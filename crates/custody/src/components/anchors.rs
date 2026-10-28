@@ -118,11 +118,11 @@ pub(super) fn validate(
             })
             .map(|l| wide(&l["amount_msat"]))
             .sum();
-        let principal = principal(row);
+        let principal = principal(row)?;
         let movement = if text(&row["direction"]).py_strip().py_lower() == "outbound" {
-            principal + wide(&row["fee"])
+            principal + wide(&integer(or(&row["fee"], &json!(0)))?)
         } else {
-            wide(&row["amount"])
+            wide(&integer(or(&row["amount"], &json!(0)))?)
         };
         let partial_review = ls.iter().any(|l| partial.contains(&pystr(&l["id"])));
         let expected = if partial_review { principal } else { movement };
@@ -154,7 +154,7 @@ pub(super) fn validate(
             .filter(|a| by_id(legs, &a["sink_leg_id"]).is_some_and(|l| l["role"] == "fee"))
             .map(|a| wide(&a["source_amount_msat"]))
             .sum();
-        let fee = wide(&row["fee"]);
+        let fee = wide(&integer(or(&row["fee"], &json!(0)))?);
         if allocated != fee {
             issues.push(json!({"code":"custody_suspense_fee_coverage_mismatch","message":"an observed miner fee must stay separate from custody suspense","source_leg_id":source_id,"transaction_id":pystr(tx),"observed_fee_msat":fee,"allocated_fee_msat":allocated}));
         }
@@ -193,14 +193,14 @@ pub(super) fn validate(
         json!({"valid":issues.is_empty(),"issues":issues,"warnings":warnings,"transaction_coverage":coverage}),
     )
 }
-pub(super) fn principal(row: &Value) -> i128 {
-    let amount = wide(&row["amount"]);
-    let fee = wide(&row["fee"]);
+pub(super) fn principal(row: &Value) -> Result<i128, Error> {
+    let amount = wide(&integer(or(&row["amount"], &json!(0)))?);
+    let fee = wide(&integer(or(&row["fee"], &json!(0)))?);
     if text(&row["direction"]).py_strip().py_lower() == "outbound"
         && truth(&row["amount_includes_fee"])
     {
-        amount - fee
+        Ok(amount - fee)
     } else {
-        amount
+        Ok(amount)
     }
 }

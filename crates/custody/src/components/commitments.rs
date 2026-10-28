@@ -182,7 +182,11 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
     }
     Ok(observations)
 }
-pub(super) fn native_status(legs: &[Value], allocs: &[Value], observations: &[Value]) -> Value {
+pub(super) fn native_status(
+    legs: &[Value],
+    allocs: &[Value],
+    observations: &[Value],
+) -> Result<Value, Error> {
     let boundaries: Vec<_> = legs
         .iter()
         .filter(|l| {
@@ -253,7 +257,7 @@ pub(super) fn native_status(legs: &[Value], allocs: &[Value], observations: &[Va
             .into_iter()
             .map(|v| (text(&v["quantity_hash"]), v))
             .collect();
-        let recovered:i128=unique.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).sum();
+        let recovered:i128=unique.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
         let same: BTreeMap<_, _> = observations
             .iter()
             .filter(|v| {
@@ -263,7 +267,7 @@ pub(super) fn native_status(legs: &[Value], allocs: &[Value], observations: &[Va
             })
             .map(|v| (text(&v["quantity_hash"]), v))
             .collect();
-        let capacity:i128=same.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).sum();
+        let capacity:i128=same.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
         if recovered > capacity {
             contradicted += 1;
         } else if recovered == capacity {
@@ -281,5 +285,7 @@ pub(super) fn native_status(legs: &[Value], allocs: &[Value], observations: &[Va
     } else {
         "unverified"
     };
-    json!({"boundary_count":boundaries.len(),"supported_boundary_count":supported,"partially_supported_boundary_count":partial,"contradicted_boundary_count":contradicted,"status":status,"usable":status!="contradicted"})
+    Ok(
+        json!({"boundary_count":boundaries.len(),"supported_boundary_count":supported,"partially_supported_boundary_count":partial,"contradicted_boundary_count":contradicted,"status":status,"usable":status!="contradicted"}),
+    )
 }

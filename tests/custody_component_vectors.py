@@ -40,6 +40,50 @@ def vectors():
             result.append({"case": case, "input": book, "error_code": getattr(exc, "code", type(exc).__name__)})
         else:
             raise AssertionError(f"{case} must refuse")
+    from copy import deepcopy
+    def revision(book):
+        c = book["components"][0]
+        target = {**c["header"], "id": "previous", "revision": "abc", "state": "superseded"}
+        c["header"]["supersedes_component_id"] = target["id"]
+        book["revision_headers"].append(target)
+    def competing(book):
+        c = book["components"][0]
+        book["revision_headers"].append({**c["header"], "id": "competing", "revision": "abc"})
+    def excluded(book, field):
+        book["anchors"]["out"].update(excluded=1, **{field: "abc"})
+        book["transactions"] = [r for r in book["transactions"] if r["id"] != "out"]
+    def order(book, kind):
+        c = book["components"][0]
+        other = deepcopy(c)
+        other["header"].update(id="aaa", lineage_id="aaa")
+        for leg in other["legs"]: leg["component_id"] = "aaa"
+        c["header"]["created_at"] = "2025"
+        if kind == "components":
+            c["legs"][0]["amount_msat"] = "abc"
+            other["legs"][0]["amount_msat"] = None
+        else:
+            c["allocations"] = [{"id": "a", "component_id": c["header"]["id"], "ordinal": 0, "source_amount_msat": "abc"}]
+            other["legs"][0]["amount_msat"] = None
+        book["components"].append(other)
+    for case, mutate in (
+        ("refusal_revision_target", revision),
+        ("refusal_competing_revision", competing),
+        ("refusal_excluded_amount", lambda b: excluded(b, "amount")),
+        ("refusal_excluded_fee", lambda b: excluded(b, "fee")),
+        ("refusal_global_leg_order", lambda b: order(b, "components")),
+        ("refusal_legs_before_allocations", lambda b: order(b, "children")),
+        ("refusal_evidence_count_before_ordinal", lambda b: (b["components"][0]["header"].update(expected_evidence_count="abc"), b["components"][0]["commitments"][0].update(ordinal=None))),
+        ("commitment_missing_ignores_ordinal", lambda b: (b["components"][0]["header"].update(expected_evidence_count=None), b["components"][0]["commitments"][0].update(ordinal="abc"))),
+    ):
+        book = component_snapshot(0)
+        mutate(book)
+        try:
+            components, blockers = compute_components_stage(book)
+        except Exception as exc:
+            result.append({"case": case, "input": book, "error_code": getattr(exc, "code", type(exc).__name__)})
+        else:
+            assert case == "commitment_missing_ignores_ordinal", case
+            result.append({"case": case, "input": book, "components": to_jsonable({"components": components, "blockers": blockers}, redact_config=False)})
     return result
 
 

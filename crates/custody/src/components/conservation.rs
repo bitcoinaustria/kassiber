@@ -333,7 +333,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
         .filter(|l| {
             matches!(l["role"].as_str(), Some("fee" | "external"))
                 && wide(&l["amount_msat"]) == 0
-                && wide(&l["valuation_amount"]) > 0
+                && wide(or(&l["valuation_amount"], &json!(0))) > 0
         })
         .map(|l| {
             if truth(&l["id"]) {
@@ -442,7 +442,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
         let missing: Vec<_> = legs
             .iter()
             .filter(|l| {
-                (wide(&l["amount_msat"]) > 0 || wide(&l["valuation_amount"]) > 0)
+                (wide(&l["amount_msat"]) > 0 || wide(or(&l["valuation_amount"], &json!(0))) > 0)
                     && (l["valuation_unit"].is_null() || l["valuation_amount"].is_null())
             })
             .map(|l| wide(&l["ordinal"]))

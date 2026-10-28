@@ -961,10 +961,14 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
             *canonical.get_mut(&owner).unwrap() += amount;
             assignments.push(json!({"vout":output["n"],"wallet_id":owner,"amount_msat":amount}));
         }
-        if group.iter().any(|r| {
+        if group.iter().try_fold(false, |bad, r| {
             let w = text(&r["wallet_id"]);
-            canonical[&w] <= 0 || ![full[&w], canonical[&w]].contains(&wide(&r["amount"]))
-        }) {
+            Ok::<_, String>(
+                bad || canonical[&w] <= 0
+                    || ![full[&w], canonical[&w]]
+                        .contains(&wide(&codec::integer_or_zero(&r["amount"])?)),
+            )
+        })? {
             continue;
         }
         for row in &group {

@@ -575,3 +575,43 @@ fn components_asset_hash_upper() {
     check("asset_hash_upper_019b");
     check("asset_hash_upper_0264");
 }
+
+#[test]
+fn components_refusal_revision_target() {
+    check("refusal_revision_target");
+}
+
+#[test]
+fn components_refusal_competing_revision() {
+    check("refusal_competing_revision");
+}
+
+#[test]
+fn components_refusal_excluded_amount() {
+    check("refusal_excluded_amount");
+}
+
+#[test]
+fn components_refusal_excluded_fee() {
+    check("refusal_excluded_fee");
+}
+
+#[test]
+fn components_refusal_global_leg_order() {
+    check("refusal_global_leg_order");
+}
+
+#[test]
+fn components_refusal_legs_before_allocations() {
+    check("refusal_legs_before_allocations");
+}
+
+#[test]
+fn components_refusal_evidence_count_before_ordinal() {
+    check("refusal_evidence_count_before_ordinal");
+}
+
+#[test]
+fn components_commitment_missing_ignores_ordinal() {
+    check("commitment_missing_ignores_ordinal");
+}

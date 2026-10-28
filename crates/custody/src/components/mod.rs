@@ -90,6 +90,16 @@ fn integer(v: &Value) -> Result<Value, Error> {
     }
     codec::integer(v).map_err(Error::value)
 }
+// SQLite orders raw INTEGER/REAL facts before TEXT. Do not int() here:
+// malformed numeric text must be refused at the reference's conversion point.
+fn raw_order(a: &Value, b: &Value) -> std::cmp::Ordering {
+    match (a, b) {
+        (Value::Number(_), Value::Number(_)) => a.as_f64().partial_cmp(&b.as_f64()).unwrap(),
+        (Value::Number(_), _) => std::cmp::Ordering::Less,
+        (_, Value::Number(_)) => std::cmp::Ordering::Greater,
+        _ => pystr(a).cmp(&pystr(b)),
+    }
+}
 fn project(
     row: &Map<String, Value>,
     fields: &str,
@@ -134,7 +144,7 @@ fn allocations(c: &Component) -> Result<Vec<Value>, Error> {
         })
         .collect()
 }
-fn lineage(snapshot: &Snapshot, h: &Value) -> Vec<Value> {
+fn lineage(snapshot: &Snapshot, h: &Value) -> Result<Vec<Value>, Error> {
     let mut headers: BTreeMap<String, Value> = snapshot
         .components
         .iter()
@@ -155,10 +165,13 @@ fn lineage(snapshot: &Snapshot, h: &Value) -> Vec<Value> {
                 && o["id"] != h["id"]
         })
         .collect();
-    competing.sort_by_key(|o| (wide(&o["revision"]), pystr(&o["id"])));
+    competing.sort_by(|a, b| {
+        raw_order(&a["revision"], &b["revision"])
+            .then_with(|| pystr(&a["id"]).cmp(&pystr(&b["id"])))
+    });
     let mut issues = Vec::new();
     if h["state"] == "active" && !competing.is_empty() {
-        issues.push(json!({"code":"active_lineage_conflict","message":"multiple authored active revisions exist in this lineage","conflicts":competing.iter().map(|o|json!({"component_id":o["id"],"revision":wide(&o["revision"])})).collect::<Vec<_>>()}));
+        issues.push(json!({"code":"active_lineage_conflict","message":"multiple authored active revisions exist in this lineage","conflicts":competing.iter().map(|o|Ok(json!({"component_id":o["id"],"revision":integer(&o["revision"])?}))).collect::<Result<Vec<_>,Error>>()?}));
     }
     for (field, order) in [
         ("supersedes_component_id", -1),
@@ -176,12 +189,13 @@ fn lineage(snapshot: &Snapshot, h: &Value) -> Vec<Value> {
         };
         let wrong_scope =
             target["profile_id"] != h["profile_id"] || target["lineage_id"] != h["lineage_id"];
-        let wrong_order = (wide(&target["revision"]) - wide(&h["revision"])) * order <= 0;
+        let target_revision = integer(&target["revision"])?;
+        let wrong_order = (wide(&target_revision) - wide(&integer(&h["revision"])?)) * order <= 0;
         if wrong_scope || wrong_order {
-            issues.push(json!({"code":"revision_link_invalid","field":field,"target_component_id":id,"target_revision":wide(&target["revision"])}));
+            issues.push(json!({"code":"revision_link_invalid","field":field,"target_component_id":id,"target_revision":target_revision}));
         }
     }
-    issues
+    Ok(issues)
 }
 fn membership(snapshot: &Snapshot, c: &Component) -> Vec<Value> {
     // COALESCE distinguishes a null anchor from an empty authored anchor.
@@ -299,24 +313,26 @@ fn materialize(
             }
         }
     }
+    if !h["expected_evidence_count"].is_null() {
+        h["expected_evidence_count"] = integer(&h["expected_evidence_count"])?;
+    }
     let commitments: Vec<_> = c
         .commitments
         .iter()
         .filter(|r| r.get("profile_id") == h.get("profile_id"))
         .map(|r| {
             let mut v = Value::Object(r.clone());
-            v["ordinal"] = integer(&v["ordinal"])?;
+            if !h["expected_evidence_count"].is_null() {
+                v["ordinal"] = integer(&v["ordinal"])?;
+            }
             Ok(v)
         })
         .collect::<Result<_, Error>>()?;
-    if !h["expected_evidence_count"].is_null() {
-        h["expected_evidence_count"] = integer(&h["expected_evidence_count"])?;
-    }
     let evidence = commitments::evidence_status(snapshot, &h, &stored, &commitments);
     if !truth(&evidence["valid"]) {
         issues.push(json!({"code":"component_evidence_commitment_invalid","message":"author-bound activation evidence is missing, incomplete, conflicted, or no longer matches local canonical anchors","status":evidence["status"],"expected":evidence["expected_count"],"actual":evidence["commitment_count"]}));
     }
-    let native = commitments::native_status(&stored, &allocs, native);
+    let native = commitments::native_status(&stored, &allocs, native)?;
     if !truth(&native["usable"]) {
         issues.push(json!({"code":"component_native_support_contradicted","message":"recovered same-native-event policy evidence conflicts with an authored component boundary","supported_boundaries":native["supported_boundary_count"],"contradicted_boundaries":native["contradicted_boundary_count"]}));
     }
@@ -333,7 +349,7 @@ fn materialize(
         validation["warnings"] = anchors["warnings"].clone();
     }
     validation["anchors"] = anchors;
-    issues.extend(lineage(snapshot, &h));
+    issues.extend(lineage(snapshot, &h)?);
     let conflicts = membership(snapshot, c);
     if !conflicts.is_empty() {
         issues.push(json!({"code":"active_transaction_membership_conflict","message":"a transaction belongs to another authored active component","conflicts":conflicts}));
@@ -387,30 +403,56 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
         .iter()
         .filter(|c| c.header["profile_id"] == profile && c.header["state"] == "active")
         .collect();
-    components.sort_by_key(|c| {
-        (
-            pystr(&c.header["created_at"]),
-            wide(&c.header["revision"]),
-            pystr(&c.header["id"]),
-        )
+    components.sort_by(|a, b| {
+        pystr(&a.header["created_at"])
+            .cmp(&pystr(&b.header["created_at"]))
+            .then_with(|| raw_order(&a.header["revision"], &b.header["revision"]))
+            .then_with(|| pystr(&a.header["id"]).cmp(&pystr(&b.header["id"])))
     });
-    let mut quantity_legs = Vec::new();
-    let mut quantity_allocs = Vec::new();
+    // The SQL reference reads all quantity legs before any allocations, in
+    // component/ordinal/id order; convert only after that raw ordering.
+    let mut raw_legs = Vec::new();
+    let mut raw_allocs = Vec::new();
     for c in &components {
         if c.header["conservation_mode"] == "quantity" {
-            quantity_legs.extend(legs(c)?);
-            quantity_allocs.extend(allocations(c)?);
+            raw_legs.extend(c.legs.iter());
+            raw_allocs.extend(c.allocations.iter());
         }
     }
-    for ls in [&mut quantity_legs, &mut quantity_allocs] {
-        ls.sort_by_key(|l| {
-            (
-                pystr(&l["component_id"]),
-                wide(&l["ordinal"]),
-                pystr(&l["id"]),
-            )
+    for rows in [&mut raw_legs, &mut raw_allocs] {
+        rows.sort_by(|a, b| {
+            pystr(&a["component_id"])
+                .cmp(&pystr(&b["component_id"]))
+                .then_with(|| raw_order(&a["ordinal"], &b["ordinal"]))
+                .then_with(|| pystr(&a["id"]).cmp(&pystr(&b["id"])))
         });
     }
+    let quantity_legs = raw_legs
+        .iter()
+        .map(|r| {
+            project(
+                r,
+                LEG_FIELDS,
+                &["ordinal", "amount_msat"],
+                &["valuation_amount"],
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let quantity_allocs = if quantity_legs.is_empty() {
+        Vec::new()
+    } else {
+        raw_allocs
+            .iter()
+            .map(|r| {
+                project(
+                    r,
+                    ALLOCATION_FIELDS,
+                    &["ordinal", "source_amount_msat", "sink_amount_msat"],
+                    &[],
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    };
     let routes = scope::profile_routes(snapshot, &quantity_legs, &quantity_allocs)?;
     let native = if components.is_empty() {
         Vec::new()

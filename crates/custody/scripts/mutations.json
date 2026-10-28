@@ -693,8 +693,8 @@
   {
     "id": "components-revision-order",
     "file": "crates/custody/src/components/mod.rs",
-    "find": "(wide(&target[\"revision\"]) - wide(&h[\"revision\"])) * order <= 0",
-    "replace": "(wide(&target[\"revision\"]) - wide(&h[\"revision\"])) * order < 0",
+    "find": "(wide(&target_revision) - wide(&integer(&h[\"revision\"])?)) * order <= 0",
+    "replace": "(wide(&target_revision) - wide(&integer(&h[\"revision\"])?)) * order < 0",
     "expect_failing": [
       "components_revision_order"
     ],
@@ -813,8 +813,8 @@
   {
     "id": "components-header-id-tie",
     "file": "crates/custody/src/components/mod.rs",
-    "find": "pystr(&c.header[\"id\"]),",
-    "replace": "std::cmp::Reverse(pystr(&c.header[\"id\"])) ,",
+    "find": ".then_with(|| pystr(&a.header[\"id\"]).cmp(&pystr(&b.header[\"id\"])))",
+    "replace": ".then_with(|| pystr(&b.header[\"id\"]).cmp(&pystr(&a.header[\"id\"])))",
     "expect_failing": [
       "components_component_order"
     ],
@@ -1093,8 +1093,8 @@
   {
     "id": "components-hash-quantity-direction",
     "file": "crates/custody/src/evidence.rs",
-    "find": "\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase()",
-    "replace": "\"direction\":null,\"asset\":text(&row[\"asset\"]).to_uppercase()",
+    "find": "\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper()",
+    "replace": "\"direction\":null,\"asset\":text(&row[\"asset\"]).py_upper()",
     "expect_failing": [
       "components_hash_direction"
     ],
@@ -1103,7 +1103,7 @@
   {
     "id": "components-hash-quantity-asset",
     "file": "crates/custody/src/evidence.rs",
-    "find": "\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])?",
+    "find": "\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])?",
     "replace": "\"asset\":null,\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])?",
     "expect_failing": [
       "components_hash_asset"
@@ -1113,8 +1113,8 @@
   {
     "id": "components-hash-amount_msat",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
-    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":null ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":null ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
     "expect_failing": [
       "components_hash_amount"
     ],
@@ -1123,8 +1123,8 @@
   {
     "id": "components-hash-fee_msat",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
-    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":null ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":null ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
     "expect_failing": [
       "components_hash_fee"
     ],
@@ -1133,8 +1133,8 @@
   {
     "id": "components-hash-amount_includes_fee",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
-    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":null}),\n    )\n}\n",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":null}),\n    )\n}\n",
     "expect_failing": [
       "components_hash_included"
     ],
@@ -1283,8 +1283,8 @@
   {
     "id": "components-revision-conflict-tie",
     "file": "crates/custody/src/components/mod.rs",
-    "find": "(wide(&o[\"revision\"]), pystr(&o[\"id\"]))",
-    "replace": "(wide(&o[\"revision\"]), std::cmp::Reverse(pystr(&o[\"id\"])))",
+    "find": "raw_order(&a[\"revision\"], &b[\"revision\"])\n            .then_with(|| pystr(&a[\"id\"]).cmp(&pystr(&b[\"id\"])))",
+    "replace": "raw_order(&a[\"revision\"], &b[\"revision\"])\n            .then_with(|| pystr(&b[\"id\"]).cmp(&pystr(&a[\"id\"])))",
     "expect_failing": [
       "components_lineage_ties"
     ],
@@ -1293,8 +1293,8 @@
   {
     "id": "components-revision-conflict-order",
     "file": "crates/custody/src/components/mod.rs",
-    "find": "(wide(&o[\"revision\"]), pystr(&o[\"id\"]))",
-    "replace": "(std::cmp::Reverse(wide(&o[\"revision\"])), pystr(&o[\"id\"]))",
+    "find": "raw_order(&a[\"revision\"], &b[\"revision\"])",
+    "replace": "raw_order(&b[\"revision\"], &a[\"revision\"])",
     "expect_failing": [
       "components_lineage_ties"
     ],
@@ -1363,8 +1363,8 @@
   {
     "id": "components-header-revision-tie",
     "file": "crates/custody/src/components/mod.rs",
-    "find": "wide(&c.header[\"revision\"]),",
-    "replace": "std::cmp::Reverse(wide(&c.header[\"revision\"])) ,",
+    "find": ".then_with(|| raw_order(&a.header[\"revision\"], &b.header[\"revision\"]))",
+    "replace": ".then_with(|| raw_order(&b.header[\"revision\"], &a.header[\"revision\"]))",
     "expect_failing": [
       "components_lineage_ties"
     ],
@@ -1439,5 +1439,15 @@
       "components_asset_hash_upper"
     ],
     "rule": "Quantity commitments use CPython 3.11 uppercase for the raw row asset."
+  },
+  {
+    "id": "X02-excluded-anchor-integer",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "let fee = wide(&integer(or(&row[\"fee\"], &json!(0)))?);\n        if allocated != fee",
+    "replace": "let fee = 0;\n        if allocated != fee",
+    "expect_failing": [
+      "components_suspense_fee"
+    ],
+    "rule": "Excluded anchors must refuse malformed raw fees at int(), even without native observations."
   }
 ]

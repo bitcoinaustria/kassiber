@@ -450,7 +450,9 @@ pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, String> {
             if i != keeper {
                 let fee = int(&result[i]["fee"]);
                 if !truth(&result[i]["amount_includes_fee"]) {
-                    result[i]["amount"] = json!(wide(&result[i]["amount"]) + i128::from(fee));
+                    result[i]["amount"] = json!(
+                        wide(&codec::integer_or_zero(&result[i]["amount"])?) + i128::from(fee)
+                    );
                 }
                 result[i]["fee"] = json!(0);
                 result[i]["custody_duplicate_event_fee_normalized"] = json!(true);

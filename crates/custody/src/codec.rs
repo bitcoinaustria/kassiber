@@ -441,9 +441,13 @@ pub fn int(v: &Value) -> i64 {
     integer(v).ok().and_then(|v| v.as_i64()).unwrap_or(0)
 }
 
+/// Arithmetic only on values already converted by `integer` (or typed facts).
 pub fn wide(v: &Value) -> i128 {
-    integer(v)
-        .ok()
-        .and_then(|v| v.to_string().parse().ok())
-        .unwrap_or(0)
+    debug_assert!(
+        v.is_number() && !v.to_string().contains(['.', 'e', 'E']),
+        "unconverted integer fact: {v}"
+    );
+    v.to_string()
+        .parse()
+        .expect("converted integer exceeds custody arithmetic range")
 }
