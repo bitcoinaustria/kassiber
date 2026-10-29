@@ -1308,3 +1308,24 @@ def test_review_notes_schema_migration_backfills_and_refreezes_terms():
             "SET review_notes = 'changed' WHERE id = 'pair-term'"
         )
     conn.close()
+
+
+@pytest.mark.parametrize("failure", ["excluded", "canonical"])
+def test_native_review_activation_failure_leaves_no_committed_draft(tmp_path, failure):
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "out", "btc", "outbound", "BTC", 1000, NOW)
+    _tx(conn, "in", "btc2", "inbound", "BTC", 1000, NOW)
+    if failure == "excluded":
+        conn.execute("UPDATE transactions SET excluded=1 WHERE id='in'")
+    else:
+        conn.execute("UPDATE transactions SET amount_includes_fee=1,fee=1 WHERE id='in'")
+    conn.commit()
+    # No outer transaction: creation previously committed before activation.
+    assert not conn.in_transaction
+    before = list(conn.iterdump())
+    with pytest.raises((AppError, ValueError)):
+        create_transaction_pair(conn, "ws", "profile", "out", "in")
+    conn.rollback()
+    assert list(conn.iterdump()) == before
+    conn.close()

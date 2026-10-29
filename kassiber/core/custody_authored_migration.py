@@ -1954,31 +1954,33 @@ def _activate_native_review(
         "authored_source": authored_source,
         "created_at": str(row["created_at"]),
     }
-    if prior is None:
-        component = create_component(
+    # Creation and activation are one authoring operation, including refusals.
+    with _savepoint(conn, "custody_native_review"):
+        if prior is None:
+            component = create_component(
+                conn,
+                workspace_id=str(row["workspace_id"]),
+                profile_id=str(row["profile_id"]),
+                component_id=str(spec["component_id"]),
+                lineage_id=str(spec["lineage_id"]),
+                **component_kwargs,
+            )
+        else:
+            component = update_component(
+                conn,
+                str(prior["id"]),
+                new_component_id=str(spec["component_id"]),
+                preserve_planned_row_ids=True,
+                change_reason=change_reason or f"{term_kind} review revised",
+                **component_kwargs,
+            )
+        activate_component(
             conn,
-            workspace_id=str(row["workspace_id"]),
-            profile_id=str(row["profile_id"]),
-            component_id=str(spec["component_id"]),
-            lineage_id=str(spec["lineage_id"]),
-            **component_kwargs,
+            component["id"],
+            activated_at=str(row["created_at"]),
+            _validated_component=component,
         )
-    else:
-        component = update_component(
-            conn,
-            str(prior["id"]),
-            new_component_id=str(spec["component_id"]),
-            preserve_planned_row_ids=True,
-            change_reason=change_reason or f"{term_kind} review revised",
-            **component_kwargs,
-        )
-    activate_component(
-        conn,
-        component["id"],
-        activated_at=str(row["created_at"]),
-        _validated_component=component,
-    )
-    return {**dict(row), "component_id": component["id"]}
+        return {**dict(row), "component_id": component["id"]}
 
 
 def create_pair_review_component(
