@@ -139,6 +139,11 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.payouts.list",
     "transfers.gaps.history",
     "transfers.rules.list",
+    "transfers.rules.create",
+    "transfers.rules.delete",
+    "transfers.rules.enable",
+    "transfers.rules.disable",
+    "transfers.dismiss",
     "review.receipt",
 ];
 

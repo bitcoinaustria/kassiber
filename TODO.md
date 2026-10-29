@@ -273,6 +273,24 @@ and the owner decisions it needs.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 
+## Rust backend R5 transfers and review
+
+The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
+serves all five stored reads and five authoring commands (rule CRUD/toggles and
+dismissals): 10/29 CLI leaves and nine desktop kinds. Full authoring row parity
+is pinned for that subset; AI projections remain Python.
+
+- [ ] Port pair/unpair/update and payout create/delete using the shared custody
+  service, including native residual/conflict validation, append-only revisions,
+  immutable rows, Python commitments and atomic journal invalidation.
+- [ ] Port component plan/apply and gap plan/apply with version-bound candidate
+  fingerprints, conservation/hold barriers and filed-report impacts. Require
+  complete normalized row parity after mixed authoring/revision sequences.
+- [ ] Port the ten computation-dependent commands and related desktop kinds
+  after custody/journal services are available. Matching needs its own mutation
+  catalog and Python/naive-all-pairs oracle before native suggestions or auto-pair
+  can be enabled; review cases/plan/apply must retain readiness barriers.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in

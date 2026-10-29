@@ -128,5 +128,315 @@
       "malformed_stored_payout_value_fails_closed"
     ],
     "rule": "Invalid stored payout fiat values fail instead of fabricating a value."
+  },
+  {
+    "id": "authored-kind",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !KINDS.iter().any(|k| kind == s(*k)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring refuses unsupported pair kinds."
+  },
+  {
+    "id": "authored-policy",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !POLICIES.iter().any(|p| policy == s(*p)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring refuses unsupported policies."
+  },
+  {
+    "id": "rule-sorted-python-json",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "sort_keys: true,",
+    "replace": "sort_keys: false,",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Stored predicates use Python sorted-key JSON bytes."
+  },
+  {
+    "id": "rule-create-disabled",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "let enabled = get(args, \"enabled\").is_none_or(truthy);",
+    "replace": "let enabled = true;",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Explicitly disabled rule creation stays disabled."
+  },
+  {
+    "id": "rule-enable-invalid",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if let Some(reason) = get(&row, \"invalid_reason\") {",
+    "replace": "if let Some(reason) = get(&row, \"no_invalid_reason\") {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "An invalid stored rule cannot be enabled."
+  },
+  {
+    "id": "rule-scoped-mutation",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "SELECT * FROM swap_matching_rules WHERE id=? AND profile_id=?",
+    "replace": "SELECT * FROM swap_matching_rules WHERE id=? AND ? IS NOT NULL",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "A rule write cannot touch another profile."
+  },
+  {
+    "id": "policy-same-asset",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if out == inbound {",
+    "replace": "if false {",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Same-asset policy defaults to carrying value independently of the rail preference."
+  },
+  {
+    "id": "policy-country",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if country == \"at\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Austria supports reviewed multi-asset carrying-value policy; configuration does not match observations."
+  },
+  {
+    "id": "policy-rail-preference",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "&& get(&profile, \"bitcoin_rail_carrying_value\").is_some_and(truthy)",
+    "replace": "&& true",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Generic BTC/LBTC carrying-value defaults honor the profile preference."
+  },
+  {
+    "id": "policy-python-uppercase",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "kassiber_pytext::upper(kassiber_pytext::strip(&s))",
+    "replace": "kassiber_pytext::strip(&s).to_uppercase()",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Asset policy normalization uses Python Unicode 14 uppercase, including newly assigned Rust characters."
+  },
+  {
+    "id": "dismiss-reference-ambiguity",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "An external transaction reference with multiple scoped rows is refused."
+  },
+  {
+    "id": "dismiss-id-priority",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "if let Some(row) = row.into_iter().next() {",
+    "replace": "if let Some(row) = row.into_iter().filter(|_| false).next() {",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "A scoped Kassiber transaction ID takes precedence over external identifiers."
+  },
+  {
+    "id": "dismiss-reason-coalesce",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "reason=COALESCE(excluded.reason,transaction_pair_dismissals.reason)",
+    "replace": "reason=excluded.reason",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "A repeated dismissal without a reason retains the original reason."
+  },
+  {
+    "id": "dismiss-identity",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "DO UPDATE SET reason=",
+    "replace": "DO UPDATE SET id=excluded.id,reason=",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Repeated dismissals retain their original identity."
+  },
+  {
+    "id": "dismiss-expiry",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "let expires = if days > 0.into() {",
+    "replace": "let expires = if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Only positive expiry days set a dismissal expiry; zero and negative values never expire."
+  },
+  {
+    "id": "rule-no-journal-invalidation",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "        let id;",
+    "replace": "        conn.execute(\"UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?\",[scope.profile_id]).map_err(error)?;\n        let id;",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring does not alter journal input or readiness facts."
+  },
+  {
+    "id": "dismiss-no-journal-invalidation",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "        let source = resolve(",
+    "replace": "        conn.execute(\"UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?\",[scope.profile_id]).map_err(error)?;\n        let source = resolve(",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "An advisory dismissal does not establish accounting facts or invalidate journals."
+  },
+  {
+    "id": "fee-bool-is-not-number",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "            _ => return Err(fail()),",
+    "replace": "            Value::Bool(v) => f64::from(u8::from(*v)),\n            _ => return Err(fail()),",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "A bool cannot author a numeric fee threshold."
+  },
+  {
+    "id": "dismiss-created-time",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "DO UPDATE SET reason=",
+    "replace": "DO UPDATE SET created_at=excluded.created_at,reason=",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Repeated dismissals retain their original creation time."
+  },
+  {
+    "id": "dismiss-days-range",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "if days > 999999999 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Dismissal expiry retains the Python timedelta magnitude limit."
+  },
+  {
+    "id": "dismiss-days-c-int",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": ".parse::<i32>()",
+    "replace": ".parse::<i64>()",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Expiry conversion retains the Python C-int overflow boundary."
+  },
+  {
+    "id": "authoring-atomic-rollback",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "        Err(e) => {\n            let _ = conn.execute_batch(\n                \"ROLLBACK TO SAVEPOINT transfers_service; RELEASE SAVEPOINT transfers_service\",",
+    "replace": "        Err(e) => {\n            let _ = conn.execute_batch(\n                \"RELEASE SAVEPOINT transfers_service\",",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "An error after mutation restores the complete pre-operation rows and releases its savepoint."
+  },
+  {
+    "id": "rule-predicate-object",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "return Err(validation(\"predicate must be an object\"));",
+    "replace": "return Ok(dict::<&str>([]));",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring requires an object predicate."
+  },
+  {
+    "id": "rule-integer-overflow",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !n.is_finite() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Integer-to-float overflow retains Python's internal error rather than becoming a validation error."
+  },
+  {
+    "id": "history-snapshot-object",
+    "file": "crates/transfers/src/history.rs",
+    "find": "if !matches!(snapshot, Value::Dict(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "historical_snapshot_quantities_follow_python_integer_coercion"
+    ],
+    "rule": "A non-object historical snapshot fails rather than inventing zero quantities."
+  },
+  {
+    "id": "history-integer-coercion",
+    "file": "crates/transfers/src/lib.rs",
+    "find": "kassiber_pytext::parse_int(v.as_str().unwrap_or_default())",
+    "replace": "kassiber_pytext::parse_int(\"0\")",
+    "expect_failing": [
+      "historical_snapshot_quantities_follow_python_integer_coercion"
+    ],
+    "rule": "Historical quantities preserve Python integer parsing and refuse malformed values."
+  },
+  {
+    "id": "receipt-selector-exclusive",
+    "file": "crates/transfers/src/lib.rs",
+    "find": "(Some(id), None) => (\"id\", id),",
+    "replace": "(Some(id), _) => (\"id\", id),",
+    "expect_failing": [
+      "stored_scope_limits_and_receipt_selectors_fail_closed"
+    ],
+    "rule": "Receipt selectors are mutually exclusive."
+  },
+  {
+    "id": "receipt-profile-scope",
+    "file": "crates/transfers/src/lib.rs",
+    "find": "WHERE profile_id=? AND {field}=?",
+    "replace": "WHERE ? IS NOT NULL AND {field}=?",
+    "expect_failing": [
+      "stored_scope_limits_and_receipt_selectors_fail_closed"
+    ],
+    "rule": "Historical receipt selection is profile scoped."
+  },
+  {
+    "id": "dismiss-profile-scope",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "WHERE profile_id=? AND id=?",
+    "replace": "WHERE ? IS NOT NULL AND id=?",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "Dismissal transaction IDs are resolved within the active profile."
+  },
+  {
+    "id": "history-reopened-status",
+    "file": "crates/transfers/src/history.rs",
+    "find": "if event == s(\"bridge_reopened\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Reopened gap history remains in needs-review status."
+  },
+  {
+    "id": "desktop-expiry-integer",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "Value::Float(n) if n.is_finite() =>",
+    "replace": "Value::Float(n) if false =>",
+    "expect_failing": [
+      "desktop_dismissal_expiry_uses_python_integer_coercion"
+    ],
+    "rule": "Desktop dismissal expiry truncates finite floats using Python int semantics."
   }
 ]

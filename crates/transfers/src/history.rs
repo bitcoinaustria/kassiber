@@ -33,6 +33,15 @@ pub(super) fn list(conn: &Connection, scope: &Scope<'_>, args: &Value) -> Result
             "dismissed"
         };
         let snapshot = parse_json(&text(row, "snapshot_json")).unwrap_or_else(|_| dict::<&str>([]));
+        if !matches!(snapshot, Value::Dict(_)) {
+            return Err(AppError::new(
+                "internal_error",
+                format!(
+                    "'{}' object has no attribute 'get'",
+                    kassiber_envelope::type_name(&snapshot)
+                ),
+            ));
+        }
         let residual = get(&snapshot, "residual_classification")
             .and_then(|v| {
                 if matches!(v, Value::Dict(_)) {
@@ -57,17 +66,21 @@ pub(super) fn list(conn: &Connection, scope: &Scope<'_>, args: &Value) -> Result
                 ("reason".into(), value(row, "reason")),
                 (
                     "retained_msat".into(),
-                    get(&snapshot, "retained_msat")
-                        .filter(|v| truthy(v))
-                        .cloned()
-                        .unwrap_or(Value::Int(0.into())),
+                    Value::Int(integer(
+                        &get(&snapshot, "retained_msat")
+                            .filter(|v| truthy(v))
+                            .cloned()
+                            .unwrap_or(0.into()),
+                    )?),
                 ),
                 (
                     "residual_msat".into(),
-                    get(&snapshot, "residual_msat")
-                        .filter(|v| truthy(v))
-                        .cloned()
-                        .unwrap_or(Value::Int(0.into())),
+                    Value::Int(integer(
+                        &get(&snapshot, "residual_msat")
+                            .filter(|v| truthy(v))
+                            .cloned()
+                            .unwrap_or(0.into()),
+                    )?),
                 ),
                 (
                     "residual_classification".into(),

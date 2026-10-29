@@ -39,3 +39,81 @@ pub fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Val
     }
     Ok(result)
 }
+
+/// Injectable UUID/clock source for Python row oracles; production has no overrides.
+pub trait Sources {
+    fn uuid(&self, conn: &Connection) -> Result<String>;
+    fn now(&self, conn: &Connection) -> Result<String>;
+}
+pub struct SystemSources;
+impl Sources for SystemSources {
+    fn uuid(&self, conn: &Connection) -> Result<String> {
+        let mut bytes: Vec<u8> = conn
+            .query_row("SELECT randomblob(16)", [], |r| r.get(0))
+            .map_err(error)?;
+        bytes[6] = (bytes[6] & 15) | 64;
+        bytes[8] = (bytes[8] & 63) | 128;
+        let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+        Ok(format!(
+            "{}-{}-{}-{}-{}",
+            &hex[..8],
+            &hex[8..12],
+            &hex[12..16],
+            &hex[16..20],
+            &hex[20..]
+        ))
+    }
+    fn now(&self, conn: &Connection) -> Result<String> {
+        conn.query_row("SELECT strftime('%Y-%m-%dT%H:%M:%SZ','now')", [], |r| {
+            r.get(0)
+        })
+        .map_err(error)
+    }
+}
+/// Own the operation savepoint; never commit another service's partial writes.
+pub fn atomic<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    conn.execute_batch("SAVEPOINT transfers_service")
+        .map_err(error)?;
+    match f() {
+        Ok(value) => {
+            if let Err(e) = conn.execute_batch("RELEASE SAVEPOINT transfers_service") {
+                let _ = conn.execute_batch(
+                    "ROLLBACK TO SAVEPOINT transfers_service; RELEASE SAVEPOINT transfers_service",
+                );
+                return Err(error(e));
+            }
+            Ok(value)
+        }
+        Err(e) => {
+            let _ = conn.execute_batch(
+                "ROLLBACK TO SAVEPOINT transfers_service; RELEASE SAVEPOINT transfers_service",
+            );
+            Err(e)
+        }
+    }
+}
+
+pub fn bind(value: &Value, index: usize) -> Result<kassiber_store::rusqlite::types::Value> {
+    use kassiber_store::rusqlite::types::Value as Sql;
+    match value {
+        Value::Null => Ok(Sql::Null),
+        Value::Bool(v) => Ok(Sql::Integer(i64::from(*v))),
+        Value::Int(n) => n.to_string().parse().map(Sql::Integer).map_err(|_| {
+            AppError::new(
+                "internal_error",
+                "Python int too large to convert to SQLite INTEGER",
+            )
+        }),
+        Value::Float(v) => Ok(Sql::Real(*v)),
+        Value::Str(v) => v.as_str().map(|s| Sql::Text(s.into())).ok_or_else(|| {
+            AppError::new("internal_error", "surrogates not allowed in SQLite text")
+        }),
+        _ => Err(AppError::new(
+            "internal_error",
+            format!(
+                "Error binding parameter {index}: type '{}' is not supported",
+                kassiber_envelope::type_name(value)
+            ),
+        )),
+    }
+}

@@ -29,6 +29,7 @@ verification, including per-command Rust routing counts.
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/reports` | read-only stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, and saved/filed snapshot listing |
+| `crates/transfers` | stored effective pairs/payouts, gap history, historical receipts, local matching-rule configuration and advisory dismissals |
 
 ## Command line
 
@@ -2856,18 +2857,27 @@ access directly; journal and custody dependencies are listed below.
 | `review apply` | c | `ui.review.apply` | Atomic rebuild/revalidation and durable verification receipt |
 | `review receipt` | a | `ui.review.receipt` | Stored historical receipt; no current-readiness claim |
 
-Additional related desktop kinds: `ui.transfers.review_context` (c: matcher,
-ownership and journal projections), `ui.review.worklist` (c: aggregated current
-cases), `ui.review.request_input` (c: verifies current canonical cases),
-`ui.review.badges` (c: freshness and review projections), and
-`ui.journals.transfers.list` (c: journal transfer projection). They stay
-`not_implemented` until their dependencies are ported. Group (c) is not
+Additional related desktop kinds have no leaf in these two CLI families:
+
+| Desktop kind | Group | Dependency |
+| --- | --- | --- |
+| `ui.transfers.review_context` | c | Matcher, ownership and journal projections |
+| `ui.review.worklist` | c | Aggregated current review cases |
+| `ui.review.request_input` | c | Verification against current canonical cases |
+| `ui.review.badges` | c | Freshness and review projections |
+| `ui.journals.transfers.list` | c | Journal transfer projection |
+| `ui.custody.coverage.snapshot` | c | Custody coverage composition |
+| `ui.custody.lineage.snapshot` | c | Custody lineage composition |
+
+These stay `not_implemented` until their dependencies are ported. Group (c) is not
 advertised as supported. Matching remains in Python; porting it requires a
 separate mutation catalog and an oracle against both the Python matcher and
 its naive all-pairs reference.
 
-The initial stored-read checkpoint implements all five group (a) commands and
-their five desktop kinds through `crates/transfers`. Pair/payout selection uses
+The partial checkpoint implements all five group (a) commands and five of the
+fourteen group (b) commands through `crates/transfers`: **9/25 transfers and
+1/4 review CLI leaves**, with **9 desktop kinds**. The complete classification
+is **(a) 5, (b) 14, (c) 10**. Pair/payout selection uses
 persisted effective memberships, never the compatibility pair tables or a new
 ownership inference. Split allocations take precedence over review source
 amounts. Gap history exposes bounded redacted review facts. Historical receipt
@@ -2875,5 +2885,150 @@ verification never establishes current readiness. Rules are configuration:
 invalid stored rules are projected disabled with Python's validation reason.
 The deterministic Python vectors and native service tests compare ordered JSON
 bytes, while `tests/test_rust_transfer_services.py` compares real CLI/daemon
-bytes and witnesses Rust routing for each implemented leaf. Group (b) remains
-unported at this checkpoint.
+bytes and witnesses Rust routing for each implemented leaf.
+
+The authoring checkpoint adds rule create/delete/enable/disable and dismissal,
+with desktop rule create/delete/set-enabled and dismissal. Predicate validation
+and default policy selection are shared domain rules; they do not select or
+match observations. Stored predicates use `crates/pyjson` sorted-key Python JSON.
+Asset normalization uses the locked reference's Unicode 14 uppercase mappings,
+including expansions and characters assigned only after that Unicode release.
+An invalid stored rule cannot be enabled. Dismissals resolve profile-scoped
+transaction IDs before external IDs and refuse ambiguous external references.
+Repeated dismissals retain identity/creation time and coalesce absent reasons.
+Positive expiry days preserve Python conversion and datetime overflow limits;
+explicit CLI zero never expires, while desktop zero retains Python's 90-day
+default. Each write owns a savepoint and preserves a caller's transaction.
+
+The deterministic authoring oracle compares **41 sequential operations: 11
+successful writes and 30 refusals**. After every operation it compares the
+complete rules, dismissals and profile rows as Python JSON bytes, including
+stored JSON strings, UUIDs and timestamps injected through a native test-only
+source. Every other application table must remain unchanged. Production UUIDs
+and time have no environment overrides. Neither rule configuration nor advisory
+dismissals invalidates journals or establishes observation, ownership, custody,
+basis or provenance facts.
+
+As in the existing shell contract, unexpected Python exceptions include
+interpreter-specific traceback text which Rust does not fabricate. The daemon
+oracle normalizes only that `error.debug` field for internal errors, plus
+production UUID/time fields; error codes/messages and stored bytes remain pinned.
+
+This is a partial service slice. Nine group (b) commands still answer
+`not_implemented`: pair/unpair/update, payout create/delete, component plan/apply,
+and gap plan/apply. They require shared custody hydration/materialization,
+native residual and active-conflict validation, append-only revisions and
+immutability triggers, `pyjson` commitments/fingerprints, filed-report impacts
+and atomic invalidation. No revision/hash parity is claimed for this checkpoint.
+All ten group (c) commands and the additional computation-dependent desktop
+kinds remain unported. Matching was not ported; its mutation catalog and Python
+plus naive-all-pairs oracle remain requirements for that later work. AI
+projections stay in Python. No Python reference behavior was changed.
+
+### Transfer/review verification
+
+Verification used Rust 1.99.1 and the locked Python 3.11 environment, Cargo
+`--offline`, and disposable books. Workspace and package formatting, workspace
+and `-p kassiber --features test-harness` clippy with `-D warnings`, and the
+harness build passed. `cargo test --offline --workspace --locked` passed **943
+tests**. The five added real-process transfer oracles passed, and all 44
+mutations were killed. The mutation applicability check also passed.
+The exact requested shell/parity/hybrid-candidate/CLI-runner/`tests/rust_port`
+gate passed **63 tests and 178 subtests**, including inventory and contracts.
+
+The affected hybrid modules were `test_swap_matching_cli`, `test_swap_rules`,
+`test_transfer_matching`, `test_custody_component_surfaces`,
+`test_review_workflow`, `test_review_cli_ai` and `test_review_regressions`:
+**386 tests and 35 subtests passed; one test failed**.
+`ReviewRegressionTest.test_diagnostics_out_auto_writes_public_error_report`
+expects a diagnostics artifact, but `--diagnostics-out` already returned
+`not_implemented` in `65c74e84` (`crates/cli/src/run.rs`). This inherited global
+flag dependency is outside the transfer checkpoint; the broader hybrid suite
+is not reported green. A disposable launcher restored only the hybrid binary
+and routing-log settings for tests that intentionally scrub `KASSIBER_*` from
+child environments. It did not change command routing or product behavior.
+
+Earlier attempts collided with a workspace build overwriting the harness
+binary, and a direct hybrid invocation lost its configuration in a scrubbed
+environment. The final runs used the rebuilt harness without concurrent Cargo
+builds and the disposable launcher. Loopback-dependent workspace tests passed
+outside the restricted socket sandbox. No Python reference bug was found.
+
+### Transfer/review routing evidence
+
+The two focused hybrid witnesses in `tests/test_rust_transfer_services.py`
+assert the following counts. All thirteen calls were served by Rust; none
+fell back to Python. The affected-module hybrid run independently recorded
+20 Rust calls to this subset, again with zero fallbacks. Its tests do not
+call payout listing or gap history; the focused witnesses cover both.
+
+| Command | Focused Rust calls | Affected-module Rust calls | Python fallbacks |
+| --- | ---: | ---: | ---: |
+| `transfers list` | 1 | 5 | 0 |
+| `transfers payouts list` | 1 | 0 | 0 |
+| `transfers gaps history` | 1 | 0 | 0 |
+| `transfers rules list` | 2 | 2 | 0 |
+| `review receipt` | 1 | 1 | 0 |
+| `transfers rules create` | 2 | 7 | 0 |
+| `transfers rules delete` | 1 | 1 | 0 |
+| `transfers rules enable` | 1 | 2 | 0 |
+| `transfers rules disable` | 1 | 1 | 0 |
+| `transfers dismiss` | 2 | 1 | 0 |
+
+Native daemon oracle sessions exercise every one of the nine supported kinds,
+including validation failures and large-integer projections. They invoke the
+Rust binary directly, which has no Python fallback or AI projection dispatch.
+
+### Transfer/review mutation catalog
+
+The catalog is `crates/transfers/scripts/mutations.json`; its scratch-tree runner
+is `crates/transfers/scripts/mutation_check.py`. Every entry below names a test
+that must pass unmutated and fail after its rule is changed. The full run passed
+all ten named unmutated selections and killed **44/44 mutations**.
+
+| Mutation | Named killing test |
+| --- | --- |
+| `stored-membership` | `stored_reads_match_python_bytes_without_touching_rows` |
+| `stored-allocated-source` | `stored_allocations_override_reviewed_amounts` |
+| `history-bounds` | `stored_scope_limits_and_receipt_selectors_fail_closed` |
+| `history-newest-page` | `stored_reads_match_python_bytes_without_touching_rows` |
+| `rule-unknown-fields` | `malformed_stored_rules_are_disabled_with_python_reasons` |
+| `rule-finite-nonnegative` | `malformed_stored_rules_are_disabled_with_python_reasons` |
+| `rule-confidence-values` | `malformed_stored_rules_are_disabled_with_python_reasons` |
+| `rule-invalid-disabled` | `malformed_stored_rules_are_disabled_with_python_reasons` |
+| `rule-kind` | `stored_reads_match_python_bytes_without_touching_rows` |
+| `rule-policy` | `stored_reads_match_python_bytes_without_touching_rows` |
+| `rule-string-type` | `malformed_stored_rules_are_disabled_with_python_reasons` |
+| `rule-confidence-type` | `malformed_stored_rules_are_disabled_with_python_reasons` |
+| `payout-malformed-fiat` | `malformed_stored_payout_value_fails_closed` |
+| `authored-kind` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `authored-policy` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `rule-sorted-python-json` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `rule-create-disabled` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `rule-enable-invalid` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `rule-scoped-mutation` | `rule_scope_dismissal_reference_priority_and_rollback_are_preserved` |
+| `policy-same-asset` | `profile_policy_defaults_do_not_author_ownership_or_journal_freshness` |
+| `policy-country` | `profile_policy_defaults_do_not_author_ownership_or_journal_freshness` |
+| `policy-rail-preference` | `profile_policy_defaults_do_not_author_ownership_or_journal_freshness` |
+| `policy-python-uppercase` | `profile_policy_defaults_do_not_author_ownership_or_journal_freshness` |
+| `dismiss-reference-ambiguity` | `rule_scope_dismissal_reference_priority_and_rollback_are_preserved` |
+| `dismiss-id-priority` | `rule_scope_dismissal_reference_priority_and_rollback_are_preserved` |
+| `dismiss-reason-coalesce` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `dismiss-identity` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `dismiss-expiry` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `rule-no-journal-invalidation` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `dismiss-no-journal-invalidation` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `fee-bool-is-not-number` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `dismiss-created-time` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `dismiss-days-range` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `dismiss-days-c-int` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `authoring-atomic-rollback` | `rule_scope_dismissal_reference_priority_and_rollback_are_preserved` |
+| `rule-predicate-object` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `rule-integer-overflow` | `authoring_sequences_match_python_rows_and_errors_byte_for_byte` |
+| `history-snapshot-object` | `historical_snapshot_quantities_follow_python_integer_coercion` |
+| `history-integer-coercion` | `historical_snapshot_quantities_follow_python_integer_coercion` |
+| `receipt-selector-exclusive` | `stored_scope_limits_and_receipt_selectors_fail_closed` |
+| `receipt-profile-scope` | `stored_scope_limits_and_receipt_selectors_fail_closed` |
+| `dismiss-profile-scope` | `rule_scope_dismissal_reference_priority_and_rollback_are_preserved` |
+| `history-reopened-status` | `stored_reads_match_python_bytes_without_touching_rows` |
+| `desktop-expiry-integer` | `desktop_dismissal_expiry_uses_python_integer_coercion` |

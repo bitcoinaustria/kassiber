@@ -9,7 +9,7 @@ spec = importlib.util.spec_from_file_location("tax_mutation_check", ROOT / "tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-transfers")
+checker.ENGINE_PACKAGES = ("--offline", "-p", "kassiber-transfers", "-p", "kassiber-daemon")
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 
 if __name__ == "__main__":

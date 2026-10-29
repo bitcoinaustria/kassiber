@@ -22569,9 +22569,9 @@
           "subprocess"
         ],
         "group": "custody",
-        "reason": "Compares raw CLI/desktop bytes against Python on a synthetic stored book and proves native hybrid routing",
+        "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution",
         "reviewed": true,
-        "tests": 3
+        "tests": 5
       }
     }
   }

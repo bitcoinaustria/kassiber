@@ -72,6 +72,7 @@ elements-miniscript
 regex
 kassiber-setup
 kassiber-transactions
+kassiber-transfers
 kassiber-imports
 kassiber-wallets
 # Stored-journal reports: SQLite/Decimal/JSON only; no transport or process API.

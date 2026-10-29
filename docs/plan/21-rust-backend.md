@@ -1675,6 +1675,37 @@ that adapter and whole-stage parity remain outstanding. Finalized projection
 stays skipped everywhere. See the [lossless diagnostic checkpoint](../reference/custody-engine.md#lossless-interpreter-diagnostic-seam-r2f-partial)
 for comparison counts, mutation witnesses and remaining gates.
 
+### R5 transfers/review checkpoint (partial)
+
+The transfer slice starts at integration tip `65c74e84` on
+`t3code/r5-transfers`. The [29-command classification](../reference/rust-shell.md#transfers-and-review-classification-r5)
+separates stored reads from authoring and current-state computation.
+`crates/transfers` serves stored pairs/payouts, gap history, matching-rule
+configuration and historical review receipts through `Book::transfers`, CLI
+and desktop family adapters. No matcher, journal builder, egress path or AI
+projection is enabled by these reads. Native Python vectors and real-process
+byte oracles cover the five stored-read commands.
+
+The authoring checkpoint adds rule create/delete/enable/disable and advisory
+dismissal, giving **10/29 CLI commands** (9 transfers, 1 review) and **9 desktop
+kinds** with no Python execution in a supported path. Rules preserve validated
+Python JSON bytes, Unicode 14 policy defaults and fail-closed enable behavior.
+Dismissals preserve scope, ambiguity rejection, stable identity/creation time,
+reason coalescing and expiry. Savepoints contain failed writes; these authoring
+operations do not invalidate journals. The native oracle pins complete rows
+after 41 sequential operations (11 writes, 30 refusals), and asserts every
+other application table stays unchanged. The mutation table and verification
+evidence live in the linked Rust shell reference.
+
+Nine authoring commands remain: pair/unpair/update, payout create/delete,
+component plan/apply and gap plan/apply. Append-only revisions, immutable
+aggregates, commitments/fingerprints, native residual validation, report impacts
+and invalidation must be ported together before those commands are advertised.
+All ten computation-dependent commands remain `not_implemented`, including
+component materialization, suggestions/bulk/rules matching and review
+cases/plan/apply. AI projections stay Python. This checkpoint does not satisfy
+full transfers/review slice acceptance, and found no Python reference bug.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
@@ -1878,3 +1909,4 @@ byte oracles cover the five stored-read commands. Authoring remains the next
 checkpoint; append-only revisions, commitments, native residual validation and
 invalidation must be ported together before pairing/components/gap application
 can be advertised.
+

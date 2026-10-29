@@ -220,3 +220,37 @@ fn malformed_stored_payout_value_fails_closed() {
     assert_eq!(e.code, "internal_error");
     assert_eq!(e.message, "could not convert string to float: 'invalid'");
 }
+
+#[test]
+fn historical_snapshot_quantities_follow_python_integer_coercion() {
+    let (_dir, book) = book();
+    let conn = book.connection();
+    conn.execute_batch("DROP TRIGGER trg_custody_gap_reviews_immutable")
+        .unwrap();
+    conn.execute(
+        "UPDATE custody_gap_reviews SET snapshot_json=? WHERE id='review3'",
+        [r#"{"retained_msat":"１２３","residual_msat":1.9}"#],
+    )
+    .unwrap();
+    let args = dict([("gap_id", s("gap")), ("limit", 1.into())]);
+    let result = execute(conn, &scope(), "transfers.gaps.history", &args).unwrap();
+    let row = &array(get(&result, "history").unwrap())[0];
+    assert_eq!(get(row, "retained_msat"), Some(&123.into()));
+    assert_eq!(get(row, "residual_msat"), Some(&1.into()));
+    for (snapshot, message) in [
+        ("[]", "'list' object has no attribute 'get'"),
+        (
+            r#"{"retained_msat":"bad"}"#,
+            "invalid literal for int() with base 10: 'bad'",
+        ),
+    ] {
+        conn.execute(
+            "UPDATE custody_gap_reviews SET snapshot_json=? WHERE id='review3'",
+            [snapshot],
+        )
+        .unwrap();
+        let error = execute(conn, &scope(), "transfers.gaps.history", &args).unwrap_err();
+        assert_eq!(error.code, "internal_error");
+        assert_eq!(error.message, message);
+    }
+}

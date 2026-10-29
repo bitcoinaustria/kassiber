@@ -66,8 +66,10 @@ class RustTransferServicesTest(unittest.TestCase):
         payload = ''.join(json.dumps(r)+'\n' for r in requests).encode()
         args = ["--data-root", str(self.root), "daemon"]
         records = []
-        for command in ([sys.executable, "-m", "kassiber"], [RUST_BIN]):
-            result = subprocess.run([*command,*args],input=payload,capture_output=True,env=self.env,cwd=ROOT,timeout=120)
+        for rust in (False, True):
+            options = dict(input=payload,capture_output=True,env=self.env,cwd=ROOT,timeout=120)
+            result = (subprocess.run([RUST_BIN,*args], **options) if rust
+                      else cli_runner.run(args, reference=True, **options))
             self.assertEqual(result.returncode,0,result.stderr)
             records.append(result.stdout.splitlines(keepends=True))
         self.assertEqual(records[0][1:],records[1][1:])
@@ -81,3 +83,67 @@ class RustTransferServicesTest(unittest.TestCase):
         observed = [json.loads(line) for line in log.read_text().splitlines()]
         self.assertEqual(len(observed),5)
         self.assertTrue(all(row["served_by"]=="rust" for row in observed),observed)
+
+    def test_native_authoring_and_hybrid_witness_every_write(self):
+        from kassiber.cli import handlers
+        log = self.base / 'authoring-hybrid.jsonl'
+        env = {**self.env,'KASSIBER_HYBRID_RUST_BIN':RUST_BIN,'KASSIBER_HYBRID_LOG':str(log)}
+        def call(*args):
+            result=subprocess.run([sys.executable,str(ROOT/'tests/rust_port/hybrid_cli.py'),'--machine','--data-root',str(self.root),*args],env=env,cwd=ROOT,capture_output=True,timeout=120)
+            self.assertEqual(result.returncode,0,(result.stdout,result.stderr))
+            return json.loads(result.stdout)['data']
+        native=call('transfers','rules','create','--predicate','{"out_asset":"BTC","in_asset":"LBTC","max_fee_pct":"0.000_001"}','--name','€ 🚀')
+        c=open_db(self.root)
+        expected=handlers.create_transfer_rule(c,'w','p',predicate={'out_asset':'BTC','in_asset':'LBTC','max_fee_pct':'0.000_001'},name='€ 🚀')
+        c.close()
+        for key in ('id','created_at','updated_at'):
+            native.pop(key,None);expected.pop(key,None)
+        self.assertEqual(native,expected)
+        call("transfers","rules","list")
+        # Use an explicit fresh rule ID instead of assuming ordering of timestamps.
+        rule=call('transfers','rules','create','--disabled')['id']
+        call('transfers','rules','enable','--rule-id',rule)
+        call('transfers','rules','disable','--rule-id',rule)
+        call('transfers','rules','delete','--rule-id',rule)
+        first=call('transfers','dismiss','--tx-out','tx0','--tx-in','tx1','--reason','reviewed','--expires-in-days','0')
+        repeated=call('transfers','dismiss','--tx-out','external0','--tx-in','external1','--expires-in-days','0')
+        self.assertEqual(first,repeated)
+        self.assertIsNone(first['expires_at'])
+        self.assertEqual(first['reason'],'reviewed')
+        observed=[json.loads(line) for line in log.read_text().splitlines()]
+        self.assertTrue(all(row['served_by']=='rust' for row in observed),observed)
+        self.assertEqual({row['command'] for row in observed},{'transfers.rules.list','transfers.rules.create','transfers.rules.enable','transfers.rules.disable','transfers.rules.delete','transfers.dismiss'})
+
+    def test_native_daemon_authoring_validation_and_aliases(self):
+        requests=[
+            {'kind':'ui.transfers.rules.create','args':{'predicate':[]}},
+            {'kind':'ui.transfers.rules.create','args':{'predicate':{'out_asset':1}}},
+            {'kind':'ui.transfers.rules.delete','args':{}},
+            {'kind':'ui.transfers.rules.set_enabled','args':{'rule_id':'invalid','enabled':True}},
+            {'kind':'ui.transfers.rules.set_enabled','args':{'rule_id':'invalid','enabled':False}},
+            {'kind':'ui.transfers.dismiss','args':{'out_id':'tx1','in_id':'tx2','expires_in_days':0}},
+            {'kind':'ui.transfers.dismiss','args':{'out_id':'absent','in_id':'tx2','expires_in_days':'bad'}},
+            {'kind':'ui.transfers.dismiss','args':{'out_id':'absent','in_id':'tx2','expires_in_days':float('inf')}},
+            {'kind':'ui.transfers.rules.create','args':{'predicate':{'out_asset':'BTC'},'enabled':False}},
+            {'kind':'daemon.shutdown'},
+        ]
+        records=[]
+        for rust in (False, True):
+            payload=''.join(json.dumps({**r,'request_id':str(i)})+'\n' for i,r in enumerate(requests)).encode()
+            args=['--data-root',str(self.root),'daemon']
+            options=dict(input=payload,capture_output=True,env=self.env,cwd=ROOT,timeout=120)
+            result=(subprocess.run([RUST_BIN,*args],**options) if rust
+                    else cli_runner.run(args,reference=True,**options))
+            self.assertEqual(result.returncode,0,result.stderr)
+            records.append([json.loads(line) for line in result.stdout.splitlines()[1:]])
+        for expected,actual in zip(*records):
+            # Normalize production UUIDs and wall-clock timestamps; the native
+            # row oracle independently pins all stored bytes with fixed sources.
+            for key in ('id','created_at','updated_at','expires_at'):
+                expected.get('data',{}).pop(key,None);actual.get('data',{}).pop(key,None)
+            if (expected.get('error') or {}).get('code') == 'internal_error':
+                # The shell contract omits interpreter-specific tracebacks.
+                # Keep comparing all other error fields, including the message.
+                self.assertIsNone(actual['error']['debug'])
+                expected['error']['debug'] = None
+            self.assertEqual(actual,expected)

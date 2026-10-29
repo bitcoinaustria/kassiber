@@ -63,7 +63,16 @@ fn predicate(input: &Value) -> Result<Value> {
         let fail = || validation("predicate field 'max_fee_pct' must be a number");
         let n = match v {
             Value::Float(n) => *n,
-            Value::Int(n) => n.to_string().parse::<f64>().map_err(|_| fail())?,
+            Value::Int(n) => {
+                let n = n.to_string().parse::<f64>().map_err(|_| fail())?;
+                if !n.is_finite() {
+                    return Err(AppError::new(
+                        "internal_error",
+                        "int too large to convert to float",
+                    ));
+                }
+                n
+            }
             Value::Str(s) => {
                 kassiber_pytext::parse_float(s.as_str().ok_or_else(fail)?).map_err(|_| fail())?
             }
@@ -178,5 +187,138 @@ fn key_text(key: &kassiber_pyjson::Key) -> String {
         Key::Bool(v) => Value::Bool(*v),
         Key::Float(v) => Value::Float(*v),
         Key::Null => Value::Null,
+    })
+}
+
+fn recommended_policy(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    predicate: &Value,
+) -> Result<&'static str> {
+    let normalized = |name| {
+        get(predicate, name)
+            .filter(|v| truthy(v))
+            .map(py_str)
+            .map(|s| kassiber_pytext::upper(kassiber_pytext::strip(&s)))
+            .unwrap_or_default()
+    };
+    let out = normalized("out_asset");
+    let inbound = normalized("in_asset");
+    if out == inbound {
+        return Ok("carrying-value");
+    }
+    let profile = rows(
+        conn,
+        "SELECT tax_country,bitcoin_rail_carrying_value FROM profiles WHERE id=?",
+        [scope.profile_id],
+    )?
+    .into_iter()
+    .next()
+    .ok_or_else(|| AppError::new("not_found", "Review profile was not found"))?;
+    let country = kassiber_pytext::lower(kassiber_pytext::strip(&text(&profile, "tax_country")));
+    if country == "at" {
+        return Ok("carrying-value");
+    }
+    if !["generic", ""].contains(&country.as_str()) {
+        return Err(AppError::new(
+            "internal_error",
+            format!(
+                "Unsupported tax country '{}'",
+                text(&profile, "tax_country")
+            ),
+        ));
+    }
+    if ((out == "BTC" && inbound == "LBTC") || (out == "LBTC" && inbound == "BTC"))
+        && get(&profile, "bitcoin_rail_carrying_value").is_some_and(truthy)
+    {
+        return Ok("carrying-value");
+    }
+    Ok("taxable")
+}
+
+pub(super) fn write(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operation: &str,
+    args: &Value,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    use crate::sql::{atomic, bind, error};
+    use kassiber_pyjson::{dumps, Options};
+    use kassiber_store::rusqlite::params;
+    atomic(conn, || {
+        let id;
+        if operation == "transfers.rules.create" {
+            let kind = get(args, "kind").cloned().unwrap_or_else(|| s("manual"));
+            if !KINDS.iter().any(|k| kind == s(*k)) {
+                return Err(validation(format!(
+                    "Unsupported pair kind '{}'. Supported: {}",
+                    py_str(&kind),
+                    KINDS.join(", ")
+                )));
+            }
+            let raw = get(args, "predicate")
+                .filter(|v| !matches!(v, Value::Null))
+                .cloned()
+                .unwrap_or_else(|| dict::<&str>([]));
+            let predicate = predicate(&raw)?;
+            let policy = match get(args, "policy").filter(|v| !matches!(v, Value::Null)) {
+                Some(v) => v.clone(),
+                None => s(recommended_policy(conn, scope, &predicate)?),
+            };
+            if !POLICIES.iter().any(|p| policy == s(*p)) {
+                return Err(validation(format!(
+                    "Unsupported pair policy '{}'. Supported: {}",
+                    py_str(&policy),
+                    POLICIES.join(", ")
+                )));
+            }
+            id = sources.uuid(conn)?;
+            let now = sources.now(conn)?;
+            let payload = dumps(
+                &predicate,
+                &Options {
+                    sort_keys: true,
+                    ..Options::default()
+                },
+            )
+            .map_err(|e| AppError::new("internal_error", e.to_string()))?;
+            let enabled = get(args, "enabled").is_none_or(truthy);
+            conn.execute("INSERT INTO swap_matching_rules(id,workspace_id,profile_id,name,predicate_json,kind,policy,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",params![id,scope.workspace_id,scope.profile_id,bind(&value(args,"name"),4)?,payload,bind(&kind,6)?,bind(&policy,7)?,i64::from(enabled),now,now]).map_err(error)?;
+        } else {
+            id = text(args, "rule_id");
+            let row = rows(
+                conn,
+                "SELECT * FROM swap_matching_rules WHERE id=? AND profile_id=?",
+                [id.as_str(), scope.profile_id],
+            )?
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::new("not_found", format!("Rule '{id}' not found")))?;
+            if operation == "transfers.rules.delete" {
+                conn.execute("DELETE FROM swap_matching_rules WHERE id=?", [&id])
+                    .map_err(error)?;
+                return Ok(dict([("deleted", s(id))]));
+            }
+            let enabled = operation == "transfers.rules.enable";
+            if enabled {
+                let row = loaded(&row)?;
+                if let Some(reason) = get(&row, "invalid_reason") {
+                    return Err(validation("Invalid auto-pair rule cannot be enabled")
+                        .with_hint("Delete and recreate the rule with a valid predicate.")
+                        .with_details(dict([("reason", reason.clone())])));
+                }
+            }
+            conn.execute(
+                "UPDATE swap_matching_rules SET enabled=?,updated_at=? WHERE id=?",
+                params![i64::from(enabled), sources.now(conn)?, id],
+            )
+            .map_err(error)?;
+        }
+        let row = rows(conn, "SELECT * FROM swap_matching_rules WHERE id=?", [id])?
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::new("internal_error", "Rule row was not stored"))?;
+        loaded(&row)
     })
 }
