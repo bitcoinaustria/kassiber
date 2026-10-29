@@ -3025,3 +3025,17 @@ campaign and inherited mutation rerun are still running; this boundary does not
 claim their completion. PyO3, census, shadow and normal replay still skip the
 stage. Python remains authoritative, Rust results do not reach stored state,
 and snapshot v1 remains raw-only.
+
+### Whole-stage parity gate
+
+The unpackaged raw driver now matches the unchanged full Python entry point
+across all twelve inherited raw generators: **24,000 books plus 1,030
+permutations**, including projection refusals, with **zero differences**.
+`tests/test_custody_projection_stage.py` uses the existing common comparison
+projection and reports 13 passing tests, including fixture regeneration.
+The read-only retained corpus independently matches **159 requests plus 159
+permutations**, with zero differences and no refusals. Logs are
+`target/r2f8-verify/raw-comparison.log` and `replay-projection.log`.
+This establishes the whole-stage gate before enabling normal comparison
+admission. Neither the binding nor census/shadow admission changes at this
+boundary. The complete inherited mutation campaign remains outstanding.
