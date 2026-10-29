@@ -3,6 +3,8 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "test-probe")]
+use kassiber_cli::PROBE_NOT_IMPLEMENTED;
 use kassiber_cli::{run, Environment, Streams};
 use kassiber_runtime::fake::{FakeConfig, FakeStore};
 use kassiber_runtime::store::{BookStore, StubStore, UnlockMode};
@@ -309,6 +311,11 @@ fn the_probe_reports_implementation_without_running_the_command() {
         (&["--machine", "status"][..], 0, "status"),
         (&["--machine", "init"][..], 0, "init"),
         (&["--machine", "wallets", "list"][..], 0, "wallets.list"),
+        (
+            &["--machine", "--diagnostics-out", "auto", "status"][..],
+            PROBE_NOT_IMPLEMENTED,
+            "status",
+        ),
     ] {
         let (code, out, err) = invoke(Arc::new(StubStore), &probe, argv);
         assert_eq!(code, expected, "{argv:?}");

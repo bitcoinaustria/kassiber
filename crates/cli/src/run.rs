@@ -267,7 +267,9 @@ pub fn run(
     if env.test_probe {
         let _ = writeln!(stdout, "{dotted}");
         let _ = stdout.flush();
-        return if IMPLEMENTED.contains(&dotted.as_str()) {
+        // `--diagnostics-out` is refused below, so a call carrying it is
+        // not one Rust serves.
+        return if IMPLEMENTED.contains(&dotted.as_str()) && globals.diagnostics_out.is_none() {
             0
         } else {
             PROBE_NOT_IMPLEMENTED
