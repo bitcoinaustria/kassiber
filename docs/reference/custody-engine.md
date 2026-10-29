@@ -2968,7 +2968,10 @@ copied record still contained the original identifier. That attempt is not a
 kill. The final witness contains two distinct surrogate identifiers which a
 lossy conversion collapses; it kills the building mutant. The inherited
 `projection6-receipt-existing` recipe was mechanically adapted to `PyStr`
-membership and re-killed. No Python reference bug was found.
+membership and re-killed. Known Python direct-payout reference bugs are mirrored pending the separate
+Python fix: R1 prices every external slice for a partial payout; R2 gives
+partial carrying-value payouts duplicate row ids; R3 stores payout value
+through a float.
 
 | Verification for this checkpoint | Result |
 | --- | --- |
@@ -3081,8 +3084,11 @@ All verification uses locked Python 3.11, Rust 1.99.1,
 four sandbox-denied loopback binds; the complete permitted rerun passed using
 disposable owned servers. `HOME` was not changed. Local verification artifacts
 are under `target/r2f8-verify/`; the retained corpus was read only. No full
-quality gate, push or PR is claimed. No Python reference bug was found, and no
-Python production source changed.
+quality gate, push or PR is claimed. Known Python direct-payout reference bugs are mirrored pending the separate
+Python fix: R1 prices every external slice for a partial payout; R2 gives
+partial carrying-value payouts duplicate row ids; R3 stores payout value
+through a float. No Python production
+source changed.
 
 The final enabled generator rerun uses the normal Rust entry point and evaluates
 each raw input once per engine, without companion activity calls. The fixture
@@ -3122,3 +3128,28 @@ baselines, complete catalog membership and replacement trials. It reports zero
 survivors and zero build errors in
 `target/r2f8-verify/mutation-summary.json`. The targeted Cargo adapter, original
 batch recipes, checker logs and `audit-catalog.py` remain alongside it.
+
+
+## R2f independent-review corrections
+
+The finalized row contract treats mappings as records of named fields. Mapping
+insertion order is not an accounting or fusion contract: Python constructs row
+keys in insertion order, while Rust's serde maps sort them. Comparisons preserve
+sequence order (rows, pairs, selected moves and diagnostics), key sets, values,
+types and exact decimal text, but intentionally ignore mapping key order.
+`test_projection_row_mapping_order_is_not_a_contract` verifies this distinction
+on actual finalized rows. Fusion must read row fields by name and must not hash,
+zip or otherwise interpret their insertion order; canonical hashing must use
+its explicit canonical serializer.
+
+The review payout generator uses the real `create_direct_swap_payout` writer
+with disposable SQLite books. Its expected outputs are computed live. Partial
+payout cases are labelled "reference bug, expected to change" for R1/R2, and
+all writer values remain subject to R3. These are parity evidence, not frozen
+assertions of correct payout accounting.
+
+Rust refusals now include `error.stage`: the first uncompleted Python stage.
+Pre-component admission errors identify `components`; raw protocol admission
+identifies `snapshot`. Census, shadow, PyO3 replay and the raw projection driver
+compare this stage together with the error code. No successful outputs are
+fabricated for an atomic refusal.
