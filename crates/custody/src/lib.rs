@@ -110,6 +110,7 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
             drop(span);
             let _span = timing::span("response");
             if let Some(text) = response_text(
+                snapshot.transactions.len() >= 256,
                 &components,
                 &evidence,
                 &gaps,
@@ -145,6 +146,7 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
 /// object keys are sorted), without materializing it; `None` defers to that
 /// path for any value it would treat differently.
 fn response_text(
+    concurrent: bool,
     components: &serde_json::Value,
     evidence: &serde_json::Value,
     gaps: &serde_json::Value,
@@ -152,8 +154,59 @@ fn response_text(
     quantity: &kassiber_pyjson::Value,
     projection: Option<&kassiber_pyjson::Value>,
 ) -> Option<String> {
+    enum Stage<'a> {
+        Json(&'a serde_json::Value),
+        Py(&'a kassiber_pyjson::Value),
+    }
+    // Stages sit two containers deep: the response, then its stage map.
+    fn encode(stage: &Stage) -> Option<String> {
+        let options = kassiber_pyjson::Options::new();
+        let mut out = String::new();
+        match stage {
+            Stage::Json(value) => codec::dumps_json_into(value, &options, 2, &mut out)?,
+            Stage::Py(value) => kassiber_pyjson::dumps_into(value, &options, 2, &mut out).ok()?,
+        }
+        Some(out)
+    }
+    let mut stages = vec![
+        ("components", Stage::Json(components)),
+        ("evidence", Stage::Json(evidence)),
+        ("gaps", Stage::Json(gaps)),
+    ];
+    stages.push(("interpretation", Stage::Py(interpretation)));
+    stages.push(("quantity", Stage::Py(quantity)));
+    if let Some(projection) = projection {
+        stages.push(("finalized_projection", Stage::Py(projection)));
+    }
+    // Stage texts are independent; encode a large book's concurrently when
+    // threads are available, and in order otherwise.
+    let texts: Vec<Option<String>> = if !concurrent {
+        stages.iter().map(|(_, stage)| encode(stage)).collect()
+    } else {
+        std::thread::scope(|scope| {
+            let workers: Vec<_> = stages
+                .iter()
+                .map(|(_, stage)| {
+                    std::thread::Builder::new()
+                        .spawn_scoped(scope, move || encode(stage))
+                        .ok()
+                })
+                .collect();
+            stages
+                .iter()
+                .zip(workers)
+                .map(|((_, stage), worker)| match worker {
+                    Some(worker) => worker
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+                    None => encode(stage),
+                })
+                .collect()
+        })
+    };
     let options = kassiber_pyjson::Options::new();
-    let mut out = String::new();
+    let mut out =
+        String::with_capacity(texts.iter().flatten().map(String::len).sum::<usize>() + 256);
     out.push_str("{\"engine_version\": ");
     kassiber_pyjson::dumps_str_into(ENGINE_VERSION, &options, &mut out);
     out.push_str(", \"schema_version\": 1, \"skipped_stages\": ");
@@ -162,19 +215,14 @@ fn response_text(
     } else {
         "[\"finalized_projection\"]"
     });
-    out.push_str(", \"stages\": {\"components\": ");
-    codec::dumps_json_into(components, &options, 2, &mut out)?;
-    out.push_str(", \"evidence\": ");
-    codec::dumps_json_into(evidence, &options, 2, &mut out)?;
-    out.push_str(", \"gaps\": ");
-    codec::dumps_json_into(gaps, &options, 2, &mut out)?;
-    out.push_str(", \"interpretation\": ");
-    kassiber_pyjson::dumps_into(interpretation, &options, 2, &mut out).ok()?;
-    out.push_str(", \"quantity\": ");
-    kassiber_pyjson::dumps_into(quantity, &options, 2, &mut out).ok()?;
-    if let Some(projection) = projection {
-        out.push_str(", \"finalized_projection\": ");
-        kassiber_pyjson::dumps_into(projection, &options, 2, &mut out).ok()?;
+    out.push_str(", \"stages\": {");
+    for (index, ((name, _), text)) in stages.iter().zip(texts).enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        kassiber_pyjson::dumps_str_into(name, &options, &mut out);
+        out.push_str(": ");
+        out.push_str(&text?);
     }
     out.push_str("}}");
     Some(out)

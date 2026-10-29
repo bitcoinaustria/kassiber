@@ -11526,7 +11526,7 @@
   {
     "id": "REC-OPERATION-01",
     "file": "crates/custody/src/lib.rs",
-    "find": "    out.push_str(\", \\\"interpretation\\\": \");\n    kassiber_pyjson::dumps_into(interpretation, &options, 2, &mut out).ok()?;\n",
+    "find": "    stages.push((\"interpretation\", Stage::Py(interpretation)));\n",
     "replace": "    let _ = interpretation;\n",
     "rule": "Advertise interpretation as implemented.",
     "expect_failing": [
@@ -11536,8 +11536,8 @@
   {
     "id": "REC-OPERATION-02",
     "file": "crates/custody/src/lib.rs",
-    "find": "    out.push_str(\", \\\"interpretation\\\": \");",
-    "replace": "    out.push_str(\", \\\"incorrect\\\": \");",
+    "find": "(\"interpretation\", Stage::Py(interpretation))",
+    "replace": "(\"incorrect\", Stage::Py(interpretation))",
     "rule": "Publish the complete stage under its stable operation key.",
     "expect_failing": [
       "interpretation_operation_vectors"
