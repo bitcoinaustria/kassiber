@@ -687,7 +687,9 @@ pub fn build(v: &Value) -> Result<Value, String> {
 fn compose(v: &Operands) -> Result<State, String> {
     let canonical = &v["canonical"];
     let components = array(&v["components"]);
+    let span = crate::timing::span("quantity.components");
     let comp = component_claims(canonical, components, &v["evidence"])?;
+    drop(span);
     let component_ids: BTreeSet<_> = components
         .iter()
         .flat_map(|c| array(&c["legs"]))
@@ -713,12 +715,15 @@ fn compose(v: &Operands) -> Result<State, String> {
             }
         }
     }
+    let span = crate::timing::span("quantity.holds");
     let gaps = super::holds::compose(
         canonical,
         &ignored.into_iter().map(|s| json!(s)).collect::<Vec<_>>(),
         &v["dismissed"],
         &v["search"],
     )?;
+    drop(span);
+    let span = crate::timing::span("quantity.native");
     let native = super::native::compile(
         canonical,
         array(&v["native"]),
@@ -738,7 +743,11 @@ fn compose(v: &Operands) -> Result<State, String> {
         .flat_map(|e| array(&e["legs"]))
         .cloned()
         .collect();
+    drop(span);
+    let span = crate::timing::span("quantity.project");
     let projection = super::project(&observations, &claims)?;
+    drop(span);
+    let _span = crate::timing::span("quantity.issues");
     let rows: serde_json::Map<_, _> = array(&v["rows"])
         .iter()
         .filter(|r| !r["id"].is_null() && r["id"] != "")
@@ -922,7 +931,9 @@ pub fn stage(
         ignored: &ignored,
         dismissed: &dismissed,
     })?;
+    let span = crate::timing::span("quantity.py");
     let mut value = state.py()?;
+    drop(span);
     let mut issues = stored::list(stored::get(&value, "issues")).to_vec();
     for (safe_hash, exact_hash, id, reason, detail) in originals {
         let q = issues

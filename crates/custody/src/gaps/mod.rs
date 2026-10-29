@@ -99,7 +99,7 @@ pub fn stage(
         .gap_worklist
         .rows
         .iter()
-        .map(|r| json!(r))
+        .map(|r| Value::Object(r.clone()))
         .collect();
     compute(
         &rows,

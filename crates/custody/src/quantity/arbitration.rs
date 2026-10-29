@@ -639,9 +639,20 @@ pub fn project(observations: &[Value], claims: &[Value]) -> Result<Value, String
         return Err("AssertionError".into());
     }
     decisions.sort_by_key(|d| d.source.clone());
-    Ok(
-        json!({"$type":"QuantityProjection","observations":by_hash.into_values().collect::<Vec<_>>(),"decisions":decisions.into_iter().map(|d|d.value).collect::<Vec<_>>(),"postings":postings,"claim_errors":errors}),
-    )
+    // The object json! would build, with the lists moved rather than copied.
+    let mut projection = serde_json::Map::new();
+    projection.insert("$type".into(), json!("QuantityProjection"));
+    projection.insert(
+        "observations".into(),
+        Value::Array(by_hash.into_values().collect()),
+    );
+    projection.insert(
+        "decisions".into(),
+        Value::Array(decisions.into_iter().map(|d| d.value).collect()),
+    );
+    projection.insert("postings".into(), Value::Array(postings));
+    projection.insert("claim_errors".into(), Value::Array(errors));
+    Ok(Value::Object(projection))
 }
 
 #[cfg(test)]

@@ -47,7 +47,7 @@ fn blocked_ids(interpreter: &Py, projection: &Py) -> Result<Value, String> {
 pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
     let mut rows = Map::new();
     for raw in &snapshot.transactions {
-        let mut row = json!(raw);
+        let mut row = Value::Object(raw.clone());
         row["_closed_confirmation_observation"] = interpretation::capture_confirmation(&row)?;
         let id = if codec::truth(&row["id"]) {
             codec::pystr(&row["id"])
