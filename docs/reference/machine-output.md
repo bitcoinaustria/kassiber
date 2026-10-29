@@ -84,7 +84,9 @@ stderr; see [the operator broker](operator-broker.md#queue-and-operation-semanti
 Use `kassiber --machine diagnostics collect --save` to also write the report
 under `exports/diagnostics/` in the active state root. Use
 `--diagnostics-out auto` before a failing subcommand to save the same public
-report only when that command errors.
+report only when that command errors. Each automatic report is named after its
+`generated_at` time (`kassiber-diagnostics-2026-10-29T01-02-03Z.json`) and never
+replaces an earlier one; a second report in the same second gets a `-2` suffix.
 
 Diagnostics reports preserve shape, counts, and sanitized code context. They do
 not include raw txids, addresses, descriptors, xpubs, labels, notes, exact
