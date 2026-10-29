@@ -9,7 +9,6 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
-kassiber-pytext = { path = "../pytext" }
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 # Existing JSON boundary libraries; retain exact integers and parse float literals with CPython's

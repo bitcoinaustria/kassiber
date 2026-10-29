@@ -130,6 +130,8 @@ fn clock(s: &[u8], offset: bool) -> Option<i64> {
     // the whole offset is strictly smaller than 24 hours.
     (!offset || result < 86_400_000_000).then_some(result)
 }
+// Custody follows time_utils.py's trailing-Z rewrite and CPython offset parsing.
+// Keep this vector-pinned path separate from setup's iso_datetime helper.
 fn parsed(v: &Value) -> Option<i64> {
     if v.is_null() || v == "" {
         return None;
