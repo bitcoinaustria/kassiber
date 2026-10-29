@@ -972,8 +972,8 @@
   {
     "id": "D-incoming-quiet",
     "file": "crates/store/src/encryption.rs",
-    "find": "let logging: Option<String> = if backup {",
-    "replace": "let logging: Option<String> = if false && backup {",
+    "find": "conn.execute_batch(\"PRAGMA cipher_log_level=NONE\")",
+    "replace": "conn.execute_batch(\"PRAGMA cipher_log_level=ERROR\")",
     "expect_failing": [
       "incoming_authentication_is_quiet_and_ignores_active_operator_binding"
     ],
