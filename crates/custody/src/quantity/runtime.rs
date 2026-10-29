@@ -587,8 +587,104 @@ pub fn whole_issues(
     issues.sort_by_key(|i| (text(&i["occurred_at"]), text(&i["issue_id"])));
     Ok(json!(issues))
 }
+/// Private typed runtime operands by reference, indexed by their operand
+/// names; an unknown name is null, as in a JSON object.
+struct Operands<'a> {
+    canonical: &'a Value,
+    rows: &'a Value,
+    components: &'a Value,
+    evidence: &'a Value,
+    claims: &'a Value,
+    native: &'a Value,
+    blockers: &'a Value,
+    search: &'a Value,
+    ignored: &'a Value,
+    dismissed: &'a Value,
+}
+impl<'a> Operands<'a> {
+    fn of(v: &'a Value) -> Self {
+        Self {
+            canonical: &v["canonical"],
+            rows: &v["rows"],
+            components: &v["components"],
+            evidence: &v["evidence"],
+            claims: &v["claims"],
+            native: &v["native"],
+            blockers: &v["blockers"],
+            search: &v["search"],
+            ignored: &v["ignored"],
+            dismissed: &v["dismissed"],
+        }
+    }
+}
+impl std::ops::Index<&str> for Operands<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        static NULL: Value = Value::Null;
+        match key {
+            "canonical" => self.canonical,
+            "rows" => self.rows,
+            "components" => self.components,
+            "evidence" => self.evidence,
+            "claims" => self.claims,
+            "native" => self.native,
+            "blockers" => self.blockers,
+            "search" => self.search,
+            "ignored" => self.ignored,
+            "dismissed" => self.dismissed,
+            _ => &NULL,
+        }
+    }
+}
+/// The computed parts of a `CanonicalQuantityState`.
+struct State {
+    native: Value,
+    projection: Value,
+    issues: Value,
+    tax: Value,
+    gaps: Value,
+    comp: Value,
+}
+impl State {
+    fn json(&self) -> Value {
+        let canonical = &self.native["canonical_input"];
+        let (projection, issues, tax, gaps, comp) = (
+            &self.projection,
+            &self.issues,
+            &self.tax,
+            &self.gaps,
+            &self.comp,
+        );
+        json!({"$type":"CanonicalQuantityState","canonical_input":canonical,"projection":projection,"issues":issues,"tax_eligibility":tax,"gap_candidate_transaction_ids":gaps[2],"gap_holds":gaps[3],"reviewed_conversion_pairs":comp[2],"reviewed_direct_payouts":comp[3]})
+    }
+    /// `codec::from_json(&self.json())`, converting each part in place:
+    /// the JSON object holds its keys in sorted order.
+    fn py(&self) -> Result<kassiber_pyjson::Value, String> {
+        use kassiber_pyjson::{Key, Value as Py};
+        let parts = [
+            ("$type", &json!("CanonicalQuantityState")),
+            ("canonical_input", &self.native["canonical_input"]),
+            ("gap_candidate_transaction_ids", &self.gaps[2]),
+            ("gap_holds", &self.gaps[3]),
+            ("issues", &self.issues),
+            ("projection", &self.projection),
+            ("reviewed_conversion_pairs", &self.comp[2]),
+            ("reviewed_direct_payouts", &self.comp[3]),
+            ("tax_eligibility", &self.tax),
+        ];
+        Ok(Py::Dict(
+            parts
+                .into_iter()
+                .map(|(key, value)| Ok((Key::Str(key.into()), codec::from_json(value)?)))
+                .collect::<Result<_, String>>()?,
+        ))
+    }
+}
 /// Private typed runtime operands; raw snapshot v1 never contains these values.
 pub fn build(v: &Value) -> Result<Value, String> {
+    compose(&Operands::of(v)).map(|state| state.json())
+}
+fn compose(v: &Operands) -> Result<State, String> {
     let canonical = &v["canonical"];
     let components = array(&v["components"]);
     let comp = component_claims(canonical, components, &v["evidence"])?;
@@ -659,9 +755,14 @@ pub fn build(v: &Value) -> Result<Value, String> {
         array(&v["blockers"]),
     )?;
     let tax = tax_eligibility(canonical, &projection, array(&issues), &rows)?;
-    Ok(
-        json!({"$type":"CanonicalQuantityState","canonical_input":canonical,"projection":projection,"issues":issues,"tax_eligibility":tax,"gap_candidate_transaction_ids":gaps[2],"gap_holds":gaps[3],"reviewed_conversion_pairs":comp[2],"reviewed_direct_payouts":comp[3]}),
-    )
+    Ok(State {
+        native,
+        projection,
+        issues,
+        tax,
+        gaps,
+        comp,
+    })
 }
 /// Recompute quantity from preceding Rust stages and the raw snapshot only.
 pub fn stage(
@@ -798,10 +899,30 @@ pub fn stage(
             .push(row);
     }
     let reviews: Vec<_> = snapshot.gap_reviews.iter().map(|r| json!(r)).collect();
-    let value = build(
-        &json!({"canonical":evidence["canonical_input"],"rows":evidence["enriched_rows"],"components":effective,"evidence":snapshots,"claims":converted["claims"],"native":converted["native_audits"],"blockers":safe,"search":gaps,"ignored":ignored,"dismissed":crate::gaps::dismissed_fingerprints(&reviews)}),
-    )?;
-    let mut value = codec::from_json(&value)?;
+    // The operands `build` would read from one JSON object, without copying.
+    let components = Value::Array(effective);
+    let snapshots = Value::Object(
+        snapshots
+            .into_iter()
+            .map(|(k, v)| (k, Value::Array(v)))
+            .collect(),
+    );
+    let blockers = Value::Array(safe);
+    let ignored = Value::Array(ignored.into_iter().map(Value::String).collect());
+    let dismissed = crate::gaps::dismissed_fingerprints(&reviews);
+    let state = compose(&Operands {
+        canonical: &evidence["canonical_input"],
+        rows: &evidence["enriched_rows"],
+        components: &components,
+        evidence: &snapshots,
+        claims: &converted["claims"],
+        native: &converted["native_audits"],
+        blockers: &blockers,
+        search: gaps,
+        ignored: &ignored,
+        dismissed: &dismissed,
+    })?;
+    let mut value = state.py()?;
     let mut issues = stored::list(stored::get(&value, "issues")).to_vec();
     for (safe_hash, exact_hash, id, reason, detail) in originals {
         let q = issues
