@@ -1879,3 +1879,124 @@ failed baselines. The local audit and witness map are
 `target/r2e2-verify/mutation-summary.json`; verification logs stay under that
 ignored artifact root. New snapshots also replay as **80 requests and 80
 permutations**, with zero differences or pre-request refusals.
+
+## Reviewed compilation and native augmentation checkpoint (R2e, partial)
+
+Branch `t3code/r2e-quantity-3`, based on `180edd62`, ports
+`compile_component_quantity_claims` and `compile_verified_native_claims` as
+private, comparison-only quantity primitives. Reviewed compilation includes
+inferred and explicit allocations, transactionless FIFO routes, source/target
+cursors, observation fees, reviewed residuals, high-end conversion slices,
+economic conversion records and direct payouts. Native augmentation includes
+virtual channel-close sources, exact audit admission and source conservation,
+aggregate observed/synthetic targets, alias preflight, connected invalidity
+closure, reservations and implicit-wallet-delta suspense.
+
+Every msat operation uses `BigInt`. Synthetic observations share the evidence
+field/commitment constructor, then use exact quantity admission; they do not
+pass through the earlier evidence stage's machine-width validator. Earlier
+stage admission is unchanged. CPython uppercase and integer conversions,
+lexical timestamps, error families and component compiler diagnostics are
+compared independently. The private reviewed seam accepts ordered observation
+pairs so dictionary admission order survives JSON decoding. No intermediate
+compiler operand is added to snapshot v1.
+
+| Frozen Python operands | Successful outcomes | Refusals | Claims |
+| --- | ---: | ---: | ---: |
+| Reviewed components/conversions (83) | 39 | 44 | 51 |
+| Native augmentation (100) | 96 | 4 | 13 |
+| **Total (183)** | **135** | **48** | **64** |
+
+Successful native compilation may deliberately emit diagnostics and no claims.
+The generator therefore gives each scenario a separately checked positive
+companion. Every primary result is compared too; companions cannot mask a
+changed refusal, missing issue, orphan synthetic observation or missing claim.
+Both engines assert the checked-in active-count manifest for every scenario.
+
+| Generated scenario batches | Batches per engine | Active claims per engine |
+| --- | ---: | ---: |
+| Reviewed (83 scenarios, 20 variants each) | 1,660 | 4,340 |
+| Native (100 scenarios, 20 variants each) | 2,000 | 2,280 |
+| **Total** | **3,660** | **6,620** |
+
+These are **7,320 compiler calls per engine**, plus 7,320 reversed-input calls
+independently re-evaluated by Python. Variants use four exact integer widths,
+including quantities above `i128`, and lexical offset timestamps. Frozen
+controls include duplicate pending allocation ids, partial and native
+conversion residuals, negative slice admission, explicit/leg-derived external
+subtypes, Unicode proof identities, virtual-source contradictions and a native
+source/target graph that requires more than one invalidity-closure pass.
+
+The catalog adds **335 entries**. Each counted entry has a passing unmutated
+named test, a building mutant and a failing named test. Twelve equivalent or
+defensive trials are excluded; interrupted trials and a failed
+baseline contribute no result. The affected witnesses were rechecked with a
+fresh target root. The audit and witness map are
+`target/r2e3-verify/mutation-summary.json`.
+
+| Mutation area | New entries | Named witnesses |
+| --- | ---: | --- |
+| Reviewed admission, routes, conversion and output fields | 157 | `quantity_reviewed_compilation_vectors` |
+| Native admission, augmentation, contradictions and output fields | 149 | `quantity_native_augmentation_vectors` |
+| Arithmetic, ordering, defaults, identities and constructors | 29 | Both compiler witnesses above |
+| **New total** | **335** | **All killed** |
+| Inherited catalog rerun | 1,462 | **All killed** |
+| **Catalog total** | **1,797** | **All killed** |
+
+Verification uses Rust 1.99.1, locked Python 3.11,
+`MATURIN_NO_INSTALL_RUST=1`, offline Cargo and disposable data roots:
+
+- Workspace formatting and all-target Clippy with warnings denied pass.
+  Workspace tests pass **777 tests**: 759 with `kassiber-net` excluded and 18
+  in that crate's separately run isolated local-listener tests.
+- The inherited generator suite passes **31 tests**, including the twelve
+  raw-snapshot suites' **24,000 books and 1,030 permutations**, with zero
+  differences. The final quantity primitive/compiler suite passes **7 tests**,
+  including frozen regeneration, activity counts and reversed operands.
+- Inventory/contracts, mutation-runner contracts and snapshot checks together
+  with the quantity suite pass **26 tests and 14 subtests**. All **1,797**
+  catalog applicability checks pass.
+- Focused census and shadow each pass **91 tests and 36 subtests**, comparing
+  four implemented stages on **40 builds** with zero mismatches. Shadow also
+  completes **40 frozen Python comparisons**. Each lane retains **0 quantity
+  comparisons and 40 quantity skips**.
+- Read-only replay compares the retained **159 requests and 159 permutations**
+  with zero differences or pre-request refusals. Fresh recordings remain under
+  this worktree's `target/r2e3-verify/{census,shadow}-snapshots`.
+- Manual second review checks Python branch correspondence, admission order,
+  exact source/target coordinates, conversion terms and defaults, native proof
+  preimages, multi-pass contradiction closure and the raw-only/persistence
+  boundary.
+
+Fresh recordings additionally replay as **80 requests and 80 permutations**
+with zero differences or pre-request refusals.
+
+Branch dispositions:
+
+- The flattening pass has already checked allocation endpoints and quantity
+  conservation and discarded nonpositive allocations before the claim loop.
+  Repeating those guards there is defensive. Its returned sources are observed
+  by construction; a transactionless source cannot escape its token pools.
+- Source/target slice constructors retain their own refusal witnesses,
+  including malformed conversion coordinates. The complete claim constructor
+  also rejects a conversion whose unobserved retained sink would otherwise
+  combine an internal state with external destination classification. The
+  preceding target-equality/retained-destination assertion is defensive rather
+  than a separate reachable constructor failure.
+- Inferred allocation ordinals are not consumed after inference; changing
+  that intermediate field alone is equivalent. Sorting explicit allocations
+  and FIFO/source/target cursor behavior have separate witnesses.
+- Alias ownership is installed after preflighting a whole slot. A later slot
+  cannot have the same slot identity, so the same-slot owner guard is
+  defensive. Default-false fee-inclusion fields and a default-zero synthetic
+  inbound fee cannot be tested by merely omitting those fields; counted
+  mutations change their actual values instead.
+- Non-JSON custom mappings/iterators and lone-surrogate strings are outside
+  this typed private fixture seam. No shell, filesystem, snapshot or product
+  interface is added.
+
+Quantity stays skipped in PyO3, census and custody-shadow. Gap-hold composition,
+whole-state issues (including authored-component evidence drift/fail-closed
+composition), scoped tax barriers, finalized projection and journal fusion
+remain unported. Python stays authoritative and Rust results never reach
+stored state. No Python reference bug was identified in this checkpoint.

@@ -29,6 +29,10 @@ impl Slice {
         json!({"$type":"QuantitySlice","observation_hash":self.hash,"start_msat":number(&self.start),"end_msat":number(&self.end)})
     }
 }
+pub(super) fn validate_claim(value: &Value) -> Result<(), String> {
+    Claim::parse(value).map(|_| ())
+}
+
 #[derive(Clone)]
 struct Claim {
     value: Value,

@@ -93,3 +93,49 @@ def test_quantity_transfer_vectors_and_active_generated_counts(primitive_driver)
         value["projection"]["decisions"].reverse()
         value["eligible"].reverse()
     assert primitive_driver(shuffled) == expected
+
+
+def test_quantity_composition_frozen_python_outputs():
+    from tests.custody_quantity_composition_vectors import PATH, vectors
+    assert json.loads(PATH.read_text()) == vectors()
+
+
+def test_quantity_composition_generated_active_counts_both_engines(primitive_driver):
+    from tests.custody_quantity_composition_generator import COUNTS, activity, scenario, scenarios
+    counts = {engine: Counter() for engine in ('Python', 'Rust')}
+    values = []
+    expected = []
+    names = []
+    for i in range(len(scenarios())):
+        for variant in range(20):
+            name, operands, results, active = scenario(i, variant)
+            assert active > 0
+            values.extend(operands)
+            expected.extend(results)
+            names.append(name)
+            counts['Python'][name] += active
+    actual = primitive_driver(values)
+    assert actual == expected
+    for i, name in enumerate(names):
+        active = sum(activity(v) for v in actual[2*i:2*i+2])
+        assert active > 0
+        counts['Rust'][name] += active
+    assert counts['Python'] == counts['Rust'] == json.loads(COUNTS.read_text())
+    assert len(counts['Python']) == len(scenarios())
+
+    # Re-evaluate reversed operands independently: malformed admission order
+    # may change a refusal, while every positive companion remains active.
+    from tests.custody_quantity_composition_generator import evaluate
+    permuted = deepcopy(values)
+    for value in permuted:
+        if value['op'] == 'reviewed':
+            value['observations'].reverse()
+            for field in ('legs', 'allocations', 'economic_terms'):
+                value['component'].get(field, []).reverse()
+        else:
+            value['audit'].reverse()
+            value['canonical']['events'].reverse()
+            for event in value['canonical']['events']:
+                for field in ('legs', 'evidence_snapshots', 'observation_aliases'):
+                    event[field].reverse()
+    assert primitive_driver(permuted) == [evaluate(v) for v in permuted]

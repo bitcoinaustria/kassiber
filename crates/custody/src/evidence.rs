@@ -497,6 +497,12 @@ fn validate_observation(observation: &Value) -> Result<(), Error> {
     Ok(())
 }
 pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, Error> {
+    let result = observation_fields(row, key)?;
+    validate_observation(&result)?;
+    Ok(result)
+}
+// Construction shared with exact native augmentation, whose admission uses BigInt.
+pub(crate) fn observation_fields(row: &Value, key: &EventKey) -> Result<Value, Error> {
     let snapshot = evidence_snapshot(row, key, None)?;
     let cached = &row["_kassiber_verified_chain_observation"];
     let auth = if truth(&cached["authoritative"]) {
@@ -515,7 +521,6 @@ pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, Error> {
         "unknown".into()
     };
     let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).py_upper(),"direction":text(&row["direction"]).py_lower(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
-    validate_observation(&result)?;
     Ok(result)
 }
 fn issue(key: &EventKey, code: &str, message: &str, rows: &[Value], details: Value) -> Value {

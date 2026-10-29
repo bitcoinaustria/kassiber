@@ -1,11 +1,20 @@
 //! Test-only JSONL driver for primitive parity; this is not snapshot admission.
-use kassiber_custody::quantity::{allocation, balances, project, transfers};
+use kassiber_custody::quantity::{allocation, balances, native, project, reviewed, transfers};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 fn main() {
     let mut output = io::BufWriter::new(io::stdout().lock());
     for line in io::stdin().lock().lines() {
         let v: Value = serde_json::from_str(&line.unwrap()).unwrap();
+        if v["op"] == "reviewed" {
+            writeln!(
+                output,
+                "{}",
+                reviewed::outcome(&v["component"], &v["observations"])
+            )
+            .unwrap();
+            continue;
+        }
         let result = match v["op"].as_str().unwrap_or("project") {
             "fifo" => {
                 allocation::allocate_msat_fifo(&v["sources"], &v["sinks"], v.get("amount_msat"))
@@ -20,6 +29,12 @@ fn main() {
                 &v["projection"],
                 v["eligible"].as_array().unwrap(),
                 &v["refs"],
+            ),
+            "native" => native::compile(
+                &v["canonical"],
+                v["audit"].as_array().unwrap(),
+                v["excluded"].as_array().unwrap(),
+                &v["reserved"],
             ),
             "project" => project(
                 v["observations"].as_array().unwrap(),

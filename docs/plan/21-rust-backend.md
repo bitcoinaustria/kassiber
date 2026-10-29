@@ -1521,6 +1521,19 @@ controls with a separate exact companion edge. See the
 Quantity remains skipped until reviewed compilation, native augmentation,
 gap holds, issues and scoped tax barriers match the Python runtime.
 
+### Reviewed quantity compilation and native augmentation (R2e, partial)
+
+The local `t3code/r2e-quantity-3` checkpoint, based on `180edd62`, ports the
+reviewed component/conversion compiler and native audit augmentation. It covers
+transactionless routes, partial conversion coordinates and economic records,
+virtual channel sources, aggregate native targets and connected contradiction
+closure. The exact compiler operands and per-engine scenario activity remain
+private comparison inputs. See the [checkpoint evidence](../reference/custody-engine.md#reviewed-compilation-and-native-augmentation-checkpoint-r2e-partial).
+
+Quantity remains skipped. Gap holds, whole-state issue composition, scoped tax
+barriers and finalized projection still precede journal fusion. Python owns
+production decisions and persistence; snapshot v1 stays raw-only.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

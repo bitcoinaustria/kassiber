@@ -78,3 +78,44 @@ fn quantity_transfer_vectors() {
         );
     }
 }
+
+fn composition_vectors(op: &str) {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_composition.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap().iter().filter(|c| c["op"] == op) {
+        if op == "reviewed" {
+            let actual = kassiber_custody::quantity::reviewed::outcome(
+                &case["component"],
+                &case["observations"],
+            );
+            let expected: serde_json::Map<String, Value> =
+                ["expected", "error", "message", "details"]
+                    .into_iter()
+                    .filter_map(|k| case.get(k).map(|v| (k.to_owned(), v.clone())))
+                    .collect();
+            assert_eq!(actual, Value::Object(expected), "{}", case["case"]);
+            continue;
+        }
+        let actual = kassiber_custody::quantity::native::compile(
+            &case["canonical"],
+            case["audit"].as_array().unwrap(),
+            case["excluded"].as_array().unwrap(),
+            &case["reserved"],
+        );
+        if let Some(error) = case["error"].as_str() {
+            assert_eq!(actual.unwrap_err(), error, "{}", case["case"]);
+        } else {
+            assert_eq!(actual.unwrap(), case["expected"], "{}", case["case"]);
+        }
+    }
+}
+#[test]
+fn quantity_reviewed_compilation_vectors() {
+    composition_vectors("reviewed");
+}
+#[test]
+fn quantity_native_augmentation_vectors() {
+    composition_vectors("native");
+}

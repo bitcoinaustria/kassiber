@@ -48,8 +48,10 @@ mutation entries.
 - [ ] Port quantity arbitration and finalized tax projection, comparing each
   stage before fusing it. Exact quantity primitives and
   [canonical transfer rows](docs/reference/custody-engine.md#canonical-transfer-row-checkpoint-r2e-partial)
-  are ported; reviewed compilation, native augmentation, gap holds, issues and
-  scoped tax barriers still block quantity-stage comparison.
+  are ported, together with the [reviewed component/conversion compiler and
+  native augmentation](docs/reference/custody-engine.md#reviewed-compilation-and-native-augmentation-checkpoint-r2e-partial).
+  Gap holds, whole-state issues and scoped tax barriers still block
+  quantity-stage comparison.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 
