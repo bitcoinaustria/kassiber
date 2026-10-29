@@ -203,6 +203,59 @@ pub fn dumps(value: &Value, options: &Options) -> Result<String, Error> {
     Ok(encoder.out)
 }
 
+/// Appends the text [`dumps`] writes for `value` when it sits `level`
+/// containers deep inside a larger document, depth limit included.
+///
+/// A [`Error::Surrogate`] is reported at the end of this value; in a larger
+/// document Python would report a later error first, so callers combining
+/// parts must order such failures themselves. With `ensure_ascii` it cannot
+/// occur. On an error `out` holds partial output.
+pub fn dumps_into(
+    value: &Value,
+    options: &Options,
+    level: usize,
+    out: &mut String,
+) -> Result<(), Error> {
+    let indent = options.indent.as_ref().map(|indent| match indent {
+        Indent::Spaces(n) => " ".repeat(*n),
+        Indent::Text(text) => text.clone(),
+    });
+    let (item_separator, key_separator) = match &options.separators {
+        Some((item, key)) => (item.as_str(), key.as_str()),
+        None if indent.is_some() => (",", ": "),
+        None => (", ", ": "),
+    };
+    let mut encoder = Encoder {
+        options,
+        indent: indent.as_deref(),
+        item_separator,
+        key_separator,
+        out: std::mem::take(out),
+        surrogate: false,
+    };
+    let result = encoder.value(value, level);
+    *out = encoder.out;
+    result?;
+    if encoder.surrogate {
+        return Err(Error::Surrogate);
+    }
+    Ok(())
+}
+
+/// Appends a JSON string as [`dumps`] writes `text` under `options`.
+pub fn dumps_str_into(text: &str, options: &Options, out: &mut String) {
+    let mut encoder = Encoder {
+        options,
+        indent: None,
+        item_separator: "",
+        key_separator: "",
+        out: std::mem::take(out),
+        surrogate: false,
+    };
+    encoder.string_bytes(text.as_bytes());
+    *out = encoder.out;
+}
+
 struct Encoder<'a> {
     options: &'a Options,
     indent: Option<&'a str>,
@@ -351,34 +404,63 @@ impl Encoder<'_> {
     /// A JSON string as `encode_basestring_ascii` or, without
     /// `ensure_ascii`, `encode_basestring` writes it.
     fn string(&mut self, s: &PyStr) {
+        self.string_bytes(s.bytes());
+    }
+
+    /// [`Self::string`] over generalized UTF-8 bytes.
+    fn string_bytes(&mut self, bytes: &[u8]) {
         self.out.push('"');
-        for point in s.code_points() {
-            match point {
-                0x22 => self.out.push_str("\\\""),
-                0x5C => self.out.push_str("\\\\"),
-                0x08 => self.out.push_str("\\b"),
-                0x0C => self.out.push_str("\\f"),
-                0x0A => self.out.push_str("\\n"),
-                0x0D => self.out.push_str("\\r"),
-                0x09 => self.out.push_str("\\t"),
-                0x00..=0x1F => self.escape(point),
-                0x20..=0x7E => self.out.push(point as u8 as char),
-                _ if self.options.ensure_ascii => {
-                    if point >= 0x1_0000 {
-                        let offset = point - 0x1_0000;
-                        self.escape(0xD800 | (offset >> 10));
-                        self.escape(0xDC00 | (offset & 0x3FF));
-                    } else {
-                        self.escape(point);
-                    }
-                }
-                _ => match char::from_u32(point) {
-                    Some(c) => self.out.push(c),
-                    None => self.surrogate = true,
-                },
+        // Printable ASCII other than '"' and '\\' is written as is under both
+        // options; copy such runs whole and encode everything else per point.
+        let mut at = 0;
+        while at < bytes.len() {
+            let start = at;
+            while at < bytes.len()
+                && matches!(bytes[at], 0x20..=0x7E)
+                && !matches!(bytes[at], b'"' | b'\\')
+            {
+                at += 1;
+            }
+            if at > start {
+                self.out
+                    .push_str(core::str::from_utf8(&bytes[start..at]).expect("ASCII run"));
+            }
+            if at < bytes.len() {
+                let mut points = PyStr::code_points_of(&bytes[at..]);
+                let point = points.next().expect("whole code point");
+                at = bytes.len() - points.rest_len();
+                self.point(point);
             }
         }
         self.out.push('"');
+    }
+
+    /// One code point as either encoder writes it.
+    fn point(&mut self, point: u32) {
+        match point {
+            0x22 => self.out.push_str("\\\""),
+            0x5C => self.out.push_str("\\\\"),
+            0x08 => self.out.push_str("\\b"),
+            0x0C => self.out.push_str("\\f"),
+            0x0A => self.out.push_str("\\n"),
+            0x0D => self.out.push_str("\\r"),
+            0x09 => self.out.push_str("\\t"),
+            0x00..=0x1F => self.escape(point),
+            0x20..=0x7E => self.out.push(point as u8 as char),
+            _ if self.options.ensure_ascii => {
+                if point >= 0x1_0000 {
+                    let offset = point - 0x1_0000;
+                    self.escape(0xD800 | (offset >> 10));
+                    self.escape(0xDC00 | (offset & 0x3FF));
+                } else {
+                    self.escape(point);
+                }
+            }
+            _ => match char::from_u32(point) {
+                Some(c) => self.out.push(c),
+                None => self.surrogate = true,
+            },
+        }
     }
 
     /// `\uXXXX` with lowercase hex digits, as CPython writes it.

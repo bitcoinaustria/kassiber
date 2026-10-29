@@ -62,6 +62,16 @@ impl PyStr {
     pub fn code_points(&self) -> CodePoints<'_> {
         CodePoints { bytes: &self.0 }
     }
+
+    /// The generalized UTF-8 bytes.
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// The code points of whole generalized UTF-8 sequences.
+    pub(crate) fn code_points_of(bytes: &[u8]) -> CodePoints<'_> {
+        CodePoints { bytes }
+    }
 }
 
 fn push_code_point(bytes: &mut Vec<u8>, point: u32) -> Result<(), InvalidCodePoint> {
@@ -92,6 +102,13 @@ fn push_code_point(bytes: &mut Vec<u8>, point: u32) -> Result<(), InvalidCodePoi
 #[derive(Clone, Debug)]
 pub struct CodePoints<'a> {
     bytes: &'a [u8],
+}
+
+impl CodePoints<'_> {
+    /// Bytes not yet decoded.
+    pub(crate) fn rest_len(&self) -> usize {
+        self.bytes.len()
+    }
 }
 
 impl Iterator for CodePoints<'_> {
