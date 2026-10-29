@@ -1914,15 +1914,20 @@ companion. Every primary result is compared too; companions cannot mask a
 changed refusal, missing issue, orphan synthetic observation or missing claim.
 Both engines assert the checked-in active-count manifest for every scenario.
 
-| Generated scenario batches | Batches per engine | Active claims per engine |
+| Compiler operands | Frozen scenarios | Distinct generated inputs per engine |
 | --- | ---: | ---: |
-| Reviewed (83 scenarios, 20 variants each) | 1,660 | 4,340 |
-| Native (100 scenarios, 20 variants each) | 2,000 | 2,280 |
-| **Total** | **3,660** | **6,620** |
+| Reviewed | 83 | 324 |
+| Native | 100 | 336 |
+| **Total** | **183** | **660** |
 
-These are **7,320 compiler calls per engine**, plus 7,320 reversed-input calls
-independently re-evaluated by Python. Variants use four exact integer widths,
-including quantities above `i128`, and lexical offset timestamps. Frozen
+The original twenty-variant loop repeated inputs: its 3,660 primaries contained
+only **660 distinct operands**, and its positive companions added no distinct
+inputs. The corrected generator discards repeated variants, and the comparison
+deduplicates operands across scenario labels before invoking either engine.
+It compares **660 distinct compiler inputs per engine**, plus the independently
+re-evaluated reversed operands. The previous “7,320 compiler calls” claim counted
+repetitions and is withdrawn. Variants use four exact integer widths, including
+quantities above `i128`, and lexical offset timestamps. Frozen
 controls include duplicate pending allocation ids, partial and native
 conversion residuals, negative slice admission, explicit/leg-derived external
 subtypes, Unicode proof identities, virtual-source contradictions and a native
@@ -2052,24 +2057,37 @@ its primary result is also compared, including refusals. Both engines assert the
 checked-in per-scenario activity manifest, and reversed operands are independently
 re-evaluated by Python.
 
-| Runtime operand family | Frozen scenarios | Generated batches per engine | Active results per engine |
-| --- | ---: | ---: | ---: |
-| Gap-hold composition | 97 | 1,940 | 5,920 |
-| Scoped tax barriers | 68 | 1,360 | 4,120 |
-| Whole-state composition | 63 | 1,260 | 5,290 |
-| Component runtime diagnostics | 83 | 1,660 | 7,800 |
-| **Total** | **311** | **6,220** | **23,130** |
+| Runtime operand family | Frozen scenarios | Distinct generated inputs per engine |
+| --- | ---: | ---: |
+| Gap-hold composition | 97 | 384 |
+| Scoped tax barriers | 68 | 256 |
+| Whole-state composition | 63 | 252 |
+| Component runtime diagnostics | 83 | 324 |
+| **Total** | **311** | **1,216** |
 
-These batches make **12,440 calls per engine**, plus **12,440 reversed calls**.
+The original 6,220 primaries contained **1,216 distinct operands**. Its four
+companions were already in that set. The corrected comparison invokes each
+distinct operand once, retaining scenario labels for the activity manifest;
+reversed operands are independently evaluated and deduplicated separately.
+The previous “12,440 calls per engine” claim counted repetitions and is withdrawn.
+Companion activity is diagnostic evidence for its own operand, never activity
+attributed to a raw snapshot seed.
+
 The 106 inherited admission/migration wrapper cases also compare complete
 quantity, including CPython diagnostic scalars, surrogate identities and refusal
 families. The inherited twelve raw snapshot suites compare quantity on
-**24,000 books and 1,030 permutations**, with zero differences. Empty/refusal
-scenarios retain an independently checked active companion.
+**24,000 books and 1,030 permutations**. Fourteen deliberately empty controls
+remain parity checks but are excluded from activity claims; the checked-in
+`custody_quantity_inactive_controls.json` names them. Every other scenario must
+produce its own decisions, issues or refusal, independently in both engines.
+A named regression proves that a vacuous scenario fails this assertion. One
+additional malformed migration request runs through the same raw comparison
+loop, so its refusal branch is exercised and counted without changing the
+inherited 24,000 books or 1,030 permutations.
 
 ### Mutation catalog and verification
 
-The catalog contains **1,918 entries: 1,797 inherited and 121 new**. New entries
+At the original R2e checkpoint the catalog contained **1,918 entries: 1,797 inherited and 121 new**. The independent-review corrections below supersede that inventory. New entries
 name `quantity_gap_hold_composition_vectors`,
 `quantity_scoped_tax_barrier_vectors`, `quantity_whole_state_vectors`,
 `quantity_component_runtime_vectors` and `quantity_runtime_wrapper_vectors`.
@@ -2106,3 +2124,31 @@ Verified integration evidence at this boundary:
 
 No Python reference bug has been identified. Remaining work is finalized
 projection, followed by journal fusion with `ledger` after its own parity gate.
+
+## R2e independent-review corrections
+
+The live census/shadow harness now waits for Python's stage outcome before
+querying the atomic Rust result. An implemented-stage Python refusal is compared
+by code even after gaps has emitted. Matching refusals preserve Python's original
+exception; earlier outputs absent from an atomic refusal are explicitly skipped.
+Unported finalized projection remains skipped. Successful and refused builds
+must account for every stage, and session reporting rejects incomplete inventories.
+The late-refusal regression covers Rust success, matching/mismatching refusal
+codes and both live modes.
+
+A deliberately patched Python stage must explicitly declare
+`injected_stage_failure(stage, exception)` in its test. The annotation is scoped
+to the exact exception instance and failed stage; equal messages, other stages
+and later builds retain strict comparison. Such a build records `outcome` and
+`reason` as `injected`, with every stage skipped. Session reporting validates
+that inventory and counts injected builds separately. The snapshot recorder's
+intentional `RuntimeError("boom")` uses this annotation; it is not a Rust refusal.
+
+Tax eligibility admits only Python's four finalized states. Gap identity rejects
+an empty asset at Python's identity-validation position, with empty compiler
+details. Reviewed source slices reject empty observation hashes before target
+validation. Component conservation, allocations, chronology, anchor coverage and
+native support retain exact integers instead of narrowing component amounts to
+`i128`. No projection code or production Python accounting rules change.
+
+The local correction report is [custody-r2e-quantity-review.md](custody-r2e-quantity-review.md).
