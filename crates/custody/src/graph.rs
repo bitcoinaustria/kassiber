@@ -80,8 +80,40 @@ pub(crate) fn transfer_object(value: &Value) -> Value {
     }
 }
 
+type Scope = Option<(String, String, String, String)>;
+thread_local! {
+    static SCOPES: std::cell::RefCell<std::collections::HashMap<String, Scope>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Releases memoized scopes at the end of an operation.
+pub(crate) fn clear_scopes() {
+    SCOPES.with(|m| m.borrow_mut().clear());
+}
+
 /// Physical Bitcoin-family grouping; contradictory graph/configuration facts refuse it.
-pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
+/// The scope reads only these row fields, so it is memoized by their exact JSON.
+pub(crate) fn onchain_scope(row: &Value) -> Scope {
+    let key = serde_json::to_string(&[
+        &row["id"],
+        &row["raw_json"],
+        &row["config_json"],
+        &row["wallet_config_json"],
+        &row["external_id"],
+        &row["external_id_kind"],
+        &row["wallet_kind"],
+        &row["asset"],
+    ])
+    .expect("JSON values");
+    if let Some(hit) = SCOPES.with(|m| m.borrow().get(&key).cloned()) {
+        return hit;
+    }
+    let scope = physical_scope(row);
+    SCOPES.with(|m| m.borrow_mut().insert(key, scope.clone()));
+    scope
+}
+
+fn physical_scope(row: &Value) -> Scope {
     if [
         "custody-tax:",
         "cross-split:",

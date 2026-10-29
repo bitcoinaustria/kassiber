@@ -415,6 +415,7 @@ pub(crate) fn clear_memos() {
             .iter_mut()
             .for_each(std::collections::HashMap::clear)
     });
+    crate::graph::clear_scopes();
 }
 
 pub fn object(v: &Value) -> Value {
