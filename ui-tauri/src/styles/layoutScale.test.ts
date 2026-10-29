@@ -58,8 +58,6 @@ const ALLOWED: Partial<Record<Rule, Record<string, string>>> = {
       "the backdrop softens the page the Settings modal covers",
     "components/overview-dashboard/PortfolioInspector.tsx":
       "the inspector floats over the chart",
-    "components/transactions/NewTransactionDialog.tsx":
-      "the sticky footer scrolls over the form",
   },
 };
 

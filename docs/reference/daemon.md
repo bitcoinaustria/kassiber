@@ -511,7 +511,9 @@ The result also includes `matched`, `skipped_unmatched`, and
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
 mode.
 
-The desktop first uses the privileged native picker to invoke
+No desktop screen starts this flow since the Transactions page's photo/PDF
+dialog was removed; the picker, staging, and kinds below remain for the next
+entry point. The desktop first uses the privileged native picker to invoke
 `internal.document_import.stage`. That kind is supported by the Python daemon
 but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
 the canonical source path in a bounded, expiring, process-local daemon session

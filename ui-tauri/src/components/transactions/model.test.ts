@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createNewTransactionDraft,
   draftForTransaction,
   metadataUpdateArgs,
-  nextLabelForFlow,
   formatCounterDisplayMoney,
   formatDisplayMoney,
   formatSignedDisplayMoney,
@@ -94,18 +92,6 @@ describe("metadataUpdateArgs review status", () => {
     expect(args).not.toHaveProperty("taxable");
     expect(args).not.toHaveProperty("at_regime");
     expect(args).not.toHaveProperty("at_category");
-  });
-});
-
-describe("nextLabelForFlow", () => {
-  it("does not sticker a new receipt as Income", () => {
-    expect(createNewTransactionDraft().label).toBe("Unlabeled");
-    // The label persists as a tag and a tag outranks the derived type on the
-    // chip, so auto-applying "Income" reproduces the exact contradiction the
-    // kind-derived label removes: chip says earnings, engine books a buy.
-    expect(nextLabelForFlow("incoming")).toBe("Unlabeled");
-    expect(nextLabelForFlow("transfer")).toBe("Transfer");
-    expect(nextLabelForFlow("outgoing")).toBe("Expense");
   });
 });
 
