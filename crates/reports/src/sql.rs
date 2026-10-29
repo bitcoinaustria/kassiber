@@ -49,22 +49,22 @@ fn raw_rows(conn: &Connection, query: &str, args: impl Params) -> rusqlite::Resu
 fn row_value(row: &rusqlite::Row<'_>, names: &[String]) -> rusqlite::Result<Value> {
     let mut fields = Vec::with_capacity(names.len());
     for (i, name) in names.iter().enumerate() {
-        let v = match row.get_ref(i)? {
-            ValueRef::Null => Value::Null,
-            ValueRef::Integer(n) => Value::Int(n.into()),
-            ValueRef::Real(n) => Value::Float(n),
-            ValueRef::Text(t) => s(std::str::from_utf8(t).map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    i,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?),
-            ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
-        };
+        let v = column_value(row, i)?;
         fields.push((name.clone(), v));
     }
     Ok(dict(fields))
+}
+
+fn column_value(row: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<Value> {
+    Ok(match row.get_ref(i)? {
+        ValueRef::Null => Value::Null,
+        ValueRef::Integer(n) => Value::Int(n.into()),
+        ValueRef::Real(n) => Value::Float(n),
+        ValueRef::Text(t) => s(std::str::from_utf8(t).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(i, rusqlite::types::Type::Text, Box::new(e))
+        })?),
+        ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
+    })
 }
 
 /// Stream rows without retaining an unused table projection. As with rows()
@@ -75,16 +75,34 @@ pub fn visit_rows(
     conn: &Connection,
     query: &str,
     args: impl Params,
-    mut visit: impl FnMut(Value) -> Result<()>,
+    mut visit: impl FnMut(&Value) -> Result<()>,
 ) -> Result<()> {
     let mut stmt = conn.prepare(query).map_err(sql_error)?;
     let names: Vec<_> = stmt.column_names().iter().map(|s| s.to_string()).collect();
     let mut query = stmt.query(args).map_err(sql_error)?;
     let mut interpreted = Ok(());
+    let mut converted = dict(names.iter().map(|name| (name.as_str(), Value::Null)));
     while let Some(row) = query.next().map_err(sql_error)? {
-        let converted = row_value(row, &names).map_err(sql_error)?;
+        if let Value::Dict(fields) = &mut converted {
+            for (i, (_, value)) in fields.iter_mut().enumerate() {
+                if let ValueRef::Text(raw) = row.get_ref(i).map_err(sql_error)? {
+                    let raw = std::str::from_utf8(raw).map_err(|error| {
+                        sql_error(rusqlite::Error::FromSqlConversionFailure(
+                            i,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        ))
+                    })?;
+                    if !matches!(value, Value::Str(old) if old.as_str() == Some(raw)) {
+                        *value = s(raw);
+                    }
+                } else {
+                    *value = column_value(row, i).map_err(sql_error)?;
+                }
+            }
+        }
         if interpreted.is_ok() {
-            interpreted = visit(converted);
+            interpreted = visit(&converted);
         }
     }
     interpreted
@@ -105,6 +123,19 @@ mod tests {
             ffi::Error::new(ffi::SQLITE_CORRUPT),
             None,
         )));
+    }
+    #[test]
+    fn streaming_reuses_keys_without_retaining_previous_column_values() {
+        let conn = Connection::open_in_memory().unwrap();
+        let query = "SELECT 'BTC' AS asset, 1 AS amount UNION ALL SELECT 'BTC',NULL UNION ALL SELECT 'LBTC',2.5 UNION ALL SELECT NULL,'text'";
+        let expected = rows(&conn, query, []).unwrap();
+        let mut actual = Vec::new();
+        visit_rows(&conn, query, [], |row| {
+            actual.push(row.clone());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(actual, expected);
     }
     #[test]
     fn streaming_preserves_late_sql_error_precedence() {

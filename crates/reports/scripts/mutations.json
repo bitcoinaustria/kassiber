@@ -283,8 +283,8 @@
   {
     "id": "transaction-rate-first",
     "file": "crates/reports/src/holdings.rs",
-    "find": "if rates.contains_key(&asset) { continue; }",
-    "replace": "if false { continue; }",
+    "find": "if rates.contains_key(&asset) { return Ok(()); }",
+    "replace": "if false { return Ok(()); }",
     "expect_failing": [
       "holdings_vectors"
     ],
@@ -363,8 +363,8 @@
   {
     "id": "summary-wallet-realized",
     "file": "crates/reports/src/summary.rs",
-    "find": "capital.retain(|r| value(r, \"wallet\") == value(w, \"label\"));",
-    "replace": "capital.retain(|_| true);",
+    "find": "wallet\n            .as_ref()\n            .is_none_or(|w| value(row, \"wallet\") == value(w, \"label\"))",
+    "replace": "true",
     "expect_failing": [
       "summary_vectors"
     ],
@@ -393,8 +393,8 @@
   {
     "id": "summary-realized-total",
     "file": "crates/reports/src/summary.rs",
-    "find": "n + number(r, k)",
-    "replace": "n - number(r, k)",
+    "find": "*total += number(row, key);",
+    "replace": "*total -= number(row, key);",
     "expect_failing": [
       "summary_vectors"
     ],
@@ -2233,8 +2233,8 @@
   {
     "id": "history-transaction-value-amount",
     "file": "crates/reports/src/history.rs",
-    "find": "&msat(value(&row, \"amount\"))?",
-    "replace": "&decimal(value(&row, \"amount\"))?",
+    "find": "&msat(value(row, \"amount\"))?",
+    "replace": "&decimal(value(row, \"amount\"))?",
     "expect_failing": [
       "history_quote_vectors"
     ],
@@ -2789,5 +2789,15 @@
       "report_csv_format_contract"
     ],
     "rule": "Boolean cells use Python str rather than JSON literals."
+  },
+  {
+    "id": "sqlite-btc-scale",
+    "file": "crates/reports/src/lib.rs",
+    "find": "msat.unsigned_abs().into(), -11",
+    "replace": "msat.unsigned_abs().into(), -8",
+    "expect_failing": [
+      "scaled_sqlite_quantities_match_context_division"
+    ],
+    "rule": "Every SQLite quantity converts integer msat to BTC at exactly 10^-11."
   }
 ]

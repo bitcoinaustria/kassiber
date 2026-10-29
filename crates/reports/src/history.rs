@@ -10,6 +10,11 @@ const DAY: i64 = 86_400_000_000;
 // Python's msat_to_btc first applies int(), including to legacy numeric rows.
 // Invalid stored quantities must raise instead of becoming a zero balance.
 fn msat(raw: &Value) -> Result<Decimal> {
+    if let Value::Int(n) = raw {
+        if let Ok(n) = i64::try_from(n.clone()) {
+            return btc(n);
+        }
+    }
     let integer = match raw {
         Value::Int(n) => n.to_string(),
         Value::Float(n) if n.is_finite() => format!("{:.0}", n.trunc()),
@@ -156,12 +161,16 @@ struct Event {
 fn events(conn: &Connection, profile: &str, filters: &str, params: Vec<Sql>) -> Result<Vec<Event>> {
     let mut bound = vec![Sql::Text(profile.into())];
     bound.extend(params);
-    rows(conn, &format!("SELECT occurred_at,asset,entry_type,quantity,fiat_value,COALESCE(cost_basis,0) AS cost_basis FROM journal_entries WHERE profile_id=?{filters} ORDER BY occurred_at ASC,created_at ASC,id ASC"), params_from_iter(bound))?
-        .iter().map(|row| Ok(Event {
+    let mut events = Vec::new();
+    sql::visit_rows(conn, &format!("SELECT occurred_at,asset,entry_type,quantity,fiat_value,COALESCE(cost_basis,0) AS cost_basis FROM journal_entries WHERE profile_id=?{filters} ORDER BY occurred_at ASC,created_at ASC,id ASC"), params_from_iter(bound), |row| {
+        events.push(Event {
             at: parse(value(row,"occurred_at"),"occurred_at")?.ok_or_else(|| AppError::new("internal_error", "missing journal timestamp"))?,
             asset: text(row,"asset"), kind: text(row,"entry_type"), quantity: msat(value(row,"quantity"))?,
             fiat: decimal(value(row,"fiat_value"))?, basis: decimal(value(row,"cost_basis"))?,
-        })).collect()
+        });
+        Ok(())
+    })?;
+    Ok(events)
 }
 struct Holdings {
     quantity: Decimal,
@@ -201,27 +210,25 @@ struct Quote {
 }
 fn transaction_quotes(conn: &Connection, profile: &str, needed: bool) -> Result<Vec<Quote>> {
     let mut quotes = Vec::new();
-    let stored = rows(conn,"SELECT occurred_at,asset,amount,fiat_rate,fiat_value FROM transactions WHERE profile_id=? AND excluded=0 AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL) ORDER BY occurred_at ASC,created_at ASC,id ASC",[profile])?;
-    if !needed {
-        return Ok(quotes);
-    }
-    for row in stored {
+    sql::visit_rows(conn,"SELECT occurred_at,asset,amount,fiat_rate,fiat_value FROM transactions WHERE profile_id=? AND excluded=0 AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL) ORDER BY occurred_at ASC,created_at ASC,id ASC",[profile], |row| {
+        if !needed { return Ok(()); }
         // Historical Python reads these stored numeric columns, not *_exact.
-        let rate = if !matches!(value(&row, "fiat_rate"), Value::Null) {
-            decimal(value(&row, "fiat_rate"))?
-        } else if truthy(value(&row, "amount")) {
-            decimal(value(&row, "fiat_value"))?
-                .div(&msat(value(&row, "amount"))?, &DECIMAL)
+        let rate = if !matches!(value(row, "fiat_rate"), Value::Null) {
+            decimal(value(row, "fiat_rate"))?
+        } else if truthy(value(row, "amount")) {
+            decimal(value(row, "fiat_value"))?
+                .div(&msat(value(row, "amount"))?, &DECIMAL)
                 .map_err(arithmetic)?
         } else {
-            continue;
+            return Ok(());
         };
         quotes.push(Quote {
-            at: parse(value(&row, "occurred_at"), "occurred_at")?.unwrap(),
-            asset: text(&row, "asset"),
+            at: parse(value(row, "occurred_at"), "occurred_at")?.unwrap(),
+            asset: text(row, "asset"),
             rate,
         });
-    }
+        Ok(())
+    })?;
     Ok(quotes)
 }
 fn cached_quotes(

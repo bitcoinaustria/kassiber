@@ -21,11 +21,11 @@ fn rates(
 ) -> Result<BTreeMap<String, Decimal>> {
     let mut rates = BTreeMap::new();
     sql::visit_rows(conn,"SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",[text(profile,"id")], |row| {
-        let asset = text(&row,"asset");
+        let asset = text(row,"asset");
         if rates.contains_key(&asset) { return Ok(()); }
-        if let Some(rate) = exact(&row,"fiat_rate")? { rates.insert(asset,rate); }
-        else if let Some(total) = exact(&row,"fiat_value")? {
-            let amount = int(&row,"amount");
+        if let Some(rate) = exact(row,"fiat_rate")? { rates.insert(asset,rate); }
+        else if let Some(total) = exact(row,"fiat_value")? {
+            let amount = int(row,"amount");
             if amount != 0 { rates.insert(asset,total.div(&btc(amount)?,&DECIMAL).map_err(arithmetic)?); }
         }
         Ok(())

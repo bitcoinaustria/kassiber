@@ -36,11 +36,15 @@ fn int(row: &Value, key: &str) -> i64 {
     }
 }
 fn decimal(v: &Value) -> Result<Decimal> {
-    let raw = if matches!(v, Value::Null) || v == &s("") {
-        "0".into()
-    } else {
-        py_str(v)
-    };
+    if matches!(v, Value::Null) || matches!(v, Value::Str(raw) if raw.as_str() == Some("")) {
+        return Ok(Decimal::zero());
+    }
+    if let Value::Int(n) = v {
+        if let Ok(n) = i64::try_from(n.clone()) {
+            return Ok(Decimal::from(n));
+        }
+    }
+    let raw = py_str(v);
     raw.trim()
         .parse()
         .map_err(|_| AppError::new("app_error", format!("Invalid decimal value: {raw}")))
@@ -54,9 +58,10 @@ fn float(d: &Decimal) -> Result<Value> {
     })?))
 }
 fn btc(msat: i64) -> Result<Decimal> {
-    Decimal::from(msat)
-        .div(&Decimal::from(100_000_000_000_i64), &DECIMAL)
-        .map_err(arithmetic)
+    // Every SQLite integer has at most 19 decimal digits: scaling it by
+    // 10^-11 is exact under the reference's precision-32 context. Avoid a
+    // general BigInt division and its quotient/trailing-zero work.
+    Decimal::from_parts(msat < 0, msat.unsigned_abs().into(), -11).map_err(arithmetic)
 }
 fn replace(row: &mut Value, key: &str, v: Value) {
     if let Value::Dict(fields) = row {
@@ -217,6 +222,8 @@ fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result
     Ok(())
 }
 
+const CAPITAL_GAINS_SQL: &str = "SELECT je.id AS journal_entry_id,je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,je.capital_gains_type FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC";
+
 fn capital_gains_rows(conn: &Connection, profile: &Value) -> Result<(Option<String>, Vec<Value>)> {
     let database: Option<String> = conn
         .query_row(
@@ -225,10 +232,14 @@ fn capital_gains_rows(conn: &Connection, profile: &Value) -> Result<(Option<Stri
             |r| r.get(0),
         )
         .ok();
-    let result = rows(conn,"SELECT je.id AS journal_entry_id,je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,je.capital_gains_type FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[text(profile,"id")])?;
-    if !result.is_empty() {
+    let result = rows(conn, CAPITAL_GAINS_SQL, [text(profile, "id")])?;
+    validate_capital_identity(database.as_deref(), !result.is_empty())?;
+    Ok((database, result))
+}
+
+fn validate_capital_identity(database: Option<&str>, nonempty: bool) -> Result<()> {
+    if nonempty {
         database
-            .as_deref()
             .filter(|s| {
                 s.len() == 32
                     && s.bytes()
@@ -241,7 +252,7 @@ fn capital_gains_rows(conn: &Connection, profile: &Value) -> Result<(Option<Stri
                 )
             })?;
     }
-    Ok((database, result))
+    Ok(())
 }
 
 fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
@@ -270,4 +281,45 @@ fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
         replace(row, "quantity", float(&btc(quantity)?)?);
     }
     Ok(Value::List(result))
+}
+
+#[cfg(test)]
+mod amount_tests {
+    use super::*;
+    #[test]
+    fn scaled_sqlite_quantities_match_context_division() {
+        for msat in [
+            i64::MIN,
+            i64::MIN + 1,
+            -1_000_000_000_000,
+            -1_000,
+            -1,
+            0,
+            1,
+            10,
+            1_000,
+            9_007_199_254_740_993,
+            i64::MAX,
+        ] {
+            let divided = Decimal::from(msat)
+                .div(&Decimal::from(100_000_000_000_i64), &DECIMAL)
+                .unwrap();
+            let scaled = btc(msat).unwrap();
+            assert_eq!(scaled, divided);
+            assert_eq!(float(&scaled).unwrap(), float(&divided).unwrap());
+            // Scale representation can differ; subsequent precision-32
+            // arithmetic must preserve the same numeric and float results.
+            for base in [
+                "0",
+                "1.2345678901234567890123456789012",
+                "-9999999999999999999999.123456789",
+            ] {
+                let base: Decimal = base.parse().unwrap();
+                assert_eq!(
+                    float(&base.add(&scaled, &DECIMAL).unwrap()).unwrap(),
+                    float(&base.add(&divided, &DECIMAL).unwrap()).unwrap()
+                );
+            }
+        }
+    }
 }

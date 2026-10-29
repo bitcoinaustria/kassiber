@@ -214,10 +214,34 @@ pub fn report(
     // Keep the complete SQL conversion and identity checks, and the original
     // row order for float sums. Summary does not emit per-entry references or
     // quantities, so it need not construct those presentation fields.
-    let (_, mut capital) = capital_gains_rows(conn, profile)?;
+    let database: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key='database_instance_id'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    let mut nonempty = false;
+    let mut realized_totals = [0.0; 3];
+    sql::visit_rows(conn, CAPITAL_GAINS_SQL, [&id], |row| {
+        nonempty = true;
+        if wallet
+            .as_ref()
+            .is_none_or(|w| value(row, "wallet") == value(w, "label"))
+        {
+            for (total, key) in
+                realized_totals
+                    .iter_mut()
+                    .zip(["proceeds", "cost_basis", "gain_loss"])
+            {
+                *total += number(row, key);
+            }
+        }
+        Ok(())
+    })?;
+    validate_capital_identity(database.as_deref(), nonempty)?;
     if let Some(w) = &wallet {
         holdings.retain(|r| value(r, "wallet") == value(w, "label"));
-        capital.retain(|r| value(r, "wallet") == value(w, "label"));
     }
     // Python first groups wallet floats into account buckets, then sums sorted
     // buckets. Preserve both rounding stages and the iteration order.
@@ -259,12 +283,8 @@ pub fn report(
     let realized = dict(
         ["proceeds", "cost_basis", "gain_loss"]
             .into_iter()
-            .map(|k| {
-                (
-                    k,
-                    Value::Float(capital.iter().fold(0.0, |n, r| n + number(r, k))),
-                )
-            }),
+            .zip(realized_totals)
+            .map(|(k, total)| (k, Value::Float(total))),
     );
     let flow = |wallet_flow: bool| -> Result<Value> {
         let select = if wallet_flow {
