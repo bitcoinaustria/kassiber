@@ -84,6 +84,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_hybrid_candidate",
         "test_rust_grouped_metadata_services",
         "test_rust_transaction_desktop",
+        "test_rust_document_services",
         "test_rust_shell_parity",
     }
 )

@@ -1913,6 +1913,9 @@
     "tests/test_rust_bip329_services.py": {
       "RustBip329ServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares Rust CLI/daemon envelopes, persisted label/audit state and exact BIP329 file bytes against Python on disposable books", "reviewed": true, "tests": 3}
     },
+    "tests/test_rust_document_services.py": {
+      "RustDocumentServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares document CLI and daemon refusals, evidence storage and prior-report archives, stored matching and commercial context against Python on disposable books", "reviewed": true, "tests": 4}
+    },
     "tests/test_rust_grouped_metadata_services.py": {
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },

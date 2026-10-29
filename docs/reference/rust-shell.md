@@ -64,6 +64,8 @@ address/inventory/Core-receive index. Descriptor-backed matching and complex
 input graphs fail `not_implemented`; standard string fields containing lone
 surrogates also refuse explicitly. Unknown JSON fields, including surrogate
 keys/values, are preserved. Global stored and synthesized exports do not need
+that index. This is a partial BIP329 acceptance boundary.
+
 Transaction CLI pages preserve all filters,
 four sorts, chronological ties, scoped cursor bytes, unpaged counts, integer msat
 fields and Python's one-rounding BTC display. Custody flow filters read only
@@ -82,23 +84,29 @@ microsecond bounds. Stored MOVE/conversion relations and journal transfer rows
 are read only while the full journal freshness markers permit them. Wallet
 filters retain the desktop rule of selecting every matching ID or label. No
 journal rebuild, ownership inference or provider lookup runs for these reads.
+Document registration, transactionless managed file/URL evidence, and prior-report
+archives share the admitted book service. Stored commercial matching preserves
+Python's identifier signals, uniqueness refusals, principal-based confidence,
+document enrichment, rejected-link retention and response ordering. Suggestions
+never apply pricing or kind changes. Prior reports remain evidence without
+ledger, lot, ownership, custody or tax authority.
 `ui.transactions.dashboard/resolve/graph/review_context/ledger_template`,
-`transactions export` in every format, and the four document leaves and their
-desktop kinds remain `not_implemented`. The acceptance record names the remaining
+`transactions export` in every format, journal/report processing, BTCPay provenance
+sync and commercial review remain `not_implemented`. The acceptance record names the remaining
 dependencies.
-that index. This is a partial BIP329 acceptance boundary.
 
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactions list`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
-`loans` and six `attachments` commands, 26 local `metadata` leaves (notes/tags,
+`loans` and six `attachments` commands, all four `documents` commands and stored
+`btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, `wallets derive`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends` (35 setup leaves; 85 total). Each family registers through its own
+`offline` and `backends` (35 setup leaves; 92 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -298,7 +306,12 @@ R5 also registers the four `ui.loans.*` kinds and the six
 resolution), plus `ui.activity.stale`, `ui.activity.history`,
 `ui.transactions.history`, `ui.transactions.history.revert`,
 `ui.metadata.bip329.preview/import/export`, `ui.transactions.metadata.update`,
-and `ui.transactions.list/search/extremes`.
+and `ui.transactions.list/search/extremes`. Document kinds are
+`ui.documents.list/create/attach/import_report`; stored commercial kinds are
+`ui.btcpay.provenance.list/links/suggest` and `ui.transactions.commercial_context`.
+The context read retains invoice/payment/document provenance, payout-batch exact
+amounts and fiat-currency barriers, and stored sync freshness. It performs no
+provider lookup. These additions do not port AI projections.
 BIP329 daemon exports use the resolved
 managed reports directory; URLs in labels remain literal local evidence.
 Metadata writes append Python-compatible edit events and fields atomically with

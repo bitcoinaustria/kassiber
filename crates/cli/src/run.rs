@@ -423,7 +423,20 @@ pub fn run(
     let _ = sink.stderr.write_all(&warnings);
     match result {
         Ok(()) => 0,
-        Err(error) => {
+        Err(mut error) => {
+            // Python wraps layout I/O exceptions before these local services
+            // as internal_error, just as it does their evidence-file failures.
+            if error.code == "storage_io_error"
+                && (dotted.starts_with("documents.")
+                    || matches!(
+                        dotted.as_str(),
+                        "btcpay.provenance.list"
+                            | "btcpay.provenance.links"
+                            | "btcpay.provenance.suggest"
+                    ))
+            {
+                error.code = "internal_error".into();
+            }
             emit_error(&mut sink, format, &error);
             1
         }
@@ -514,6 +527,26 @@ fn book_command(
         }
         if operation.starts_with("loans.") {
             return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
+        }
+        if operation.starts_with("documents.") {
+            return emit(crate::documents::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
+        }
+        if [
+            "btcpay.provenance.suggest",
+            "btcpay.provenance.links",
+            "btcpay.provenance.list",
+        ]
+        .contains(&operation)
+        {
+            return emit(crate::commercial::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
         }
         if operation.starts_with("attachments.") {
             return emit(crate::attachments::execute(

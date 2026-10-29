@@ -1758,5 +1758,505 @@
       "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
     ],
     "rule": "Desktop cursors remain bound to scope and the complete normalized filter set."
+  },
+  {
+    "id": "document-id-precedence",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if let Some(row) = exact.first() {",
+    "replace": "if let Some(row) = exact.first().filter(|_| false) {",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Exact document IDs win over labels and external references."
+  },
+  {
+    "id": "document-reference-scope",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "SELECT * FROM external_documents WHERE profile_id=? AND id=?",
+    "replace": "SELECT * FROM external_documents WHERE (profile_id=? OR 1) AND id=?",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Document references remain bound to the admitted profile."
+  },
+  {
+    "id": "document-reference-ambiguity",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 1000 {",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Non-unique labels and references refuse rather than selecting a document."
+  },
+  {
+    "id": "document-external-conflict",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if truthy(&external)\n",
+    "replace": "if false && truthy(&external)\n",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Duplicate external references retain the explicit conflict refusal."
+  },
+  {
+    "id": "document-page-tie",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "ORDER BY created_at DESC, id DESC LIMIT ?",
+    "replace": "ORDER BY created_at DESC, id ASC LIMIT ?",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Document pages retain descending ID ties."
+  },
+  {
+    "id": "document-second-precision",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "format_timestamp(us / 1_000_000 * 1_000_000)?",
+    "replace": "format_timestamp(us)?",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Authored document timestamps truncate to UTC seconds as Python does."
+  },
+  {
+    "id": "document-unknown-date",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "normalized != \"1970-01-01T00:00:00Z\"",
+    "replace": "normalized != \"impossible\"",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "The unknown timestamp sentinel remains null document evidence."
+  },
+  {
+    "id": "document-exact-fiat",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "decimal(v)?\n        .to_fixed_string()",
+    "replace": "decimal(&s(\"0\"))?\n        .to_fixed_string()",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Registration preserves the exact source decimal without float rounding."
+  },
+  {
+    "id": "document-cleanup-files",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if result.is_err() {",
+    "replace": "if false && result.is_err() {",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Failed evidence insertion removes every file created by the request."
+  },
+  {
+    "id": "document-transactionless",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "VALUES(?,?,?,NULL,?,?,?,?,?,?,?,?,?)",
+    "replace": "VALUES(?,?,?,'tx',?,?,?,?,?,?,?,?,?)",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Document evidence does not attach itself to an observed transaction."
+  },
+  {
+    "id": "document-url-literal",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "let source = py_str(&url);",
+    "replace": "let source = strip(&py_str(&url)).to_owned();",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Document URL targets remain literal and are never normalized or fetched."
+  },
+  {
+    "id": "document-prior-evidence-type",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "(\"document_type\",s(\"tax_report\"))",
+    "replace": "(\"document_type\",s(\"invoice\"))",
+    "expect_failing": [
+      "prior_reports_are_atomic_evidence_without_ledger_or_lot_authority"
+    ],
+    "rule": "A prior tax report is archived as report evidence rather than commercial authority."
+  },
+  {
+    "id": "commercial-profile",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "WHERE profile_id=? AND excluded=0 AND",
+    "replace": "WHERE (profile_id=? OR 1) AND excluded=0 AND",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Transaction matches cannot cross profile scope."
+  },
+  {
+    "id": "commercial-excluded",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "AND excluded=0 AND",
+    "replace": "AND excluded>=0 AND",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Excluded transactions cannot absorb commercial suggestions."
+  },
+  {
+    "id": "commercial-txid-signal",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let txid = value(record, \"txid\");",
+    "replace": "let txid = Value::Null;",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "A stored transaction ID is an independent deterministic match signal."
+  },
+  {
+    "id": "commercial-payment-hash-signal",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let hash = value(record, \"payment_hash\");",
+    "replace": "let hash = Value::Null;",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "A stored payment hash is an independent deterministic match signal."
+  },
+  {
+    "id": "commercial-stable-key-signal",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "value(record, \"stable_key\")",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Payment-ledger stable keys match their observed transaction identities."
+  },
+  {
+    "id": "commercial-unique-transaction",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "if matches.len() != 1 {",
+    "replace": "if matches.is_empty() {",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Ambiguous transaction observations cannot become suggestions."
+  },
+  {
+    "id": "commercial-principal-fee",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "principal -= integer(&value(tx, \"fee\"))?;",
+    "replace": "principal += integer(&value(tx, \"fee\"))?;",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Exact confidence uses principal after an included outbound fee."
+  },
+  {
+    "id": "commercial-principal-absolute",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "== principal.abs()",
+    "replace": "== principal",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Confidence compares payment amounts with absolute transaction principal."
+  },
+  {
+    "id": "commercial-confidence",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "confidence: if exact { \"exact\" } else { \"strong\" }",
+    "replace": "confidence: if exact { \"strong\" } else { \"exact\" }",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Amount equality and mere identifier agreement have different confidence."
+  },
+  {
+    "id": "commercial-payout-direction",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "(? != 'payout' OR direction='outbound')",
+    "replace": "(? != 'payout' OR direction IN ('inbound','outbound'))",
+    "expect_failing": [
+      "commercial_payout_matching_requires_outgoing_proof_and_matchable_status"
+    ],
+    "rule": "Payout proofs only match the outgoing merchant side."
+  },
+  {
+    "id": "commercial-payout-status",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "IN ('inprogress','completed')",
+    "replace": "IN ('inprogress','completed','awaiting')",
+    "expect_failing": [
+      "commercial_payout_matching_requires_outgoing_proof_and_matchable_status"
+    ],
+    "rule": "Only in-progress and completed stored payout proofs can be proposed."
+  },
+  {
+    "id": "document-match-request-reference",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "OR d.external_ref=p.payment_request_id",
+    "replace": "OR 0=p.payment_request_id",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "Payment-request references connect both invoice and payment evidence."
+  },
+  {
+    "id": "document-match-order-reference",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "OR d.external_ref=p.order_id",
+    "replace": "OR 0=p.order_id",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "External order references connect both invoice and payment evidence."
+  },
+  {
+    "id": "document-match-exact-fiat",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "p.fiat_value_exact=d.fiat_value_exact",
+    "replace": "CAST(p.fiat_value_exact AS REAL)=CAST(d.fiat_value_exact AS REAL)",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "The reference matcher compares exact stored fiat spellings."
+  },
+  {
+    "id": "document-match-currency",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "p.fiat_currency=d.fiat_currency",
+    "replace": "p.fiat_currency IS NOT NULL",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "Amount-only document matching requires equal currencies."
+  },
+  {
+    "id": "document-match-profile",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "p.profile_id=d.profile_id",
+    "replace": "p.profile_id IS NOT NULL",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "Document matches cannot cross profile scope."
+  },
+  {
+    "id": "document-match-unique-payment",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "if tx.len() != 1 {",
+    "replace": "if tx.is_empty() {",
+    "expect_failing": [
+      "document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch"
+    ],
+    "rule": "A document cannot break a tie between duplicate payment observations."
+  },
+  {
+    "id": "commercial-rejected-identity",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "AND state!='rejected'",
+    "replace": "AND state IN ('suggested','reviewed','rejected')",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "Rejected links are retained and cannot absorb a fresh suggestion."
+  },
+  {
+    "id": "commercial-document-enrichment",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "&& !truthy(&value(row, \"document_id\"))",
+    "replace": "&& truthy(&value(row, \"document_id\"))",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "A payment link can acquire its first matching document without duplication."
+  },
+  {
+    "id": "commercial-first-document",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "(?='btcpay_payment_transaction' OR COALESCE(document_id,'')=COALESCE(?,''))",
+    "replace": "(?='unused' OR COALESCE(document_id,'')=COALESCE(?,''))",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "One existing payment/transaction identity survives later matching documents."
+  },
+  {
+    "id": "commercial-document-fiat-provenance",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let fiat = if truthy(&value(row, \"doc_value\"))",
+    "replace": "let fiat = if !truthy(&value(row, \"doc_value\"))",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "Document fiat evidence takes precedence when enriching a payment link."
+  },
+  {
+    "id": "commercial-suggestion-dedup",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": ".find(|old| text(old, \"id\") == text(&link, \"id\"))",
+    "replace": ".find(|_| false)",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "Repeated generation paths replace a link value without duplicating its position."
+  },
+  {
+    "id": "commercial-suggestion-atomic",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "atomic(conn, || suggest(conn, scope, limit(*n, 500, 500)))",
+    "replace": "suggest(conn, scope, limit(*n, 500, 500))",
+    "expect_failing": [
+      "document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch"
+    ],
+    "rule": "A failed later suggestion rolls back earlier inserts in the same request."
+  },
+  {
+    "id": "commercial-context-rejected",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "cl.state IN ('suggested', 'reviewed')",
+    "replace": "cl.state IN ('suggested', 'reviewed', 'rejected')",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Rejected evidence is omitted from transaction commercial context."
+  },
+  {
+    "id": "commercial-context-reviewed-order",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id DESC",
+    "replace": "ORDER BY cl.reviewed_at ASC, cl.created_at DESC, cl.id DESC",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Reviewed context sorts reviewed time before creation time and ID."
+  },
+  {
+    "id": "commercial-context-id-tie",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id DESC",
+    "replace": "ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id ASC",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Commercial context preserves descending ID ties."
+  },
+  {
+    "id": "commercial-links-id-tie",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY cl.created_at DESC, cl.id DESC LIMIT ?",
+    "replace": "ORDER BY cl.created_at DESC, cl.id ASC LIMIT ?",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Stored link pages preserve descending ID ties."
+  },
+  {
+    "id": "commercial-records-id-tie",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY COALESCE(occurred_at,created_at) DESC,id DESC LIMIT ?",
+    "replace": "ORDER BY COALESCE(occurred_at,created_at) DESC,id ASC LIMIT ?",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Stored provenance pages preserve descending ID ties."
+  },
+  {
+    "id": "commercial-invoice-origin-priority",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let source = if truthy(&invoice) { &invoice } else { &payment };",
+    "replace": "let source = if truthy(&payment) { &payment } else { &invoice };",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Invoice origin and payment-request evidence take precedence over payment fields."
+  },
+  {
+    "id": "commercial-bitcoin-is-not-fiat",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "[\"BTC\", \"SATS\", \"SAT\", \"MSAT\", \"LBTC\"]",
+    "replace": "[\"SATS\", \"SATS\", \"SAT\", \"MSAT\", \"LBTC\"]",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Bitcoin-denominated invoice values cannot become displayed fiat prices."
+  },
+  {
+    "id": "commercial-payout-absolute-sum",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "sum + n.abs()",
+    "replace": "sum + n",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "Payout batch amounts sum absolute integer msat."
+  },
+  {
+    "id": "commercial-payout-decimal-precision",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "Context::new(32, Rounding::HalfEven)",
+    "replace": "Context::new(28, Rounding::HalfEven)",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "Payout fiat totals retain the Python 32-digit decimal context."
+  },
+  {
+    "id": "commercial-payout-currency-barrier",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let priced = currencies.len() == 1",
+    "replace": "let priced = !currencies.is_empty()",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "Mixed-currency payout evidence has no inferred aggregate fiat value."
+  },
+  {
+    "id": "commercial-payout-missing-currency",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "&& truthy(&value(r, \"payment_fiat_currency\"))",
+    "replace": "&& true",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "A payout member with no currency prevents aggregate fiat pricing."
+  },
+  {
+    "id": "commercial-freshness-never-synced",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "(\"never_synced\", Value::Bool(!truthy(&success)))",
+    "replace": "(\"never_synced\", Value::Bool(truthy(&success)))",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Missing stored sync evidence remains explicitly never synced."
+  },
+  {
+    "id": "commercial-corrupt-amount",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "number.ok_or_else",
+    "replace": "number.or(Some(0)).ok_or_else",
+    "expect_failing": [
+      "document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch"
+    ],
+    "rule": "Malformed stored amounts must refuse rather than become guessed zero-valued evidence."
+  },
+  {
+    "id": "document-prior-source-provenance",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "&dict([(\"provider\",s(provider)),(\"tax_year\",year.as_deref().map_or(Value::Null,s))])",
+    "replace": "&dict::<&str>([])",
+    "expect_failing": [
+      "prior_reports_are_atomic_evidence_without_ledger_or_lot_authority"
+    ],
+    "rule": "A prior report preserves the provider and tax year in raw source provenance without importing accounting authority."
+  },
+  {
+    "id": "document-url-surrogate",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "storable(&url)?;",
+    "replace": "",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Unencodable URL evidence is refused rather than silently dropping Unicode code points from its literal provenance."
   }
 ]

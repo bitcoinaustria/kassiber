@@ -120,7 +120,12 @@ fn filename(name: &str) -> String {
     }
 }
 
-fn storage(root: &Path, profile: &str, id: &str, name: &str) -> Result<(PathBuf, String)> {
+pub(crate) fn storage(
+    root: &Path,
+    profile: &str,
+    id: &str,
+    name: &str,
+) -> Result<(PathBuf, String)> {
     let dir = root.join(profile);
     fs::create_dir_all(&dir).map_err(io)?;
     let relative = format!("{profile}/{id}-{}", filename(name));
@@ -147,7 +152,7 @@ fn stored(root: &Path, relative: &str) -> (Option<PathBuf>, bool) {
     (Some(path), true)
 }
 
-fn hash(path: &Path, destination: Option<&Path>) -> Result<(i64, String)> {
+pub(crate) fn hash(path: &Path, destination: Option<&Path>) -> Result<(i64, String)> {
     let mut input = fs::File::open(path).map_err(io)?;
     let mut output = destination.map(fs::File::create).transpose().map_err(io)?;
     let mut digest = Sha256::new();
@@ -399,7 +404,11 @@ fn payload(row: &Value, root: &Path) -> Value {
     ])
 }
 
-fn resolve_transaction(conn: &Connection, profile: &str, reference: &str) -> Result<String> {
+pub(crate) fn resolve_transaction(
+    conn: &Connection,
+    profile: &str,
+    reference: &str,
+) -> Result<String> {
     let exact = rows(
         conn,
         "SELECT id FROM transactions WHERE profile_id=? AND id=?",

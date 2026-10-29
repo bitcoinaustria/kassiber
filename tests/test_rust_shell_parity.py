@@ -316,7 +316,21 @@ class RustDaemonParityTest(_Roots):
             self.assertNotIn("request_id", ready)
             self.assertEqual(ready["schema_version"], 1)
         kinds = [
-            "status", "ui.wallets.preview_descriptor", "ui.imports.list", "ui.imports.rollback", "ui.attachments.list", "ui.attachments.add", "ui.attachments.copy",
+            "status",
+            "ui.wallets.preview_descriptor",
+            "ui.imports.list",
+            "ui.imports.rollback",
+            "ui.attachments.list",
+            "ui.attachments.add",
+            "ui.attachments.copy",
+            "ui.documents.list",
+            "ui.documents.create",
+            "ui.documents.attach",
+            "ui.documents.import_report",
+            "ui.transactions.commercial_context",
+            "ui.btcpay.provenance.suggest",
+            "ui.btcpay.provenance.list",
+            "ui.btcpay.provenance.links",
             "ui.attachments.rename", "ui.attachments.remove", "ui.attachments.open",
             "ui.loans.list", "ui.loans.link", "ui.loans.mark", "ui.loans.unmark", "ui.activity.stale",
             "ui.activity.history", "ui.transactions.history", "ui.transactions.history.revert",

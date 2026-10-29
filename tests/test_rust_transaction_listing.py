@@ -187,7 +187,8 @@ class RustTransactionListingTest(unittest.TestCase):
             self.assertFalse(output.exists())
         kinds = ["ui.transactions." + suffix for suffix in (
             "dashboard", "resolve", "graph", "review_context", "ledger_template",
-            "export_csv", "export_xlsx", "export_platform_csv", "commercial_context")]
+            "export_csv", "export_xlsx", "export_platform_csv")]
+        kinds += ["ui.btcpay.provenance.sync", "ui.btcpay.provenance.review"]
         wire = "".join(json.dumps({"request_id": str(i), "kind": kind}) + "\n" for i, kind in enumerate([*kinds, "daemon.shutdown"]))
         result = subprocess.run([RUST_BIN, "--machine", "--data-root", str(self.root), "daemon"], env=self.env, input=wire, text=True, capture_output=True, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr)

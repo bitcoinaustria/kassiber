@@ -4,8 +4,8 @@ This is a partial boundary of [plan 21](../plan/21-rust-backend.md), based on
 `82f6b77b`. Python remains the reference. The branch is
 `t3code/r5-transactions`; commits are local only.
 
-The latest continuation is `t3code/r5-transactions-8`; its
-[desktop page boundary](#desktop-page-continuation) and remaining work are
+The latest continuation is `t3code/r5-transactions-9`; its
+[document boundary](#document-continuation) and remaining work are
 recorded at the end of this page. Earlier continuation results are retained
 as historical evidence.
 
@@ -801,7 +801,12 @@ The first mutation run killed 89/90 entries: a page-boundary mutation survived
 because the test allowed a full final page to advertise an empty follow-up.
 The stronger assertion kills it. An intermediate rerun reused a target
 directory retaining a compiled mutant and failed its unmutated baseline;
-that run supplies no acceptance evidence. The successful final run uses a new
+that run supplies no acceptance evidence. A CLI failure fixture initially inserted an arbitrary
+trigger before reopening the book; the existing Rust schema gate correctly
+refused that unadmitted schema. The trigger rollback/error check remains in the
+open-book Rust regression; the CLI scenario instead checks a managed-root I/O
+failure. The old unported-kind assertion was updated now that commercial context
+is served. The successful final run uses a new
 target directory and checks the entire catalog. No automatic approval rejection
 occurred. The workspace socket tests and daemon scenarios ran outside the
 filesystem sandbox, with disposable books.
@@ -1274,3 +1279,193 @@ commercial context, all transaction export formats, journal processing, reports,
 BTCPay provenance sync, and the prior BIP329/platform deferrals retain their
 existing barriers. Full Python shards and native platform verification remain
 with the orchestrator.
+
+## Document continuation
+
+Branch `t3code/r5-transactions-9` starts at the requested `d5296a02`.
+The predecessor branch in its other worktree is untouched. All commits are
+local; no push or PR. Python remains the reference, with no Python product-source
+change in this continuation.
+
+All four CLI commands and desktop kinds are implemented:
+`documents list/create/attach/import-report` and
+`ui.documents.list/create/attach/import_report`.
+Stored matching is exposed by `btcpay provenance suggest` and
+`ui.btcpay.provenance.suggest`; the stored `list/links` commands and kinds and
+`ui.transactions.commercial_context` supply the needed commercial reads.
+The explicit enum requests cross the admitted runtime book interface, with
+CLI/daemon family registration and the existing unlock, ownership,
+expected-book and rollback boundaries.
+
+Registration preserves document ID precedence, scoped reference ambiguity and
+conflict refusals, exact decimal text, UTC second precision, the unknown-date
+sentinel, and descending created-time/ID pages. Managed evidence reuses the
+attachment layout, filename sanitizer, SHA-256/size and MIME inference. Document
+attachments have no transaction identity. URL targets and labels retain the
+document reference's literal behavior, including whitespace and scheme-free
+targets; no URL is fetched. Unencodable text is refused rather than silently
+dropping Unicode code points; malformed date/decimal fields keep the reference
+refusal codes. Layout I/O failures also retain the reference's CLI error code.
+Prior-report import atomically stores a document,
+raw provider/year provenance and its file, without changing transactions,
+journals, lots, custody, ownership or journal-input versions. Failure rolls back
+the rows and removes files created by that request.
+
+Matching reproduces the shipped plan-08 reference rather than inventing its
+future heuristics: transaction IDs, payment hashes and payment-ledger stable keys
+must identify exactly one active observation in the admitted profile. Payouts
+require outgoing observations and matchable stored status. Exact confidence
+uses absolute principal after included outbound fees. Documents match stored
+invoice/order/payment-request references or equal stored currency/value text.
+Ambiguity remains unresolved. Existing reviewed links retain their state and
+confidence; a first matching document enriches the same payment/transaction
+identity. Rejected rows remain historical, and suggestions never change prices,
+kinds, tax inputs or ownership. A failing later suggestion rolls back the batch.
+
+The pure context read preserves active-link ordering, document deduplication,
+invoice-first origin/payment-request evidence, BTC-denomination fiat suppression,
+integer-msat payout totals, 32-digit decimal sums and mixed/missing-currency
+barriers. Sync freshness reads stored timestamps only and never probes a backend.
+Successful desktop evidence retains Python's existing disclosure boundary;
+AI projections stay Python.
+
+<!-- document-verification:start -->
+All checks use Rust 1.99.1 and the locked Python 3.11 environment. Cargo
+builds/tests are offline. Books, HOME/XDG inputs, logs and scratch trees are
+disposable. The harness is rebuilt after workspace tests. No Python product
+bug was found or changed.
+
+| Check | Result |
+| --- | --- |
+| Workspace fmt | Passed |
+| Workspace clippy, all targets, warnings denied | Passed |
+| Test-harness clippy, all targets, warnings denied | Passed |
+| Full workspace tests, including `kassiber-net` | 547 passed, 0 failed |
+| Final test-harness build | Passed |
+| Seven hybrid document/transaction/metadata parity modules | 29 distinct tests passed across the broad run and focused rerun; 57 subtests passed |
+| Requested shell/hybrid-candidate/CLI-runner/port modules | 53 passed, 84 subtests passed |
+| Inventory, contracts, shard validation | Passed; 28 tests and 47 subtests passed |
+| Mutation applicability | 226 entries apply |
+| Transaction mutation checks | 226/226 built and killed across two acceptance runs; 62 named baseline tests passed |
+
+A sandboxed preliminary workspace attempt could not bind its disposable local
+sockets; the complete run with that permission passed. An interrupted attempt
+also exhausted the host filesystem while compiling; no result from that attempt
+is counted. The resumed run uses fresh isolated mutation targets. A reused-target
+baseline picked up a prior mutated artifact and failed before mutation, so that
+attempt supplies no kills. Compiler failures and incomplete runs likewise supply
+no acceptance evidence. A CLI failure fixture initially inserted an arbitrary
+trigger before reopening the book; the existing Rust schema gate correctly
+refused that unadmitted schema. The trigger rollback/error check remains in the
+open-book Rust regression; the CLI scenario instead checks a managed-root I/O
+failure. The old unported-kind assertion was updated now that commercial context
+is served.
+The broad seven-module run passed 27 tests and failed the two assertions
+described above. After the fixture, remaining-kind assertion and CLI layout
+error-code corrections, the focused four document scenarios plus that
+remaining-kind scenario passed (5 tests). Together these cover all 29 distinct
+tests; a single clean 29-test run is not claimed.
+<!-- document-verification:end -->
+
+<!-- document-served-counts:start -->
+The accepted five-test focused run gives these counts. The four document
+scenarios exercise every new command/kind; the additional remaining-kind test
+does not add document calls. Raw reference/candidate byte comparisons are
+additional checks, excluded from hybrid counters. Setup workspace/profile/wallet
+calls intentionally fall back to Python. The five hybrid daemon sessions run
+in Rust; each kind count records requests inside those admitted Rust processes.
+
+| Command | Rust | Python |
+| --- | ---: | ---: |
+| `documents.list` | 1 | 0 |
+| `documents.create` | 5 | 0 |
+| `documents.attach` | 5 | 0 |
+| `documents.import-report` | 2 | 0 |
+| `btcpay.provenance.list` | 1 | 0 |
+| `btcpay.provenance.links` | 1 | 0 |
+| `btcpay.provenance.suggest` | 1 | 0 |
+| `daemon` | 5 | 0 |
+
+| Desktop kind | Rust | Python |
+| --- | ---: | ---: |
+| `ui.documents.list` | 8 | 0 |
+| `ui.documents.create` | 13 | 0 |
+| `ui.documents.attach` | 8 | 0 |
+| `ui.documents.import_report` | 5 | 0 |
+| `ui.transactions.commercial_context` | 6 | 0 |
+| `ui.btcpay.provenance.list` | 2 | 0 |
+| `ui.btcpay.provenance.links` | 2 | 0 |
+| `ui.btcpay.provenance.suggest` | 1 | 0 |
+<!-- document-served-counts:end -->
+
+Eleven Rust regressions and four hybrid scenarios cover the boundary. The
+mutation runner builds every mutated tree and requires its named test to fail;
+compiler errors and baseline failures are not kills. The full 224-entry run
+killed all 224 entries. After the final Unicode refusal guards, all 50 document
+entries were rerun in a fresh isolated target and killed, with their 11 named
+baseline tests passing. These overlapping runs cover all 176 inherited and 50
+new entries; a single 226-entry run is not claimed. The 50 new mappings follow.
+
+<!-- document-mutations:start -->
+| New mutation | Named Rust test |
+| --- | --- |
+| `document-id-precedence` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-reference-scope` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-reference-ambiguity` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-external-conflict` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-page-tie` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-second-precision` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-unknown-date` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-exact-fiat` | `document_registration_preserves_exact_values_refusals_scope_and_order` |
+| `document-cleanup-files` | `document_evidence_is_literal_transactionless_hashed_and_atomic` |
+| `document-transactionless` | `document_evidence_is_literal_transactionless_hashed_and_atomic` |
+| `document-url-literal` | `document_evidence_is_literal_transactionless_hashed_and_atomic` |
+| `document-prior-evidence-type` | `prior_reports_are_atomic_evidence_without_ledger_or_lot_authority` |
+| `commercial-profile` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-excluded` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-txid-signal` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-payment-hash-signal` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-stable-key-signal` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-unique-transaction` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-principal-fee` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-principal-absolute` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-confidence` | `commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal` |
+| `commercial-payout-direction` | `commercial_payout_matching_requires_outgoing_proof_and_matchable_status` |
+| `commercial-payout-status` | `commercial_payout_matching_requires_outgoing_proof_and_matchable_status` |
+| `document-match-request-reference` | `document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment` |
+| `document-match-order-reference` | `document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment` |
+| `document-match-exact-fiat` | `document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment` |
+| `document-match-currency` | `document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment` |
+| `document-match-profile` | `document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment` |
+| `document-match-unique-payment` | `document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch` |
+| `commercial-rejected-identity` | `document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates` |
+| `commercial-document-enrichment` | `document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates` |
+| `commercial-first-document` | `document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates` |
+| `commercial-document-fiat-provenance` | `document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates` |
+| `commercial-suggestion-dedup` | `document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates` |
+| `commercial-suggestion-atomic` | `document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch` |
+| `commercial-context-rejected` | `commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness` |
+| `commercial-context-reviewed-order` | `commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties` |
+| `commercial-context-id-tie` | `commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties` |
+| `commercial-links-id-tie` | `commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties` |
+| `commercial-records-id-tie` | `commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties` |
+| `commercial-invoice-origin-priority` | `commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness` |
+| `commercial-bitcoin-is-not-fiat` | `commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness` |
+| `commercial-payout-absolute-sum` | `commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers` |
+| `commercial-payout-decimal-precision` | `commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers` |
+| `commercial-payout-currency-barrier` | `commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers` |
+| `commercial-payout-missing-currency` | `commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers` |
+| `commercial-freshness-never-synced` | `commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness` |
+| `commercial-corrupt-amount` | `document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch` |
+| `document-prior-source-provenance` | `prior_reports_are_atomic_evidence_without_ledger_or_lot_authority` |
+| `document-url-surrogate` | `document_evidence_is_literal_transactionless_hashed_and_atomic` |
+<!-- document-mutations:end -->
+
+Remaining work: the five deferred transaction desktop projections and full
+editor smoke session, transaction exports in every format, journal processing
+and reports, BTCPay provenance sync and commercial review, descriptor/input-graph
+BIP329 matching, standard-field surrogate support and native-platform evidence.
+The stored commercial section is now available to a future review-context port;
+the whole review-context kind remains `not_implemented`. OCR/import-draft AI
+workflows and AI projections are outside this document-family port. Native
+platform checks and full Python shards remain with the orchestrator.

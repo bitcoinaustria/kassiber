@@ -1045,12 +1045,31 @@ audit/evidence section composition. Ledger template still needs the managed
 CSV/XLSX template writer. These five whole kinds remain `not_implemented`;
 the full editor smoke session and all eight-kind acceptance are unfinished.
 
+The `t3code/r5-transactions-9` continuation starts at `d5296a02` and adds all four
+`documents list/create/attach/import-report` commands and their four existing
+desktop kinds. `crates/transactions/src/documents.rs` reuses managed attachment
+storage and keeps prior reports as evidence without ledger or lot authority.
+`commercial.rs` adds local `btcpay provenance list/links/suggest` and their desktop
+kinds, plus the pure stored `ui.transactions.commercial_context` read needed by
+the deferred review-context projection. Matching preserves the reference's
+transaction-ID/payment-hash/stable-key signals, unique-observation requirement,
+principal confidence, exact document reference/currency/value comparisons,
+existing-link enrichment and rejected-link retention. The context projection
+preserves invoice-origin precedence, payout-batch currency barriers, ordering
+and stored freshness. Suggestions do not apply prices or transaction kinds.
+URL evidence remains literal and is never fetched. No schema or dependency is
+added. The acceptance record gives verification, per-command/kind served-by
+counts and the named mutation mappings for this continuation. The document
+commands and kinds have zero Python fallbacks; 50 new mappings supplement the
+176 inherited killed mutations.
+
 This remains a partial finish. Descriptor-backed ownership derivation, complex
 input graphs and lone surrogates in standard BIP329 string fields refuse
 `not_implemented`; unknown JSON keys/values retain surrogates. Global stored and
 synthesized exports do not require that ownership index. Transaction exports,
-the five desktop projections listed above, documents, and journal/report
-processing remain unported and fail `not_implemented`. AI projections remain Python. The
+the five desktop projections listed above, journal/report processing, commercial
+review and BTCPay provenance sync remain unported and fail `not_implemented`.
+AI projections remain Python. The
 five loan tax-composition dispositions remain with journal processing; the
 collateral mark storage tests are ported.
 The [acceptance record](../reference/rust-transactions-r5-status.md) records

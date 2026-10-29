@@ -119,7 +119,9 @@ exact pricing, review/tax validation and atomic audited edits. `transactions lis
 now preserves observed CLI pages, scoped filters, sort/cursor bytes and unpaged
 counts. Desktop list/search/extremes now preserve grouped custody rows, queue
 status, signed display sorts, exact bounds and cursor pages; the five other
-transaction desktop projections and exports remain unported. AI
+transaction desktop projections and exports remain unported. Documents now cover
+registration, transactionless evidence and prior-report archives, with stored
+commercial matching/context reads. AI
 projections stay Python. Progress and remaining work for this slice:
 
 - [x] Correct the Python reference's lexical fractional timestamp bounds in
@@ -128,8 +130,10 @@ projections stay Python. Progress and remaining work for this slice:
   in the acceptance record.
 - [x] Port desktop transaction list/search/extremes over stored journal/custody
   state, with raw JSONL parity and killed filter/order/count/page mutations.
-- [ ] Port desktop dashboard/resolve/graph/review-context/template projections,
-  then commercial documents through the CLI and daemon. Preserve the exact
+- [x] Port commercial documents through the CLI and daemon, with stored
+  matching, context reads, parity and mutation evidence in the acceptance record.
+- [ ] Port desktop dashboard/resolve/graph/review-context/template projections.
+  Preserve the exact
   dependencies and remaining editor-smoke boundary in the acceptance record.
 - [ ] Complete descriptor/input-graph BIP329 matching and standard-field
   surrogate/platform parity with the wallet lifecycle work.

@@ -175,6 +175,22 @@ pub trait Book: Send {
     fn service(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("service", operation))
     }
+    fn documents(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::documents::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("documents", "document evidence services"))
+    }
+    fn commercial(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::commercial::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("commercial", "stored commercial services"))
+    }
     /// Desktop transaction projections over the current book context.
     fn transaction_desktop(
         &mut self,

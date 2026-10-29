@@ -715,6 +715,46 @@ impl Book for RealBook {
         }
         kassiber_setup::execute(self.conn()?, operation, args, &SetupSources)
     }
+    fn documents(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        command: &kassiber_transactions::documents::Command,
+    ) -> Result<Value, AppError> {
+        kassiber_transactions::documents::validate_before_scope(command)?;
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        let paths = context()?
+            .resolve(&ResolveOptions {
+                data_root: Some(PathBuf::from(&self.data_root)),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        kassiber_transactions::documents::execute(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            &paths.attachments_root,
+            command,
+        )
+    }
+    fn commercial(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        command: &kassiber_transactions::commercial::Command,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_transactions::commercial::execute(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            command,
+        )
+    }
     fn transaction_desktop(
         &mut self,
         projection: kassiber_transactions::desktop::Projection,

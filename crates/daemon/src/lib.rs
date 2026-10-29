@@ -15,6 +15,7 @@
 
 mod attachments;
 pub mod control;
+mod documents;
 mod imports;
 pub mod input;
 mod loans;
@@ -78,6 +79,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(rates::KINDS);
     kinds.push("ui.profiles.reset_data");
     kinds.extend(imports::KINDS);
+    kinds.extend(documents::KINDS);
     kinds.extend(wallets::KINDS);
     kinds.extend(
         metadata::KINDS
@@ -483,6 +485,16 @@ impl Daemon {
                         .collect(),
                 ));
             }
+        }
+        if documents::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = documents::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         if transactions::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {

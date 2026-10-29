@@ -184,7 +184,7 @@ fn parsed(raw: &str) -> Option<i64> {
     Some(day * 86_400_000_000 + local - offset)
 }
 
-fn normalized(raw: &str) -> Option<i64> {
+pub(crate) fn normalized(raw: &str) -> Option<i64> {
     let stripped = kassiber_pytext::strip(raw);
     let with_offset = stripped
         .strip_suffix('Z')
