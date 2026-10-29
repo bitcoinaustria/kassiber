@@ -1008,6 +1008,21 @@ impl Book for RealBook {
         )
     }
 
+    fn transfers(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(
+            kassiber_envelope::get(args, "workspace"),
+            kassiber_envelope::get(args, "profile"),
+        )?;
+        kassiber_transfers::execute(
+            self.conn()?,
+            &kassiber_transfers::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            operation,
+            args,
+        )
+    }
     fn metadata(
         &mut self,
         workspace: Option<&Value>,

@@ -598,6 +598,16 @@ fn book_command(
                 namespace,
             )?);
         }
+        if operation.starts_with("review.") {
+            return emit(crate::review::execute(book.as_mut(), operation, namespace)?);
+        }
+        if operation.starts_with("transfers.") {
+            return emit(crate::transfers::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
+        }
         if operation.starts_with("loans.") {
             return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
         }

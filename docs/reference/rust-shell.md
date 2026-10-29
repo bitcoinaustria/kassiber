@@ -2810,3 +2810,70 @@ all fourteen text rules, every sensitive key, native report/debug frame
 refusal, debug presence, detail shapes and effective review selection.
 See [slice acceptance](rust-diagnostics-r5-status.md) for verification,
 served-by evidence, reference repros and platform limits.
+
+## Transfers and review classification (R5)
+
+This classification uses Python at `65c74e84`. The requested
+`core/transfers.py` is named `core/custody_review_terms.py` in this base;
+`kassiber/transfers.py` contains shared observation helpers. AI projections
+remain in Python. A stored membership is reviewed custody, not ownership
+inferred from an observation or a matching suggestion.
+
+(a) means stored reads, (b) authoring and its validation, and (c) current-state
+computation or network dependencies. A command's name or registry read effect
+does not imply that it is a stored read. None of these paths requires network
+access directly; journal and custody dependencies are listed below.
+
+| CLI command | Group | Related desktop kind | Dependency / behavior |
+| --- | --- | --- | --- |
+| `transfers list` | a | `ui.transfers.list` | Stored effective memberships, economic terms and observation context |
+| `transfers pair` | b | `ui.transfers.pair` | Authored component, native residual validation, active conflicts, append-only terms |
+| `transfers unpair` | b | `ui.transfers.unpair` | Supersede and re-slice connected pair group; invalidate journals |
+| `transfers update` | b | `ui.transfers.update` | Append component revision and terms; invalidate journals |
+| `transfers gaps list` | c | `ui.custody.gaps.list` | Gap candidate computation and custody state |
+| `transfers gaps review` | c | `ui.custody.gaps.review_context` | Gap candidate computation and review context |
+| `transfers gaps history` | a | `ui.custody.gaps.history` | Bounded redacted stored history and impact counts |
+| `transfers gaps plan` | b | `ui.custody.review.plan` | Current candidate fingerprints, authored component plan, filed-report impacts |
+| `transfers gaps apply` | b | `ui.custody.review.apply` | Recheck candidates/version; append reviews, relations, components, impacts; invalidate |
+| `transfers components list` | c | `ui.transfers.components.list` | Materialize validation, native support, evidence and effective custody state |
+| `transfers components show` | c | `ui.transfers.components.get` | Same component materialization; privacy-safe desktop projection |
+| `transfers components plan` | b | `ui.transfers.components.plan` | Component planner, scope/anchor/allocation/conservation validation |
+| `transfers components apply` | b | `ui.transfers.components.apply` | Version-bound planner; append aggregate/revision; activation and invalidation |
+| `transfers payouts list` | a | `ui.transfers.payouts.list` | Stored effective memberships and payout terms |
+| `transfers payouts create` | b | `ui.transfers.payouts.create` | Authored conversion component, source residual validation and invalidation |
+| `transfers payouts delete` | b | `ui.transfers.payouts.delete` | Supersede authored payout and invalidate |
+| `transfers suggest` | c | `ui.transfers.suggest` | Matcher plus ownership/custody projections; not a stored list |
+| `transfers bulk-pair` | c | `ui.transfers.bulk_pair` | Matcher, conflict guards and authored pair service |
+| `transfers dismiss` | b | `ui.transfers.dismiss` | Scoped observations; dismissal upsert only; no ownership or journal mutation |
+| `transfers rules list` | a | `ui.transfers.rules.list` | Stored rules, validated fail-closed projection |
+| `transfers rules create` | b | `ui.transfers.rules.create` | Predicate validation, recommended policy and Python JSON serialization |
+| `transfers rules delete` | b | `ui.transfers.rules.delete` | Scoped rule deletion |
+| `transfers rules enable` | b | `ui.transfers.rules.set_enabled` | Validate stored predicate/kind/policy before enabling |
+| `transfers rules disable` | b | `ui.transfers.rules.set_enabled` | Disable without granting matching authority |
+| `transfers rules apply` | c | `ui.transfers.rules.apply` | Matcher, rule selection and authored pair service |
+| `review cases` | c | `ui.review.cases` | Canonical custody journal rebuild, version-bound cursor |
+| `review plan` | c | `ui.review.plan` | Isolated snapshot, canonical journal rebuild and economic effects |
+| `review apply` | c | `ui.review.apply` | Atomic rebuild/revalidation and durable verification receipt |
+| `review receipt` | a | `ui.review.receipt` | Stored historical receipt; no current-readiness claim |
+
+Additional related desktop kinds: `ui.transfers.review_context` (c: matcher,
+ownership and journal projections), `ui.review.worklist` (c: aggregated current
+cases), `ui.review.request_input` (c: verifies current canonical cases),
+`ui.review.badges` (c: freshness and review projections), and
+`ui.journals.transfers.list` (c: journal transfer projection). They stay
+`not_implemented` until their dependencies are ported. Group (c) is not
+advertised as supported. Matching remains in Python; porting it requires a
+separate mutation catalog and an oracle against both the Python matcher and
+its naive all-pairs reference.
+
+The initial stored-read checkpoint implements all five group (a) commands and
+their five desktop kinds through `crates/transfers`. Pair/payout selection uses
+persisted effective memberships, never the compatibility pair tables or a new
+ownership inference. Split allocations take precedence over review source
+amounts. Gap history exposes bounded redacted review facts. Historical receipt
+verification never establishes current readiness. Rules are configuration:
+invalid stored rules are projected disabled with Python's validation reason.
+The deterministic Python vectors and native service tests compare ordered JSON
+bytes, while `tests/test_rust_transfer_services.py` compares real CLI/daemon
+bytes and witnesses Rust routing for each implemented leaf. Group (b) remains
+unported at this checkpoint.

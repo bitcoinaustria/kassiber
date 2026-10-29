@@ -1487,6 +1487,7 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "kassiber-transactions",
+ "kassiber-transfers",
  "kassiber-wallets",
  "serde_json",
  "tempfile",
@@ -1811,6 +1812,17 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-store",
  "sha2 0.11.1",
+ "tempfile",
+]
+
+[[package]]
+name = "kassiber-transfers"
+version = "0.1.0"
+dependencies = [
+ "kassiber-envelope",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
  "tempfile",
 ]
 

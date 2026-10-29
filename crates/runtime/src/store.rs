@@ -247,6 +247,10 @@ pub trait Book: Send {
         Err(not_implemented("transactions", "transaction listing"))
     }
 
+    /// Local stored transfer/review services. No journal or network fallback.
+    fn transfers(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("transfers", operation))
+    }
     /// Local metadata edits and append-only history state.
     fn metadata(
         &mut self,

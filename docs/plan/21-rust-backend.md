@@ -1864,3 +1864,17 @@ Python corrections. The [integration audit](../reference/rust-backend-r6-integra
 records the linear picks, skips, conflict resolutions, custody campaigns,
 hybrid parity and full mutation rerun. R4-0 is complete; R4-1 onward and the
 production journal authority switch remain planned.
+
+### R5 transfers/review stored-read checkpoint
+
+The transfer slice starts at integration tip `65c74e84` on
+`t3code/r5-transfers`. The [29-command classification](../reference/rust-shell.md#transfers-and-review-classification-r5)
+separates stored reads from authoring and current-state computation.
+`crates/transfers` serves stored pairs/payouts, gap history, matching-rule
+configuration and historical review receipts through `Book::transfers`, CLI
+and desktop family adapters. No matcher, journal builder, egress path or AI
+projection is enabled by these reads. Native Python vectors and real-process
+byte oracles cover the five stored-read commands. Authoring remains the next
+checkpoint; append-only revisions, commitments, native residual validation and
+invalidation must be ported together before pairing/components/gap application
+can be advertised.

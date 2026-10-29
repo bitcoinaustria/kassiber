@@ -1,0 +1,132 @@
+[
+  {
+    "id": "stored-membership",
+    "file": "crates/transfers/src/records.rs",
+    "find": "SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?",
+    "replace": "SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Only stored effective component memberships select current pair/payout terms."
+  },
+  {
+    "id": "stored-allocated-source",
+    "file": "crates/transfers/src/records.rs",
+    "find": "\"allocated_source_amount_msat\",\n                \"reviewed_source_amount_msat\",",
+    "replace": "\"reviewed_source_amount_msat\",\n                \"allocated_source_amount_msat\",",
+    "expect_failing": [
+      "stored_allocations_override_reviewed_amounts"
+    ],
+    "rule": "Stored allocation amounts take precedence over a review source amount."
+  },
+  {
+    "id": "history-bounds",
+    "file": "crates/transfers/src/history.rs",
+    "find": "(1..=500).contains(n)",
+    "replace": "(0..=501).contains(n)",
+    "expect_failing": [
+      "stored_scope_limits_and_receipt_selectors_fail_closed"
+    ],
+    "rule": "History accepts exact integers between 1 and 500."
+  },
+  {
+    "id": "history-newest-page",
+    "file": "crates/transfers/src/history.rs",
+    "find": "stored.iter().rev()",
+    "replace": "stored.iter()",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "History returns the newest bounded page in ascending revision order."
+  },
+  {
+    "id": "rule-unknown-fields",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !unknown.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Unknown predicate fields are rejected, not silently ignored."
+  },
+  {
+    "id": "rule-finite-nonnegative",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !n.is_finite() || n < 0.0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Fee threshold must be finite and nonnegative."
+  },
+  {
+    "id": "rule-confidence-values",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if ![s(\"exact\"), s(\"strong\")].contains(v) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Confidence must be exact or strong."
+  },
+  {
+    "id": "rule-invalid-disabled",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "parse_bool(&value(row, \"enabled\"))? && invalid.is_empty()",
+    "replace": "parse_bool(&value(row, \"enabled\"))?",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Invalid stored rules are force-disabled."
+  },
+  {
+    "id": "rule-kind",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !KINDS.contains(&kind.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Unsupported stored kinds are disabled and projected with a safe default."
+  },
+  {
+    "id": "rule-policy",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !POLICIES.contains(&policy.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Unsupported stored policies are disabled and projected with a safe default."
+  },
+  {
+    "id": "rule-string-type",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !matches!(v, Value::Str(_)) {\n                return Err(validation(format!(",
+    "replace": "if false {\n                return Err(validation(format!(",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Predicate wallet and asset fields must be strings."
+  },
+  {
+    "id": "rule-confidence-type",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !matches!(v, Value::Str(_)) {\n            return Err(validation(",
+    "replace": "if false {\n            return Err(validation(",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Confidence must be text before checking allowed values."
+  },
+  {
+    "id": "payout-malformed-fiat",
+    "file": "crates/transfers/src/records.rs",
+    "find": "if parsed.is_err() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_payout_value_fails_closed"
+    ],
+    "rule": "Invalid stored payout fiat values fail instead of fabricating a value."
+  }
+]

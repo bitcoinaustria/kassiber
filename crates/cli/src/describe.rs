@@ -134,6 +134,12 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.austrian-e1kv",
     "reports.austrian-tax-summary",
     "reports.balance-history",
+
+    "transfers.list",
+    "transfers.payouts.list",
+    "transfers.gaps.history",
+    "transfers.rules.list",
+    "review.receipt",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

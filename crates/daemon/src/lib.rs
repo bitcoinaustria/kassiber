@@ -25,10 +25,12 @@ mod metadata;
 pub mod output;
 mod rates;
 mod reports;
+mod review;
 mod secrets;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
 mod transactions;
+mod transfers;
 mod wallets;
 
 use std::io::{Read, Write};
@@ -86,6 +88,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .filter(|k| ["ui.wallets.list"].contains(k)),
     );
     kinds.extend(loans::KINDS);
+    kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| {
         backends::KINDS.contains(k)
             && [
@@ -120,6 +123,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .contains(k)
     }));
     kinds.extend(rates::KINDS);
+    kinds.extend(review::KINDS);
     kinds.extend(services::kinds().filter(|k| workspaces::KINDS.contains(k)));
     kinds.extend(
         services::kinds()
@@ -602,6 +606,26 @@ impl Daemon {
                 return Ok((Some(locked), false));
             }
             let payload = metadata::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if review::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = review::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if transfers::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = transfers::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
