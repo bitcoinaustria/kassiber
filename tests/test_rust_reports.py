@@ -107,6 +107,94 @@ def test_reports_match_reference_bytes_and_run_in_rust(tmp_path, monkeypatch, co
     _history_daemon_bytes(root, env)
 
 
+@pytest.mark.parametrize("country,algorithm,size", [
+    ("generic", "fifo", 32), ("generic", "hifo", 32), ("at", "moving_average_at", 32),
+    ("generic", "fifo", 1500), ("generic", "hifo", 1500), ("at", "moving_average_at", 1500),
+])
+def test_tabular_report_csv_bytes_and_atomic_output(tmp_path, monkeypatch, country, algorithm, size):
+    root, env, call = _setup(tmp_path, monkeypatch, country, algorithm, size)
+    conn = open_db(root)
+    conn.execute("UPDATE journal_entries SET description=? WHERE entry_type='disposal'",
+                 ('Receipt €: comma, quote " and CR\r\nLF\n',))
+    workspace_id, profile_id = conn.execute("SELECT workspace_id,id FROM profiles WHERE label='Book'").fetchone()
+    for state in ("saved", "filed"):
+        conn.execute("""INSERT INTO filed_report_snapshots(
+            id,workspace_id,profile_id,report_kind,report_state,period_start_year,period_end_year,
+            content_sha256,classification_summary_json,gain_summary_json,report_scope_json,created_at)
+            VALUES(?,?,?,?,?,2020,2024,?,?,?,?,?)""",
+            (state, workspace_id, profile_id, "full-report.csv", state, "a" * 64,
+             '{"income":{"count":1,"amount_msat":1001}}', '{"gain_loss_exact":"1.2300"}',
+             '{}', "2025-01-01T00:00:00Z"))
+    conn.commit()
+    sealed_tables = ("filed_report_snapshots", "custody_filed_report_impacts",
+                     "custody_filed_report_impact_resolutions", "filed_report_chain_captures",
+                     "filed_report_chain_dependencies")
+    sealed_before = {table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table}")]
+                     for table in sealed_tables}
+    commands = [(command,) for command in COMMANDS]
+    commands += [(command, "--year", "2024") for command in ("austrian-e1kv", "austrian-tax-summary")]
+    commands += [("filed-snapshots", "list")]
+    for command in commands:
+        args = ("--format", "csv", "reports", *command)
+        reference = call(*args, reference=True, machine=False)
+        rust = call(*args, machine=False)
+        assert (rust.returncode, rust.stdout, rust.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+        if command[0].startswith("austrian") and country != "at":
+            assert rust.returncode == 1
+            continue
+        assert rust.returncode == 0, rust.stderr
+        assert rust.stdout.endswith(b"\r\n")
+        if command[0] == "journal-entries":
+            assert b'"Receipt \xe2\x82\xac: comma, quote "" and CR\r\nLF\n"' in rust.stdout
+        output = tmp_path / "nested" / (command[0] + ".csv")
+        file_args = ("--format", "csv", "--output", str(output), "reports", *command)
+        expected = call(*file_args, reference=True, machine=False)
+        csv_bytes = output.read_bytes()
+        assert csv_bytes == reference.stdout
+        output.write_bytes(b"previous artifact\r\n")
+        actual = call(*file_args, machine=False)
+        assert (actual.returncode, actual.stdout, actual.stderr) == (expected.returncode, expected.stdout, expected.stderr) == (0, b"", b"")
+        assert output.read_bytes() == csv_bytes
+        assert not list(output.parent.glob(".*.tmp"))
+    assert sealed_before == {table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table}")]
+                             for table in sealed_tables}
+    conn.close()
+    calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
+    report_calls = [c for c in calls if c["command"].startswith("reports.")]
+    assert report_calls and all(c["served_by"] == "rust" for c in report_calls)
+
+
+def test_tabular_csv_refusals_leave_existing_artifacts_and_snapshots(tmp_path, monkeypatch):
+    root, env, call = _setup(tmp_path, monkeypatch, country="at", algorithm="moving_average_at")
+    output = tmp_path / "report.csv"
+    output.write_bytes(b"previous artifact\r\n")
+    conn = open_db(root)
+    conn.execute("UPDATE profiles SET last_processed_input_version=-1")
+    conn.commit()
+    for command in [*( (c,) for c in COMMANDS ), ("austrian-e1kv", "--year", "2024"),
+                    ("austrian-tax-summary", "--year", "2024")]:
+        args = ("--format", "csv", "--output", str(output), "reports", *command)
+        reference = call(*args, reference=True, machine=False)
+        rust = call(*args, machine=False)
+        assert (rust.returncode, rust.stdout, rust.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+        assert rust.returncode == 1
+        assert output.read_bytes() == b"previous artifact\r\n"
+    conn.execute("UPDATE profiles SET last_processed_input_version=journal_input_version")
+    for table in ("journal_entries", "journal_tax_summary", "journal_account_holdings", "journal_wallet_holdings"):
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    for command in ("capital-gains", "journal-entries", "balance-sheet", "portfolio-summary", "tax-summary"):
+        args = ("--format", "csv", "--output", str(output), "reports", command)
+        reference = call(*args, reference=True, machine=False)
+        rust = call(*args, machine=False)
+        assert (rust.returncode, rust.stdout, rust.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+        assert rust.returncode == 1
+        assert b"CSV output requires a list of records" in rust.stderr
+        assert output.read_bytes() == b"previous artifact\r\n"
+    assert conn.execute("SELECT count(*) FROM filed_report_snapshots").fetchone()[0] == 0
+    conn.close()
+
+
 def _history_daemon_bytes(root, env):
     requests = [{"kind":"ui.reports.balance_history", "args":args} for args in (
         {}, {"interval":"day","start":"2024-01-01","end":"2024-04-01","wallet":"Cold","limit":7},
@@ -199,13 +287,3 @@ def test_table_and_plain_reads_match_bytes(tmp_path,monkeypatch):
             rust=call(*args,machine=False)
             assert (rust.returncode,rust.stdout,rust.stderr)==(python.returncode,python.stdout,python.stderr)
             assert rust.returncode==0,rust.stderr
-
-    # These new leaves port stored reads only; CSV is an excluded export.
-    with monkeypatch.context() as direct:
-        direct.setenv("KASSIBER_TEST_CLI", str(Path(RUST_BIN).resolve()))
-        for command in ("tax-summary", "journal-entries", "austrian-e1kv", "austrian-tax-summary", "balance-history"):
-            year = ("--year", "2024") if command.startswith("austrian-") else ()
-            result = call("--format", "csv", "reports", command, *year, machine=False)
-            assert result.returncode == 1
-            assert result.stdout == b""
-            assert result.stderr == b"error: CSV report exports are not implemented in this Rust read slice\n"

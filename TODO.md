@@ -220,6 +220,8 @@ read Python-produced journals through ten CLI leaves and five daemon kinds.
   quarantine disclosure; port the desktop tax-summary kind.
 - [x] Port the complete stored journal-entry listing with signed msat and
   deterministic split-row ordering.
+- [x] Port CSV projections for the ten report reads and atomic `--output`
+  publication, with FIFO/HIFO/Austrian byte parity and killed mutations.
 - [ ] Port exit-tax reads and the associated amendment disclosures.
 - [x] Port historical balance/holdings reads and the desktop balance-history
   kind with native parity and killed mutations.
@@ -227,8 +229,11 @@ read Python-produced journals through ten CLI leaves and five daemon kinds.
   callers exist and the stack includes phase 5; preserve append-only history.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
   explanation, privacy, Lightning and cross-check reads.
-- [ ] Port exports and explicit snapshot save/file actions as later slices.
-  Keep unsupported commands disabled and all AI projections in Python.
+- [ ] Port full-report, Austrian bundle and transaction CSV artifacts, saved
+  export registration, explicit filed markers and their daemon kinds. Preserve
+  sealed summaries, hashes and phase-4 append-only impact history.
+- [ ] Port PDF/XLSX artifacts in a later slice. Keep unsupported commands
+  disabled and all AI projections in Python.
 
 ## Accounting correctness and custody
 

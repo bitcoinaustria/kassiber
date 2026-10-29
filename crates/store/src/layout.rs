@@ -8,6 +8,35 @@ use std::{fs::OpenOptions, path::Path};
 /// Publish a machine preference exactly as `private_files.atomic_write_private`.
 /// Unlike book metadata writes, this replaces a final symlink without following it.
 pub fn write_private_preference(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    write_atomic_file(path, bytes, true, &mut || Ok(()))
+}
+
+/// Publish an explicit export without changing the permissions of its parent.
+/// The complete owner-only temporary file is synced before atomic replacement.
+pub fn write_export(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    // Atomic replacement must not bypass an existing file's write refusal.
+    match OpenOptions::new().write(true).open(path) {
+        Ok(_) => (),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+        Err(error) => return Err(error),
+    }
+    write_atomic_file(path, bytes, false, &mut || Ok(()))?;
+    #[cfg(not(windows))]
+    std::fs::File::open(
+        path.parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new(".")),
+    )?
+    .sync_all()?;
+    Ok(())
+}
+
+fn write_atomic_file(
+    path: &Path,
+    bytes: &[u8],
+    _private_parent: bool,
+    before_publish: &mut impl FnMut() -> std::io::Result<()>,
+) -> std::io::Result<()> {
     use std::io::Write;
     let parent = path
         .parent()
@@ -18,9 +47,13 @@ pub fn write_private_preference(path: &Path, bytes: &[u8]) -> std::io::Result<()
     #[cfg(unix)]
     {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-        directories.mode(0o700);
+        if _private_parent {
+            directories.mode(0o700);
+        }
         directories.create(parent)?;
-        let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        if _private_parent {
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
     }
     #[cfg(not(unix))]
     directories.create(parent)?;
@@ -34,6 +67,7 @@ pub fn write_private_preference(path: &Path, bytes: &[u8]) -> std::io::Result<()
         .tempfile_in(parent)?;
     temporary.write_all(bytes)?;
     temporary.as_file().sync_all()?;
+    before_publish()?;
     temporary.persist(path).map_err(|e| e.error)?;
     Ok(())
 }
@@ -193,6 +227,43 @@ pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn export_publication_is_atomic_and_preserves_parent_permissions() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("report.csv");
+        std::fs::write(&path, b"prior\r\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o750)).unwrap();
+        }
+        assert!(write_atomic_file(&path, b"complete\r\n", false, &mut || {
+            // The old artifact remains visible until the complete file is published.
+            assert_eq!(std::fs::read(&path).unwrap(), b"prior\r\n");
+            Err(std::io::Error::other("injected publication failure"))
+        })
+        .is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"prior\r\n");
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+        write_export(&path, b"complete\r\n").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"complete\r\n");
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(root.path()).unwrap().permissions().mode() & 0o777,
+                0o750
+            );
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let absent = root.path().join("nested/new.csv");
+        write_export(&absent, b"new\r\n").unwrap();
+        assert_eq!(std::fs::read(absent).unwrap(), b"new\r\n");
+    }
     #[test]
     fn private_replace_preserves_old_or_complete_new_bytes_at_each_boundary() {
         for point in [

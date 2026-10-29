@@ -138,3 +138,8 @@ fn desktop_tax_vectors() {
 fn journal_entry_vectors() {
     check("entries");
 }
+
+#[test]
+fn report_csv_projection_vectors() {
+    check("csv");
+}

@@ -1538,9 +1538,11 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-runtime",
  "kassiber-secrets",
+ "kassiber-store",
  "kassiber-transactions",
  "kassiber-wallets",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

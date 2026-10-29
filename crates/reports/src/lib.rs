@@ -119,7 +119,17 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
             }
             "reports.austrian-e1kv" | "reports.austrian-tax-summary" => {
                 let report = austrian::report(conn, &workspace, &profile, args)?;
-                if truthy(value(args, "text")) {
+                if truthy(value(args, "csv")) {
+                    Ok(value(
+                        &report,
+                        if command == "reports.austrian-tax-summary" {
+                            "summary_rows"
+                        } else {
+                            "rows"
+                        },
+                    )
+                    .clone())
+                } else if truthy(value(args, "text")) {
                     Ok(s(austrian_text::render(&report)?))
                 } else {
                     Ok(report)

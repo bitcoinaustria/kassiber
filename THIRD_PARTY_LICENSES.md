@@ -48,6 +48,9 @@ The Rust secrets lifecycle reuses `tempfile` for private credential-migration
 staging and `zeroize` for transport copies. It directly uses the already locked
 `getrandom` version for credential enrollment and invalidation generations;
 the standard library has no portable cryptographic random-byte API.
+Report CSV publication shares that storage helper. CLI publication tests reuse
+the same pinned `tempfile` crate for disposable directories and cleanup; no
+third-party package or runtime requirement is added.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |

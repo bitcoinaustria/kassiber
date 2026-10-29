@@ -67,6 +67,10 @@ def build():
     case("snapshots-ignore-live-staleness","snapshots","reports.filed-snapshots.list",snapshots+"UPDATE profiles SET last_processed_at=NULL;")
     # Stored report continuation: category mapping, per-row rounding and totals.
     at = "UPDATE profiles SET tax_country='at' WHERE id='p';"
+    for command in ('austrian-e1kv', 'austrian-tax-summary'):
+        for name, sql in (('populated', at), ('empty', at + 'DELETE FROM journal_entries;')):
+            case('csv-' + command + '-' + name, 'csv', 'reports.' + command,
+                 sql, {'year': 2025, 'csv': True})
     tax = "INSERT INTO journal_tax_summary(id,workspace_id,profile_id,year,asset,transaction_type,capital_gains_type,quantity,proceeds,cost_basis,gain_loss,created_at) VALUES('tax','ws','p',2024,'BTC','sell','short_term',123556789,102.33,11.23,91.1,'fixed'),('tax2','ws','p',2025,'BTC','sell','short_term',100001,100,10,90,'fixed'),('tax3','ws','p',2025,'LBTC','interest','income',789001,0.123,0.123,0.123,'fixed');"
     for label,sql in (("generic",tax),("vienna",at),("empty","DELETE FROM journal_entries;"),("adjustment-zero",tax+"DELETE FROM journal_entries WHERE id='a';"),("kind-override",at+"UPDATE transactions SET kind_override='  MINING_REWARD ' WHERE id='earn';"),("null-gains",at+"UPDATE journal_entries SET capital_gains_type=NULL;"),("stale",at+"UPDATE profiles SET last_processed_at=NULL;")):
         case('tax-'+label,'tax','reports.tax-summary',sql)
@@ -188,7 +192,10 @@ def build():
                     function={"reports.balance-sheet":reports.report_balance_sheet,"reports.portfolio-summary":reports.report_portfolio_summary,"reports.capital-gains":reports.report_capital_gains}[command]
                     run=lambda:function(conn,None,None,hooks)
                 try:
-                    expected={"ok":json_ready(run())}
+                    payload = run()
+                    if args.get('csv') and command in {'reports.austrian-e1kv', 'reports.austrian-tax-summary'}:
+                        payload = payload['summary_rows' if command == 'reports.austrian-tax-summary' else 'rows']
+                    expected={"ok":json_ready(payload)}
                 except AppError as exc:
                     expected={"error":{"code":exc.code,"message":str(exc),"hint":exc.hint,"details":exc.details,"retryable":exc.retryable}}
                 except Exception as exc:

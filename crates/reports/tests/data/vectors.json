@@ -2616,6 +2616,54 @@
     "expected": "{\"ok\":{\"snapshots\":[{\"id\":\"b\",\"workspace_id\":\"ws\",\"profile_id\":\"p\",\"report_kind\":\"summary\",\"report_state\":\"filed\",\"period_start_year\":2024,\"period_end_year\":2025,\"content_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"classification_summary\":{\"kind\":\"sale\"},\"gain_summary\":{\"gain\":\"1.2300\"},\"report_scope\":{\"wallet_ids\":[\"cold\"]},\"authored_source\":\"user\",\"notes\":null,\"created_at\":\"late\"},{\"id\":\"x\",\"workspace_id\":\"ws\",\"profile_id\":\"p\",\"report_kind\":\"summary\",\"report_state\":\"saved\",\"period_start_year\":2024,\"period_end_year\":2026,\"content_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"classification_summary\":{},\"gain_summary\":{\"gain\":\"1.2300\"},\"report_scope\":{\"wallet_ids\":[\"cold\"]},\"authored_source\":\"user\",\"notes\":null,\"created_at\":\"early\"},{\"id\":\"a\",\"workspace_id\":\"ws\",\"profile_id\":\"p\",\"report_kind\":\"summary\",\"report_state\":\"saved\",\"period_start_year\":2025,\"period_end_year\":2025,\"content_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"classification_summary\":{},\"gain_summary\":{\"gain\":\"1.2300\"},\"report_scope\":{\"wallet_ids\":[\"cold\"]},\"authored_source\":\"user\",\"notes\":null,\"created_at\":\"same\"},{\"id\":\"z\",\"workspace_id\":\"ws\",\"profile_id\":\"p\",\"report_kind\":\"summary\",\"report_state\":\"filed\",\"period_start_year\":2025,\"period_end_year\":2025,\"content_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"classification_summary\":{},\"gain_summary\":{\"gain\":\"1.2300\"},\"report_scope\":{\"wallet_ids\":[\"cold\"]},\"authored_source\":\"user\",\"notes\":null,\"created_at\":\"same\"}]}}"
   },
   {
+    "name": "csv-austrian-e1kv-populated",
+    "group": "csv",
+    "command": "reports.austrian-e1kv",
+    "sql": "UPDATE profiles SET tax_country='at' WHERE id='p';",
+    "args": {
+      "year": 2025,
+      "csv": true
+    },
+    "base": true,
+    "expected": "{\"ok\":[{\"tax_year\":2025,\"date\":\"2025-01-01\",\"tx_id\":\"out\",\"transaction_id\":\"out\",\"wallet\":\"Cold\",\"asset\":\"BTC\",\"kind\":\"withdrawal\",\"entry_type\":\"disposal\",\"at_category\":\"alt_taxfree\",\"at_category_label\":\"Altbestand ausserhalb Spekulationsfrist\",\"at_regime\":\"alt\",\"qty_msat\":3,\"quantity\":3e-11,\"price_eur_cents\":0,\"cost_basis_eur_cents\":0,\"proceeds_eur_cents\":0,\"gain_loss_eur_cents\":0,\"income_eur_cents\":0,\"form_amount_eur_cents\":0,\"holding_period_days\":null,\"kennzahl\":null,\"stored_kennzahl\":null,\"form\":\"\",\"form_section\":\"\",\"note\":\"Earlier creation\"},{\"tax_year\":2025,\"date\":\"2025-01-01\",\"tx_id\":\"out\",\"transaction_id\":\"out\",\"wallet\":\"Cold\",\"asset\":\"BTC\",\"kind\":\"withdrawal\",\"entry_type\":\"disposal\",\"at_category\":\"neu_gain\",\"at_category_label\":\"Realisierte Wertsteigerung Neuvermoegen\",\"at_regime\":\"neu\",\"qty_msat\":23456788,\"quantity\":0.00023456788,\"price_eur_cents\":993316,\"cost_basis_eur_cents\":123,\"proceeds_eur_cents\":233,\"gain_loss_eur_cents\":110,\"income_eur_cents\":0,\"form_amount_eur_cents\":110,\"holding_period_days\":null,\"kennzahl\":174,\"stored_kennzahl\":174,\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"note\":\"Split a\"},{\"tax_year\":2025,\"date\":\"2025-01-02\",\"tx_id\":\"earn\",\"transaction_id\":\"earn\",\"wallet\":\"Hot\",\"asset\":\"LBTC\",\"kind\":\"interest\",\"entry_type\":\"income\",\"at_category\":\"income_general\",\"at_category_label\":\"Laufende Einkuenfte aus Kryptowaehrungen\",\"at_regime\":\"income\",\"qty_msat\":789001,\"quantity\":7.89001e-06,\"price_eur_cents\":1558933,\"cost_basis_eur_cents\":12,\"proceeds_eur_cents\":12,\"gain_loss_eur_cents\":12,\"income_eur_cents\":12,\"form_amount_eur_cents\":12,\"holding_period_days\":null,\"kennzahl\":172,\"stored_kennzahl\":172,\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"note\":\"Income €\"}]}"
+  },
+  {
+    "name": "csv-austrian-e1kv-empty",
+    "group": "csv",
+    "command": "reports.austrian-e1kv",
+    "sql": "UPDATE profiles SET tax_country='at' WHERE id='p';DELETE FROM journal_entries;",
+    "args": {
+      "year": 2025,
+      "csv": true
+    },
+    "base": true,
+    "expected": "{\"ok\":[]}"
+  },
+  {
+    "name": "csv-austrian-tax-summary-populated",
+    "group": "csv",
+    "command": "reports.austrian-tax-summary",
+    "sql": "UPDATE profiles SET tax_country='at' WHERE id='p';",
+    "args": {
+      "year": 2025,
+      "csv": true
+    },
+    "base": true,
+    "expected": "{\"ok\":[{\"kennzahl\":172,\"label\":\"Auslaendische laufende Einkuenfte aus Kryptowaehrungen\",\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"row_count\":1,\"amount_eur_cents\":12},{\"kennzahl\":174,\"label\":\"Auslaendische Ueberschuesse aus realisierten Wertsteigerungen\",\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"row_count\":1,\"amount_eur_cents\":110},{\"kennzahl\":176,\"label\":\"Auslaendische realisierte Wertverluste\",\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"row_count\":0,\"amount_eur_cents\":0},{\"kennzahl\":801,\"label\":\"Spekulationsgeschaefte Altbestand (outside E 1kv)\",\"form\":\"E 1\",\"form_section\":\"E 1 Spekulationsgeschaefte\",\"row_count\":0,\"amount_eur_cents\":0}]}"
+  },
+  {
+    "name": "csv-austrian-tax-summary-empty",
+    "group": "csv",
+    "command": "reports.austrian-tax-summary",
+    "sql": "UPDATE profiles SET tax_country='at' WHERE id='p';DELETE FROM journal_entries;",
+    "args": {
+      "year": 2025,
+      "csv": true
+    },
+    "base": true,
+    "expected": "{\"ok\":[{\"kennzahl\":172,\"label\":\"Auslaendische laufende Einkuenfte aus Kryptowaehrungen\",\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"row_count\":0,\"amount_eur_cents\":0},{\"kennzahl\":174,\"label\":\"Auslaendische Ueberschuesse aus realisierten Wertsteigerungen\",\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"row_count\":0,\"amount_eur_cents\":0},{\"kennzahl\":176,\"label\":\"Auslaendische realisierte Wertverluste\",\"form\":\"E 1kv\",\"form_section\":\"E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen\",\"row_count\":0,\"amount_eur_cents\":0},{\"kennzahl\":801,\"label\":\"Spekulationsgeschaefte Altbestand (outside E 1kv)\",\"form\":\"E 1\",\"form_section\":\"E 1 Spekulationsgeschaefte\",\"row_count\":0,\"amount_eur_cents\":0}]}"
+  },
+  {
     "name": "tax-generic",
     "group": "tax",
     "command": "reports.tax-summary",

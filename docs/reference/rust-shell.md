@@ -107,7 +107,7 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
-the ten [report reads](#reports-historical-read-checkpoint-r5-third-continuation-partial), and every leaf of
+the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
 `offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 119 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
@@ -2480,6 +2480,132 @@ before any provider request. This is an environmental filesystem restriction,
 not an AI-routing, report-port or harness defect; no Python product fix is
 needed. The earlier `secrets init` descriptor-fallback failure has the same
 owner-lock directory restriction.
+
+## Reports tabular CSV checkpoint (R5 fourth continuation, partial)
+
+`t3code/r5-reports-4`, based on `6d0d7c88`, enables `--format csv` for all ten
+ported report reads, including the Austrian detail and summary projections.
+This is a partial checkpoint within requested step 1. Full CSV artifacts,
+saved/filed mutations and their daemon kinds are still unported; this is
+**not complete reports slice acceptance**.
+
+The CLI retains first-record column order, minimal quoting, doubled quotes,
+CRLF records, Unicode cells, blank null/missing cells, Python boolean spelling,
+ordered ASCII-escaped nested JSON and eight-place float formatting, including
+HALF_EVEN ties and negative zero. Empty lists retain `format_unsupported`.
+Austrian E1kv selects detail rows; Austrian tax summary selects summary rows.
+All existing readiness and profile refusals remain in place.
+
+Explicit report CSV `--output` publication uses the shared atomic storage
+writer: a private temporary file is synced and atomically replaces the final
+artifact, then the directory is synced. A prepublication failure preserves the
+old artifact and cleans the temporary file. Publication leaves export-parent
+permissions unchanged. Explicit final symlinks retain Python's destination
+semantics, including dangling links, and never create missing target parents.
+An existing destination must still permit writing. Other CLI output paths
+retain their existing behavior. No new third-party package, schema or runtime
+requirement is introduced; CLI publication tests reuse the pinned `tempfile`.
+
+These tabular read projections do not register saved snapshots, just as in
+Python. Only the accounting-artifact exporters register completed exports;
+only explicit user action may establish a filed marker. The process fixtures
+seed saved and filed rows and prove that CSV reads and publication preserve
+them and the phase-4 impact/capture/dependency tables. They do not establish
+parity for new stored snapshot rows, content hashes or sealed-summary writes.
+
+The process oracle compares stdout, stderr, exit status and explicit output
+files at both 64 and 3,000 transactions. Journal descriptions include Unicode,
+commas, quotes and embedded CR/LF. Refused stale/empty reads preserve existing
+artifacts. File naming follows the explicit `--output` path; generated
+artifact and bundle names remain outside this checkpoint.
+
+All 19 report scenarios pass. The fresh log records 280 ported report reads,
+including 126 CSV calls, with zero Python fallback. Counts exclude pytest's
+`current` directory symlinks so each invocation is counted once:
+
+| Command | Rust, all formats | Rust, CSV | Python fallback |
+| --- | ---: | ---: | ---: |
+| `reports.summary` | 36 | 13 | 0 |
+| `reports.capital-gains` | 25 | 14 | 0 |
+| `reports.balance-sheet` | 25 | 14 | 0 |
+| `reports.portfolio-summary` | 25 | 14 | 0 |
+| `reports.tax-summary` | 25 | 14 | 0 |
+| `reports.journal-entries` | 25 | 14 | 0 |
+| `reports.austrian-e1kv` | 23 | 9 | 0 |
+| `reports.austrian-tax-summary` | 23 | 9 | 0 |
+| `reports.balance-history` | 60 | 13 | 0 |
+| `reports.filed-snapshots.list` | 13 | 12 | 0 |
+
+Two unported `reports.filed-snapshots.create` fixture calls deliberately use
+Python. Nine native daemon sessions compare 150 balance-history, 27 tax-summary,
+24 summary, three balance-sheet and three portfolio-summary result lines as
+raw bytes, with zero fallback. The intentionally different ready-handshake
+kind inventories are excluded. No new daemon kind is enabled here.
+
+| CSV bytes, 64 / 3,000 transactions | Generic FIFO | Generic HIFO | Austrian moving average AT |
+| --- | --- | --- | --- |
+| Summary | exact | exact | exact |
+| Capital gains | exact | exact | exact |
+| Balance sheet | exact | exact | exact |
+| Portfolio summary | exact | exact | exact |
+| Tax summary | exact | exact | exact |
+| Journal entries | exact | exact | exact |
+| Austrian E1kv detail | exact profile refusal | exact profile refusal | exact |
+| Austrian tax summary | exact profile refusal | exact profile refusal | exact |
+| Balance history | exact | exact | exact |
+| Saved/filed snapshot listing | exact | exact | exact |
+| Newly stored snapshot rows | unported | unported | unported |
+
+The frozen oracle contains 320 cases, adding four Austrian CSV projections.
+Native renderer tests cover formatting, special-character quoting, refusal
+and publication boundaries. The mutation manifest contains 278 entries: the
+249 inherited rules and these 29 new entries, all killed by named tests:
+
+| New rules | Entries | Named killer |
+| --- | ---: | --- |
+| Austrian detail/summary projection | 2 | `report_csv_projection_vectors` |
+| CLI CSV request forwarding | 1 | `report_csv_arguments_select_payload_without_terminal_text` |
+| CSV columns, cells, formatting and empty-list refusal | 19 | `report_csv_format_contract` |
+| Atomic CLI output routing | 1 | `report_csv_file_publication_replaces_complete_artifacts` |
+| Explicit output symlink destination | 1 | `report_csv_publication_follows_explicit_output_symlinks` |
+| Publication bytes, replacement, failure and parent permissions | 5 | `export_publication_is_atomic_and_preserves_parent_permissions` |
+
+The final new-entry audit passes six baseline selections and kills all 29
+mutations in a fresh disposable target. An initial nonfinite mutation was
+equivalent; replacing it with a wrong literal makes the intended rule
+observable. The 249 inherited entries retain the preceding checkpoint's kill
+evidence and were not rerun in this continuation. There is no claim that one
+fresh invocation killed all 278 entries.
+
+Verification uses Rust 1.99.1, offline/locked Cargo and locked Python 3.11.
+Workspace formatting, workspace and test-harness clippy with `-D warnings`,
+all 962 workspace tests, all 14 binary/harness integration tests, the harness
+build and the generated oracle check pass. After the final helper review,
+the store suite passes all 46 tests and both clippy selections pass again.
+The inventory/contract/shard checks pass 28 tests and 47 subtests; all 278
+mutation entries apply. The broader hybrid CLI-smoke/blocker/contract/year-handoff
+selection passes 127 tests and four subtests. The required
+shell/hybrid/CLI-runner/port suite passes 63 tests and 178 subtests. A truncated
+generated inventory was restored and compared with the base: only the two
+intended test additions differ. The previous slice's CSV-refusal assertion is
+removed; the seven new CSV cases verify acceptance, refusal and preservation.
+Interrupted reruns are excluded from these totals; the final harness was rebuilt
+under `/tmp` before the successful process suites. Owned-loopback and Python
+account-home owner-lock fixtures use the access their contracts require; all
+books and data roots are disposable. There is no full quality-gate or
+push-readiness claim.
+
+Remaining requested work is full `reports export-csv`, the Austrian E1kv CSV
+bundle, and report-owned `transactions export` CSV (including draft and range
+semantics); export-completion saved registration and explicit
+`reports filed-snapshots create`; hashes through `crates/pyjson`, sealed
+summaries, dependency capture/copy, phase-4 impacts and all mutation refusals;
+and the corresponding daemon exports, including capital-gains CSV. All remain
+`not_implemented`. No phase-5 upgrade-impact semantics are added.
+
+XLSX/PDF, exit-tax, explanations, privacy/Lightning/cross-check/commercial
+reads and network reads remain `not_implemented`. AI projections and journal
+production stay Python. No Python reference bug was found or fixed.
 
 ## Not yet ported
 

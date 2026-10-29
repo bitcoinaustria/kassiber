@@ -2499,5 +2499,295 @@
       "history_quantity_vectors"
     ],
     "rule": "Stored quantities convert from msat rather than sat."
+  },
+  {
+    "id": "csv-at-projection-gate",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if truthy(value(args, \"csv\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "report_csv_projection_vectors"
+    ],
+    "rule": "Austrian CSV selects annual detail or summary rows exactly as its CLI command requests."
+  },
+  {
+    "id": "csv-at-summary-selection",
+    "file": "crates/reports/src/lib.rs",
+    "find": "command == \"reports.austrian-tax-summary\"",
+    "replace": "command == \"reports.austrian-e1kv\"",
+    "expect_failing": [
+      "report_csv_projection_vectors"
+    ],
+    "rule": "Austrian CSV selects annual detail or summary rows exactly as its CLI command requests."
+  },
+  {
+    "id": "csv-quote-comma",
+    "file": "crates/cli/src/render.rs",
+    "find": "text.contains([',', '\"', '\\r', '\\n'])",
+    "replace": "text.contains(['\"', '\\r', '\\n'])",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "QUOTE_MINIMAL quotes comma characters."
+  },
+  {
+    "id": "csv-quote-quote",
+    "file": "crates/cli/src/render.rs",
+    "find": "text.contains([',', '\"', '\\r', '\\n'])",
+    "replace": "text.contains([',', '\\r', '\\n'])",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "QUOTE_MINIMAL quotes quote characters."
+  },
+  {
+    "id": "csv-quote-cr",
+    "file": "crates/cli/src/render.rs",
+    "find": "text.contains([',', '\"', '\\r', '\\n'])",
+    "replace": "text.contains([',', '\"', '\\n'])",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "QUOTE_MINIMAL quotes cr characters."
+  },
+  {
+    "id": "csv-quote-lf",
+    "file": "crates/cli/src/render.rs",
+    "find": "text.contains([',', '\"', '\\r', '\\n'])",
+    "replace": "text.contains([',', '\"', '\\r'])",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "QUOTE_MINIMAL quotes lf characters."
+  },
+  {
+    "id": "csv-double-quotes",
+    "file": "crates/cli/src/render.rs",
+    "find": "text.replace('\"', \"\\\"\\\"\")",
+    "replace": "text.to_owned()",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Embedded quotes double."
+  },
+  {
+    "id": "csv-crlf",
+    "file": "crates/cli/src/render.rs",
+    "find": "line + \"\\r\\n\"",
+    "replace": "line + \"\\n\"",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "CSV rows end with CRLF."
+  },
+  {
+    "id": "csv-single-empty",
+    "file": "crates/cli/src/render.rs",
+    "find": "cells.len() == 1 && cells[0].is_empty()",
+    "replace": "false",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Lone empty cells are quoted."
+  },
+  {
+    "id": "csv-header-order",
+    "file": "crates/cli/src/render.rs",
+    "find": "let headers: Vec<String> = first.iter().map(|(k, _)| key_text(k)).collect();",
+    "replace": "let mut headers: Vec<String> = first.iter().map(|(k, _)| key_text(k)).collect(); headers.reverse();",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "First-record insertion order sets the columns."
+  },
+  {
+    "id": "csv-null-blank",
+    "file": "crates/cli/src/render.rs",
+    "find": "None | Some(Value::Null) => String::new(),",
+    "replace": "None | Some(Value::Null) => \"None\".into(),",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Nulls and missing cells are blank."
+  },
+  {
+    "id": "csv-float-places",
+    "file": "crates/cli/src/render.rs",
+    "find": "let fixed = format!(\"{f:.8}\");",
+    "replace": "let fixed = format!(\"{f:.7}\");",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Float display uses eight places."
+  },
+  {
+    "id": "csv-negative-zero",
+    "file": "crates/cli/src/render.rs",
+    "find": "fixed.trim_end_matches('0').trim_end_matches('.').to_owned()",
+    "replace": "fixed.trim_end_matches('0').trim_end_matches('.').trim_start_matches('-').to_owned()",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Float display preserves negative zero."
+  },
+  {
+    "id": "csv-nested-json",
+    "file": "crates/cli/src/render.rs",
+    "find": "Some(value @ (Value::Dict(_) | Value::List(_))) => inline_json(value),",
+    "replace": "Some(value @ (Value::Dict(_) | Value::List(_))) => py_str(value),",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Nested cells use json.dumps."
+  },
+  {
+    "id": "csv-nonfinite",
+    "file": "crates/cli/src/render.rs",
+    "find": "float_repr(*f).to_lowercase().replace(\"infinity\", \"inf\")",
+    "replace": "String::from(\"nan\")",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Nonfinite float display matches Python."
+  },
+  {
+    "id": "csv-json-key-order",
+    "file": "crates/cli/src/render.rs",
+    "find": "dumps(&json_ready(value.clone()), &Options::new()).unwrap_or_default()",
+    "replace": "dumps(&json_ready(value.clone()), &Options { sort_keys: true, ..Default::default() }).unwrap_or_default()",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Nested JSON retains insertion order."
+  },
+  {
+    "id": "csv-json-ascii",
+    "file": "crates/cli/src/render.rs",
+    "find": "dumps(&json_ready(value.clone()), &Options::new()).unwrap_or_default()",
+    "replace": "dumps(&json_ready(value.clone()), &Options { ensure_ascii: false, ..Default::default() }).unwrap_or_default()",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Nested JSON uses ASCII escaping."
+  },
+  {
+    "id": "csv-json-separators",
+    "file": "crates/cli/src/render.rs",
+    "find": "dumps(&json_ready(value.clone()), &Options::new()).unwrap_or_default()",
+    "replace": "dumps(&json_ready(value.clone()), &Options { separators: Some((\",\".into(), \":\".into())), ..Default::default() }).unwrap_or_default()",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Nested JSON keeps separator spaces."
+  },
+  {
+    "id": "csv-output-atomic",
+    "file": "crates/cli/src/render.rs",
+    "find": "sink.write_report_csv(target, text.as_bytes()).map_err(io)",
+    "replace": "sink.write_file(target, text.as_bytes()).map_err(io)",
+    "expect_failing": [
+      "report_csv_file_publication_replaces_complete_artifacts"
+    ],
+    "rule": "Report output replaces a complete artifact."
+  },
+  {
+    "id": "csv-output-symlink",
+    "file": "crates/cli/src/render.rs",
+    "find": "report_destination(&path)",
+    "replace": "Ok::<_, std::io::Error>(path.clone())",
+    "expect_failing": [
+      "report_csv_publication_follows_explicit_output_symlinks"
+    ],
+    "rule": "Explicit output follows existing or dangling symlinks without creating target parents."
+  },
+  {
+    "id": "csv-command-projection",
+    "file": "crates/cli/src/reports.rs",
+    "find": "Value::Bool(args.text(\"format\") == Some(\"csv\"))",
+    "replace": "Value::Bool(false)",
+    "expect_failing": [
+      "report_csv_arguments_select_payload_without_terminal_text"
+    ],
+    "rule": "CSV requests forward the report projection."
+  },
+  {
+    "id": "csv-publication-parent",
+    "file": "crates/store/src/layout.rs",
+    "find": "write_atomic_file(path, bytes, false, &mut || Ok(()))?;",
+    "replace": "write_atomic_file(path, bytes, true, &mut || Ok(()))?;",
+    "expect_failing": [
+      "export_publication_is_atomic_and_preserves_parent_permissions"
+    ],
+    "rule": "Publication preserves export-directory permissions."
+  },
+  {
+    "id": "csv-publication-old-file",
+    "file": "crates/store/src/layout.rs",
+    "find": "    temporary.write_all(bytes)?;",
+    "replace": "    std::fs::write(path, bytes)?;\n    temporary.write_all(bytes)?;",
+    "expect_failing": [
+      "export_publication_is_atomic_and_preserves_parent_permissions"
+    ],
+    "rule": "A failed export preserves the prior artifact."
+  },
+  {
+    "id": "csv-publication-abort",
+    "file": "crates/store/src/layout.rs",
+    "find": "    before_publish()?;",
+    "replace": "    let _ = before_publish();",
+    "expect_failing": [
+      "export_publication_is_atomic_and_preserves_parent_permissions"
+    ],
+    "rule": "A pre-replacement failure aborts publication."
+  },
+  {
+    "id": "csv-publication-bytes",
+    "file": "crates/store/src/layout.rs",
+    "find": "    temporary.write_all(bytes)?;",
+    "replace": "    temporary.write_all(b\"wrong\")?;",
+    "expect_failing": [
+      "export_publication_is_atomic_and_preserves_parent_permissions"
+    ],
+    "rule": "Publication writes exact bytes."
+  },
+  {
+    "id": "csv-publication-replace",
+    "file": "crates/store/src/layout.rs",
+    "find": "    temporary.persist(path).map_err(|e| e.error)?;",
+    "replace": "    drop(temporary);",
+    "expect_failing": [
+      "export_publication_is_atomic_and_preserves_parent_permissions"
+    ],
+    "rule": "Successful publication replaces the destination."
+  },
+  {
+    "id": "csv-empty-refusal",
+    "file": "crates/cli/src/render.rs",
+    "find": "\"format_unsupported\",",
+    "replace": "\"internal_error\",",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Empty report lists retain the Python format_unsupported refusal before output publication."
+  },
+  {
+    "id": "csv-first-record",
+    "file": "crates/cli/src/render.rs",
+    "find": "let Some(Value::Dict(first)) = rows.first()",
+    "replace": "let Some(Value::Dict(first)) = rows.last()",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Only the first record establishes headers; later extras are ignored."
+  },
+  {
+    "id": "csv-boolean",
+    "file": "crates/cli/src/render.rs",
+    "find": "Some(other) => py_str(other),",
+    "replace": "Some(other) => inline_json(other),",
+    "expect_failing": [
+      "report_csv_format_contract"
+    ],
+    "rule": "Boolean cells use Python str rather than JSON literals."
   }
 ]

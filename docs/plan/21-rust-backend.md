@@ -903,10 +903,25 @@ read-only sandbox, before it reaches provider acknowledgement. Python-only
 and hybrid reruns pass with that filesystem access; all nine provider/chat
 calls route to Python. No Python reference bug or routing fix is needed.
 
+The fourth continuation (`t3code/r5-reports-4`, based on `6d0d7c88`) enables
+`--format csv` on all ten ported report leaves, including the Austrian detail
+and summary projections. The CLI reuses Python-compatible CSV rendering;
+explicit report CSV `--output` files use the shared atomic storage writer, without
+changing export-directory permissions. Explicit output symlinks keep their
+destination semantics. CSV reads retain all readiness barriers and neither
+register saved artifacts nor mark reports filed. The 64/3,000-transaction
+FIFO/HIFO/Austrian process oracle and 29 named CSV/publication mutations cover
+this boundary; the catalog contains 278 entries including the 249 inherited
+rules. This is a partial checkpoint within requested step 1, not completion of
+the CSV artifact, snapshot-mutation or daemon-export steps. The
+[CSV checkpoint](../reference/rust-shell.md#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial)
+records verification and the precise remaining work.
+
 This is **not full reports slice acceptance**. Exit-tax outputs,
 capital-gain explanations and desktop capital gains remain unported.
 So do privacy, Lightning and cross-check reads, commercial/source-funds reads,
-all PDF/XLSX/CSV/artifact exports, snapshot save/file actions and every
+all PDF/XLSX/artifact exports (including full-report and Austrian bundle CSV),
+standalone transaction CSV, snapshot save/file actions and every
 network-dependent operation. Unsupported commands retain `not_implemented`;
 the [continuation checkpoint](../reference/rust-shell.md#reports-austrian-and-journal-read-checkpoint-r5-continuation-partial)
 records exact parity, mutations, routing counts and verification limits.

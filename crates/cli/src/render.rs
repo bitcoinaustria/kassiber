@@ -185,6 +185,35 @@ fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
     }))
 }
 
+// Python's explicit --output follows a final symlink. Resolve that destination
+// before atomic publication so replacing the complete artifact keeps the link.
+fn report_destination(path: &Path) -> std::io::Result<PathBuf> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => match path.canonicalize() {
+            Ok(destination) => Ok(destination),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let link = std::fs::read_link(path)?;
+                let destination = if link.is_absolute() {
+                    link
+                } else {
+                    path.parent().unwrap_or(Path::new(".")).join(link)
+                };
+                // Opening a dangling link never creates the target's parents.
+                let parent = destination
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .unwrap_or(Path::new("."));
+                parent.canonicalize()?;
+                report_destination(&destination)
+            }
+            Err(error) => Err(error),
+        },
+        Ok(_) => Ok(path.to_owned()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(path.to_owned()),
+        Err(error) => Err(error),
+    }
+}
+
 impl Sink<'_> {
     fn write_file(&self, target: &str, text: &[u8]) -> std::io::Result<()> {
         let path = expand_user(target, self.home)?;
@@ -195,6 +224,17 @@ impl Sink<'_> {
             std::fs::File::create(&path).map_err(|error| stream_io_error(error, Some(&path)))?;
         file.write_all(text)
             .map_err(|error| stream_io_error(error, None))
+    }
+
+    fn write_report_csv(&self, target: &str, text: &[u8]) -> std::io::Result<()> {
+        let path = expand_user(target, self.home)?;
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            output_parents(parent)?;
+        }
+        let destination =
+            report_destination(&path).map_err(|error| stream_io_error(error, Some(&path)))?;
+        kassiber_store::layout::write_export(&destination, text)
+            .map_err(|error| stream_io_error(error, Some(&path)))
     }
 
     /// `write_text(args, text)`: the text and a final newline, to stdout
@@ -425,6 +465,9 @@ pub fn emit_with_meta(
             let text = csv_text(&rows)?;
             match sink.output.filter(|t| !t.is_empty() && *t != "-") {
                 None => sink.stdout.write_all(text.as_bytes()).map_err(io),
+                Some(target) if kind.starts_with("reports.") => {
+                    sink.write_report_csv(target, text.as_bytes()).map_err(io)
+                }
                 Some(target) => sink.write_file(target, text.as_bytes()).map_err(io),
             }
         }
