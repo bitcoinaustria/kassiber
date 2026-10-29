@@ -14786,8 +14786,8 @@
   {
     "id": "QR-018",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": " fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {\n    let id = text(&c[\"id\"]);\n    if id.is_empty() {\n        return Err(error(\"component id is required\", json!({})));\n    }\n    if c[\"effective_state\"]",
-    "replace": " fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {\n    let id = text(&c[\"id\"]);\n    if false && (id.is_empty()) {\n        return Err(error(\"component id is required\", json!({})));\n    }\n    if c[\"effective_state\"]",
+    "find": " fn compile_observed(c: &Value, observations: Option<&Observations>) -> Result<Value, Error> {\n    let id = text(&c[\"id\"]);\n    if id.is_empty() {\n        return Err(error(\"component id is required\", json!({})));\n    }\n    if c[\"effective_state\"]",
+    "replace": " fn compile_observed(c: &Value, observations: Option<&Observations>) -> Result<Value, Error> {\n    let id = text(&c[\"id\"]);\n    if false && (id.is_empty()) {\n        return Err(error(\"component id is required\", json!({})));\n    }\n    if c[\"effective_state\"]",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -14876,8 +14876,8 @@
   {
     "id": "QR-027",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "\"] == hash)\n                .unwrap();\n            let cap = principal(o).map_err(|e| family(&e))?;\n            if n > cap {\n                return Err(error(\n                    \"component claims exceed observed source prin",
-    "replace": "\"] == hash)\n                .unwrap();\n            let cap = principal(o).map_err(|e| family(&e))?;\n            if false && (n > cap) {\n                return Err(error(\n                    \"component claims exceed observed source prin",
+    "find": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(o).map_err(|e| family(&e))?;\n            if n > cap {\n                return Err(error(\n                    \"component claims exceed observed source prin",
+    "replace": ".map(|&at| observations.entries[at].1)\n                .unwrap();\n            let cap = principal(o).map_err(|e| family(&e))?;\n            if false && (n > cap) {\n                return Err(error(\n                    \"component claims exceed observed source prin",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -15056,8 +15056,8 @@
   {
     "id": "QR-050",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "o[\"direction\"] != \"outbound\"\n                || !legs\n                    .values()\n                    .any(|l| tx(l) == *transaction && l[\"role\"] == \"source\")",
-    "replace": "false && (o[\"direction\"] != \"outbound\"\n                || !legs\n                    .values()\n                    .any(|l| tx(l) == *transaction && l[\"role\"] == \"source\"))",
+    "find": "for &at in &source_positions {\n            let (transaction, o) = &observations.entries[at];\n            if o[\"direction\"] != \"outbound\" || !source_txs.contains(transaction) {",
+    "replace": "for at in 0..observations.entries.len() {\n            let (transaction, o) = &observations.entries[at];\n            if false && (o[\"direction\"] != \"outbound\" || !source_txs.contains(transaction)) {",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -19336,7 +19336,7 @@
   {
     "id": "R2-review-audit-runtime-349",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "if let Some((_, o)) = obs.iter().find(|(id, _)| id == tx) {",
+    "find": "if let Some(&o) = first_observation.get(tx.as_str()) {",
     "replace": "if let Some((_, o)) = obs.iter().find(|(id, _)| id != tx) {",
     "expect_failing": [
       "quantity_operator_audit_vectors"
@@ -19686,8 +19686,8 @@
   {
     "id": "R2-review-audit-reviewed-393",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": ".find(|(k, _)| k == key)",
-    "replace": ".find(|(k, _)| k != key)",
+    "find": "            .last\n            .get(key)\n            .map(|&at| observations.entries[at].1)",
+    "replace": "            .entries\n            .iter()\n            .rev()\n            .find(|(k, _)| k != key)\n            .map(|(_, o)| *o)",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
@@ -19706,8 +19706,8 @@
   {
     "id": "R2-review-audit-reviewed-424",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": ".find(|o| o[\"quantity_hash\"] == hash)",
-    "replace": ".find(|o| o[\"quantity_hash\"] != hash)",
+    "find": "                .first_hash\n                .get(&hash)\n                .map(|&at| observations.entries[at].1)",
+    "replace": "                .entries\n                .iter()\n                .map(|(_, o)| *o)\n                .find(|o| o[\"quantity_hash\"] != hash)",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],

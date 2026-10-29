@@ -3,7 +3,7 @@ use super::{array, exact, number, principal};
 use crate::{codec, python_text::PythonText};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 #[derive(Debug)]
 pub struct Error {
@@ -279,8 +279,54 @@ fn payout(
 ) -> Value {
     json!({"id":s(&term["legacy_source_id"]),"component_id":id,"out_transaction_id":source["anchor_transaction_id"],"deleted_at":null,"kind":text(&fallback(&term["review_kind"],&json!("direct-swap-payout"))),"policy":text(&fallback(&term["tax_policy"],&json!("taxable"))),"out_amount":number(amount),"payout_asset":fallback(&term["payout_asset"],&sink["asset"]),"payout_amount":fallback(&term["payout_amount_msat"],&number(target)),"payout_occurred_at":fallback(&term["payout_occurred_at"],&sink["occurred_at"]),"payout_fiat_value":term["payout_fiat_value_exact"],"payout_external_id":term["payout_external_id"],"counterparty":term["counterparty"],"swap_fee_msat":term["swap_fee_msat"],"swap_fee_kind":term["swap_fee_kind"],"notes":term["review_notes"],"confidence_at_review":term["confidence_at_review"],"review_source":term["review_source"]})
 }
+/// Observation pairs in order, indexed for the lookups a compilation makes.
+pub struct Observations<'a> {
+    entries: Vec<(String, &'a Value)>,
+    last: HashMap<String, usize>,
+    first_hash: HashMap<String, usize>,
+    positions: HashMap<String, Vec<usize>>,
+}
+impl<'a> Observations<'a> {
+    pub fn new(entries: Vec<(String, &'a Value)>) -> Self {
+        let mut last = HashMap::new();
+        let mut first_hash = HashMap::new();
+        let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
+        for (at, (key, o)) in entries.iter().enumerate() {
+            last.insert(key.clone(), at);
+            if let Some(hash) = o["quantity_hash"].as_str() {
+                first_hash.entry(hash.to_owned()).or_insert(at);
+            }
+            positions.entry(key.clone()).or_default().push(at);
+        }
+        Self {
+            entries,
+            last,
+            first_hash,
+            positions,
+        }
+    }
+}
+
 /// Compile a materialized reviewed component; no journal or tax rows are emitted.
 pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
+    let observed = if observations.is_array() {
+        Some(Observations::new(
+            array(observations)
+                .iter()
+                .map(|p| (s(&p[0]), &p[1]))
+                .collect(),
+        ))
+    } else {
+        observations
+            .as_object()
+            .map(|o| Observations::new(o.iter().map(|(k, v)| (k.clone(), v)).collect()))
+    };
+    compile_observed(c, observed.as_ref())
+}
+
+/// `compile` over prepared observations; `None` is a non-sequence operand,
+/// refused at the point the original conversion refused it.
+pub fn compile_observed(c: &Value, observations: Option<&Observations>) -> Result<Value, Error> {
     let id = text(&c["id"]);
     if id.is_empty() {
         return Err(error("component id is required", json!({})));
@@ -373,25 +419,13 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
         e
     })?;
     let allocations = flatten(&id, &legs, inferred, conversion, &retained)?;
-    let observations: Vec<(String, Value)> = if observations.is_array() {
-        array(observations)
-            .iter()
-            .map(|p| (s(&p[0]), p[1].clone()))
-            .collect()
-    } else {
-        observations
-            .as_object()
-            .ok_or_else(|| family("TypeError"))?
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
-    };
+    let observations = observations.ok_or_else(|| family("TypeError"))?;
+    // The last pair with this key, as a reversed scan finds it.
     let observation = |key: &str| {
         observations
-            .iter()
-            .rev()
-            .find(|(k, _)| k == key)
-            .map(|(_, o)| o)
+            .last
+            .get(key)
+            .map(|&at| observations.entries[at].1)
             .ok_or_else(|| {
                 error(
                     "component allocation references an unavailable observation",
@@ -419,9 +453,9 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
         }
         for (hash, n) in totals {
             let o = observations
-                .iter()
-                .map(|(_, o)| o)
-                .find(|o| o["quantity_hash"] == hash)
+                .first_hash
+                .get(&hash)
+                .map(|&at| observations.entries[at].1)
                 .unwrap();
             let cap = principal(o).map_err(|e| family(&e))?;
             if n > cap {
@@ -668,12 +702,22 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
         })?;
     }
     if !conversion {
-        for (transaction, o) in &observations {
-            if o["direction"] != "outbound"
-                || !legs
-                    .values()
-                    .any(|l| tx(l) == *transaction && l["role"] == "source")
-            {
+        let source_txs: BTreeSet<String> = legs
+            .values()
+            .filter(|l| l["role"] == "source")
+            .map(tx)
+            .collect();
+        // Only pairs keyed by a source transaction can pass; visit those in order.
+        let mut source_positions: Vec<usize> = source_txs
+            .iter()
+            .filter_map(|t| observations.positions.get(t))
+            .flatten()
+            .copied()
+            .collect();
+        source_positions.sort_unstable();
+        for &at in &source_positions {
+            let (transaction, o) = &observations.entries[at];
+            if o["direction"] != "outbound" || !source_txs.contains(transaction) {
                 continue;
             }
             let n = sources

@@ -2,7 +2,7 @@
 use super::{array, domain};
 use crate::{codec, python_text::PythonText};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 type Order = [String; 5];
 type Pool = [String; 4];
 fn text(v: &Value) -> String {
@@ -286,7 +286,22 @@ pub fn component_claims(
     evidence: &Value,
 ) -> Result<Value, String> {
     let obs = observations(canonical)?;
-    let obs_value = json!(obs.iter().map(|(k, v)| json!([k, v])).collect::<Vec<_>>());
+    let observed =
+        super::reviewed::Observations::new(obs.iter().map(|(k, v)| (k.clone(), v)).collect());
+    let mut first_observation: HashMap<&str, &Value> = HashMap::new();
+    let mut hashes_by_tx: HashMap<&str, Vec<String>> = HashMap::new();
+    for (tx, o) in &obs {
+        first_observation.entry(tx.as_str()).or_insert(o);
+        hashes_by_tx
+            .entry(tx.as_str())
+            .or_default()
+            .push(text(&o["quantity_hash"]));
+    }
+    let snapshot_hashes: BTreeSet<_> = array(&canonical["events"])
+        .iter()
+        .flat_map(|e| array(&e["evidence_snapshots"]))
+        .map(|s| text(&s["quantity_hash"]))
+        .collect();
     let mut components = components.to_vec();
     components.sort_by_key(|c| text(&c["id"]));
     let mut claims = Vec::new();
@@ -308,16 +323,16 @@ pub fn component_claims(
                 json!({"component_id":id,"evidence_status":c["evidence_status"]["status"]}),
             ));
         } else if !array(&evidence[&id]).is_empty() {
-            let relevant: BTreeSet<_> = obs
+            let relevant: BTreeSet<_> = ids
                 .iter()
-                .filter(|(tx, _)| ids.contains(tx))
-                .map(|(_, o)| text(&o["quantity_hash"]))
+                .filter_map(|tx| hashes_by_tx.get(tx.as_str()))
+                .flatten()
+                .cloned()
                 .collect();
-            let current: BTreeSet<_> = array(&canonical["events"])
+            let current: BTreeSet<_> = snapshot_hashes
                 .iter()
-                .flat_map(|e| array(&e["evidence_snapshots"]))
-                .map(|s| text(&s["quantity_hash"]))
-                .filter(|h| relevant.contains(h))
+                .filter(|h| relevant.contains(*h))
+                .cloned()
                 .collect();
             let expected: BTreeSet<_> = array(&evidence[&id])
                 .iter()
@@ -328,7 +343,7 @@ pub fn component_claims(
             }
         }
         if error.is_none() {
-            match super::reviewed::compile(c, &obs_value) {
+            match super::reviewed::compile_observed(c, Some(&observed)) {
                 Ok(v) => {
                     claims.extend(array(&v["claims"]).iter().cloned());
                     conversions.extend(array(&v["reviewed_conversion_pairs"]).iter().cloned());
@@ -353,7 +368,7 @@ pub fn component_claims(
         let (code, message, details) = error.unwrap();
         let mut sources: Vec<&Value> = Vec::new();
         for tx in &ids {
-            if let Some((_, o)) = obs.iter().find(|(id, _)| id == tx) {
+            if let Some(&o) = first_observation.get(tx.as_str()) {
                 if o["direction"] == "outbound"
                     && !sources
                         .iter()
