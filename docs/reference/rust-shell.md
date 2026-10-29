@@ -4578,3 +4578,145 @@ mise exec rust@1.99.1 -- cargo build -p kassiber-wallets --examples --features t
 KASSIBER_RUST_BIN=$PWD/target/debug/kassiber mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_observer_state.py
 mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/wallets/scripts/observer_mutation_check.py
 ```
+
+### Native BDK execution and compatibility caches (R5 step 1)
+
+This continuation starts at `3d6dce7d` on `t3code/r5-sync-4`. The earlier
+missing-cache blocker is resolved. Step 1 now constructs real, request-local
+BDK wallets and executes ordinary Electrum full/revealed-script scans. It does
+not register product sync or persist the prepared result. Steps 2–4 remain.
+
+`bdk_wallet =3.0.0`, `bdk_chain =0.23.3` and `bdk_core =0.6.3` match the
+versions compiled into pinned `bdkpython` 3.0.0. Only `std` is enabled. BDK owns
+the wallet, descriptor index, graph, updates and staged changeset merge. The
+version-one private JSON codec reconstructs and serializes the native changeset,
+including chain tombstones, full witness transactions, floating prevouts,
+anchors, all three time maps, revealed indices and locked outpoints. There is
+no BDK file store, independent database or diagnostic serialization.
+
+No `bdk_electrum`, `bdk_esplora`, `electrum-client` or `esplora-client` is linked.
+The cached `bdk_electrum` 0.24.0 and `bdk_esplora` 0.22.2 sources are translation
+references only. Electrum histories, raw transactions, parents, block suffixes,
+headers and Merkle proofs pass through `kassiber-chain`/`kassiber-net`. The native
+translator snapshots the eight-block suffix before histories, checks raw txids
+and Merkle roots, retains the suffix over subsequently fetched anchors, and
+uses request-local transaction/header/anchor caches. Parent transactions become
+floating prevouts, not unrelated wallet graph entries. Coinbase never fetches
+the null parent. Full scans and bounded incremental widening use BDK's actual
+index/update model. Esplora retains Python's compatibility observer route.
+The low-level execution seam's proxy regression verifies transport containment;
+it does not change Python's observer selection. Product preflight must still
+select compatibility for proxy/custom-CA routes where Python does so.
+
+`Acquisition::new_cached` binds its checkpoint/history/configuration and explicit
+book network before consent. It ports Esplora fingerprint/complete-membership
+reuse and Electrum status/current-graph/dirty-history reuse, graph and header
+caches, changed-entry filtering and unchanged-round inventory skips. Counters
+match Python's integer coercion for metadata while completeness requires explicit
+nonnegative integer counters. Incomplete or omitted-script Esplora rounds retain
+old and new positives. This preparation API returns private protocol observations
+and freshness checkpoints; it does not issue retraction authority or compose the
+final normalized transaction/inventory records.
+
+Each execution needs exact-action, single-use consent and current scope. Offline,
+cancellation and deadlines are rechecked; offline before return discards prepared
+state. Constructors, state reconstruction and cache policy are inert. Proxies
+use the existing gate and never retry directly. The guarded `bdk_fixture`
+example is built by the serial-daemon CI lane and local gate. It is not a CLI,
+daemon or AI command. The dependency-tree regression requires all three exact
+BDK versions and forbids BDK transport/file-store crates; the chokepoint scanner
+continues to own the source/dependency boundary.
+
+Python reference bug: `72c18e53` fixes fixed-descriptor widening. BDK caps a
+non-ranged descriptor at index zero, so requesting a larger index does not imply
+that the revealed horizon changed. Python previously reported progress on every
+incremental pass and could exhaust its 64-pass limit. The isolated regression
+`BdkDependencyContractTest::test_fixed_descriptor_widening_stops_after_the_only_script_is_revealed`
+failed before the fix; 48 observer/reuse tests and 29 subtests pass afterward.
+No Python adapter or routing behavior is otherwise changed.
+
+The native aggregate oracle compares full scan and same-chain restart to live
+`bdkpython` for eight fixture families, including each multi-script identity.
+Compatibility cache oracles compare three rounds for confirmed and mempool
+histories over both protocols, including a proven unchanged inventory skip.
+These are aggregate/checkpoint comparisons, **not post-sync book-dump parity**.
+The inherited protocol acquisition oracle covers all ten fixtures over both
+protocols. Reorg/retraction rows still describe observations only.
+
+| Fixture / sequence | Step-1 evidence | Full normalized post-sync book dump |
+| --- | --- | --- |
+| Empty branches | native aggregate/restart; both-protocol acquisition | not implemented |
+| Receive/change usage | same | not implemented |
+| Cached highest-used prefix | same | not implemented |
+| Multiple script families | same, each native identity | not implemented |
+| Fixed descriptors | same; Python widening regression | not implemented |
+| Gap one | native aggregate/restart; both-protocol acquisition | not implemented |
+| Changed block height | both-protocol acquisition only | not implemented |
+| Disappeared history | both-protocol acquisition only | not implemented |
+| Mempool | native aggregate/restart; both-protocol acquisition/cache rounds | not implemented |
+| Coinbase | native aggregate/restart; both-protocol acquisition | not implemented |
+| Restart sequence | same-chain native aggregate reload/update/merge | not implemented |
+| Canonical reorg sequence | disconnected prior tip refuses before histories | not implemented |
+| Authoritative retraction sequence | no durable absence authority | not implemented |
+
+Successful native product served-by counts remain `wallets.sync: 0`,
+`ui.wallets.sync: 0`, `ui.freshness.run: 0` and
+`ui.workspace.freshness.run: 0`. No successful in-scope product workload was run;
+no measured zero-fallback acceptance is claimed. The existing hybrid routes and
+all out-of-scope refusals remain in place.
+
+The catalog `crates/wallets/scripts/bdk_mutations.json` has 89 mutations; all are
+killed after their 24 named baselines pass. Every entry names its required
+killing test, and compilation errors are errors. The final run uses an isolated
+Cargo target so mutation builds cannot replace parity examples. An earlier
+shared-target oracle run was invalidated and is not counted as verification.
+
+| Step-1 rule group | Entries | Final result |
+| --- | ---: | --- |
+| Native execution, source/scope/consent, gap/widening, protocol proofs/cache, update/merge/eviction and return fence | 33 | killed |
+| Every native changeset component, serialized hash order and exact quantities | 11 | killed |
+| Compatibility source/fingerprints, graph/history/header reuse, complete/partial memberships, indices and dirty state | 45 | killed |
+| Inherited observer/acquisition/discovery/chain catalogs | 82 / 19 / 20 / 22 | entries still apply; full mutation execution not repeated |
+
+The inherited 143 prior kills are historical evidence; this run claims 89 new
+kills, not a fresh 232-entry run. Required verification results follow below.
+
+Remaining work, in order:
+
+2. Canonical chain/reorg/retraction authority: point-of-agreement recovery,
+   stale-anchor rebuild, behind-tip semantics and scoped absence/completeness.
+   Until then a behind or disconnected prior tip refuses without prepared state.
+3. Compose facts and atomically persist observer aggregate, transactions,
+   provenance, retractions, graph, inventory, exclusive coverage, freshness and
+   journal invalidation under scope/epoch fencing and rollback tests.
+4. Register the four scoped product paths, retain Python routes for unsupported
+   wallets/backends, and prove complete book dumps plus actual served-by and
+   zero-fallback counts over all fixtures and restart/reorg/retraction sequences.
+
+Final verification uses Rust 1.99.1, the locked Python 3.11 environment and
+`MATURIN_NO_INSTALL_RUST=1`; Cargo dependency/test/build commands are offline and
+locked. Formatting and workspace/all-target plus harness clippy with
+`-D warnings` pass. Workspace tests pass (1,021), net `test-observer` passes
+(63), the explicit chokepoint scanner passes (nine), and binary harness tests
+pass (14). Harness, all four wallet examples and the chain client example build.
+All 89 new mutations are killed after 24 named baselines pass. The four inherited
+catalogs validate against the final tree; their full mutation runs are not
+repeated.
+
+The requested shell/hybrid/CLI-runner/rust-port command passes 63 tests and 178
+subtests. The combined BDK/cache/acquisition/discovery/private-state, existing
+hybrid chain/rates, Python observer/reuse and CI-shard run passes 163 tests and
+79 subtests. In particular, all 14 new execution/cache oracle cases pass against
+stable rebuilt examples. A separate inventory/contracts/CI-shard check passes
+28 tests and 50 subtests; shard validation passes. The initial stale Python
+error-code source locations were regenerated in the reference-fix commit before
+these passing reruns. The complete frontend/Python quality gate and Docker
+regtest were not run; no product-sync acceptance is inferred from these checks.
+
+Reproduce the new mutation check separately from parity build artifacts:
+
+```sh
+MATURIN_NO_INSTALL_RUST=1 CARGO_TARGET_DIR=/tmp/kassiber-bdk-mutation-target mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/wallets/scripts/bdk_mutation_check.py
+mise exec rust@1.99.1 -- cargo build -p kassiber-wallets --examples --features test-harness --offline --locked
+MATURIN_NO_INSTALL_RUST=1 KASSIBER_RUST_BIN=$PWD/target/debug/kassiber mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_bdk_execution.py
+```

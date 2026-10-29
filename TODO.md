@@ -141,9 +141,12 @@ through the shared setup crate.
   and closed graph/quantity provenance checks. This does not reconstruct or
   execute a BDK wallet or reuse protocol fetches; see the state checkpoint in
   `docs/reference/rust-shell.md`.
-- [ ] Complete observer transaction projections, confirmation/reorg/retraction
-  authority, ordinary Electrum BDK wallet reconstruction/full/incremental sync,
-  and compatibility checkpoint/fetch reuse. Preserve the
+- [x] Execute native BDK wallet reconstruction/full/revealed-script sync and
+  staged changeset merging using the Python-matching pure state crates. Fetch
+  through Kassiber's gated clients; port compatibility checkpoint/fetch reuse.
+  This is step 1 preparation, with no durable facts or product registration.
+- [ ] Complete observer transaction projections and confirmation/reorg/retraction
+  authority (step 2). Preserve the
   existing named observer routes and source-overlap/book-network preflight.
 - [ ] Apply transactions, provenance, graph cache, output/policy coverage and
   freshness/journal invalidation atomically, with full normalized book dumps.

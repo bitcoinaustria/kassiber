@@ -630,3 +630,31 @@ keys and malformed hex refuse locally; no descriptor check probes a backend.
 This remains representation/read verification, not a native sync path. The
 offline registry lacks both `bdk_wallet` and `bdk_electrum`; neither dependency
 nor an alternate transport was fetched to bypass that boundary.
+
+## Native Bitcoin BDK execution and compatibility caches (R5 step 1)
+
+BDK's native transport crates are deliberately absent. `bdk_wallet` 3.0.0,
+`bdk_chain` 0.23.3 and `bdk_core` 0.6.3 provide pure in-memory state, indexing,
+updates and merge semantics under `std`; no file-store or network feature is
+enabled. Cached connector source is used only to implement protocol translation.
+`bdk_wallet_uses_pinned_pure_state_without_transport_or_file_store` verifies the
+resolved wallet dependency tree, including the exact pins and the absence of
+BDK connectors and alternate HTTP clients. Source/dependency chokepoint checks
+continue to reject independent connectors outside `kassiber-net`.
+
+| Preparation path | Consent and route | Named regressions |
+| --- | --- | --- |
+| Native Electrum BDK full/revealed-script execution, histories/raw txs/parents/headers/Merkle proofs | `ExecutionConsent` binds one immutable scope, public source, prior state and backend; single-use; all calls through existing `ElectrumClient` and `kassiber-net` | `bdk_requires_exact_consent_and_online_even_for_loopback`; differential `test_cached_acquisition_and_native_bdk_require_consent_and_online` |
+| Prepared native result | cancellation/deadline and offline checked again before return; no persistence | `bdk_offline_toggle_before_return_discards_prepared_state` |
+| Cached Esplora and compatibility Electrum | existing acquisition consent also binds the immutable checkpoint/history snapshot and explicit book network; cache hits do not grant consent | `compatibility_cached_paths_require_bound_consent_and_online`; same differential no-traffic regression |
+| Native BDK explicit proxy | same selected route and TLS policy; no SDK socket constructor or direct retry | `bdk_proxy_failure_never_connects_directly_to_the_backend` |
+
+The native execution snapshots the tip/suffix before histories and uses
+request-local caches. Disconnected or behind prior state currently refuses;
+canonical recovery and authoritative retractions are the next numbered step.
+Python's Esplora route stays compatibility. Native cache preparation preserves
+complete/source-bound reuse and incomplete positive memberships, but confers no
+absence, ownership, custody or tax authority. No new product command, background
+feature or AI projection is enabled. No new diagnostic/disk logging is added.
+See the [native execution checkpoint](rust-shell.md#native-bdk-execution-and-compatibility-caches-r5-step-1)
+for verification, limitations and remaining registration/persistence work.

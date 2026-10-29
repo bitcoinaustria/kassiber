@@ -19,6 +19,9 @@ pub use kassiber_net::Consent;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
+// Pure timestamp helpers shared with compatibility-history cache policy.
+pub use time::{epoch as format_unix_time, parse as parse_iso_time};
+
 pub type Result<T> = std::result::Result<T, AppError>;
 pub const RESPONSE_LIMIT: usize = 16 * 1024 * 1024;
 pub const CORE_HISTORY_LIMIT: usize = 64 * 1024 * 1024;

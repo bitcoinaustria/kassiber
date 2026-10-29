@@ -24,6 +24,10 @@ required-features = ["test-harness"]
 name = "observer_state_fixture"
 required-features = ["test-harness"]
 
+[[example]]
+name = "bdk_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-chain = { path = "../chain" }
 kassiber-net = { path = "../net" }
@@ -39,6 +43,11 @@ kassiber-store = { path = "../store" }
 bitcoin = "0.32"
 miniscript = "12"
 elements-miniscript = "0.4"
+# Match bdkpython 3.0.0's wallet/index/update semantics. The protocol adapters
+# are deliberately absent: their connectors would bypass kassiber-net.
+bdk_wallet = { version = "=3.0.0", default-features = false, features = ["std"] }
+bdk_chain = { version = "=0.23.3", default-features = false, features = ["std"] }
+bdk_core = { version = "=0.6.3", default-features = false, features = ["std"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 sha2 = "0.11"
 regex = "1"

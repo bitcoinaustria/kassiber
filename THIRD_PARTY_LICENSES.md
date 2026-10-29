@@ -62,6 +62,12 @@ third-party package or runtime requirement is added.
 | --- | --- | --- | --- |
 | `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities | MIT OR Apache-2.0 |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
+| `bdk_wallet` | `=3.0.0` | Native in-memory watch-only wallet state and indexing matching bdkpython; standard library and descriptor parsing alone cannot reproduce BDK's update model. No BDK storage or connector features | MIT OR Apache-2.0 |
+| `bdk_chain` | `=0.23.3` | Native graph, chain checkpoints and changeset merging matching the Python binding; fetched data comes through Kassiber's consent-bound clients | MIT OR Apache-2.0 |
+| `bdk_core` | `=0.6.3` | Exact BDK script requests, transaction updates and confirmation anchors; keeps the native observer's update contract pinned to Python | MIT OR Apache-2.0 |
+| `ahash` | `0.8.12` (transitive) | BDK's pinned graph/index hash tables require this hasher; selected by the matching SDK rather than a new application API | MIT OR Apache-2.0 |
+| `hashbrown` | `0.14.5` (transitive) | BDK's pinned chain/index implementation requires these hash tables; replacing them would fork the reference SDK | MIT OR Apache-2.0 |
+| `base64` | `0.21.7` (transitive) | BDK's pinned core serialization dependency; kept alongside existing 0.22 to preserve the matching SDK without patching it | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
 | `bitcoin_hashes` | `0.14` (already locked) | Python-compatible UUIDv5 review identities using the existing SHA-1 primitive | CC0-1.0 |

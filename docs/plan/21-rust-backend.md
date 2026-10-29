@@ -2167,3 +2167,31 @@ Cargo cache; no registry source was side-loaded and no compatibility substitute
 was introduced.
 Full details, mutation entries and verification limits are in the
 [state/reuse checkpoint](../reference/rust-shell.md#bitcoin-observer-state-and-record-reuse-r5-partial-step-1).
+
+### R5 Bitcoin sync: native BDK execution/cache checkpoint (step 1)
+
+The offline cache now supplies the Python-matching native state crates:
+`bdk_wallet =3.0.0`, `bdk_chain =0.23.3`, `bdk_core =0.6.3`. The native wallet
+is reconstructed from private version-one JSON, runs full/revealed-script
+Electrum scans with bounded widening, applies native graph/index updates and
+merges staged changes into its aggregate. BDK's connector/file-store crates are
+not linked: existing consent-bound Kassiber clients fetch protocol data and the
+translator follows the pinned connector sources. Esplora retains Python's
+compatibility route. Compatibility checkpoint/history/header/membership reuse
+is prepared under the same immutable exact-action consent, offline and proxy
+boundaries. Dependencies, lockfile and license reasons are recorded together.
+
+This completes the execution/cache work of step 1, subject to the verification
+record in [rust-shell.md](../reference/rust-shell.md#native-bdk-execution-and-compatibility-caches-r5-step-1).
+The separate Python reference fix stops fixed-descriptor widening when BDK's
+actual revealed index does not change; its regression failed before the fix.
+Native aggregate/restart and compatibility cache differential oracles supplement
+the ten inherited acquisition fixtures. They do not establish persisted
+book-dump or product-sync parity. No command, desktop kind or AI projection is
+newly registered, and all four product-sync served-by counts remain zero.
+
+Next are numbered steps 2 (canonical/reorg/retraction authority), 3 (atomic
+facts/provenance/graph/inventory/coverage/freshness/journal application) and 4
+(scoped routing and zero-fallback full-dump parity). Disconnected/behind native
+state refuses until step 2. Product delivery remains blocked by those incomplete
+steps, even when this library checkpoint's checks pass.

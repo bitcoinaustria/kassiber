@@ -880,3 +880,11 @@ mode refuses even empty target lists, and configured proxies never retry
 directly. Its test-only driver fetches observations without creating ownership,
 custody, absence authority or durable wallet state. See the
 [acquisition egress checkpoint](rust-port-egress.md#bitcoin-protocol-acquisition-r5-preparation-only).
+
+The unregistered native Bitcoin BDK execution helper links only the pinned
+wallet/chain/core state crates. BDK receives no transport or storage path;
+Kassiber's consent-bound Electrum client fetches all observations. Private cache
+snapshots and book network are bound before granting the exact action. Cached
+reads remain subject to consent and offline checks; proxies never retry directly.
+No product route, AI disclosure or durable write is enabled by this preparation
+checkpoint. See [native execution egress](rust-port-egress.md#native-bitcoin-bdk-execution-and-compatibility-caches-r5-step-1).

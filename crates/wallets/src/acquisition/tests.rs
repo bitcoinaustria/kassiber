@@ -9,7 +9,7 @@ use kassiber_net::{
 };
 use std::time::Duration;
 
-fn scope() -> Scope {
+pub(super) fn scope() -> Scope {
     Scope {
         database_instance: "db".into(),
         profile_id: "p".into(),
@@ -18,13 +18,13 @@ fn scope() -> Scope {
         source_revision: "1".into(),
     }
 }
-fn targets() -> Vec<Value> {
+pub(super) fn targets() -> Vec<Value> {
     vec![json!({"chain":"bitcoin","network":"regtest","script_pubkey":"51"})]
 }
-fn deadline() -> Instant {
+pub(super) fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(5)
 }
-fn gate(state: Offline) -> Gate {
+pub(super) fn gate(state: Offline) -> Gate {
     Gate::new(move || state, Ledger::default())
 }
 fn action(kind: &str, url: &str) -> Acquisition {
@@ -36,7 +36,7 @@ fn action(kind: &str, url: &str) -> Acquisition {
     )
     .unwrap()
 }
-fn run(a: &Acquisition) -> Result<Value> {
+pub(super) fn run(a: &Acquisition) -> Result<Value> {
     a.run(
         &gate(Offline::Online),
         &scope(),

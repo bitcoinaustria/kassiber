@@ -35,13 +35,25 @@ fn main() {
         },
         Ledger::default(),
     );
-    let result = Acquisition::new(
-        scope.clone(),
-        &input["backend"],
-        input["targets"].as_array().unwrap(),
-        input["version"].as_str().unwrap_or("fixture"),
-    )
-    .and_then(|action| {
+    let action = if input["cached"] == true {
+        Acquisition::new_cached(
+            scope.clone(),
+            &input["backend"],
+            input["targets"].as_array().unwrap(),
+            input["version"].as_str().unwrap_or("fixture"),
+            &input["checkpoint"],
+            &input["history_cache"],
+            input["network"].as_str().unwrap_or("main"),
+        )
+    } else {
+        Acquisition::new(
+            scope.clone(),
+            &input["backend"],
+            input["targets"].as_array().unwrap(),
+            input["version"].as_str().unwrap_or("fixture"),
+        )
+    };
+    let result = action.and_then(|action| {
         let grant =
             (input["consent"] == true).then(|| AcquisitionConsent::explicit_trigger(&action));
         action.run(

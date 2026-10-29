@@ -8,6 +8,9 @@ pub mod time;
 pub use snapshot::snapshot;
 
 pub mod acquisition;
+pub mod bdk;
+mod bdk_state;
+pub mod compatibility_cache;
 mod derive;
 mod lifecycle;
 mod network;

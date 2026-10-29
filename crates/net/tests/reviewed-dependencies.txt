@@ -88,3 +88,8 @@ kassiber-backup test-hooks
 bitcoin_hashes
 
 kassiber-diagnostics test-hooks
+
+# Pure BDK wallet/index/update types; no protocol client or storage features.
+bdk_wallet std
+bdk_chain std
+bdk_core std

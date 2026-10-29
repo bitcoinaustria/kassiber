@@ -1,8 +1,7 @@
 //! Request-local Bitcoin protocol observations, before observer interpretation.
 //!
-//! This is not a sync adapter: there is no checkpoint reuse, canonical-chain
-//! selection, absence authority, ownership, custody or database access here.
-//! Ordinary Electrum still needs the BDK state machine before product routing.
+//! Cache-aware preparation retains Python's protocol checkpoints. There is no
+//! canonical-chain selection, absence authority, ownership or database access.
 use crate::scan::{script_hash, Cancellation, Scope};
 use bitcoin::{consensus::deserialize, hex::FromHex, Transaction};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
@@ -34,6 +33,14 @@ pub struct Acquisition {
     targets: Vec<Value>,
     max_pages: Option<usize>,
     version: String,
+    cache: Option<CacheInput>,
+}
+
+struct CacheInput {
+    checkpoint: Value,
+    history: Value,
+    config: Value,
+    network: String,
 }
 
 pub struct AcquisitionConsent {
@@ -112,7 +119,40 @@ impl Acquisition {
             targets: targets.to_vec(),
             max_pages,
             version: version.into(),
+            cache: None,
         })
+    }
+
+    /// Bind private Python compatibility caches to the same immutable action
+    /// as the targets and transport, before any grant can be minted.
+    pub fn new_cached(
+        scope: Scope,
+        backend: &Value,
+        targets: &[Value],
+        version: &str,
+        checkpoint: &Value,
+        history: &Value,
+        network: &str,
+    ) -> Result<Self> {
+        crate::bdk_state::network(network)?;
+        if targets.iter().any(|t| t["network"] != network) {
+            return Err(AppError::new(
+                "validation",
+                "Cached observation targets must use the book network",
+            ));
+        }
+        let mut action = Self::new(scope, backend, targets, version)?;
+        let mut config = backend.clone();
+        if let Some(raw) = backend.get("config_json").and_then(Value::as_str) {
+            config["config"] = serde_json::from_str(raw).map_err(|_| invalid())?;
+        }
+        action.cache = Some(CacheInput {
+            checkpoint: checkpoint.clone(),
+            history: history.clone(),
+            config,
+            network: network.into(),
+        });
+        Ok(action)
     }
 
     /// Returns a complete request-local acquisition or an error, never partial
@@ -152,11 +192,17 @@ impl Acquisition {
                 "Wallet acquisition consent was already used",
             ));
         }
-        let result = match self.protocol {
-            Protocol::Esplora => {
+        let result = match (self.protocol, self.cache.as_ref()) {
+            (Protocol::Esplora, Some(cache)) => {
+                self.cached_esplora(gate, &proof.transport, deadline, cancel, cache)
+            }
+            (Protocol::Electrum, Some(cache)) => {
+                self.cached_electrum(gate, &proof.transport, deadline, cancel, cache)
+            }
+            (Protocol::Esplora, None) => {
                 self.esplora(gate, &proof.transport, deadline, cancel, &mut progress)
             }
-            Protocol::Electrum => {
+            (Protocol::Electrum, None) => {
                 self.electrum(gate, &proof.transport, deadline, cancel, &mut progress)
             }
         }?;
@@ -520,5 +566,6 @@ fn header_timestamp(hex: &str) -> Result<u32> {
     ))
 }
 
+mod cached;
 #[cfg(test)]
 mod tests;

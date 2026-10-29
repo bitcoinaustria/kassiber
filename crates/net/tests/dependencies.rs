@@ -1,5 +1,48 @@
 //! Pin the reviewed ASCII-only URL dependency surface, not just URL behavior.
 #[test]
+fn bdk_wallet_uses_pinned_pure_state_without_transport_or_file_store() {
+    let output = std::process::Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "-p",
+            "kassiber-wallets",
+            "--edges",
+            "normal",
+            "--prefix",
+            "none",
+            "--locked",
+            "--offline",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let tree = String::from_utf8(output.stdout).unwrap();
+    for required in ["bdk_wallet v3.0.0", "bdk_chain v0.23.3", "bdk_core v0.6.3"] {
+        assert!(
+            tree.lines()
+                .any(|line| line == required || line == format!("{required} (*)")),
+            "{required}"
+        );
+    }
+    for line in tree.lines() {
+        let name = line.split_whitespace().next().unwrap_or_default();
+        assert!(
+            ![
+                "bdk_electrum",
+                "bdk_esplora",
+                "electrum-client",
+                "esplora-client",
+                "bdk_file_store",
+                "reqwest",
+                "ureq"
+            ]
+            .contains(&name),
+            "ungated BDK dependency: {name}"
+        );
+    }
+}
+
+#[test]
 fn ascii_url_dependencies_do_not_restore_icu_or_unicode_mapping() {
     let output = std::process::Command::new(env!("CARGO"))
         .args([
