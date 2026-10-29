@@ -206,7 +206,9 @@ The checked-in `crates/store/fixtures/current-schema.json` freezes every
 non-internal `sqlite_master` table, index, trigger and view with its full SQL
 (including column types, defaults, constraints, foreign keys and partial
 indexes), after Python's current `open_db`, including graph-index installation.
-The gate compares normalized structure using `table_xinfo`, `index_list`,
+When the complete non-internal `sqlite_master` object list matches the frozen
+definitions byte for byte, the gate accepts that identical structure directly.
+Otherwise it compares normalized structure using `table_xinfo`, `index_list`,
 `index_xinfo`, grouped `foreign_key_list`, tokenized trigger/view/index SQL,
 and table constraints. ALTER-appended column order, comments, identifier quotes
 and insignificant whitespace do not cause refusal. String literals remain
@@ -220,6 +222,16 @@ specific and are not compared with a fresh book's values. A read transaction
 keeps the gate's schema and semantic reads consistent. The public SHA-256
 schema fingerprint hashes the compact JSON object list; the audit gate is
 validated separately.
+
+Current-book compatibility passes compare existing replacement index, view and
+immutability-trigger definitions before issuing DDL. Matching definitions avoid
+schema writes and close-time WAL checkpoints; changed or missing definitions
+still run their original repairs. Ordered column ranges reuse each table's
+column inventory within the range. Liquid worklists first test the same asset
+predicates against a materialized distinct-asset inventory using existing
+covering indexes. No index, migration marker or schema version is added, and
+the final structural, audit and semantic admission checks still run. See the
+[read-path measurements](rust-read-performance.md).
 
 `semantic-probes.sql` and the durable-review relation checks refuse pending
 source-link/target snapshots, provider names, ownership-history cleanup,

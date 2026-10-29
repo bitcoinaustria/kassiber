@@ -68,6 +68,18 @@ pub(crate) fn liquid(
     }
     let marks = vec!["?"; assets.len()].join(",");
     let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    // Evaluate the identical asset predicate over distinct assets first. SQLite
+    // can use an existing covering index instead of scanning wide observation
+    // rows twice. Materialization keeps normalization after DISTINCT.
+    let pending: bool = tx.query_row(
+        &format!("WITH assets AS MATERIALIZED (SELECT DISTINCT asset FROM transactions) SELECT EXISTS(SELECT 1 FROM assets WHERE upper(replace(asset,'-',''))='LBTC' OR lower(asset) IN ({marks}))"),
+        params_from_iter(&assets), |r| r.get(0),
+    ).map_err(map_sqlite_error)?;
+    if !pending {
+        observer("liquid.before_commit")?;
+        tx.commit().map_err(map_sqlite_error)?;
+        return observer("liquid.after_commit");
+    }
     let mut stmt = tx.prepare(&format!("SELECT id,profile_id,wallet_id,external_id,occurred_at,direction,amount,fee,raw_json FROM transactions WHERE lower(asset) IN ({marks})")).map_err(map_sqlite_error)?;
     let rows = stmt
         .query_map(params_from_iter(&assets), |r| {

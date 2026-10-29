@@ -30,7 +30,12 @@ pub fn fingerprint(conn: &Connection) -> Result<String> {
 }
 pub fn verify(conn: &Connection) -> Result<()> {
     let expected: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");
-    crate::schema_structure::verify(conn, &expected)?;
+    // Identical SQLite definitions imply identical parsed structure. Avoid
+    // creating a second database and walking every pragma on the usual fresh
+    // schema. Historical ALTER layouts still take the full normalized gate.
+    if objects(conn)? != expected["objects"] {
+        crate::schema_structure::verify(conn, &expected)?;
+    }
     let mut stmt = conn
         .prepare("SELECT id,migration_name,schema_version FROM schema_migration_audits ORDER BY id")
         .map_err(map_sqlite_error)?;
@@ -192,13 +197,22 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
     ];
     let policy_pending: bool = conn
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM transactions WHERE lower(asset) IN (?1,?2,?3))",
+            "WITH assets AS MATERIALIZED (SELECT DISTINCT asset FROM transactions) SELECT EXISTS(SELECT 1 FROM assets WHERE lower(asset) IN (?1,?2,?3))",
             POLICY,
             |r| r.get(0),
         )
         .map_err(map_sqlite_error)?;
     if policy_pending {
         return Err(Error::migration("liquid_observation_backfill"));
+    }
+    // Prove the joined Liquid worklist is empty using a covering asset scan,
+    // rather than visiting every wide transaction row on ordinary BTC books.
+    let liquid: bool = conn.query_row(
+        "WITH assets AS MATERIALIZED (SELECT DISTINCT asset FROM transactions) SELECT EXISTS(SELECT 1 FROM assets WHERE upper(replace(asset,'-',''))='LBTC')",
+        [], |r| r.get(0),
+    ).map_err(map_sqlite_error)?;
+    if !liquid {
+        return Ok(());
     }
     let mut stmt=conn.prepare("SELECT t.raw_json,w.config_json,t.external_id FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE upper(replace(t.asset,'-',''))='LBTC'").map_err(map_sqlite_error)?;
     for row in stmt
@@ -501,6 +515,8 @@ mod tests {
     #[test]
     fn exact_objects_and_audits_gate_current_schema() {
         let conn = current_schema();
+        let manifest: Value = serde_json::from_str(MANIFEST).unwrap();
+        assert_eq!(objects(&conn).unwrap(), manifest["objects"]);
         verify(&conn).unwrap();
         let fingerprint_before = fingerprint(&conn).unwrap();
         conn.execute(
@@ -516,5 +532,20 @@ mod tests {
         conn.execute_batch("DROP TRIGGER chain_index_track_transactions_insert")
             .unwrap();
         assert_ne!(fingerprint(&conn).unwrap(), fingerprint_before);
+    }
+    #[test]
+    fn historical_layout_uses_normalized_gate_and_still_refuses_constraint_drift() {
+        let conn = current_schema();
+        let manifest: Value = serde_json::from_str(MANIFEST).unwrap();
+        conn.execute_batch("ALTER TABLE transaction_edit_events ADD COLUMN sync_context_json TEXT")
+            .unwrap();
+        assert_ne!(objects(&conn).unwrap(), manifest["objects"]);
+        verify(&conn).unwrap();
+        conn.execute_batch("CREATE INDEX unexpected_index ON transactions(asset)")
+            .unwrap();
+        assert_eq!(
+            verify(&conn).unwrap_err().kind,
+            crate::ErrorKind::RequiresPythonMigration
+        );
     }
 }

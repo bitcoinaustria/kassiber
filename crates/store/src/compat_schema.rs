@@ -22,6 +22,56 @@ pub(super) fn statement(function: &str, prefix: &str) -> &'static str {
 fn execute(conn: &Connection, sql: &str) -> Result<()> {
     conn.execute_batch(sql).map_err(map_sqlite_error)
 }
+/// SQLite stores CREATE definitions without IF NOT EXISTS or a final semicolon.
+/// Only exact matches avoid replacement; historical spellings are still repaired.
+pub(super) fn definition_matches(
+    conn: &Connection,
+    kind: &str,
+    name: &str,
+    sql: &str,
+) -> Result<bool> {
+    let actual: Option<String> = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type=? AND name=?",
+            [kind, name],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(map_sqlite_error)?;
+    let expected = sql
+        .trim()
+        .trim_end_matches(';')
+        .replacen("IF NOT EXISTS ", "", 1);
+    Ok(actual.as_deref().map(str::trim_end) == Some(expected.as_str()))
+}
+fn created_index_name(sql: &str) -> Option<&str> {
+    let tail = sql.trim_start().strip_prefix("CREATE ")?;
+    let tail = tail.strip_prefix("UNIQUE ").unwrap_or(tail);
+    let tail = tail.strip_prefix("INDEX ")?;
+    let tail = tail.strip_prefix("IF NOT EXISTS ").unwrap_or(tail);
+    tail.split_whitespace().next()
+}
+pub(super) fn unchanged_index_statement(
+    conn: &Connection,
+    sql: &str,
+    script: &[&str],
+) -> Result<bool> {
+    if let Some(name) = created_index_name(sql) {
+        return definition_matches(conn, "index", name, sql);
+    }
+    let Some(name) = sql.trim().strip_prefix("DROP INDEX IF EXISTS ") else {
+        return Ok(false);
+    };
+    let name = name.trim_end_matches(';');
+    match script
+        .iter()
+        .find(|sql| created_index_name(sql) == Some(name))
+    {
+        Some(sql) => definition_matches(conn, "index", name, sql),
+        None => Ok(false), // An obsolete index still needs removal.
+    }
+}
+
 fn table_sql(conn: &Connection, table: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT COALESCE(sql,'') FROM sqlite_master WHERE type='table' AND name=?",
@@ -302,7 +352,25 @@ fn immutability_sql(conn: &Connection) -> Result<()> {
 }
 pub(crate) fn immutability(conn: &mut Connection) -> Result<()> {
     let tx = conn.savepoint().map_err(map_sqlite_error)?;
-    immutability_sql(&tx)?;
+    let mut current = tx
+        .prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?")
+        .map_err(map_sqlite_error)?;
+    let mut matches = true;
+    for sql in statements("_ensure_custody_revision_immutability_triggers") {
+        let trigger = sql.split_whitespace().nth(2).expect("trigger name");
+        let actual: Option<String> = current
+            .query_row([trigger], |row| row.get(0))
+            .optional()
+            .map_err(map_sqlite_error)?;
+        if actual.as_deref() != Some(sql.trim().trim_end_matches(';')) {
+            matches = false;
+            break;
+        }
+    }
+    drop(current);
+    if !matches {
+        immutability_sql(&tx)?;
+    }
     tx.commit().map_err(map_sqlite_error)
 }
 fn custody_fk_check(conn: &Connection) -> Result<()> {
@@ -454,7 +522,8 @@ pub(crate) fn commercial(conn: &mut Connection) -> Result<()> {
     let function = "_ensure_commercial_reconciliation_schema";
     let tx = conn.savepoint().map_err(map_sqlite_error)?;
     // origin_source is an appended compatibility column even on new tables.
-    for sql in statements(function) {
+    let script = statements(function);
+    for sql in &script {
         let sql_trim = sql.trim_start();
         if sql_trim.starts_with("SELECT") {
             continue;
@@ -470,6 +539,9 @@ pub(crate) fn commercial(conn: &mut Connection) -> Result<()> {
             if duplicate {
                 continue;
             }
+        }
+        if unchanged_index_statement(&tx, sql, &script)? {
+            continue;
         }
         execute(&tx, sql)?;
         if sql_trim.starts_with("CREATE TABLE IF NOT EXISTS btcpay_provenance_records") {
@@ -546,6 +618,16 @@ pub(crate) fn step(
                 _ => "_backfill_source_funds_target_external_id",
             };
             let tx = conn.savepoint().map_err(map_sqlite_error)?;
+            if name == "projection-view"
+                && definition_matches(
+                    &tx,
+                    "view",
+                    "journal_custody_projection_relations",
+                    statement(function, "CREATE VIEW"),
+                )?
+            {
+                return tx.commit().map_err(map_sqlite_error);
+            }
             for sql in statements(function) {
                 execute(&tx, sql)?;
             }
@@ -561,6 +643,32 @@ pub(crate) fn step(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn current_immutability_is_read_only_but_missing_or_changed_triggers_are_repaired() {
+        let root = tempfile::tempdir().unwrap();
+        let mut book = crate::Book::create(root.path(), None).unwrap();
+        let conn = &mut book.connection;
+        let version = |conn: &Connection| {
+            conn.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                .unwrap()
+        };
+        let original = crate::schema::fingerprint(conn).unwrap();
+        let before = version(conn);
+        immutability(conn).unwrap();
+        assert_eq!(version(conn), before);
+        for replacement in [
+            "",
+            "CREATE TRIGGER trg_custody_component_revision_immutable BEFORE UPDATE ON custody_components BEGIN SELECT 1; END",
+        ] {
+            execute(conn, "DROP TRIGGER trg_custody_component_revision_immutable").unwrap();
+            execute(conn, replacement).unwrap();
+            immutability(conn).unwrap();
+            assert_eq!(crate::schema::fingerprint(conn).unwrap(), original);
+            let before = version(conn);
+            immutability(conn).unwrap();
+            assert_eq!(version(conn), before);
+        }
+    }
     #[test]
     fn review_notes_backfill_restores_immutable_authored_terms() {
         let mut conn = Connection::open_in_memory().unwrap();

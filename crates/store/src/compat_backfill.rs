@@ -485,7 +485,11 @@ pub(crate) fn swap_schema(
         )?;
     }
     let tx = conn.savepoint().map_err(map_sqlite_error)?;
-    for sql in statements("_ensure_swap_matching_schema") {
+    let indexes = statements("_ensure_swap_matching_schema");
+    for sql in &indexes {
+        if super::repairs::unchanged_index_statement(&tx, sql, &indexes)? {
+            continue;
+        }
         tx.execute_batch(sql).map_err(map_sqlite_error)?;
     }
     observer("swap-schema.before_indexes_commit")?;

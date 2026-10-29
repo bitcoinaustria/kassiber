@@ -28,15 +28,23 @@ fn columns_between(conn: &Connection, first: (&str, &str), last: (&str, &str)) -
             .position(|column| column[0] == table && column[1] == name)
             .expect("checked column endpoint")
     };
+    let mut present = std::collections::BTreeMap::new();
     for column in &columns[position(first)..=position(last)] {
-        if ensure_column(
-            conn,
-            column[0].as_str().unwrap(),
-            column[1].as_str().unwrap(),
-            column[2].as_str().unwrap(),
-        )? {
+        let table = column[0].as_str().unwrap();
+        let existing = match present.entry(table) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(super::columns(conn, table)?)
+            }
+        };
+        let name = column[1].as_str().unwrap();
+        if existing.iter().any(|(n, _)| n == name) {
+            continue;
+        }
+        if ensure_column(conn, table, name, column[2].as_str().unwrap())? {
             commit(conn)?;
         }
+        existing.push((name.to_owned(), String::new()));
     }
     Ok(())
 }
@@ -209,6 +217,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn current_open_repairs_changed_indexes_and_view_before_admission() {
+        let root = tempfile::tempdir().unwrap();
+        let mut book = crate::Book::create(root.path(), None).unwrap();
+        let conn = &mut book.connection;
+        let before = crate::schema::fingerprint(conn).unwrap();
+        conn.execute_batch("DROP INDEX idx_transaction_pairs_active_out; CREATE INDEX idx_transaction_pairs_active_out ON transaction_pairs(id); DROP INDEX idx_commercial_links_unique_payment_tx_active; CREATE UNIQUE INDEX idx_commercial_links_unique_payment_tx_active ON commercial_links(id); DROP VIEW journal_custody_projection_relations; CREATE VIEW journal_custody_projection_relations AS SELECT 1;").unwrap();
+        migrate(conn, &mut |_| panic!("identity must survive"), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(crate::schema::fingerprint(conn).unwrap(), before);
+        crate::schema::verify(conn).unwrap();
+    }
+
+    #[test]
     fn current_book_keeps_identity_audits_and_journal_mode() {
         let root = tempfile::tempdir().unwrap();
         let mut book = crate::Book::create(root.path(), None).unwrap();
@@ -236,6 +259,9 @@ mod tests {
             .unwrap()
         };
         let before = audits(conn);
+        let schema_version: i64 = conn
+            .query_row("PRAGMA schema_version", [], |r| r.get(0))
+            .unwrap();
         migrate(
             conn,
             &mut |_| panic!("current identities must survive"),
@@ -245,6 +271,11 @@ mod tests {
         assert_eq!(crate::read_instance_id(conn).unwrap(), identity);
         assert_eq!(audits(conn), before);
         assert_eq!(mode(conn), journal);
+        assert_eq!(
+            conn.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            schema_version
+        );
         crate::schema::verify(conn).unwrap();
     }
 }
