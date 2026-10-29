@@ -57,6 +57,17 @@ rewrite the next time current Python rebuilds. Backups preserve both formats.
 The scoped 128 MiB rebuild cache is a connection setting. It adds no schema,
 migration or stored-format change, so the same Python/Rust schema manifest and
 older-binary coexistence rules apply. SQLCipher retains DELETE/FULL durability.
+## Dependency-origin correction
+
+The custody dependency-origin fixed-point correction changes only the
+`blocked_by_transaction_ids` explanation stored in `journal_quarantines`:
+previous builds could omit a connected explicit root depending on Python's
+hash seed. Selected rows, blocked transaction membership, journal amounts and
+report-readiness barriers are unchanged. No schema migration or automatic
+journal invalidation is needed. Existing stored explanations remain until
+`journals process` rebuilds them; review evidence and the displayed root may
+then name a previously omitted blocker. Saved exports and filed snapshots
+are not rewritten.
 
 ## Intentionally not inferred during upgrade
 

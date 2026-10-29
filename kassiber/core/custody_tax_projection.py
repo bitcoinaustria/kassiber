@@ -407,8 +407,10 @@ def compile_finalized_tax_projection(
             origins = blocked_origins.setdefault(neighbor, set())
             if not blocked_origins[transaction_id] <= origins:
                 origins.update(blocked_origins[transaction_id])
-                if neighbor not in explicitly_blocked:
-                    frontier.append(neighbor)
+                # Explicit roots can also bridge other roots to a dependent.
+                # Propagate every growing origin set, including at roots,
+                # until the whole connected path reaches a fixed point.
+                frontier.append(neighbor)
             if neighbor not in effectively_blocked:
                 effectively_blocked.add(neighbor)
     event_order_by_hash: dict[str, tuple[str, str, str, str, str]] = {}

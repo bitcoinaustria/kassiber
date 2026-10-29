@@ -8,6 +8,12 @@ wallets.
 
 ## One path from observation to report
 
+When an explicit blocker holds a connected selected custody path, every
+dependent quarantine names the complete set of explicit roots in that path
+in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
+another root to a dependent; propagation continues through it until no origin
+set grows. Unconnected blockers are excluded.
+
 1. Wallet adapters observe transactions and outputs. Native chain sync records
    closed provenance bound to the normalized graph and exact wallet quantity.
 2. `CustodyJournalBuilder` combines the current observations, ownership index,
