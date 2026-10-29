@@ -742,7 +742,7 @@ const TransactionWorkbench = ({
                       className={cn(
                         "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
                         chartMetric === metric
-                          ? "border-primary bg-primary text-primary-foreground"
+                          ? "border-input bg-accent text-foreground"
                           : "border-border bg-background text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -760,7 +760,7 @@ const TransactionWorkbench = ({
                     className={cn(
                       "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
                       chartMode === mode
-                        ? "border-primary bg-primary text-primary-foreground"
+                        ? "border-input bg-accent text-foreground"
                         : "border-border bg-background text-muted-foreground hover:text-foreground",
                     )}
                   >
