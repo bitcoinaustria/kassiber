@@ -30,8 +30,9 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) use holds::capture_confirmation;
+pub(crate) use holds::{capture_confirmation, ledger_conflicts, ledger_pending};
 pub use migration::quarantines as migration_quarantines;
+pub(crate) use text::repr as value_repr;
 
 pub(crate) fn canonical_event_repr(event: &Value) -> String {
     text::event_repr(event)

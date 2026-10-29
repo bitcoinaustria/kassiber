@@ -40,7 +40,7 @@ pub(super) fn quoted(points: impl Iterator<Item = u32>) -> String {
     result
 }
 
-fn repr(value: &Py) -> String {
+pub(crate) fn repr(value: &Py) -> String {
     match value {
         Py::Str(value) => quoted(value.code_points()),
         Py::List(values) => format!(

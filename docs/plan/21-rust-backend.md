@@ -1755,3 +1755,15 @@ and sorting. Rust results remain comparison-only, Python owns accounting and
 persistence, and snapshot v1 remains raw-only. See the
 [adapter and parity evidence](../reference/custody-engine.md#raw-finalized-stage-adapter-checkpoint-r2f-partial).
 Journal fusion with `ledger` is the next separate R2 boundary.
+
+
+### Journal request builder checkpoint (R2g step 1)
+
+The [request builder](../reference/custody-engine.md#rust-journal-request-builder-checkpoint-r2g-step-1)
+now compiles ledger operands in Rust over finalized projections, ordered wallet
+references and raw profile facts. Independent Python comparisons cover 145
+new vectors, 166 existing ledger operands and 515 raw generated books; six
+new named mutations are killed. The empty outcome makes no engine call.
+This is a local compiler checkpoint: ledger-response comparison, complete
+campaign reruns and normal fusion comparison/skip admission remain outstanding.
+Python retains production authority and post-ledger joins remain R4.

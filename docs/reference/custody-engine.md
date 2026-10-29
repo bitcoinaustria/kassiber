@@ -3043,11 +3043,12 @@ This establishes the whole-stage gate before enabling normal comparison
 admission. Neither the binding nor census/shadow admission changes at this
 boundary. The complete inherited mutation campaign remains outstanding.
 
-## Journal fusion design (R2g; implementation pending)
+## Journal fusion design (R2g; request-builder checkpoint)
 
 This design-only checkpoint starts at `1b62f405`. It does not add a compared
 stage or complete R2. The existing six-stage inventory remains unchanged;
-fusion is unimplemented, and none of the R2f counts below proves fusion parity.
+the compared fusion stage is unimplemented, and none of the R2f counts below proves fusion parity.
+The request-builder checkpoint below implements the first local boundary.
 
 ### Inputs, outputs and authority
 
@@ -3153,6 +3154,57 @@ The first workspace run hit four sandbox-denied loopback binds; the complete
 permitted rerun passed with disposable local test servers. Fresh verification
 artifacts are under `target/r2g-fusion-verify/`. No retained corpus was changed,
 and no push, PR or full quality-gate result is claimed.
+
+## Rust journal request builder checkpoint (R2g step 1)
+
+Branch `t3code/r2g-fusion-4`, based on `76375c27`, adds the comparison-only
+`ledger_request::build_request` compiler. Its operands are a finalized Rust
+projection, ordered wallet-reference key/value pairs and raw profile facts.
+It preserves configuration, crossed-asset assertion, pool scope, invariants,
+asset holds and construction admission order. Integer msat remain arbitrary
+precision; exact decimal coefficient/exponent and signed zero are retained.
+Empty projections produce an explicit no-engine outcome. As with Python's
+request builder, the constructor tax-support gate belongs to the caller.
+The compiler never invokes an engine or supplies persisted journal state.
+
+The unpackaged `ledger-request` probe accepts either explicit compiler
+operands or a raw snapshot plus ordered wallet references. In raw mode it
+runs Rust custody to obtain its own finalized projection. The independent
+Python oracle runs Python custody and the original Python request builder;
+it does not supply its projection or request to Rust in that mode. This
+probe does not extend snapshot v1 or normal comparison admission.
+
+| Local builder verification | Result |
+| --- | --- |
+| New independent Python vectors | 145: 98 requests, 46 structured refusals, 1 empty control; zero differences |
+| Existing ledger golden operands | 166; independently rebuild requests, including refusals; zero differences |
+| Raw books, one seed for each inherited scenario | 515: 265 active requests, 243 empty controls, 3 builder refusals, 4 upstream refusals; zero differences |
+| Named new mutation witnesses | Ordering, exact-rate field choice, omitted chain order, fee comparison, closed confirmation and cutoff diagnostics: all 6 building kills |
+| Inherited mutation catalog | All 2,236 recipes still apply; not rerun at this checkpoint |
+| Workspace Rust tests | 832 passed |
+| Workspace fmt and all-target Clippy `-D warnings` | Passed |
+| Python builder/reference tests | 5 passed, including the vacuous-probe rejection |
+| Test inventory and preflight | Updated and reviewed; required preflight passed |
+
+The raw probe counts activity only for distinct inputs owned by the current
+seed. A deliberately vacuous probe fails even when an unrelated companion
+produces active output; repeated copies of an input count once. Empty controls
+and upstream refusals do not contribute activity. These are bounded builder
+checks, not the full 24,000-book/1,030-permutation acceptance rerun.
+
+Manual review corrected prototype cutoff error-object differences and
+preserved captured confirmation provenance: a captured observation for another
+physical scope must not cause recapture from enriched rows. No new Python
+reference bug was found; Python production source is unchanged.
+
+This checkpoint stops at step 1. Ledger responses are not compared. PyO3,
+census, custody-shadow and recorded replay retain their previous six-stage
+inventory and do not yet compare fusion. Steps 2 and 3 still require complete
+competing-invalid-input/refusal parity, independent ledger-response parity,
+the full inherited mutation rerun, the 24,000-book/1,030-permutation rerun,
+read-only retained replay, and explicit fusion comparison/skip accounting in
+every harness path. Python's post-ledger joins remain R4. Fresh logs are under
+`target/r2g-fusion-verify/`; no push, PR or full quality gate is claimed.
 
 ## Complete finalized projection runtime (R2f)
 

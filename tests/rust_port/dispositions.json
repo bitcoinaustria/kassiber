@@ -633,8 +633,14 @@
     "tests/test_custody_finalization_scalability.py": {
       "test_finalization_target_lookup_is_linear_and_preserves_native_moves": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_authored_migration directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_custody_fusion_builder.py": {
+      "test_fusion_builder_fixtures_match_python": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares the Rust request builder with the original Python builder over independent finalized projections, raw generated books, competing refusals and exact ledger operands; fusion remains outside normal comparison admission", "reviewed": true, "tests": 1},
+      "test_fusion_builder_probe": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares the Rust request builder with the original Python builder over independent finalized projections, raw generated books, competing refusals and exact ledger operands; fusion remains outside normal comparison admission", "reviewed": true, "tests": 1},
+      "test_fusion_builder_from_rust_finalized_projection": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "custody", "reason": "compares the Rust request builder with the original Python builder over independent finalized projections, raw generated books, competing refusals and exact ledger operands; fusion remains outside normal comparison admission", "reviewed": true, "tests": 1},
+      "test_vacuous_fusion_probe_fails": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares the Rust request builder with the original Python builder over independent finalized projections, raw generated books, competing refusals and exact ledger operands; fusion remains outside normal comparison admission", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_fusion_reference.py": {
-      "test_fusion_reference_competing_asset_refusals": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "characterizes the unchanged Python request builder's hash-dependent first refusal over identical finalized inputs; retains the R2g admission blocker repro", "reviewed": true, "tests": 1}
+      "test_competing_asset_refusals_do_not_depend_on_the_hash_seed": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "pins sorted competing-asset first refusal across eight hash seeds after the R2g Python reference fix", "reviewed": true, "tests": 1}
     },
     "tests/test_custody_gap_acceptance.py": {
       "CustodyGapCliAcceptanceTests": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 2},

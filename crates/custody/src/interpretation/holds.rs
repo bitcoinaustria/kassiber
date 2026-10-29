@@ -177,6 +177,7 @@ pub(super) fn facts(rows: &[Value]) -> Vec<Facts> {
 fn confirmation_states(
     rows: &[Value],
     facts: &[Facts],
+    closed: bool,
 ) -> Result<BTreeMap<Physical, bool>, String> {
     let mut legacy = BTreeMap::new();
     let mut observed: BTreeMap<Physical, Vec<(i64, bool)>> = BTreeMap::new();
@@ -187,6 +188,24 @@ fn confirmation_states(
         };
         let confirmed = fact.explicit.unwrap_or_else(|| truth(&row["confirmed_at"]));
         *legacy.entry(scope.clone()).or_insert(false) |= confirmed;
+        if closed
+            && row["_closed_confirmation_observation"]["$type"] == "ChainConfirmationObservation"
+        {
+            let captured = &row["_closed_confirmation_observation"];
+            if captured["physical_scope"] == json!([scope.0, scope.1, scope.2]) {
+                if let Some(timestamp) = time::instant(&captured["observed_at"]["$datetime"])
+                    .map_err(|e| e.code.to_owned())?
+                {
+                    observed
+                        .entry(scope)
+                        .or_default()
+                        .push((timestamp, truth(&captured["confirmed"])));
+                }
+            }
+            // A captured dataclass is authoritative as captured; a different
+            // physical scope does not authorize recapturing enriched rows.
+            continue;
+        }
         // Raw snapshot v1 never contains Python's captured dataclass. Recompute
         // its closed provenance from the raw hashes and chronology instead.
         if !evidence::current_observation(row).map_err(|e| e.code.to_owned())? {
@@ -234,7 +253,13 @@ fn canonical_outpoint(value: &Py) -> Option<String> {
 }
 
 pub(super) fn conflicts(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> {
-    let states = confirmation_states(rows, facts)?;
+    conflicts_impl(rows, facts, false)
+}
+pub(crate) fn ledger_conflicts(rows: &[Value]) -> Result<Ids, String> {
+    conflicts_impl(rows, &facts(rows), true)
+}
+fn conflicts_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, String> {
+    let states = confirmation_states(rows, facts, closed)?;
     let mut row_txid = BTreeMap::new();
     let mut outpoints: BTreeMap<Physical, BTreeSet<Physical>> = BTreeMap::new();
     for (row, fact) in rows.iter().zip(facts) {
@@ -276,7 +301,13 @@ pub(super) fn conflicts(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> 
 }
 
 pub(super) fn pending(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> {
-    let states = confirmation_states(rows, facts)?;
+    pending_impl(rows, facts, false)
+}
+pub(crate) fn ledger_pending(rows: &[Value]) -> Result<Ids, String> {
+    pending_impl(rows, &facts(rows), true)
+}
+fn pending_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, String> {
+    let states = confirmation_states(rows, facts, closed)?;
     let mut row_txid = BTreeMap::new();
     let mut explicit_txids = BTreeSet::new();
     for (row, fact) in rows.iter().zip(facts) {

@@ -22742,5 +22742,63 @@
       "tests/test_custody_shadow_harness.py::test_earlier_stages_account_matching_finalized_refusal"
     ],
     "rule": "Earlier-stage comparisons can only bypass a finalized refusal after matching both Python code and stage."
+    "id": "FUSION-ORDER-assets",
+    "file": "crates/custody/src/ledger_request/config.rs",
+    "find": "let mut assets = assets\n        .iter()",
+    "replace": "let mut assets = assets\n        .iter().rev()",
+    "expect_failing": [
+      "fusion_builder_admission_order"
+    ],
+    "rule": "Asset token refusals follow lexical asset order before the profile token."
+  },
+  {
+    "id": "FUSION-FIELD-rate",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "decimal(&[&row[\"fiat_rate_exact\"], &row[\"fiat_rate\"]])",
+    "replace": "decimal(&[&row[\"fiat_rate\"], &row[\"fiat_rate_exact\"]])",
+    "expect_failing": [
+      "fusion_builder_field_choice"
+    ],
+    "rule": "Stored exact pricing wins over the legacy rate."
+  },
+  {
+    "id": "FUSION-OMISSION-chain",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": ",\"chain_order\":order",
+    "replace": ",\"omitted_chain_order\":order",
+    "expect_failing": [
+      "fusion_builder_field_choice"
+    ],
+    "rule": "Every request row includes chain order, including an explicit null."
+  },
+  {
+    "id": "FUSION-COMPARISON-fee",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "if fee < zero {",
+    "replace": "if fee <= zero {",
+    "expect_failing": [
+      "fusion_builder_field_choice"
+    ],
+    "rule": "A zero fee is valid, while a negative fee refuses before the amount check."
+  },
+  {
+    "id": "FUSION-FIELD-closed-confirmation",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if closed\n            && row[\"_closed_confirmation_observation\"][\"$type\"] == \"ChainConfirmationObservation\"",
+    "replace": "if false && closed\n            && row[\"_closed_confirmation_observation\"][\"$type\"] == \"ChainConfirmationObservation\"",
+    "expect_failing": [
+      "fusion_builder_field_choice"
+    ],
+    "rule": "Ledger holds consume closed confirmation provenance captured before finalized rows change amounts."
+  },
+  {
+    "id": "FUSION-FIELD-cutoff-spelling",
+    "file": "crates/custody/src/ledger_request/time.rs",
+    "find": "diagnostic_spelling(&rewritten)",
+    "replace": "Some(rewritten.clone())",
+    "expect_failing": [
+      "fusion_builder_field_choice"
+    ],
+    "rule": "A basic date or shortened ISO clock retains CPython constructor diagnostics at the cutoff boundary."
   }
 ]

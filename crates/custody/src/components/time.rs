@@ -133,11 +133,19 @@ fn clock(s: &[u8], offset: bool) -> Option<i64> {
 // Custody follows time_utils.py's trailing-Z rewrite and CPython offset parsing.
 // Keep this vector-pinned path separate from setup's iso_datetime helper.
 fn parsed(v: &Value) -> Option<i64> {
+    parsed_impl(v, true)
+}
+// The ledger cutoff calls fromisoformat directly, without str.strip or a
+// bounded astimezone conversion. Datetime subtraction may cross year bounds.
+pub(crate) fn strict_parsed(v: &Value) -> Option<i64> {
+    parsed_impl(v, false)
+}
+fn parsed_impl(v: &Value, strip: bool) -> Option<i64> {
     if v.is_null() || v == "" {
         return None;
     }
     let raw = pystr(v);
-    let raw = raw.py_strip();
+    let raw = if strip { raw.py_strip() } else { &raw };
     let rewritten;
     let s = if let Some(prefix) = raw.strip_suffix('Z') {
         rewritten = format!("{prefix}+00:00");

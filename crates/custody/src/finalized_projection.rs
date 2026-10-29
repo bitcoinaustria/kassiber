@@ -272,3 +272,11 @@ pub fn primitive(value: &Value) -> Value {
         Err(error) => json!({"error":error}),
     }
 }
+
+// Exact request decimals reuse the existing CPython parser, without rounding.
+pub(crate) fn request_decimal(value: &Value) -> Result<String, String> {
+    match money::Money::parse(value)? {
+        money::Money::Finite(value) => Ok(value.to_canonical()),
+        money::Money::Special(value) => Ok(value),
+    }
+}
