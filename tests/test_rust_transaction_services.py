@@ -109,7 +109,16 @@ class RustTransactionServicesTest(unittest.TestCase):
         self.assertEqual(rust.stdout.splitlines()[1:],python.stdout.splitlines()[1:])
 
     def test_unported_families_fail_before_bootstrap(self):
-        for command in (("transactions","export","--file",str(self.base / "unwritten.csv")),("reports","summary")):
+        from kassiber.cli.command_registry import describe_command_catalog
+        from kassiber.cli.main import build_parser
+        from tests.test_rust_hybrid_candidate import IMPLEMENTED
+
+        witnesses = [entry["path"] for entry in describe_command_catalog(build_parser())["commands"]
+                     if entry["kind"] not in IMPLEMENTED
+                     and entry["effect"] == "read_only" and entry["needs_database"]
+                     and not any(arg["required"] for arg in entry["arguments"])][:1]
+        self.assertTrue(witnesses)
+        for command in witnesses:
             absent = self.base / "uncreated-book"
             result = subprocess.run([RUST_BIN,"--machine","--data-root",str(absent),*command], env=self.env, capture_output=True, timeout=120)
             self.assertEqual(json.loads(result.stdout)["error"]["code"],"not_implemented")
