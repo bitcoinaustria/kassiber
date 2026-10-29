@@ -646,6 +646,14 @@
       "CustodyGapLifecycleTests::test_cli_correction_previews_and_history_are_redacted": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "drives the cli entry in process", "reviewed": false, "tests": 1},
       "CustodyGapLifecycleTests::test_daemon_preview_and_create_accept_only_gap_identity_and_return_no_raw_txids": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1}
     },
+    "tests/test_custody_gap_port.py": {
+      "test_every_gap_generator_matches_and_counts_both_engines": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_frozen_gap_vectors_are_python_outputs": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gaps, kassiber.core.chain_observer directly", "reviewed": false, "tests": 1},
+      "test_gap_stage_errors_follow_interpretation_and_admit_all_rows_before_ignoring": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_gaps_difference_is_recorded_even_when_caught": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_journal, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_adversarial_gap_search_is_bounded_in_both_engines": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_gaps directly", "reviewed": false, "tests": 1},
+      "test_gap_stage_uses_the_sql_selected_worklist": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_custody_gap_surfaces.py": {
       "CustodyGapSurfaceTest": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql"], "group": "custody", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 7},
       "CustodyGapSurfaceTest::test_read_kinds_are_supported_and_ai_read_only": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.ai.prompt, kassiber.ai.tools directly", "reviewed": false, "tests": 1},

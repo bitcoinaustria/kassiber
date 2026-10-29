@@ -36,6 +36,72 @@ pub fn admit_channels(snapshot: &Snapshot) -> Result<(), String> {
     channels::compute(snapshot).map(|_| ())
 }
 
+/// Gap discovery ignores authoritative target-bearing edges, component anchors,
+/// loans and channel lifecycle rows. Suspense claims remain advisory sources;
+/// blocked rows are excluded only from the separate accounting population.
+pub(crate) fn gap_ignored_ids(
+    snapshot: &Snapshot,
+    components: &Value,
+    evidence: &Value,
+    interpretation: &kassiber_pyjson::Value,
+) -> Result<(BTreeSet<String>, BTreeSet<String>), String> {
+    use crate::graph::stored;
+    use kassiber_pyjson::Value as Py;
+    let mut ignored = BTreeSet::new();
+    for leg in &snapshot.loan_legs {
+        let value = leg.get("transaction_id").unwrap_or(&Value::Null);
+        if !value.is_null() && value != "" {
+            ignored.insert(crate::gaps::raw_string(value));
+        }
+    }
+    let channels = channels::compute(snapshot)?;
+    if let Some(roles) = channels["roles"].as_object() {
+        ignored.extend(roles.keys().cloned());
+    }
+    for pair in array(&channels["pairs"]) {
+        for side in ["out", "in"] {
+            let row = &pair[side];
+            let id = row
+                .get("journal_transaction_id")
+                .filter(|id| truth(id))
+                .unwrap_or(&row["id"]);
+            if !id.is_null() && id != "" {
+                ignored.insert(crate::gaps::raw_string(id));
+            }
+        }
+    }
+    ignored.extend(Context::from_stages(components, evidence).excluded);
+    let observations: BTreeMap<_, _> = array(&evidence["canonical_input"]["events"])
+        .iter()
+        .flat_map(|event| array(&event["legs"]))
+        .map(|leg| (text(&leg["quantity_hash"]), text(&leg["transaction_id"])))
+        .collect();
+    for claim in stored::list(stored::get(interpretation, "claims")) {
+        if matches!(stored::get(claim, "target"), Py::Null) {
+            continue;
+        }
+        for side in ["source", "target"] {
+            let hash =
+                python_value_string(stored::get(stored::get(claim, side), "observation_hash"));
+            if let Some(id) = observations.get(&hash) {
+                ignored.insert(id.clone());
+            }
+        }
+    }
+    let mut accounting = ignored.clone();
+    accounting.extend(
+        stored::list(stored::get(interpretation, "blocked_transaction_ids"))
+            .iter()
+            // A migration can name an unpaired surrogate. Keep it in the
+            // interpreter output; no UTF-8 raw transaction id can match it.
+            .filter_map(|value| match value {
+                Py::Str(id) => id.as_str().map(str::to_owned),
+                _ => unreachable!("compiled blocked identity"),
+            }),
+    );
+    Ok((ignored, accounting))
+}
+
 pub(crate) fn python_value_string(value: &kassiber_pyjson::Value) -> String {
     text::string(value)
 }
@@ -292,8 +358,7 @@ mod stage_tests {
                 );
                 assert_eq!(
                     stored::get(&response, "skipped_stages"),
-                    &codec::from_json(&json!(["gaps", "quantity", "finalized_projection"]))
-                        .unwrap()
+                    &codec::from_json(&json!(["quantity", "finalized_projection"])).unwrap()
                 );
             }
         }

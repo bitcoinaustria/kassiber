@@ -2,6 +2,7 @@
 pub mod codec;
 pub mod components;
 pub mod evidence;
+pub mod gaps;
 mod gates;
 mod graph;
 pub mod interpretation;
@@ -51,11 +52,15 @@ pub fn custody(request: &str) -> String {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
             };
+            let gaps = match gaps::stage(&snapshot, &components, &evidence, &interpretation) {
+                Ok(value) => value,
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+            };
             let response = serde_json::json!({
                 "schema_version":1,
                 "engine_version":ENGINE_VERSION,
-                "stages":{"components":components,"evidence":evidence},
-                "skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence"|"interpretation")).collect::<Vec<_>>()
+                "stages":{"components":components,"evidence":evidence,"gaps":gaps},
+                "skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence"|"interpretation"|"gaps")).collect::<Vec<_>>()
             });
             let mut response = codec::from_json(&response).expect("computed custody response");
             let mut stages = graph::stored::get(&response, "stages").clone();

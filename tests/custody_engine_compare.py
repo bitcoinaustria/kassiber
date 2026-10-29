@@ -105,10 +105,8 @@ def rust_results(snapshot, *, python_error=None):
 def compare_rust(snapshot, evidence, *, python_stages=None):
     results, skipped = rust_results(snapshot)
     if python_stages is None:
-        from kassiber.core.custody_compute import compute_components_stage
-        from tests.custody_interpretation_stage import python_stage
-        components, blockers = compute_components_stage(snapshot)
-        stages = {"components": {"components": components, "blockers": blockers}, "evidence": evidence, "interpretation": python_stage(snapshot)}
+        from tests.custody_gap_stage import python_stages as gap_stages
+        stages = {**gap_stages(snapshot), "evidence": evidence}
     else:
         stages = python_stages
     compared = []
@@ -154,7 +152,7 @@ def _build(self, *, finalized):
         python_stages[name] = value
         comparing = name
         try:
-            if name == "interpretation":
+            if name == "gaps":
                 rust_stages, skipped = rust_results(snapshot)
             if rust_stages is not None:
                 for stage in STAGES:

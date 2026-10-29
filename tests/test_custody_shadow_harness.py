@@ -34,7 +34,7 @@ def cli_book():
 
 
 @pytest.mark.parametrize("mode", ["shadow", "census"])
-@pytest.mark.parametrize("inject", [False, "evidence", "interpretation"])
+@pytest.mark.parametrize("inject", [False, "evidence", "interpretation", "gaps"])
 def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode, inject):
     records = tmp_path / "records.jsonl"
     env = child_env(mode, inject=inject)
@@ -48,6 +48,8 @@ def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode
     assert routes[0]["compared"][:2] == ["components", "evidence"]
     if inject != "evidence":
         assert "interpretation" in routes[0]["compared"]
+    if inject not in {"evidence", "interpretation"}:
+        assert "gaps" in routes[0]["compared"]
     assert bool(compare.session_report(routes)[1]) == bool(inject)
 
 

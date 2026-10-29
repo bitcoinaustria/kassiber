@@ -35,7 +35,7 @@ the feasibility spikes are in place; these remain:
 
 ## Rust backend R2
 
-The [raw custody v1 snapshot, pure Python stages and Rust components/evidence/interpretation stages](docs/reference/custody-engine.md)
+The [raw custody v1 snapshot, pure Python stages and Rust components/evidence/interpretation/gaps stages](docs/reference/custody-engine.md)
 are in place with required shadow/census comparison, CPython parser vectors,
 raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
@@ -43,8 +43,10 @@ mutation entries.
 
 - [x] Finish native component reconciliation and complete interpreter composition;
   [interpretation now participates in full-stage comparison](docs/reference/custody-engine.md#complete-interpretation-checkpoint-r2c).
-- [ ] Port gap search over the captured SQL worklist, then quantity arbitration
-  and finalized tax projection, comparing each stage before fusing it.
+- [x] Port bounded gap search over the captured SQL worklist, including matcher
+  capacity and source blockers; [gaps now participates in full-stage comparison](docs/reference/custody-engine.md#gap-search-checkpoint-r2d).
+- [ ] Port quantity arbitration and finalized tax projection, comparing each
+  stage before fusing it.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 

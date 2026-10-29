@@ -73,16 +73,18 @@ A refusal has `error` with a stable code and message and cannot be interpreted a
 a partial successful stage. Persisted hashes always use CPython-compatible JSON
 from `kassiber-pyjson`; decimal arithmetic uses `kassiber-pydecimal`.
 
-Rust currently implements `components`, `evidence` and the complete
-`interpretation` stage. The component
+Rust currently implements `components`, `evidence`, the complete
+`interpretation` stage and `gaps`. The component
 result is `{"components": [...], "blockers": [...]}` with the exact Python
 materialization and integrity blockers. Its invalid authored-active rows stay
 visible with `effective_state="draft"`; their anchor quarantine and readiness
-barriers remain intact. Gaps, quantity and finalized projection are explicitly
+barriers remain intact. Quantity and finalized projection are explicitly
 skipped. Interpretation includes native component reconciliation and the final
 Python compilation/precedence; the [completion checkpoint](#complete-interpretation-checkpoint-r2c)
-records its proof. The partial checkpoints below describe historical states. Schema 1's existing raw component/anchor/wallet/revision
-and transaction facts suffice; R2b adds no input field or Python verdict.
+records its proof. The [gap checkpoint](#gap-search-checkpoint-r2d) records the
+bounded search and separate advisory/accounting populations. The checkpoints
+below describe historical states. Schema 1's existing raw facts suffice; neither
+stage adds a Python verdict to the input.
 
 ## Test-only recording and comparison
 
@@ -1427,3 +1429,211 @@ The next stages are **gaps → quantity arbitration → finalized projection →
 journal fusion with ledger**. In particular, the quantity stage still owns full
 reviewed component/tax claim arbitration; this reconciliation compiler does not
 replace it.
+
+
+## Gap search checkpoint (R2d)
+
+Branch `t3code/r2d-gaps` starts at `16234030`. The pure Rust `gaps` module
+recomputes bounded missing-wallet discovery, scoring, conflicts, promotion
+margins, matcher capacity and structured-source blockers. The PyO3 response lists
+`gaps` as implemented; only `quantity` and `finalized_projection` remain skipped.
+Census and custody-shadow compare the complete gap stage, including failures in
+Python admission order. Python remains authoritative; Rust results never reach
+stored state.
+
+The snapshot's existing `gap_worklist.rows` and `large_book` flag are the exact
+SQL-selected raw worklist. Rust consumes these rather than deriving a second
+worklist from `transactions`. A SQL-backed test captures 67 selected rows from
+304 raw observations, disables SQL, and proves exact stage parity. Snapshot v1
+needs no new facts, version change or derived input. Loan/channel roles,
+authored reservations and target-bearing interpreter claims are reconstructed
+from the preceding Rust stages; accounting additionally excludes blocked ids.
+Advisory candidates remain separate from authored components. Search can hold a
+likely missing-wallet source in suspense, but only explicit review carries basis.
+
+Pure helpers also port both fingerprint schemas, latest-review sibling conflict
+and reopened-dismissal behavior, privacy-safe candidate display/downstream
+impact, and seeded version-bound keyset pagination. Python retains SQL selection,
+schema fallbacks, readiness, historical review lookups, review writes and bridge
+activation. No dependencies, storage, product I/O or consent boundaries change.
+
+### Bounds and branch dispositions
+
+The production limits remain Python's: 50,000 normalized rows before bounded
+worklist mode (threshold 1 for a SQL-selected large book), 256 source groups,
+3 adjacent source legs, a 512-leg return pool, beam width 48, 16 beam return legs,
+256 aggregate return legs, 24 ranked return groups per source, and 250 displayed
+candidates. Indexed nearest-amount inspection stops at eight times the return
+pool limit; indexed era inspection stops at 512 independently of that limit.
+Candidate discovery/conflict stamping precedes display truncation. Capacity
+remains ordinary result metadata with separate source blockers, never guessed
+ownership or accounting evidence.
+
+Every ported Python decision has a named mutation witness or this disposition:
+
+- Production v1 supplies fixed typed matcher limits and a typed pagination
+  adapter. Python kwargs type/negative-value validation and profile/argument
+  type messages are unreachable at this raw snapshot seam. Reachable limit,
+  cursor shape, version/ordinal/id expiry and paging decisions have witnesses.
+- SQL querying, missing-table/schema fallbacks, readiness/status composition,
+  historical review state and writes remain Python-owned adapters. They are not
+  replaced by a Rust storage path. Raw latest review siblings, not a Python
+  dismissal verdict, feed the pure dismissal helper.
+- Nonempty sources and a positive source budget cannot produce an empty selected
+  source worklist. The Python `_source_groups` helper's `max_groups` argument is
+  unused; the caller enforces capacity before grouping. Defensive unsorted-pool
+  handling is unreachable after explicit chronology sorting.
+- Ordered-map intermediate traversal is equivalent only where subsequent
+  explicit Python sort keys or minimum-id conflict roots settle output order.
+  Chronology, same-time astral ids, amount-distance ties, score ties, group ids
+  and source/return inspection ceilings retain independent witnesses.
+- Trial GAP-012 (allowing zero at the initial positive-amount filter) is
+  equivalent because the later nonpositive-principal guard rejects it. It is
+  removed and never counted as a kill.
+- Raw quantities use BigInt and Python's integer families; no raw fact passes
+  through `codec::wide()`. CPython Unicode case/digit helpers and the corrected
+  timestamp parser are reused. Century-scale elapsed times compare the exact
+  rational half-ULP before integer truncation, avoiding an intermediate float's
+  double rounding. Four independent Python counterexamples pin this behavior.
+- Migration ids with lone surrogates remain in the complete interpreter output
+  but cannot match UTF-8 raw worklist ids. The ignored-id projection omits only
+  that impossible membership. Cursor JSON bytes separately retain Python's
+  surrogatepass behavior for UTF-8/16/32, including raw pairs distinct from
+  JSON-escaped pairs; invalid byte encodings still refuse.
+- Display helpers consume generated normalized candidates. Invalid candidate
+  end timestamps and non-string generated wallet labels are unreachable there;
+  malformed raw rows are still admitted/rejected in Python order before ignore
+  filters. Storage-generated review revisions are already selected raw facts.
+
+### Mutation accounting
+
+The catalog contains **1,315 entries: 1,178 retained and 137 new**. The table
+names selectable Rust witnesses; each new entry builds successfully, passes its
+unmutated baseline and fails its named test under mutation.
+
+| Area | New entries | Named witnesses |
+| --- | ---: | --- |
+| Normalization, signals and calendar formatting | 28 | `gaps_search_vectors` |
+| Bounded source/pool/era/beam search | 40 | `gaps_search_vectors` |
+| Scoring, conflicts, fingerprints and safe display | 33 | `gaps_search_vectors`, `gaps_fingerprint_vectors`, `gaps_snapshot_vectors` |
+| Stage composition, revisions and exact duration | 9 | `gaps_compute_vectors`, `gaps_review_revision_vectors`, `gaps_operation_vectors`, `gaps_search_vectors` |
+| Ignored advisory/accounting populations | 7 | `gaps_ignored_ids_vectors` |
+| Cursor codecs and seeded pagination | 20 | `gaps_cursor_vectors`, `gaps_seeded_pagination_vectors` |
+| **New total** | **137** | **All killed** |
+
+All 137 new ids and the 16 retained ids in edited boundary/helper files were
+killed in this run. The other 1,162 retained kills are inherited from R2c and
+were not rerun here. The checked final kill-id union covers every new id; no
+survivor, nonbuilding trial or equivalent trial counts as a kill. Catalog
+applicability checks all 1,315 entries.
+
+### Generated, frozen and recorded evidence
+
+All twelve suites compare exact gaps for **2,000 books per engine per suite**,
+with independent Python and Rust scenario/signature counts, plus unordered-input
+permutations. There are **515 scenarios, 24,000 books and 1,030 permutations**.
+The checked-in [count matrix](../../tests/fixtures/custody_gap_counts.json)
+contains every per-scenario output signature for both engines' assertions.
+Signature fields are displayed candidates, accounting candidates, eligible count,
+source blockers, completeness, limit kind and discovered candidates.
+
+| Generator | Scenarios | Books per scenario per engine | Permutations |
+| --- | ---: | --- | ---: |
+| channels | 32 | 62–63 | 64 |
+| components | 156 | 12–13 | 312 |
+| evidence | 29 | 68–69 | 58 |
+| fanout | 47 | 42–43 | 94 |
+| gaps | 32 | 62–63 | 64 |
+| graph | 8 | 250 | 16 |
+| native | 55 | 36–37 | 110 |
+| pipeline | 12 | 166–167 | 24 |
+| reconciliation | 25 | 80 | 50 |
+| recorded | 46 | 43–44 | 92 |
+| safety | 39 | 51–52 | 78 |
+| samourai | 34 | 58–59 | 68 |
+
+The dedicated gap scenarios have these independent counts per engine. The
+signature column uses the field order above; equality compares every field.
+
+| Scenario | Books per engine | Gap signature |
+| --- | ---: | --- |
+| `blocked_competitor` | 62 | `2,1,1,0,1,None,2` |
+| `clear_margin` | 62 | `2,1,1,0,1,None,2` |
+| `cross_chain` | 62 | `0,0,0,0,1,None,0` |
+| `cross_network` | 62 | `0,0,0,0,1,None,0` |
+| `equal_competitors` | 63 | `2,0,0,0,1,None,2` |
+| `era_capacity` | 62 | `0,0,0,1,0,boundary_worklist,0` |
+| `excess` | 63 | `1,0,0,0,1,None,1` |
+| `excluded` | 62 | `0,0,0,0,1,None,0` |
+| `external_return` | 63 | `1,0,0,0,1,None,1` |
+| `external_source` | 63 | `1,0,0,0,1,None,1` |
+| `fee` | 63 | `1,0,0,0,1,None,1` |
+| `inclusive_fee` | 63 | `1,0,0,0,1,None,1` |
+| `large_empty` | 62 | `0,0,0,0,0,boundary_worklist,0` |
+| `large_no_returns` | 62 | `0,0,0,0,0,boundary_worklist,0` |
+| `large_structured` | 62 | `1,0,0,1,0,boundary_worklist,1` |
+| `large_untyped` | 62 | `1,0,0,0,0,boundary_worklist,1` |
+| `loan_ignored` | 62 | `0,0,0,0,1,None,0` |
+| `long_horizon` | 63 | `1,0,0,0,1,None,1` |
+| `missing_wallet` | 63 | `1,0,0,0,1,None,1` |
+| `missing_wallet_and_disposal` | 62 | `1,0,0,0,1,None,1` |
+| `multiple_wallets` | 63 | `1,0,0,0,1,None,1` |
+| `postmix_fan_in` | 63 | `1,0,0,0,1,None,1` |
+| `return_capacity` | 62 | `0,0,0,1,0,boundary_worklist,0` |
+| `same_time` | 62 | `0,0,0,0,1,None,0` |
+| `separate_eras` | 63 | `1,0,0,0,1,None,1` |
+| `source_capacity` | 62 | `1,0,0,1,0,boundary_worklist,1` |
+| `split_returns` | 63 | `1,0,0,0,1,None,1` |
+| `split_sources` | 63 | `1,0,0,0,1,None,1` |
+| `unicode_labels` | 62 | `1,0,0,0,1,None,1` |
+| `untyped` | 63 | `1,0,0,0,1,None,1` |
+| `whirlpool_policy` | 63 | `1,1,1,0,1,None,1` |
+| `whirlpool_tx0` | 63 | `1,1,1,0,1,None,1` |
+
+Whirlpool policy/tx0 cases each produce one accounting candidate per book;
+blocked competitors and clear score margins preserve the separate accounting
+search. Coinjoin-only quarantines remain advisory. Source, return and era
+capacity cases independently assert source-only holds. Realistic books cover
+split sources/returns, postmix fan-in, missing wallets followed by disposals,
+external-origin disqualification and long horizons.
+
+Frozen Python fixtures pin **173 searches, 30 compute controls, 396 fingerprint
+pairs, 7 review revisions, 31 display rows, 98 cursors and 13 seeded pages**.
+Another **96 operation snapshots** pin ignored populations, full responses and
+admission error families. The adversarial search has **60,301 rows and 300
+structured sources**; both engines finish under the 20-second smoke ceiling.
+Rust additionally pins 300 blockers, 251 discovered and 250 displayed candidates.
+
+### Verification and remaining work
+
+Checks use Rust 1.99.1, locked Python 3.11 (`uv sync --locked --python 3.11`),
+`MATURIN_NO_INSTALL_RUST=1`, offline Cargo including mutation children, and
+disposable books/target roots. No push or PR is created.
+
+- Workspace formatting, workspace/all-target Clippy with warnings denied and
+  locked offline workspace tests excluding `kassiber-net` pass **750 tests**.
+- The complete generated/permutation gap suite passes **17 tests**. The final
+  rebuilt-binding run passes **36 tests**, including all twelve generators,
+  frozen regeneration, interpreter wrapper/refusal controls and child/session
+  discrepancy injection. Inventory/contracts and mutation-runner contracts pass
+  **13 tests and 14 subtests**. CPython text regeneration, source contracts,
+  shard inventory and mutation applicability checks pass.
+- Recorded integrity and Rust replay pass **73 census snapshots and 6 shadow
+  snapshots: 79 requests and 79 permutations**, with zero differences and zero
+  pre-request refusals.
+- Focused census and shadow each pass **54 tests and 2 subtests** (two structural
+  read-budget cases deselected), comparing gaps for **6 requests each**. The
+  broader census passes **180 tests and 52 subtests**, comparing **67 requests**.
+- Focused Python custody modules pass **160 tests and 4 subtests**. Two daemon
+  tests initially fail because their stable account-home owner-lock namespace
+  lies outside the sandbox's writable roots; both pass on the authorized rerun
+  with that access. The product owner-lock boundary is unchanged.
+- Failure injection proves gaps discrepancies are recorded in both child modes
+  and remain session failures when caught. Manual second review covers Python
+  branch correspondence, bounded scans, exact integers/timestamps, raw snapshot
+  worklists, response inventory and the absence of production Rust writes.
+
+Full census/custody-shadow shards remain assigned to the orchestrator; they were
+not run here. The next stage is **quantity arbitration**, followed by finalized
+projection and journal fusion with `ledger`. Quantity still owns the complete
+reviewed-component/tax-claim arbitration and downstream report blockers.

@@ -11792,5 +11792,1375 @@
     "expect_failing": [
       "reconciliation_reviewed_vectors"
     ]
+  },
+  {
+    "id": "GAP-001",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "!v.to_string().contains(['.', 'e', 'E'])",
+    "replace": "true",
+    "rule": "Reject floating point amounts rather than coercing them.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-002",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "n >= zero()",
+    "replace": "n > zero()",
+    "rule": "Accept an exact zero fee.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-003",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "s.chars().all(python_text::isdigit)",
+    "replace": "s.chars().all(|c| c.is_ascii_digit())",
+    "rule": "Use CPython Unicode digit admission before int conversion.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-004",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "v.as_f64() == Some(1.0)",
+    "replace": "v.as_f64() == Some(2.0)",
+    "rule": "Match Python truthy numeric one.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-005",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "[\"true\", \"yes\", \"on\"]",
+    "replace": "[\"false\", \"no\", \"off\"]",
+    "rule": "Respect explicit truthy string flags.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-006",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "contains(&text(v).py_strip().py_lower().as_str())",
+    "replace": "contains(&text(v).py_strip())",
+    "rule": "Use CPython lowercase rules for flags and typed codes.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-007",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "id.is_empty() || ignored.contains(&id) || truthy(&row[\"excluded\"])",
+    "replace": "id.is_empty() || ignored.contains(&id)",
+    "rule": "Exclude authored excluded rows from advisory matching.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-008",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "id.is_empty() || ignored.contains(&id)",
+    "replace": "id.is_empty() || !ignored.contains(&id)",
+    "rule": "Ignore only the specified transaction identities.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-009",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "![\"outbound\", \"inbound\"].contains(&direction.as_str())",
+    "replace": "![\"inbound\"].contains(&direction.as_str())",
+    "rule": "Admit outbound boundaries as sources.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-010",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "text(&row[\"asset\"]).py_strip().py_upper()",
+    "replace": "text(&row[\"asset\"]).py_strip().to_owned()",
+    "rule": "Canonicalize assets with CPython uppercase mappings.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-011",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "row.get(\"amount_msat\").unwrap_or(&row[\"amount\"])",
+    "replace": "&row[\"amount\"]",
+    "rule": "An explicitly present null amount_msat must not fall back to amount.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-013",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "let fee = if outbound { fee } else { zero() };",
+    "replace": "let fee = zero();",
+    "rule": "Retain known outbound fees separately from principal.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-014",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "outbound && truthy(&row[\"amount_includes_fee\"])",
+    "replace": "outbound && !truthy(&row[\"amount_includes_fee\"])",
+    "rule": "Subtract included fees exactly once from the source principal.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-015",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "&principal + &fee",
+    "replace": "principal.clone()",
+    "rule": "Keep the wallet debit equal to principal plus its known fee.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-016",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "if principal <= zero()",
+    "replace": "if principal > zero()",
+    "rule": "Reject fee-inclusive nonpositive principal.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-017",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "[\"parent\", \"child\"].contains(&lower(role).as_str())",
+    "replace": "[\"parent\"].contains(&lower(role).as_str())",
+    "rule": "Samourai child policy is typed evidence.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-018",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "[\"coinjoin\", \"payjoin\", \"whirlpool\"].contains",
+    "replace": "[\"unrecognized\"].contains",
+    "rule": "Only recognized privacy boundaries create structured evidence.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-019",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "if SAMOURAI_KINDS.contains",
+    "replace": "if !SAMOURAI_KINDS.contains",
+    "rule": "Samourai wallet kinds supply structured evidence.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-020",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "if SAMOURAI_TRANSACTIONS.contains",
+    "replace": "if !SAMOURAI_TRANSACTIONS.contains",
+    "rule": "Samourai transaction kinds supply structured evidence.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-021",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "row[\"kind_override\"].is_null() || row[\"kind_override\"] == \"\"",
+    "replace": "true",
+    "rule": "An explicit economic override takes precedence over import classification.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-022",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "string(kind).py_strip().py_lower().replace(['-', ' '], \"_\")",
+    "replace": "string(kind).py_strip().py_lower()",
+    "rule": "Normalize hyphens and spaces in economic kinds.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-023",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "lower(&row[\"direction\"]) == \"inbound\"",
+    "replace": "lower(&row[\"direction\"]) == \"outbound\"",
+    "rule": "Inbound recognized acquisitions are external-origin disqualifiers.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-024",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "samourai.is_object() && policy(&samourai[\"role\"], &samourai[\"section\"])",
+    "replace": "false",
+    "rule": "Typed Samourai configuration supplies policy evidence.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-025",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "|| policy(&row[\"samourai_role\"], &row[\"samourai_section\"])",
+    "replace": "|| false",
+    "rule": "Normalized Samourai role and section facts supply policy evidence.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-026",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "let fraction = if micro == 0",
+    "replace": "let fraction = if micro != 0",
+    "rule": "Preserve datetime isoformat auto-microsecond output.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-027",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "min_coverage_ppm: 800_000",
+    "replace": "min_coverage_ppm: 950_000",
+    "rule": "The default coverage floor is eighty percent.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-028",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_excess_ppm: 250_000",
+    "replace": "max_excess_ppm: 0",
+    "rule": "Admit bounded excess without manufacturing retained basis.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-029",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_source_legs: 3",
+    "replace": "max_source_legs: 1",
+    "rule": "Visit allowed adjacent source groups.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-030",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_return_legs: 16",
+    "replace": "max_return_legs: 1",
+    "rule": "Allow bounded split return groups.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-031",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_aggregate_return_legs: 256",
+    "replace": "max_aggregate_return_legs: 1",
+    "rule": "Allow wallet-era aggregation up to its separate ceiling.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-032",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_source_groups: 256",
+    "replace": "max_source_groups: 1",
+    "rule": "Preserve the configured source-worklist capacity.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-033",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_return_pool: 512",
+    "replace": "max_return_pool: 1",
+    "rule": "Preserve the configured return pool capacity.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-034",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "beam_width: 48",
+    "replace": "beam_width: 1",
+    "rule": "Retain a deterministic bounded set of partial return groups.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-035",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_return_groups_per_source: 24",
+    "replace": "max_return_groups_per_source: 1",
+    "rule": "Rank and retain the configured return-group population.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-036",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "max_candidates: 250",
+    "replace": "max_candidates: 1",
+    "rule": "The display ceiling is independent from page size.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-037",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "return_era_gap_seconds: 180 * 86_400",
+    "replace": "return_era_gap_seconds: 1",
+    "rule": "Split wallet eras by the configured inactivity gap.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-038",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "promotion_score_margin: 75",
+    "replace": "promotion_score_margin: 0",
+    "rule": "A competing explanation must clear the required score margin.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-039",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "!legs[i].signals.is_empty() && legs[i].disqualifiers.is_empty()",
+    "replace": "!legs[i].signals.is_empty()",
+    "rule": "Explicit external economics cannot create a capacity suspense source.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-040",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "legs.len() > limits.max_input_rows",
+    "replace": "legs.len() < limits.max_input_rows",
+    "rule": "Switch to the bounded large-worklist algorithm above the threshold.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-041",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "(&leg.profile_id, &leg.asset, &leg.chain, &leg.network)",
+    "replace": "(&leg.profile_id, &leg.asset, &leg.chain, &leg.chain)",
+    "rule": "Never match candidates across protocol networks.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-042",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": ".map(|size| sources.len() - size + 1)",
+    "replace": ".map(|_| 0)",
+    "rule": "Count every adjacent source group before selecting a bounded worklist.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-043",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "ordinary.iter().rev().take(budget)",
+    "replace": "ordinary.iter().take(budget)",
+    "rule": "Retain the chronological tail of ordinary sources when bounded.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-044",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "1\n        } else {\n            limits.max_source_legs",
+    "replace": "limits.max_source_legs\n        } else {\n            limits.max_source_legs",
+    "rule": "Do not invent source adjacency across omitted history.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-045",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "(boundary, \"\\u{ffff}\")",
+    "replace": "(boundary, \"\")",
+    "rule": "Use Python tuple bisect including the U+FFFF sentinel.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-046",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "eligible.len() > limits.max_return_pool",
+    "replace": "eligible.len() < limits.max_return_pool",
+    "rule": "Mark an oversized return suffix explicitly incomplete.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-047",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if candidate.score < 650",
+    "replace": "if candidate.score < 0",
+    "rule": "Reject low-scoring amount and time hints.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-048",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "source_limited && generated.len() > limits.max_candidates",
+    "replace": "source_limited && generated.len() > 0",
+    "rule": "Stop bounded source scanning only after the candidate ceiling is exceeded.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-049",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "candidates.iter().filter(|c| c.eligible)",
+    "replace": "candidates.iter().filter(|c| !c.eligible)",
+    "rule": "Only promotion-eligible candidates reach the accounting population.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-050",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "candidates.truncate(limits.max_candidates);",
+    "replace": "candidates.truncate(0);",
+    "rule": "Return the fully scored display prefix on population overflow.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-051",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if ordered.len() <= maximum",
+    "replace": "if ordered.len() > maximum",
+    "rule": "Select amount-nearest returns only when the pool ceiling is exceeded.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-052",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "ordered.truncate(maximum);",
+    "replace": "ordered.truncate(1);",
+    "rule": "Honor the configured bounded return pool size.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-053",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "maximum.saturating_mul(8)",
+    "replace": "maximum.saturating_mul(1)",
+    "rule": "Bound defensive inspection without prematurely dropping admissible nearest rows.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-054",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if legs[leg].when > boundary",
+    "replace": "if legs[leg].when >= boundary",
+    "rule": "Indexed returns must be strictly later than the source boundary.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-055",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "seconds(legs[i].when - legs[last].when) > gap",
+    "replace": "seconds(legs[i].when - legs[last].when) >= gap",
+    "rule": "An era ends only when truncated elapsed seconds exceed the gap.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-056",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "eras[start..end].iter().take(512)",
+    "replace": "eras[start..end].iter().take(513)",
+    "rule": "Inspect at most the fixed default return-pool number of indexed eras.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-057",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if legs[era.group[0]].when <= boundary",
+    "replace": "if legs[era.group[0]].when < boundary",
+    "rule": "A matching complete era must begin strictly after the source boundary.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-058",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if era.group.len() > limits.max_aggregate_return_legs",
+    "replace": "if era.group.len() < limits.max_aggregate_return_legs",
+    "rule": "An oversized indexed era marks its source incomplete.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-059",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if amount < minimum || amount > maximum",
+    "replace": "if amount < minimum",
+    "rule": "Do not aggregate wallet eras beyond the maximum excess.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-060",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if group.len() > limits.max_aggregate_return_legs",
+    "replace": "if group.len() < limits.max_aggregate_return_legs",
+    "rule": "An oversized wallet era marks its source incomplete.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-061",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "groups.truncate(maximum);",
+    "replace": "groups.truncate(1);",
+    "rule": "Honor the ranked return-group result ceiling.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-062",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if group.len() >= limits.max_return_legs",
+    "replace": "if group.len() > limits.max_return_legs",
+    "rule": "Do not expand beam groups beyond the leg ceiling.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-063",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if next_total > maximum",
+    "replace": "if next_total < maximum",
+    "rule": "Discard over-target beam additions.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-064",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if next_total >= minimum",
+    "replace": "if next_total < minimum",
+    "rule": "Only sufficiently covered beam groups qualify.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-065",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "usize::from(!group.is_empty())",
+    "replace": "usize::from(group.is_empty())",
+    "rule": "Keep the empty beam state so each later row can begin a group.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-066",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "states.truncate(limits.beam_width);",
+    "replace": "states.truncate(1);",
+    "rule": "Enforce the beam width without losing its alternate partials.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-067",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "source_total.clone().min(return_total.clone())",
+    "replace": "source_total.clone().max(return_total.clone())",
+    "rule": "Retained principal is capped by both observed sides.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-068",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "let residual = &source_total - &retained;",
+    "replace": "let residual = zero();",
+    "rule": "Expose unresolved principal separately from fees.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-069",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "let excess = &return_total - &retained;",
+    "replace": "let excess = zero();",
+    "rule": "Expose returns beyond the source separately from retained principal.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-070",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "coverage >= BigInt::from(950_000)",
+    "replace": "coverage >= BigInt::from(1)",
+    "rule": "Distinguish high and partial amount coverage.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-071",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if elapsed >= 90 * 86_400",
+    "replace": "if elapsed >= 900 * 86_400",
+    "rule": "Expose the long-horizon reason without a matching cutoff.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-072",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if sources.len() > 1",
+    "replace": "if sources.len() > 100",
+    "rule": "Expose split-source candidates.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-073",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if returns.len() > 1",
+    "replace": "if returns.len() > 100",
+    "rule": "Expose split-return candidates.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-074",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "let different = source_wallets != destination_wallets;",
+    "replace": "let different = false;",
+    "rule": "Wallet transition influences both score and reasons.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-075",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "retained * 1_000_000",
+    "replace": "retained * 999_999",
+    "rule": "Compute exact integer coverage in parts per million.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-076",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "identity.join(\"\\x1f\")",
+    "replace": "identity.join(\"|\")",
+    "rule": "Gap identity hashes the exact Python unit-separator preimage.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-077",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if score>=850",
+    "replace": "if score>=950",
+    "rule": "Use Python strong-confidence score threshold.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-078",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "coverage * 700 / 1_000_000",
+    "replace": "coverage * 699 / 1_000_000",
+    "rule": "Apply the amount score weight exactly.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-079",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "200 - 10 * bits",
+    "replace": "200 - 11 * bits",
+    "rule": "Apply logarithmic elapsed-time scoring exactly.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-080",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if different { 50 } else { 0 }",
+    "replace": "if different { 0 } else { 0 }",
+    "rule": "Apply the wallet transition score exactly.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-081",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "80.min(signals as i64 * 40)",
+    "replace": "40.min(signals as i64 * 40)",
+    "rule": "Cap structured evidence score at eighty points.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-082",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "excess_ppm * 150 / 250_000",
+    "replace": "excess_ppm * 149 / 250_000",
+    "rule": "Apply the excess return penalty with exact integer arithmetic.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-083",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "candidates[a].id <= candidates[b].id",
+    "replace": "candidates[a].id >= candidates[b].id",
+    "rule": "Conflict components choose the smallest stable gap identity.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-084",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": ".find(|(_, id)| *id != candidate.id)",
+    "replace": ".find(|(_, _)| true)",
+    "rule": "Score margins compare against another candidate in the complete conflict cluster.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-085",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "structured && !disqualified && competitor.is_none_or(|v| v >= margin)",
+    "replace": "structured && competitor.is_none_or(|v| v >= margin)",
+    "rule": "An external origin never promotes an advisory bridge.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-086",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "competitor.is_none_or(|v| v >= margin)",
+    "replace": "competitor.is_none_or(|v| v <= margin)",
+    "rule": "Only an unambiguous structured candidate clears its competitors.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-087",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if limited.contains(&candidate.id) && candidate.eligible",
+    "replace": "if false && candidate.eligible",
+    "rule": "Capacity-limited candidates require source suspense rather than promotion.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-088",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "json!(members.len())",
+    "replace": "json!(1)",
+    "rule": "Compute conflicts over the complete bounded candidate population.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-089",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "b.score\n            .cmp(&a.score)",
+    "replace": "a.score\n            .cmp(&b.score)",
+    "rule": "Rank candidate scores descending before stable tie breakers.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-090",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "json!(if authored { 1 } else { 2 })",
+    "replace": "json!(if authored { 2 } else { 1 })",
+    "rule": "Authored and advisory fingerprints use their distinct schema versions.",
+    "expect_failing": [
+      "gaps_fingerprint_vectors"
+    ]
+  },
+  {
+    "id": "GAP-091",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "if !authored {",
+    "replace": "if authored {",
+    "rule": "Only advisory fingerprints bind ranking and conflict context.",
+    "expect_failing": [
+      "gaps_fingerprint_vectors"
+    ]
+  },
+  {
+    "id": "GAP-092",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "codec::hash(&Value::Object(payload), true)",
+    "replace": "codec::hash(&Value::Object(payload), false)",
+    "rule": "Encode persisted fingerprint preimages with CPython ASCII escaping.",
+    "expect_failing": [
+      "gaps_fingerprint_vectors"
+    ]
+  },
+  {
+    "id": "GAP-093",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "max_input_rows: if large_book { 1 } else { 50_000 }",
+    "replace": "max_input_rows: 50_000",
+    "rule": "An SQL-selected large-book worklist stays explicitly incomplete.",
+    "expect_failing": [
+      "gaps_compute_vectors"
+    ]
+  },
+  {
+    "id": "GAP-094",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "if large_book && r.search_complete",
+    "replace": "if false && r.search_complete",
+    "rule": "Empty and singleton large-book results cannot imply complete discovery.",
+    "expect_failing": [
+      "gaps_compute_vectors"
+    ]
+  },
+  {
+    "id": "GAP-095",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "if accounting_ignored != ignored",
+    "replace": "if false",
+    "rule": "Recompute the separate accounting population when blocked ids differ.",
+    "expect_failing": [
+      "gaps_compute_vectors"
+    ]
+  },
+  {
+    "id": "GAP-096",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "result.blocking_source_ids = accounting.blocking_source_ids;",
+    "replace": "result.blocking_source_ids.clear();",
+    "rule": "Capacity blockers belong to the accounting exclusion population.",
+    "expect_failing": [
+      "gaps_compute_vectors"
+    ]
+  },
+  {
+    "id": "GAP-097",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "signature(row) != signature(last)",
+    "replace": "signature(row) == signature(last)",
+    "rule": "Concurrent incompatible review siblings cannot suppress a gap.",
+    "expect_failing": [
+      "gaps_review_revision_vectors"
+    ]
+  },
+  {
+    "id": "GAP-098",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "last[\"action\"] == \"dismissed\" && last[\"event_kind\"] != \"bridge_reopened\"",
+    "replace": "last[\"action\"] == \"dismissed\"",
+    "rule": "A reopened bridge invalidates a prior dismissal.",
+    "expect_failing": [
+      "gaps_review_revision_vectors"
+    ]
+  },
+  {
+    "id": "GAP-099",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "json!(string(&last[\"candidate_fingerprint\"]))",
+    "replace": "json!(text(&last[\"candidate_fingerprint\"]))",
+    "rule": "Retain Python str conversion of a raw dismissal fingerprint.",
+    "expect_failing": [
+      "gaps_review_revision_vectors"
+    ]
+  },
+  {
+    "id": "GAP-100",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "strip_prefix(\"cgr3.\")",
+    "replace": "strip_prefix(\"cgr2.\")",
+    "rule": "Only the current cursor prefix is admitted.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-101",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "items.len() != 3",
+    "replace": "items.len() != 2",
+    "rule": "The opaque cursor has exactly three fields.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-102",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "v.len()==2 && v.iter().all(nonnegative)",
+    "replace": "v.len()==2",
+    "rule": "Version fields must be exact nonnegative integers.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-103",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "!nonnegative(&items[1])",
+    "replace": "false",
+    "rule": "Cursor ordinal must be an exact nonnegative integer.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-104",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "!matches!(&items[2], Py::Str(_))",
+    "replace": "false",
+    "rule": "Cursor identity must be a string.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-105",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "!(1..=500).contains(&limit)",
+    "replace": "!(2..=500).contains(&limit)",
+    "rule": "Page limits admit one through five hundred entries.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-106",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "cursor.filter(|v| *v != \"0\")",
+    "replace": "cursor.filter(|v| *v != \"1\")",
+    "rule": "The explicit zero sentinel denotes the first page.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-107",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "gap_id.is_some() && cursor.is_some()",
+    "replace": "false",
+    "rule": "A direct gap lookup cannot also carry a page cursor.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-108",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "items[0] != codec::from_json(version)?",
+    "replace": "false",
+    "rule": "Cursors expire when journal input version or active row count changes.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-109",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "start = ordinal.unwrap() + 1;",
+    "replace": "start = ordinal.unwrap();",
+    "rule": "Resume strictly after the cursor entry.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-110",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": ".skip(start).take(limit)",
+    "replace": ".skip(start).take(500)",
+    "rule": "Cut the page independently of matcher population semantics.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-111",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "start + limit < population.len()",
+    "replace": "start + limit <= population.len()",
+    "rule": "The terminal page has no continuation cursor.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-112",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "start + page.len() - 1",
+    "replace": "start + page.len()",
+    "rule": "The cursor binds the last returned ordinal and its identity.",
+    "expect_failing": [
+      "gaps_seeded_pagination_vectors"
+    ]
+  },
+  {
+    "id": "GAP-113",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "ignored.insert(crate::gaps::raw_string(value));",
+    "replace": "ignored.insert(String::new());",
+    "rule": "Loan legs reserve their actual transaction identities.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-114",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "ignored.extend(roles.keys().cloned());",
+    "replace": "ignored.extend(roles.keys().take(0).cloned());",
+    "rule": "Channel roles reserve their lifecycle transaction identities.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-115",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "ignored.insert(crate::gaps::raw_string(id));",
+    "replace": "ignored.insert(String::new());",
+    "rule": "Channel transfer pairs reserve both boundary identities.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-116",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "ignored.extend(Context::from_stages(components, evidence).excluded);",
+    "replace": "ignored.extend(BTreeSet::<String>::new());",
+    "rule": "Authored components reserve all arrived anchors even when blocked.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-117",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "if matches!(stored::get(claim, \"target\"), Py::Null)",
+    "replace": "if !matches!(stored::get(claim, \"target\"), Py::Null)",
+    "rule": "Only target-bearing interpreter claims suppress advisory boundaries.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-118",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "for side in [\"source\", \"target\"]",
+    "replace": "for side in [\"target\", \"target\"]",
+    "rule": "Authoritative claims reserve their canonical source identity.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-119",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "let mut accounting = ignored.clone();",
+    "replace": "let mut accounting = BTreeSet::new();",
+    "rule": "Accounting exclusions include all advisory exclusions.",
+    "expect_failing": [
+      "gaps_ignored_ids_vectors"
+    ]
+  },
+  {
+    "id": "GAP-120",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "for row in rows {\n        normalize::leg(row, &BTreeSet::new())?;\n    }",
+    "replace": "for row in rows.iter().take(0) {\n        normalize::leg(row, &BTreeSet::new())?;\n    }",
+    "rule": "Normalize all raw worklist rows before applying ignored ids.",
+    "expect_failing": [
+      "gaps_operation_vectors"
+    ]
+  },
+  {
+    "id": "GAP-121",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "y * 365 + y / 4 - y / 100 + y / 400",
+    "replace": "y * 365 + y / 4",
+    "rule": "UTC calendar formatting respects Gregorian century exceptions.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-122",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)",
+    "replace": "year % 4 == 0 && year % 100 != 0",
+    "rule": "Leap centuries divisible by four hundred retain February 29.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-123",
+    "file": "crates/custody/src/gaps/normalize.rs",
+    "find": "while remaining >= months[month]",
+    "replace": "while remaining > months[month]",
+    "rule": "Calendar month boundaries use the next month on the exact day boundary.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-124",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "25.max(200 - 10 * bits)",
+    "replace": "0.max(200 - 10 * bits)",
+    "rule": "Long-horizon scoring retains the nonzero floor.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-125",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": ".min(BigInt::from(1000))",
+    "replace": ".min(BigInt::from(1001))",
+    "rule": "Candidate scores are capped at one thousand.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-126",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "signals as i64 * 40",
+    "replace": "signals as i64 * 39",
+    "rule": "Each structured signal contributes exactly forty points before the cap.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-127",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "leg.direction == \"outbound\"",
+    "replace": "leg.direction == \"inbound\"",
+    "rule": "Downstream impact counts later outbound disposals.",
+    "expect_failing": [
+      "gaps_snapshot_vectors"
+    ]
+  },
+  {
+    "id": "GAP-128",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "ended.is_some_and(|ended| leg.when > ended)",
+    "replace": "ended.is_some_and(|ended| leg.when < ended)",
+    "rule": "Downstream impact begins strictly after the last return.",
+    "expect_failing": [
+      "gaps_snapshot_vectors"
+    ]
+  },
+  {
+    "id": "GAP-129",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": "array(&candidate[\"destination_wallet_ids\"]).contains(&json!(leg.wallet_id))",
+    "replace": "array(&candidate[\"source_wallet_ids\"]).contains(&json!(leg.wallet_id))",
+    "rule": "Downstream impact follows destination wallets.",
+    "expect_failing": [
+      "gaps_snapshot_vectors"
+    ]
+  },
+  {
+    "id": "GAP-130",
+    "file": "crates/custody/src/gaps/candidate.rs",
+    "find": ".join(\" + \")",
+    "replace": ".join(\" \")",
+    "rule": "Present combined source wallet labels exactly as Python.",
+    "expect_failing": [
+      "gaps_snapshot_vectors"
+    ]
+  },
+  {
+    "id": "GAP-131",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "if !text.is_ascii()",
+    "replace": "if text.is_ascii()",
+    "rule": "Cursor base64 admission follows Python ASCII input rules.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-132",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "_ => continue,",
+    "replace": "_ => return None,",
+    "rule": "Nonvalidating base64 decoding ignores irrelevant ASCII bytes.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-133",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "if width == 2",
+    "replace": "if width == 3",
+    "rule": "JSON byte decoding accepts UTF-16 cursors.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-134",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "bytes.starts_with(&[0xff, 0xfe, 0, 0])",
+    "replace": "bytes.starts_with(&[0xfe, 0xff, 0, 0])",
+    "rule": "Decode the UTF-32 little-endian JSON BOM correctly.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-135",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "fn seconds(delta: i64) -> i64 {\n    // int(timedelta.total_seconds()) truncates a correctly rounded rational.\n    // Casting the microsecond numerator to f64 first double-rounds dates more\n    // than 285 years apart. Only rounding up to the next integral second can\n    // change int(); compare its exact half-ULP boundary in integer arithmetic.\n    let magnitude = delta.unsigned_abs();\n    let whole = magnitude / 1_000_000;\n    let next = whole + 1;\n    let exponent = next.ilog2();\n    let shift = 53 - exponent + u32::from(next.is_power_of_two());\n    let distance = u128::from(1_000_000 - magnitude % 1_000_000);\n    let rounded_up = (distance << shift) <= 1_000_000;\n    let result = (whole + u64::from(rounded_up)) as i64;\n    if delta < 0 {\n        -result\n    } else {\n        result\n    }\n}",
+    "replace": "fn seconds(delta: i64) -> i64 {\n    (delta as f64 / 1_000_000.0) as i64\n}\n",
+    "rule": "Do not double-round timedelta microseconds before Python int truncation.",
+    "expect_failing": [
+      "gaps_search_vectors"
+    ]
+  },
+  {
+    "id": "GAP-136",
+    "file": "crates/custody/src/codec.rs",
+    "find": "let point = if width == 3",
+    "replace": "let point = if width == 99",
+    "rule": "Preserve raw surrogatepass UTF-8 cursor code points rather than rejecting them.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-137",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "Err(error) => u32::from(error.unpaired_surrogate()),",
+    "replace": "Err(_error) => 0xfffd,",
+    "rule": "Preserve unpaired UTF-16 surrogate cursor ids without replacing their code points.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
+  },
+  {
+    "id": "GAP-138",
+    "file": "crates/custody/src/gaps/pagination.rs",
+    "find": "if (0xd800..=0xdfff).contains(&point) {",
+    "replace": "if (0xd800..=0xd800).contains(&point) {",
+    "rule": "Preserve both high and low raw surrogate code points independently.",
+    "expect_failing": [
+      "gaps_cursor_vectors"
+    ]
   }
 ]

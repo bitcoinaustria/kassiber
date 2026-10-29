@@ -783,8 +783,31 @@ counts, branch dispositions and remaining verification in the
 Full census/shadow shards and the four nonsandboxed daemon reruns belong to the
 orchestrator.
 
-Next port gap search, quantity arbitration and finalized projection, then join
-custody with `ledger` in the journal operation.
+The following checkpoint completes gap search.
+
+#### Gap search checkpoint (R2d)
+
+Branch `t3code/r2d-gaps`, based on `16234030`, ports bounded gap discovery,
+candidate scoring, matcher capacity, source blockers and the two ignored-id
+populations. `gaps` is now implemented in PyO3 and compared in census and
+custody-shadow. Pure helpers also match seeded keyset pagination, fingerprints,
+latest-review dismissal revisions and privacy-safe candidate display. Python
+still owns SQL worklist selection, review writes, readiness and activation.
+Snapshot v1 already carries the raw facts; no schema or dependency changes.
+
+All twelve generators match exact gap output for 24,000 books and 1,030
+permutations, with independent Python/Rust counts for 515 scenarios, including
+Samourai/Whirlpool missing-wallet bridges and capacity-only source blockers.
+Recorded replay matches 79 requests and 79 permutations. Adversarial 60,301-row
+searches retain Python's inspection ceilings and pass timing smoke tests.
+The mutation catalog contains 1,315 entries: all 137 new entries and 16 affected
+retained entries have been re-killed; the other retained kills are inherited
+from R2c, not claimed as rerun here. Full census/shadow shards remain with the
+orchestrator. See the [gap checkpoint](../reference/custody-engine.md#gap-search-checkpoint-r2d)
+for branch dispositions, counts and verification.
+
+Next port quantity arbitration and finalized projection, then join custody with
+`ledger` in the journal operation.
 
 ### R5 rates checkpoint (partial)
 

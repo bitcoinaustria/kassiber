@@ -144,6 +144,12 @@ pub fn sha256(text: &str) -> String {
 /// Those are needed even when the outer request only holds raw JSON as text.
 /// Encoding an unpaired surrogate with ensure_ascii=false still refuses it.
 pub fn loads(text: &str) -> Result<Py, String> {
+    loads_bytes(text.as_bytes())
+}
+
+/// JSON after Python's surrogatepass byte decoding. Cursor byte inputs can
+/// contain raw surrogate code points, distinct from JSON-escaped pairs.
+pub(crate) fn loads_bytes(text: &[u8]) -> Result<Py, String> {
     struct Parser<'a> {
         text: &'a [u8],
         at: usize,
@@ -224,13 +230,35 @@ pub fn loads(text: &str) -> Result<Py, String> {
                     32..=127 => points.push(u32::from(byte)),
                     _ => {
                         self.at -= 1;
-                        let c = std::str::from_utf8(&self.text[self.at..])
-                            .map_err(|e| e.to_string())?
-                            .chars()
-                            .next()
+                        let width = match byte {
+                            0xc2..=0xdf => 2,
+                            0xe0..=0xef => 3,
+                            0xf0..=0xf4 => 4,
+                            _ => return Err("invalid unicode".into()),
+                        };
+                        let encoded = self
+                            .text
+                            .get(self.at..self.at + width)
                             .ok_or("invalid unicode")?;
-                        self.at += c.len_utf8();
-                        points.push(u32::from(c));
+                        let point = if width == 3
+                            && encoded[0] == 0xed
+                            && (0xa0..=0xbf).contains(&encoded[1])
+                            && (0x80..=0xbf).contains(&encoded[2])
+                        {
+                            (u32::from(encoded[0] & 15) << 12)
+                                | (u32::from(encoded[1] & 63) << 6)
+                                | u32::from(encoded[2] & 63)
+                        } else {
+                            u32::from(
+                                std::str::from_utf8(encoded)
+                                    .map_err(|e| e.to_string())?
+                                    .chars()
+                                    .next()
+                                    .ok_or("invalid unicode")?,
+                            )
+                        };
+                        self.at += width;
+                        points.push(point);
                     }
                 }
             }
@@ -324,10 +352,7 @@ pub fn loads(text: &str) -> Result<Py, String> {
             })
         }
     }
-    let mut parser = Parser {
-        text: text.as_bytes(),
-        at: 0,
-    };
+    let mut parser = Parser { text, at: 0 };
     let value = parser.value(0)?;
     parser.ws();
     if parser.at != parser.text.len() {

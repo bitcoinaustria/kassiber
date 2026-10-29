@@ -538,14 +538,23 @@ def check_rust(directory: Path, *, permuted: bool = False):
             recorded = document.get("stages", {}).get("evidence")
             if recorded is not None:
                 assert_same(recorded, evidence, "recorded/replayed Python evidence")
-            from tests.custody_interpretation_stage import python_stage
-            interpretation = python_stage(request)
-            recorded = document.get("stages", {}).get("interpretation")
-            if recorded is not None:
-                assert_same(recorded, interpretation, "recorded/replayed Python interpretation")
-            implemented, _ = compare_rust(request, evidence)
-            if not {"components", "evidence", "interpretation"}.issubset(implemented):
-                raise AssertionError("Rust components/evidence/interpretation stage is unavailable")
+            from tests.custody_gap_stage import python_stages
+            try:
+                stages = python_stages(request)
+            except Exception as exc:
+                rust_results(request, python_error=exc)
+                compared += 1
+                if permuted:
+                    rust_results(permuted_snapshot(request), python_error=exc)
+                    permutations += 1
+                continue
+            for name in ("interpretation", "gaps"):
+                recorded = document.get("stages", {}).get(name)
+                if recorded is not None:
+                    assert_same(recorded, stages[name], "recorded/replayed Python " + name)
+            implemented, _ = compare_rust(request, evidence, python_stages=stages)
+            if not {"components", "evidence", "interpretation", "gaps"}.issubset(implemented):
+                raise AssertionError("Rust components/evidence/interpretation/gaps stage is unavailable")
             compared += 1
             if permuted:
                 altered = permuted_snapshot(request)
