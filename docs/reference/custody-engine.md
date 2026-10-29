@@ -3039,3 +3039,86 @@ permutations**, with zero differences and no refusals. Logs are
 This establishes the whole-stage gate before enabling normal comparison
 admission. Neither the binding nor census/shadow admission changes at this
 boundary. The complete inherited mutation campaign remains outstanding.
+
+## Complete finalized projection runtime (R2f)
+
+The whole-stage gate above precedes normal admission. The binding now compares
+`finalized_projection`, and census, custody-shadow and recorded replay include
+it. `custody(request, finalized=False)` explicitly skips it for decision-only
+builds; the control is outside snapshot v1. Refusals identify their compared
+stage and skip the unavailable outputs. Intentionally injected failures retain
+the explicit all-stage skip inventory, including finalized-stage injections.
+No Rust result reaches stored state. Python remains authoritative, snapshot v1
+stays raw-only, and journal fusion with `ledger` remains separate work.
+
+Confirmation provenance is captured once before rates/channel admission, in
+Python's order. `projection_capture_precedes_rates` pins a closed timestamp
+which overflows UTC conversion alongside malformed rates; both engines raise
+`OverflowError` first. Interpreter-blocked quantity issues still contribute
+component anchor suppression before they are excluded from generic issue
+explanations. A dedicated adapter witness preserves that distinction.
+`projection_adapter_lossless_diagnostics` independently retains surrogate ids,
+NaN and infinity through the actual adapter seam.
+
+| Final comparison | Result |
+| --- | --- |
+| Twelve inherited raw suites, after enabling | 24,000 books + 1,030 permutations; 24,852 successes and 178 compared refusals; zero differences |
+| Empty-success controls within those successes | 305; compared explicitly, not counted as active output |
+| Retained read-only replay, enabled stage | 159 requests + 159 permutations; zero differences or pre-request refusals |
+| Fresh census recordings, integrity/replay | 29 snapshots, zero integrity problems; 29 requests + 29 permutations, zero differences |
+| Fresh shadow recordings, integrity/replay | 29 snapshots, zero integrity problems; 29 requests + 29 permutations, zero differences |
+| Focused census | 107 passed; finalized projection 8 compared / 5 skipped, other stages 12 compared / 1 skipped; zero mismatches |
+| Focused shadow | 107 passed; same stage counts, 11 frozen Python comparisons; zero mismatches |
+| Explicit injected builds in each focused lane | 1, with every stage skipped |
+| Refusal/injection and child-difference harness | 48 passed, including finalized-stage refusal and injection inventories |
+| Private projection comparison lane | 15 passed |
+| Rust workspace | 827 passed |
+| Workspace fmt and all-target Clippy `-D warnings` | Passed |
+| Inventory refresh and required preflight | Updated and reviewed; 57 passed |
+
+All verification uses locked Python 3.11, Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1` and offline Cargo. The first workspace run encountered
+four sandbox-denied loopback binds; the complete permitted rerun passed using
+disposable owned servers. `HOME` was not changed. Local verification artifacts
+are under `target/r2f8-verify/`; the retained corpus was read only. No full
+quality gate, push or PR is claimed. No Python reference bug was found, and no
+Python production source changed.
+
+The final enabled generator rerun uses the normal Rust entry point and evaluates
+each raw input once per engine, without companion activity calls. The fixture
+lane separately verifies 16 raw-book witnesses, 56 adapter seam witnesses and
+the admission-order counterexample against the original Python compiler.
+Manual review covered admission order, original row selection, pool identity,
+interpreter copies, component anchor suppression and complete stage inventories.
+
+### Complete mutation rerun
+
+All **2,236 final recipes** have audited building named-test kills: the entire
+**2,213-entry inherited catalog** and **23 additions**. Across the campaign,
+**393 distinct named filters** passed unmutated. Eight disposable source/target
+batches reran the inherited catalog at the adapter boundary. After enabling,
+the two mechanically reshaped inherited recipes (`rates-before-components`
+and `REC-OPERATION-01`) and all 23 additions were re-killed against the final
+implementation. Their final trials replace the earlier attempts in the audit.
+No inherited kill was merely carried forward from the previous handoff.
+
+| New named witness | Final recipes |
+| --- | ---: |
+| `projection_adapter_input_families` | 18 |
+| `projection_raw_adapter_vectors` | 3 |
+| `projection_adapter_lossless_diagnostics` | 1 |
+| `projection_capture_precedes_rates` | 1 |
+| **Total** | **23** |
+
+The recipes cover raw-row order and field choice, original confirmation
+provenance, observations, decisions, eligibility, canonical event ordering,
+pool barriers/roots, issues and component anchor suppression, reviewed payouts
+and conversions, interpreter blocks and copied diagnostics, both non-event
+families, profile fields, lossless diagnostic admission and refusal families.
+The old row-id and non-event witness survivors are explicitly superseded by
+building kills from strengthened witnesses; none counts as a kill. The final
+per-entry audit checks exact recipe equality, named-test multiplicity, successful
+baselines, complete catalog membership and replacement trials. It reports zero
+survivors and zero build errors in
+`target/r2f8-verify/mutation-summary.json`. The targeted Cargo adapter, original
+batch recipes, checker logs and `audit-catalog.py` remain alongside it.

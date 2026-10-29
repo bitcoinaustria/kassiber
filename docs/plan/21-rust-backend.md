@@ -1738,3 +1738,20 @@ This does not complete the requested chain-client/probe slice:
 full failure/TLS/proxy differential coverage and live regtest/platform gates
 remain. No new CLI grammar is invented: this Python reference has no backend
 probe/detection leaves outside the daemon. Wallet sync remains the next slice.
+
+### Complete finalized projection runtime (R2f)
+
+Branch `t3code/r2f-projection-8`, based on `84b2181b`, connects the existing
+lossless compiler to the raw snapshot and computed stages. The whole stage
+matches the unchanged Python entry point across 24,000 inherited books,
+1,030 permutations and 159 retained requests plus their permutations before
+normal comparison admission is enabled. PyO3, census, custody-shadow and
+replay now include finalized projection. Decision-only calls explicitly skip
+finalization and its refusals through a control outside the raw snapshot.
+
+Confirmation provenance is captured before rates and channel admission.
+Interpreter diagnostics remain CPython values throughout copying, grouping
+and sorting. Rust results remain comparison-only, Python owns accounting and
+persistence, and snapshot v1 remains raw-only. See the
+[adapter and parity evidence](../reference/custody-engine.md#raw-finalized-stage-adapter-checkpoint-r2f-partial).
+Journal fusion with `ledger` is the next separate R2 boundary.

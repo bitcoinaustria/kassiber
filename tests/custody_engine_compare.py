@@ -97,11 +97,11 @@ def read_records(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def rust_results(snapshot, *, python_error=None):
+def rust_results(snapshot, *, python_error=None, finalized=True):
     import kassiber_tax
     if not hasattr(kassiber_tax, "custody"):
         raise AssertionError("Rust custody binding is missing")
-    response = json.loads(kassiber_tax.custody(json.dumps(snapshot, ensure_ascii=True, allow_nan=True)))
+    response = json.loads(kassiber_tax.custody(json.dumps(snapshot, ensure_ascii=True, allow_nan=True), finalized=finalized))
     if python_error is not None:
         code = getattr(python_error, "code", type(python_error).__name__)
         if response.get("error", {}).get("code") != code:
@@ -125,12 +125,13 @@ def rust_results(snapshot, *, python_error=None):
 
 
 def compare_rust(snapshot, evidence, *, python_stages=None):
-    results, skipped = rust_results(snapshot)
     if python_stages is None:
-        from tests.custody_quantity_stage import python_stages as quantity_stages
-        stages = {**quantity_stages(snapshot), "evidence": evidence}
+        stages = {}
+        compute_custody_projection(snapshot, stage_observer=lambda name, value: stages.setdefault(name, value))
+        stages["evidence"] = evidence
     else:
         stages = python_stages
+    results, skipped = rust_results(snapshot, finalized="finalized_projection" in stages)
     compared = []
     for name in STAGES:
         if name in results and name in stages:
@@ -184,13 +185,13 @@ def _build(self, *, finalized):
         try:
             # The binding returns an atomic refusal, without earlier outputs.
             # Compare its code at the failed implemented stage, and explicitly
-            # skip unavailable outputs. Finalized projection is still unported.
-            if error is not None and failed in STAGES[:-1]:
+            # skip unavailable outputs, including decision-only finalization.
+            if error is not None and failed in STAGES:
                 compared = (failed,)
                 skipped = tuple(stage for stage in STAGES if stage != failed)
-                rust_results(snapshot, python_error=error)
+                rust_results(snapshot, python_error=error, finalized=finalized)
             else:
-                results, skipped = rust_results(snapshot)
+                results, skipped = rust_results(snapshot, finalized=finalized)
                 for stage in STAGES:
                     if stage in results:
                         assert stage in python_stages, "Python omitted implemented stage: " + stage

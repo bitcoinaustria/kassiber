@@ -58,10 +58,10 @@ def test_recorded_quantity_primitives_replay_and_permute(primitive_driver):
     assert primitive_driver(values)==[{"expected":v["expected"]} for v in values]
 
 
-def test_quantity_stage_compares_and_finalized_projection_stays_skipped():
+def test_decision_only_quantity_stage_explicitly_skips_finalized_projection():
     from tests.custody_gap_generator import snapshot
     from tests.custody_engine_compare import rust_results
-    stages,skipped=rust_results(snapshot(0))
+    stages,skipped=rust_results(snapshot(0), finalized=False)
     assert set(stages)=={"components","evidence","interpretation","gaps","quantity"}
     assert skipped==("finalized_projection",)
 

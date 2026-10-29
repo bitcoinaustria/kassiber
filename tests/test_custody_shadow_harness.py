@@ -34,7 +34,7 @@ def cli_book():
 
 
 @pytest.mark.parametrize("mode", ["shadow", "census"])
-@pytest.mark.parametrize("inject", [False, "evidence", "interpretation", "gaps", "quantity"])
+@pytest.mark.parametrize("inject", [False, "evidence", "interpretation", "gaps", "quantity", "finalized_projection"])
 def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode, inject):
     records = tmp_path / "records.jsonl"
     env = child_env(mode, inject=inject)
@@ -52,6 +52,8 @@ def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode
         assert "gaps" in routes[0]["compared"]
     if inject not in {"evidence", "interpretation", "gaps"}:
         assert "quantity" in routes[0]["compared"]
+    if inject not in {"evidence", "interpretation", "gaps", "quantity"}:
+        assert "finalized_projection" in routes[0]["compared"]
     assert bool(compare.session_report(routes)[1]) == bool(inject)
 
 
@@ -90,7 +92,7 @@ def test_every_implemented_stage_is_compared(monkeypatch):
     expected = {"components": {"blockers": []}, "evidence": {}}
     response = {"schema_version": 1, "stages": {"components": {"blockers": ["injected"]}, "evidence": {}}, "skipped_stages": [stage for stage in compare.STAGES if stage not in expected]}
     monkeypatch.delenv(compare.INJECT_ENV, raising=False)
-    monkeypatch.setattr(kassiber_tax, "custody", lambda request: json.dumps(response))
+    monkeypatch.setattr(kassiber_tax, "custody", lambda request, **kwargs: json.dumps(response))
     with pytest.raises(AssertionError, match="components.blockers"):
         compare.compare_rust({}, {}, python_stages=expected)
 
@@ -130,9 +132,9 @@ def test_python_gate_refusal_is_compared_even_when_caught(cli_book, tmp_path, mo
     calls = []
     import kassiber_tax
     original = kassiber_tax.custody
-    def observe(request):
+    def observe(request, **kwargs):
         calls.append(request)
-        return original(request)
+        return original(request, **kwargs)
     monkeypatch.setattr(kassiber_tax, "custody", observe)
     monkeypatch.setattr(custody_journal.CustodyJournalBuilder, "load_snapshot", lambda self: book)
     builder = custody_journal.CustodyJournalBuilder(None, book["profile"])
@@ -165,7 +167,7 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
         raise ValueError('simulated Python quantity-stage refusal')
     monkeypatch.setattr(custody_quantity_runtime, 'build_canonical_quantity_state', refuse)
     if rust_refuses:
-        monkeypatch.setattr(kassiber_tax, 'custody', lambda _: json.dumps({'error': {'code': 'ValueError' if rust_refuses is True else 'TypeError'}}))
+        monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'ValueError' if rust_refuses is True else 'TypeError'}}))
     compare.install_custody_mode(mode)
     conn = open_db(tmp_path / 'book')
     try:
@@ -197,7 +199,7 @@ def test_rust_quantity_refusal_against_python_success(tmp_path, monkeypatch, mod
     from tests.custody_snapshot_generator import snapshot
     book = snapshot(0)
     monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
-    monkeypatch.setattr(kassiber_tax, 'custody', lambda _: json.dumps({'error': {'code': 'ValueError'}}))
+    monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'ValueError'}}))
     monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
     previous = compare._INSTALLED_MODE
     compare.install_custody_mode(mode)
@@ -212,29 +214,33 @@ def test_rust_quantity_refusal_against_python_success(tmp_path, monkeypatch, mod
 
 
 @pytest.mark.parametrize('mode', ['census', 'shadow'])
+@pytest.mark.parametrize('stage', ['quantity', 'finalized_projection'])
 @pytest.mark.parametrize('injection', ['exact', 'different_exception', 'different_stage'])
-def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypatch, mode, injection):
-    from kassiber.core import custody_quantity_runtime
+def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypatch, mode, injection, stage):
+    from kassiber.core import custody_quantity_runtime, custody_tax_projection
     from kassiber.core.custody_journal import CustodyJournalBuilder
     from tests.custody_snapshot_generator import snapshot
     book = snapshot(0)
     error = ValueError('intentional test failure')
     def refuse(*args, **kwargs):
         raise error
-    monkeypatch.setattr(custody_quantity_runtime, 'build_canonical_quantity_state', refuse)
+    monkeypatch.setattr(custody_quantity_runtime if stage == 'quantity' else custody_tax_projection,
+                        'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
     monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
     monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
     previous = compare._INSTALLED_MODE
     compare.install_custody_mode(mode)
     try:
         declared_error = ValueError(str(error)) if injection == 'different_exception' else error
-        declared_stage = 'gaps' if injection == 'different_stage' else 'quantity'
+        declared_stage = 'gaps' if injection == 'different_stage' else stage
         with compare.injected_stage_failure(declared_stage, declared_error):
             with pytest.raises(ValueError if injection == 'exact' else AssertionError):
-                CustodyJournalBuilder(None, book['profile']).build_custody_decisions()
+                (CustodyJournalBuilder(None, book['profile']).build_custody_decisions() if stage == 'quantity'
+                 else CustodyJournalBuilder(None, book['profile']).build_custody_projection())
         # The annotation must not leak to a later build.
         with pytest.raises(AssertionError):
-            CustodyJournalBuilder(None, book['profile']).build_custody_decisions()
+            (CustodyJournalBuilder(None, book['profile']).build_custody_decisions() if stage == 'quantity'
+                 else CustodyJournalBuilder(None, book['profile']).build_custody_projection())
     finally:
         compare.uninstall_custody_mode()
         if previous:
@@ -267,3 +273,25 @@ def test_recorder_failure_has_explicit_injected_skip(mode):
     # report validates the record and exposes the explicit skip inventory.
     assert 'injected builds: 1 (all stages skipped)' in result.stdout
     assert 'quantity: 0 compared, 1 skipped' in result.stdout
+
+
+def test_real_finalized_refusal_has_complete_stage_inventory(tmp_path, monkeypatch):
+    from kassiber.core import custody_journal
+    from kassiber.errors import AppError
+    from tests.custody_fanout_generator import fanout_snapshot
+    book = fanout_snapshot(24)
+    class Builder:
+        conn = None
+        profile = book['profile']
+        def load_snapshot(self):
+            return book
+    monkeypatch.setattr(custody_journal, '_build_observer_factory', None)
+    monkeypatch.setattr(compare, '_INSTALLED_MODE', 'census')
+    monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
+    with pytest.raises(AppError):
+        compare._build(Builder(), finalized=True)
+    row = compare.read_records(tmp_path / 'records')[-1]
+    assert row['outcome'] == 'error'
+    assert row['compared'] == ['finalized_projection']
+    assert set(row['skipped']) == set(compare.STAGES) - {'finalized_projection'}
+    assert not compare.session_report([row])[1]

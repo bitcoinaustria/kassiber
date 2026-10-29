@@ -11,7 +11,12 @@ def vectors():
     non_event.update(case='interpreter_non_event_population', issues=[], pool_barrier_roots=[], interpreter_quarantines=[], reviewed=[])
     non_event['decisions'][0].update(target=None, state='external_presumed')
     non_event['non_event_transaction_ids'] = ['source', 'other']
-    for original in [*operands(), non_event]:
+    interpreter_component = seed('finalize')
+    interpreter_component.update(case='interpreter_component_anchor',
+        issues=[dict(reason='custody_component_hold', issue_type='custody_interpreter_blocked',
+                     transaction_ids=['other'], issue_id='interpreter-component', details={})],
+        pool_barrier_roots=[], interpreter_quarantines=[], reviewed=[])
+    for original in [*operands(), non_event, interpreter_component]:
         v = deepcopy(original)
         for row in v['rows'].values():
             row['_closed_confirmation_observation'] = None

@@ -1652,9 +1652,9 @@
   },
   {
     "id": "rates-before-components",
-    "file": "crates/custody/src/gates.rs",
-    "find": "    require_rates(snapshot)?;",
-    "replace": "    let _ = require_rates;",
+    "file": "crates/custody/src/lib.rs",
+    "find": "gates::require_rates(&snapshot)",
+    "replace": "gates::require_accounting(&snapshot)",
     "expect_failing": [
       "components_refusal_rate_exact"
     ],
@@ -11526,8 +11526,8 @@
   {
     "id": "REC-OPERATION-01",
     "file": "crates/custody/src/lib.rs",
-    "find": "\"components\"|\"evidence\"|\"interpretation\"",
-    "replace": "\"components\"|\"evidence\"",
+    "find": "graph::stored::put(&mut stages, \"interpretation\", interpretation);",
+    "replace": "let _ = interpretation;",
     "rule": "Advertise interpretation as implemented.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -22342,5 +22342,35 @@
       "projection_adapter_input_families"
     ],
     "rule": "The raw projection adapter preserves refusal family."
+  },
+  {
+    "id": "projection8-blocked-anchors",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"blocked_anchor_ids\":blocked_anchors",
+    "replace": "\"blocked_anchor_ids\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "Interpreter quantity issues still suppress authored component anchors before generic issue filtering."
+  },
+  {
+    "id": "projection8-lossless-adapter-seam",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "stored::list(stored::get(interpreter, \"quarantines\")),",
+    "replace": "stored::list(&codec::from_json(&codec::to_json(stored::get(interpreter, \"quarantines\")))?),",
+    "expect_failing": [
+      "projection_adapter_lossless_diagnostics"
+    ],
+    "rule": "The raw adapter never narrows copied diagnostics through ordinary JSON."
+  },
+  {
+    "id": "projection8-capture-before-rates",
+    "file": "crates/custody/src/lib.rs",
+    "find": "let projection_rows = match finalized_projection::runtime::confirmation_rows(&snapshot) {",
+    "replace": "let projection_rows = match (|| { gates::require_rates(&snapshot).map_err(|(code, _)| code.to_owned())?; finalized_projection::runtime::confirmation_rows(&snapshot) })() {",
+    "expect_failing": [
+      "projection_capture_precedes_rates"
+    ],
+    "rule": "Closed confirmation capture refuses before rates, matching Python admission order."
   }
 ]

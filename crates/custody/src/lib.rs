@@ -24,6 +24,12 @@ pub const STAGES: [&str; 6] = [
 
 /// Versioned JSON operation; missing stages are explicit and never fabricated.
 pub fn custody(request: &str) -> String {
+    custody_with_finalized(request, true)
+}
+
+/// Decision-only callers explicitly skip finalization, including its refusals.
+/// The control is outside snapshot v1; the snapshot remains raw facts only.
+pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
     let parsed = serde_json::from_str::<snapshot::Snapshot>(request)
         .map_err(|e| e.to_string())
         .and_then(|snapshot| {
@@ -33,6 +39,15 @@ pub fn custody(request: &str) -> String {
     match parsed {
         Ok(snapshot) => {
             if let Err((code, message)) = gates::require_accounting(&snapshot) {
+                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":message}}).to_string();
+            }
+            // Python captures confirmation provenance before rates and channel
+            // admission, retaining the original rows rather than enriched rows.
+            let projection_rows = match finalized_projection::runtime::confirmation_rows(&snapshot) {
+                Ok(value) => value,
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+            };
+            if let Err((code, message)) = gates::require_rates(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":message}}).to_string();
             }
             if let Err(code) = interpretation::admit_channels(&snapshot) {
@@ -62,16 +77,25 @@ pub fn custody(request: &str) -> String {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
             };
+            let projection = if finalized {
+                match finalized_projection::runtime::stage_with_rows(&snapshot, &projection_rows, &quantity, &interpretation) {
+                    Ok(value) => Some(value),
+                    Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                }
+            } else { None };
             let response = serde_json::json!({
                 "schema_version":1,
                 "engine_version":ENGINE_VERSION,
                 "stages":{"components":components,"evidence":evidence,"gaps":gaps},
-                "skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence"|"interpretation"|"gaps"|"quantity")).collect::<Vec<_>>()
+                "skipped_stages":if finalized { Vec::<&str>::new() } else { vec!["finalized_projection"] }
             });
             let mut response = codec::from_json(&response).expect("computed custody response");
             let mut stages = graph::stored::get(&response, "stages").clone();
             graph::stored::put(&mut stages, "interpretation", interpretation);
             graph::stored::put(&mut stages, "quantity", quantity);
+            if let Some(projection) = projection {
+                graph::stored::put(&mut stages, "finalized_projection", projection);
+            }
             graph::stored::put(&mut response, "stages", stages);
             kassiber_pyjson::dumps(&response, &kassiber_pyjson::Options::new())
                 .expect("computed JSON values")

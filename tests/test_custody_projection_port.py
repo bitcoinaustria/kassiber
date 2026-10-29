@@ -1,4 +1,4 @@
-"""Partial finalized-row parity; complete projection remains skipped."""
+"""Finalized-row primitive parity and enabled whole-stage admission."""
 from collections import Counter
 from copy import deepcopy
 import json
@@ -83,9 +83,9 @@ def test_projection_generated_counts_both_engines(projection_driver):
     print('projection primitive active counts: '+json.dumps(dict(counts=counts, distinct_inputs=len({json.dumps(v,sort_keys=True) for v in inputs})),sort_keys=True))
 
 
-def test_projection_stage_still_skipped():
+def test_projection_stage_is_enabled():
     from tests.custody_engine_compare import rust_results
     from tests.custody_gap_generator import snapshot
     stages,skipped=rust_results(snapshot(0))
-    assert 'finalized_projection' not in stages
-    assert skipped==('finalized_projection',)
+    assert 'finalized_projection' in stages
+    assert skipped==()

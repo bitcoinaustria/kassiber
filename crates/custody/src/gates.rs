@@ -188,14 +188,13 @@ pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
             ),
         ));
     }
-    require_rates(snapshot)?;
     Ok(())
 }
 
 /// Python loads rates before component/evidence materialization. Parse both
 /// candidate columns even when a rate already exists on this row, while
 /// retaining the loader's first-successful-row precedence per asset.
-fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
+pub(crate) fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
     use kassiber_pydecimal::{Decimal, DecimalError};
     use std::str::FromStr;
     let mut seen = BTreeSet::new();

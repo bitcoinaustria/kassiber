@@ -49,9 +49,20 @@ fn ledger(py: Python<'_>, request: &str) -> PyResult<String> {
 }
 
 /// Runs the versioned raw-fact custody operation independently of `ledger`.
-#[pyfunction]
-fn custody(py: Python<'_>, request: &str) -> PyResult<String> {
-    run(py, request, kassiber_custody::custody)
+#[pyfunction(signature = (request, *, finalized=true))]
+fn custody(py: Python<'_>, request: &str, finalized: bool) -> PyResult<String> {
+    fn decisions(request: &str) -> String {
+        kassiber_custody::custody_with_finalized(request, false)
+    }
+    run(
+        py,
+        request,
+        if finalized {
+            kassiber_custody::custody
+        } else {
+            decisions
+        },
+    )
 }
 
 #[pymodule]

@@ -1,5 +1,5 @@
-//! Private finalized-projection compiler and comparison primitives.
-//! Snapshot stage admission remains skipped; no result grants persistence authority.
+//! Finalized-projection compiler and comparison primitives.
+//! Snapshot stage results remain comparison-only; no result grants persistence authority.
 use crate::{codec, evidence, graph, interpretation::python_value_string};
 use kassiber_pyjson::{BigInt, Value as Py};
 use serde_json::{json, Value};

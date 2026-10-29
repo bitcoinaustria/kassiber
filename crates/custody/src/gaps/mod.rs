@@ -201,8 +201,11 @@ mod tests {
     #[test]
     fn gaps_operation_vectors() {
         for case in vectors() {
-            let response: Value =
-                serde_json::from_str(&crate::custody(&case["input"].to_string())).unwrap();
+            let response: Value = serde_json::from_str(&crate::custody_with_finalized(
+                &case["input"].to_string(),
+                false,
+            ))
+            .unwrap();
             if let Some(error) = case["error"].as_str() {
                 assert_eq!(response["error"]["code"], error, "{}", case["case"]);
                 assert!(response.get("stages").is_none());

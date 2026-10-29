@@ -1,4 +1,4 @@
-//! Raw-stage adapter. This private interface does not enable snapshot admission.
+//! Raw-stage finalized-projection adapter; no persistence authority.
 use crate::{codec, graph::stored, interpretation, snapshot::Snapshot};
 use kassiber_pyjson::Value as Py;
 use serde_json::{json, Map, Value};
@@ -19,9 +19,8 @@ fn pools(value: &Py) -> Result<Value, String> {
     Ok(value)
 }
 
-/// Assemble the original Python compiler's operands from computed Rust stages.
-/// Interpreter diagnostics bypass serde entirely, including grouping and sorting.
-pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py, String> {
+/// Capture the original row population before rates and interpreter admission.
+pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
     let mut rows = Map::new();
     for raw in &snapshot.transactions {
         let mut row = json!(raw);
@@ -33,6 +32,17 @@ pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py,
         };
         rows.insert(id, row);
     }
+    Ok(Value::Object(rows))
+}
+
+/// Assemble Python compiler operands from previously computed Rust stages.
+/// Interpreter diagnostics bypass serde, including grouping and sorting.
+pub fn stage_with_rows(
+    snapshot: &Snapshot,
+    rows: &Value,
+    quantity: &Py,
+    interpreter: &Py,
+) -> Result<Py, String> {
     let projection = stored::get(quantity, "projection");
     let eligibility = stored::get(quantity, "tax_eligibility");
     let eligible = stored::list(stored::get(eligibility, "eligible_decisions"))
@@ -40,6 +50,26 @@ pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py,
         .map(|d| exact(stored::get(d, "source")))
         .collect::<Result<Vec<_>, _>>()?;
     let canonical = stored::get(quantity, "canonical_input");
+    let mut blocked_anchors = Vec::new();
+    for issue in stored::list(stored::get(quantity, "issues")) {
+        let component = match stored::get(issue, "reason") {
+            Py::Str(reason) => reason
+                .code_points()
+                .take("custody_component_".len())
+                .eq("custody_component_".chars().map(u32::from)),
+            _ => return Err("AttributeError".into()),
+        };
+        if component
+            || matches!(stored::get(issue, "issue_type"), Py::Str(kind) if matches!(kind.as_str(), Some("component_claim_compile_failed" | "quantity_claim_bundle_invalid")))
+        {
+            blocked_anchors.extend(
+                stored::list(stored::get(issue, "transaction_ids"))
+                    .iter()
+                    .map(exact)
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
+    }
     // Interpreter-blocked quantity issues are deliberately ignored by Python's
     // compiler. Their complete lossless records remain in interpreter quarantines.
     let issues = stored::list(stored::get(quantity, "issues"))
@@ -64,7 +94,7 @@ pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py,
         "events":exact(stored::get(canonical,"events"))?,
         "pool_barriers":pools(stored::get(eligibility,"pool_barriers"))?,
         "pool_barrier_roots":pools(stored::get(eligibility,"pool_barrier_roots"))?,
-        "issues":issues, "blocked_anchor_ids":[],
+        "issues":issues, "blocked_anchor_ids":blocked_anchors,
         "blocked_transaction_ids":exact(stored::get(interpreter,"blocked_transaction_ids"))?,
         "non_event_transaction_ids":non_events,
         "payouts":exact(stored::get(quantity,"reviewed_direct_payouts"))?,
@@ -81,4 +111,13 @@ pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py,
             error
         }
     })
+}
+
+pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py, String> {
+    stage_with_rows(
+        snapshot,
+        &confirmation_rows(snapshot)?,
+        quantity,
+        interpreter,
+    )
 }

@@ -352,7 +352,7 @@ mod stage_tests {
         .unwrap();
         for v in stored::list(&vectors) {
             let request = codec::dumps(stored::get(v, "input"), false).unwrap();
-            let response = codec::loads(&crate::custody(&request)).unwrap();
+            let response = codec::loads(&crate::custody_with_finalized(&request, false)).unwrap();
             let error = stored::get(v, "error");
             if !matches!(error, Py::Null) {
                 assert_eq!(

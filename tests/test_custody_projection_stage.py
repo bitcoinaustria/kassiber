@@ -1,6 +1,7 @@
 """Whole finalized-stage comparison through an unpackaged raw-only driver."""
 import json
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -21,14 +22,25 @@ def expected(book):
 def test_projection_adapter_fixtures_match_original_python():
     from tests.custody_projection_adapter import vectors
     assert json.loads(Path('tests/fixtures/custody_projection_adapter.json').read_text()) == vectors()
-    for case in json.loads(Path('tests/fixtures/custody_projection_stage.json').read_text()):
-        assert_same(expected(case['input']), case['expected'], case['case'])
+    for filename in ('custody_projection_stage.json', 'custody_projection_admission.json'):
+        for case in json.loads((Path('tests/fixtures') / filename).read_text()):
+            assert_same(expected(case['input']), case['expected'], case['case'])
+
+
+@pytest.fixture(scope='module')
+def projection_stage_driver():
+    built = subprocess.run(
+        ['cargo', 'build', '--offline', '--locked', '--release', '-p', 'kassiber-custody',
+         '--example', 'projection-stage', '--message-format=json'],
+        capture_output=True, text=True, check=True)
+    return next(record['executable'] for line in built.stdout.splitlines()
+                if (record := json.loads(line)).get('executable'))
 
 
 @pytest.mark.parametrize('suite,scenarios,generate', suites(), ids=lambda v: v if isinstance(v, str) else None)
-def test_finalized_raw_stage(suite, scenarios, generate):
-    driver = Path('target/release/examples/projection-stage')
-    assert driver.exists(), 'build the offline projection-stage example first'
+def test_finalized_raw_stage(suite, scenarios, generate, projection_stage_driver):
+    driver = projection_stage_driver
+    counts = Counter()
     with subprocess.Popen([str(driver)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as process:
         for seed in range(2000):
             book = generate(seed)
@@ -36,6 +48,14 @@ def test_finalized_raw_stage(suite, scenarios, generate):
                 process.stdin.write(json.dumps(candidate, ensure_ascii=True) + '\n')
                 process.stdin.flush()
                 actual = json.loads(process.stdout.readline())
-                assert_same(expected(candidate), actual, f'{suite}:{seed}:{shuffled}')
+                reference = expected(candidate)
+                assert_same(reference, actual, f'{suite}:{seed}:{shuffled}')
+                counts['permutations' if shuffled else 'books'] += 1
+                counts['refusals' if 'error' in reference else 'results'] += 1
+                if 'error' not in reference and not reference['rows'] and not reference['quarantines']:
+                    counts['empty_results'] += 1
         process.stdin.close()
         assert process.wait() == 0
+    assert counts['books'] == 2000
+    assert counts['permutations'] == len(scenarios) * 2
+    print(suite + ' finalized comparisons: ' + json.dumps(counts, sort_keys=True))

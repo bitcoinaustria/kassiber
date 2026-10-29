@@ -1,5 +1,5 @@
 //! Unpackaged whole-stage parity driver; raw v1 requests only.
-use kassiber_custody::{codec, finalized_projection::runtime, snapshot::Snapshot};
+use kassiber_custody::codec;
 use std::io::{self, BufRead};
 
 fn main() {
@@ -11,7 +11,6 @@ fn main() {
             if let Some(code) = encoded["error"]["code"].as_str() {
                 return Err(code.into());
             }
-            let snapshot: Snapshot = serde_json::from_str(&line).map_err(|_| "ValueError")?;
             let stages = match &response {
                 kassiber_pyjson::Value::Dict(entries) => entries
                     .iter()
@@ -28,7 +27,7 @@ fn main() {
                     .ok_or("KeyError".to_owned()),
                 _ => Err("TypeError".into()),
             };
-            runtime::stage(&snapshot, get("quantity")?, get("interpretation")?)
+            Ok(get("finalized_projection")?.clone())
         })();
         let output = match result {
             Ok(value) => {

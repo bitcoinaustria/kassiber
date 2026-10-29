@@ -48,21 +48,12 @@ mutation entries.
 - [x] Complete quantity arbitration and runtime composition, including gap
   holds, whole-state issues and scoped tax barriers;
   [quantity now participates in full-stage comparison](docs/reference/custody-engine.md#complete-quantity-runtime-checkpoint-r2e).
-- [ ] Complete finalized tax projection and compare it before journal fusion.
-  Reviewed conversion metadata and issue/quarantine composition are ported in
-  the private compiler. Raw-stage admission and whole-stage comparison remain;
-  see the [diagnostic checkpoint](docs/reference/custody-engine.md#issuequarantine-composition-checkpoint-r2f-partial). The Python dependency-origin
-  and nonfinite-pricing fixes are included in the
-  [verified restack](docs/reference/custody-engine.md#projection-restack-on-reviewed-quantity-r2f-partial). The
-  finalized stage remains skipped; see the [checkpoint](docs/reference/custody-engine.md#reviewed-conversion-metadata-checkpoint-r2f-partial).
-  [The row primitive checkpoint](docs/reference/custody-engine.md#finalized-row-primitive-checkpoint-r2f-partial)
-  ports row identities, validation, base rows and fee-only rows. The
-  [pricing/payout/fee checkpoint](docs/reference/custody-engine.md#principal-pricing-payouts-and-fee-allocation-checkpoint-r2f-partial)
-  adds principal pricing, payouts and fee allocation. The
-  [selected-row checkpoint](docs/reference/custody-engine.md#selected-row-composition-checkpoint-r2f-partial)
-  adds MOVE/external/inbound composition, connected blocking and scoped basis
-  barriers. The diagnostic checkpoint adds fixed-point dependency origins,
-  ranked issue explanations and barrier-held receipts.
+- [x] Complete finalized tax projection and compare it before journal fusion;
+  [the raw adapter and whole-stage gate](docs/reference/custody-engine.md#whole-stage-parity-gate)
+  cover the inherited books and recorded requests. Finalized projection now
+  participates in PyO3, census, custody-shadow and replay; decision-only calls
+  explicitly skip it. Rust results remain comparison-only and snapshot v1
+  remains raw-only.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 

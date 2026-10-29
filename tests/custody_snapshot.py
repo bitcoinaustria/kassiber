@@ -538,7 +538,7 @@ def check_rust(directory: Path, *, permuted: bool = False):
             recorded = document.get("stages", {}).get("evidence")
             if recorded is not None:
                 assert_same(recorded, evidence, "recorded/replayed Python evidence")
-            from tests.custody_quantity_stage import python_stages
+            from tests.custody_finalized_stage import python_stages
             try:
                 stages = python_stages(request)
             except Exception as exc:
@@ -548,13 +548,13 @@ def check_rust(directory: Path, *, permuted: bool = False):
                     rust_results(permuted_snapshot(request), python_error=exc)
                     permutations += 1
                 continue
-            for name in ("interpretation", "gaps", "quantity"):
+            for name in ("interpretation", "gaps", "quantity", "finalized_projection"):
                 recorded = document.get("stages", {}).get(name)
                 if recorded is not None:
-                    assert_same(recorded, stages[name], "recorded/replayed Python " + name)
+                    assert_same(recorded, to_jsonable(stages[name]) if name == "finalized_projection" else stages[name], "recorded/replayed Python " + name)
             implemented, _ = compare_rust(request, evidence, python_stages=stages)
-            if not {"components", "evidence", "interpretation", "gaps", "quantity"}.issubset(implemented):
-                raise AssertionError("Rust components/evidence/interpretation/gaps/quantity stage is unavailable")
+            if not {"components", "evidence", "interpretation", "gaps", "quantity", "finalized_projection"}.issubset(implemented):
+                raise AssertionError("Rust complete custody stage inventory is unavailable")
             compared += 1
             if permuted:
                 altered = permuted_snapshot(request)
