@@ -685,6 +685,33 @@ impl RealBook {
 }
 
 impl Book for RealBook {
+    fn diagnostics(
+        &self,
+        args: &Value,
+        version: &str,
+        error: Option<&AppError>,
+    ) -> Result<Value, AppError> {
+        let mut args = args.clone();
+        if self.db_passphrase.as_ref().is_some_and(|p| !p.is_empty()) {
+            kassiber_envelope::set(&mut args, "db_passphrase_fd", Value::Null);
+            kassiber_envelope::set(
+                &mut args,
+                "_db_passphrase_cached",
+                kassiber_envelope::s("<present>"),
+            );
+        }
+        let conn = self.conn()?;
+        let state = kassiber_diagnostics::state::state(conn, self.backends.diagnostics_summary())?;
+        Ok(kassiber_diagnostics::report::collect(
+            &args,
+            version,
+            &kassiber_diagnostics::report::now()?,
+            Some(state),
+            kassiber_diagnostics::state::checks(Some(conn)),
+            error,
+        ))
+    }
+
     fn backup_fingerprint(
         &self,
         project: Option<&str>,

@@ -163,6 +163,16 @@ pub struct StatusFacts {
 
 /// An open, unlocked book.
 pub trait Book: Send {
+    /// Redacted report over this admitted connection; never exposes raw rows/configuration.
+    fn diagnostics(
+        &self,
+        _args: &Value,
+        _version: &str,
+        _error: Option<&AppError>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("diagnostics", "public report"))
+    }
+
     fn backup_fingerprint(
         &self,
         _project: Option<&str>,

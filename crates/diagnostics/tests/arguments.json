@@ -1,0 +1,518 @@
+[
+  {
+    "input": {
+      "command": "diagnostics",
+      "diagnostics_command": "collect",
+      "save": true,
+      "format": "json",
+      "machine": true,
+      "non_interactive": true,
+      "debug": false,
+      "data_root": "/private/secret",
+      "env_file": "/private/secret.env",
+      "output": "private-output",
+      "diagnostics_out": "auto",
+      "runtime_config": {
+        "password": "secret"
+      }
+    },
+    "expected": {
+      "command_path": [
+        "diagnostics",
+        "collect"
+      ],
+      "output_format": "json",
+      "machine": true,
+      "debug_requested": false,
+      "diagnostics_out_requested": true,
+      "provided_arguments": [
+        {
+          "name": "format",
+          "value_class": "enum",
+          "value": "json"
+        },
+        {
+          "name": "machine",
+          "value_class": "boolean",
+          "value": true
+        },
+        {
+          "name": "non_interactive",
+          "value_class": "boolean",
+          "value": true
+        },
+        {
+          "name": "save",
+          "value_class": "boolean",
+          "value": true
+        }
+      ]
+    }
+  },
+  {
+    "input": {
+      "command": "rates",
+      "rates_command": "range",
+      "format": "table",
+      "machine": false,
+      "pair": "BTC-USD",
+      "start": "not-a-date",
+      "end": "2026-10-29",
+      "project_selection_explicit": true,
+      "limit": 42,
+      "zero": 0,
+      "text": "",
+      "empty": {},
+      "items": [
+        "secret"
+      ],
+      "descriptor": "upubabababababababababababababababababababababababababababababababababababababababab",
+      "api_key": "sk-planted-secret"
+    },
+    "expected": {
+      "command_path": [
+        "rates",
+        "range"
+      ],
+      "output_format": "table",
+      "machine": false,
+      "debug_requested": false,
+      "diagnostics_out_requested": false,
+      "provided_arguments": [
+        {
+          "name": "api_key",
+          "value_class": "redacted"
+        },
+        {
+          "name": "descriptor",
+          "value_class": "redacted"
+        },
+        {
+          "name": "empty",
+          "value_class": "text",
+          "value": "{}"
+        },
+        {
+          "name": "end",
+          "value_class": "redacted"
+        },
+        {
+          "name": "format",
+          "value_class": "enum",
+          "value": "table"
+        },
+        {
+          "name": "items",
+          "value_class": "list",
+          "items": 1
+        },
+        {
+          "name": "limit",
+          "value_class": "number"
+        },
+        {
+          "name": "pair",
+          "value_class": "text",
+          "value": "BTC-USD"
+        },
+        {
+          "name": "project_selection_explicit",
+          "value_class": "boolean",
+          "value": true
+        },
+        {
+          "name": "start",
+          "value_class": "redacted"
+        },
+        {
+          "name": "text",
+          "value_class": "text",
+          "value": ""
+        }
+      ]
+    }
+  },
+  {
+    "input": {
+      "command": "wallets",
+      "wallets_command": "create",
+      "dry_run": true,
+      "amount": true,
+      "password": false,
+      "count": 1.25,
+      "kind": "Bearer planted-secret",
+      "file": "/private/secret",
+      "safe": "/home/private-user/secret"
+    },
+    "expected": {
+      "command_path": [
+        "wallets",
+        "create"
+      ],
+      "output_format": null,
+      "machine": false,
+      "debug_requested": false,
+      "diagnostics_out_requested": false,
+      "provided_arguments": [
+        {
+          "name": "amount",
+          "value_class": "boolean",
+          "value": true
+        },
+        {
+          "name": "count",
+          "value_class": "number"
+        },
+        {
+          "name": "dry_run",
+          "value_class": "boolean",
+          "value": true
+        },
+        {
+          "name": "file",
+          "value_class": "redacted"
+        },
+        {
+          "name": "kind",
+          "value_class": "enum",
+          "value": "Bearer <redacted>"
+        },
+        {
+          "name": "safe",
+          "value_class": "text",
+          "value": "<path>"
+        }
+      ]
+    }
+  },
+  {
+    "input": {
+      "command": "diagnostics",
+      "diagnostics_command": "collect",
+      "format": "json",
+      "account": "sk-planted-account-secret-value",
+      "address": "sk-planted-address-secret-value",
+      "amount": "sk-planted-amount-secret-value",
+      "asset": "sk-planted-asset-secret-value",
+      "auth": "sk-planted-auth-secret-value",
+      "backend": "sk-planted-backend-secret-value",
+      "balance": "sk-planted-balance-secret-value",
+      "basis": "sk-planted-basis-secret-value",
+      "blinding": "sk-planted-blinding-secret-value",
+      "code": "sk-planted-code-secret-value",
+      "config": "sk-planted-config-secret-value",
+      "cookie": "sk-planted-cookie-secret-value",
+      "counterparty": "sk-planted-counterparty-secret-value",
+      "credential": "sk-planted-credential-secret-value",
+      "cursor": "sk-planted-cursor-secret-value",
+      "date": "sk-planted-date-secret-value",
+      "description": "sk-planted-description-secret-value",
+      "descriptor": "sk-planted-descriptor-secret-value",
+      "end": "sk-planted-end-secret-value",
+      "env": "sk-planted-env-secret-value",
+      "external": "sk-planted-external-secret-value",
+      "fee": "sk-planted-fee-secret-value",
+      "file": "sk-planted-file-secret-value",
+      "fingerprint": "sk-planted-fingerprint-secret-value",
+      "gain": "sk-planted-gain-secret-value",
+      "id": "sk-planted-id-secret-value",
+      "key": "sk-planted-key-secret-value",
+      "label": "sk-planted-label-secret-value",
+      "loss": "sk-planted-loss-secret-value",
+      "mnemonic": "sk-planted-mnemonic-secret-value",
+      "name": "sk-planted-name-secret-value",
+      "note": "sk-planted-note-secret-value",
+      "output": "sk-planted-output-secret-value",
+      "pair_id": "sk-planted-pair-id-secret-value",
+      "passphrase": "sk-planted-passphrase-secret-value",
+      "password": "sk-planted-password-secret-value",
+      "path": "sk-planted-path-secret-value",
+      "payload": "sk-planted-payload-secret-value",
+      "price": "sk-planted-price-secret-value",
+      "proceeds": "sk-planted-proceeds-secret-value",
+      "profile": "sk-planted-profile-secret-value",
+      "rate": "sk-planted-rate-secret-value",
+      "raw": "sk-planted-raw-secret-value",
+      "recovery": "sk-planted-recovery-secret-value",
+      "ref": "sk-planted-ref-secret-value",
+      "secret": "sk-planted-secret-secret-value",
+      "seed": "sk-planted-seed-secret-value",
+      "source": "sk-planted-source-secret-value",
+      "start": "sk-planted-start-secret-value",
+      "store": "sk-planted-store-secret-value",
+      "tag": "sk-planted-tag-secret-value",
+      "time": "sk-planted-time-secret-value",
+      "timestamp": "sk-planted-timestamp-secret-value",
+      "token": "sk-planted-token-secret-value",
+      "transaction": "sk-planted-transaction-secret-value",
+      "tx": "sk-planted-tx-secret-value",
+      "type": "sk-planted-type-secret-value",
+      "url": "sk-planted-url-secret-value",
+      "user": "sk-planted-user-secret-value",
+      "value": "sk-planted-value-secret-value",
+      "wallet": "sk-planted-wallet-secret-value",
+      "workspace": "sk-planted-workspace-secret-value"
+    },
+    "expected": {
+      "command_path": [
+        "diagnostics",
+        "collect"
+      ],
+      "output_format": "json",
+      "machine": false,
+      "debug_requested": false,
+      "diagnostics_out_requested": false,
+      "provided_arguments": [
+        {
+          "name": "account",
+          "value_class": "redacted"
+        },
+        {
+          "name": "address",
+          "value_class": "redacted"
+        },
+        {
+          "name": "amount",
+          "value_class": "redacted"
+        },
+        {
+          "name": "asset",
+          "value_class": "redacted"
+        },
+        {
+          "name": "auth",
+          "value_class": "redacted"
+        },
+        {
+          "name": "backend",
+          "value_class": "redacted"
+        },
+        {
+          "name": "balance",
+          "value_class": "redacted"
+        },
+        {
+          "name": "basis",
+          "value_class": "redacted"
+        },
+        {
+          "name": "blinding",
+          "value_class": "redacted"
+        },
+        {
+          "name": "code",
+          "value_class": "redacted"
+        },
+        {
+          "name": "config",
+          "value_class": "redacted"
+        },
+        {
+          "name": "cookie",
+          "value_class": "redacted"
+        },
+        {
+          "name": "counterparty",
+          "value_class": "redacted"
+        },
+        {
+          "name": "credential",
+          "value_class": "redacted"
+        },
+        {
+          "name": "cursor",
+          "value_class": "redacted"
+        },
+        {
+          "name": "date",
+          "value_class": "redacted"
+        },
+        {
+          "name": "description",
+          "value_class": "redacted"
+        },
+        {
+          "name": "descriptor",
+          "value_class": "redacted"
+        },
+        {
+          "name": "end",
+          "value_class": "redacted"
+        },
+        {
+          "name": "env",
+          "value_class": "redacted"
+        },
+        {
+          "name": "external",
+          "value_class": "redacted"
+        },
+        {
+          "name": "fee",
+          "value_class": "redacted"
+        },
+        {
+          "name": "file",
+          "value_class": "redacted"
+        },
+        {
+          "name": "fingerprint",
+          "value_class": "redacted"
+        },
+        {
+          "name": "format",
+          "value_class": "enum",
+          "value": "json"
+        },
+        {
+          "name": "gain",
+          "value_class": "redacted"
+        },
+        {
+          "name": "id",
+          "value_class": "redacted"
+        },
+        {
+          "name": "key",
+          "value_class": "redacted"
+        },
+        {
+          "name": "label",
+          "value_class": "redacted"
+        },
+        {
+          "name": "loss",
+          "value_class": "redacted"
+        },
+        {
+          "name": "mnemonic",
+          "value_class": "redacted"
+        },
+        {
+          "name": "name",
+          "value_class": "redacted"
+        },
+        {
+          "name": "note",
+          "value_class": "redacted"
+        },
+        {
+          "name": "pair_id",
+          "value_class": "redacted"
+        },
+        {
+          "name": "passphrase",
+          "value_class": "redacted"
+        },
+        {
+          "name": "password",
+          "value_class": "redacted"
+        },
+        {
+          "name": "path",
+          "value_class": "redacted"
+        },
+        {
+          "name": "payload",
+          "value_class": "redacted"
+        },
+        {
+          "name": "price",
+          "value_class": "redacted"
+        },
+        {
+          "name": "proceeds",
+          "value_class": "redacted"
+        },
+        {
+          "name": "profile",
+          "value_class": "redacted"
+        },
+        {
+          "name": "rate",
+          "value_class": "redacted"
+        },
+        {
+          "name": "raw",
+          "value_class": "redacted"
+        },
+        {
+          "name": "recovery",
+          "value_class": "redacted"
+        },
+        {
+          "name": "ref",
+          "value_class": "redacted"
+        },
+        {
+          "name": "secret",
+          "value_class": "redacted"
+        },
+        {
+          "name": "seed",
+          "value_class": "redacted"
+        },
+        {
+          "name": "source",
+          "value_class": "redacted"
+        },
+        {
+          "name": "start",
+          "value_class": "redacted"
+        },
+        {
+          "name": "store",
+          "value_class": "redacted"
+        },
+        {
+          "name": "tag",
+          "value_class": "redacted"
+        },
+        {
+          "name": "time",
+          "value_class": "redacted"
+        },
+        {
+          "name": "timestamp",
+          "value_class": "redacted"
+        },
+        {
+          "name": "token",
+          "value_class": "redacted"
+        },
+        {
+          "name": "transaction",
+          "value_class": "redacted"
+        },
+        {
+          "name": "tx",
+          "value_class": "redacted"
+        },
+        {
+          "name": "type",
+          "value_class": "redacted"
+        },
+        {
+          "name": "url",
+          "value_class": "redacted"
+        },
+        {
+          "name": "user",
+          "value_class": "redacted"
+        },
+        {
+          "name": "value",
+          "value_class": "redacted"
+        },
+        {
+          "name": "wallet",
+          "value_class": "redacted"
+        },
+        {
+          "name": "workspace",
+          "value_class": "redacted"
+        }
+      ]
+    }
+  }
+]

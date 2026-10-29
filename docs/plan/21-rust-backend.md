@@ -1810,3 +1810,23 @@ both fresh 50-request recording sets with zero differences. All ten fusion
 mutation recipes and 25 inherited boundary recipes were freshly killed;
 **2,211 inherited recipes still need rerunning**. This bounded mutation result
 does not complete the full inherited-campaign gate or the R4 authority switch.
+
+### R5 diagnostics service slice
+
+`diagnostics collect`, its optional public report save, and the global
+`--diagnostics-out PATH|auto` error hook now run natively. The hybrid probe
+admits implemented commands carrying the flag. The reference defines no
+diagnostics daemon kind. Collection reads the admitted connection before
+close, projects aggregate state and applies the reference's ordered redaction
+rules without egress or disk logging.
+
+The owner approved honest native runtime and stack values inside the same
+ordered schema: the historical Python identity keys describe Rust, SQLite
+reports its linked version, report stacks are empty arrays, and requested CLI
+`error.debug` strings are empty. Python tracebacks are never invented. CLI
+debug remains null without `--debug`, including for unhandled failures.
+Differential tests normalize only the named runtime/stack fields and,
+separately for unhandled diagnostics export failures, `error.debug`; tests pin
+the normalization scope. All other bytes retain Python parity.
+See the [slice acceptance](../reference/rust-diagnostics-r5-status.md) and
+[implementation contract](../reference/rust-shell.md#diagnostics-service-slice-r5).

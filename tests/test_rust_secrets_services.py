@@ -173,7 +173,7 @@ def test_init_refuses_either_live_owner_without_changing_the_database(cli, owner
 
 def test_remaining_slice_commands_fail_closed_before_bootstrap(tmp_path):
     for index, command in enumerate([
-        ["maintenance", "purge-legacy-ledger"], ["diagnostics", "collect"],
+        ["maintenance", "purge-legacy-ledger"],
     ]):
         root = tmp_path / str(index) / "data"
         result = subprocess.run([RUST_BIN, "--machine", "--data-root", str(root), *command],

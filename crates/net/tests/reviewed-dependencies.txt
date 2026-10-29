@@ -26,7 +26,7 @@ kassiber-store test-hooks
 kassiber-tax-core
 keyring-core
 libc
-nix user fs
+nix user fs feature
 num-bigint
 num-integer
 num-traits
@@ -83,3 +83,5 @@ kassiber-backup test-hooks
 
 # Custody HTLC replay reuses the already pinned pure HASH160/SHA-256 crate.
 bitcoin_hashes
+
+kassiber-diagnostics test-hooks

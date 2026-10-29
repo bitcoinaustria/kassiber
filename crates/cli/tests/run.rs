@@ -293,11 +293,8 @@ fn describe_honours_output_and_needs_no_store() {
         &env,
         &["--diagnostics-out", "auto", "commands", "describe"],
     );
-    assert_eq!(code, 1);
-    assert_eq!(
-        err,
-        "error: --diagnostics-out is not implemented in the Rust backend yet\n"
-    );
+    assert_eq!(code, 0);
+    assert!(err.is_empty());
 }
 
 #[cfg(feature = "test-probe")]
@@ -313,8 +310,18 @@ fn the_probe_reports_implementation_without_running_the_command() {
         (&["--machine", "wallets", "list"][..], 0, "wallets.list"),
         (
             &["--machine", "--diagnostics-out", "auto", "status"][..],
-            PROBE_NOT_IMPLEMENTED,
+            0,
             "status",
+        ),
+        (
+            &["--machine", "diagnostics", "collect"][..],
+            0,
+            "diagnostics.collect",
+        ),
+        (
+            &["--machine", "wallets", "sync"][..],
+            PROBE_NOT_IMPLEMENTED,
+            "wallets.sync",
         ),
     ] {
         let (code, out, err) = invoke(Arc::new(StubStore), &probe, argv);

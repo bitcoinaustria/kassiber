@@ -148,6 +148,21 @@ pub(super) fn tombstones(conn: &Connection) -> Result<BTreeSet<String>, AppError
         .collect())
 }
 impl Config {
+    /// Public diagnostics only: the private merged configuration never leaves this service.
+    pub fn diagnostics_summary(&self) -> kassiber_pyjson::Value {
+        let config = kassiber_envelope::dict([
+            (
+                "backends",
+                kassiber_envelope::dict(self.view.iter().map(|(k, v)| (k.as_str(), v.clone()))),
+            ),
+            (
+                "default_backend",
+                kassiber_envelope::s(self.default_backend.as_str()),
+            ),
+        ]);
+        kassiber_diagnostics::state::backends(&config)
+    }
+
     /// Resolve raw adapter configuration inside the backend, never project it
     /// to AI or the renderer. DB rows override seeded/dotenv configuration;
     /// explicit process fields override the DB one field at a time.

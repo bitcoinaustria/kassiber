@@ -1,0 +1,30 @@
+[package]
+name = "kassiber-diagnostics"
+description = "Local public-safe diagnostics report generation and explicit exports"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-store = { path = "../store" }
+kassiber-paths = { path = "../paths" }
+fancy-regex = "0.20"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["feature"] }
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[features]
+test-hooks = []

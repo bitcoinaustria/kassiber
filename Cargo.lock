@@ -1472,6 +1472,7 @@ dependencies = [
  "kassiber-chain",
  "kassiber-cli",
  "kassiber-daemon",
+ "kassiber-diagnostics",
  "kassiber-envelope",
  "kassiber-imports",
  "kassiber-net",
@@ -1532,6 +1533,7 @@ version = "0.1.0"
 dependencies = [
  "fancy-regex",
  "kassiber-daemon",
+ "kassiber-diagnostics",
  "kassiber-envelope",
  "kassiber-imports",
  "kassiber-pyjson",
@@ -1572,6 +1574,21 @@ dependencies = [
  "kassiber-transactions",
  "kassiber-wallets",
  "serde_json",
+]
+
+[[package]]
+name = "kassiber-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex",
+ "kassiber-envelope",
+ "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
+ "nix",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1734,6 +1751,7 @@ version = "0.1.0"
 dependencies = [
  "age",
  "fancy-regex",
+ "kassiber-diagnostics",
  "kassiber-envelope",
  "kassiber-paths",
  "kassiber-pyjson",

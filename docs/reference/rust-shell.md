@@ -217,8 +217,9 @@ retains Python descriptor coverage through an unported encrypted backend read.
 
 Remaining work is `secrets change-passphrase`, `remember-unlock`, `forget-unlock`,
 `status`, `migrate-credentials`; `backup export/import`; `maintenance
-purge-legacy-ledger`; `diagnostics collect` and `--diagnostics-out`; and all
-associated desktop daemon kinds. They retain `not_implemented` before bootstrap.
+purge-legacy-ledger`; and associated desktop daemon kinds. Diagnostics has
+since been ported in the diagnostics service slice below. Unported operations
+retain `not_implemented` before bootstrap.
 Native credential writes/deletes and their disposable-bus tests, archive safety
 mutations, age/.kassiber round trips in both directions, credential/restore
 publication recovery, and native-platform/TTY acceptance remain unverified.
@@ -339,8 +340,9 @@ publication, and the binary reuses `zeroize` for transport copies.
 Remaining acceptance: the 29 disposable native cases, native macOS/Windows
 item/ACL/signing and interruption runs (including Windows compound-target
 displacement), interactive TTY behavior, and broader secrets disposition and
-complete refusal/error-byte coverage. Backup, maintenance, diagnostics,
-`--diagnostics-out` and desktop encryption initialization remain later work.
+complete refusal/error-byte coverage. Backup, maintenance and desktop
+encryption initialization were later work at this checkpoint; diagnostics
+has since been ported below.
 Python product code is unchanged; no new Python reference bug was confirmed.
 
 ## Import-run checkpoint (R5)
@@ -2608,8 +2610,8 @@ production stay Python. No Python reference bug was found or fixed.
 
 ## Not yet ported
 
-`--diagnostics-out` fails `not_implemented` instead of writing its report;
-`--debug` adds no traceback; there is no cached update banner, no RAM log
+The diagnostics slice now implements explicit public reports and native debug
+provenance (below). There is no cached update banner, no RAM log
 ring or request log, and no operator broker or broker child. A bound brokered
 project's commands fail `not_implemented`.
 
@@ -2752,3 +2754,59 @@ The [second performance round](rust-read-performance-round2.md) adds streaming
 admission/history/summary projections, reusable row conversion, exact integer
 amount scaling and narrow transaction-page selection. It records phase spans
 and scratch index measurements; schema proposals remain unimplemented.
+## Diagnostics service slice (R5)
+
+`crates/diagnostics` owns `diagnostics collect`, optional `--save`, and the
+explicit global `--diagnostics-out PATH|auto` error export. The CLI has one
+family adapter; the reference has no diagnostics daemon kind or separate AI
+projection. Error collection uses the admitted book before it closes. Failures
+before admission report unavailable state. A report-write failure is best effort:
+it emits Python's redacted stderr notice and preserves the original error.
+No automatic log, network request, provider probe, descriptor dispatch or new
+AI authority is introduced.
+
+The ordered report schema, argument classes, sensitive-key tokens, fourteen
+ordered text rules, recursive detail shapes, aggregate SQL summaries and
+syntactic backend locality follow `kassiber/diagnostics.py`. The implementation
+reuses the already locked regex engine because CPython lookarounds and Unicode
+case/word/space/digit matching are not available in the standard library.
+The same existing `nix` dependency supplies public OS identity on Unix; no new
+third-party package is introduced.
+
+Native provenance is an owner-approved exception to byte parity. Historical
+schema keys `environment.python_version` and `python_implementation` contain
+the actual compiler identity and `Rust`, respectively; `sqlite_version` is the
+native linked SQLite version. Platform values describe the running host.
+The report's `stack` is an empty array on failure: a meaningful bounded public
+native trace is unavailable, so Python frames are never fabricated and native
+Debug/Display backtraces are never serialized. The CLI envelope always retains
+`error.debug` in its original position: it is null without `--debug`, including
+for unhandled failures, and an empty string with `--debug`. No native frame
+paths, usernames, home directories, build-machine paths or stack locals escape.
+An empty stack/debug has zero frames and bytes, below Python's 20-frame report
+cap and traceback-size cap.
+
+The report oracle normalizes only `environment.python_version`,
+`environment.python_implementation`, `environment.sqlite_version`, and `stack`.
+A separate unhandled diagnostics-export envelope oracle normalizes only
+`error.debug` when it is a string. Scope regressions prove other values and
+layout remain observable. Clocks are injected on both sides in tests, rather
+than normalized. The timestamp hook is compiled only into test-harness builds.
+All other keys, ordering, nesting, types, bytes, errors and saved-file modes
+remain the reference's. Python product code is unchanged.
+
+Python currently uses `Path.write_text` directly, with ordinary umask-derived
+permissions, rather than an atomic replacement or an explicit private mode.
+Rust deliberately preserves this behavior, including existing-inode/mode
+retention. The report filename also follows Python's timestamp sanitizer:
+ordinary timestamps produce `kassiber-diagnostics--timestamp-.json`, so a
+later automatic export overwrites that filename. These reference limitations
+are recorded, not silently fixed in the port.
+
+The checked-in oracle corpus has 29 text cases, 135 sensitive-key cases,
+140 recursive detail cases, four argument-class cases, a planted aggregate
+state fixture and 146 backend locality vectors. The mutation catalog covers
+all fourteen text rules, every sensitive key, native report/debug frame
+refusal, debug presence, detail shapes and effective review selection.
+See [slice acceptance](rust-diagnostics-r5-status.md) for verification,
+served-by evidence, reference repros and platform limits.

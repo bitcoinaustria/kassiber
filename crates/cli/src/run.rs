@@ -193,7 +193,7 @@ pub fn run(
 
     let width = width_from_columns(env.columns.as_deref());
     let version = build.version_text();
-    let namespace = match parse_args(
+    let mut namespace = match parse_args(
         argv,
         Context {
             width,
@@ -261,15 +261,22 @@ pub fn run(
             .unwrap_or(Format::Table)
     };
 
+    namespace.set("non_interactive", Value::Bool(globals.non_interactive));
+    namespace.set(
+        "format",
+        s(if globals.machine {
+            "json"
+        } else {
+            globals.format.as_deref().unwrap_or("table")
+        }),
+    );
     let (path, _) = selected_leaf(&namespace);
     let dotted = path.join(".");
     #[cfg(feature = "test-probe")]
     if env.test_probe {
         let _ = writeln!(stdout, "{dotted}");
         let _ = stdout.flush();
-        // `--diagnostics-out` is refused below, so a call carrying it is
-        // not one Rust serves.
-        return if IMPLEMENTED.contains(&dotted.as_str()) && globals.diagnostics_out.is_none() {
+        return if IMPLEMENTED.contains(&dotted.as_str()) {
             0
         } else {
             PROBE_NOT_IMPLEMENTED
@@ -280,6 +287,13 @@ pub fn run(
     let fail = |stdout: &mut Box<dyn Write + Send>,
                 stderr: &mut Box<dyn Write + Send>,
                 error: AppError| {
+        crate::diagnostics::write_error(
+            &crate::diagnostics::arguments(&namespace, None),
+            build.version,
+            &error,
+            None,
+            stderr.as_mut(),
+        );
         let mut sink = Sink {
             output: output.as_deref(),
             home: env.home.as_deref(),
@@ -300,9 +314,6 @@ pub fn run(
             return Err(error);
         }
         check_operator_bindings(env)?;
-        if globals.diagnostics_out.is_some() {
-            return Err(not_implemented("diagnostics", "--diagnostics-out"));
-        }
         Ok(())
     })();
     if let Err(error) = prepared {
@@ -346,17 +357,26 @@ pub fn run(
         stdout: &mut stdout,
         stderr: &mut stderr,
     };
+    let mut diagnostics = crate::diagnostics::FailureContext {
+        args: crate::diagnostics::arguments(&namespace, None),
+        report: None,
+        unhandled_type: None,
+    };
     let result = match dotted.as_str() {
         command if crate::backup::COMMANDS.contains(&command) => {
             route_brokered(env, store.as_ref(), &globals.selection)
                 .and_then(|_| store.bootstrap(&globals.selection))
-                .and_then(|bootstrap| crate::backup::execute(store.as_ref(), &bootstrap.paths, command, &namespace))
+                .and_then(|bootstrap| {
+                    diagnostics.args = crate::diagnostics::arguments(&namespace, Some(&bootstrap));
+                    crate::backup::execute(store.as_ref(), &bootstrap.paths, command, &namespace)
+                })
                 .and_then(|payload| emit(&mut sink, format, &kind, payload))
         }
         command if crate::secrets::COMMANDS.contains(&command) => {
             route_brokered(env, store.as_ref(), &globals.selection)
                 .and_then(|_| store.bootstrap(&globals.selection))
                 .and_then(|bootstrap| {
+                    diagnostics.args = crate::diagnostics::arguments(&namespace, Some(&bootstrap));
                     crate::secrets::execute(store.as_ref(), &bootstrap.paths, command, &namespace)
                 })
                 .and_then(|payload| {
@@ -368,7 +388,10 @@ pub fn run(
         }
         command if crate::offline::COMMANDS.contains(&command) => store
             .bootstrap(&globals.selection)
-            .and_then(|_| crate::offline::execute(store.as_ref(), command, &namespace))
+            .and_then(|bootstrap| {
+                diagnostics.args = crate::diagnostics::arguments(&namespace, Some(&bootstrap));
+                crate::offline::execute(store.as_ref(), command, &namespace)
+            })
             .and_then(|payload| emit(&mut sink, format, command, payload)),
         command if crate::projects::COMMANDS.contains(&command) => {
             crate::projects::execute(store.as_ref(), command, &namespace)
@@ -382,6 +405,7 @@ pub fn run(
             &globals,
             stdin_is_tty,
             None,
+            (&namespace, build.version, &mut diagnostics),
             |book, _| {
                 let payload =
                     crate::wallets::execute(&namespace, book, stdin.as_mut(), sink.stderr)?;
@@ -394,6 +418,7 @@ pub fn run(
             &globals,
             stdin_is_tty,
             None,
+            (&namespace, build.version, &mut diagnostics),
             |book, _| {
                 let (kind, payload) = crate::imports::execute(&namespace, book)?;
                 emit(&mut sink, format, kind, payload)
@@ -404,7 +429,7 @@ pub fn run(
             store.as_ref(),
             build,
             &globals,
-            (&dotted, &namespace, stdin_is_tty),
+            (&dotted, &namespace, stdin_is_tty, &mut diagnostics),
             &mut prepare,
             |payload| {
                 if dotted == "metadata.bip329.list" || dotted == "transactions.list" {
@@ -459,7 +484,18 @@ pub fn run(
             {
                 error.code = "internal_error".into();
             }
-            emit_error(&mut sink, format, &error);
+            crate::diagnostics::write_error(
+                &diagnostics.args,
+                build.version,
+                &error,
+                diagnostics.report,
+                sink.stderr,
+            );
+            let debug = kassiber_diagnostics::report::native_debug(
+                diagnostics.unhandled_type.is_some(),
+                namespace.flag("debug"),
+            );
+            crate::render::emit_error_with_debug(&mut sink, format, &error, debug);
             1
         }
     }
@@ -484,17 +520,23 @@ fn book_command(
     store: &dyn BookStore,
     build: BuildInfo,
     globals: &Globals,
-    command: (&str, &Namespace, bool),
+    command: (
+        &str,
+        &Namespace,
+        bool,
+        &mut crate::diagnostics::FailureContext,
+    ),
     prepare: &mut dyn FnMut(&Namespace) -> Result<Namespace, AppError>,
     emit: impl FnOnce(Value) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
-    let (operation, namespace, stdin_is_tty) = command;
+    let (operation, namespace, stdin_is_tty, diagnostics) = command;
     let initialize = operation == "init";
     route_brokered(env, store, &globals.selection)?;
     if env.operator_child() {
         return Err(not_implemented("operator", "running as a broker child"));
     }
     let bootstrap = store.bootstrap(&globals.selection)?;
+    diagnostics.args = crate::diagnostics::arguments(namespace, Some(&bootstrap));
     let mut runtime_config = bootstrap.runtime_config.clone();
     let expected = operator_expected_database_identity(env)?;
     let allow_prompt =
@@ -516,6 +558,15 @@ fn book_command(
                 &bootstrap.paths.data_root,
                 !bootstrap.selection_explicit,
             )?;
+        }
+        if operation == "diagnostics.collect" {
+            return emit(crate::diagnostics::execute(
+                book.as_mut(),
+                namespace,
+                &bootstrap,
+                build.version,
+                diagnostics,
+            )?);
         }
         if namespace.text("command") == Some("rates") {
             return emit(crate::rates::run(book.as_mut(), namespace)?);
@@ -595,6 +646,17 @@ fn book_command(
         let facts = book.status_facts()?;
         emit(status_payload(build.version, &facts, &runtime_config))
     })();
+    if let Err(ref error) = outcome {
+        if globals.diagnostics_out.is_some() {
+            diagnostics.report = Some(
+                book.diagnostics(&diagnostics.args, build.version, Some(error))
+                    .map(|mut report| {
+                        diagnostics.annotate(&mut report);
+                        report
+                    }),
+            );
+        }
+    }
     let closed = book.close();
     outcome?;
     closed
@@ -607,6 +669,7 @@ fn with_book(
     globals: &Globals,
     stdin_is_tty: bool,
     initialize_version: Option<&str>,
+    diagnostics: (&Namespace, &str, &mut crate::diagnostics::FailureContext),
     execute: impl FnOnce(
         &mut dyn kassiber_runtime::store::Book,
         &kassiber_runtime::store::Bootstrap,
@@ -616,7 +679,9 @@ fn with_book(
     if env.operator_child() {
         return Err(not_implemented("operator", "running as a broker child"));
     }
+    let (args, version, diagnostics) = diagnostics;
     let mut bootstrap = store.bootstrap(&globals.selection)?;
+    diagnostics.args = crate::diagnostics::arguments(args, Some(&bootstrap));
     let mut runtime_config = bootstrap.runtime_config.clone();
     let expected = operator_expected_database_identity(env)?;
     let allow_prompt =
@@ -642,6 +707,11 @@ fn with_book(
         }
         execute(book.as_mut(), &bootstrap)
     })();
+    if let Err(ref error) = outcome {
+        if globals.diagnostics_out.is_some() {
+            diagnostics.report = Some(book.diagnostics(&diagnostics.args, version, Some(error)));
+        }
+    }
     let closed = book.close();
     outcome?;
     closed

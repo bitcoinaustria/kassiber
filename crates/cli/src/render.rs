@@ -516,8 +516,17 @@ pub fn emit_with_meta(
 /// `emit_error(args, exc)`: the error envelope for `json`, otherwise
 /// `error:` and `hint:` lines on stderr.
 pub fn emit_error(sink: &mut Sink<'_>, format: Format, error: &AppError) {
+    emit_error_with_debug(sink, format, error, None);
+}
+/// Preserve the error envelope's debug position/type for native failures.
+pub fn emit_error_with_debug(
+    sink: &mut Sink<'_>,
+    format: Format,
+    error: &AppError,
+    debug: Option<&str>,
+) {
     if format == Format::Json {
-        let envelope = error.envelope(None);
+        let envelope = error.envelope(debug);
         let Ok(text) = cli_text(&envelope) else {
             return;
         };

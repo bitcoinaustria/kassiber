@@ -12,6 +12,7 @@ members = [
   "crates/setup",
   "crates/custody",
   "crates/daemon",
+  "crates/diagnostics",
   "crates/envelope",
   "crates/kassiber",
   "crates/imports",

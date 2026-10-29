@@ -21,6 +21,7 @@ path = "src/main.rs"
 # kinds, and the KASSIBER_RUST_TEST_PROBE implementation probe the hybrid
 # test candidate routes on. Never in a release build.
 test-harness = [
+  "kassiber-diagnostics/test-hooks",
   "kassiber-cli/test-probe",
   "kassiber-net/test-observer",
   "kassiber-runtime/fake",
@@ -31,6 +32,7 @@ test-harness = [
 ]
 
 [dependencies]
+kassiber-diagnostics = { path = "../diagnostics" }
 kassiber-chain = { path = "../chain" }
 kassiber-backup = { path = "../backup" }
 kassiber-reports = { path = "../reports" }

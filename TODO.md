@@ -153,8 +153,11 @@ starts from `0d4fbc28`; the complete service slice remains open.
 - [ ] Consider attachment content hashes in a future backup format/product
   change. The current Python-compatible manifest records only file counts;
   this Rust port deliberately retains that behavior.
-- [ ] Port `maintenance purge-legacy-ledger`, `diagnostics collect`,
-  `--diagnostics-out` and the remaining desktop kinds; preserve RAM-only logging.
+- [x] Port `diagnostics collect` and global `--diagnostics-out`, with ordered
+  redaction fixtures, native runtime/stack provenance exceptions and planted
+  privacy mutations. No diagnostics daemon kind exists in the reference.
+- [ ] Port `maintenance purge-legacy-ledger` and the remaining desktop kinds;
+  preserve RAM-only logging.
 - [ ] Complete all slice dispositions and native-platform/TTY gates before
   accepting the slice.
 

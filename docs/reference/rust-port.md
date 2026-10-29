@@ -66,12 +66,12 @@ the classifier's `summary` output and is checked by preflight.
 | custody | 0 | 38 | 380 | 90 | 1 | 509 |
 | journals | 4 | 14 | 173 | 118 | 8 | 317 |
 | imports | 67 | 33 | 168 | 0 | 0 | 268 |
-| reports | 57 | 23 | 178 | 11 | 0 | 269 |
+| reports | 56 | 23 | 178 | 11 | 0 | 268 |
 | chain/sync | 38 | 76 | 1274 | 9 | 0 | 1397 |
 | network/egress | 7 | 15 | 79 | 0 | 10 | 111 |
-| transactions/metadata/transfers/reviews | 47 | 95 | 530 | 21 | 0 | 693 |
+| transactions/metadata/transfers/reviews | 46 | 95 | 529 | 21 | 0 | 691 |
 | source-funds | 51 | 50 | 139 | 0 | 0 | 240 |
-| secrets/backup | 5 | 18 | 80 | 44 | 0 | 147 |
+| secrets/backup | 7 | 18 | 81 | 52 | 0 | 158 |
 | daemon runtime | 8 | 25 | 187 | 0 | 1 | 221 |
 | AI/MCP/operator | 64 | 134 | 604 | 0 | 0 | 802 |
 | CLI shell | 20 | 0 | 30 | 95 | 0 | 145 |

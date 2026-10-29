@@ -20,7 +20,9 @@ fn bypass(source: &str) -> bool {
         .replace(
             "parse::<std::net::IpAddr>()",
             "parse::<ReviewedAddressLiteral>()",
-        );
+        )
+        .replace("std::net::IpAddr::V4", "ReviewedV4Literal")
+        .replace("std::net::IpAddr::V6", "ReviewedV6Literal");
     [
         "TcpStream",
         "TcpListener",
@@ -317,7 +319,9 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
                 .replace(
                     "parse::<std::net::IpAddr>()",
                     "parse::<ReviewedAddressLiteral>()",
-                );
+                )
+                .replace("std::net::IpAddr::V4", "ReviewedV4Literal")
+                .replace("std::net::IpAddr::V6", "ReviewedV6Literal");
             let net_identifier = path.extension().is_some_and(|ext| ext == "rs")
                 && literal_checked
                     .split(|c: char| !(c.is_alphanumeric() || c == '_'))
@@ -413,6 +417,10 @@ fn scanner_catches_common_import_and_dependency_forms() {
     assert!(!bypass("use kassiber_net::{Route, Request};"));
     assert!(!bypass("address.parse::<std::net::Ipv6Addr>().is_ok()"));
     assert!(!bypass("address.parse::<std::net::IpAddr>().is_ok()"));
+    assert!(!bypass("match ip {std::net::IpAddr::V4(v)=>v.is_private(),std::net::IpAddr::V6(v)=>v.is_loopback()}"));
+    assert!(bypass(
+        "std::net::IpAddr::V4(ip); std::net::TcpStream::connect(addr)"
+    ));
     assert!(bypass(
         "address.parse::<std::net::IpAddr>(); std::net::TcpStream::connect(addr)"
     ));

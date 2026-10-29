@@ -11,6 +11,7 @@ pub mod argparse;
 mod attachments;
 mod commercial;
 pub mod describe;
+mod diagnostics;
 mod documents;
 pub mod help;
 mod rates;

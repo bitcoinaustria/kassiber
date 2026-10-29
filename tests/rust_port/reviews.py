@@ -234,3 +234,22 @@ REVIEWS["tests/test_payment_hash_promotion.py"] = {
         "replacement": "crates/wallets/src/file_import/tests.rs::csv_import_dedupe_batch_membership_and_journal_invalidation",
     },
 }
+
+REVIEWS["tests/test_rust_diagnostics.py"] = {"*": {
+    "disposition": "oracle", "group": "secrets-backup",
+    "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions",
+}}
+REVIEWS["tests/test_review_regressions.py"] = {
+    "ReviewRegressionTest::test_public_diagnostics_collect_omits_sensitive_state": {
+        "disposition": "boundary-fixture", "group": "secrets-backup",
+        "reason": "runs diagnostics collect/save with planted wallet/backend/transaction secrets; native hybrid routing is required",
+    },
+    "ReviewRegressionTest::test_diagnostics_out_auto_writes_public_error_report": {
+        "disposition": "boundary-fixture", "group": "secrets-backup",
+        "reason": "runs automatic/custom public error exports; native hybrid routing is required",
+    },
+    "ReviewRegressionTest::test_public_diagnostics_sanitizes_xpubs_integer_amounts_and_argument_text": {
+        "disposition": "rust-test", "group": "secrets-backup",
+        "reason": "Rust replacements: all_text_rules_match_python_bytes, every_sensitive_key_matches_python, recursive_details_shapes_match_python, every_argument_class_matches_python in crates/diagnostics/tests",
+    },
+}
