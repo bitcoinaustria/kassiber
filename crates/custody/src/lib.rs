@@ -31,6 +31,13 @@ pub fn custody(request: &str) -> String {
 /// Decision-only callers explicitly skip finalization, including its refusals.
 /// The control is outside snapshot v1; the snapshot remains raw facts only.
 pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
+    struct Memos;
+    impl Drop for Memos {
+        fn drop(&mut self) {
+            codec::clear_memos();
+        }
+    }
+    let _memos = Memos;
     let parse = timing::span("parse");
     let parsed = serde_json::from_str::<snapshot::Snapshot>(request)
         .map_err(|e| e.to_string())

@@ -60,12 +60,16 @@ fn transfer_value(value: &Value) -> Value {
             _ => codec::to_json(value),
         }
     }
-    value
-        .as_str()
-        .and_then(|s| codec::loads(s).ok())
-        .as_ref()
-        .map(decoded)
-        .unwrap_or_else(|| value.clone())
+    match value.as_str() {
+        Some(s) => codec::memo(codec::Memo::Transfer, s, || {
+            codec::loads(s)
+                .ok()
+                .as_ref()
+                .map(decoded)
+                .unwrap_or_else(|| value.clone())
+        }),
+        None => value.clone(),
+    }
 }
 pub(crate) fn transfer_object(value: &Value) -> Value {
     let value = transfer_value(value);

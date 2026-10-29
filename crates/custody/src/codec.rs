@@ -186,6 +186,18 @@ pub(crate) fn loads_bytes(text: &[u8]) -> Result<Py, String> {
             if !self.take(b"\"") {
                 return Err("expected string".into());
             }
+            // Fast path: no escape or control character before the closing
+            // quote, and valid UTF-8 (which excludes surrogates) decodes to
+            // exactly these bytes.
+            let rest = &self.text[self.at..];
+            if let Some(end) = rest.iter().position(|&b| b == b'"' || b == b'\\' || b < 32) {
+                if rest[end] == b'"' {
+                    if let Ok(text) = std::str::from_utf8(&rest[..end]) {
+                        self.at += end + 1;
+                        return Ok(PyStr::from(text));
+                    }
+                }
+            }
             let mut points = Vec::new();
             loop {
                 let byte = *self.text.get(self.at).ok_or("unterminated string")?;
@@ -335,6 +347,18 @@ pub(crate) fn loads_bytes(text: &[u8]) -> Result<Py, String> {
                     }
                     let text = std::str::from_utf8(&self.text[start..self.at])
                         .map_err(|e| e.to_string())?;
+                    // A plain JSON integer of at most 18 digits is an exact i64.
+                    let digits = text.strip_prefix('-').unwrap_or(text).as_bytes();
+                    if !digits.is_empty()
+                        && digits.len() <= 18
+                        && digits.iter().all(u8::is_ascii_digit)
+                        && (digits[0] != b'0' || digits.len() == 1)
+                    {
+                        let number: i64 = text
+                            .parse()
+                            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+                        return Ok(Py::Int(BigInt::from(number)));
+                    }
                     // serde enforces the JSON grammar; unbounded integers and
                     // float overflow remain Python's own numeric types.
                     if text.is_empty() || serde_json::from_str::<Value>(text).is_err() {
@@ -361,17 +385,52 @@ pub(crate) fn loads_bytes(text: &[u8]) -> Result<Py, String> {
     Ok(value)
 }
 
+/// Pure conversions of embedded JSON text, memoized by kind and exact text for
+/// one custody operation. Results depend only on the text, so a hit is the
+/// value the conversion would compute again.
+#[derive(Clone, Copy)]
+pub(crate) enum Memo {
+    Object,
+    Transfer,
+}
+
+thread_local! {
+    static MEMOS: std::cell::RefCell<[std::collections::HashMap<String, Value>; 2]> =
+        std::cell::RefCell::new([std::collections::HashMap::new(), std::collections::HashMap::new()]);
+}
+
+pub(crate) fn memo(kind: Memo, text: &str, convert: impl FnOnce() -> Value) -> Value {
+    if let Some(hit) = MEMOS.with(|m| m.borrow()[kind as usize].get(text).cloned()) {
+        return hit;
+    }
+    let value = convert();
+    MEMOS.with(|m| m.borrow_mut()[kind as usize].insert(text.to_owned(), value.clone()));
+    value
+}
+
+/// Releases memoized conversions at the end of an operation.
+pub(crate) fn clear_memos() {
+    MEMOS.with(|m| {
+        m.borrow_mut()
+            .iter_mut()
+            .for_each(std::collections::HashMap::clear)
+    });
+}
+
 pub fn object(v: &Value) -> Value {
     if v.is_object() {
         return v.clone();
     }
     if let Some(text) = v.as_str() {
-        if let Ok(parsed) = loads(text) {
-            let value = to_json(&parsed);
-            if value.is_object() {
-                return value;
+        return memo(Memo::Object, text, || {
+            if let Ok(parsed) = loads(text) {
+                let value = to_json(&parsed);
+                if value.is_object() {
+                    return value;
+                }
             }
-        }
+            serde_json::json!({})
+        });
     }
     serde_json::json!({})
 }
