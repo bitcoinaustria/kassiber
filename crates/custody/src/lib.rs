@@ -39,48 +39,48 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
     match parsed {
         Ok(snapshot) => {
             if let Err((code, message)) = gates::require_accounting(&snapshot) {
-                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":message}}).to_string();
+                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
             }
             // Python captures confirmation provenance before rates and channel
             // admission, retaining the original rows rather than enriched rows.
             let projection_rows = match finalized_projection::runtime::confirmation_rows(&snapshot) {
                 Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string(),
             };
             if let Err((code, message)) = gates::require_rates(&snapshot) {
-                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":message}}).to_string();
+                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
             }
             if let Err(code) = interpretation::admit_channels(&snapshot) {
-                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string();
+                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string();
             }
             let components = match components::compute(&snapshot) {
                 Ok(value) => value,
-                Err(error) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":error.code,"message":error.message}}).to_string(),
+                Err(error) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":error.code,"message":error.message}}).to_string(),
             };
             let migration = match interpretation::migration_quarantines(&snapshot) {
                 Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string(),
             };
             let evidence = match evidence::compute(&snapshot) {
                 Ok(value) => value,
-                Err(message) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":"custody_evidence_invalid","message":message}}).to_string(),
+                Err(message) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"evidence","code":"custody_evidence_invalid","message":message}}).to_string(),
             };
             let interpretation = match interpretation::stage(&snapshot, &components, &evidence, migration) {
                 Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"interpretation","code":code,"message":code}}).to_string(),
             };
             let gaps = match gaps::stage(&snapshot, &components, &evidence, &interpretation) {
                 Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"gaps","code":code,"message":code}}).to_string(),
             };
             let quantity = match quantity::runtime::stage(&snapshot, &components, &evidence, &interpretation, &gaps) {
                 Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"quantity","code":code,"message":code}}).to_string(),
             };
             let projection = if finalized {
                 match finalized_projection::runtime::stage_with_rows(&snapshot, &projection_rows, &quantity, &interpretation) {
                     Ok(value) => Some(value),
-                    Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+                    Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"finalized_projection","code":code,"message":code}}).to_string(),
                 }
             } else { None };
             let response = serde_json::json!({
@@ -100,6 +100,6 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
             kassiber_pyjson::dumps(&response, &kassiber_pyjson::Options::new())
                 .expect("computed JSON values")
         },
-        Err(message) => serde_json::json!({"schema_version": 1, "engine_version": ENGINE_VERSION, "error": {"code": "custody_snapshot_invalid", "message": message}}).to_string(),
+        Err(message) => serde_json::json!({"schema_version": 1, "engine_version": ENGINE_VERSION, "error": {"stage":"snapshot","code": "custody_snapshot_invalid", "message": message}}).to_string(),
     }
 }

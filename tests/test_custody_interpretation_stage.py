@@ -1,6 +1,7 @@
 """Whole-stage parity, scenario census and refusal/comparison boundaries."""
 from collections import Counter
 import json
+from tests.custody_engine_compare import python_refusal
 from pathlib import Path
 
 import pytest
@@ -19,11 +20,12 @@ def test_every_generator_matches_and_counts_both_engines(suite, scenarios, gener
     matrix=json.loads((FIXTURES/"custody_interpretation_counts.json").read_text())[suite]
     assert set(matrix)==set(scenarios)
     counts={engine:{case:Counter() for case in scenarios} for engine in ("Python","Rust")}
+    finalized_refusals=Counter()
     for seed in range(2000):
         book=generate(seed);case=scenarios[seed%len(scenarios)]
         for permuted,b in enumerate((book,permuted_snapshot(book)) if seed<len(scenarios)*2 else (book,)):
             expected=to_jsonable(python_stage(b),redact_config=False)
-            stages,skipped=rust_results(b)
+            stages,skipped=rust_results(b, finalized_refusals=finalized_refusals)
             assert "interpretation" not in skipped
             actual=stages["interpretation"]
             assert_same(expected,actual,f"{suite}:{case}:{seed}:{permuted}")
@@ -31,6 +33,8 @@ def test_every_generator_matches_and_counts_both_engines(suite, scenarios, gener
             for engine,result in (("Python",expected),("Rust",actual)):
                 signature=','.join(str(len(result[key])) for key in METRICS)
                 counts[engine][case][signature]+=1
+    assert finalized_refusals == (Counter({'finalized_projection:validation': 178}) if suite == 'fanout' else Counter())
+    print(suite + ' finalized refusals: ' + json.dumps(finalized_refusals, sort_keys=True))
     for engine,scenarios_counts in counts.items():
         assert scenarios_counts==matrix,(engine,suite,scenarios_counts)
         for index,case in enumerate(scenarios):
@@ -43,13 +47,17 @@ def test_full_stage_vectors_wrappers_and_refusals():
     assert json.loads(PATH.read_text())==vectors()
     expected_wrappers=json.loads(WRAPPERS.read_text())
     assert expected_wrappers==wrappers()
+    finalized_refusals=Counter()
     for v in expected_wrappers:
-        response=json.loads(kassiber_tax.custody(json.dumps(v["input"])))
+        response=json.loads(kassiber_tax.custody(json.dumps(v["input"]), finalized=False))
         if 'error' in v:
             assert response['error']['code']==v['error'],v['case']
+            assert response['error']['stage'] == python_refusal(v['input'], finalized=False)[1]
             assert 'stages' not in response
         else:
-            assert_same(v['expected'],response['stages']['interpretation'],v['case'])
+            stages, _ = rust_results(v['input'], finalized_refusals=finalized_refusals)
+            assert_same(v['expected'],stages['interpretation'],v['case'])
+    assert not finalized_refusals
     from tests.custody_reconciliation_vectors import PATH as REC_PATH, HELPERS, vectors as rec_vectors, helpers
     assert json.loads(REC_PATH.read_text())==rec_vectors()
     assert json.loads(HELPERS.read_text())==helpers()

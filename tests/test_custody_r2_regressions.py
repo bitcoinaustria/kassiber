@@ -33,6 +33,7 @@ def test_rust_refuses_the_same_accounting_gates(gate):
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     expected_code = getattr(caught.value, "code", type(caught.value).__name__)
     assert response.get("error", {}).get("code") == expected_code
+    assert response["error"]["stage"] == "components"
     assert "stages" not in response
 
 
@@ -43,6 +44,7 @@ def test_real_msat_is_an_explicit_rust_refusal(field):
     assert compute_evidence_stage(book)
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert response["error"]["code"] == "custody_snapshot_invalid"
+    assert response["error"]["stage"] == "snapshot"
     assert f"{field} must be an exact signed-64 msat integer" in response["error"]["message"]
 
 

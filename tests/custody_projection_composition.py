@@ -168,14 +168,13 @@ def operands():
 
 def scenario(v,variant):
     v=deepcopy(v)
-    factor=(1,3,10**60+1,10**120+7)[variant%4]
+    factor=(1,3,10**60+1,10**120+7)[variant%4] + (variant//4)*10**160
     for o in v['observations']:
         for k in ['amount_msat','principal_msat','fee_msat','wallet_delta_msat','wallet_movement_msat']:
             if type(o.get(k)) is int:o[k]*=factor
     for row in v['rows'].values():
         for k in ('amount','fee'):
             if type(row.get(k)) is int:row[k]*=factor
-        row['projection_variant']=variant
     for d in v['decisions']:
         for q in (d['source'],d['target']):
             if q:

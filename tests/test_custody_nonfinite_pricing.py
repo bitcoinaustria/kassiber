@@ -1,7 +1,5 @@
 """Custody admission and legacy projection must never emit nonfinite prices."""
 import json
-import subprocess
-import sys
 
 import pytest
 
@@ -13,6 +11,7 @@ from kassiber.core.imports import normalize_import_record
 from kassiber.daemon import _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests.cli_runner import run as run_cli
 from tests.test_custody_authored_migration import _scope, _tx, _legacy_rows, NOW
 from kassiber.core.custody_journal import CustodyJournalBuilder
 from tests.test_custody_quantity import _observation
@@ -29,8 +28,8 @@ def test_payout_admission_is_atomic(tmp_path, bad, surface):
         before = conn.total_changes
         args = dict(payout_asset='BTC', payout_amount='1', payout_fiat_value=bad)
         if surface == 'cli':
-            result = subprocess.run(
-                [sys.executable, '-m', 'kassiber', '--data-root', str(tmp_path),
+            result = run_cli(
+                ['--data-root', str(tmp_path),
                  '--machine', 'transfers', 'payouts', 'create',
                  '--workspace', 'Books', '--profile', 'Book', '--tx-out', 'out',
                  '--payout-asset', 'BTC', '--payout-amount', '1',

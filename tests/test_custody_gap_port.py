@@ -1,6 +1,7 @@
 """Full gap stage parity and per-engine scenario counts; no live book roots."""
 from collections import Counter
 import json
+from tests.custody_engine_compare import python_refusal
 from pathlib import Path
 import time
 
@@ -18,16 +19,19 @@ def test_every_gap_generator_matches_and_counts_both_engines(suite,scenarios,gen
     expected=json.loads(Path("tests/fixtures/custody_gap_counts.json").read_text())[suite]
     assert set(expected)==set(scenarios)
     counts={engine:{case:Counter() for case in scenarios} for engine in ("Python","Rust")}
+    finalized_refusals=Counter()
     for seed in range(2000):
         book=generate(seed);case=scenarios[seed%len(scenarios)]
         for shuffled,b in enumerate((book,permuted_snapshot(book)) if seed<len(scenarios)*2 else (book,)):
             stage=python_stage(b)
-            actual,skipped=rust_results(b)
+            actual,skipped=rust_results(b, finalized_refusals=finalized_refusals)
             assert "gaps" in actual and "gaps" not in skipped
             assert_same(stage,actual["gaps"],f"{suite}:{case}:{seed}:{shuffled}")
             if not shuffled:
                 for engine,result in (("Python",stage),("Rust",actual["gaps"])):
                     counts[engine][case][signature(result)]+=1
+    assert finalized_refusals == (Counter({'finalized_projection:validation': 178}) if suite == 'fanout' else Counter())
+    print(suite + ' finalized refusals: ' + json.dumps(finalized_refusals, sort_keys=True))
     for engine,actual in counts.items():
         assert actual==expected,(engine,suite,actual)
         for index,case in enumerate(scenarios):
@@ -53,8 +57,9 @@ def test_gap_stage_errors_follow_interpretation_and_admit_all_rows_before_ignori
         book["loan_legs"]=[dict(transaction_id=row["id"],role="loan_principal_out")]
         expected=outcome(lambda:python_stages(book))
         assert expected["error"]==("OverflowError" if source=="timestamp" else "ValueError")
-        actual=json.loads(kassiber_tax.custody(json.dumps(book)))
+        actual=json.loads(kassiber_tax.custody(json.dumps(book), finalized=False))
         assert actual["error"]["code"]==expected["error"] and "stages" not in actual
+        assert actual["error"]["stage"] == python_refusal(book, finalized=False)[1]
 
 
 def test_gaps_difference_is_recorded_even_when_caught(tmp_path,monkeypatch):
@@ -107,5 +112,5 @@ def test_gap_stage_uses_the_sql_selected_worklist(custody_book,monkeypatch):
     assert len(book["transactions"])==304
     conn.set_authorizer(lambda *_:1)
     expected=python_stage(book)
-    actual,_=rust_results(book)
+    actual,_=rust_results(book, finalized=False)
     assert_same(expected,actual["gaps"],"SQL-selected gap worklist")

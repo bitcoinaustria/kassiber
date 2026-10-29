@@ -19,6 +19,28 @@ fn pools(value: &Py) -> Result<Value, String> {
     Ok(value)
 }
 
+/// Unknown blocker ids cannot touch rows or move edges. Keep their diagnostics
+/// losslessly, but do not narrow an irrelevant surrogate id through serde.
+fn blocked_ids(interpreter: &Py, projection: &Py) -> Result<Value, String> {
+    let anchors: std::collections::BTreeSet<_> =
+        stored::list(stored::get(projection, "observations"))
+            .iter()
+            .filter_map(|o| match stored::get(o, "anchor_transaction_id") {
+                Py::Str(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+    let mut ids = Vec::new();
+    for id in stored::list(stored::get(interpreter, "blocked_transaction_ids")) {
+        match exact(id) {
+            Ok(id) => ids.push(id),
+            Err(_) if matches!(id, Py::Str(id) if !anchors.contains(id)) => (),
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(Value::Array(ids))
+}
+
 /// Capture the original row population before rates and interpreter admission.
 pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
     let mut rows = Map::new();
@@ -95,7 +117,7 @@ pub fn stage_with_rows(
         "pool_barriers":pools(stored::get(eligibility,"pool_barriers"))?,
         "pool_barrier_roots":pools(stored::get(eligibility,"pool_barrier_roots"))?,
         "issues":issues, "blocked_anchor_ids":blocked_anchors,
-        "blocked_transaction_ids":exact(stored::get(interpreter,"blocked_transaction_ids"))?,
+        "blocked_transaction_ids":blocked_ids(interpreter, projection)?,
         "non_event_transaction_ids":non_events,
         "payouts":exact(stored::get(quantity,"reviewed_direct_payouts"))?,
         "reviewed":exact(stored::get(quantity,"reviewed_conversion_pairs"))?

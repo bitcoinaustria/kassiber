@@ -12,7 +12,7 @@ from tests.test_custody_projection_port import projection_driver  # noqa: F401
 def activity(result):
     if 'error' in result:
         return True
-    return bool(result['expected']['rows'] or result['expected']['quarantines'])
+    return bool([r for r in result['expected']['rows'] if not (r.get('journal_transaction_id') in {'other','target'} and r['id'].endswith(':inbound'))] or result['expected']['quarantines'])
 
 
 def assert_activity(counts):
@@ -101,3 +101,12 @@ def test_projection_lossless_diagnostics_match_python():
     assert all(activity(v) for v in actual)
     assert_activity({str(i): int(activity(v)) for i, v in enumerate(actual)})
     print('lossless diagnostics: 8 distinct inputs, 7 successes, 1 compared KeyError')
+
+
+def test_projection_ignored_interpreter_issue_preserves_admission():
+    baseline = next(operands())
+    candidate = deepcopy(baseline)
+    candidate['issues'] = [dict(reason='transfer_fee_implausible',
+        issue_type='custody_interpreter_blocked', transaction_ids=['source'],
+        issue_id='ignored', details={'ignored': '\ud800'})]
+    assert evaluate(candidate) == evaluate(baseline)

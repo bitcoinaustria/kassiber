@@ -15,7 +15,7 @@ def activity(result):
     if 'error' in result:return 1
     result=result['expected']
     if isinstance(result,dict):
-        return bool(result.get('rows') or result.get('blocked') or result.get('blocked_transaction_ids') or result.get('barrier_held_receipts'))
+        return bool([r for r in result.get('rows', []) if not (r.get('journal_transaction_id') in {'other','target'} and r['id'].endswith(':inbound'))] or result.get('blocked') or result.get('blocked_transaction_ids') or result.get('barrier_held_receipts'))
     return bool(result)
 
 
@@ -37,7 +37,7 @@ def test_projection_composition_frozen(projection_driver):
 def test_projection_composition_generated(projection_driver):
     inputs=[scenario(v,i) for v in operands() for i in range(20)]
     # Distinct raw operands only. Each seed owns its activity and refusals.
-    assert len({json.dumps(v,sort_keys=True) for v in inputs})==len(inputs)
+    assert len({json.dumps({k:x for k,x in v.items() if k != 'case'},sort_keys=True) for v in inputs})==len(inputs)
     expected=[evaluate(v) for v in inputs]
     actual=projection_driver(inputs)
     assert actual==expected
@@ -58,3 +58,14 @@ def test_projection_composition_generated(projection_driver):
     for v in shuffled:v['rows']=dict(reversed(list(v['rows'].items())))
     assert projection_driver(shuffled)==expected
     print(json.dumps(dict(counts=counts,refusals=refusals,distinct_inputs=len(inputs)),sort_keys=True))
+
+
+def test_projection_companion_receipts_cannot_supply_activity():
+    from tests.custody_projection_composition import seed
+    value = seed()
+    value['decisions'] = []
+    value['observations'][0]['fee_msat'] = 0
+    result = evaluate(value)
+    assert len(result['expected']['rows']) == 2
+    with pytest.raises(AssertionError, match='vacuous'):
+        assert_activity({'deliberately_vacuous_with_receipts': activity(result)})

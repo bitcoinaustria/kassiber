@@ -13,10 +13,12 @@ from tests.custody_snapshot import to_jsonable
 
 
 def expected(book):
+    stages = {}
     try:
-        return to_jsonable(compute_custody_projection(book).finalized_tax_projection, redact_config=False)
+        return to_jsonable(compute_custody_projection(book, stage_observer=lambda n, v: stages.setdefault(n, v)).finalized_tax_projection, redact_config=False)
     except Exception as exc:
-        return {'error': getattr(exc, 'code', type(exc).__name__)}
+        from kassiber.core.custody_compute import STAGES
+        return {'error': getattr(exc, 'code', type(exc).__name__), 'stage': next(n for n in STAGES if n not in stages)}
 
 
 def test_projection_adapter_fixtures_match_original_python():
@@ -58,4 +60,93 @@ def test_finalized_raw_stage(suite, scenarios, generate, projection_stage_driver
         assert process.wait() == 0
     assert counts['books'] == 2000
     assert counts['permutations'] == len(scenarios) * 2
+    assert counts['empty_results'] == {'evidence': 48, 'channels': 193, 'gaps': 64}.get(suite, 0)
     print(suite + ' finalized comparisons: ' + json.dumps(counts, sort_keys=True))
+
+
+def test_real_writer_payout_books(tmp_path, projection_stage_driver):
+    from tests.custody_projection_payout_books import books, REFERENCE_BUGS
+    assert REFERENCE_BUGS['partial_taxable_reference_bug_expected_to_change'] == ('R1', 'R3')
+    assert REFERENCE_BUGS['partial_carry_reference_bug_expected_to_change'] == ('R2', 'R3')
+    inputs = list(books(tmp_path))
+    requests = [(name, candidate) for name, book in inputs
+                for candidate in (book, permuted_snapshot(book))]
+    result = subprocess.run([projection_stage_driver],
+        input=''.join(json.dumps(book, ensure_ascii=True) + '\n' for _, book in requests),
+        capture_output=True, text=True, check=True)
+    outputs = [json.loads(line) for line in result.stdout.splitlines()]
+    assert len(outputs) == len(requests)
+    for (name, book), actual in zip(requests, outputs):
+        stages = {}
+        try:
+            compute_custody_projection(book, stage_observer=lambda n, v: stages.setdefault(n, v))
+        except Exception:
+            pass  # The live refusal is compared below, including its stage.
+        quantity = stages['quantity']
+        assert len(quantity.reviewed_direct_payouts) == 1, name
+        if name.startswith('legacy_'):
+            assert quantity.reviewed_direct_payouts[0]['payout_fiat_value'] == name.removeprefix('legacy_')
+        if name.startswith('partial_'):
+            assert any(d.source.start_msat > 0 for d in quantity.projection.decisions), name
+        if name == 'reviewed_conversion':
+            assert quantity.reviewed_conversion_pairs, name
+        reference = expected(book)
+        assert_same(reference, actual, name)
+        if name in {'carry', 'at_eth', 'legacy_１２.５'}:
+            assert reference['cross_asset_pairs'], name
+        if name in {'taxable', 'tiny', 'huge', 'partial_taxable_reference_bug_expected_to_change'}:
+            assert any(r.get('pricing_method') == 'direct_payout_review' for r in reference['rows']), name
+        if name == 'no_value':
+            assert any(q['reason'] == 'at_swap_price_required' for q in reference['quarantines'])
+        assert 'error' in reference or reference['rows'] or reference['quarantines'], name + ' is vacuous'
+    assert len(inputs) == 13
+
+
+def test_projection_row_mapping_order_is_not_a_contract(projection_stage_driver):
+    """Fusion consumes named fields; row/pair sequence order remains observable."""
+    case = json.loads(Path('tests/fixtures/custody_projection_stage.json').read_text())[0]
+    reference = expected(case['input'])
+    assert len(reference['rows']) > 1
+    response = subprocess.run([projection_stage_driver], input=json.dumps(case['input']) + '\n',
+                              capture_output=True, text=True, check=True)
+    actual = json.loads(response.stdout)
+    assert list(reference['rows'][0]) != list(actual['rows'][0])
+    assert_same(reference, actual)
+    reordered = dict(reference, rows=[dict(reversed(list(row.items()))) for row in reference['rows']])
+    assert list(reference['rows'][0]) != list(reordered['rows'][0])
+    assert_same(reference, reordered)
+    with pytest.raises(AssertionError):
+        assert_same(reference, dict(reference, rows=list(reversed(reference['rows']))))
+
+
+def test_review_witnesses_match_live_reference():
+    from tests.custody_projection_quarantines import evaluate
+    for case in json.loads(Path('tests/fixtures/custody_projection_review.json').read_text()):
+        assert_same(evaluate(case), {'expected': case['expected']}, case['case'])
+
+
+def test_binding_distinguishes_same_code_at_different_stages(tmp_path):
+    import kassiber_tax
+    from tests.custody_projection_payout_books import books
+    from tests.test_custody_quantity_stage import raw_refusal_snapshot
+    partial = next(book for name, book in books(tmp_path) if name.startswith('partial_carry_'))
+    stages = []
+    for book in (raw_refusal_snapshot(), partial):
+        reference = expected(book)
+        actual = json.loads(kassiber_tax.custody(json.dumps(book)))['error']
+        assert reference['error'] == actual['code'] == 'ValueError'
+        assert reference['stage'] == actual['stage']
+        stages.append(actual['stage'])
+    assert stages == ['components', 'finalized_projection']
+
+
+def test_migration_surrogate_blocker_finalized_parity():
+    import kassiber_tax
+    from tests.custody_interpretation_stage_vectors import WRAPPERS
+    cases = [case for case in json.loads(WRAPPERS.read_text()) if case['case'].startswith('migration_1_')]
+    assert len(cases) == 7
+    for case in cases:
+        reference = expected(case['input'])
+        assert 'error' not in reference
+        actual = json.loads(kassiber_tax.custody(json.dumps(case['input'])))
+        assert_same(reference, actual['stages']['finalized_projection'], case['case'])

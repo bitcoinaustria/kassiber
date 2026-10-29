@@ -97,7 +97,19 @@ def read_records(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def rust_results(snapshot, *, python_error=None, finalized=True):
+def python_refusal(snapshot, *, finalized=True):
+    """Identify the first uncompleted stage independently of Rust's envelope."""
+    observed = {}
+    compute = compute_custody_projection if finalized else compute_custody_decisions
+    try:
+        compute(snapshot, stage_observer=lambda name, value: observed.setdefault(name, value))
+    except Exception as error:
+        stage = next((stage for stage in STAGES if stage not in observed), None)
+        return getattr(error, "code", type(error).__name__), stage
+    raise AssertionError("Python refusal could not be reproduced")
+
+
+def rust_results(snapshot, *, python_error=None, python_stage=None, finalized=True, finalized_refusals=None):
     import kassiber_tax
     if not hasattr(kassiber_tax, "custody"):
         raise AssertionError("Rust custody binding is missing")
@@ -106,8 +118,22 @@ def rust_results(snapshot, *, python_error=None, finalized=True):
         code = getattr(python_error, "code", type(python_error).__name__)
         if response.get("error", {}).get("code") != code:
             raise AssertionError("Rust custody refusal code differs from Python: " + code)
+        if python_stage is None:
+            reproduced_code, python_stage = python_refusal(snapshot, finalized=finalized)
+            if reproduced_code != code:
+                raise AssertionError("Python refusal changed during replay")
+        if response.get("error", {}).get("stage") != python_stage:
+            raise AssertionError("Rust custody refusal stage differs from Python: " + str(python_stage))
         return {}, STAGES
     if "error" in response:
+        if finalized and finalized_refusals is not None:
+            code, stage = python_refusal(snapshot)
+            if (response["error"].get("code"), response["error"].get("stage")) != (code, stage):
+                raise AssertionError("Rust custody finalized refusal code/stage differs from Python")
+            if stage != "finalized_projection":
+                raise AssertionError("earlier-stage comparison cannot bypass a refusal at " + str(stage))
+            finalized_refusals[stage + ":" + code] += 1
+            return rust_results(snapshot, finalized=False)
         raise AssertionError("Rust custody refused the reference snapshot: " + response["error"]["code"])
     if response.get("schema_version") != 1:
         raise AssertionError("Rust custody response schema differs")
@@ -189,7 +215,7 @@ def _build(self, *, finalized):
             if error is not None and failed in STAGES:
                 compared = (failed,)
                 skipped = tuple(stage for stage in STAGES if stage != failed)
-                rust_results(snapshot, python_error=error, finalized=finalized)
+                rust_results(snapshot, python_error=error, python_stage=failed, finalized=finalized)
             else:
                 results, skipped = rust_results(snapshot, finalized=finalized)
                 for stage in STAGES:

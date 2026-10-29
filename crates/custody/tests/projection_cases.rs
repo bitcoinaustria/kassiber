@@ -165,3 +165,88 @@ fn projection_dependency_origins_complete_and_sorted() {
         serde_json::json!(["source", "target"])
     );
 }
+
+fn check_review(name: &str) {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_review.json"
+    ))
+    .unwrap();
+    let case = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["case"] == name)
+        .unwrap();
+    assert_eq!(
+        finalized_projection::primitive(case),
+        serde_json::json!({"expected":case["expected"]}),
+        "{name}"
+    );
+}
+#[test]
+fn projection_target_blocked() {
+    check_review("projection_target_blocked");
+}
+#[test]
+fn projection_moves_sorted() {
+    check_review("projection_moves_sorted");
+}
+#[test]
+fn projection_same_asset_not_carry() {
+    check_review("projection_same_asset_not_carry");
+}
+#[test]
+fn projection_nonzero_slice_pricing() {
+    check_review("projection_nonzero_slice_pricing");
+}
+#[test]
+fn projection_inbound_fee_not_taxable() {
+    check_review("projection_inbound_fee_not_taxable");
+}
+#[test]
+fn projection_sweep_privacy() {
+    check_review("projection_sweep_privacy");
+}
+
+#[test]
+fn projection_review_operator_sweep() {
+    use kassiber_custody::{codec, finalized_projection::runtime, snapshot::Snapshot};
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_adapter.json"
+    ))
+    .unwrap();
+    {
+        let name = "interpreter_non_event_population";
+        let case = cases
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["case"] == name)
+            .unwrap();
+        let snapshot: Snapshot = serde_json::from_value(case["input"].clone()).unwrap();
+        let quantity = codec::from_json(&case["quantity"]).unwrap();
+        let interpreter = codec::from_json(&case["interpretation"]).unwrap();
+        let result = runtime::stage(&snapshot, &quantity, &interpreter).unwrap();
+        let expected = codec::from_json(&case["expected"]).unwrap();
+        assert_eq!(
+            codec::dumps(&result, true).unwrap(),
+            codec::dumps(&expected, true).unwrap(),
+            "{name}"
+        );
+    }
+    check_composition("compose");
+    check_composition("connected");
+    check_composition("basis");
+    projection_quarantine_composition_vectors();
+    projection_payout_time_vectors();
+    for name in [
+        "projection_target_blocked",
+        "projection_moves_sorted",
+        "projection_same_asset_not_carry",
+        "projection_nonzero_slice_pricing",
+        "projection_inbound_fee_not_taxable",
+        "projection_sweep_privacy",
+    ] {
+        check_review(name);
+    }
+}

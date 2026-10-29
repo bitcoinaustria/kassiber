@@ -105,6 +105,7 @@ def test_binding_refuses_unknown_schema_fractional_msat_and_private_config(custo
     for book in invalid:
         result = json.loads(kassiber_tax.custody(json.dumps(book)))
         assert result["error"]["code"] == "custody_snapshot_invalid"
+        assert result["error"]["stage"] == "snapshot"
         assert "stages" not in result
         assert "private-policy" not in json.dumps(result)
 

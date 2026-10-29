@@ -1,6 +1,7 @@
 """Complete quantity stage parity from raw-only v1 snapshots."""
 from collections import Counter
 import json
+from tests.custody_engine_compare import python_refusal
 import pytest
 from tests.custody_engine_compare import assert_same,permuted_snapshot,rust_results
 from tests.custody_gap_stage import suites
@@ -29,6 +30,7 @@ def test_every_quantity_raw_generator_matches_both_engines(suite,scenarios,gener
                 import kassiber_tax
                 actual=json.loads(kassiber_tax.custody(json.dumps(b)))
                 assert actual['error']['code']==expected['error']
+                assert actual['error']['stage'] == python_refusal(b, finalized=False)[1]
                 if not shuffled:
                     for engine in counts: counts[engine][case] += 1
                 continue
@@ -65,3 +67,4 @@ def test_raw_refusal_compares_both_engines():
     expected = outcome(lambda: python_stage(book))
     actual = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert actual['error']['code'] == expected['error'] == 'ValueError'
+    assert actual['error']['stage'] == python_refusal(book, finalized=False)[1]

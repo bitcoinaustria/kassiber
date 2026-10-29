@@ -1,6 +1,7 @@
 """Raw-fact component parity, branch accounting, refusals, and permutations."""
 from collections import Counter
 import json
+from tests.custody_engine_compare import python_refusal
 
 from kassiber.core.custody_compute import compute_components_stage
 from tests.custody_engine_compare import assert_same, permuted_snapshot, rust_results
@@ -17,7 +18,7 @@ def test_two_thousand_generated_component_snapshots_and_permutations():
     for seed in range(2000):
         book = component_snapshot(seed)
         expected = stage(book)
-        actual, _ = rust_results(book)
+        actual, _ = rust_results(book, finalized=False)
         assert_same(expected, actual["components"], f"component seed {seed}")
         shuffled = permuted_snapshot(book)
         # Component native-support reads sort their own population. The full
@@ -25,7 +26,7 @@ def test_two_thousand_generated_component_snapshots_and_permutations():
         shuffled["transactions"].reverse()
         permuted_stage = stage(shuffled)
         assert_same(expected, permuted_stage, f"Python component permutation {seed}")
-        actual, _ = rust_results(shuffled)
+        actual, _ = rust_results(shuffled, finalized=False)
         assert_same(expected, actual["components"], f"Rust component permutation {seed}")
         counts["books"] += 1
         case = COMPONENT_SCENARIOS[seed % len(COMPONENT_SCENARIOS)]
@@ -60,8 +61,9 @@ def test_checked_in_component_vectors_and_refusal_codes():
     assert json.loads(PATH.with_name("custody_component_semantics.json").read_text()) == semantics()
     for vector in expected:
         for book in (vector["input"], permuted_snapshot(vector["input"])):
-            response = json.loads(kassiber_tax.custody(json.dumps(book)))
+            response = json.loads(kassiber_tax.custody(json.dumps(book), finalized=False))
             if "error_code" in vector:
                 assert response["error"]["code"] == vector["error_code"], vector["case"]
+                assert response["error"]["stage"] == python_refusal(book, finalized=False)[1]
             else:
                 assert_same(vector["components"], response["stages"]["components"], vector["case"])

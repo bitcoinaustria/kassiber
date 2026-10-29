@@ -11556,8 +11556,8 @@
   {
     "id": "REC-OPERATION-04",
     "file": "crates/custody/src/lib.rs",
-    "find": "            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":code,\"message\":code}}).to_string(),\n            };\n",
-    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":code,\"message\":code}}).to_string(),\n            };\n            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n",
+    "find": "            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":code,\"message\":code}}).to_string(),\n            };\n",
+    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":code,\"message\":code}}).to_string(),\n            };\n            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n",
     "rule": "Materialize components before migration quarantine admission.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -11566,8 +11566,8 @@
   {
     "id": "REC-OPERATION-05",
     "file": "crates/custody/src/lib.rs",
-    "find": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":code,\"message\":code}}).to_string(),\n            };\n",
-    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":\"incorrect_migration_error\",\"message\":code}}).to_string(),\n            };\n",
+    "find": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":code,\"message\":code}}).to_string(),\n            };\n",
+    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":\"incorrect_migration_error\",\"message\":code}}).to_string(),\n            };\n",
     "rule": "Preserve migration admission error families at the operation boundary.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -22256,7 +22256,7 @@
   {
     "id": "projection8-blocks",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"blocked_transaction_ids\":exact(stored::get(interpreter,\"blocked_transaction_ids\"))?",
+    "find": "\"blocked_transaction_ids\":blocked_ids(interpreter, projection)?",
     "replace": "\"blocked_transaction_ids\":[]",
     "expect_failing": [
       "projection_adapter_input_families"
@@ -22372,5 +22372,375 @@
       "projection_capture_precedes_rates"
     ],
     "rule": "Closed confirmation capture refuses before rates, matching Python admission order."
+  },
+  {
+    "id": "projection-review-M2",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "|| target.is_some_and(|t| blocked.contains(&string(&t[\"anchor_transaction_id\"])))",
+    "replace": "|| false",
+    "expect_failing": [
+      "projection_target_blocked"
+    ],
+    "rule": "projection_target_blocked"
+  },
+  {
+    "id": "projection-review-M9",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "moves.sort_by_key(string);",
+    "replace": "",
+    "expect_failing": [
+      "projection_moves_sorted"
+    ],
+    "rule": "projection_moves_sorted"
+  },
+  {
+    "id": "projection-review-M11",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& source_asset != asset",
+    "replace": "",
+    "expect_failing": [
+      "projection_same_asset_not_carry"
+    ],
+    "rule": "projection_same_asset_not_carry"
+  },
+  {
+    "id": "projection-review-M21",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "integer_big(&d[\"source\"][\"end_msat\"])? - integer_big(&d[\"source\"][\"start_msat\"])?;",
+    "replace": "integer_big(&d[\"source\"][\"end_msat\"])?;",
+    "expect_failing": [
+      "projection_nonzero_slice_pricing"
+    ],
+    "rule": "projection_nonzero_slice_pricing"
+  },
+  {
+    "id": "projection-review-M38",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if o[\"direction\"] == \"outbound\"\n",
+    "replace": "if true\n",
+    "expect_failing": [
+      "projection_inbound_fee_not_taxable"
+    ],
+    "rule": "projection_inbound_fee_not_taxable"
+  },
+  {
+    "id": "projection-review-M30",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "replace": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\"",
+    "expect_failing": [
+      "projection_sweep_privacy"
+    ],
+    "rule": "projection_sweep_privacy"
+  },
+  {
+    "id": "projection-review-sweep-M1",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if blocked.contains(&string(&source[\"anchor_transaction_id\"]))\n            || target.is_some_and(|t| blocked.contains(&string(&t[\"anchor_transaction_id\"])))",
+    "replace": "if false",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M1 decision connected block"
+  },
+  {
+    "id": "projection-review-sweep-M3",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if blocked.contains(&anchor) || blocked_anchors.contains(&anchor) {",
+    "replace": "if blocked.contains(&anchor) {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M3 inbound blocked_anchors"
+  },
+  {
+    "id": "projection-review-sweep-M5",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& !blocked.contains(&string(&o[\"anchor_transaction_id\"]))",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M5 fee-only block"
+  },
+  {
+    "id": "projection-review-sweep-M6",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& !non_events.contains(&string(&o[\"anchor_transaction_id\"]))",
+    "replace": "",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "M6 fee-only non-event"
+  },
+  {
+    "id": "projection-review-sweep-M7",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "keyed.sort_by(|a, b| a.0.cmp(&b.0));",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M7 decision sort"
+  },
+  {
+    "id": "projection-review-sweep-M8",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "projected.sort_by_key(|r| (string(&r[\"occurred_at\"]), string(&r[\"id\"])));",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M8 rows sort"
+  },
+  {
+    "id": "projection-review-sweep-M10",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if non_events.contains(&anchor) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M10 inbound non-event"
+  },
+  {
+    "id": "projection-review-sweep-M12",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if finalize {\n                quarantines.basis(source)?;",
+    "replace": "if false {\n                quarantines.basis(source)?;",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M12 ineligible basis quarantine"
+  },
+  {
+    "id": "projection-review-sweep-M13",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "quarantines.payout(source, payout)?;",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M13 payout hold quarantine"
+  },
+  {
+    "id": "projection-review-sweep-M14",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "\"direct-payout-source\",\n                &fees.raw(source)?",
+    "replace": "\"direct-payout-source\",\n                &BigInt::from(0)",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M14 carry source fee"
+  },
+  {
+    "id": "projection-review-sweep-M15",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "barrier_receipts.push(o[\"quantity_hash\"].clone());",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M15 held receipt list"
+  },
+  {
+    "id": "projection-review-sweep-M16",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "self.basis(observation)?;",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M16 receipt barrier quarantine"
+  },
+  {
+    "id": "projection-review-sweep-M17",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "input[\"rows\"].get(&id).is_some()",
+    "replace": "true",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M17 dependency row check"
+  },
+  {
+    "id": "projection-review-sweep-M18",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& !hashes.contains(&string(&o[\"quantity_hash\"]))",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M18 fee-only projected hash"
+  },
+  {
+    "id": "projection-review-sweep-M19",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if self.input[\"rows\"].get(&id).is_none() {\n                    continue;",
+    "replace": "if false {\n                    continue;",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M19 issue row check"
+  },
+  {
+    "id": "projection-review-sweep-M20",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "\"BTC\".to_owned(), \"LBTC\".to_owned()",
+    "replace": "\"BTC\".to_owned(), \"BTC\".to_owned()",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M20 rail pair"
+  },
+  {
+    "id": "projection-review-sweep-M22",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if blocked.insert(neighbor.clone()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M22 blocked closure"
+  },
+  {
+    "id": "projection-review-sweep-M23",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": ".eq(\"custody_component_\".chars().map(u32::from)),",
+    "replace": ".eq(\"never\".chars().map(u32::from)),",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "M23 runtime interpreter component anchor"
+  },
+  {
+    "id": "projection-review-sweep-M24",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if internal(d) {\n            let target",
+    "replace": "if internal(d) && false {\n            let target",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M24 internal decision required for move"
+  },
+  {
+    "id": "projection-review-sweep-M25",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if cursor < principal {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M25 inbound principal fallthrough"
+  },
+  {
+    "id": "projection-review-sweep-M26",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if held(o, v, &order) {\n            barrier_receipts",
+    "replace": "if false {\n            barrier_receipts",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M26 basis held inbound check"
+  },
+  {
+    "id": "projection-review-sweep-M27",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if fee != BigInt::from(0) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M27 non-event fee row"
+  },
+  {
+    "id": "projection-review-sweep-M28",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "&& array(&issue[\"transaction_ids\"]).iter().any(|v| v == &id)",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M28 quarantine basis implausible scope"
+  },
+  {
+    "id": "projection-review-sweep-M29",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": ".filter(|i| stored::get(i, \"issue_type\") != &Py::Str(\"custody_interpreter_blocked\".into()))",
+    "replace": "",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "M29 runtime issues filter"
+  },
+  {
+    "id": "projection-review-sweep-M31",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"external_confirmed\" | \"external_presumed\")\n        ) {\n            continue;\n        }",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M31 external state gate"
+  },
+  {
+    "id": "projection-review-sweep-M33",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": ".contains_key(&(id.as_str().into(), reason.as_str().into()))",
+    "replace": ".contains_key(&(id.as_str().into(), \"never\".into()))",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M33 issue keeps existing"
+  },
+  {
+    "id": "projection-review-sweep-M37",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& payout[\"policy\"] == \"carrying-value\"",
+    "replace": "",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M37 carry policy"
+  },
+  {
+    "id": "projection-review-sweep-M41",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "for d in decisions.iter().filter(|d| internal(d)) {",
+    "replace": "for d in decisions.iter().filter(|d| !d[\"target\"].is_null()) {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M41 connected internal filter"
+  },
+  {
+    "id": "projection-review-sweep-M42",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "obs[\"occurred_at\"].clone()\n    } else {",
+    "replace": "json!(\"1970-01-01T00:00:00Z\")\n    } else {",
+    "expect_failing": [
+      "projection_review_operator_sweep"
+    ],
+    "rule": "M42 settlement time fallback"
+  },
+  {
+    "id": "projection-review-unknown-surrogate-blocker",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "Err(_) if matches!(id, Py::Str(id) if !anchors.contains(id)) => (),",
+    "replace": "Err(_) if false => (),",
+    "expect_failing": [
+      "projection_unknown_surrogate_blocker_is_irrelevant"
+    ],
+    "rule": "Unknown surrogate blocker ids cannot refuse unrelated observed rows; their interpreter diagnostics remain lossless."
+  },
+  {
+    "id": "projection-review-earlier-refusal-identity",
+    "file": "tests/custody_engine_compare.py",
+    "find": "if (response[\"error\"].get(\"code\"), response[\"error\"].get(\"stage\")) != (code, stage):",
+    "replace": "if False:",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_earlier_stages_account_matching_finalized_refusal"
+    ],
+    "rule": "Earlier-stage comparisons can only bypass a finalized refusal after matching both Python code and stage."
   }
 ]

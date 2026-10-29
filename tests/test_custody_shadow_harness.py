@@ -151,11 +151,12 @@ def test_python_gate_refusal_is_compared_even_when_caught(cli_book, tmp_path, mo
 
 
 @pytest.mark.parametrize("mode", ["census", "shadow"])
-@pytest.mark.parametrize("rust_refuses", [False, True, "wrong_code"])
-def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_refuses):
+@pytest.mark.parametrize("stage", ["quantity", "finalized_projection"])
+@pytest.mark.parametrize("rust_refuses", [False, True, "wrong_code", "wrong_stage"])
+def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_refuses, stage):
     """Review fail-open reproducer: late Python errors cannot escape comparison."""
     import kassiber_tax
-    from kassiber.core import custody_quantity_runtime
+    from kassiber.core import custody_quantity_runtime, custody_tax_projection
     from kassiber.core.custody_journal import CustodyJournalBuilder
     from kassiber.db import open_db
     from tests.test_custody_native_transitions import seed_native_transition_book
@@ -165,9 +166,10 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
     monkeypatch.delenv(compare.INJECT_ENV, raising=False)
     def refuse(*args, **kwargs):
         raise ValueError('simulated Python quantity-stage refusal')
-    monkeypatch.setattr(custody_quantity_runtime, 'build_canonical_quantity_state', refuse)
+    monkeypatch.setattr(custody_quantity_runtime if stage == 'quantity' else custody_tax_projection,
+                        'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
     if rust_refuses:
-        monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'ValueError' if rust_refuses is True else 'TypeError'}}))
+        monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'TypeError' if rust_refuses == 'wrong_code' else 'ValueError', 'stage': 'gaps' if rust_refuses == 'wrong_stage' else stage}}))
     compare.install_custody_mode(mode)
     conn = open_db(tmp_path / 'book')
     try:
@@ -182,7 +184,7 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
     rows = compare.read_records(records)
     assert rows[-1]['outcome'] == ('error' if rust_refuses is True else 'difference')
     if rust_refuses is True:
-        assert rows[-1]['compared'] == ['quantity']
+        assert rows[-1]['compared'] == [stage]
         assert set(rows[-1]['compared']) | set(rows[-1]['skipped']) == set(compare.STAGES)
     assert bool(compare.session_report(rows)[1]) == (rust_refuses is not True)
 
@@ -199,7 +201,7 @@ def test_rust_quantity_refusal_against_python_success(tmp_path, monkeypatch, mod
     from tests.custody_snapshot_generator import snapshot
     book = snapshot(0)
     monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
-    monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'ValueError'}}))
+    monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'ValueError', 'stage': 'quantity'}}))
     monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
     previous = compare._INSTALLED_MODE
     compare.install_custody_mode(mode)
@@ -295,3 +297,35 @@ def test_real_finalized_refusal_has_complete_stage_inventory(tmp_path, monkeypat
     assert row['compared'] == ['finalized_projection']
     assert set(row['skipped']) == set(compare.STAGES) - {'finalized_projection'}
     assert not compare.session_report([row])[1]
+
+
+@pytest.mark.parametrize('difference', [None, 'code', 'stage', 'python_success'])
+def test_earlier_stages_account_matching_finalized_refusal(monkeypatch, difference):
+    from collections import Counter
+    import kassiber_tax
+    from tests.custody_fanout_generator import fanout_snapshot
+    from tests.custody_snapshot_generator import snapshot
+    book = fanout_snapshot(24)
+    original = kassiber_tax.custody
+    response = json.loads(original(json.dumps(book)))
+    assert response['error']['stage'] == 'finalized_projection'
+    assert response['error']['code'] == 'validation'
+    if difference == 'code':
+        response['error']['code'] = 'ValueError'
+    if difference == 'stage':
+        response['error']['stage'] = 'quantity'
+    if difference == 'python_success':
+        book = snapshot(0)
+    def custody(request, *, finalized=True):
+        return json.dumps(response) if finalized else original(request, finalized=False)
+    monkeypatch.setattr(kassiber_tax, 'custody', custody)
+    counts = Counter()
+    if difference is None:
+        stages, skipped = compare.rust_results(book, finalized_refusals=counts)
+        assert 'interpretation' in stages and 'gaps' in stages
+        assert skipped == ('finalized_projection',)
+        assert counts == {'finalized_projection:validation': 1}
+    else:
+        with pytest.raises(AssertionError):
+            compare.rust_results(book, finalized_refusals=counts)
+        assert not counts
