@@ -15,6 +15,7 @@ import {
   completedAiMutationKind,
   terminalAiChatStatus,
   type AiChatMessage,
+  storedChatEntries,
 } from "./stream";
 import { ThinkParser } from "@/lib/thinkParser";
 
@@ -724,5 +725,33 @@ describe("completedAiMutationKind", () => {
     );
     expect(rounds).toHaveLength(1);
     expect(rounds[0]!.toolCalls.map((call) => call.callId)).toEqual(["legacy"]);
+  });
+});
+
+describe("storedChatEntries attachments", () => {
+  it("restores the files a stored user message sent, and nothing else", () => {
+    expect(
+      storedChatEntries([
+        {
+          role: "user",
+          content: "What is on it?",
+          provenance: {
+            attachments: [
+              { filename: "receipt.png", kind: "image", size_bytes: 812 },
+              { filename: "", kind: "image" },
+              { path: "/home/user/x.png" },
+            ],
+          },
+        },
+        { role: "assistant", content: "A receipt.", provenance: { attachments: [{ filename: "no.png" }] } },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: "What is on it?",
+        attachments: [{ filename: "receipt.png", kind: "image", sizeBytes: 812 }],
+      },
+      { role: "assistant", content: "A receipt." },
+    ]);
   });
 });

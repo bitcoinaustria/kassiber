@@ -10471,6 +10471,30 @@ def _ai_chat_seed_prefix(messages: list[dict[str, Any]]) -> list[dict[str, Any]]
     return messages[:last_user]
 
 
+def _chat_message_attachments(runtime: AiToolRuntime) -> list[dict[str, Any]]:
+    """What the user's message shows about the files it first sent.
+
+    Name, type and size only, for the stored chat to show them again; the
+    path and the staging token stay out of history.
+    """
+    shown = []
+    for entry in runtime.maintenance_state.get("chat_files") or ():
+        if not isinstance(entry, Mapping) or not entry.get("new"):
+            continue
+        try:
+            size = os.path.getsize(str(entry.get("source_file")))
+        except OSError:
+            size = None
+        shown.append(
+            {
+                "filename": str(entry.get("filename") or ""),
+                "kind": str(entry.get("kind") or ""),
+                **({"size_bytes": size} if size is not None else {}),
+            }
+        )
+    return shown
+
+
 def _persist_ai_chat_exchange(
     runtime: AiToolRuntime,
     provider_snapshot: dict[str, Any],
@@ -10575,6 +10599,7 @@ def _persist_ai_chat_exchange(
             finish_reason=finish_reason,
             provider=provider_snapshot["name"],
             model=validated["model"],
+            user_attachments=_chat_message_attachments(runtime),
             commit=True,
         )
         return target_session_id
@@ -14055,6 +14080,7 @@ def _document_import_stage_payload(
         profile_id=str(profile["id"]),
         data_root=ctx.data_root,
     )
+    kind = core_file_analysis.file_kind(str(source_path))
     return {
         "document_token": token,
         **attachment_fields,
@@ -14062,9 +14088,18 @@ def _document_import_stage_payload(
             "filename": attachment["original_filename"] if attachment_fields else source_path.name,
             "media_type": core_document_import._mime_type(source_path),
             "size_bytes": source_stat.st_size,
-            "kind": core_file_analysis.file_kind(str(source_path)),
+            "kind": kind,
+            **_chat_thumbnail_field(purpose, kind, source_path),
         },
     }
+
+
+def _chat_thumbnail_field(purpose: str, kind: str, path: Path) -> dict[str, str]:
+    """The composer card's preview of a picked or dropped chat image."""
+    if purpose != "chat_attachment" or kind != "image":
+        return {}
+    thumbnail = core_chat_files.thumbnail_data_url(str(path))
+    return {"thumbnail": thumbnail} if thumbnail else {}
 
 
 def _chat_attachment_upload_payload(

@@ -25,6 +25,7 @@ import {
   MAX_CHAT_UPLOAD_BYTES,
   chatAttachmentKind,
   chatImageThumbnail,
+  chatThumbnail,
   isChatAttachmentName,
 } from "@/components/ai/chatAttachments";
 import {
@@ -952,6 +953,7 @@ export function AssistantSessionProvider({
       filename: selected.source.filename,
       kind: selected.source.kind,
       sizeBytes: selected.source.size_bytes,
+      previewUrl: chatThumbnail(selected.source.thumbnail),
       book,
     });
     if (!added) notifyAttachment("attachmentLimit", selected.source.filename);
@@ -1049,6 +1051,7 @@ export function AssistantSessionProvider({
         filename: selected.source.filename,
         kind: selected.source.kind,
         sizeBytes: selected.source.size_bytes,
+        previewUrl: chatThumbnail(selected.source.thumbnail),
         book,
       });
       if (!added) refused += 1;

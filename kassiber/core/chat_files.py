@@ -235,6 +235,37 @@ def pdf_view(path: Path, *, file_id: str) -> ChatFileView:
     return ChatFileView(images, f"shown below as images of {span}")
 
 
+THUMBNAIL_EDGE = 96
+# A thumbnail larger than this is not worth sending to the composer.
+MAX_THUMBNAIL_BYTES = 48 * 1024
+
+
+def thumbnail_data_url(path: str) -> str | None:
+    """A small PNG of an attached image for the composer's card, or None.
+
+    Made on this device for the renderer, which never reads the file itself;
+    nothing leaves the machine. Without Pillow, or for anything that is not a
+    readable image, the card shows the file type instead.
+    """
+    try:
+        from PIL import Image  # type: ignore[import-untyped]
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as image:
+            image.seek(0)
+            frame = image.convert("RGBA")
+    except Exception:  # noqa: BLE001 - an unreadable image gets no thumbnail
+        return None
+    frame.thumbnail((THUMBNAIL_EDGE, THUMBNAIL_EDGE))
+    out = io.BytesIO()
+    frame.save(out, format="PNG", optimize=True)
+    data = out.getvalue()
+    if len(data) > MAX_THUMBNAIL_BYTES:
+        return None
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+
 def chat_file_view(path: str, kind: str, *, file_id: str) -> ChatFileView:
     """How an attached file is shown to a provider that may see it."""
 

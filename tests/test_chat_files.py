@@ -267,5 +267,35 @@ class ExpiredFileTests(unittest.TestCase):
         self.assertEqual(messages[-1]["content"], "And the receipt?")
 
 
+
+class ThumbnailTests(unittest.TestCase):
+    def test_a_chat_image_gets_a_small_png_preview(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("Pillow is not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            image = os.path.join(tmp, "receipt.png")
+            with open(image, "wb") as handle:
+                handle.write(png(400, 200))
+            other = os.path.join(tmp, "notes.png")
+            with open(other, "wb") as handle:
+                handle.write(b"not an image")
+            url = chat_files.thumbnail_data_url(image)
+            self.assertTrue(url.startswith("data:image/png;base64,"))
+            from PIL import Image
+            import io
+
+            with Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))) as thumb:
+                self.assertLessEqual(max(thumb.size), chat_files.THUMBNAIL_EDGE)
+            self.assertIsNone(chat_files.thumbnail_data_url(other))
+            # Only chat images get one; a document import's staging does not.
+            from pathlib import Path
+
+            self.assertIn("thumbnail", daemon._chat_thumbnail_field("chat_attachment", "image", Path(image)))
+            self.assertEqual(daemon._chat_thumbnail_field("document_import", "image", Path(image)), {})
+            self.assertEqual(daemon._chat_thumbnail_field("chat_attachment", "delimited", Path(image)), {})
+
+
 if __name__ == "__main__":
     unittest.main()

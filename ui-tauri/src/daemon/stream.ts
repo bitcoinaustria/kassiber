@@ -268,13 +268,31 @@ export interface StoredChatEntry {
   content: string;
   /** Notices kept with an assistant answer, so they survive a reload. */
   notices?: AiChatNotice[];
+  /** The files a user message first sent, as it showed them. */
+  attachments?: AiChatMessageAttachment[];
 }
 
 /** A message row as `ui.chat.sessions.get` returns it. */
 export interface StoredChatMessageShape {
   role?: string;
   content?: string;
-  provenance?: { notices?: unknown } | null;
+  provenance?: { notices?: unknown; attachments?: unknown } | null;
+}
+
+function storedAttachments(raw: unknown): AiChatMessageAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const { filename, kind, size_bytes: sizeBytes } = item as Record<string, unknown>;
+    if (typeof filename !== "string" || !filename) return [];
+    return [
+      {
+        filename,
+        ...(typeof kind === "string" && kind ? { kind } : {}),
+        ...(typeof sizeBytes === "number" ? { sizeBytes } : {}),
+      },
+    ];
+  });
 }
 
 /**
@@ -291,7 +309,14 @@ export function storedChatEntries(
     if (typeof content !== "string" || content.length === 0) continue;
     const notices =
       role === "assistant" ? aiChatNotices(message.provenance?.notices) : [];
-    entries.push(notices.length ? { role, content, notices } : { role, content });
+    const attachments =
+      role === "user" ? storedAttachments(message.provenance?.attachments) : [];
+    entries.push({
+      role,
+      content,
+      ...(notices.length ? { notices } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    });
   }
   return entries;
 }
@@ -1479,6 +1504,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           content: entry.content,
           status: "done" as const,
           ...(entry.notices?.length ? { notices: entry.notices } : {}),
+          ...(entry.attachments?.length ? { attachments: entry.attachments } : {}),
         })),
       );
       setIsStreaming(false);
