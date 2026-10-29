@@ -5,6 +5,7 @@ use kassiber_pyjson::{BigInt, Value as Py};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::str::FromStr;
+mod composition;
 mod fees;
 mod money;
 mod payouts;
@@ -227,6 +228,7 @@ pub fn primitive(value: &Value) -> Value {
             payouts::price(value["row"].clone(), &value["payout"], &integer("amount"))
         }
         "fees" => fees::evaluate(value),
+        "compose" | "connected" | "basis" => composition::evaluate(value),
         "base" => base_row(&value["observation"], &value["rows"]),
         "fee" => fee_row(
             &value["observation"],

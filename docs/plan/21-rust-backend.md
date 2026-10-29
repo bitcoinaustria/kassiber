@@ -1581,6 +1581,24 @@ quarantines and conversion metadata remain for the next slice; journal fusion
 remains separate. A nonfinite-payout reference issue is documented with a repro;
 Python is unchanged in this parity checkpoint.
 
+### Selected rows, connected blocking and scoped barriers (R2f, partial)
+
+The local `t3code/r2f-projection-3` checkpoint starts at `e589c9a3` and ports
+selected MOVE, external, payout, unconsumed inbound and fee-sibling composition.
+Connected internal paths close before selection; scoped basis barriers preserve
+only the barrier event's finalized siblings at equal timestamps. Quantities
+and slice coordinates remain BigInt. The private comparison uses the Python
+compiler and its original nested barrier/closure code. Distinct seed activity
+and refusals are counted without companion contributions, with a deliberately
+vacuous activity-check regression. See the
+[checkpoint](../reference/custody-engine.md#selected-row-composition-checkpoint-r2f-partial)
+for tests, mutations and the deferred Python quarantine-origin reproducibility bug.
+
+Finalized projection remains skipped. Issues/quarantines and reviewed conversion
+metadata are the next slice; journal fusion follows its own parity gate.
+Python remains authoritative, snapshot v1 stays raw-only and Rust results never
+reach stored state.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

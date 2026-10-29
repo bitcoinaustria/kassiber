@@ -31,20 +31,24 @@ def test_projection_generated_counts_both_engines(projection_driver):
     counts={engine:Counter() for engine in ('Python','Rust')}
     inputs=[];expected=[];names=[]
     for i in range(len(list(operands()))):
+        seen=set()
         for variant in range(20):
             case,values,results=scenario(i,variant)
+            key=json.dumps(values,sort_keys=True)
+            if key in seen:continue
+            seen.add(key)
             inputs.extend(values);expected.extend(results);names.append(case)
             counts['Python'][case]+=sum(map(activity,results))
     actual=projection_driver(inputs)
     assert actual==expected
     assert json.dumps(actual,sort_keys=True)==json.dumps(expected,sort_keys=True)
-    for i,case in enumerate(names):counts['Rust'][case]+=sum(map(activity,actual[i*2:i*2+2]))
-    # Independent counts pin every scenario, including an active positive
-    # companion for each refusal. No engine can silently drop a scenario.
+    for i,case in enumerate(names):counts['Rust'][case]+=activity(actual[i])
+    # Counts belong only to each seed's distinct inputs, including refusals.
+    # Explicit empty-success controls have zero activity; no companion rescues them.
     manifest=json.loads(PATH.with_name('custody_projection_counts.json').read_text())
     assert counts['Python']==counts['Rust']==manifest
     assert set(manifest)=={v['case'] for v in operands()}
-    assert all(manifest.values())
+    assert {k for k,v in manifest.items() if not v}=={'payout_settlement_zero_value', 'payout_settlement_zero', 'payout_valid_missing', 'payout_valid_too_large', 'payout_time_1', 'payout_valid_zero', 'payout_time_0', 'payout_settlement_negative_value', 'payout_valid_negative', 'payout_settlement_empty_value', 'payout_settlement_negative_inf', 'payout_valid_inclusive', 'payout_valid_inbound'}
     # Dictionary insertion order is not a row lookup priority rule.
     shuffled=deepcopy(inputs)
     for v in shuffled:

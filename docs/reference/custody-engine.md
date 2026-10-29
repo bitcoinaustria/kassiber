@@ -2412,3 +2412,167 @@ locked Python 3.11 binding was rebuilt from this checkout with Rust 1.99.1,
 `MATURIN_NO_INSTALL_RUST=1` and offline Cargo. The retained corpus stayed read-only;
 fresh recordings and verification artifacts are local under `target/`.
 This checkpoint does not claim complete finalized-projection parity.
+
+## Selected row composition checkpoint (R2f, partial)
+
+The local `t3code/r2f-projection-3` checkpoint starts at `e589c9a3` and adds
+`finalized_projection/composition.rs`. The unpackaged comparison example accepts
+separate private composition operands, never snapshots or product requests.
+`finalized_projection` remains skipped in the binding, census and custody-shadow.
+Rust results never reach stored state; snapshot v1 remains raw-only.
+
+Selected internal moves preserve fee allocation, row identities, same-asset
+privacy review, cross-rail pair identities and source/target anchor linkage.
+Non-events retain only known fees outside selected internal moves. External
+confirmed/presumed slices preserve reviewed gift/lost/payment meaning, payout
+pricing and policy-scoped carrying-value settlement. Receipt remainders index
+**all** decision targets, including ineligible targets, and use exact ordered
+BigInt intervals and a monotonic maximum cursor. Rowless virtual receipts never
+become acquisitions. Known fee siblings may project at the barrier event;
+fees behind a later barrier remain held. The final row contract still refuses
+duplicate projected identities.
+
+Connected blocking closes the undirected graph of selected internal moves
+before row selection. A blocked suffix therefore withholds its prefix even
+when that prefix is eligible. Anchor ids, not synthetic observation ids, define
+the path. Quarantine cause/origin metadata is intentionally deferred.
+
+Basis barriers use the first matching profile/network/exposure/unit pool;
+Bitcoin and Liquid network aliases share exposure, while unrelated books,
+networks and assets stay isolated. Event order starts with the minimum leg
+time. Missing event order fails closed. Equal-time tie breakers cannot establish
+chronology: only the barrier event itself retains its finalized siblings.
+Decision eligibility remains the quantity stage's decision-slice selection.
+
+### Comparison and activity accounting
+
+`tests/custody_projection_composition.py` invokes the original Python compiler
+for composition and executes the unchanged original nested closure/barrier AST
+for focused helper vectors. It omits only issue/quarantine output and the
+reviewed-conversion audit pass. Dictionary permutations preserve row lookup
+precedence. No reference implementation is changed.
+
+| New family | Frozen scenarios | Distinct generated inputs per engine | Dictionary permutations |
+| --- | ---: | ---: | ---: |
+| Selected row composition | 47 | 940 | 940 |
+| Connected path blocking | 6 | 120 | 120 |
+| Scoped basis barriers | 10 | 200 | 200 |
+| **Total** | **63** | **1,260** | **1,260** |
+
+Each scenario counts only its own distinct operands. No companion contributes
+activity. Refusals count independently and compare error families explicitly:
+140 generated refusals cover `TypeError`, `ValueError`, `KeyError` and
+`InvalidOperation`. Every new scenario has 20 active distinct inputs. The named
+`test_projection_composition_vacuous_is_rejected` proves an empty result fails
+the activity check.
+
+The inherited raw generators additionally compare **all five implemented stages**
+for **24,000 books and 1,030 permutations**, without differences. Their separate
+local activity audit counts **21,941 distinct primary inputs**, deduplicated
+within each scenario, with explicit empty-quantity controls and no companion
+contributions. The quantity review's source files are untouched. Per-engine
+counts remain in `target/r2f3-verify/full-inherited-{0,1,2}.json`.
+
+The inherited primitive generator is also corrected: companion calls no longer
+contribute activity and repeated inputs count once. Its manifest explicitly
+retains 13 zero-activity empty-success controls. The historical R2f/R2f2 activity
+totals above included companions and repeated operands; they are superseded by
+this accounting, rather than claimed as seed activity here. Refusal cases still
+compare their own error families.
+
+### Python reference issue: unstable dependency origins
+
+The reference computes the same blocked path under different process hash seeds,
+but may omit a root blocker from a dependent transaction's quarantine. Explicit
+roots are not re-enqueued after acquiring additional roots, so the answer depends
+on Python set iteration order. This concerns deferred quarantine metadata; the
+selected-row blocking result is stable. Python is unchanged.
+
+Save this as `target/r2f3-origin-repro.py` and run it with `PYTHONPATH=.` and
+`PYTHONHASHSEED=1`, then `PYTHONHASHSEED=2` using the locked Python environment:
+
+```python
+import json
+from copy import deepcopy
+from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
+from tests.custody_projection_composition import seed, environment
+v = seed()
+d = deepcopy(v["decisions"][0])
+d["source"]["observation_hash"] = v["observations"][1]["quantity_hash"]
+d["target"]["observation_hash"] = v["observations"][2]["quantity_hash"]
+v["decisions"].append(d)
+_, _, state = environment(v)
+result = compile_finalized_tax_projection(
+    v["profile"], list(v["rows"].values()), state,
+    blocked_transaction_ids=["source", "target"],
+)
+print(next(json.loads(q["detail_json"])["blocked_by_transaction_ids"]
+           for q in result.quarantines if q["transaction_id"] == "other"))
+```
+
+Seed 1 prints `['source', 'target']`; seed 2 prints `['target']`. The prior
+nonfinite-payout reference issue remains documented at the preceding checkpoint.
+
+### Remaining work
+
+Issue/quarantine composition, including explaining barrier-held receipts and
+connected dependency origins, and reviewed conversion metadata remain unported.
+Only after their parity gate may finalized projection enter the stage inventory.
+Journal fusion with `ledger` remains a separate step.
+
+### Mutation witnesses and verification
+
+The checked-in catalog adds 29 entries to the 2,015 inherited entries.
+Comparison witnesses include `projection3-barrier-comparison` and
+`projection3-inbound-gap`; minimum/maximum witnesses are
+`projection3-event-minimum` and `projection3-inbound-max`; field-choice witnesses
+include `projection3-neighbor-anchor`, `projection3-inbound-principal` and
+`projection3-payout-out-id`. Each entry names a frozen Rust test, independently
+of the generators.
+
+| New named witness | Mutations |
+| --- | ---: |
+| `projection_selected_composition_vectors` | 18 |
+| `projection_connected_path_vectors` | 3 |
+| `projection_scoped_basis_vectors` | 8 |
+| **Total** | **29** |
+
+A reviewed-fee side-label mutant initially survived because its fixture's slice
+was ineligible. The corrected fixture selects that exact reviewed fee and kills
+the mutant. A separate baseline failure came from reusing a Cargo target across
+fresh scratch trees while preserving old source mtimes: a cached mutant appeared
+fresh. Those failed baselines and the survivor contribute no kills. The final
+new-catalog run clears custody artifacts first; inherited batches each own a
+fresh target. Verification artifacts remain local under `target/r2f3-verify/`.
+
+All **2,044 entries have valid named-test kills**, including the complete
+**2,015-entry inherited catalog** and **29 new entries**. Each counted kill has
+passing unmutated baselines, a building mutant and failing named tests. Initial
+inherited batches retained their valid per-entry kills; eight final-source
+replacement batches covered every remaining entry, and redundant original
+runners were stopped after coverage was checked. All eight replacement batches
+and the final new-catalog run exit successfully. The complete per-entry audit is
+`target/r2f3-verify/mutation-summary.json`; no interrupted attempt, failed baseline,
+survivor or build error contributes a kill.
+
+| Verification | Result |
+| --- | --- |
+| Inherited raw generators | All five implemented stages: 24,000 books and 1,030 permutations; zero differences |
+| New composition generator | 63 scenarios; 1,260 distinct inputs and 1,260 permutations per engine; zero differences; 140 refusals compared |
+| Corrected inherited primitive generator | 152 scenarios; 882 distinct inputs and 882 permutations per engine; no companion contributions |
+| Retained read-only replay | 159 requests and 159 permutations; zero differences or pre-request refusals |
+| Fresh recording integrity/replay | 53 snapshots; 53 requests and 53 permutations; zero integrity problems, differences or pre-request refusals |
+| Focused census | 40 tests; 53 comparisons per implemented stage; zero mismatches |
+| Focused custody-shadow | 40 tests; 53 comparisons per implemented stage and 53 frozen Python comparisons; zero mismatches |
+| Finalized projection inventory | 0 compared; 53 skipped in both focused lanes |
+| Projection Python tests | 6 passed, including refusal and deliberately vacuous activity controls |
+| Snapshot/shadow/mutation/inventory contracts | 54 passed and 14 subtests |
+| Full mutation catalog | 2,044 killed: 2,015 inherited and 29 new; no survivors or build errors counted |
+| Rust workspace | 795 tests passed: 777 outside net and 18 net tests with disposable owned loopback servers |
+| Formatting/Clippy | Workspace fmt and all-target Clippy with `-D warnings` passed |
+
+The locked Python 3.11 environment uses Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1` and offline Cargo, including mutation children.
+Networking crate tests use disposable owned loopback servers and require a
+sandbox exception for their local binds. The retained replay corpus stays
+read-only. No push or PR is part of this checkpoint.

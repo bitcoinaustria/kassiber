@@ -21262,5 +21262,295 @@
       "projection_fee_allocation_vectors"
     ],
     "rule": "Standalone reviewed fees equal the exact source slice difference."
+  },
+  {
+    "id": "projection3-internal-state",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "Some(\"internal_verified\" | \"internal_reviewed\")",
+    "replace": "Some(\"internal_reviewed\")",
+    "expect_failing": [
+      "projection_connected_path_vectors"
+    ],
+    "rule": "Verified moves connect the blocked path."
+  },
+  {
+    "id": "projection3-neighbor-reverse",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "neighbors.entry(b).or_default().insert(a);",
+    "replace": "neighbors.entry(a).or_default().insert(b);",
+    "expect_failing": [
+      "projection_connected_path_vectors"
+    ],
+    "rule": "Connected path blocking is undirected."
+  },
+  {
+    "id": "projection3-neighbor-anchor",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&d[\"target\"])?[\"anchor_transaction_id\"]",
+    "replace": "&d[\"source\"])?[\"anchor_transaction_id\"]",
+    "expect_failing": [
+      "projection_connected_path_vectors"
+    ],
+    "rule": "Both move endpoints participate."
+  },
+  {
+    "id": "projection3-network-normalize",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "\"liquidv1\" => \"main\"",
+    "replace": "\"liquidv1\" => \"liquidv1\"",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Bitcoin and Liquid mainnet share basis."
+  },
+  {
+    "id": "projection3-pool-profile",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "[\"profile_id\", \"network\", \"exposure\", \"unit\"]",
+    "replace": "[\"network\", \"exposure\", \"unit\"]",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Profile bounds basis."
+  },
+  {
+    "id": "projection3-pool-network",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "[\"profile_id\", \"network\", \"exposure\", \"unit\"]",
+    "replace": "[\"profile_id\", \"exposure\", \"unit\"]",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Network bounds basis."
+  },
+  {
+    "id": "projection3-pool-exposure",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "[\"profile_id\", \"network\", \"exposure\", \"unit\"]",
+    "replace": "[\"profile_id\", \"network\", \"unit\"]",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Asset exposure bounds basis."
+  },
+  {
+    "id": "projection3-event-minimum",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": ".min()",
+    "replace": ".max()",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Event chronology uses its earliest leg."
+  },
+  {
+    "id": "projection3-missing-order",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "let Some(order) = orders.get(&string(&o[\"quantity_hash\"])) else {\n        return true;",
+    "replace": "let Some(order) = orders.get(&string(&o[\"quantity_hash\"])) else {\n        return false;",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Missing event chronology fails closed."
+  },
+  {
+    "id": "projection3-barrier-comparison",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "order[0] > b[0]",
+    "replace": "order[0] < b[0]",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Later basis is held."
+  },
+  {
+    "id": "projection3-barrier-sibling",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "*order != b",
+    "replace": "*order == b",
+    "expect_failing": [
+      "projection_scoped_basis_vectors"
+    ],
+    "rule": "Only barrier-event siblings survive equal time."
+  },
+  {
+    "id": "projection3-eligibility",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if !eligible.contains(&slice_key(&d[\"source\"])?)",
+    "replace": "if eligible.contains(&slice_key(&d[\"source\"])?)",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Only eligible slices project."
+  },
+  {
+    "id": "projection3-move-fee",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&fees.move_fee(d, source)?",
+    "replace": "&BigInt::from(0)",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Moves preserve exactly allocated fees."
+  },
+  {
+    "id": "projection3-inbound-side",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "rows, \"move-in\", &BigInt::from(0)",
+    "replace": "rows, \"move-out\", &BigInt::from(0)",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Move target identity has inbound side."
+  },
+  {
+    "id": "projection3-move-id",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "d[\"selected_claim_id\"].clone()",
+    "replace": "out[\"id\"].clone()",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Durable claim id takes precedence."
+  },
+  {
+    "id": "projection3-pair-asset",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "source[\"asset\"] == target[\"asset\"]",
+    "replace": "source[\"asset\"] != target[\"asset\"]",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Cross-asset relations stay separate."
+  },
+  {
+    "id": "projection3-privacy-target",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "privacy(&out) || privacy(&input)",
+    "replace": "privacy(&out)",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Either side can carry privacy evidence."
+  },
+  {
+    "id": "projection3-non-event",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if non_events.contains(&string(&source[\"anchor_transaction_id\"]))",
+    "replace": "if !non_events.contains(&string(&source[\"anchor_transaction_id\"]))",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Non-events contribute only a known fee."
+  },
+  {
+    "id": "projection3-external-state",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "Some(\"external_confirmed\" | \"external_presumed\")",
+    "replace": "Some(\"external_confirmed\")",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Presumed external slices remain selected."
+  },
+  {
+    "id": "projection3-reviewed-fee-side",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "rows, \"reviewed-fee\"",
+    "replace": "rows, \"fee-only\"",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Reviewed fee row identity is distinct."
+  },
+  {
+    "id": "projection3-payout-country",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": ".py_lower() == \"at\"",
+    "replace": ".py_lower() == \"generic\"",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Austrian policy admits reviewed non-Bitcoin carry."
+  },
+  {
+    "id": "projection3-payout-out-id",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "\"policy\":\"carrying-value\",\"out_id\":out[\"id\"],\"in_id\":input[\"id\"]",
+    "replace": "\"policy\":\"carrying-value\",\"out_id\":input[\"id\"],\"in_id\":out[\"id\"]",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Audit identities keep source and sink distinct."
+  },
+  {
+    "id": "projection3-external-subtype",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "row[\"kind\"] = d[\"external_economic_subtype\"].clone();",
+    "replace": "row[\"kind\"] = json!(\"sell\");",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Reviewed gift/lost semantics survive normalization."
+  },
+  {
+    "id": "projection3-inbound-gap",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if start > cursor",
+    "replace": "if start < cursor",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Only uncovered receipt gaps become acquisitions."
+  },
+  {
+    "id": "projection3-inbound-max",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "cursor = cursor.max(end);",
+    "replace": "cursor = cursor.min(end);",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Overlapping targets cannot reopen covered receipt value."
+  },
+  {
+    "id": "projection3-inbound-tail",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if cursor < principal",
+    "replace": "if cursor > principal",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "The unconsumed receipt tail remains an acquisition."
+  },
+  {
+    "id": "projection3-inbound-principal",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "let principal = integer_big(&o[\"amount_msat\"])?;",
+    "replace": "let principal = integer_big(&o[\"fee_msat\"])?;",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Inbound principal uses observed amount."
+  },
+  {
+    "id": "projection3-fee-positive",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "integer_big(&o[\"fee_msat\"])? > BigInt::from(0)",
+    "replace": "integer_big(&o[\"fee_msat\"])? < BigInt::from(0)",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Known positive fee survives unresolved principal."
+  },
+  {
+    "id": "projection3-fee-block",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& !held(o, v, &order)",
+    "replace": "&& held(o, v, &order)",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "Later fees cannot consume basis behind a barrier."
   }
 ]

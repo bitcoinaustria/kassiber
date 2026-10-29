@@ -62,3 +62,38 @@ fn projection_payout_price_vectors() {
 fn projection_fee_allocation_vectors() {
     check("fees");
 }
+
+fn check_composition(op: &str) {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_composition.json"
+    ))
+    .unwrap();
+    let mut count = 0;
+    for case in cases.as_array().unwrap().iter().filter(|c| c["op"] == op) {
+        let expected = if let Some(error) = case.get("error") {
+            serde_json::json!({"error":error})
+        } else {
+            serde_json::json!({"expected":case["expected"]})
+        };
+        assert_eq!(
+            finalized_projection::primitive(case),
+            expected,
+            "{}",
+            case["case"]
+        );
+        count += 1;
+    }
+    assert!(count > 0);
+}
+#[test]
+fn projection_selected_composition_vectors() {
+    check_composition("compose");
+}
+#[test]
+fn projection_connected_path_vectors() {
+    check_composition("connected");
+}
+#[test]
+fn projection_scoped_basis_vectors() {
+    check_composition("basis");
+}

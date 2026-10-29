@@ -131,14 +131,11 @@ def scenario(i,variant):
         for d in v['decisions']:
             d['source']['start_msat']*=factor;d['source']['end_msat']*=factor
         for o in v['observations'].values():o['fee_msat']*=factor
-    # Every scenario carries an independently compared positive result, including
-    # admission/refusal controls. Counts include primary successes separately.
-    positive=dict(op='ids',hash=f'companion:{variant}',start=0,end=10**90+variant,amount=1,side='fee',payout_id='review')
-    return base['case'],[v,positive],[evaluate(v),evaluate(positive)]
+    return base['case'],[v],[evaluate(v)]
 
 
 def activity(result):
-    if 'error' in result:return 0
+    if 'error' in result:return 1
     value=result['expected']
     if value is None or value=={}:return 0
     return len(value) if isinstance(value,list) else 1
