@@ -793,13 +793,59 @@ export function pricingSelectionValue(
   return quality === "missing" || !sourceKind ? "missing" : sourceKind;
 }
 
+// Which of the four pricing choices a source kind falls under, grouped as the
+// core groups them (`legacy_source_for`): the rate cache, the manual override,
+// and every source-provided price, so an exchange trade reads as a source price.
+export function pricingChoiceValue(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+): PricingSelectionValue {
+  const value = pricingSelectionValue(sourceKind, quality);
+  if (value === "missing" || value === "manual_override" || value === "fmv_provider") {
+    return value;
+  }
+  return value === "manual_rate_cache" ? "fmv_provider" : "generic_import";
+}
+
+const PRICING_SOURCE_KINDS: ReadonlySet<string> = new Set<PricingSourceKind>([
+  "generic_import",
+  "wallet_export",
+  "exchange_execution",
+  "btcpay_wallet_export",
+  "btcpay_invoice",
+  "btcpay_payment",
+  "btcpay_payout",
+  "manual_override",
+  "manual_rate_cache",
+  "fmv_provider",
+]);
+
+// Returns an i18n key: the selectable option's label, else the kind's own,
+// so a source no option offers (an exchange's trade price) never shows as
+// its raw code.
 export function pricingSourceLabel(
   sourceKind: PricingSourceKind | null,
   quality: PricingQuality,
   options = transactionPricingOptions,
 ) {
   const value = pricingSelectionValue(sourceKind, quality);
-  return options.find((option) => option.value === value)?.label ?? value;
+  const option = options.find((candidate) => candidate.value === value);
+  if (option) return option.label;
+  return PRICING_SOURCE_KINDS.has(value)
+    ? `transactions:pricingSourceKind.${value}.label`
+    : value;
+}
+
+// The same source as words inside a sentence ("Priced via the exchange's
+// trade price"); an i18n key, or null when no price is set.
+export function pricingSourcePhrase(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+) {
+  const value = pricingSelectionValue(sourceKind, quality);
+  return PRICING_SOURCE_KINDS.has(value)
+    ? `transactions:pricingSourceKind.${value}.phrase`
+    : null;
 }
 
 // Provider proper names stay as-is; only the ordinary "Manual" word is

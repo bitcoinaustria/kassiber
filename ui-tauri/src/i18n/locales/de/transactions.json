@@ -1041,6 +1041,7 @@
     "spotNowUnknown": "Unbekannt",
     "perBtc": "{{value}} / BTC",
     "rateCacheSource": "Quelle des Kurs-Caches",
+    "priceSource": "Preisquelle",
     "provider": "Provider",
     "providerUnknown": "Unbekannt",
     "pairGranularity": "Paar / Granularität",
@@ -1260,7 +1261,7 @@
     "checklist": {
       "title": "Prüf-Checkliste",
       "setPricingSource": "Eine Preisquelle festlegen",
-      "pricedVia": "Bewertet über {{label}}",
+      "pricedVia": "Bewertet mit {{label}}",
       "pickLabel": "Ein Label wählen",
       "labeled": "Gelabelt {{label}}",
       "excludedFromReports": "Aus Steuerberichten ausgenommen",
@@ -1340,5 +1341,47 @@
     "chainRecord": "Blockchain-Transaktion unten",
     "fee": "Gebühr laut Börsenbuchung",
     "reference": "Börsenreferenz"
+  },
+  "pricingSourceKind": {
+    "generic_import": {
+      "label": "Preis der Quelle",
+      "phrase": "dem Preis der Quelle"
+    },
+    "wallet_export": {
+      "label": "Wallet-Export",
+      "phrase": "dem Wallet-Export"
+    },
+    "exchange_execution": {
+      "label": "Handelspreis der Börse",
+      "phrase": "dem Handelspreis der Börse"
+    },
+    "btcpay_wallet_export": {
+      "label": "BTCPay-Wallet-Export",
+      "phrase": "dem BTCPay-Wallet-Export"
+    },
+    "btcpay_invoice": {
+      "label": "BTCPay-Rechnung",
+      "phrase": "der BTCPay-Rechnung"
+    },
+    "btcpay_payment": {
+      "label": "BTCPay-Zahlung",
+      "phrase": "der BTCPay-Zahlung"
+    },
+    "btcpay_payout": {
+      "label": "BTCPay-Auszahlung",
+      "phrase": "der BTCPay-Auszahlung"
+    },
+    "manual_override": {
+      "label": "Manueller Preis",
+      "phrase": "einem manuellen Preis"
+    },
+    "manual_rate_cache": {
+      "label": "Manueller Kurs",
+      "phrase": "einem manuellen Kurs"
+    },
+    "fmv_provider": {
+      "label": "Marktkurs",
+      "phrase": "einem Marktkurs"
+    }
   }
 }

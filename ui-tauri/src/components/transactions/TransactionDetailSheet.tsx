@@ -42,13 +42,15 @@ import {
   formatManualPrice,
   parseManualDecimal,
   pricingPriceMoment,
-  pricingSelectionValue,
+  pricingChoiceValue,
   pricingSourceLabel,
+  pricingSourcePhrase,
   shouldShowSourceExternalId,
   tagSuggestions,
   transactionBtc,
   transactionFlow,
   transactionStatusLabels,
+  type DraftPricingOption,
   type LoanMarkTarget,
   type LoanMark,
   type Transaction,
@@ -475,10 +477,21 @@ function TransactionDetailBody({
     localDraft.atRegime,
     localDraft.atCategory,
   );
-  const pricingValue = pricingSelectionValue(
+  const pricingValue = pricingChoiceValue(
     localDraft.pricingSourceKind,
     localDraft.pricingQuality,
   );
+  // A choice sets its plain kind, unless the row came priced within it: then
+  // the kind it came with returns, so an exchange trade picked again is not
+  // saved as a plain import price.
+  const choosePricingOption = (option: DraftPricingOption) => {
+    const restore =
+      originalDraft &&
+      pricingChoiceValue(originalDraft.pricingSourceKind, originalDraft.pricingQuality) ===
+        option.value;
+    updateDraft("pricingSourceKind", restore ? originalDraft.pricingSourceKind : option.sourceKind);
+    updateDraft("pricingQuality", restore ? originalDraft.pricingQuality : option.quality);
+  };
   const hasCacheProvenance = Boolean(
     transaction.pricingProvider || transaction.pricingPair,
   );
@@ -640,10 +653,11 @@ function TransactionDetailBody({
         : t("sheet.checklist.pricedVia", {
             // dynamic key
             label: t(
-              pricingSourceLabel(
-                localDraft.pricingSourceKind,
-                localDraft.pricingQuality,
-              ) as ParseKeys<["transactions", "common"]>,
+              (pricingSourcePhrase(localDraft.pricingSourceKind, localDraft.pricingQuality) ??
+                pricingSourceLabel(
+                  localDraft.pricingSourceKind,
+                  localDraft.pricingQuality,
+                )) as ParseKeys<["transactions", "common"]>,
             ),
           }),
       done: !isPricingMissing,
@@ -902,6 +916,7 @@ function TransactionDetailBody({
     availableTagSuggestions,
     amountBtc,
     pricingValue,
+    choosePricingOption,
     updateManualPrice,
     updateManualValue,
     manualPriceRef,
