@@ -57,9 +57,9 @@
     "dropToAttach": "Drop to attach",
     "attachmentUploading": "Attaching…",
     "attachmentInChat": "Stays with this chat",
-    "attachmentOnlyFirst": {
-      "title": "One file per chat",
-      "body": "{{filename}} is attached. The assistant works with one file per chat for now."
+    "attachmentLimit": {
+      "title": "A chat holds up to {{max}} files",
+      "body": "Some files weren't attached. Remove one, or start a new chat for more."
     },
     "attachmentUnsupported": {
       "title": "This file can't be attached",

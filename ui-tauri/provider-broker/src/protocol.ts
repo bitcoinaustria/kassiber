@@ -55,12 +55,51 @@ export function providerStatus(
   };
 }
 
+/**
+ * An image the user attached, inline as base64. Never a path or a URL: the
+ * daemon reads the file it holds a grant for and passes the bytes, so a
+ * provider cannot be pointed at anything else.
+ */
+export type BrokerImage = { media_type: string; data: string };
+
+export type ChatMessage = { role: string; content: string; images?: BrokerImage[] };
+
+export const BROKER_IMAGE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+// The daemon's own per-turn limits are lower; these only bound a bad request.
+export const MAX_BROKER_IMAGES = 16;
+export const MAX_BROKER_IMAGE_CHARS = 8 * 1024 * 1024;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/** The images of these messages, checked; a malformed one fails the turn. */
+export function messageImages(messages: ChatMessage[]): BrokerImage[] {
+  const images = messages.flatMap((message) => message.images ?? []);
+  if (images.length > MAX_BROKER_IMAGES) throw new Error("Too many attached images.");
+  for (const image of images) {
+    if (
+      typeof image?.media_type !== "string" ||
+      !BROKER_IMAGE_TYPES.has(image.media_type) ||
+      typeof image.data !== "string" ||
+      image.data.length === 0 ||
+      image.data.length > MAX_BROKER_IMAGE_CHARS ||
+      !BASE64.test(image.data)
+    ) {
+      throw new Error("Invalid attached image.");
+    }
+  }
+  return images;
+}
+
 export type ChatRequest = {
   command: "chat";
   request_id: string;
   provider: ProviderId;
   model: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: ChatMessage[];
   instructions?: string;
   tools?: BrokerToolDefinition[];
   options?: {

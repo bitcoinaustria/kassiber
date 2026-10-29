@@ -57,9 +57,9 @@
     "dropToAttach": "Zum Anhängen loslassen",
     "attachmentUploading": "Wird angehängt…",
     "attachmentInChat": "Bleibt in diesem Chat",
-    "attachmentOnlyFirst": {
-      "title": "Eine Datei pro Chat",
-      "body": "{{filename}} ist angehängt. Der Assistent arbeitet vorerst mit einer Datei pro Chat."
+    "attachmentLimit": {
+      "title": "Ein Chat fasst bis zu {{max}} Dateien",
+      "body": "Einige Dateien wurden nicht angehängt. Entferne eine oder starte einen neuen Chat."
     },
     "attachmentUnsupported": {
       "title": "Diese Datei kann nicht angehängt werden",

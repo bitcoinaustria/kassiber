@@ -114,8 +114,9 @@ such as `incomplete_by_construction`, `never_synced` and
 
 The assistant's attachment import uses AI-only kinds that are not in
 `supported_kinds` and cannot be invoked by the renderer:
-`ui.wallets.import_attachment.plan` / `.apply`, `ui.imports.rollback.plan`
-and `ui.wallets.request_input`. Its `ui.imports.list` and `ui.imports.rollback`
+`ui.wallets.import_attachment.plan` / `.apply`, `ui.imports.rollback.plan`,
+`ui.attachments.add_from_chat` and `ui.wallets.request_input`. Each names a
+chat file by its id (`file-1` …), never a path. Its `ui.imports.list` and `ui.imports.rollback`
 calls go through the AI executor with plan-digest binding, not the desktop's
 `dry_run` / `confirm` arguments. See
 [onboarding with the assistant](imports.md#onboarding-an-unsupported-exchange-with-the-assistant).
@@ -519,9 +520,13 @@ and returns only an opaque `document_token` plus safe filename/type metadata.
 `source.kind` is `spreadsheet`, `delimited`, `pdf` or `image`. The chat's picker
 and a file dropped on the window pass `purpose: "chat_attachment"`, which
 accepts exports as well as images and PDFs; without it only images and PDFs
-are staged. A file dropped on the window is staged by the shell's
+are staged. Files dropped on the window are staged by the shell's
 `stage_dropped_chat_attachment` command, which takes no path: it uses the
-paths the native window reported for the drop, once and within ten seconds.
+paths the native window reported for the drop, once and within ten seconds,
+stages each chat file type among them (up to eight) and returns
+`{staged: [...], dropped_count, unsupported_count}`. The daemon keeps at most
+sixteen staging grants, enough for a chat's eight files and a document
+import.
 
 `ui.chat.attachments.upload` stages a pasted file without a path. The first
 chunk names the file (`filename`, `total_bytes`) at `offset` 0; later chunks

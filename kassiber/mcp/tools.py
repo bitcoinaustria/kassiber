@@ -68,6 +68,7 @@ UNAVAILABLE_TOOL_REASONS: dict[str, str] = {
     "ui.wallets.analyze_file": "chat_attachment",
     "ui.wallets.import_attachment.plan": "chat_attachment",
     "ui.wallets.import_attachment.apply": "chat_attachment",
+    "ui.attachments.add_from_chat": "chat_attachment",
     "ui.wallets.request_input": "desktop_handoff",
     "ui.review.request_input": "desktop_handoff",
     "ui.source_funds.request_input": "desktop_handoff",

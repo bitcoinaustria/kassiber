@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
-// A file pasted into the chat (or dropped in the browser preview) is handed
-// to the daemon in chunks and comes back as the same kind of token a picked
-// file gets. Sending waits for it; the message that first carries it shows it;
-// later turns keep using it without showing it again. Runs the real chat
+// Files pasted into the chat (or dropped in the browser preview) are handed
+// to the daemon in chunks and come back as the same kind of token a picked
+// file gets. Sending waits for them; the message that first carries a file
+// shows it and marks it new; later turns keep using it without showing it. Runs the real chat
 // stream against a fake transport, so the assertions are on what would reach
 // the daemon.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -81,7 +81,7 @@ vi.mock("@/daemon/transport", async (importOriginal) => ({
           kind: request.kind,
           data: {
             complete: true,
-            document_token: "pasted-grant",
+            document_token: `grant-${request.args?.filename}`,
             source: { filename: request.args?.filename, kind: "delimited", size_bytes: request.args?.total_bytes },
           },
         };
@@ -184,8 +184,7 @@ describe("a pasted chat file", () => {
       attaching = session.attachFiles!([csv()]);
     });
     view.rerender(provider());
-    expect(session.attachmentState).toBe("uploading");
-    expect(session.attachment?.filename).toBe("export.csv");
+    expect(session.attachments).toMatchObject([{ filename: "export.csv", state: "uploading" }]);
     expect(session.sendBlockedReason).toBe("Attaching…");
     await act(async () => {
       mocks.uploadHeld?.();
@@ -195,37 +194,74 @@ describe("a pasted chat file", () => {
     expect(uploads()[0].args).toMatchObject({
       filename: "export.csv", offset: 0, expected_scope: BOOK_A,
     });
-    expect(session.attachment?.token).toBe("pasted-grant");
-    expect(session.attachmentState).toBe("ready");
+    expect(session.attachments).toMatchObject([{ token: "grant-export.csv", state: "ready" }]);
     expect(session.sendBlockedReason).toBeNull();
 
     await act(async () => session.sendPrompt("Import this export"));
     view.rerender(provider());
-    expect(lastChat().attachment).toEqual({ token: "pasted-grant" });
-    expect(session.messages[0].attachment).toMatchObject({ filename: "export.csv", kind: "delimited" });
-    expect(session.attachmentState).toBe("sent");
+    expect(lastChat().attachments).toEqual([{ token: "grant-export.csv", new: true }]);
+    expect(session.messages[0].attachments).toMatchObject([{ filename: "export.csv", kind: "delimited" }]);
+    expect(session.attachments[0].state).toBe("sent");
 
     // The chat keeps the file; the next message does not show it again.
     await act(async () => session.sendPrompt("And the fees?"));
-    expect(lastChat().attachment).toEqual({ token: "pasted-grant" });
+    expect(lastChat().attachments).toEqual([{ token: "grant-export.csv" }]);
     expect(session.messages[2].content).toBe("And the fees?");
-    expect(session.messages[2].attachment).toBeUndefined();
+    expect(session.messages[2].attachments).toBeUndefined();
   });
 
-  it("takes the first file it can and says the others were left out", async () => {
+  it("attaches several files, in order, and a later one rides with its own message", async () => {
     const view = render(provider());
-    await act(async () => session.attachFiles!([new File(["x"], "notes.zip"), csv("b.csv"), csv("c.csv")]));
+    await act(async () => session.attachFiles!([csv("a.csv"), csv("b.png")]));
     view.rerender(provider());
-    expect(session.attachment?.filename).toBe("b.csv");
-    expect(uploads()).toHaveLength(1);
-    expect(useUiStore.getState().notifications.at(-1)?.title).toBe("One file per chat");
+    expect(session.attachments.map((file) => file.filename)).toEqual(["a.csv", "b.png"]);
+    await act(async () => session.sendPrompt("Compare these"));
+    view.rerender(provider());
+    expect(lastChat().attachments).toEqual([
+      { token: "grant-a.csv", new: true },
+      { token: "grant-b.png", new: true },
+    ]);
+    expect(session.messages[0].attachments).toHaveLength(2);
+
+    await act(async () => session.attachFiles!([csv("c.csv")]));
+    view.rerender(provider());
+    await act(async () => session.sendPrompt("And this one?"));
+    view.rerender(provider());
+    expect(lastChat().attachments).toEqual([
+      { token: "grant-a.csv" },
+      { token: "grant-b.png" },
+      { token: "grant-c.csv", new: true },
+    ]);
+    expect(session.messages[2].attachments).toMatchObject([{ filename: "c.csv" }]);
+
+    // Removing one takes it off the next turn.
+    act(() => session.removeAttachment("grant-b.png"));
+    view.rerender(provider());
+    await act(async () => session.sendPrompt("Without the image"));
+    expect(lastChat().attachments).toEqual([{ token: "grant-a.csv" }, { token: "grant-c.csv" }]);
+  });
+
+  it("skips what it cannot take and stops at the chat's limit", async () => {
+    const view = render(provider());
+    await act(async () => session.attachFiles!([new File(["x"], "notes.zip"), csv("b.csv")]));
+    view.rerender(provider());
+    expect(session.attachments.map((file) => file.filename)).toEqual(["b.csv"]);
+    expect(useUiStore.getState().notifications.at(-1)?.title).toBe("This file can't be attached");
+
+    const many = Array.from({ length: 9 }, (_, index) => csv(`f${index}.csv`));
+    await act(async () => session.attachFiles!(many));
+    view.rerender(provider());
+    expect(session.attachments).toHaveLength(8);
+    expect(uploads()).toHaveLength(8);
+    // Newest first.
+    expect(useUiStore.getState().notifications[0]?.title).toBe("A chat holds up to 8 files");
   });
 
   it("refuses a file the chat cannot take without sending anything", async () => {
     const view = render(provider());
     await act(async () => session.attachFiles!([new File(["x"], "wallet.dat")]));
     view.rerender(provider());
-    expect(session.attachment).toBeNull();
+    expect(session.attachments).toEqual([]);
     expect(uploads()).toHaveLength(0);
     expect(useUiStore.getState().notifications.at(-1)?.title).toBe("This file can't be attached");
   });
@@ -245,9 +281,9 @@ describe("a pasted chat file", () => {
       await attaching;
     });
     view.rerender(provider());
-    expect(session.attachment).toBeNull();
+    expect(session.attachments).toEqual([]);
     await act(async () => session.sendPrompt("Anything pending?"));
-    expect(lastChat().attachment).toBeUndefined();
+    expect(lastChat().attachments).toBeUndefined();
   });
 });
 

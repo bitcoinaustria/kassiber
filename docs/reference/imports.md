@@ -759,8 +759,12 @@ importer. Attach the export to a chat and say what it is:
 kassiber chat --file export.csv --file-context "2024 export from exchange XYZ, custodial account"
 ```
 
-In the desktop Assistant, use the composer's attach button (**+**) and describe
-the file in your message. The assistant then calls the read-only
+Repeat `--file` to attach several files (up to eight); the nth
+`--file-context` describes the nth file, and the assistant names them
+`file-1`, `file-2`, ... when it calls a tool.
+
+In the desktop Assistant, use the composer's attach button (**+**), drop the
+files on the assistant or paste them, and describe them in your message. The assistant then calls the read-only
 `ui.wallets.analyze_file` tool, proposes a `column_map` (and a `type_map` when
 the labels are not English), previews it against the real normalizer, and asks
 about anything genuinely ambiguous.

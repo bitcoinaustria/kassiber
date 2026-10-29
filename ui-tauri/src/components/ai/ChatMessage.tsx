@@ -385,7 +385,13 @@ function UserMessage({
       className="group/user flex w-full flex-col items-end gap-1"
       data-message-id={message.id}
     >
-      {message.attachment ? <ChatAttachmentCard attachment={message.attachment} /> : null}
+      {message.attachments?.length ? (
+        <div className="flex max-w-[82%] flex-wrap justify-end gap-1.5 sm:max-w-[80%]">
+          {message.attachments.map((attachment, index) => (
+            <ChatAttachmentCard key={`${attachment.filename}-${index}`} attachment={attachment} />
+          ))}
+        </div>
+      ) : null}
       <div className="max-w-[82%] rounded-2xl bg-message p-3 text-sm text-foreground sm:max-w-[80%]">
         <p
           className={cn(

@@ -12,7 +12,7 @@ describe("ChatMessage", () => {
       role: "user",
       content: "Import this",
       status: "done",
-      attachment: { filename: "Umsatzliste.xlsx", kind: "spreadsheet", sizeBytes: 48_000 },
+      attachments: [{ filename: "Umsatzliste.xlsx", kind: "spreadsheet", sizeBytes: 48_000 }],
     };
     const html = renderToStaticMarkup(<ChatMessage message={message} />);
     expect(html).toContain("Umsatzliste.xlsx");

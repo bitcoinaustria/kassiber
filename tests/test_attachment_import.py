@@ -39,7 +39,7 @@ COLUMN_MAP = {
 }
 
 
-class AttachmentImportTests(unittest.TestCase):
+class AttachmentImportFixture(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -71,10 +71,18 @@ class AttachmentImportTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def runtime(self, *, full_access=True, attached=True):
+    def runtime(self, *, full_access=True, attached=True, extra_files=()):
         state = {"provider_kind": "openai", "provider_full_access": full_access}
         if attached:
-            state["attachment_source_file"] = self.csv_path
+            state["chat_files"] = [
+                {
+                    "id": "file-1",
+                    "source_file": self.csv_path,
+                    "filename": os.path.basename(self.csv_path),
+                    "kind": "delimited",
+                },
+                *extra_files,
+            ]
         return daemon.AiToolRuntime(self.data_root, {}, queue.Queue(), state)
 
     def read(self, name, arguments, runtime=None):
@@ -106,6 +114,8 @@ class AttachmentImportTests(unittest.TestCase):
         self.assertNotIn(self._tmp.name, text)
         self.assertNotIn("kassiber-import-", text)
 
+
+class AttachmentImportTests(AttachmentImportFixture):
     def test_tools_are_in_the_default_profile_and_bound_by_consent(self):
         for name in ("ui.wallets.import_attachment.plan", "ui.wallets.import_attachment.apply",
                      "ui.imports.list", "ui.imports.rollback.plan", "ui.imports.rollback",
@@ -116,8 +126,10 @@ class AttachmentImportTests(unittest.TestCase):
         self.assertIn("ui.wallets.import_attachment.apply", daemon.AI_TOOL_ONCE_ONLY_CONSENT)
         self.assertIn("ui.imports.rollback", daemon.AI_TOOL_ONCE_ONLY_CONSENT)
         for name in ("ui.wallets.import_attachment.plan", "ui.wallets.import_attachment.apply"):
-            properties = set(get_tool(name).parameters["properties"])
-            self.assertFalse({"path", "file", "source_file", "token"} & properties)
+            properties = get_tool(name).parameters["properties"]
+            self.assertFalse({"path", "source_file", "token"} & set(properties))
+            # `file` names one of the chat's grants by id, never a path.
+            self.assertEqual(properties["file"]["pattern"], "^file-[1-9]$")
 
     def test_plan_reports_the_effect_and_changes_nothing(self):
         plan = self.plan()
@@ -319,6 +331,92 @@ class WalletInputSourceDriftTests(unittest.TestCase):
         with open(os.path.join(ui, "lib", "connectionCatalog.tsx"), encoding="utf-8") as handle:
             catalog_ids = set(re.findall(r'^    id: "([^"]+)"', handle.read(), re.MULTILINE))
         self.assertLessEqual(set(WALLET_INPUT_SOURCES), catalog_ids)
+
+
+class ChatFileEvidenceTests(AttachmentImportFixture):
+    """Several files per chat, named by id; and a file kept as evidence."""
+
+    def receipt(self, name="Rechnung_Mustermann.png"):
+        path = os.path.join(self._tmp.name, name)
+        with open(path, "wb") as handle:
+            handle.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 32)
+        return {"id": "file-2", "source_file": path, "filename": name, "kind": "image"}
+
+    def imported_transaction(self):
+        self.assertTrue(self.apply(self.plan())["ok"])
+        return self.conn.execute(
+            "SELECT id FROM transactions ORDER BY occurred_at LIMIT 1"
+        ).fetchone()["id"]
+
+    def test_tools_pick_the_one_export_and_refuse_an_image(self):
+        runtime = self.runtime(extra_files=[self.receipt()])
+        # One export among the files: `file` may be left out.
+        self.assertTrue(self.plan(runtime)["ready"])
+        refused = self.read(
+            "ui.wallets.analyze_file", {"file": "file-2"}, runtime
+        )
+        self.assertFalse(refused["ok"])
+        self.assertEqual(refused["reason"], "ai_attachment_unsupported")
+        unknown = self.read("ui.wallets.analyze_file", {"file": "file-7"}, runtime)
+        self.assertEqual(unknown["reason"], "ai_attachment_missing")
+
+    def test_two_exports_need_a_file_id(self):
+        second = os.path.join(self._tmp.name, "second.csv")
+        with open(second, "w", encoding="utf-8") as handle:
+            handle.write(OPAQUE_CSV)
+        runtime = self.runtime(
+            extra_files=[{"id": "file-2", "source_file": second, "filename": "second.csv", "kind": "delimited"}]
+        )
+        ambiguous = self.read("ui.wallets.analyze_file", {}, runtime)
+        self.assertEqual(ambiguous["reason"], "ai_attachment_ambiguous")
+        named = self.read("ui.wallets.analyze_file", {"file": "file-2"}, runtime)
+        self.assertTrue(named["ok"], named)
+
+    def test_keeps_an_attached_file_as_evidence(self):
+        transaction = self.imported_transaction()
+        self.assertIn("ui.attachments.add_from_chat", CORE_TOOL_NAMES)
+        self.assertEqual(get_tool("ui.attachments.add_from_chat").kind_class, "mutating")
+        runtime = self.runtime(extra_files=[self.receipt()])
+        result = self.write(
+            "ui.attachments.add_from_chat",
+            {"transaction": transaction, "file": "file-2"},
+            runtime,
+        )
+        self.assertTrue(result["ok"], result)
+        row = self.conn.execute(
+            "SELECT label, original_filename, transaction_id FROM attachments"
+        ).fetchone()
+        self.assertEqual(row["transaction_id"], transaction)
+        self.assertEqual(row["label"], "Rechnung_Mustermann.png")
+        self.assert_no_local_path(result)
+
+    def test_a_restricted_provider_is_not_told_the_filename_it_kept(self):
+        transaction = self.imported_transaction()
+        runtime = self.runtime(full_access=False, extra_files=[self.receipt()])
+        result = self.write(
+            "ui.attachments.add_from_chat",
+            {"transaction": transaction, "file": "file-2"},
+            runtime,
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertNotIn("Mustermann", json.dumps(result))
+        # The book still records the file's own name.
+        label = self.conn.execute("SELECT label FROM attachments").fetchone()["label"]
+        self.assertEqual(label, "Rechnung_Mustermann.png")
+
+    def test_refuses_a_path_and_unknown_fields(self):
+        transaction = self.imported_transaction()
+        runtime = self.runtime(extra_files=[self.receipt()])
+        for arguments in (
+            {"transaction": transaction, "file_path": "/etc/passwd"},
+            {"transaction": transaction, "file": "/etc/passwd"},
+        ):
+            with self.subTest(arguments=arguments):
+                result = self.write("ui.attachments.add_from_chat", arguments, runtime)
+                self.assertFalse(result["ok"])
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0], 0
+        )
 
 
 if __name__ == "__main__":

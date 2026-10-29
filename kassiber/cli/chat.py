@@ -392,9 +392,13 @@ def _build_chat_args(
     loop_budget = getattr(args, "tool_loop_max_iterations", None)
     if loop_budget is not None:
         payload["tool_loop_max_iterations"] = loop_budget
-    attachment = getattr(args, "chat_attachment", None)
-    if attachment:
-        payload["attachment"] = attachment
+    attachments = getattr(args, "chat_attachments", None)
+    if attachments:
+        # The first turn sends the files; a provider that resumes its own
+        # session already holds them after that.
+        first = not getattr(args, "chat_attachments_sent", False)
+        payload["attachments"] = [{**attachment, "new": first} for attachment in attachments]
+        args.chat_attachments_sent = True
     system = getattr(args, "system", None)
     if system:
         payload["system_prompt_kind"] = "raw"
@@ -504,48 +508,61 @@ def _resolve_continuation(
     return requested, messages, session
 
 
-def _stage_chat_attachment(
+def _stage_chat_attachments(
     client: _DaemonChatClient,
     args: Any,
-) -> dict[str, Any] | None:
-    """Stage `--file` with the daemon and return the chat attachment grant.
+) -> list[dict[str, Any]]:
+    """Stage each `--file` with the daemon and return the chat's file grants.
 
     Staged rather than passed as a path so the CLI and the desktop reach the
-    assistant's file tool the same way, and so the model only ever holds an
+    assistant's file tools the same way, and so the model only ever holds an
     opaque token it cannot point at another file.
     """
-    source_file = getattr(args, "file", None)
-    if not source_file:
-        return None
-    path = Path(str(source_file)).expanduser().resolve()
-    if not path.is_file():
+    sources = list(getattr(args, "file", None) or [])
+    contexts = list(getattr(args, "file_context", None) or [])
+    if len(contexts) > len(sources):
         raise AppError(
-            f"Attachment not found: {path}",
-            code="not_found",
-            hint="Pass an existing export file with --file.",
+            "More --file-context values than --file values",
+            code="validation",
+            hint="Each --file-context describes the --file in the same position.",
             retryable=False,
         )
-    request_id = f"chat-attach-{uuid.uuid4().hex}"
-    client.send(
-        {
-            "request_id": request_id,
-            "kind": "internal.document_import.stage",
-            "args": {"source_file": str(path)},
-        }
-    )
-    response = _read_control_response(client, request_id)
-    data = response.get("data") if isinstance(response.get("data"), dict) else {}
-    token = data.get("token")
-    if not isinstance(token, str) or not token:
+    if len(sources) > 8:
         raise AppError(
-            "could not attach the file to this chat",
-            code="ai_attachment_failed",
+            "A chat holds up to 8 files",
+            code="validation",
             retryable=False,
         )
-    return {
-        "token": token,
-        "label": (getattr(args, "file_context", None) or "").strip() or None,
-    }
+    grants = []
+    for index, source_file in enumerate(sources):
+        path = Path(str(source_file)).expanduser().resolve()
+        if not path.is_file():
+            raise AppError(
+                f"Attachment not found: {path}",
+                code="not_found",
+                hint="Pass an existing file with --file.",
+                retryable=False,
+            )
+        request_id = f"chat-attach-{uuid.uuid4().hex}"
+        client.send(
+            {
+                "request_id": request_id,
+                "kind": "internal.document_import.stage",
+                "args": {"source_file": str(path), "purpose": "chat_attachment"},
+            }
+        )
+        response = _read_control_response(client, request_id)
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        token = data.get("token")
+        if not isinstance(token, str) or not token:
+            raise AppError(
+                "could not attach the file to this chat",
+                code="ai_attachment_failed",
+                retryable=False,
+            )
+        label = (contexts[index] if index < len(contexts) else "") or ""
+        grants.append({"token": token, "label": label.strip() or None})
+    return grants
 
 
 def _selected_provider_row(
@@ -1249,7 +1266,7 @@ def run_chat_command(
         # Staged once for the whole session, so a REPL can keep discussing the
         # same file across turns. The grant expires with the daemon's staging
         # TTL; the analysis tool then reports that rather than reading a stale path.
-        args.chat_attachment = _stage_chat_attachment(client, args)
+        args.chat_attachments = _stage_chat_attachments(client, args)
         session = ChatSessionResult(
             provider=getattr(args, "provider", None),
             model=args.model,

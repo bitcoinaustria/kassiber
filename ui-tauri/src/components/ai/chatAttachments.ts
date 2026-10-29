@@ -7,6 +7,9 @@ export const CHAT_ATTACHMENT_EXTENSIONS = [
   "csv", "tsv", "xlsx", "xlsm", "pdf", "png", "jpg", "jpeg", "webp", "gif",
 ] as const;
 
+/** Files one chat holds; the daemon names them file-1 .. file-8. */
+export const MAX_CHAT_ATTACHMENTS = 8;
+
 /** The daemon refuses larger pasted files; the picker reads larger ones in place. */
 export const MAX_CHAT_UPLOAD_BYTES = 25 * 1024 * 1024;
 

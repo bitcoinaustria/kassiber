@@ -1188,21 +1188,25 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--file",
         metavar="PATH",
+        action="append",
         help=(
-            "Attach a local export (CSV/XLSX/PDF/image) to this chat so the "
-            "assistant can analyze it — use for an exchange with no dedicated "
-            "importer. For a CSV the assistant sees the column headers and row "
-            "counts; cell values stay on this device unless the AI provider also "
-            "runs here. PDFs and photos require a loopback local vision model."
+            "Attach a local file (CSV/TSV/XLSX/PDF/image) to this chat; repeat "
+            "for up to 8 files. An export from an exchange with no dedicated "
+            "importer can be analyzed and imported. A provider with full agent "
+            "access sees the CSV's cell values, the images, and the PDFs' text "
+            "(or page images of a scan); a restricted provider sees the CSV's "
+            "headers and row counts and none of the images or PDFs."
         ),
     )
     chat.add_argument(
         "--file-context",
         metavar="TEXT",
+        action="append",
         help=(
-            "Tell the assistant what the attached file is, e.g. \"2024 export "
-            "from exchange XYZ, custodial account\". Context for the assistant, "
-            "not a claim Kassiber books: values still come from the file."
+            "Tell the assistant what an attached file is, e.g. \"2024 export "
+            "from exchange XYZ, custodial account\"; the nth --file-context "
+            "describes the nth --file. Context for the assistant, not a claim "
+            "Kassiber books: values still come from the file."
         ),
     )
     chat.add_argument("--provider", help="Provider name (defaults to the stored default)")

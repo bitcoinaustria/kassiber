@@ -84,13 +84,13 @@ describe("Ai02 composer (mounted)", () => {
   });
 
   it("does not recall into a composer holding a new attachment", () => {
-    render(<Harness attachment={{ filename: "export.csv" }} />);
+    render(<Harness attachments={[{ key: "a", filename: "export.csv", state: "ready" }]} />);
     fireEvent.keyDown(field(), { key: "ArrowUp" });
     expect(field().value).toBe("");
   });
 
   it("recalls while the chat's file was already sent", () => {
-    render(<Harness attachment={{ filename: "export.csv" }} attachmentState="sent" />);
+    render(<Harness attachments={[{ key: "a", filename: "export.csv", state: "sent" }]} />);
     fireEvent.keyDown(field(), { key: "ArrowUp" });
     expect(field().value).toBe("second question");
   });

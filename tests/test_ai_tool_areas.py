@@ -178,7 +178,7 @@ class LoadToolsLoopTest(unittest.TestCase):
             "tool_profile": profile,
             "tool_loop_max_iterations": 3,
             "screen_context": None,
-            "attachment": None,
+            "attachments": [],
         }
 
     def _run(self, client, validated, calls_by_round):

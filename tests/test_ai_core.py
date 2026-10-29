@@ -296,6 +296,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_metadata_update",
             "ui_transactions_history_revert",
             "ui_attachments_copy",
+            "ui_attachments_add_from_chat",
             "ui_source_funds_evidence_list",
             "ui_source_funds_sources_attach",
             "ui_source_funds_links_attach",

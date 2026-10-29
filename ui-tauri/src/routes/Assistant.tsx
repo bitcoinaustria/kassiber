@@ -48,12 +48,11 @@ export function Assistant() {
     incognito,
     setIncognito,
     sessionId,
-    attachment,
-    attachmentState,
+    attachments,
     attachFile,
     attachFiles,
-    attachDroppedFile,
-    clearAttachment,
+    attachDroppedFiles,
+    removeAttachment,
   } = useAssistantSession();
   // A file can be dropped anywhere on the page, not only on the composer.
   const pageRef = React.useRef<HTMLDivElement>(null);
@@ -127,11 +126,10 @@ export function Assistant() {
       toolProfile={toolProfile}
       onToolProfileChange={setToolProfile}
       onAttach={attachFile}
-      attachment={attachment}
-      attachmentState={attachmentState}
-      onClearAttachment={clearAttachment}
+      attachments={attachments}
+      onRemoveAttachment={removeAttachment}
       onAttachFiles={attachFiles}
-      onNativeFileDrop={attachDroppedFile}
+      onNativeFileDrop={attachDroppedFiles}
       dropTargetRef={pageRef}
       historyMessages={messages}
       {...(hasMessages ? { prompts: [] } : {})}
