@@ -328,3 +328,170 @@ Raw logs are in `/tmp/kassiber-r5-verification/`. Key artifacts are
 There is no unresolved integration conflict or stop condition. The branch is
 local-only and ready for the orchestrator's full census and custody-shadow
 verification. Existing partial-port and platform gates are preserved.
+
+## Round 2: R5b stopped at the setup test conflict
+
+**This round is incomplete.** Branch `t3code/rust-backend-r5b` starts at the
+requested custody tip `a4e017a3`. Its last replayed code commit is
+`c9432a16eb780a9d3786445152ce25495dc1cc14`; a following documentation-only
+commit records this stop. The completed first-round acceptance above does not
+apply to this newer custody base or establish acceptance of this partial stack.
+
+### Provenance and remaining picks
+
+The branch has 87 completed cherry-picks, in order, with every original commit
+message preserved in full and no merge commits:
+
+| Input | Required picks | Completed | Remaining |
+| --- | ---: | ---: | ---: |
+| Base `b61162fc..65c74e84` | 86 | 86 | 0 |
+| Setup `31ccde83..14e5a23a` | 7 | 1 | 6 |
+| Transactions `f417d50a..d6d9d4f4` | 10 | 0 | 10 |
+| Wallets `5bde6914..2fe3541a` | 8 | 0 | 8 |
+| Chain clients `82f6b77b..5e7e6489` | 3 new | 0 | 3 |
+| Secrets `0d4fbc28..a051e1ef` | 2 | 0 | 2 |
+| Backup `a051e1ef..6271064d` | 5 | 0 | 5 |
+| Reports `0d4fbc28..349bf2ca` | 5 | 0 | 5 |
+| Total | 126 | 87 | 39 |
+
+The one completed setup increment is `9c74e890`, the separately committed
+Python daemon fix. No skip was executed before the stop. The chain-client
+range was audited before replay: **96 of its 99 commits are already ancestors
+of `65c74e84`**, so they must be skipped when that range is reached. Exactly
+`git rev-list --reverse 82f6b77b..0d4fbc28` identifies those 96 commits. The
+only new chain picks, in order, are `3108ac4e`, `3c0e5b7a`, and `5e7e6489`.
+Their full IDs and the complete contained-commit list are in the local manifest.
+
+All base Python fixes are present once through the ordered replay. The later
+timestamp-bound, wallet preflight, Core-credential, and backup-recovery Python
+fixes are still pending with their slices; this partial branch does not claim
+to contain them. No pending fix was applied separately or duplicated.
+
+### Conflicts resolved before the stop
+
+Every completed conflicting commit is listed below. `inventory` means only
+the generated count table in `docs/reference/rust-port.md`; it was regenerated
+with `python -m tests.rust_port.classify_tests update`, together with
+`tests/rust_port/dispositions.json`. Surrounding prose survived. No generated
+counts or dispositions were hand-merged.
+
+| Original commit | Conflicting paths | Resolution |
+| --- | --- | --- |
+| `5331f395` | inventory; `tests/rust_port/reviews.py` | Unioned the separate custody-channel/safety and storage review dictionary entries; regenerated inventory. |
+| `e2734062` | inventory | Regenerated. |
+| `fe4ace19` | inventory | Regenerated. |
+| `4b633e22` | inventory | Regenerated. |
+| `c9181145` | inventory | Regenerated. |
+| `2a8f1454` | inventory | Regenerated. |
+| `9dfa92dd` | inventory | Regenerated. |
+| `f6f55b15` | inventory | Regenerated. |
+| `b75b7419` | inventory | Regenerated. |
+| `3924ef01` | inventory | Regenerated. |
+| `ad9579b1` | inventory | Regenerated. |
+| `e6ba90a6` | inventory | Regenerated. |
+| `3ed80fbb` | inventory | Regenerated. |
+| `459bab11` | inventory | Regenerated. |
+| `a04e1e1a` | inventory | Regenerated. |
+| `9c74e890` | inventory | Regenerated. |
+
+Contracts were regenerated during the base replay with
+`python -m tests.rust_port.contracts update`; the partial-tip check passes.
+One transient resolver attempt truncated working copies of the inventory
+document and review dictionary. Both were reconstructed from the three index
+stages before completing the first conflicted pick; no malformed trial commit
+or lost surrounding content is in the branch.
+
+### Required stop: `64d8a78d`
+
+The next setup commit, `64d8a78d` ("Port backend configuration through shared
+setup services"), conflicts in these six paths:
+
+| Path | Conflict and disposition |
+| --- | --- |
+| `Cargo.lock` | Local-package dependency additions overlap; no resolution retained. |
+| `crates/kassiber/src/real_store.rs` | Separate `rates` and `current_default_backend` method additions overlap at the impl boundary; no resolution retained. |
+| `crates/runtime/src/store.rs` | Separate default trait-method additions overlap; no resolution retained. |
+| `crates/kassiber/tests/binary.rs` | Both sides change the same test function differently; required stop. |
+| `docs/reference/rust-port.md` | Generated count conflict; no resolution retained. |
+| `tests/rust_port/dispositions.json` | Generated disposition conflict; no resolution retained. |
+
+The exact function is
+`describes_all_commands_and_keeps_unported_execution_closed`. The completed
+base tests these unported witnesses:
+
+```rust
+[("wallets", "list"), ("backends", "list"), ("transactions", "list")]
+```
+
+The incoming setup commit changes the same loop to:
+
+```rust
+[("wallets", "list"), ("rates", "pairs")]
+```
+
+Both edits affect the same test function. The user's rule, "Same function
+changed two different ways: stop and report rather than choose," therefore
+stops this replay. The CLI/daemon registration-union rule does not explicitly
+authorize choosing between these test witness sets. No witness set was chosen.
+The full conflict, staged diff, status, and original incoming patch were saved
+before aborting only this pending cherry-pick. The 87 completed picks remain;
+there is no cherry-pick in progress. Resume with `64d8a78d` only after the
+orchestrator resolves this policy decision. Then replay the remaining inputs
+in the original order and skip the 96 contained chain commits.
+
+### Partial-tip dependency and ref audit
+
+`Cargo.lock` is byte-identical to `65c74e84`. All **337/337 registry package
+identities**, including exact version, source and checksum, match the prior
+base and occur in the supplied input lockfiles. No package was upgraded.
+`cargo metadata --offline --locked --format-version 1` succeeds and leaves
+the lockfile unchanged. No lock conflict resolution from the aborted setup
+pick is retained.
+
+SHA-256: `e97a9c42b114972385e2c992770fddc5553b8132f09764c399c9c20f054c4099`.
+
+This run changed no input branch or stash. During replay, an external actor
+advanced `t3code/rust-backend-r2` from `a4e017a3` to `cc18b710` (its reflog
+records `branch: Reset to cc18b710`). This integration retains the explicitly
+requested `a4e017a3` base and does not include that later advance. Other saved
+`t3code/rust-backend-*` input refs and the stash ref are unchanged. Nothing was
+pushed or published.
+
+### Partial-tip verification and limits
+
+Tooling used `mise exec rust@1.99.1 uv@latest --`,
+`MATURIN_NO_INSTALL_RUST=1`, locked CPython 3.11.17, and offline Cargo.
+`uv sync --locked --python 3.11 --offline` passed using the existing shared
+cache with elevated execution. Temporary-cache attempts lacked `lwk` or the
+`maturin==1.15.0` build requirement; they are not acceptance evidence.
+HOME was never redirected to a tooling-install directory. Generated catalog
+reads used disposable roots and a no-socket guard.
+
+| Check | Partial-tip result |
+| --- | --- |
+| `cargo fmt --all --check` | Passed. |
+| `cargo metadata --offline --locked --format-version 1` | Passed; lock unchanged. |
+| Inventory check | Passed through locked uv using the shared cache. |
+| Contracts check | Passed through locked uv using the shared cache. |
+| Ordered replay, original messages, linear history | Passed for all 87 completed picks. |
+| Workspace clippy and `kassiber` test-harness clippy | Not run: integration stopped. |
+| Workspace tests and net test-observer suite | Not run: integration stopped. |
+| Every `crates/*/scripts/` mutation catalog | Not run: integration stopped; no kills claimed. |
+| Test-harness build and required Python suite | Not run: integration stopped. |
+| Per-slice hybrid parity modules | Not run: integration stopped. |
+
+No successful hybrid routing log was produced in this round. Setup, rates,
+transactions/documents, wallets/imports, chain clients, secrets, backup and
+reports therefore have **no measured served-by totals**, and zero Python
+fallbacks are **not established**. Earlier-round or slice-branch totals above
+must not be reused as R5b acceptance. Loopback acceptance and native credential
+platform checks were not attempted, so this run makes no sandbox or platform
+acceptance claim for them. The full census and custody-shadow shards remain
+with the orchestrator, after the stack is completed.
+
+Evidence is in `/tmp/kassiber-r5b-verification/`: `inputs.json`, `replay.json`,
+`replay.log`, `origin-locks.json`, `partial-audit.json`, `refs-before.txt`,
+`stopped-conflicts.diff`, `stopped-staged.diff`, `stopped-status.txt`,
+`stopped-original.patch`, `partial-fmt.log`, `partial-metadata.json`, and
+`partial-{inventory,contracts}-shared-cache.log`. These artifacts describe the
+partial code tip, not a completed R5b integration.
