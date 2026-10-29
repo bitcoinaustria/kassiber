@@ -5,7 +5,9 @@ use serde_json::{json, Map, Value};
 
 fn exact(value: &Py) -> Result<Value, String> {
     let converted = codec::to_json(value);
-    if codec::dumps(value, true)? != codec::dumps(&codec::from_json(&converted)?, true)? {
+    if !codec::lossless(value)
+        && codec::dumps(value, true)? != codec::dumps(&codec::from_json(&converted)?, true)?
+    {
         return Err("ValueError".into());
     }
     Ok(converted)

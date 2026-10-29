@@ -108,6 +108,41 @@ pub(crate) fn dumps_json_into(
     Some(())
 }
 
+/// Whether `dumps(v, true) == dumps(&from_json(&to_json(v))?, true)` holds
+/// with neither side failing: no non-finite float, `Decimal`, surrogate,
+/// non-string or repeated key, int near the digit limit, or deep nesting.
+/// Exactness checks may skip their round trip when this holds.
+pub(crate) fn lossless(v: &Py) -> bool {
+    fn walk(v: &Py, depth: usize) -> bool {
+        match v {
+            Py::Null | Py::Bool(_) => true,
+            Py::Int(n) => n.bits() < 14_000,
+            Py::Float(f) => f.is_finite(),
+            Py::Str(s) => !s.has_surrogates(),
+            Py::Decimal(_) => false,
+            Py::List(items) => depth < 900 && items.iter().all(|item| walk(item, depth + 1)),
+            Py::Dict(items) => {
+                if depth >= 900 {
+                    return false;
+                }
+                let mut keys = Vec::with_capacity(items.len());
+                for (key, item) in items {
+                    match key {
+                        Key::Str(k) if !k.has_surrogates() => keys.push(k),
+                        _ => return false,
+                    }
+                    if !walk(item, depth + 1) {
+                        return false;
+                    }
+                }
+                keys.sort_unstable();
+                keys.windows(2).all(|pair| pair[0] != pair[1])
+            }
+        }
+    }
+    walk(v, 0)
+}
+
 pub fn to_json(v: &Py) -> Value {
     match v {
         Py::Null => Value::Null,

@@ -686,7 +686,9 @@ pub fn stage(
     for key in typed {
         let value = stored::get(interpretation, key);
         let json = codec::to_json(value);
-        if codec::dumps(value, true)? != codec::dumps(&codec::from_json(&json)?, true)? {
+        if !codec::lossless(value)
+            && codec::dumps(value, true)? != codec::dumps(&codec::from_json(&json)?, true)?
+        {
             return Err("ValueError".into());
         }
         converted.insert(key.into(), json);

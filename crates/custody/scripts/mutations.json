@@ -19396,8 +19396,8 @@
   {
     "id": "R2-review-audit-runtime-667",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "if codec::dumps(value, true)? != codec::dumps(&codec::from_json(&json)?, true)? {",
-    "replace": "if codec::dumps(value, true)? == codec::dumps(&codec::from_json(&json)?, true)? {",
+    "find": "        if !codec::lossless(value)\n            && codec::dumps(value, true)? != codec::dumps(&codec::from_json(&json)?, true)?\n        {",
+    "replace": "        if codec::lossless(value)\n            || codec::dumps(value, true)? == codec::dumps(&codec::from_json(&json)?, true)?\n        {",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
