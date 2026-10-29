@@ -1047,5 +1047,14 @@
       "coinbase": "Eine Coinbase-API-Verbindung wird benötigt.",
       "binance": "Eine Binance-API-Verbindung wird benötigt."
     }
+  },
+  "modelSetup": {
+    "title": "Wähle ein Modell aus",
+    "body": "Am besten ein Coding-Agent, bei dem du schon angemeldet bist. Kontaktiert wird erst, wenn du einen auswählst.",
+    "use": "Verwenden",
+    "retry": "Erneut prüfen",
+    "useAria": "{{name}} verwenden",
+    "other": "Lokale Modelle, Server und API-Schlüssel richtest du in den Einstellungen ein.",
+    "openSettings": "Einstellungen öffnen"
   }
 }

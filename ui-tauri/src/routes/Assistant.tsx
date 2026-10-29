@@ -7,6 +7,7 @@ import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
 import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { ModelSetupCard } from "@/components/ai/ModelSetupCard";
 import { useIncognitoScope } from "@/components/ai/incognitoScope";
 import { RecentChats } from "@/components/ai/RecentChats";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
@@ -258,6 +259,7 @@ export function Assistant() {
               <h2 className="text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
                 {t("page.heading")}
               </h2>
+              {selection?.model ? null : <ModelSetupCard />}
               <div className="w-full">
                 <AssistantFocusChip className="mb-2 justify-center" />
                 {composer}

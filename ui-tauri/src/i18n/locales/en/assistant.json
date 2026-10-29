@@ -1047,5 +1047,14 @@
       "coinbase": "A Coinbase API connection is needed.",
       "binance": "A Binance API connection is needed."
     }
+  },
+  "modelSetup": {
+    "title": "Choose a model to start",
+    "body": "A coding agent you're already signed into works best. Nothing is contacted until you choose one.",
+    "use": "Use",
+    "retry": "Check again",
+    "useAria": "Use {{name}}",
+    "other": "Local models, servers and API keys are set up in Settings.",
+    "openSettings": "Open Settings"
   }
 }

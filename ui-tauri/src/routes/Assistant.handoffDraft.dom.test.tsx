@@ -58,6 +58,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
 vi.mock("@/components/ai/ChatHistoryPanel", () => ({ ChatHistoryPanel: () => null }));
 vi.mock("@/components/ai/ChatThread", () => ({ ChatThread: () => null }));
 vi.mock("@/components/ai/RecentChats", () => ({ RecentChats: () => null }));
+vi.mock("@/components/ai/ModelSetupCard", () => ({ ModelSetupCard: () => null }));
 vi.mock("@/components/ai/ProviderModelPicker", () => ({ ProviderModelPicker: () => null }));
 vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
   useSupportedReasoningEffort: () => false,

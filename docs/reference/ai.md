@@ -817,6 +817,16 @@ native CLI must not refresh global runtime status or start other providers.
 Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
 
+Until a model is chosen, the empty chat (the Assistant page and the panel)
+shows **Choose a model to start**: the coding agents (Claude, Codex, GitHub
+Copilot, OpenCode) as rows with **Use**, and a link to Settings for local
+models, servers and API keys. Showing it reads only the provider list and
+cached check results. **Use** switches the agent on if needed and runs the
+same check as Settings, after the off-device confirmation and refused in
+offline mode; a ready agent becomes the default provider and the chat's
+model, and one that is not ready says why in its row (not installed,
+sign-in needed with the CLI's hint).
+
 Typing in the picker ranks every provider's already-known models (configured
 defaults and earlier check results) at once; it never contacts a provider.
 Starred models collect under **Favorites** at the top of the rail. Favorites
