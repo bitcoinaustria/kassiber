@@ -11526,8 +11526,8 @@
   {
     "id": "REC-OPERATION-01",
     "file": "crates/custody/src/lib.rs",
-    "find": "graph::stored::put(&mut stages, \"interpretation\", interpretation);",
-    "replace": "let _ = interpretation;",
+    "find": "    out.push_str(\", \\\"interpretation\\\": \");\n    kassiber_pyjson::dumps_into(interpretation, &options, 2, &mut out).ok()?;\n",
+    "replace": "    let _ = interpretation;\n",
     "rule": "Advertise interpretation as implemented.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -11536,8 +11536,8 @@
   {
     "id": "REC-OPERATION-02",
     "file": "crates/custody/src/lib.rs",
-    "find": "graph::stored::put(&mut stages, \"interpretation\", interpretation);",
-    "replace": "graph::stored::put(&mut stages, \"incorrect\", interpretation);",
+    "find": "    out.push_str(\", \\\"interpretation\\\": \");",
+    "replace": "    out.push_str(\", \\\"incorrect\\\": \");",
     "rule": "Publish the complete stage under its stable operation key.",
     "expect_failing": [
       "interpretation_operation_vectors"
