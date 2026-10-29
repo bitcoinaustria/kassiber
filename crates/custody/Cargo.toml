@@ -19,3 +19,11 @@ serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtri
 sha2 = "0.10"
 # Legacy HTLC witness replay needs HASH160; std and sha2 have no RIPEMD160.
 bitcoin_hashes = "0.14.101"
+
+[features]
+# Opt-in `Instant` spans for performance work; never enabled by the binding.
+timing = []
+
+[[example]]
+name = "custody-bench"
+required-features = ["timing"]

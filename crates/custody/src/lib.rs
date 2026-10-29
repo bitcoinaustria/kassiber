@@ -11,6 +11,7 @@ mod liquid;
 mod python_text;
 pub mod quantity;
 pub mod snapshot;
+pub mod timing;
 
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const STAGES: [&str; 6] = [
@@ -30,14 +31,17 @@ pub fn custody(request: &str) -> String {
 /// Decision-only callers explicitly skip finalization, including its refusals.
 /// The control is outside snapshot v1; the snapshot remains raw facts only.
 pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
+    let parse = timing::span("parse");
     let parsed = serde_json::from_str::<snapshot::Snapshot>(request)
         .map_err(|e| e.to_string())
         .and_then(|snapshot| {
             snapshot.validate()?;
             Ok(snapshot)
         });
+    drop(parse);
     match parsed {
         Ok(snapshot) => {
+            let admission = timing::span("admission");
             if let Err((code, message)) = gates::require_accounting(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
             }
@@ -53,6 +57,8 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
             if let Err(code) = interpretation::admit_channels(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string();
             }
+            drop(admission);
+            let span = timing::span("components+migration");
             let components = match components::compute(&snapshot) {
                 Ok(value) => value,
                 Err(error) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":error.code,"message":error.message}}).to_string(),
@@ -61,28 +67,40 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string(),
             };
+            drop(span);
+            let span = timing::span("evidence");
             let evidence = match evidence::compute(&snapshot) {
                 Ok(value) => value,
                 Err(message) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"evidence","code":"custody_evidence_invalid","message":message}}).to_string(),
             };
+            drop(span);
+            let span = timing::span("interpretation");
             let interpretation = match interpretation::stage(&snapshot, &components, &evidence, migration) {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"interpretation","code":code,"message":code}}).to_string(),
             };
+            drop(span);
+            let span = timing::span("gaps");
             let gaps = match gaps::stage(&snapshot, &components, &evidence, &interpretation) {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"gaps","code":code,"message":code}}).to_string(),
             };
+            drop(span);
+            let span = timing::span("quantity");
             let quantity = match quantity::runtime::stage(&snapshot, &components, &evidence, &interpretation, &gaps) {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"quantity","code":code,"message":code}}).to_string(),
             };
+            drop(span);
+            let span = timing::span("finalized_projection");
             let projection = if finalized {
                 match finalized_projection::runtime::stage_with_rows(&snapshot, &projection_rows, &quantity, &interpretation) {
                     Ok(value) => Some(value),
                     Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"finalized_projection","code":code,"message":code}}).to_string(),
                 }
             } else { None };
+            drop(span);
+            let _span = timing::span("response");
             let response = serde_json::json!({
                 "schema_version":1,
                 "engine_version":ENGINE_VERSION,
