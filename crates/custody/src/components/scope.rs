@@ -167,11 +167,11 @@ pub(super) fn scoped_legs(snapshot: &Snapshot, legs: &[Value]) -> Result<Vec<Val
 pub(super) fn inferred_pairs<'a>(legs: &'a [Value], mode: &str) -> Vec<(&'a Value, &'a Value)> {
     let sources: Vec<_> = legs
         .iter()
-        .filter(|l| l["role"] == "source" && wide(&l["amount_msat"]) > 0)
+        .filter(|l| l["role"] == "source" && big(&l["amount_msat"]) > BigInt::from(0))
         .collect();
     let sinks: Vec<_> = legs
         .iter()
-        .filter(|l| sink(l) && wide(&l["amount_msat"]) > 0)
+        .filter(|l| sink(l) && big(&l["amount_msat"]) > BigInt::from(0))
         .collect();
     if mode == "conversion" {
         return if sources.len() == 1 && sinks.len() == 1 {
@@ -198,7 +198,7 @@ pub(super) fn pairs<'a>(
     legs: &'a [Value],
     allocs: &[Value],
     mode: &str,
-) -> Vec<(Value, &'a Value, &'a Value, i128, i128)> {
+) -> Vec<(Value, &'a Value, &'a Value, BigInt, BigInt)> {
     if allocs.is_empty() {
         return inferred_pairs(legs, mode)
             .into_iter()
@@ -207,8 +207,8 @@ pub(super) fn pairs<'a>(
                     Value::Null,
                     s,
                     t,
-                    wide(&s["amount_msat"]),
-                    wide(&t["amount_msat"]),
+                    big(&s["amount_msat"]),
+                    big(&t["amount_msat"]),
                 )
             })
             .collect();
@@ -220,8 +220,8 @@ pub(super) fn pairs<'a>(
                 a["id"].clone(),
                 by_id(legs, &a["source_leg_id"])?,
                 by_id(legs, &a["sink_leg_id"])?,
-                wide(&a["source_amount_msat"]),
-                wide(&a["sink_amount_msat"]),
+                big(&a["source_amount_msat"]),
+                big(&a["sink_amount_msat"]),
             ))
         })
         .collect()
@@ -243,7 +243,7 @@ pub(super) fn chronology(
 ) -> Result<Vec<Value>, Error> {
     let mut issues = Vec::new();
     for (id, s, t, sa, ta) in pairs(legs, allocs, mode) {
-        if sa <= 0 && ta <= 0 {
+        if sa <= BigInt::from(0) && ta <= BigInt::from(0) {
             continue;
         }
         let source = time::instant(&s["occurred_at"])?;
@@ -262,7 +262,7 @@ pub(super) fn location_issues(legs: &[Value]) -> Result<Vec<Value>, Error> {
     let mut groups = group(
         legs.iter()
             .filter(|l| {
-                wide(&l["amount_msat"]) > 0
+                big(&l["amount_msat"]) > BigInt::from(0)
                     && truth(&l["wallet_id"])
                     && (owned(l) || l["role"] == "source")
             })
@@ -312,13 +312,13 @@ pub(super) fn location_issues(legs: &[Value]) -> Result<Vec<Value>, Error> {
             }
         }
         events.sort_by_key(|(when, kind, l)| (*when, *kind, wide(&l["ordinal"])));
-        let mut available = 0;
+        let mut available = BigInt::from(0);
         for (_, kind, l) in events {
-            let amount = wide(&l["amount_msat"]);
+            let amount = big(&l["amount_msat"]);
             if kind == 0 {
                 available += amount;
             } else if amount > available {
-                issues.push(json!({"code":"custody_location_continuity_mismatch","message":"an intermediate custody location spends before or beyond the value this component credited to it","wallet_id":wallet,"exposure":exposure,"conservation_unit":unit,"source_leg_id":l["id"],"available_msat":available,"source_msat":amount}));
+                issues.push(json!({"code":"custody_location_continuity_mismatch","message":"an intermediate custody location spends before or beyond the value this component credited to it","wallet_id":wallet,"exposure":exposure,"conservation_unit":unit,"source_leg_id":l["id"],"available_msat":number(&available),"source_msat":number(&amount)}));
                 break;
             } else {
                 available -= amount;
@@ -333,7 +333,7 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
     }
     let material: Vec<_> = legs
         .iter()
-        .filter(|l| wide(&l["amount_msat"]) > 0)
+        .filter(|l| big(&l["amount_msat"]) > BigInt::from(0))
         .cloned()
         .collect();
     // Dicts replace duplicate ids without changing their insertion slot.
@@ -357,7 +357,7 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
     }
     let mut edges: Vec<(String, String)> = pairs(&material, allocs, mode)
         .into_iter()
-        .filter(|(_, _, _, s, t)| *s > 0 || *t > 0)
+        .filter(|(_, _, _, s, t)| *s > BigInt::from(0) || *t > BigInt::from(0))
         .map(|(_, s, t, _, _)| (pystr(&s["id"]), pystr(&t["id"])))
         .collect();
     for (_, items) in group(
@@ -451,7 +451,7 @@ pub(super) fn complete_allocations(legs: &[Value], allocs: &[Value]) -> Vec<Valu
             continue;
         }
         for (i, (s, t)) in inferred_pairs(&ls, "quantity").into_iter().enumerate() {
-            result.push(json!({"id":format!("inferred:{id}:{i}"),"component_id":id,"source_leg_id":s["id"],"sink_leg_id":t["id"],"source_amount_msat":wide(&s["amount_msat"]),"sink_amount_msat":wide(&t["amount_msat"])}));
+            result.push(json!({"id":format!("inferred:{id}:{i}"),"component_id":id,"source_leg_id":s["id"],"sink_leg_id":t["id"],"source_amount_msat":s["amount_msat"],"sink_amount_msat":t["amount_msat"]}));
         }
     }
     result

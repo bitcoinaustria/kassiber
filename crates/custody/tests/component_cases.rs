@@ -790,3 +790,16 @@ fn components_core_ln_kind_scope() {
 fn components_liquid_kind_conflict() {
     check("liquid_kind_conflict");
 }
+
+#[test]
+fn components_allocation_beyond_i128() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_component_review.json"
+    ))
+    .unwrap();
+    for c in cases {
+        let snapshot = serde_json::from_value(c["input"].clone()).unwrap();
+        let actual = kassiber_custody::components::compute(&snapshot).unwrap();
+        assert_eq!(actual, c["expected"]);
+    }
+}

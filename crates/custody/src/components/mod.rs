@@ -8,6 +8,11 @@ pub(crate) mod time;
 
 use crate::codec::{self, pystr, text, truth, wide};
 use crate::python_text::PythonText;
+use crate::quantity::{exact, number};
+use kassiber_pyjson::BigInt;
+fn big(v: &Value) -> BigInt {
+    exact(v).expect("converted component integer")
+}
 use crate::snapshot::{Component, Snapshot};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};

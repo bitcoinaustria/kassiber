@@ -23,7 +23,7 @@ pub(super) fn validate(
             && (truth(&l["location_ref"])
                 || text(&l["notes"]) == "reviewed_residual:retained_custody");
         if (role == "source" || owned(l))
-            && wide(&l["amount_msat"]) > 0
+            && big(&l["amount_msat"]) > BigInt::from(0)
             && !truth(&l["wallet_id"])
             && !reviewed
         {
@@ -34,7 +34,7 @@ pub(super) fn validate(
                 issues.push(json!({"code":"anchor_transaction_retracted","message":"an imported transaction anchor was removed; re-import it or author a reviewed replacement revision","leg_id":l["id"],"transaction_id":pystr(anchor)}));
                 continue;
             }
-            if (role == "source" || owned(l)) && wide(&l["amount_msat"]) > 0 {
+            if (role == "source" || owned(l)) && big(&l["amount_msat"]) > BigInt::from(0) {
                 if !truth(&l["wallet_id"]) && !reviewed {
                     issues.push(json!({"code":"transactionless_leg_wallet_missing","leg_id":l["id"],"role":role}));
                 }
@@ -110,25 +110,25 @@ pub(super) fn validate(
         let Some(row) = rows.get(id) else {
             continue;
         };
-        let actual: i128 = ls
+        let actual: BigInt = ls
             .iter()
             .filter(|l| {
                 (row["direction"] == "outbound" && l["role"] == "source")
                     || (row["direction"] == "inbound" && owned(l))
             })
-            .map(|l| wide(&l["amount_msat"]))
+            .map(|l| big(&l["amount_msat"]))
             .sum();
         let principal = principal(row)?;
         let movement = if text(&row["direction"]).py_strip().py_lower() == "outbound" {
-            principal + wide(&integer(or(&row["fee"], &json!(0)))?)
+            &principal + big(&integer(or(&row["fee"], &json!(0)))?)
         } else {
-            wide(&integer(or(&row["amount"], &json!(0)))?)
+            big(&integer(or(&row["amount"], &json!(0)))?)
         };
         let partial_review = ls.iter().any(|l| partial.contains(&pystr(&l["id"])));
         let expected = if partial_review { principal } else { movement };
-        let mut c = json!({"transaction_id":id,"direction":row["direction"],"partial_review":partial_review,"raw_economic_msat":expected,"reviewed_component_msat":actual,"reviewed_minus_raw_msat":actual-expected});
+        let mut c = json!({"transaction_id":id,"direction":row["direction"],"partial_review":partial_review,"raw_economic_msat":number(&expected),"reviewed_component_msat":number(&actual),"reviewed_minus_raw_msat":number(&(&actual-&expected))});
         coverage.push(c.clone());
-        if (partial_review && !(0 < actual && actual <= expected))
+        if (partial_review && !(BigInt::from(0) < actual && actual <= expected))
             || (!partial_review && actual != expected)
         {
             c["code"] = json!("anchor_coverage_mismatch");
@@ -149,14 +149,14 @@ pub(super) fn validate(
         let Some(row) = rows.get(&pystr(tx)).filter(|_| truth(tx)) else {
             continue;
         };
-        let allocated: i128 = allocs
+        let allocated: BigInt = allocs
             .iter()
             .filter(|a| by_id(legs, &a["sink_leg_id"]).is_some_and(|l| l["role"] == "fee"))
-            .map(|a| wide(&a["source_amount_msat"]))
+            .map(|a| big(&a["source_amount_msat"]))
             .sum();
-        let fee = wide(&integer(or(&row["fee"], &json!(0)))?);
+        let fee = big(&integer(or(&row["fee"], &json!(0)))?);
         if allocated != fee {
-            issues.push(json!({"code":"custody_suspense_fee_coverage_mismatch","message":"an observed miner fee must stay separate from custody suspense","source_leg_id":source_id,"transaction_id":pystr(tx),"observed_fee_msat":fee,"allocated_fee_msat":allocated}));
+            issues.push(json!({"code":"custody_suspense_fee_coverage_mismatch","message":"an observed miner fee must stay separate from custody suspense","source_leg_id":source_id,"transaction_id":pystr(tx),"observed_fee_msat":number(&fee),"allocated_fee_msat":number(&allocated)}));
         }
     }
     if mode == "quantity" {
@@ -196,9 +196,9 @@ pub(super) fn validate(
         json!({"valid":issues.is_empty(),"issues":issues,"warnings":warnings,"transaction_coverage":coverage}),
     )
 }
-pub(super) fn principal(row: &Value) -> Result<i128, Error> {
-    let amount = wide(&integer(or(&row["amount"], &json!(0)))?);
-    let fee = wide(&integer(or(&row["fee"], &json!(0)))?);
+pub(super) fn principal(row: &Value) -> Result<BigInt, Error> {
+    let amount = big(&integer(or(&row["amount"], &json!(0)))?);
+    let fee = big(&integer(or(&row["fee"], &json!(0)))?);
     if text(&row["direction"]).py_strip().py_lower() == "outbound"
         && truth(&row["amount_includes_fee"])
     {

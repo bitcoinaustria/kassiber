@@ -3,7 +3,7 @@ use super::scope::*;
 use super::*;
 
 fn balances(legs: &[Value], keys: &[&str], amount: &str, skip_missing: bool) -> Vec<Value> {
-    let mut buckets: BTreeMap<Vec<String>, BTreeMap<String, i128>> = BTreeMap::new();
+    let mut buckets: BTreeMap<Vec<String>, BTreeMap<String, BigInt>> = BTreeMap::new();
     for l in legs {
         if (skip_missing && keys.iter().any(|k| l[k].is_null())) || l[amount].is_null() {
             continue;
@@ -22,7 +22,7 @@ fn balances(legs: &[Value], keys: &[&str], amount: &str, skip_missing: bool) -> 
             .entry(key)
             .or_default()
             .entry(pystr(&l["role"]))
-            .or_default() += wide(&l[amount]);
+            .or_default() += big(&l[amount]);
     }
     let mut rows = Vec::new();
     for (key, totals) in buckets {
@@ -35,7 +35,7 @@ fn balances(legs: &[Value], keys: &[&str], amount: &str, skip_missing: bool) -> 
         } else {
             "amount"
         };
-        let mut sinks = 0;
+        let mut sinks = BigInt::from(0);
         for role in [
             "source",
             "destination",
@@ -44,16 +44,16 @@ fn balances(legs: &[Value], keys: &[&str], amount: &str, skip_missing: bool) -> 
             "retained",
             "suspense",
         ] {
-            let n = totals.get(role).copied().unwrap_or(0);
-            row.insert(format!("{role}_{suffix}"), json!(n));
+            let n = totals.get(role).cloned().unwrap_or_default();
+            row.insert(format!("{role}_{suffix}"), number(&n));
             if role != "source" {
                 sinks += n;
             }
         }
-        row.insert(format!("sink_{suffix}"), json!(sinks));
+        row.insert(format!("sink_{suffix}"), number(&sinks));
         row.insert(
             format!("residual_{suffix}"),
-            json!(totals.get("source").copied().unwrap_or(0) - sinks),
+            number(&(totals.get("source").cloned().unwrap_or_default() - sinks)),
         );
         rows.push(Value::Object(row));
     }
@@ -96,22 +96,22 @@ fn fee_issues(source: &Value, fee: &Value, allocation: Option<&Value>, mode: &st
         issues.push(v);
     }
     if let Some(a) = allocation.filter(|_| mode == "conversion") {
-        let sa = wide(&a["source_amount_msat"]);
-        let ta = wide(&a["sink_amount_msat"]);
+        let sa = big(&a["source_amount_msat"]);
+        let ta = big(&a["sink_amount_msat"]);
         if sa != ta {
             let mut v = base("conversion_fee_quantity_mismatch");
-            v["source_amount_msat"] = json!(sa);
-            v["fee_amount_msat"] = json!(ta);
+            v["source_amount_msat"] = number(&sa);
+            v["fee_amount_msat"] = number(&ta);
             issues.push(v);
         }
         let sv = &source["valuation_amount"];
         let fv = &fee["valuation_amount"];
-        let amount = wide(&source["amount_msat"]);
+        let amount = big(&source["amount_msat"]);
         if !sv.is_null()
             && !fv.is_null()
             && source["valuation_unit"] == fee["valuation_unit"]
-            && amount > 0
-            && wide(fv) * amount != wide(sv) * sa
+            && amount > BigInt::from(0)
+            && big(fv) * amount != big(sv) * &sa
         {
             issues.push(base("conversion_fee_valuation_mismatch"));
         }
@@ -121,16 +121,16 @@ fn fee_issues(source: &Value, fee: &Value, allocation: Option<&Value>, mode: &st
 fn allocations(legs: &[Value], allocs: &[Value], mode: &str) -> Value {
     let sources: Vec<_> = legs
         .iter()
-        .filter(|l| l["role"] == "source" && wide(&l["amount_msat"]) > 0)
+        .filter(|l| l["role"] == "source" && big(&l["amount_msat"]) > BigInt::from(0))
         .collect();
     let sinks: Vec<_> = legs
         .iter()
-        .filter(|l| sink(l) && wide(&l["amount_msat"]) > 0)
+        .filter(|l| sink(l) && big(&l["amount_msat"]) > BigInt::from(0))
         .collect();
     let mut issues = Vec::new();
     let mut edges = Vec::new();
-    let mut source_coverage: BTreeMap<String, i128> = BTreeMap::new();
-    let mut sink_coverage: BTreeMap<String, i128> = BTreeMap::new();
+    let mut source_coverage: BTreeMap<String, BigInt> = BTreeMap::new();
+    let mut sink_coverage: BTreeMap<String, BigInt> = BTreeMap::new();
     let mut fee_sources = BTreeSet::new();
     let mut material_sources = BTreeSet::new();
     for a in allocs {
@@ -141,11 +141,11 @@ fn allocations(legs: &[Value], allocs: &[Value], mode: &str) -> Value {
             issues.push(json!({"code":"allocation_leg_invalid","allocation_id":a["id"]}));
             continue;
         };
-        let sa = wide(&a["source_amount_msat"]);
-        let ta = wide(&a["sink_amount_msat"]);
-        *source_coverage.entry(pystr(&s["id"])).or_default() += sa;
-        *sink_coverage.entry(pystr(&t["id"])).or_default() += ta;
-        if sa > 0 {
+        let sa = big(&a["source_amount_msat"]);
+        let ta = big(&a["sink_amount_msat"]);
+        *source_coverage.entry(pystr(&s["id"])).or_default() += &sa;
+        *sink_coverage.entry(pystr(&t["id"])).or_default() += &ta;
+        if sa > BigInt::from(0) {
             if t["role"] == "fee" {
                 fee_sources.insert(pystr(&s["id"]));
             } else {
@@ -162,13 +162,16 @@ fn allocations(legs: &[Value], allocs: &[Value], mode: &str) -> Value {
         {
             issues.push(json!({"code":"allocation_quantity_mismatch","allocation_id":a["id"],"source_leg_id":s["id"],"sink_leg_id":t["id"]}));
         }
-        edges.push(json!({"id":a["id"],"source_leg_id":s["id"],"sink_leg_id":t["id"],"source_amount_msat":sa,"sink_amount_msat":ta}));
+        edges.push(json!({"id":a["id"],"source_leg_id":s["id"],"sink_leg_id":t["id"],"source_amount_msat":number(&sa),"sink_amount_msat":number(&ta)}));
     }
     if !allocs.is_empty() {
         for s in &sources {
-            let covered = source_coverage.get(&pystr(&s["id"])).copied().unwrap_or(0);
-            if covered != wide(&s["amount_msat"]) {
-                issues.push(json!({"code":"allocation_source_coverage_mismatch","leg_id":s["id"],"expected_msat":wide(&s["amount_msat"]),"covered_msat":covered}));
+            let covered = source_coverage
+                .get(&pystr(&s["id"]))
+                .cloned()
+                .unwrap_or_default();
+            if covered != big(&s["amount_msat"]) {
+                issues.push(json!({"code":"allocation_source_coverage_mismatch","leg_id":s["id"],"expected_msat":s["amount_msat"],"covered_msat":number(&covered)}));
             }
         }
         let orphans: Vec<_> = fee_sources.difference(&material_sources).collect();
@@ -176,9 +179,12 @@ fn allocations(legs: &[Value], allocs: &[Value], mode: &str) -> Value {
             issues.push(json!({"code":"custody_component_fee_orphaned","message":"a fee source needs an owned transfer or external disposal row to carry it into journals","source_leg_ids":orphans}));
         }
         for t in &sinks {
-            let covered = sink_coverage.get(&pystr(&t["id"])).copied().unwrap_or(0);
-            if covered != wide(&t["amount_msat"]) {
-                issues.push(json!({"code":"allocation_sink_coverage_mismatch","leg_id":t["id"],"expected_msat":wide(&t["amount_msat"]),"covered_msat":covered}));
+            let covered = sink_coverage
+                .get(&pystr(&t["id"]))
+                .cloned()
+                .unwrap_or_default();
+            if covered != big(&t["amount_msat"]) {
+                issues.push(json!({"code":"allocation_sink_coverage_mismatch","leg_id":t["id"],"expected_msat":t["amount_msat"],"covered_msat":number(&covered)}));
             }
         }
     } else {
@@ -223,28 +229,28 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
             json!({"conservation_mode":mode,"activatable":false,"issues":[{"code":"custody_component_leg_role_unknown","message":"component contains a leg role unsupported by this application","roles":roles}],"suspense_msat":0,"source_msat":0,"owned_destination_msat":0,"by_asset":[],"by_conservation_unit":[],"by_valuation_unit":[],"allocations":{"valid":false,"issues":[],"edges":[]}}),
         );
     }
-    let source_total: i128 = legs
+    let source_total: BigInt = legs
         .iter()
         .filter(|l| l["role"] == "source")
-        .map(|l| wide(&l["amount_msat"]))
+        .map(|l| big(&l["amount_msat"]))
         .sum();
-    let owned_total: i128 = legs
+    let owned_total: BigInt = legs
         .iter()
         .filter(|l| owned(l))
-        .map(|l| wide(&l["amount_msat"]))
+        .map(|l| big(&l["amount_msat"]))
         .sum();
     let suspense: Vec<_> = legs
         .iter()
-        .filter(|l| l["role"] == "suspense" && wide(&l["amount_msat"]) > 0)
+        .filter(|l| l["role"] == "suspense" && big(&l["amount_msat"]) > BigInt::from(0))
         .collect();
-    let suspense_total: i128 = suspense.iter().map(|l| wide(&l["amount_msat"])).sum();
+    let suspense_total: BigInt = suspense.iter().map(|l| big(&l["amount_msat"])).sum();
     if legs.is_empty() {
         issues.push(json!({"code":"no_legs","message":"component has no legs"}));
     }
-    if source_total <= 0 {
+    if source_total <= BigInt::from(0) {
         issues.push(json!({"code":"missing_source","message":"component has no positive source"}));
     }
-    if owned_total <= 0 {
+    if owned_total <= BigInt::from(0) {
         issues.push(json!({"code":"missing_owned_destination","message":"component has no positive destination or retained-custody leg"}));
     }
     if !suspense.is_empty() {
@@ -293,7 +299,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
             }
             if s["exposure"] != t["exposure"]
                 || s["conservation_unit"] != t["conservation_unit"]
-                || wide(&a["source_amount_msat"]) != wide(&a["sink_amount_msat"])
+                || big(&a["source_amount_msat"]) != big(&a["sink_amount_msat"])
             {
                 issues.push(base(
                     "custody_suspense_quantity_mismatch",
@@ -332,8 +338,8 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
         .iter()
         .filter(|l| {
             matches!(l["role"].as_str(), Some("fee" | "external"))
-                && wide(&l["amount_msat"]) == 0
-                && wide(or(&l["valuation_amount"], &json!(0))) > 0
+                && big(&l["amount_msat"]) == BigInt::from(0)
+                && big(or(&l["valuation_amount"], &json!(0))) > BigInt::from(0)
         })
         .map(|l| {
             if truth(&l["id"]) {
@@ -351,7 +357,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
         .filter(|l| {
             l["transaction_id"].is_null()
                 && (l["role"] == "source" || owned(l))
-                && wide(&l["amount_msat"]) > 0
+                && big(&l["amount_msat"]) > BigInt::from(0)
                 && !truth(&l["occurred_at"])
         })
         .map(|l| wide(&l["ordinal"]))
@@ -381,7 +387,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
     if mode == "quantity" {
         let unbalanced: Vec<_> = by_unit
             .iter()
-            .filter(|r| wide(&r["residual_msat"]) != 0)
+            .filter(|r| big(&r["residual_msat"]) != BigInt::from(0))
             .collect();
         if !unbalanced.is_empty() {
             issues.push(json!({"code":"unbalanced_quantity","message":"source and sink quantities do not conserve","groups":unbalanced}));
@@ -389,15 +395,15 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
     } else {
         let sources: Vec<_> = legs
             .iter()
-            .filter(|l| l["role"] == "source" && wide(&l["amount_msat"]) > 0)
+            .filter(|l| l["role"] == "source" && big(&l["amount_msat"]) > BigInt::from(0))
             .collect();
         let mut outputs: Vec<_> = legs
             .iter()
-            .filter(|l| l["role"] == "destination" && wide(&l["amount_msat"]) > 0)
+            .filter(|l| l["role"] == "destination" && big(&l["amount_msat"]) > BigInt::from(0))
             .collect();
         let retained: Vec<_> = legs
             .iter()
-            .filter(|l| l["role"] == "retained" && wide(&l["amount_msat"]) > 0)
+            .filter(|l| l["role"] == "retained" && big(&l["amount_msat"]) > BigInt::from(0))
             .collect();
         let mut continuations = Vec::new();
         if sources.len() == 1 {
@@ -423,7 +429,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
             .iter()
             .filter(|a| {
                 by_id(legs, &a["sink_leg_id"]).is_some_and(|l| continuations.contains(&l))
-                    && wide(&a["source_amount_msat"]) != wide(&a["sink_amount_msat"])
+                    && big(&a["source_amount_msat"]) != big(&a["sink_amount_msat"])
             })
             .map(|a| &a["id"])
             .collect();
@@ -442,7 +448,8 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
         let missing: Vec<_> = legs
             .iter()
             .filter(|l| {
-                (wide(&l["amount_msat"]) > 0 || wide(or(&l["valuation_amount"], &json!(0))) > 0)
+                (big(&l["amount_msat"]) > BigInt::from(0)
+                    || big(or(&l["valuation_amount"], &json!(0))) > BigInt::from(0))
                     && (l["valuation_unit"].is_null() || l["valuation_amount"].is_null())
             })
             .map(|l| wide(&l["ordinal"]))
@@ -455,7 +462,7 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
         }
         let unbalanced: Vec<_> = by_valuation
             .iter()
-            .filter(|r| wide(&r["residual_amount"]) != 0)
+            .filter(|r| big(&r["residual_amount"]) != BigInt::from(0))
             .collect();
         if !unbalanced.is_empty() {
             issues.push(json!({"code":"unbalanced_conversion_valuation","message":"conversion valuations do not conserve","groups":unbalanced}));
@@ -465,6 +472,6 @@ pub(super) fn validate(legs: &[Value], allocs: &[Value], h: &Value) -> Result<Va
     issues.extend(array(&allocation["issues"]).iter().cloned());
     issues.extend(connectivity(legs, allocs, &mode));
     Ok(
-        json!({"conservation_mode":mode,"activatable":issues.is_empty(),"issues":issues,"suspense_msat":suspense_total,"source_msat":source_total,"owned_destination_msat":owned_total,"by_asset":by_asset,"by_conservation_unit":by_unit,"by_valuation_unit":by_valuation,"allocations":allocation}),
+        json!({"conservation_mode":mode,"activatable":issues.is_empty(),"issues":issues,"suspense_msat":number(&suspense_total),"source_msat":number(&source_total),"owned_destination_msat":number(&owned_total),"by_asset":by_asset,"by_conservation_unit":by_unit,"by_valuation_unit":by_valuation,"allocations":allocation}),
     )
 }

@@ -199,7 +199,7 @@ pub(super) fn native_status(
         .filter(|l| {
             (l["role"] == "source" || owned(l))
                 && truth(or(&l["anchor_transaction_id"], &l["transaction_id"]))
-                && wide(&l["amount_msat"]) > 0
+                && big(&l["amount_msat"]) > BigInt::from(0)
         })
         .collect();
     let mut exact = BTreeSet::new();
@@ -221,7 +221,7 @@ pub(super) fn native_status(
             && so["direction"] == "outbound"
             && to["direction"] == "inbound"
             && s["asset"] == t["asset"]
-            && wide(&a["source_amount_msat"]) == wide(&a["sink_amount_msat"])
+            && big(&a["source_amount_msat"]) == big(&a["sink_amount_msat"])
         {
             exact.insert(text(&t["id"]));
         }
@@ -264,7 +264,7 @@ pub(super) fn native_status(
             .into_iter()
             .map(|v| (text(&v["quantity_hash"]), v))
             .collect();
-        let recovered:i128=unique.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
+        let recovered:BigInt=unique.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
         let same: BTreeMap<_, _> = observations
             .iter()
             .filter(|v| {
@@ -274,7 +274,7 @@ pub(super) fn native_status(
             })
             .map(|v| (text(&v["quantity_hash"]), v))
             .collect();
-        let capacity:i128=same.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
+        let capacity:BigInt=same.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
         if recovered > capacity {
             contradicted += 1;
         } else if recovered == capacity {

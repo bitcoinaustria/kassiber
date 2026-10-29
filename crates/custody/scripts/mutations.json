@@ -113,8 +113,8 @@
   {
     "id": "components-source-total",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "if source_total <= 0 {",
-    "replace": "if source_total < 0 {",
+    "find": "if source_total <= BigInt::from(0) {",
+    "replace": "if source_total < BigInt::from(0) {",
     "expect_failing": [
       "components_missing_source"
     ],
@@ -123,8 +123,8 @@
   {
     "id": "components-destination-total",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "if owned_total <= 0 {",
-    "replace": "if owned_total < 0 {",
+    "find": "if owned_total <= BigInt::from(0) {",
+    "replace": "if owned_total < BigInt::from(0) {",
     "expect_failing": [
       "components_missing_destination"
     ],
@@ -183,8 +183,8 @@
   {
     "id": "components-conversion-fee-value",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "wide(fv) * amount != wide(sv) * sa",
-    "replace": "wide(fv) * amount == wide(sv) * sa",
+    "find": "big(fv) * amount != big(sv) * &sa",
+    "replace": "big(fv) * amount == big(sv) * &sa",
     "expect_failing": [
       "components_conversion_fee_value"
     ],
@@ -213,8 +213,8 @@
   {
     "id": "components-source-coverage",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "if covered != wide(&s[\"amount_msat\"]) {",
-    "replace": "if covered == wide(&s[\"amount_msat\"]) {",
+    "find": "if covered != big(&s[\"amount_msat\"]) {",
+    "replace": "if covered == big(&s[\"amount_msat\"]) {",
     "expect_failing": [
       "components_allocation_source_coverage"
     ],
@@ -223,8 +223,8 @@
   {
     "id": "components-sink-coverage",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "if covered != wide(&t[\"amount_msat\"]) {",
-    "replace": "if covered == wide(&t[\"amount_msat\"]) {",
+    "find": "if covered != big(&t[\"amount_msat\"]) {",
+    "replace": "if covered == big(&t[\"amount_msat\"]) {",
     "expect_failing": [
       "components_allocation_sink_coverage"
     ],
@@ -323,8 +323,8 @@
   {
     "id": "components-suspense-quantity",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "|| wide(&a[\"source_amount_msat\"]) != wide(&a[\"sink_amount_msat\"])",
-    "replace": "|| wide(&a[\"source_amount_msat\"]) == wide(&a[\"sink_amount_msat\"])",
+    "find": "|| big(&a[\"source_amount_msat\"]) != big(&a[\"sink_amount_msat\"])",
+    "replace": "|| big(&a[\"source_amount_msat\"]) == big(&a[\"sink_amount_msat\"])",
     "expect_failing": [
       "components_suspense_quantity"
     ],
@@ -383,8 +383,8 @@
   {
     "id": "components-quantity-balance",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "wide(&r[\"residual_msat\"]) != 0",
-    "replace": "wide(&r[\"residual_msat\"]) == 0",
+    "find": "big(&r[\"residual_msat\"]) != BigInt::from(0)",
+    "replace": "big(&r[\"residual_msat\"]) == BigInt::from(0)",
     "expect_failing": [
       "components_unbalanced"
     ],
@@ -403,8 +403,8 @@
   {
     "id": "components-retained-quantity",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "&& wide(&a[\"source_amount_msat\"]) != wide(&a[\"sink_amount_msat\"])",
-    "replace": "&& wide(&a[\"source_amount_msat\"]) == wide(&a[\"sink_amount_msat\"])",
+    "find": "&& big(&a[\"source_amount_msat\"]) != big(&a[\"sink_amount_msat\"])",
+    "replace": "&& big(&a[\"source_amount_msat\"]) == big(&a[\"sink_amount_msat\"])",
     "expect_failing": [
       "components_conversion_retained"
     ],
@@ -453,8 +453,8 @@
   {
     "id": "components-conversion-balance",
     "file": "crates/custody/src/components/conservation.rs",
-    "find": "wide(&r[\"residual_amount\"]) != 0",
-    "replace": "wide(&r[\"residual_amount\"]) == 0",
+    "find": "big(&r[\"residual_amount\"]) != BigInt::from(0)",
+    "replace": "big(&r[\"residual_amount\"]) == BigInt::from(0)",
     "expect_failing": [
       "components_conversion_unbalanced"
     ],
@@ -593,8 +593,8 @@
   {
     "id": "components-partial-lower-bound",
     "file": "crates/custody/src/components/anchors.rs",
-    "find": "0 < actual && actual <= expected",
-    "replace": "0 <= actual && actual <= expected",
+    "find": "BigInt::from(0) < actual && actual <= expected",
+    "replace": "BigInt::from(0) <= actual && actual <= expected",
     "expect_failing": [
       "components_anchor_partial_zero"
     ],
@@ -603,8 +603,8 @@
   {
     "id": "components-partial-upper-bound",
     "file": "crates/custody/src/components/anchors.rs",
-    "find": "0 < actual && actual <= expected",
-    "replace": "0 < actual && actual >= expected",
+    "find": "BigInt::from(0) < actual && actual <= expected",
+    "replace": "BigInt::from(0) < actual && actual >= expected",
     "expect_failing": [
       "components_anchor_partial_excess"
     ],
@@ -1443,8 +1443,8 @@
   {
     "id": "X02-excluded-anchor-integer",
     "file": "crates/custody/src/components/anchors.rs",
-    "find": "let fee = wide(&integer(or(&row[\"fee\"], &json!(0)))?);\n        if allocated != fee",
-    "replace": "let fee = 0;\n        if allocated != fee",
+    "find": "let fee = big(&integer(or(&row[\"fee\"], &json!(0)))?);\n        if allocated != fee",
+    "replace": "let fee = BigInt::from(0);\n        if allocated != fee",
     "expect_failing": [
       "components_suspense_fee"
     ],
@@ -1553,8 +1553,8 @@
   {
     "id": "X17-zero-amount-chronology",
     "file": "crates/custody/src/components/scope.rs",
-    "find": "if sa <= 0 && ta <= 0 {",
-    "replace": "if sa < 0 && ta < 0 {",
+    "find": "if sa <= BigInt::from(0) && ta <= BigInt::from(0) {",
+    "replace": "if sa < BigInt::from(0) && ta < BigInt::from(0) {",
     "expect_failing": [
       "components_zero_amount_chronology"
     ],
