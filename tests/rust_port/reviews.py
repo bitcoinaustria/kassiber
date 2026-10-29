@@ -4,6 +4,7 @@
 # large mixed classes were inspected by method. Notes describe what the
 # heuristic alone cannot decide. Sampling is not a claim of exhaustive review.
 SAMPLES = {
+    "tests/test_rust_shell_parity.py": "Raw CLI bytes, complete command metadata and daemon records compare Python with Rust, including injected formatting discrepancies. Real-book setup, exact typed state, encryption, ownership exclusion and killed migration cases use disposable roots and explicitly seeded SQL/identities; retain this cross-runtime oracle rather than treating its helper setup as portable CLI fixtures.",
     "tests/test_backup_recovery.py": "Killed Python installer regression, every observed install I/O boundary, and bounded recovery-intent admission; port the storage transaction and cross-runtime killed-child matrix to Rust.",
     "tests/test_rust_store_migrations.py": "The opt-in Rust storage probe is compared with Python on deterministic disposable books, including complete typed/internal-object dumps, historical fixtures, journal coexistence and real killed-child recovery. Direct SQL/helper setup is explicit scenario input, not a portable CLI recording; retain the differential oracle and its dump-sensitivity check.",
     "tests/test_review_regressions.py": "CLI subprocesses, direct handlers, SQL mutation and embedded ledger snapshots coexist; keep per-method splits and retain snapshot comparisons as oracles.",
