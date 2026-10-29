@@ -399,7 +399,12 @@ owner's explicit choice for that pair, and its reason records that choice.
 The Review screen uses it for the pairs the owner picked, one or several,
 so the recalculated journals are stored in the same transaction.
 
-Prices are decimal strings. A price assertion still needs evidence: the module
+Prices are decimal strings. Custody payout values and imported fiat values/rates
+must be finite and representable in numeric output; NaN, infinity, malformed
+decimals, and numeric overflow return a typed `validation` error before review
+writes. Finalized custody tax projection also refuses invalid stored pricing
+(including legacy rows) rather than emitting nonfinite journal inputs. A price
+assertion still needs evidence: the module
 checks arithmetic and records the reviewed assertion, rather than proving an
 invoice's contents. An exclusion is never a substitute for explaining an owned
 movement or missing acquisition basis. Native chain authority, component anchor

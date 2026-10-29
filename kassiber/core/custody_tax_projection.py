@@ -10,7 +10,6 @@ tax-engine input contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
 from ..errors import AppError
@@ -20,6 +19,7 @@ from ..transfers import is_bitcoin_rail_pair
 from . import pricing, quarantine_catalog
 from .privacy_hops import privacy_hop_evidence_from_row
 from .custody_evidence import row_principal_msat
+from .custody_pricing import finite_decimal
 from .custody_quantity import (
     EXTERNAL_CONFIRMED,
     EXTERNAL_PRESUMED,
@@ -110,6 +110,9 @@ def _base_row(
         observation.anchor_transaction_id
     )
     result = dict(source or {})
+    for field in ("fiat_value", "fiat_value_exact", "fiat_rate", "fiat_rate_exact"):
+        if result.get(field) not in (None, ""):
+            finite_decimal(result[field], field)
     # A coarse-price review was accepted for the transaction's own price; the
     # projection re-slices that price below, so keep what was reviewed.
     result["pricing_review_price"] = pricing.reviewed_price(result)
@@ -168,10 +171,11 @@ def _projected_slice_row(
             value = base.get("fiat_value")
         if value not in (None, ""):
             try:
-                rate = Decimal(str(value)) / msat_to_btc(original_amount)
+                rate = finite_decimal(value, "fiat_value") / msat_to_btc(original_amount)
             except (ArithmeticError, ValueError):
                 rate = None
             if rate is not None:
+                rate = finite_decimal(rate, "fiat_rate")
                 base["fiat_rate"] = float(rate)
                 base["fiat_rate_exact"] = format(rate, "f")
     base["fiat_value"] = None
@@ -264,10 +268,10 @@ def _direct_payout_settlement_rows(
     payout_value_raw = _field(payout, "payout_fiat_value")
     if payout_amount_msat <= 0 or payout_value_raw in (None, ""):
         return None
-    payout_value = Decimal(str(payout_value_raw))
+    payout_value = finite_decimal(payout_value_raw, "payout_fiat_value")
     if payout_value <= 0:
         return None
-    payout_rate = payout_value / msat_to_btc(payout_amount_msat)
+    payout_rate = finite_decimal(payout_value / msat_to_btc(payout_amount_msat), "payout_fiat_rate")
     payout_id = str(_field(payout, "id") or source.anchor_transaction_id)
     payout_at = _direct_payout_occurred_at(payout) or source.occurred_at
     base = _base_row(source, rows_by_id)
@@ -746,8 +750,8 @@ def compile_finalized_tax_projection(
                 projected["privacy_boundary"] = None
             payout_value = _field(payout, "payout_fiat_value") if payout else None
             if payout_value not in (None, "") and decision.source.amount_msat > 0:
-                value = Decimal(str(payout_value))
-                rate = value / msat_to_btc(decision.source.amount_msat)
+                value = finite_decimal(payout_value, "payout_fiat_value")
+                rate = finite_decimal(value / msat_to_btc(decision.source.amount_msat), "payout_fiat_rate")
                 projected.update(
                     {
                         "fiat_rate": float(rate),

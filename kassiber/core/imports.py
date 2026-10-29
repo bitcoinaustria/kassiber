@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .book_network import network_write
+from .custody_pricing import finite_decimal
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
@@ -1666,10 +1667,10 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     fiat_rate = record.get("fiat_rate")
     fiat_value = record.get("fiat_value")
     has_import_price = fiat_rate not in (None, "") or fiat_value not in (None, "")
-    rate = dec(fiat_rate) if fiat_rate not in (None, "") else None
-    value = dec(fiat_value) if fiat_value not in (None, "") else None
+    rate = finite_decimal(fiat_rate, "fiat_rate") if fiat_rate not in (None, "") else None
+    value = finite_decimal(fiat_value, "fiat_value") if fiat_value not in (None, "") else None
     if value is None and rate is not None:
-        value = amount * rate
+        value = finite_decimal(amount * rate, "fiat_value")
     source_kind = None
     quality = None
     if has_import_price:

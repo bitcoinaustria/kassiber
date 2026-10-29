@@ -328,6 +328,12 @@ Quarantine causes typically include:
 
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
 
+Imported fiat prices and reviewed payout values must be finite decimal numbers.
+Custody projection refuses nonfinite stored values or derived rates with a typed
+validation error; correct the source price or supersede the invalid review before
+rebuilding journals. Legacy payout migration records a blocking migration issue
+when its stored price is invalid.
+
 Pricing now carries provenance alongside the legacy numeric fields: source kind,
 provider, pair, source timestamp, fetched timestamp, granularity, method, and
 quality. Imported source prices can outrank cache-derived FMV.

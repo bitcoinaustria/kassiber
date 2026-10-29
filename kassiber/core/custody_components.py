@@ -34,6 +34,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 import uuid
 
 from ..errors import AppError, build_remediation
+from .custody_pricing import finite_decimal
 from ..time_utils import parse_iso_datetime_or_none, parse_timestamp
 from ..transfers import (
     LIGHTNING_INFERENCE_WALLET_KINDS,
@@ -635,6 +636,8 @@ def normalize_economic_terms(
                 "custody_component_validation",
                 details={"ordinal": ordinal},
             )
+        if raw.get("payout_fiat_value_exact") not in (None, ""):
+            finite_decimal(raw["payout_fiat_value_exact"], "payout_fiat_value_exact")
         normalized.append(
             {
                 "id": _optional_text(raw.get("id"), "id") or str(uuid.uuid4()),

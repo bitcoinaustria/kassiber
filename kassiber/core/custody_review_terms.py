@@ -13,9 +13,10 @@ import uuid
 
 from . import custody_authored_migration, transfer_matching
 from .custody_evidence import row_principal_msat
+from .custody_pricing import finite_decimal
 from .repo import invalidate_journals
 from ..errors import AppError
-from ..msat import btc_to_msat, dec, msat_to_btc
+from ..msat import btc_to_msat, msat_to_btc
 from ..tax_policy import (
     cross_asset_carrying_value_supported,
     recommended_pair_policy,
@@ -202,7 +203,8 @@ def payout_to_dict(row) -> dict[str, Any]:
         "payout_amount_msat": int(row["payout_amount"]),
         "payout_occurred_at": row["payout_occurred_at"],
         "payout_fiat_value": (
-            float(payout_fiat_value) if payout_fiat_value is not None else None
+            float(finite_decimal(payout_fiat_value, "payout_fiat_value"))
+            if payout_fiat_value is not None else None
         ),
         "payout_external_id": row["payout_external_id"],
         "counterparty": row["counterparty"],
@@ -216,7 +218,7 @@ def payout_to_dict(row) -> dict[str, Any]:
 
 
 def _positive_btc_amount_msat(value, flag_name: str) -> int:
-    amount = dec(value)
+    amount = finite_decimal(value, flag_name)
     if amount <= 0:
         raise AppError(f"{flag_name} must be positive", code="validation")
     return btc_to_msat(amount)
@@ -537,7 +539,14 @@ def create_payout_review(
                 f"({out_amount_msat} > {full_out_msat} msat).",
                 code="validation",
             )
-    payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
+    payout_value = (
+        finite_decimal(payout_fiat_value, "--payout-fiat-value")
+        if payout_fiat_value is not None else None
+    )
+    if payout_value is not None:
+        for quantity in (payout_amount_msat, out_amount_msat or row_principal_msat(out_row)):
+            if quantity > 0:
+                finite_decimal(payout_value / msat_to_btc(quantity), "payout_fiat_rate")
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
     payout_occurred_at = _payout_occurred_at(payout_occurred_at)
