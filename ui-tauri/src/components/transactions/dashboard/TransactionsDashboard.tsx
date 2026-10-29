@@ -408,6 +408,9 @@ const TransactionsDashboard = ({
     <div
       className={cn(
         screenShellClassName,
+        // The page lays out by its own width (`@…/page`), which a docked
+        // right panel narrows while the window stays wide.
+        "@container/page",
         tableExpanded &&
           "flex h-full min-h-0 flex-col overflow-hidden pt-0 pb-3",
         "relative",
@@ -418,7 +421,7 @@ const TransactionsDashboard = ({
       <div
         id="transactions-period-nav"
         className={cn(
-          "-mx-(--kb-page-gutter) flex flex-col bg-background px-(--kb-page-gutter) sm:flex-row sm:items-center sm:justify-between",
+          "-mx-(--kb-page-gutter) flex flex-col bg-background px-(--kb-page-gutter) @4xl/page:flex-row @4xl/page:items-center @4xl/page:justify-between",
           tableExpanded
             ? "gap-2 pt-(--kb-page-gutter) pb-0"
             : "sticky top-2 z-30 gap-2 py-0 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]",

@@ -102,14 +102,16 @@ const PeriodTabs = ({
   const translatePeriod = (key: PeriodKey) =>
     (t as (key: string) => string)(periodLabels[key]);
   return (
-    <div className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5">
+    // One line at any width: beside a docked panel the strip scrolls
+    // sideways instead of breaking "30 Days" over two lines.
+    <div className="flex h-8 max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {periodOptions.map((key) => (
         <button
           key={key}
           type="button"
           onClick={() => onPeriodChange(key)}
           className={cn(
-            "h-7 rounded-md px-2.5 text-xs font-medium transition-all sm:px-3 sm:text-sm",
+            "h-7 shrink-0 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-all @4xl/page:px-3 @4xl/page:text-sm",
             activePeriod === key
               ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
@@ -601,17 +603,19 @@ const TransactionWorkbench = ({
   return (
     <>
       <section
-        className="kb-surface relative z-20 grid grid-cols-2 overflow-visible md:grid-cols-3 xl:grid-cols-6"
+        // Columns by the page's own width, not the window's: a docked panel
+        // can leave the page half the window.
+        className="kb-surface relative z-20 grid grid-cols-2 overflow-visible @2xl/page:grid-cols-3 @6xl/page:grid-cols-6"
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
         {metricCards.map((metric, index) => {
           const Icon = metric.icon;
           const className = cn(
-            "min-w-0 space-y-2 border-b p-3 text-left sm:p-4",
+            "min-w-0 space-y-2 border-b p-3 text-left @2xl/page:p-4",
             index % 2 === 1 && "border-l",
-            index % 3 === 0 ? "md:border-l-0" : "md:border-l",
-            index > 0 ? "xl:border-l" : "xl:border-l-0",
+            index % 3 === 0 ? "@2xl/page:border-l-0" : "@2xl/page:border-l",
+            index > 0 ? "@6xl/page:border-l" : "@6xl/page:border-l-0",
             metric.onClick &&
               !isRefreshing &&
               "relative isolate w-full cursor-pointer overflow-hidden transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:before:scale-x-100 [&>*]:relative [&>*]:z-10",
@@ -673,8 +677,8 @@ const TransactionWorkbench = ({
           );
         })}
 
-        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 sm:p-4 md:col-span-3 xl:col-span-6">
-          <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
+        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 @2xl/page:col-span-3 @2xl/page:p-4 @6xl/page:col-span-6">
+          <div className="mb-3 flex shrink-0 flex-col gap-2 @xl/page:flex-row @xl/page:items-start @xl/page:justify-between @xl/page:gap-3">
             <div>
               <h2 className="text-sm font-semibold">
                 {t(`workbench.chart.title${bucketTitleSuffix}`)}
@@ -690,8 +694,8 @@ const TransactionWorkbench = ({
                 </p>
               )}
             </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-2xs text-muted-foreground sm:text-xs">
+            <div className="flex flex-col items-start gap-2 @xl/page:items-end">
+              <div className="flex flex-wrap gap-x-2 gap-y-1 text-2xs text-muted-foreground @xl/page:justify-end @2xl/page:text-xs">
                 {[
                   ["incoming", t("chartSegment.incoming")],
                   ["outgoing", t("chartSegment.outgoing")],
@@ -731,7 +735,7 @@ const TransactionWorkbench = ({
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap justify-end gap-1">
+              <div className="flex flex-wrap gap-1 @xl/page:justify-end">
                 {(["amount", "count"] satisfies FlowChartMetric[]).map(
                   (metric) => (
                     <button
@@ -740,7 +744,7 @@ const TransactionWorkbench = ({
                       aria-pressed={chartMetric === metric}
                       onClick={() => setChartMetric(metric)}
                       className={cn(
-                        "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
+                        "h-7 rounded-md border px-2 text-2xs font-medium transition-colors @2xl/page:text-xs",
                         chartMetric === metric
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-background text-muted-foreground hover:text-foreground",
@@ -758,7 +762,7 @@ const TransactionWorkbench = ({
                     aria-pressed={chartMode === mode}
                     onClick={() => setChartMode(mode)}
                     className={cn(
-                      "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
+                      "h-7 rounded-md border px-2 text-2xs font-medium transition-colors @2xl/page:text-xs",
                       chartMode === mode
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border bg-background text-muted-foreground hover:text-foreground",
