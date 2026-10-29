@@ -2195,3 +2195,37 @@ facts/provenance/graph/inventory/coverage/freshness/journal application) and 4
 (scoped routing and zero-fallback full-dump parity). Disconnected/behind native
 state refuses until step 2. Product delivery remains blocked by those incomplete
 steps, even when this library checkpoint's checks pass.
+
+### R5 Bitcoin sync: canonical authority preparation (step 2)
+
+The continuation at `f9ff09d0` now prepares Python-equivalent BDK canonical
+membership and per-source retractions. A disconnected persisted tip triggers a
+fresh full scan and aggregate; force-full rebuilds retain the identity-local
+absence baseline and reject lagging backends. Point-of-agreement recovery uses
+uncached remote checkpoints, with the pinned dependency's separate semantics
+for a backend that falls behind after preflight. Canonical transaction selection,
+eviction/reappearance and replacement remain BDK decisions. Esplora's named
+compatibility route now prepares source-bound complete-history retractions,
+retaining partial/omitted-script positives and preserving membership across
+force-full scans. Compatibility Electrum caches still grant no independent
+withdrawal authority.
+
+This is the clean boundary after numbered step 2. The eight BDK and six Esplora
+three-round authority sequences compare private aggregate/checkpoint state and
+canonical/retraction sets to Python, supplementing the ten acquisition fixtures
+on both protocols. They do not establish post-sync book-dump parity. No Python
+product code, dependency pin, schema, product route or AI projection changes.
+The BDK/cache mutation catalog grows from 89 to 114 entries, with named tests
+for all 25 new authority mutations; the inherited tip entries are updated to
+pin the completed preflight/rebuild rules.
+
+Step 3 must still compose normalized records and complete outputs/coverage,
+veto retractions contradicted by another live observer, and atomically apply
+all facts plus freshness/journal/report effects under scope/epoch fencing.
+Step 4 must register the four scoped product paths, retain the hybrid's Python
+routes for unsupported wallets/backends, and prove full normalized book dumps
+and zero in-scope Python fallbacks. Successful native served-by counts remain
+zero for each of `wallets.sync`, `ui.wallets.sync`, `ui.freshness.run` and
+`ui.workspace.freshness.run`. See the
+[authority checkpoint](../reference/rust-shell.md#bitcoin-canonical-authority-preparation-r5-step-2)
+for the fixture matrix, exact mutation/test mapping, verification and limits.

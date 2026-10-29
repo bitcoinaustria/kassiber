@@ -1,7 +1,8 @@
 //! Request-local Bitcoin protocol observations, before observer interpretation.
 //!
 //! Cache-aware preparation retains Python's protocol checkpoints. There is no
-//! canonical-chain selection, absence authority, ownership or database access.
+//! canonical-chain selection, ownership or database access. Cache-aware Esplora
+//! prepares absence candidates only after a complete source-bound round.
 use crate::scan::{script_hash, Cancellation, Scope};
 use bitcoin::{consensus::deserialize, hex::FromHex, Transaction};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
@@ -16,6 +17,12 @@ use std::sync::{
 use std::time::Instant;
 
 type Result<T> = std::result::Result<T, AppError>;
+
+/// Discard fetch caches for a forced scan, retaining only versioned Esplora
+/// positive memberships. Source binding and completeness are rechecked later.
+pub fn full_scan_checkpoint(checkpoint: &Value) -> Value {
+    crate::compatibility_cache::full_scan_checkpoint(checkpoint)
+}
 
 #[derive(Clone, Copy)]
 enum Protocol {

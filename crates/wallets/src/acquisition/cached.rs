@@ -1,10 +1,24 @@
 //! Incremental protocol fetch policy, matching Python compatibility adapters.
-//! Results are preparation data; membership is not retraction authority here.
+//! Complete source-bound histories can prepare scoped absence candidates.
+//! The coordinator must still apply them atomically with all positive facts.
 use super::*;
 use crate::compatibility_cache as cache;
 
 fn identity(a: &Acquisition, c: &CacheInput) -> Value {
     cache::backend_identity(&c.config, &c.network, a.backend.batch_size())
+}
+fn checkpoint(saved: &Value) -> Value {
+    let mut cp = if saved.is_object() {
+        saved.clone()
+    } else {
+        json!({})
+    };
+    // Python writes dict(checkpoint.get("highest_used") or {}) even when the
+    // complete history is empty and no target advances the highest index.
+    if !crate::descriptors::truthy(&cp["highest_used"]) {
+        cp["highest_used"] = json!({});
+    }
+    cp
 }
 fn highest(cp: &mut Value, target: &Value, used: bool) -> Result<()> {
     if !used {
@@ -83,9 +97,22 @@ fn finish_members(
     prior: &BTreeMap<String, Value>,
     current: BTreeMap<String, Value>,
     key: &str,
-) -> Value {
+) -> (Value, Vec<String>, bool) {
     let complete = prior.keys().all(|s| current.contains_key(s))
         && current.values().all(|e| e["complete"] == true);
+    let ids = |entries: &BTreeMap<String, Value>| -> BTreeSet<String> {
+        entries
+            .values()
+            .flat_map(|e| e["txids"].as_array().into_iter().flatten())
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect()
+    };
+    let retracted = if complete {
+        ids(prior).difference(&ids(&current)).cloned().collect()
+    } else {
+        vec![]
+    };
     let retained = if complete {
         current
     } else {
@@ -94,7 +121,11 @@ fn finish_members(
             (s.clone(),json!({"txids":ids,"fingerprint":current.get(s).map(|e|&e["fingerprint"]),"complete":false}))
         }).collect()
     };
-    json!({"version":1,"backend_key":key,"scripts":retained})
+    (
+        json!({"version":1,"backend_key":key,"scripts":retained}),
+        retracted,
+        complete,
+    )
 }
 impl Acquisition {
     pub(super) fn cached_esplora(
@@ -108,11 +139,7 @@ impl Acquisition {
         let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
         let key = cache::esplora_key(&c.config, &identity(self, c));
         let prior = cache::memberships(&c.checkpoint["esplora_history_memberships"], &key);
-        let mut cp = if c.checkpoint.is_object() {
-            c.checkpoint.clone()
-        } else {
-            json!({})
-        };
+        let mut cp = checkpoint(&c.checkpoint);
         let mut scripts = vec![];
         let mut transactions = Map::new();
         let mut stats = Map::new();
@@ -178,10 +205,11 @@ impl Acquisition {
         }
         cp["backend"] = identity(self, c);
         cp["esplora_scripthashes"] = Value::Object(stats);
-        cp["esplora_history_memberships"] = finish_members(&prior, members, &key);
+        let (membership, retracted, complete) = finish_members(&prior, members, &key);
+        cp["esplora_history_memberships"] = membership;
         cancel.check(deadline)?;
         Ok(
-            json!({"scripts":scripts,"transactions":transactions,"freshness_checkpoint":cp,"scripts_changed":changed,"scripts_unchanged":self.targets.len()-changed,"utxos_skipped_unchanged":skipped}),
+            json!({"scripts":scripts,"transactions":transactions,"freshness_checkpoint":cp,"scripts_changed":changed,"scripts_unchanged":self.targets.len()-changed,"utxos_skipped_unchanged":skipped,"esplora_history_complete":complete,"observer_retracted_external_ids":retracted}),
         )
     }
     pub(super) fn cached_electrum(
@@ -206,11 +234,7 @@ impl Acquisition {
             deadline,
             cancel,
         )?;
-        let mut cp = if c.checkpoint.is_object() {
-            c.checkpoint.clone()
-        } else {
-            json!({})
-        };
+        let mut cp = checkpoint(&c.checkpoint);
         let mut next_status = Map::new();
         let mut entries = Map::new();
         let mut changed_hashes = vec![];
@@ -465,7 +489,7 @@ mod tests {
             "s".into(),
             json!({"txids":["b"],"fingerprint":"f","complete":false}),
         )]);
-        let p = finish_members(&prior, current, "k");
+        let p = finish_members(&prior, current, "k").0;
         assert_eq!(p["scripts"]["s"]["txids"], json!(["a", "b"]));
         assert_eq!(p["scripts"]["s"]["complete"], false);
         let current = BTreeMap::from([(
@@ -473,7 +497,7 @@ mod tests {
             json!({"txids":["b"],"fingerprint":"f","complete":true}),
         )]);
         assert_eq!(
-            finish_members(&prior, current, "k")["scripts"]["s"]["txids"],
+            finish_members(&prior, current, "k").0["scripts"]["s"]["txids"],
             json!(["b"])
         );
     }
@@ -530,7 +554,7 @@ mod tests {
             "omitted".into(),
             json!({"txids":["a".repeat(64)],"complete":true}),
         )]);
-        let retained = finish_members(&prior, BTreeMap::new(), "k");
+        let retained = finish_members(&prior, BTreeMap::new(), "k").0;
         assert_eq!(
             retained["scripts"]["omitted"]["txids"],
             json!(["a".repeat(64)])
@@ -650,5 +674,108 @@ mod tests {
                 "network_egress_disabled"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod authority_tests {
+    use super::*;
+
+    fn members(entries: &[(&str, &[&str], bool)]) -> BTreeMap<String, Value> {
+        entries
+            .iter()
+            .map(|(s, ids, complete)| {
+                (
+                    s.to_string(),
+                    json!({"txids":ids,"complete":complete,"fingerprint":"f"}),
+                )
+            })
+            .collect()
+    }
+    #[test]
+    fn esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships() {
+        let membership = json!({"version":1,"backend_key":"source","scripts":{}});
+        let checkpoint = json!({"esplora_history_memberships":membership,"esplora_scripthashes":{"cache":true},"highest_used":{"0":8},"observer_instances":{"other":{}}});
+        assert_eq!(
+            full_scan_checkpoint(&checkpoint),
+            json!({"esplora_history_memberships":membership})
+        );
+        for saved in [
+            json!(null),
+            json!([]),
+            json!(true),
+            json!({"version":true}),
+            json!({"version":1.0}),
+            json!({"version":"1"}),
+            json!({"version":2}),
+        ] {
+            assert_eq!(
+                full_scan_checkpoint(&json!({"esplora_history_memberships":saved})),
+                json!({})
+            );
+        }
+    }
+    #[test]
+    fn esplora_absence_requires_complete_coverage_and_unions_live_script_memberships() {
+        let prior = members(&[("s1", &["a", "b"], true), ("s2", &["c"], true)]);
+        let current = members(&[("s1", &["b"], true), ("s2", &["a", "d"], true)]);
+        let (checkpoint, retracted, complete) = finish_members(&prior, current.clone(), "source");
+        assert!(complete);
+        assert_eq!(retracted, ["c"]);
+        assert_eq!(checkpoint["scripts"], json!(current));
+        assert_eq!(checkpoint["version"], 1);
+        assert_eq!(checkpoint["backend_key"], "source");
+        // Complete emptiness is authority; omitted or partial scope is not.
+        let empty = members(&[("s1", &[], true), ("s2", &[], true)]);
+        let (_, retracted, complete) = finish_members(&prior, empty, "source");
+        assert!(complete);
+        assert_eq!(retracted, ["a", "b", "c"]);
+        for current in [
+            members(&[("s1", &[], true)]),
+            members(&[("s1", &[], true), ("s2", &[], false)]),
+        ] {
+            let (checkpoint, retracted, complete) = finish_members(&prior, current, "source");
+            assert!(!complete);
+            assert!(retracted.is_empty());
+            assert_eq!(checkpoint["scripts"]["s1"]["txids"], json!(["a", "b"]));
+            assert_eq!(checkpoint["scripts"]["s2"]["txids"], json!(["c"]));
+            assert_eq!(checkpoint["scripts"]["s1"]["complete"], false);
+        }
+    }
+    #[test]
+    fn esplora_partial_positive_then_complete_absence_preserves_its_retraction_baseline() {
+        let prior = members(&[("s1", &["a"], true), ("s2", &["b"], true)]);
+        let (partial, retracted, complete) =
+            finish_members(&prior, members(&[("s1", &["c"], false)]), "source");
+        assert!(!complete);
+        assert!(retracted.is_empty());
+        assert_eq!(partial["scripts"]["s1"]["txids"], json!(["a", "c"]));
+        let saved: BTreeMap<String, Value> =
+            serde_json::from_value(partial["scripts"].clone()).unwrap();
+        let (_, retracted, complete) = finish_members(
+            &saved,
+            members(&[("s1", &[], true), ("s2", &["b"], true)]),
+            "source",
+        );
+        assert!(complete);
+        assert_eq!(retracted, ["a", "c"]);
+    }
+}
+
+#[cfg(test)]
+mod empty_checkpoint_tests {
+    use super::*;
+    #[test]
+    fn empty_rounds_still_write_the_python_highest_used_mapping() {
+        for absent in [
+            json!({}),
+            json!({"highest_used":null}),
+            json!({"highest_used":false}),
+            json!({"highest_used":[]}),
+        ] {
+            assert_eq!(checkpoint(&absent), json!({"highest_used":{}}));
+        }
+        let prior = json!({"highest_used":{"0":4},"saved":true});
+        assert_eq!(checkpoint(&prior), prior);
     }
 }

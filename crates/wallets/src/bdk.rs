@@ -49,6 +49,15 @@ pub struct Execution {
     network: bitcoin::Network,
     gap: u32,
     prior: Option<ChangeSet>,
+    refresh: Refresh,
+}
+/// Private source history supplied from the same identity snapshot as `prior`.
+/// A forced rebuild discards dependency state, but keeps this absence baseline.
+#[derive(Default)]
+pub struct Refresh {
+    pub force_full: bool,
+    pub canonical_txids: BTreeSet<String>,
+    pub checkpoint_tip: Option<u32>,
 }
 pub struct ExecutionConsent {
     identity: Arc<()>,
@@ -68,10 +77,14 @@ impl ExecutionConsent {
     }
 }
 /// Private in-memory result. The coordinator must still fence scope/epoch and
-/// persist all facts atomically; this type conveys no absence authority.
+/// persist all facts atomically. Retractions belong only to this source/scope;
+/// another observer's live record must still veto them during composition.
 pub struct Prepared {
     wallet: Wallet,
     aggregate: ChangeSet,
+    canonical_txids: BTreeSet<String>,
+    retracted_external_ids: BTreeSet<String>,
+    rebuilt: bool,
 }
 impl Prepared {
     pub fn changeset(&self) -> Value {
@@ -79,6 +92,16 @@ impl Prepared {
     }
     pub fn wallet(&self) -> &Wallet {
         &self.wallet
+    }
+    pub fn canonical_txids(&self) -> &BTreeSet<String> {
+        &self.canonical_txids
+    }
+    pub fn retracted_external_ids(&self) -> &BTreeSet<String> {
+        &self.retracted_external_ids
+    }
+    /// Whether a disconnected persisted tip triggered a fresh dependency scan.
+    pub fn rebuilt(&self) -> bool {
+        self.rebuilt
     }
 }
 impl Execution {
@@ -93,6 +116,28 @@ impl Execution {
         network: &str,
         gap: u32,
         prior: Option<&Value>,
+    ) -> Result<Self> {
+        Self::new_refresh(
+            scope,
+            backend,
+            external,
+            internal,
+            network,
+            gap,
+            prior,
+            Refresh::default(),
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_refresh(
+        scope: Scope,
+        backend: &Value,
+        external: &str,
+        internal: Option<&str>,
+        network: &str,
+        gap: u32,
+        prior: Option<&Value>,
+        refresh: Refresh,
     ) -> Result<Self> {
         if backend["kind"] != "electrum" {
             return Err(AppError::new(
@@ -119,7 +164,12 @@ impl Execution {
             internal: internal.map(str::to_owned),
             network: bdk_state::network(network)?,
             gap,
-            prior: prior.map(bdk_state::decode).transpose()?,
+            prior: if refresh.force_full {
+                None
+            } else {
+                prior.map(bdk_state::decode).transpose()?
+            },
+            refresh,
         };
         // Validate the source binding before any consent or network access.
         action.wallet()?;
@@ -136,16 +186,19 @@ impl Execution {
                 .map_err(|_| failed())?
                 .ok_or_else(failed)
         } else {
-            let create = match &self.internal {
-                Some(change) => Wallet::create(self.external.clone(), change.clone()),
-                None => Wallet::create_single(self.external.clone()),
-            };
-            create
-                .network(self.network)
-                .lookahead(self.gap)
-                .create_wallet_no_persist()
-                .map_err(|_| failed())
+            self.fresh_wallet()
         }
+    }
+    fn fresh_wallet(&self) -> Result<Wallet> {
+        let create = match &self.internal {
+            Some(change) => Wallet::create(self.external.clone(), change.clone()),
+            None => Wallet::create_single(self.external.clone()),
+        };
+        create
+            .network(self.network)
+            .lookahead(self.gap)
+            .create_wallet_no_persist()
+            .map_err(|_| failed())
     }
     pub fn run(
         &self,
@@ -223,9 +276,26 @@ impl Execution {
             headers: BTreeMap::new(),
             anchors: BTreeMap::new(),
         };
+        let mut rebuilt = false;
+        if self.prior.is_some() {
+            let prior = wallet.latest_checkpoint();
+            let prior_hash = protocol.remote_block_hash(prior.height())?;
+            if prior_hash != prior.hash() {
+                // Python replaces stale anchors with a fresh dependency wallet.
+                // Never merge disconnected graphs, timestamps or chain entries
+                // back into the replacement aggregate.
+                wallet = self.fresh_wallet()?;
+                aggregate = ChangeSet::default();
+                rebuilt = true;
+            }
+        } else if self.refresh.force_full {
+            if let Some(height) = self.refresh.checkpoint_tip {
+                protocol.remote_block_hash(height)?;
+            }
+        }
         // Python's binding creates a fresh BdkElectrumClient for each refresh;
         // its transaction/header cache is request-local, not seeded from state.
-        if self.prior.is_none() {
+        if self.prior.is_none() || rebuilt {
             let chain = protocol.chain_snapshot(wallet.latest_checkpoint())?;
             let mut request = wallet.start_full_scan_at(start_time).build();
             let mut update = Update::default();
@@ -280,7 +350,23 @@ impl Execution {
         if let Some(staged) = wallet.take_staged() {
             aggregate.merge(staged);
         }
-        Ok(Prepared { wallet, aggregate })
+        let canonical_txids: BTreeSet<_> = wallet
+            .transactions()
+            .map(|t| t.tx_node.tx.compute_txid().to_string())
+            .collect();
+        let retracted_external_ids = self
+            .refresh
+            .canonical_txids
+            .difference(&canonical_txids)
+            .cloned()
+            .collect();
+        Ok(Prepared {
+            wallet,
+            aggregate,
+            canonical_txids,
+            retracted_external_ids,
+            rebuilt,
+        })
     }
 }
 fn reveal(wallet: &mut Wallet, gap: u32, internal: bool) -> Result<bool> {
@@ -375,13 +461,16 @@ impl<R: Rpc> Protocol<'_, R> {
         if let Some(h) = self.headers.get(&height) {
             return Ok(*h);
         }
-        let raw = self.rpc.call("blockchain.block.header", json!([height]))?;
-        let header = consensus::deserialize(
-            &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
-        )
-        .map_err(|_| invalid())?;
+        let header = self.read_header(height)?;
         self.headers.insert(height, header);
         Ok(header)
+    }
+    fn read_header(&mut self, height: u32) -> Result<Header> {
+        let raw = self.rpc.call("blockchain.block.header", json!([height]))?;
+        consensus::deserialize(
+            &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
+        )
+        .map_err(|_| invalid())
     }
     fn anchor(&mut self, id: Txid, height: u32) -> Result<Option<ConfirmationBlockTime>> {
         let mut header = self.header(height)?;
@@ -492,7 +581,7 @@ impl<R: Rpc> Protocol<'_, R> {
         }
         for (a, _) in &update.tx_update.anchors {
             // The pre-scan suffix is authoritative over anchors fetched later,
-            // as in bdk_electrum's chain_update. Reorg recovery is step 2.
+            // as in bdk_electrum's chain_update.
             if a.block_id.height <= chain.height() && chain.get(a.block_id.height).is_none() {
                 chain = chain.insert(a.block_id);
             }
@@ -500,19 +589,43 @@ impl<R: Rpc> Protocol<'_, R> {
         update.chain = Some(chain);
         Ok(())
     }
-    fn chain_snapshot(&mut self, prior: CheckPoint) -> Result<CheckPoint> {
-        // BDK snapshots the tip before histories, using one suffix response.
+    fn remote_height(&mut self) -> Result<u32> {
         let notification = self.rpc.call("blockchain.headers.subscribe", json!([]))?;
-        let height = notification["height"]
+        notification["height"]
             .as_u64()
             .and_then(|h| u32::try_from(h).ok())
-            .ok_or_else(invalid)?;
-        if height < prior.height() {
+            .ok_or_else(invalid)
+    }
+    fn remote_block_hash(&mut self, persisted_height: u32) -> Result<bitcoin::BlockHash> {
+        let height = self.remote_height()?;
+        if height < persisted_height {
             return Err(AppError::new(
                 "backend_tip_behind",
                 "The selected Bitcoin backend is behind the persisted wallet state",
             )
+            .with_hint("Wait for the backend to catch up or select a fully synchronized backend, then retry.")
+            .with_details(kassiber_envelope::dict([
+                ("observer", kassiber_envelope::s("bdk")),
+                ("backend_height", kassiber_pyjson::Value::from(height)),
+                ("persisted_height", kassiber_pyjson::Value::from(persisted_height)),
+            ]))
             .retryable(true));
+        }
+        // The Python preflight is a separate observation from BDK's header
+        // cache. A chain change between preflight and scanning must be visible.
+        self.headers.remove(&persisted_height);
+        let hash = self.header(persisted_height)?.block_hash();
+        self.headers.remove(&persisted_height);
+        Ok(hash)
+    }
+    fn chain_snapshot(&mut self, prior: CheckPoint) -> Result<CheckPoint> {
+        // BDK snapshots the tip before histories, using one suffix response.
+        let height = self.remote_height()?;
+        // Python checks the durable height before scanning. If the server then
+        // falls behind, bdk_electrum retains the old chain instead of retracting
+        // its checkpoints. Keep that distinct from the preflight refusal.
+        if height < prior.height() {
+            return Ok(prior);
         }
         let start = height.saturating_sub(7);
         let response = self
@@ -524,7 +637,7 @@ impl<R: Rpc> Protocol<'_, R> {
         {
             return Err(invalid());
         }
-        let suffix = raws
+        let mut suffix = raws
             .iter()
             .enumerate()
             .map(|(i, raw)| {
@@ -535,16 +648,24 @@ impl<R: Rpc> Protocol<'_, R> {
                 Ok((start + i as u32, header.block_hash()))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
-        let prior_hash = match suffix.get(&prior.height()) {
-            Some(hash) => *hash,
-            None => self.header(prior.height())?.block_hash(),
-        };
-        // Step 2 adds stale-anchor rebuilding and point-of-agreement recovery.
-        // Until then refuse disconnected state before preparing any update.
-        if prior_hash != prior.hash() {
-            return Err(failed());
+        let mut agreement = None;
+        for cp in prior.iter() {
+            let hash = match suffix.get(&cp.height()) {
+                Some(hash) => *hash,
+                None => {
+                    // bdk_electrum reads agreement blocks directly from its
+                    // underlying client, independently of the anchor cache.
+                    let hash = self.read_header(cp.height())?.block_hash();
+                    suffix.insert(cp.height(), hash);
+                    hash
+                }
+            };
+            if hash == cp.hash() {
+                agreement = Some(cp);
+                break;
+            }
         }
-        let mut chain = prior;
+        let mut chain = agreement.ok_or_else(invalid)?;
         for (h, hash) in suffix {
             if h > chain.height() {
                 chain = chain.insert(BlockId { height: h, hash });

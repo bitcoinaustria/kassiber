@@ -1,10 +1,20 @@
 //! Pure compatibility cache policy. Cached histories remain observations and
-//! never grant ownership or withdrawal authority. No I/O or persistence here.
+//! never grant ownership. Complete source-bound membership rounds may prepare
+//! absence candidates for atomic application. No I/O or persistence here.
 use kassiber_envelope::AppError;
 use kassiber_pyjson::{dumps, Options};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+
+/// Force a fetch without destroying the prior positive absence baseline.
+pub(crate) fn full_scan_checkpoint(checkpoint: &Value) -> Value {
+    let saved = &checkpoint["esplora_history_memberships"];
+    if !saved.is_object() || saved["version"].as_u64() != Some(1) {
+        return json!({});
+    }
+    json!({"esplora_history_memberships":saved})
+}
 
 pub(crate) fn digest(v: &Value) -> String {
     let py = kassiber_pytext::loads(&v.to_string()).expect("JSON value");

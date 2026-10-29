@@ -145,9 +145,12 @@ through the shared setup crate.
   staged changeset merging using the Python-matching pure state crates. Fetch
   through Kassiber's gated clients; port compatibility checkpoint/fetch reuse.
   This is step 1 preparation, with no durable facts or product registration.
-- [ ] Complete observer transaction projections and confirmation/reorg/retraction
-  authority (step 2). Preserve the
-  existing named observer routes and source-overlap/book-network preflight.
+- [x] Prepare canonical BDK reorg/retraction decisions and complete, source-bound
+  Esplora absence candidates (step 2), including stale-anchor rebuild, forced
+  refresh height fences and point-of-agreement recovery. No durable apply.
+- [ ] Compose observer transaction/output projections and shared-observer
+  retraction vetoes. Preserve the existing named observer routes and
+  source-overlap/book-network preflight.
 - [ ] Apply transactions, provenance, graph cache, output/policy coverage and
   freshness/journal invalidation atomically, with full normalized book dumps.
 - [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero

@@ -658,3 +658,34 @@ absence, ownership, custody or tax authority. No new product command, background
 feature or AI projection is enabled. No new diagnostic/disk logging is added.
 See the [native execution checkpoint](rust-shell.md#native-bdk-execution-and-compatibility-caches-r5-step-1)
 for verification, limitations and remaining registration/persistence work.
+
+## Bitcoin canonical authority preparation (R5 step 2)
+
+The [step-2 authority checkpoint](rust-shell.md#bitcoin-canonical-authority-preparation-r5-step-2)
+supersedes the temporary disconnected-tip refusal above. Tip preflight, stale-
+anchor rebuild and point-of-agreement recovery use the same request's existing
+`ElectrumClient`; they introduce no connector, background work, provider probe,
+DNS shortcut or direct proxy fallback. The immutable action also binds forced
+refresh policy, prior canonical membership and the identity-local checkpoint.
+`bdk_rebuild_paths_require_exact_consent_online_scope_and_return_fence` pins
+consent/scope/offline before entry and offline/cancellation after preparation
+for reorg and forced rebuilds. The disposable-loopback oracle
+`test_native_rebuild_preflight_and_consent_fences_match_python` proves no
+requests without consent or while offline and refusal before histories when
+the backend is behind.
+
+Esplora's source-bound membership calculation and forced checkpoint extraction
+are local. Complete current histories can now prepare absence candidates, while
+partial, uncovered and page-limited observations retain their positives.
+`test_esplora_absence_sequences_match_python_source_bound_completeness` checks
+saved-baseline no-traffic behavior online without consent and offline, together
+with source changes and forced refresh. No durable observation is deleted at
+this checkpoint; the future atomic coordinator must still fence scope/epoch
+and compose every live observer before applying a withdrawal.
+
+The translator's preflight/header/cache distinction has a direct regression
+(`bdk_preflight_does_not_seed_the_scan_header_cache`) and an actual chain change
+between preflight and suffix acquisition in the Python/native oracle. All
+network operations still pass through `Wire`, rechecking cancellation/deadlines,
+and the prepared result remains subject to the return-time offline/consent
+fence. Product sync paths, automatic freshness and AI exposure remain disabled.

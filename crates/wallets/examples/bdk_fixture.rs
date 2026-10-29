@@ -1,7 +1,7 @@
 //! Gated native BDK driver; no product registration or database access.
 use kassiber_net::{Gate, Ledger, Offline};
 use kassiber_wallets::{
-    bdk::{Execution, ExecutionConsent},
+    bdk::{Execution, ExecutionConsent, Refresh},
     scan::{Cancellation, Scope},
 };
 use serde_json::{json, Value};
@@ -34,7 +34,7 @@ fn main() {
         },
         Ledger::default(),
     );
-    let result = Execution::new(
+    let result = Execution::new_refresh(
         scope.clone(),
         &i["backend"],
         i["descriptor"].as_str().unwrap(),
@@ -42,6 +42,18 @@ fn main() {
         i["network"].as_str().unwrap_or("main"),
         i["gap"].as_u64().unwrap_or(3) as u32,
         i.get("prior").filter(|v| !v.is_null()),
+        Refresh {
+            force_full: i["force_full"] == true,
+            canonical_txids: i["canonical_txids"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect(),
+            checkpoint_tip: i["checkpoint_tip"]
+                .as_u64()
+                .map(|h| u32::try_from(h).unwrap()),
+        },
     )
     .and_then(|a| {
         let c = (i["consent"] == true).then(|| ExecutionConsent::explicit_trigger(&a));
@@ -58,7 +70,7 @@ fn main() {
         "{}",
         match result {
             Ok(p) =>
-                json!({"result":{"bdk_changeset":p.changeset(),"canonical_txids":p.wallet().transactions().map(|t|t.tx_node.tx.compute_txid().to_string()).collect::<Vec<_>>()}}),
+                json!({"result":{"bdk_changeset":p.changeset(),"canonical_txids":p.canonical_txids(),"retracted_external_ids":p.retracted_external_ids(),"rebuilt":p.rebuilt()}}),
             Err(e) => json!({"error":{"code":e.code,"message":e.message}}),
         }
     );

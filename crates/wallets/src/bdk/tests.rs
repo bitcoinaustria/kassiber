@@ -207,7 +207,7 @@ fn bdk_snapshot_precedes_histories_and_caches_transactions_and_anchors_per_reque
     );
 }
 #[test]
-fn bdk_behind_or_disconnected_tip_refuses_before_history_preparation() {
+fn bdk_behind_tip_refuses_but_disconnected_tip_rebuilds_before_histories() {
     let a = action(None);
     let mut fake = Fake::new(&a, 0, true, false);
     let state = a.execute(&mut fake, 100).unwrap().changeset();
@@ -222,11 +222,23 @@ fn bdk_behind_or_disconnected_tip_refuses_before_history_preparation() {
     fake.calls.clear();
     fake.tip = 12;
     fake.header.time += 1;
+    let rebuilt = a.execute(&mut fake, 101).unwrap();
+    assert!(rebuilt.rebuilt());
+    assert_eq!(rebuilt.canonical_txids().len(), 1);
     assert_eq!(
-        a.execute(&mut fake, 101).err().unwrap().code,
-        "observer_state_rebuild_required"
+        rebuilt.changeset()["tx_graph"]["anchors"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
     );
-    assert_eq!(fake.calls.len(), 2);
+    assert_ne!(
+        rebuilt.changeset()["tx_graph"]["anchors"],
+        state["tx_graph"]["anchors"]
+    );
+    assert_eq!(fake.calls[1].0, "blockchain.block.header");
+    assert_eq!(fake.calls[2].0, "blockchain.headers.subscribe");
+    assert_eq!(fake.calls[3].0, "blockchain.block.headers");
 }
 #[test]
 fn bdk_malformed_suffix_header_and_history_refuse_without_prepared_state() {
@@ -403,7 +415,7 @@ fn bdk_widening_refuses_after_exactly_sixty_four_unsettled_passes() {
             .iter()
             .filter(|(m, _)| m == "blockchain.headers.subscribe")
             .count(),
-        64
+        65 // One durable-height preflight, then 64 BDK snapshots.
     );
 }
 #[test]
@@ -653,5 +665,324 @@ fn bdk_offline_toggle_before_return_discards_prepared_state() {
             .unwrap()
             .code,
         "cancelled"
+    );
+}
+
+fn refresh_action(prior: Option<&Value>, refresh: Refresh) -> Execution {
+    let (a, b) = descriptors();
+    Execution::new_refresh(scope(), &config(), &a, Some(&b), "main", 3, prior, refresh).unwrap()
+}
+fn history_of(p: &Prepared) -> Refresh {
+    Refresh {
+        canonical_txids: p.canonical_txids().clone(),
+        ..Default::default()
+    }
+}
+#[test]
+fn bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, true, false);
+    let first = a.execute(&mut fake, 100).unwrap();
+    assert_eq!(first.canonical_txids().len(), 1);
+    let state = first.changeset();
+    let a = refresh_action(Some(&state), history_of(&first));
+    fake.header.time += 1;
+    let reanchored = a.execute(&mut fake, 101).unwrap();
+    assert!(reanchored.rebuilt());
+    assert_eq!(reanchored.canonical_txids(), first.canonical_txids());
+    assert!(reanchored.retracted_external_ids().is_empty());
+    let history_calls = fake
+        .calls
+        .iter()
+        .filter(|(m, _)| m == "blockchain.scripthash.get_history")
+        .count();
+    // Both scans are full scans; rebuilding never incrementally widens a fresh
+    // wallet or accidentally scans the prior wallet's revealed horizon.
+    assert_eq!(history_calls, 16);
+    assert_eq!(
+        reanchored.changeset(),
+        action(None).execute(&mut fake, 101).unwrap().changeset()
+    );
+    // A second reorg drops the confirmed transaction. None of its old graph,
+    // prevouts, anchors, timestamps or revealed horizon survives the rebuild.
+    let state = reanchored.changeset();
+    let a = refresh_action(Some(&state), history_of(&reanchored));
+    fake.header.time += 1;
+    fake.history.clear();
+    let absent = a.execute(&mut fake, 102).unwrap();
+    assert!(absent.rebuilt());
+    assert!(absent.canonical_txids().is_empty());
+    assert_eq!(absent.retracted_external_ids(), first.canonical_txids());
+    assert_eq!(
+        absent.changeset(),
+        action(None).execute(&mut fake, 102).unwrap().changeset()
+    );
+    assert_eq!(
+        absent.wallet.derivation_index(KeychainKind::External),
+        Some(2)
+    );
+}
+#[test]
+fn bdk_retractions_use_canonical_membership_and_never_raw_graph_absence() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, false, false);
+    let first = a.execute(&mut fake, 100).unwrap();
+    let original_history = fake.history.clone();
+    let state = first.changeset();
+    let a = refresh_action(Some(&state), history_of(&first));
+    fake.history.clear();
+    let absent = a.execute(&mut fake, 101).unwrap();
+    assert!(!absent.rebuilt());
+    assert_eq!(absent.retracted_external_ids(), first.canonical_txids());
+    assert!(absent.canonical_txids().is_empty());
+    assert_eq!(
+        absent.changeset()["tx_graph"]["txs"],
+        state["tx_graph"]["txs"]
+    );
+    let state = absent.changeset();
+    let a = refresh_action(Some(&state), history_of(&absent));
+    let still_absent = a.execute(&mut fake, 102).unwrap();
+    assert!(still_absent.retracted_external_ids().is_empty());
+    fake.history = original_history;
+    let state = still_absent.changeset();
+    let a = refresh_action(Some(&state), history_of(&still_absent));
+    let returned = a.execute(&mut fake, 103).unwrap();
+    assert_eq!(returned.canonical_txids(), first.canonical_txids());
+    assert!(returned.retracted_external_ids().is_empty());
+    // A confirmed observation remains canonical when the current history omits
+    // it but its block is still on the same chain, exactly as BDK decides.
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, true, false);
+    let first = a.execute(&mut fake, 100).unwrap();
+    fake.history.clear();
+    let state = first.changeset();
+    let a = refresh_action(Some(&state), history_of(&first));
+    let retained = a.execute(&mut fake, 104).unwrap();
+    assert_eq!(retained.canonical_txids(), first.canonical_txids());
+    assert!(retained.retracted_external_ids().is_empty());
+}
+#[test]
+fn bdk_canonical_replacement_withdraws_only_the_previous_wallet_transaction() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, false, false);
+    let first = a.execute(&mut fake, 100).unwrap();
+    let old = first.canonical_txids().first().unwrap();
+    let mut replacement: Transaction =
+        consensus::deserialize(&Vec::from_hex(&fake.txs[old]).unwrap()).unwrap();
+    replacement.output[0].value = Amount::from_sat(98_000);
+    let id = replacement.compute_txid().to_string();
+    fake.txs
+        .insert(id.clone(), consensus::encode::serialize_hex(&replacement));
+    *fake.history.values_mut().next().unwrap() = json!([{"tx_hash":id,"height":0}]);
+    let state = first.changeset();
+    let a = refresh_action(Some(&state), history_of(&first));
+    let replaced = a.execute(&mut fake, 101).unwrap();
+    assert_eq!(replaced.canonical_txids(), &BTreeSet::from([id]));
+    assert_eq!(replaced.retracted_external_ids(), first.canonical_txids());
+    assert_eq!(
+        replaced.changeset()["tx_graph"]["txs"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+#[test]
+fn bdk_forced_rebuild_ignores_invalid_state_but_fences_checkpoint_height_and_history() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, false, false);
+    let first = a.execute(&mut fake, 100).unwrap();
+    let history = Refresh {
+        force_full: true,
+        checkpoint_tip: Some(12),
+        ..history_of(&first)
+    };
+    let a = refresh_action(Some(&json!({"invalid":"old-version"})), history);
+    fake.tip = 11;
+    fake.calls.clear();
+    let error = a.execute(&mut fake, 101).err().unwrap();
+    assert_eq!(error.code, "backend_tip_behind");
+    assert!(error.retryable);
+    assert_eq!(
+        error.details,
+        Some(
+            kassiber_pytext::loads(
+                r#"{"observer":"bdk","backend_height":11,"persisted_height":12}"#
+            )
+            .unwrap()
+        )
+    );
+    assert_eq!(
+        error.hint.as_deref(),
+        Some(
+            "Wait for the backend to catch up or select a fully synchronized backend, then retry."
+        )
+    );
+    assert_eq!(fake.calls.len(), 1);
+    fake.tip = 12;
+    fake.history.clear();
+    let absent = a.execute(&mut fake, 102).unwrap();
+    assert!(absent.canonical_txids().is_empty());
+    assert_eq!(absent.retracted_external_ids(), first.canonical_txids());
+    assert_eq!(
+        absent.changeset(),
+        action(None).execute(&mut fake, 102).unwrap().changeset()
+    );
+    // Force-full without a checkpoint still rebuilds, but has no borrowed
+    // source/height baseline and performs no remote-hash preflight.
+    let a = refresh_action(
+        Some(&first.changeset()),
+        Refresh {
+            force_full: true,
+            ..Default::default()
+        },
+    );
+    fake.calls.clear();
+    let absent = a.execute(&mut fake, 103).unwrap();
+    assert!(absent.retracted_external_ids().is_empty());
+    assert_eq!(fake.calls[1].0, "blockchain.block.headers");
+}
+#[test]
+fn bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, true, false);
+    let genesis = CheckPoint::new(BlockId {
+        height: 0,
+        hash: bitcoin::constants::genesis_block(bitcoin::Network::Bitcoin).block_hash(),
+    });
+    let mut old = fake.header;
+    old.time += 1;
+    let prior = genesis
+        .clone()
+        .extend([2, 10, 12].map(|height| BlockId {
+            height,
+            hash: old.block_hash(),
+        }))
+        .unwrap();
+    let mut protocol = Protocol {
+        rpc: &mut fake,
+        txs: BTreeMap::new(),
+        headers: BTreeMap::from([(2, old), (0, old)]),
+        anchors: BTreeMap::new(),
+    };
+    let recovered = protocol.chain_snapshot(prior.clone()).unwrap();
+    assert_eq!(recovered.height(), 12);
+    assert_eq!(recovered.hash(), protocol.rpc.header.block_hash());
+    assert_eq!(
+        recovered.get(2).unwrap().hash(),
+        protocol.rpc.header.block_hash()
+    );
+    assert_eq!(recovered.get(0).unwrap().hash(), genesis.hash());
+    assert!(protocol
+        .rpc
+        .calls
+        .iter()
+        .any(|(m, p)| m == "blockchain.block.header" && p[0] == 2));
+    protocol.rpc.tip = 11;
+    protocol.rpc.calls.clear();
+    let retained = protocol.chain_snapshot(prior.clone()).unwrap();
+    assert_eq!(retained, prior);
+    assert_eq!(protocol.rpc.calls.len(), 1);
+    protocol.rpc.tip = 12;
+    let wrong_genesis = CheckPoint::new(BlockId {
+        height: 0,
+        hash: old.block_hash(),
+    });
+    assert_eq!(
+        protocol.chain_snapshot(wrong_genesis).err().unwrap().code,
+        "protocol_error"
+    );
+}
+#[test]
+fn bdk_rebuild_paths_require_exact_consent_online_scope_and_return_fence() {
+    for force_full in [false, true] {
+        let a = action(None);
+        let mut fake = Fake::new(&a, 0, true, false);
+        let first = a.execute(&mut fake, 100).unwrap();
+        let refresh = Refresh {
+            force_full,
+            checkpoint_tip: Some(12),
+            ..history_of(&first)
+        };
+        let a = refresh_action(Some(&first.changeset()), refresh);
+        let other = action(None);
+        let gate = Gate::new(|| Offline::Online, Ledger::default());
+        let offline = Gate::new(|| Offline::Offline, Ledger::default());
+        let d = Instant::now() + Duration::from_secs(3);
+        let c = Cancellation::default();
+        for proof in [None, Some(ExecutionConsent::explicit_trigger(&other))].iter() {
+            assert_eq!(
+                a.run(&gate, &scope(), proof.as_ref(), d, &c, 101)
+                    .err()
+                    .unwrap()
+                    .code,
+                "interaction_required"
+            );
+        }
+        let proof = ExecutionConsent::explicit_trigger(&a);
+        assert_eq!(
+            a.run(&offline, &scope(), Some(&proof), d, &c, 101)
+                .err()
+                .unwrap()
+                .code,
+            "network_egress_disabled"
+        );
+        let mut wrong = scope();
+        wrong.source_revision = "2".into();
+        assert_eq!(
+            a.run(&gate, &wrong, Some(&proof), d, &c, 101)
+                .err()
+                .unwrap()
+                .code,
+            "stale_context"
+        );
+        fake.header.time += 1;
+        let prepared = a.execute(&mut fake, 101).unwrap();
+        assert_eq!(
+            a.finish(&offline, &proof, d, &c, prepared)
+                .err()
+                .unwrap()
+                .code,
+            "network_egress_disabled"
+        );
+        let prepared = a.execute(&mut fake, 102).unwrap();
+        c.cancel();
+        assert_eq!(
+            a.finish(&gate, &proof, d, &c, prepared).err().unwrap().code,
+            "cancelled"
+        );
+    }
+}
+
+#[test]
+fn bdk_preflight_does_not_seed_the_scan_header_cache() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, true, false);
+    let mut protocol = Protocol {
+        rpc: &mut fake,
+        txs: BTreeMap::new(),
+        headers: BTreeMap::new(),
+        anchors: BTreeMap::new(),
+    };
+    let old = protocol.rpc.header;
+    protocol.headers.insert(
+        10,
+        Header {
+            time: old.time - 1,
+            ..old
+        },
+    );
+    assert_eq!(protocol.remote_block_hash(10).unwrap(), old.block_hash());
+    assert!(protocol.headers.is_empty());
+    protocol.rpc.header.time += 1;
+    assert_eq!(protocol.header(10).unwrap(), protocol.rpc.header);
+    assert_eq!(
+        protocol
+            .rpc
+            .calls
+            .iter()
+            .filter(|(m, _)| m == "blockchain.block.header")
+            .count(),
+        2
     );
 }

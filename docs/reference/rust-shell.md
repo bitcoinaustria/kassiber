@@ -4720,3 +4720,147 @@ MATURIN_NO_INSTALL_RUST=1 CARGO_TARGET_DIR=/tmp/kassiber-bdk-mutation-target mis
 mise exec rust@1.99.1 -- cargo build -p kassiber-wallets --examples --features test-harness --offline --locked
 MATURIN_NO_INSTALL_RUST=1 KASSIBER_RUST_BIN=$PWD/target/debug/kassiber mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_bdk_execution.py
 ```
+
+### Bitcoin canonical authority preparation (R5 step 2)
+
+This continuation starts at `f9ff09d0` on `t3code/r5-sync-5`. Step 2 now
+prepares the same per-source canonical/retraction decisions as Python. It adds
+no durable application or product routing; steps 3–4 remain open.
+
+`bdk::Execution::new_refresh` binds force-full policy, prior canonical txids and
+an identity-local checkpoint tip into the immutable action before consent.
+Incremental preparation checks the remote height/hash at the persisted tip.
+A behind backend returns Python's `backend_tip_behind`, including the ordered
+observer/remote/persisted details and remediation hint. A disconnected tip
+reconstructs a fresh BDK wallet and aggregate and runs a full scan; no stale
+anchor, graph entry, time map, floating prevout or revealed index is merged
+back. Prior canonical membership remains available solely for the absence
+comparison. Forced refresh also discards unsupported dependency state while
+retaining that baseline and checking the identity's checkpoint height first.
+The coordinator must supply these inputs from the same scoped snapshot; the
+existing `observer_state::identity_checkpoint` excludes other identities.
+
+The native translator follows the pinned Electrum point-of-agreement walk,
+reading agreement blocks independently of the anchor cache and retaining the
+pre-scan suffix over anchors fetched later. No common block fails closed. A
+backend falling behind *after* the initial durable-height check retains the
+old chain, matching the dependency's behavior. Canonical membership comes only
+from `Wallet::transactions()`; a graph entry or disappeared protocol history
+alone does not withdraw an accounting observation. A confirmed transaction
+remains canonical when its block still stands, even if a history omits it.
+Mempool eviction, return and double-spend replacement use native BDK selection.
+Prepared retractions are the sorted prior-canonical minus current-canonical set.
+
+Cached Esplora now returns `esplora_history_complete` and
+`observer_retracted_external_ids` matching Python's membership `finish()`.
+Absence requires every prior script covered and every current membership
+complete. Current membership is unioned across scripts before subtraction;
+partial or shrunken rounds retain all old and new positives. Source changes
+cannot borrow another endpoint/auth/proxy/TLS identity's baseline. Explicit
+page limits continue to withhold absence authority. `acquisition::full_scan_checkpoint`
+discards fetch caches while retaining only versioned positive memberships for
+fresh verification. Compatibility Electrum keeps Python's existing behavior:
+its history cache does not independently grant retractions.
+
+The existing gated `bdk_fixture` now accepts the private refresh context and
+returns canonical/retraction sets. It remains test-harness-only, with no book
+writes, product kind or AI projection. Named consent,
+offline, scope, cancellation and return-fence regressions cover both ordinary
+reorg recovery and force-full rebuilds. Esplora sequence oracles check no
+traffic without consent or while offline even with a saved absence baseline.
+
+Two Rust-only parity defects were corrected: empty cached rounds omitted
+Python's `highest_used: {}`, and agreement recovery could consult an old anchor
+header. Both have named regressions and mutation entries. No new Python
+reference bug was found; Python product code is unchanged.
+
+The new oracle sequences compare live Python `BdkObserver.prepare()` against
+Rust's full private aggregate, sorted canonical txids and retractions over
+three rounds. They cover reanchoring, confirmed reorg/drop, a reorg between
+preflight and suffix acquisition, mempool drop/return and replacement, changed
+confirmation height, forced refresh and forced refresh without readable state.
+Both implementations receive identical BDK request clocks through the public
+`*_at(timestamp)` APIs, including widening passes. Only the dependency's clock
+input is injected; Kassiber services, protocol responses and output fields are
+not replaced or normalized.
+Six Esplora sequences compare complete checkpoints and absence decisions:
+complete empty history, partial-positive retention, scope shrink/recovery,
+force-full, source change and page-limited history.
+
+| Fixture / sequence | Preparation parity | Full normalized post-sync book dump |
+| --- | --- | --- |
+| Empty branches | Esplora/Electrum acquisition; native BDK aggregate/restart | not implemented |
+| Receive/change usage | same | not implemented |
+| Cached highest-used prefix | same | not implemented |
+| Multiple script families | same, every native identity | not implemented |
+| Fixed descriptors | same | not implemented |
+| Gap one | same | not implemented |
+| Changed block height | both-protocol acquisition; BDK canonical sequence | not implemented |
+| Disappeared history | both-protocol acquisition; BDK/Esplora absence sequences | not implemented |
+| Mempool | both-protocol acquisition/cache; BDK eviction/return/replacement | not implemented |
+| Coinbase | both-protocol acquisition; native BDK aggregate/restart | not implemented |
+| Restart | BDK reload/merge and compatibility cache rounds | not implemented |
+| Reorg | BDK reanchor/drop and preflight-race recovery | not implemented |
+| Retraction | BDK canonical difference; complete Esplora membership difference | not implemented |
+
+Successful native product served-by counts remain `wallets.sync: 0`,
+`ui.wallets.sync: 0`, `ui.freshness.run: 0` and
+`ui.workspace.freshness.run: 0`. There is no successful in-scope product-sync
+workload, so Python fallback counts for those commands are unmeasured and the
+zero-fallback acceptance bar is unmet. Product refusals and the hybrid's Python
+routes for Liquid, Core RPC, Lightning, Silent Payments and exchanges remain.
+
+The existing BDK/cache catalog now contains 114 entries: its inherited 89 plus
+25 authority entries. The two inherited tip rules now pin Python's completed
+preflight/rebuild behavior instead of the old temporary disconnected-tip
+refusal. Exact named killing tests remain in each entry; compilation errors
+are never counted as kills.
+
+| Authority rule / mutation prefix | New entries | Named killing tests |
+| --- | ---: | --- |
+| Fresh/forced wallet, aggregate and canonical set (`canonical-force-discard`, `canonical-prior-preflight`, `canonical-fresh-*`, `canonical-full-rebuild`, `canonical-force-height`, `canonical-current-set`) | 7 | `bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline`; `bdk_forced_rebuild_ignores_invalid_state_but_fences_checkpoint_height_and_history` |
+| Prior-only canonical subtraction (`canonical-prior-difference`, `canonical-retraction-only-prior`) | 2 | `bdk_retractions_use_canonical_membership_and_never_raw_graph_absence` |
+| Chain agreement/late lag and uncached preflight (`canonical-snapshot-behind`, `canonical-agreement-*`, `canonical-preflight-cache-*`) | 7 | `bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip`; `bdk_preflight_does_not_seed_the_scan_header_cache` |
+| Complete all-script Esplora absence (`absence-complete-*`, `absence-old-minus-live`, `absence-all-scripts`, `absence-partial-baseline`) | 5 | `esplora_absence_requires_complete_coverage_and_unions_live_script_memberships`; `esplora_partial_positive_then_complete_absence_preserves_its_retraction_baseline` |
+| Forced checkpoint/empty-round metadata (`absence-force-*`, `absence-empty-highest`) | 4 | `esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships`; `empty_rounds_still_write_the_python_highest_used_mapping` |
+
+The full mutation rerun kills 257/257 entries: observer 82/82, acquisition
+19/19, discovery 20/20, chain 22/22 and BDK/cache/authority 114/114. This repeats
+all 232 inherited entries and kills all 25 new ones. An initial full run exposed
+a missing nonempty-canonical assertion; the strengthened named regression
+kills that mutant, and the entire 114-entry catalog then passes again.
+
+Final verification uses Rust 1.99.1, locked Python 3.11 and
+`MATURIN_NO_INSTALL_RUST=1`, with offline/locked Cargo commands. Formatting,
+workspace/all-target and harness/all-target clippy with `-D warnings` pass.
+Workspace tests pass (1,032, including doctests), net `test-observer` passes
+(63), the explicit chokepoint scanner passes (nine), and binary harness tests
+pass (14). The harness, all wallet examples and the chain client example build.
+
+The requested shell/hybrid/CLI-runner/rust-port command passes 63 tests and 178
+subtests. The combined BDK/cache/acquisition/discovery/private-state, existing
+hybrid chain/rates, Python observer/reuse and CI-shard run passes 179 tests and
+79 subtests, including all 30 BDK/cache oracle cases. These final parity runs
+start only after default-target Cargo work finishes and the harness/examples
+are rebuilt; a workspace test build can replace the harness binary. Inventory,
+contracts and CI-shard checks separately pass 28 tests and 50 subtests; shard
+validation passes. All protocol tests use owned disposable-loopback fixtures.
+The full frontend/Python quality gate and Docker regtest were not run. These
+checks verify the preparation checkpoint, not product-sync delivery.
+
+Remaining work starts at step 3:
+
+3. Compose normalized records, complete outputs and exclusive coverage from the
+   prepared observers. Preserve cross-family record composition and the live-
+   record veto of another observer's retraction. Under one scope/epoch-fenced
+   wallet savepoint persist observer state, retractions, transactions,
+   provenance, graph, inventory, policy coverage, wallet sync metadata and
+   freshness, including Python's journal/report invalidation and cancellation/
+   failure rollback. Preparation must finish before opening that savepoint;
+   progress callbacks must not commit during apply.
+4. Route only Bitcoin descriptor wallets over Esplora/Electrum through
+   `wallets sync`, `ui.wallets.sync`, `ui.freshness.run` and
+   `ui.workspace.freshness.run`. Preserve all other refusals and hybrid Python
+   routes. Prove complete normalized book dumps for all ten fixtures and
+   restart/reorg/retraction sequences over both protocols, with actual per-
+   command native counts and zero in-scope Python fallbacks.

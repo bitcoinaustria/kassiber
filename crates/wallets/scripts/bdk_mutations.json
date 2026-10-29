@@ -262,10 +262,10 @@
   {
     "id": "bdk-behind-tip",
     "file": "crates/wallets/src/bdk.rs",
-    "find": "if height < prior.height() {",
+    "find": "if height < persisted_height {",
     "replace": "if false {",
     "expect_failing": [
-      "bdk_behind_or_disconnected_tip_refuses_before_history_preparation"
+      "bdk_behind_tip_refuses_but_disconnected_tip_rebuilds_before_histories"
     ],
     "rule": "A backend behind persisted state cannot prepare an ordinary refresh."
   },
@@ -275,9 +275,9 @@
     "find": "if prior_hash != prior.hash() {",
     "replace": "if false {",
     "expect_failing": [
-      "bdk_behind_or_disconnected_tip_refuses_before_history_preparation"
+      "bdk_behind_tip_refuses_but_disconnected_tip_rebuilds_before_histories"
     ],
-    "rule": "Disconnected state refuses until canonical recovery is implemented."
+    "rule": "Disconnected persisted state rebuilds through the dependency before histories."
   },
   {
     "id": "bdk-suffix-count",
@@ -442,8 +442,8 @@
   {
     "id": "cache-version",
     "file": "crates/wallets/src/compatibility_cache.rs",
-    "find": "saved[\"version\"].as_u64() != Some(1)",
-    "replace": "false",
+    "find": "saved[\"version\"].as_u64() != Some(1) || saved[\"backend_key\"] != key",
+    "replace": "saved[\"backend_key\"] != key",
     "expect_failing": [
       "compatibility_cache_binds_membership_source_and_dirty_history"
     ],
@@ -888,5 +888,255 @@
       "compatibility_cached_indices_fail_closed_and_header_keys_normalize_like_python"
     ],
     "rule": "Decimal and zero-padded header keys normalize to Python integer heights."
+  },
+  {
+    "id": "canonical-force-discard",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "prior: if refresh.force_full {",
+    "replace": "prior: if false {",
+    "expect_failing": [
+      "bdk_forced_rebuild_ignores_invalid_state_but_fences_checkpoint_height_and_history"
+    ],
+    "rule": "A forced scan discards even unsupported dependency state before decoding."
+  },
+  {
+    "id": "canonical-prior-preflight",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if self.prior.is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "Every incremental refresh checks the persisted tip before scanning."
+  },
+  {
+    "id": "canonical-fresh-wallet",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "wallet = self.fresh_wallet()?;",
+    "replace": "let _ = self.fresh_wallet()?;",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "A disconnected dependency wallet is replaced rather than updated with stale anchors."
+  },
+  {
+    "id": "canonical-fresh-aggregate",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "aggregate = ChangeSet::default();",
+    "replace": "let _ = ChangeSet::default();",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "Disconnected aggregates never merge back into a replacement wallet."
+  },
+  {
+    "id": "canonical-full-rebuild",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if self.prior.is_none() || rebuilt {",
+    "replace": "if self.prior.is_none() {",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "A reorg rebuild executes a full scan rather than incremental widening."
+  },
+  {
+    "id": "canonical-force-height",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "protocol.remote_block_hash(height)?;",
+    "replace": "let _ = height;",
+    "expect_failing": [
+      "bdk_forced_rebuild_ignores_invalid_state_but_fences_checkpoint_height_and_history"
+    ],
+    "rule": "A force-full checkpoint cannot let a lagging backend withdraw newer facts."
+  },
+  {
+    "id": "canonical-current-set",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".transactions()\n            .map",
+    "replace": ".transactions().filter(|_| false)\n            .map",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "Current membership comes from every canonical BDK wallet transaction."
+  },
+  {
+    "id": "canonical-prior-difference",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".difference(&canonical_txids)",
+    "replace": ".intersection(&canonical_txids)",
+    "expect_failing": [
+      "bdk_retractions_use_canonical_membership_and_never_raw_graph_absence"
+    ],
+    "rule": "Only previously canonical transactions absent now are retracted."
+  },
+  {
+    "id": "canonical-retraction-only-prior",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".difference(&canonical_txids)",
+    "replace": ".symmetric_difference(&canonical_txids)",
+    "expect_failing": [
+      "bdk_retractions_use_canonical_membership_and_never_raw_graph_absence"
+    ],
+    "rule": "New canonical positives cannot become absence candidates."
+  },
+  {
+    "id": "canonical-snapshot-behind",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "return Ok(prior);",
+    "replace": "return Err(invalid());",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "A post-preflight lagging snapshot retains the previous chain as Python BDK does."
+  },
+  {
+    "id": "canonical-agreement-match",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if hash == cp.hash() {",
+    "replace": "if hash != cp.hash() {",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "Chain recovery stops only at a matching local and remote checkpoint."
+  },
+  {
+    "id": "canonical-agreement-required",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "let mut chain = agreement.ok_or_else(invalid)?;",
+    "replace": "let mut chain = agreement.unwrap_or_else(|| CheckPoint::new(BlockId { height: 0, hash: bitcoin::BlockHash::all_zeros() }));",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "A chain with no common checkpoint fails closed."
+  },
+  {
+    "id": "canonical-agreement-extension",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if h > chain.height() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "Recovery retains the remote extension above its point of agreement."
+  },
+  {
+    "id": "canonical-preflight-cache-before",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "self.headers.remove(&persisted_height);\n        let hash",
+    "replace": "let hash",
+    "expect_failing": [
+      "bdk_preflight_does_not_seed_the_scan_header_cache"
+    ],
+    "rule": "Tip preflight does not read a cached stale block hash."
+  },
+  {
+    "id": "canonical-preflight-cache-after",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "self.headers.remove(&persisted_height);\n        Ok(hash)",
+    "replace": "Ok(hash)",
+    "expect_failing": [
+      "bdk_preflight_does_not_seed_the_scan_header_cache"
+    ],
+    "rule": "Preflight header reads do not seed the separate scanning cache."
+  },
+  {
+    "id": "absence-complete-only",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let retracted = if complete {",
+    "replace": "let retracted = if true {",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "Partial or omitted-script rounds never withdraw prior observations."
+  },
+  {
+    "id": "absence-complete-withdrawal",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let retracted = if complete {",
+    "replace": "let retracted = if false {",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "A complete empty round withdraws its prior memberships."
+  },
+  {
+    "id": "absence-old-minus-live",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "ids(prior).difference(&ids(&current)).cloned().collect()",
+    "replace": "ids(prior).intersection(&ids(&current)).cloned().collect()",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "Esplora retractions are prior positives minus the union of current positives."
+  },
+  {
+    "id": "absence-all-scripts",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "entries\n            .values()",
+    "replace": "entries\n            .values().take(1)",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "A transaction still observed by another script remains live."
+  },
+  {
+    "id": "absence-partial-baseline",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "prior.get(s).into_iter().chain(current.get(s))",
+    "replace": "prior.get(s).into_iter()",
+    "expect_failing": [
+      "esplora_partial_positive_then_complete_absence_preserves_its_retraction_baseline"
+    ],
+    "rule": "Positive observations from incomplete rounds survive until later complete absence."
+  },
+  {
+    "id": "absence-force-version",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "!saved.is_object() || saved[\"version\"].as_u64() != Some(1)",
+    "replace": "!saved.is_object()",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "A forced scan preserves only the known membership version without integer coercion."
+  },
+  {
+    "id": "absence-force-caches",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "json!({\"esplora_history_memberships\":saved})",
+    "replace": "checkpoint.clone()",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "Forced scans discard fetch caches and unrelated identity checkpoints."
+  },
+  {
+    "id": "absence-force-retain",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "json!({\"esplora_history_memberships\":saved})",
+    "replace": "json!({})",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "Forced scans preserve versioned positive membership for absence comparison."
+  },
+  {
+    "id": "canonical-agreement-cache",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "self.read_header(cp.height())?.block_hash()",
+    "replace": "self.header(cp.height())?.block_hash()",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "Point-of-agreement reads bypass stale anchor-header caches."
+  },
+  {
+    "id": "absence-empty-highest",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if !crate::descriptors::truthy(&cp[\"highest_used\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "empty_rounds_still_write_the_python_highest_used_mapping"
+    ],
+    "rule": "Even empty histories emit the same highest-used mapping as Python."
   }
 ]
