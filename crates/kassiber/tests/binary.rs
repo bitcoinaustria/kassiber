@@ -109,24 +109,57 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
     ]));
     assert!(output.status.success());
     assert!(text(&output.stdout).contains("\"kind\": \"wallets.sync\""));
-    for (family, action) in [
-        ("wallets", "list"),
-        ("backends", "list"),
-        ("transactions", "list"),
-    ] {
+    let mut checked = 0;
+    for leaf in kassiber_cli::describe::leaves()
+        .into_iter()
+        .filter(|leaf| !leaf.implemented())
+    {
+        use kassiber_cli::spec::{parsers, Nargs, ValueType};
+
+        let parser = &parsers()[leaf.parser];
+        let required_choices: Vec<usize> = parser
+            .mutex_groups
+            .iter()
+            .filter(|group| group.required)
+            .map(|group| group.actions[0])
+            .collect();
+        let mut argv = leaf.path.clone();
+        for (index, action) in parser.actions.iter().enumerate() {
+            let required_positional = action.is_positional()
+                && matches!(action.nargs, Nargs::Single | Nargs::OneOrMore);
+            if !(action.required || required_positional || required_choices.contains(&index)) {
+                continue;
+            }
+            if let Some(option) = action.option_strings.first() {
+                argv.push(option);
+            }
+            if action.nargs != Nargs::Zero {
+                argv.push(
+                    action
+                        .choices
+                        .and_then(|choices| choices.first().copied())
+                        .unwrap_or(match action.value_type {
+                            ValueType::Str => "unported-witness",
+                            _ => "1",
+                        }),
+                );
+            }
+        }
         let root = tempfile::tempdir().unwrap();
         let data = root.path().join("unported");
-        let output = run(&mut kassiber(&[
-            "--machine",
-            "--data-root",
-            data.to_str().unwrap(),
-            family,
-            action,
-        ]));
-        assert_eq!(output.status.code(), Some(1));
-        assert!(text(&output.stdout).contains("\"code\": \"not_implemented\""));
-        assert!(!data.exists(), "{family} bootstrapped an unsupported book");
+        let mut args = vec!["--machine", "--data-root", data.to_str().unwrap()];
+        args.extend(argv);
+        let output = run(&mut kassiber(&args));
+        let command = leaf.dotted();
+        assert_eq!(output.status.code(), Some(1), "{command}: {output:?}");
+        assert!(
+            text(&output.stdout).contains("\"code\": \"not_implemented\""),
+            "{command}: {output:?}"
+        );
+        assert!(!data.exists(), "{command} bootstrapped an unsupported book");
+        checked += 1;
     }
+    assert!(checked > 0, "the catalog must retain an unported witness");
 }
 
 #[test]
