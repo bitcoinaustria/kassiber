@@ -788,6 +788,11 @@
       "test_projection_generated_counts_both_engines": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1},
       "test_projection_stage_still_skipped": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1}
     },
+    "tests/test_custody_projection_quarantines_port.py": {
+      "test_projection_quarantine_vacuous_is_rejected": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares the private finalized compiler with unchanged Python, including quarantine origins, issue priority, barrier receipts and refusal admission; counts distinct seed activity and rejects vacuity", "reviewed": true, "tests": 1},
+      "test_projection_quarantine_frozen": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares the private finalized compiler with unchanged Python, including quarantine origins, issue priority, barrier receipts and refusal admission; counts distinct seed activity and rejects vacuity", "reviewed": true, "tests": 1},
+      "test_projection_quarantine_generated": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares the private finalized compiler with unchanged Python, including quarantine origins, issue priority, barrier receipts and refusal admission; counts distinct seed activity and rejects vacuity", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_quantity.py": {
       "CustodyQuantityTests": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_quantity directly", "reviewed": false, "tests": 29}
     },
