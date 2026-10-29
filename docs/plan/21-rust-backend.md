@@ -1642,6 +1642,15 @@ private operand comparison cannot prove that adapter. Snapshot v1 stays raw-only
 and Rust results never reach stored state. Journal fusion with `ledger` follows
 complete projection parity. See the [checkpoint evidence](../reference/custody-engine.md#issuequarantine-composition-checkpoint-r2f-partial).
 
+### Lossless finalized interpreter diagnostics (R2f, partial)
+
+The local `t3code/r2f-projection-7` checkpoint, based on `746cda8c`, preserves
+CPython values and surrogate strings in copied interpreter diagnostics through
+the private finalized compiler. This is preparation for the raw-stage adapter;
+that adapter and whole-stage parity remain outstanding. Finalized projection
+stays skipped everywhere. See the [lossless diagnostic checkpoint](../reference/custody-engine.md#lossless-interpreter-diagnostic-seam-r2f-partial)
+for comparison counts, mutation witnesses and remaining gates.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

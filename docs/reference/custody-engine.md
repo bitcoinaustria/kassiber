@@ -2919,3 +2919,79 @@ Preflight is included in this checkpoint's verification.
    census/shadow and replay. Every stage must remain compared or explicitly
    skipped, including refused and intentionally injected builds.
 4. Journal fusion with `ledger` follows complete projection parity.
+
+## Lossless interpreter diagnostic seam (R2f, partial)
+
+Local branch `t3code/r2f-projection-7` starts at `746cda8c`. This is a smaller
+verified checkpoint toward item 1 above, **not** the raw-stage adapter or the
+whole-stage parity gate. `finalized_projection` remains skipped in PyO3 and all
+comparison inventories. Snapshot v1 remains raw-only; Python accounting and
+stored state are unchanged. Journal fusion remains outside this change.
+
+The private `compose_lossless` compiler accepts interpreter diagnostics as
+`kassiber_pyjson::Value` records independently of its ordinary typed operands.
+Copies, last-write retention, grouping keys and final sorting retain Python
+strings and values throughout. Generated diagnostics join that same population
+without narrowing the interpreter copies through serde. In particular, distinct
+lone surrogate identifiers cannot collapse into replacement characters.
+The existing serde-only fixture operation remains available for its ordinary
+JSON operands; it is not the lossless adapter interface.
+
+The unpackaged `projection-lossless` example separates the operand JSON string
+from the CPython-decoded diagnostic population. Its independent Python test
+calls the unchanged full reference compiler and applies the existing comparison
+projection to both outputs, including explicit nonfinite float tags.
+
+| New comparison | Result |
+| --- | ---: |
+| Distinct primary private inputs | 6 |
+| Additional distinct diagnostic-order permutations | 2 |
+| Successful comparisons | 7 |
+| Compared refusals | 1 KeyError |
+| Differences | 0 |
+
+Each input is evaluated once per engine; activity belongs to that input alone.
+Every result has rows, quarantines or a compared refusal. The inherited
+`test_projection_quarantine_vacuous_is_rejected` still proves that an empty
+result cannot satisfy activity. These counts are private-operand comparisons,
+not raw-book activity or whole-stage admission evidence.
+
+| New mutation | Named Rust witness |
+| --- | --- |
+| `projection7-diagnostic-order` | `projection_lossless_order_and_last_write` |
+| `projection7-diagnostic-field` | `projection_lossless_order_and_last_write` |
+| `projection7-diagnostic-special` | `projection_lossless_special_values` |
+| `projection7-diagnostic-surrogate` | `projection_lossless_surrogate_keys_and_values` |
+
+The first surrogate-key mutant survived a single-record witness because the
+copied record still contained the original identifier. That attempt is not a
+kill. The final witness contains two distinct surrogate identifiers which a
+lossy conversion collapses; it kills the building mutant. The inherited
+`projection6-receipt-existing` recipe was mechanically adapted to `PyStr`
+membership and re-killed. No Python reference bug was found.
+
+| Verification for this checkpoint | Result |
+| --- | --- |
+| Projection Python comparison lane | 15 passed |
+| New lossless Rust witnesses | 4 passed |
+| Mutation rerun | 33 killed: 29 inherited issue/quarantine entries and 4 additions; 5 baseline named filters passed |
+| Catalog applicability | All 2,213 recipes apply; not a full mutation rerun |
+| Rust workspace | 823 passed |
+| Workspace fmt and all-target Clippy `-D warnings` | Passed |
+| Required inventory refresh and preflight | Refreshed; 57 passed |
+
+The workspace initially encountered four sandbox-denied networking test binds;
+the complete run with disposable loopback servers permitted passed. Offline
+Rust 1.99.1 and locked Python 3.11 were used with
+`MATURIN_NO_INSTALL_RUST=1`; `HOME` was not changed. Logs remain under
+`target/r2f7-*.log`. A manual second pass reviewed lossless grouping, copy
+precedence, final sorting and refusal retention. No full quality gate, raw
+recording campaign, push or PR is claimed.
+
+Remaining work is still items 1–3 above: connect the original confirmation-
+decorated rows and all computed stages in Python admission order; compare the
+whole stage over all inherited raw generators, retained recordings and fresh
+census/shadow recordings; only then enable admission and prove nonzero stage
+comparisons. The full inherited 2,209-entry mutation rerun is also outstanding;
+catalog applicability is not a kill claim. This checkpoint must not be used to
+claim completion of the adapter, the whole-stage gate or plan 21 R2f.

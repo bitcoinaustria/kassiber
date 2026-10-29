@@ -139,6 +139,12 @@ fn privacy(row: &Value) -> bool {
     )
 }
 pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
+    let diagnostics = codec::from_json(&v["interpreter_quarantines"])?;
+    evaluate_lossless(v, crate::graph::stored::list(&diagnostics)).map(|v| codec::to_json(&v))
+}
+
+/// Diagnostic records remain CPython values for their entire lifetime.
+pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, String> {
     let finalize = v["op"] == "finalize";
     let payouts = if v["op"] == "compose" || finalize {
         payouts::valid(&v["payouts"], &v["rows"])?
@@ -164,7 +170,7 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     let explicit = strings(&v["blocked_transaction_ids"]);
     let closure = connected(&decisions, &observations, &explicit)?;
     if v["op"] == "connected" {
-        return Ok(json!({"blocked":closure["blocked"]}));
+        return codec::from_json(&json!({"blocked":closure["blocked"]}));
     }
     let blocked = strings(&closure["blocked"]);
     let non_events = strings(&v["non_event_transaction_ids"]);
@@ -183,7 +189,7 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     }
     let order = orders(&v["events"]);
     if v["op"] == "basis" {
-        return Ok(json!(array(&v["observations"])
+        return codec::from_json(&json!(array(&v["observations"])
             .iter()
             .map(|o| held(o, v, &order))
             .collect::<Vec<_>>()));
@@ -198,7 +204,8 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     let mut cross = Vec::new();
     let mut moves = Vec::new();
     let mut barrier_receipts = Vec::new();
-    let mut quarantines = super::quarantines::Quarantines::new(v, &closure)?;
+    let mut quarantines =
+        super::quarantines::Quarantines::with_interpreter(v, &closure, diagnostics)?;
     let mut fees = FeeAllocation::new(&decisions)?;
     for d in &decisions {
         let source = observation(&observations, &d["source"])?;
@@ -389,13 +396,13 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
         .clone();
         let quarantines = quarantines.sorted()?;
         validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-        return Ok(
-            json!({"$type":"FinalizedTaxProjection","rows":projected,"intra_pairs":intra,
-            "cross_asset_pairs":cross,"selected_move_ids":moves,"quarantines":quarantines}),
-        );
+        let mut result = codec::from_json(&json!({"$type":"FinalizedTaxProjection",
+            "rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves}))?;
+        crate::graph::stored::put(&mut result, "quarantines", Py::List(quarantines));
+        return Ok(result);
     }
     validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-    Ok(
-        json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),
+    codec::from_json(
+        &json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),
     )
 }

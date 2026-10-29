@@ -57,3 +57,47 @@ def test_projection_quarantine_generated(projection_driver):
         v['issues'].reverse()
     assert projection_driver(shuffled) == expected
     print(json.dumps(dict(counts=counts,refusals=refusals,distinct_inputs=len(inputs)),sort_keys=True))
+
+
+def test_projection_lossless_diagnostics_match_python():
+    """Compare actual copied values and refusals through the CPython codec."""
+    import subprocess
+
+    built = subprocess.run(
+        ['cargo', 'build', '--offline', '--locked', '-p', 'kassiber-custody',
+         '--example', 'projection-lossless', '--message-format=json'],
+        capture_output=True, text=True, check=True,
+    )
+    binary = next(record['executable'] for line in built.stdout.splitlines()
+                  if (record := json.loads(line)).get('executable'))
+    base = next(operands())
+    diagnostics = [
+        [dict(transaction_id='source', reason='specific', detail_json=dict(
+            huge=10**90, nan=float('nan'), inf=float('inf'), negative=-float('inf'), zero=-0.0))],
+        [dict(transaction_id='\ud800', reason='\udfff', detail_json={'\ud800': ['\udfff', '\ud800x']})],
+        [dict(transaction_id='source', reason='z', detail_json='first'),
+         dict(transaction_id='other', reason='a', detail_json='second'),
+         dict(transaction_id='source', reason='z', detail_json='last')],
+        [dict(transaction_id='source')],
+        [dict(transaction_id='', reason='ignored')],
+        [dict(transaction_id='\ud800', reason='r'), dict(transaction_id='\udfff', reason='r')],
+    ]
+    primary = [dict(base, interpreter_quarantines=items) for items in diagnostics]
+    assert len({json.dumps(v, sort_keys=True) for v in primary}) == 6
+    variants = primary + [dict(v, interpreter_quarantines=list(reversed(v['interpreter_quarantines']))) for v in primary]
+    inputs = list({json.dumps(v, sort_keys=True): v for v in variants}.values())
+    assert len(inputs) == 8  # Six primaries and two additional distinct orderings.
+    expected = [evaluate(v) for v in inputs]
+    requests = [dict(operands_json=json.dumps(base), diagnostics=v['interpreter_quarantines']) for v in inputs]
+    result = subprocess.run([binary], input=''.join(json.dumps(v) + '\n' for v in requests),
+                            capture_output=True, text=True, check=True)
+    actual = [json.loads(line) for line in result.stdout.splitlines()]
+    from tests.custody_snapshot import to_jsonable
+    # Apply the independent comparison projection, including its explicit
+    # nonfinite tags; signed zero and lone surrogates remain distinguishable.
+    assert json.dumps(to_jsonable(actual, redact_config=False), sort_keys=True) == json.dumps(expected, sort_keys=True)
+    assert expected[3] == actual[3] == {'error': 'KeyError'}
+    assert all(activity(v) for v in expected)
+    assert all(activity(v) for v in actual)
+    assert_activity({str(i): int(activity(v)) for i, v in enumerate(actual)})
+    print('lossless diagnostics: 8 distinct inputs, 7 successes, 1 compared KeyError')

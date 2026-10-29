@@ -196,6 +196,13 @@ fn number(n: &BigInt) -> Value {
     serde_json::from_str(&n.to_string()).expect("exact integer")
 }
 
+/// Private compiler seam for lossless interpreter diagnostics. This is not raw
+/// snapshot admission: callers still supply the independently compared operands.
+/// The copied diagnostic population never passes through serde JSON values.
+pub fn compose_lossless(value: &Value, diagnostics: &[Py]) -> Result<Py, String> {
+    composition::evaluate_lossless(value, diagnostics)
+}
+
 /// Private fixture operation, not snapshot admission or a product interface.
 pub fn primitive(value: &Value) -> Value {
     let integer =

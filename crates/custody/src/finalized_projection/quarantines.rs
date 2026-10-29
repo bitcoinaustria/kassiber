@@ -1,9 +1,27 @@
 //! Explaining diagnostics for the private finalized-projection compiler.
 //! A diagnostic never grants ownership, basis, or permission to book a row.
 use super::*;
+use crate::graph::stored;
+use kassiber_pyjson::PyStr;
 use std::collections::BTreeMap;
 
-type Key = (String, String);
+type Key = (PyStr, PyStr);
+fn py_string(value: &Py) -> PyStr {
+    match value {
+        Py::Str(s) => s.clone(),
+        _ => python_value_string(value).into(),
+    }
+}
+fn field(value: &Py, key: &str) -> Result<PyStr, String> {
+    let Py::Dict(entries) = value else {
+        return Err("TypeError".into());
+    };
+    entries
+        .iter()
+        .find(|(k, _)| *k == kassiber_pyjson::Key::Str(key.into()))
+        .map(|(_, v)| py_string(v))
+        .ok_or_else(|| "KeyError".into())
+}
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -30,24 +48,34 @@ fn rank(reason: &str) -> (usize, &str) {
 
 pub(super) struct Quarantines<'a> {
     input: &'a Value,
-    records: BTreeMap<Key, Value>,
+    records: BTreeMap<Key, Py>,
     interpreter: BTreeSet<Key>,
 }
 impl<'a> Quarantines<'a> {
-    pub(super) fn new(input: &'a Value, closure: &Value) -> Result<Self, String> {
+    pub(super) fn with_interpreter(
+        input: &'a Value,
+        closure: &Value,
+        diagnostics: &[Py],
+    ) -> Result<Self, String> {
         let mut result = Self {
             input,
             records: BTreeMap::new(),
             interpreter: BTreeSet::new(),
         };
-        for item in array(&input["interpreter_quarantines"]) {
-            let id = text(&item["transaction_id"]);
-            let reason = if codec::truth(&item["reason"]) {
-                string(&item["reason"])
+        for item in diagnostics {
+            let raw_id = stored::get(item, "transaction_id");
+            let id = if stored::truth(raw_id) {
+                py_string(raw_id)
+            } else {
+                "".into()
+            };
+            let raw_reason = stored::get(item, "reason");
+            let reason = if stored::truth(raw_reason) {
+                py_string(raw_reason)
             } else {
                 "custody_interpreter_blocked".into()
             };
-            if !id.is_empty() {
+            if id.code_points().next().is_some() {
                 let key = (id, reason);
                 result.records.insert(key.clone(), item.clone());
                 result.interpreter.insert(key);
@@ -74,7 +102,7 @@ impl<'a> Quarantines<'a> {
         Ok(result)
     }
     fn insert(&mut self, id: &str, reason: &str, detail: Value, keep: bool) -> Result<(), String> {
-        let key = (id.to_owned(), reason.to_owned());
+        let key = (id.into(), reason.into());
         let profile = &self.input["profile"];
         // Preserve Python's mandatory profile fields and json.dumps spacing.
         let workspace = profile.get("workspace_id").ok_or("KeyError")?;
@@ -90,8 +118,8 @@ impl<'a> Quarantines<'a> {
         }
         self.records.insert(
             key,
-            json!({"transaction_id":id,"workspace_id":workspace,
-            "profile_id":profile_id,"reason":reason,"detail_json":detail}),
+            codec::from_json(&json!({"transaction_id":id,"workspace_id":workspace,
+            "profile_id":profile_id,"reason":reason,"detail_json":detail}))?,
         );
         Ok(())
     }
@@ -139,7 +167,7 @@ impl<'a> Quarantines<'a> {
         receipts: &[Value],
         observations: &BTreeMap<String, Value>,
     ) -> Result<(), String> {
-        let mut groups: BTreeMap<Key, Vec<&Value>> = BTreeMap::new();
+        let mut groups: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();
         for issue in array(&self.input["issues"]) {
             if issue["issue_type"] == "custody_interpreter_blocked" {
                 continue;
@@ -157,7 +185,10 @@ impl<'a> Quarantines<'a> {
             }
         }
         for ((id, reason), issues) in groups {
-            if self.records.contains_key(&(id.clone(), reason.clone())) {
+            if self
+                .records
+                .contains_key(&(id.as_str().into(), reason.as_str().into()))
+            {
                 continue;
             }
             let issue = *issues
@@ -202,21 +233,21 @@ impl<'a> Quarantines<'a> {
             .iter()
             .map(|r| text(&r["journal_transaction_id"]))
             .collect();
-        let quarantined: BTreeSet<_> = self.records.keys().map(|k| k.0.clone()).collect();
+        let quarantined: BTreeSet<PyStr> = self.records.keys().map(|k| k.0.clone()).collect();
         for hash in receipts {
             let observation = observations.get(&string(hash)).ok_or("KeyError")?;
             let id = string(&observation["anchor_transaction_id"]);
-            if !projected.contains(&id) && !quarantined.contains(&id) {
+            if !projected.contains(&id) && !quarantined.contains(&PyStr::from(id.as_str())) {
                 self.basis(observation)?;
             }
         }
         Ok(())
     }
-    pub(super) fn sorted(self) -> Result<Vec<Value>, String> {
+    pub(super) fn sorted(self) -> Result<Vec<Py>, String> {
         let mut records = Vec::new();
         for value in self.records.into_values() {
-            let id = string(value.get("transaction_id").ok_or("KeyError")?);
-            let reason = string(value.get("reason").ok_or("KeyError")?);
+            let id = field(&value, "transaction_id")?;
+            let reason = field(&value, "reason")?;
             let key = (id.clone(), reason.clone());
             records.push(((id, !self.interpreter.contains(&key), reason), value));
         }

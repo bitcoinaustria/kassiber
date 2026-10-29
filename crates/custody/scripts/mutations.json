@@ -21996,7 +21996,7 @@
   {
     "id": "projection6-receipt-existing",
     "file": "crates/custody/src/finalized_projection/quarantines.rs",
-    "find": "!projected.contains(&id) && !quarantined.contains(&id)",
+    "find": "!projected.contains(&id) && !quarantined.contains(&PyStr::from(id.as_str()))",
     "replace": "!projected.contains(&id)",
     "expect_failing": [
       "projection_quarantine_composition_vectors"
@@ -22102,5 +22102,45 @@
       "projection_quarantine_composition_vectors"
     ],
     "rule": "Only the full private operation composes the complete projection contract."
+  },
+  {
+    "id": "projection7-diagnostic-order",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "records.sort_by(|a, b| a.0.cmp(&b.0));",
+    "replace": "records.sort_by(|a, b| b.0.cmp(&a.0));",
+    "expect_failing": [
+      "projection_lossless_order_and_last_write"
+    ],
+    "rule": "Copied diagnostics retain Python sorting order."
+  },
+  {
+    "id": "projection7-diagnostic-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "let raw_reason = stored::get(item, \"reason\");",
+    "replace": "let raw_reason = stored::get(item, \"transaction_id\");",
+    "expect_failing": [
+      "projection_lossless_order_and_last_write"
+    ],
+    "rule": "Grouping uses the reason independently of the transaction id."
+  },
+  {
+    "id": "projection7-diagnostic-special",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "result.records.insert(key.clone(), item.clone());",
+    "replace": "result.records.insert(key.clone(), codec::from_json(&codec::to_json(item))?);",
+    "expect_failing": [
+      "projection_lossless_special_values"
+    ],
+    "rule": "Copied diagnostics must not narrow CPython special values through serde."
+  },
+  {
+    "id": "projection7-diagnostic-surrogate",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "Py::Str(s) => s.clone(),",
+    "replace": "Py::Str(s) => codec::pystr(&codec::to_json(&Py::Str(s.clone()))).into(),",
+    "expect_failing": [
+      "projection_lossless_surrogate_keys_and_values"
+    ],
+    "rule": "Surrogate identity strings must remain Python code points."
   }
 ]
