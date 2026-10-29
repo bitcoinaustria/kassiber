@@ -169,6 +169,7 @@ const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.transfers.components.apply",
   "ui.review.apply",
   "ui.wallets.import_attachment.apply",
+  "ui.wallets.import_document.apply",
   "ui.imports.rollback",
 ]);
 

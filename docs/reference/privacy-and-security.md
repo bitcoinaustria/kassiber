@@ -722,7 +722,9 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   results, and an attached file's cell values and name. Attached images and
   PDFs are shown to such a provider on the user's message: an image as itself,
   a PDF as its text (extracted on this device) or, for a scan, as page images.
-  A restricted provider is shown none of them. The user can restrict
+  A restricted provider is shown none of them. Turning a photo or PDF into
+  rows (`ui_wallets_read_document`) uses only a local provider on a loopback
+  address, after consent, whatever provider serves the chat. The user can restrict
   any off-device provider in its form or with
   `kassiber ai providers update <name> --agent-access restricted`, which keeps
   it to the projected surface those tools used to be limited to. A provider on

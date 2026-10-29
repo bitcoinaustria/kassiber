@@ -230,6 +230,24 @@ _IMPORT_ATTACHMENT_REQUEST_PROPERTIES: dict[str, Any] = {
     },
 }
 
+# A document draft's id from ui_wallets_read_document, with the import target.
+_IMPORT_DOCUMENT_REQUEST_PROPERTIES: dict[str, Any] = {
+    "draft": {"type": "string", "minLength": 16, "maxLength": 128},
+    "wallet": _IMPORT_ATTACHMENT_REQUEST_PROPERTIES["wallet"],
+    "new_wallet": _IMPORT_ATTACHMENT_REQUEST_PROPERTIES["new_wallet"],
+}
+
+# Offered on a turn whose chat holds an image or PDF, never by a capability
+# pack: without one they can do nothing.
+CHAT_DOCUMENT_TOOL_NAMES = frozenset(
+    {
+        "ui.wallets.read_document",
+        "ui.wallets.import_document.plan",
+        "ui.wallets.import_document.apply",
+    }
+)
+CHAT_DOCUMENT_CAPABILITY = "chat_documents"
+
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -3495,6 +3513,93 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Keep attached file as evidence",
     ),
     ToolEntry(
+        name="ui.wallets.read_document",
+        description=(
+            "Read a photo or PDF the user attached to this chat (`file`) with "
+            "the local vision model on this computer, into a draft of "
+            "transaction rows: each with its values, a confidence, and status "
+            "`ready` or held for review. Use it when the user wants rows from a "
+            "receipt, statement or screenshot added to the book. It runs only "
+            "against a local model (never a remote one) and can take a minute. "
+            "Show the user what was read; then plan the import of the ready "
+            "rows with ui_wallets_import_document_plan, passing the returned "
+            "`draft`. Rows held for review are imported only in the desktop's "
+            "document import, where the user checks them against the page."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "file": _CHAT_FILE_PROPERTY,
+                "pages": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?$",
+                    "description": "PDF pages to read, e.g. \"2\" or \"1-3\"; all (up to 8) when left out.",
+                },
+                "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A local provider by name; the first local one when left out.",
+                },
+            },
+        },
+        kind_class="read_only",
+        egresses=True,
+        wire_name="ui_wallets_read_document",
+        daemon_kind="ui.wallets.read_document",
+        summary_template="Read the attached document on this computer",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_document.plan",
+        description=(
+            "Plan importing the ready rows of a document draft from "
+            "ui_wallets_read_document into a file or exchange wallet "
+            "(`wallet`) or a new one (`new_wallet`), without changing the book. "
+            "Returns the rows to import and already present, date range, "
+            "per-asset totals in msat, overlap with existing rows, warnings, "
+            "blockers and `apply_with`. Show the user the plan; when `ready`, "
+            "call ui_wallets_import_document_apply with the same draft, target "
+            "and apply_with values. Never alter or invent figures."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["draft"],
+            "properties": _IMPORT_DOCUMENT_REQUEST_PROPERTIES,
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_import_document_plan",
+        daemon_kind="ui.wallets.import_document.plan",
+        summary_template="Plan document import",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_document.apply",
+        description=(
+            "Import a document draft's ready rows exactly as an unchanged ready "
+            "plan from ui_wallets_import_document_plan describes, after the "
+            "user's consent, and keep the document as evidence on each row. "
+            "Refused when the document, the book or the effect changed since "
+            "planning; then plan again. The run is recorded in the import "
+            "history; because the document stays attached as evidence, rolling "
+            "it back is done in the desktop, not with a tool."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["draft", "plan_digest", "expected_source_sha256", "expected_input_version"],
+            "properties": {
+                **_IMPORT_DOCUMENT_REQUEST_PROPERTIES,
+                "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_wallets_import_document_apply",
+        daemon_kind="ui.wallets.import_document.apply",
+        summary_template="Import rows from the attached document",
+    ),
+    ToolEntry(
         name="ui.source_funds.evidence.list",
         description="Read AI-safe evidence labels and transaction associations for source-funds review.",
         parameters={
@@ -4135,6 +4240,8 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
     """Return the small-model capability packs that should advertise a tool."""
 
     name = tool.name
+    if name in CHAT_DOCUMENT_TOOL_NAMES:
+        return frozenset({CHAT_DOCUMENT_CAPABILITY})
     capabilities: set[str] = set()
     if name in REVIEW_TOOL_NAMES:
         capabilities.add("review")
@@ -4432,6 +4539,14 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Import the attached file"
     if tool.name == "ui.imports.rollback":
         return "Delete the rows an import run created"
+    if tool.name == "ui.wallets.import_document.apply":
+        new_wallet = arguments.get("new_wallet")
+        label = (
+            new_wallet.get("label") if isinstance(new_wallet, dict) else arguments.get("wallet")
+        )
+        if isinstance(label, str) and label.strip():
+            return f"Import rows from the attached document into {label.strip()}"
+        return "Import rows from the attached document"
     if tool.name == "ui.attachments.add_from_chat":
         transaction = arguments.get("transaction")
         file_id = arguments.get("file")

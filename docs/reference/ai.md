@@ -1735,6 +1735,12 @@ sees depends on its [agent access](#agent-access):
   the files that message first sends, since it already saw the others; a
   stateless one is shown them on every turn. A restricted provider is told an
   image or PDF is attached, by its extension only, and is shown none of it.
+- **Rows from an image or PDF** come only through the on-device reader:
+  `ui_wallets_read_document` (a local vision model; consent, as it starts a
+  model) drafts rows, and `ui_wallets_import_document_plan` / `_apply` import
+  the ready ones as a bound plan; a restricted provider sees counts only. These
+  tools are offered only on a turn whose chat holds an image or PDF; see
+  [imports](imports.md#from-the-assistant).
 - **Any file** can be kept as evidence on a transaction with the consented
   `ui_attachments_add_from_chat` (`transaction`, `file`, optional `label`):
   the same managed copy as attaching it in the transaction's evidence. It

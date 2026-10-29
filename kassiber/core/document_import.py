@@ -1328,13 +1328,46 @@ def preview_document_import(
     expected_fiat_currency: str | None = None,
     client_factory: ClientFactory | None = None,
 ) -> dict[str, Any]:
+    provider = resolve_ai_provider(conn, provider_name)
+    require_ai_provider_contactable(provider)
+    draft, detected = read_document(
+        provider,
+        source_file=source_file,
+        model=model,
+        confidence_threshold=confidence_threshold,
+        max_pages=max_pages,
+        pages=pages,
+        expected_fiat_currency=expected_fiat_currency,
+        client_factory=client_factory,
+    )
+    if detected:
+        # The local server answered only in Chat Completions; remember it.
+        record_detected_api_format(conn, provider["name"], provider["base_url"], detected)
+    return draft
+
+
+def read_document(
+    provider: Mapping[str, Any],
+    *,
+    source_file: str,
+    model: str | None = None,
+    confidence_threshold: Any = None,
+    max_pages: Any = None,
+    pages: Any = None,
+    expected_fiat_currency: str | None = None,
+    client_factory: ClientFactory | None = None,
+) -> tuple[dict[str, Any], str | None]:
+    """Draft transaction rows from an image or PDF with a local vision model.
+
+    Needs no database: the caller resolves the provider (and records the
+    returned API format, if the server detected one), so a chat can run this
+    slow step off the daemon's main thread.
+    """
     source_path = _source_path(source_file)
     threshold = _confidence_threshold(confidence_threshold)
     page_limit = _max_pages(max_pages)
-    provider = resolve_ai_provider(conn, provider_name)
-    require_ai_provider_contactable(provider)
     _validate_local_provider(provider)
-    client = (client_factory or _client_for_provider)(provider)
+    client = (client_factory or _client_for_provider)(dict(provider))
     models = client.list_models(strict=True)
     selected_model, installed_models = _choose_model(provider, models, model)
 
@@ -1378,9 +1411,6 @@ def preview_document_import(
         cleanup()
         stable_dir.cleanup()
     detected = getattr(client, "newly_detected_api_format", None)
-    if isinstance(detected, str) and detected:
-        # The local server answered only in Chat Completions; remember it.
-        record_detected_api_format(conn, provider["name"], provider["base_url"], detected)
 
     payload = _extract_json_object(str(response.get("content") or ""))
     if _sha256_file(source_path) != source_hash:
@@ -1432,7 +1462,7 @@ def preview_document_import(
             "has_importable_rows": ready > 0,
         },
         "created_at": now_iso(),
-    }
+    }, (detected if isinstance(detected, str) and detected else None)
 
 
 def _import_records_from_rows(

@@ -110,6 +110,7 @@ from .ai.provider_checks import (
 )
 from .ai.undo import undo_hint
 from .ai.tools import (
+    CHAT_DOCUMENT_TOOL_NAMES,
     CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA,
     LOAD_TOOLS_ENTRY,
     LOAD_TOOLS_NAME,
@@ -179,6 +180,7 @@ from .core import ownership_policy_epochs as core_ownership_policy_epochs
 from .core import attachments as core_attachments
 from .core import document_import as core_document_import
 from .core import chat_files as core_chat_files
+from .core import document_chat_import as core_document_chat_import
 from .core import file_analysis as core_file_analysis
 from .core import import_batches as core_import_batches
 from .core import lightning as core_lightning
@@ -836,6 +838,7 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
         "ui.custody.review.apply",
         # Each import and each rollback is its own plan-bound decision.
         "ui.wallets.import_attachment.apply",
+        "ui.wallets.import_document.apply",
         "ui.imports.rollback",
         # Changes standing egress policy, so one "allow for this chat" must not
         # become permission to keep re-flipping it.
@@ -7318,6 +7321,17 @@ def _execute_read_only_ai_tool(
             return _load_tool_areas_for_ai(call, runtime)
         if entry.daemon_kind is None:
             return _tool_result_denied("tool_not_allowed")
+        if entry.daemon_kind == "ui.wallets.read_document":
+            # Not one `_read`: the local model can take a minute, and that
+            # must not hold the daemon's main thread.
+            return redact_ai_tool_result(
+                {
+                    "ok": True,
+                    "envelope": build_envelope(
+                        entry.daemon_kind, _read_chat_document_for_ai(runtime, call.arguments)
+                    ),
+                }
+            )
 
         def _read(conn: sqlite3.Connection) -> dict[str, Any]:
             maintenance_metadata: dict[str, Any] = {}
@@ -7418,6 +7432,8 @@ def _execute_read_only_ai_tool(
                 )
             elif entry.daemon_kind == "ui.wallets.analyze_file":
                 payload = _analyze_attached_file_for_ai(runtime, call.arguments)
+            elif entry.daemon_kind == "ui.wallets.import_document.plan":
+                payload = _import_document_ai_payload(conn, runtime, call.arguments, apply=False)
             elif entry.daemon_kind == "ui.wallets.import_attachment.plan":
                 payload = _import_attachment_ai_payload(
                     conn, runtime, call.arguments, apply=False
@@ -7882,7 +7898,20 @@ def _run_scoped_ai_operation(
     runtime: AiToolRuntime,
     callback: Callable[[sqlite3.Connection], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Execute only against the project/book frozen when the chat began."""
+    """Execute only against the project/book frozen when the chat began.
+
+    The result is redacted for the model. A step whose result stays inside
+    the daemon (a resolved provider, say) uses `_run_scoped_ai_internal`.
+    """
+
+    return redact_ai_tool_result(_run_scoped_ai_internal(runtime, callback))
+
+
+def _run_scoped_ai_internal(
+    runtime: AiToolRuntime,
+    callback: Callable[[sqlite3.Connection], Any],
+) -> Any:
+    """`_run_scoped_ai_operation` without redaction, for daemon-internal results."""
 
     def scoped(conn: sqlite3.Connection) -> dict[str, Any]:
         _assert_ai_runtime_database_scope(conn, runtime)
@@ -7912,7 +7941,7 @@ def _run_scoped_ai_operation(
             )
         return callback(conn)
 
-    return redact_ai_tool_result(_run_on_daemon_main_thread(runtime, scoped))
+    return _run_on_daemon_main_thread(runtime, scoped)
 
 
 def _run_scoped_ai_mutation(
@@ -8632,6 +8661,14 @@ def _execute_mutating_ai_tool_unhinted(
                 # "Process journals" consent rebuilds derived state only; it
                 # does not let the assistant author transfer pairs.
                 payload = _journals_refresh_payload(conn, auto_pair=False)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind == "ui.wallets.import_document.apply":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _import_document_ai_payload(
+                    conn, runtime, call.arguments, apply=True
+                )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
@@ -10012,6 +10049,18 @@ def _chat_files_note(
         "ui.attachments.add_from_chat keeps a file as evidence on a transaction, "
         "after the user approves.",
     ]
+    if any(
+        isinstance(entry, Mapping) and entry.get("kind") in _CHAT_DOCUMENT_KINDS
+        for entry in state.get("chat_files") or ()
+    ):
+        guidance.insert(
+            0,
+            "To add rows from an image or PDF to the book, read it with "
+            "ui.wallets.read_document (a vision model on this computer) and "
+            "import its ready rows with ui.wallets.import_document.plan and, "
+            "after the user approves, .apply. Never type figures from a file "
+            "into the book yourself.",
+        )
     if has_table:
         guidance.insert(
             0,
@@ -10794,8 +10843,14 @@ def _run_ai_chat_tool_loop(
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
     # The note names it for any attached file, whatever the question was about.
+    offered_for_files: list[str] = []
     if chat_files:
-        entry = get_tool("ui.attachments.add_from_chat")
+        offered_for_files.append("ui.attachments.add_from_chat")
+    if any(entry.get("kind") in _CHAT_DOCUMENT_KINDS for entry in chat_files):
+        # Reading a photo or PDF into rows; no capability pack offers these.
+        offered_for_files.extend(sorted(CHAT_DOCUMENT_TOOL_NAMES))
+    for name in offered_for_files:
+        entry = get_tool(name)
         if entry is not None and entry.provider_name not in offered:
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
@@ -13382,6 +13437,146 @@ def _attach_chat_file_ai_payload(
     return payload
 
 
+_CHAT_DOCUMENT_KINDS = frozenset({"image", "pdf"})
+
+
+def _chat_document_sessions(runtime: AiToolRuntime) -> "DocumentImportSessions":
+    sessions = runtime.maintenance_state.get("document_import_sessions")
+    if not isinstance(sessions, DocumentImportSessions):
+        raise AppError(
+            "Documents can only be read in a desktop or CLI chat",
+            code="ai_attachment_missing",
+            retryable=False,
+        )
+    return sessions
+
+
+def _local_document_reader(conn: sqlite3.Connection, name: Any) -> dict[str, Any]:
+    """The local vision provider that reads a chat's photos and PDFs.
+
+    The one named, else the first enabled provider that runs on this
+    computer. A document is never sent to a remote provider for this, so
+    there is no fallback beyond the loopback ones.
+    """
+    if isinstance(name, str) and name.strip():
+        provider = resolve_ai_provider(conn, name.strip())
+    else:
+        candidates = [
+            row
+            for row in list_db_ai_providers(conn)
+            if row.get("enabled", True) is not False and _provider_is_on_device(row)
+        ]
+        if not candidates:
+            raise AppError(
+                "No local model can read the document",
+                code="document_reader_unavailable",
+                hint=(
+                    "Photos and PDFs are read by a vision model on this computer, "
+                    "never sent elsewhere for this. Add one in Settings → Assistant. "
+                    + core_document_import._recommendations_hint()
+                ),
+                retryable=False,
+            )
+        provider = resolve_ai_provider(conn, str(candidates[0]["name"]))
+    require_ai_provider_contactable(provider)
+    core_document_import._validate_local_provider(provider)
+    return provider
+
+
+def _read_chat_document_for_ai(
+    runtime: AiToolRuntime, arguments: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Draft rows from a chat's image or PDF with a local vision model.
+
+    The provider is resolved and the draft stored on the main thread; the
+    model call runs on this worker. The draft is kept like the desktop's
+    document preview, and its id is what the plan and apply tools take.
+    """
+    chat_file = _ai_chat_file(runtime, arguments, kinds=_CHAT_DOCUMENT_KINDS)
+    sessions = _chat_document_sessions(runtime)
+
+    def prepare(conn: sqlite3.Connection) -> dict[str, Any]:
+        workspace, profile = resolve_scope(conn, None, None)
+        return {
+            "workspace_id": str(workspace["id"]),
+            "profile_id": str(profile["id"]),
+            "fiat_currency": str(profile["fiat_currency"] or ""),
+            "provider": _local_document_reader(conn, arguments.get("provider")),
+        }
+
+    prepared = _run_scoped_ai_internal(runtime, prepare)
+    provider = prepared["provider"]
+    draft, detected = core_document_import.read_document(
+        provider,
+        source_file=str(chat_file["source_file"]),
+        pages=arguments.get("pages"),
+        expected_fiat_currency=prepared["fiat_currency"] or None,
+    )
+
+    def store(conn: sqlite3.Connection) -> dict[str, Any]:
+        if detected:
+            record_detected_api_format(conn, provider["name"], provider["base_url"], detected)
+        return {
+            "draft": sessions.create_preview(
+                str(chat_file["token"]),
+                draft,
+                workspace_id=prepared["workspace_id"],
+                profile_id=prepared["profile_id"],
+                data_root=runtime.data_root,
+            )
+        }
+
+    stored = _run_scoped_ai_internal(runtime, store)
+    projected = core_document_chat_import.project_draft(draft, full_access=_ai_full_access(runtime))
+    projected["file"] = chat_file["id"]
+    projected["draft"] = stored["draft"]
+    return projected
+
+
+def _import_document_ai_payload(
+    conn: sqlite3.Connection,
+    runtime: AiToolRuntime,
+    arguments: Mapping[str, Any],
+    *,
+    apply: bool,
+) -> dict[str, Any]:
+    """Plan (read-only) or apply importing a document draft's ready rows."""
+
+    sessions = _chat_document_sessions(runtime)
+    draft_id = _required_str_arg(dict(arguments), "draft", "Document draft")
+    workspace, profile = resolve_scope(conn, None, None)
+    session = sessions.preview_for_import(
+        draft_id,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=runtime.data_root,
+    )
+    request = {key: arguments[key] for key in ("wallet", "new_wallet") if key in arguments}
+    expected = (
+        {
+            key: arguments.get(key)
+            for key in ("plan_digest", "expected_source_sha256", "expected_input_version")
+        }
+        if apply
+        else None
+    )
+    payload = core_document_chat_import.plan_or_apply(
+        conn,
+        profile,
+        source_file=session.source_file,
+        draft=session.draft or {},
+        request=request,
+        hooks=_document_import_hooks(),
+        data_root=runtime.data_root,
+        expected=expected,
+    )
+    if apply:
+        sessions.consume(draft_id)
+    if not _ai_full_access(runtime):
+        return core_document_chat_import.withhold_values(payload)
+    return payload
+
+
 _IMPORT_ATTACHMENT_REQUEST_FIELDS = ("wallet", "new_wallet", "column_map", "transfers_only_confirmed")
 _IMPORT_ATTACHMENT_EXPECTED_FIELDS = (
     "plan_digest",
@@ -13518,7 +13713,7 @@ def _wallet_input_request_payload(
 
 
 _AI_PLAN_BOUND_CONSENT_TOOLS = frozenset(
-    {"ui.wallets.import_attachment.apply", "ui.imports.rollback"}
+    {"ui.wallets.import_attachment.apply", "ui.wallets.import_document.apply", "ui.imports.rollback"}
 )
 
 
@@ -13535,6 +13730,8 @@ def _ai_plan_consent_preview(
     def preview(conn: sqlite3.Connection) -> dict[str, Any]:
         if entry.name == "ui.wallets.import_attachment.apply":
             return _import_attachment_ai_payload(conn, runtime, arguments, apply=False)
+        if entry.name == "ui.wallets.import_document.apply":
+            return _import_document_ai_payload(conn, runtime, arguments, apply=False)
         return _imports_rollback_ai_payload(conn, runtime, arguments, apply=False)
 
     try:
@@ -13547,12 +13744,13 @@ def _ai_plan_consent_preview(
         status = "ready"
     else:
         status = "blocked"
-    if entry.name == "ui.wallets.import_attachment.apply":
+    if entry.name in {"ui.wallets.import_attachment.apply", "ui.wallets.import_document.apply"}:
         target = plan.get("target") or {}
         rows = plan.get("rows") or {}
         noun = "new wallet" if target.get("action") == "create" else "wallet"
+        what = "document" if entry.name == "ui.wallets.import_document.apply" else "file"
         summary = (
-            f"Import {rows.get('to_import', 0)} row(s) from the attached file into "
+            f"Import {rows.get('to_import', 0)} row(s) from the attached {what} into "
             f"{noun} {target.get('label') or '?'}"
         )
     else:
@@ -13635,6 +13833,9 @@ def _resolve_chat_attachments(
                 "label": attachment.get("label"),
                 "kind": core_file_analysis.file_kind(source_file),
                 "new": bool(attachment.get("new")),
+                # Internal: a document draft is staged against it. Never in
+                # the note, a tool result or history.
+                "token": str(attachment["token"]),
             }
         )
     state: dict[str, Any] = {"chat_files": files}
@@ -20547,6 +20748,9 @@ def handle_request(
                 "scope_workspace_id": chat_scope.get("workspace_id"),
                 "scope_profile_id": chat_scope.get("profile_id"),
                 "chain_analysis_job_starter": chain_analysis_job_starter(ctx.data_root, ctx.db_passphrase),
+                # A document read from chat is kept here as a draft, like
+                # the desktop's document import preview.
+                "document_import_sessions": ctx.document_import_sessions,
                 **attachment_state,
             },
         )

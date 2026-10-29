@@ -670,6 +670,23 @@ Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
 the logged-in browser, download the PDF/image, and import the local file.
 
+### From the assistant
+
+A photo or PDF attached to a chat can go the same way. `ui_wallets_read_document`
+reads it with the first enabled local provider (or one named), runs the model
+off the daemon's main thread, and keeps the draft like the desktop preview. The
+model gets each row's values, status, flags and confidence with full agent
+access, counts only when restricted, and never the path, evidence text or
+source regions. `ui_wallets_import_document_plan` then plans importing the
+draft's **ready** rows into a file or exchange wallet or a new `custom` one,
+without changing the book, and `ui_wallets_import_document_apply` imports
+exactly that plan after once-only consent: it is bound to the draft, the
+document's SHA-256, the book's input version and the plan digest. Rows held
+for review are never imported from chat; the plan says how many and points to
+the desktop's OCR import. The document is kept as evidence on each imported
+row, and the run is recorded in the import history; because rolling it back
+would also delete that evidence, the rollback is done in the desktop.
+
 ## Wallet completeness and scan bounds
 
 Kassiber cannot prove that a book holds every wallet you own, and most sources

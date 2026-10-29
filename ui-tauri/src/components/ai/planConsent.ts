@@ -1,12 +1,13 @@
 /**
- * Consent previews for plan-bound assistant writes (attachment import and
- * import rollback). The daemon recomputes the plan when it asks for consent
+ * Consent previews for plan-bound assistant writes (attachment and document
+ * import, and import rollback). The daemon recomputes the plan when it asks for consent
  * and sends it as `arguments_preview`; the card renders that, never figures
  * the model supplied.
  */
 
 export const PLAN_BOUND_CONSENT_TOOLS = new Set([
   "ui.wallets.import_attachment.apply",
+  "ui.wallets.import_document.apply",
   "ui.imports.rollback",
 ]);
 
