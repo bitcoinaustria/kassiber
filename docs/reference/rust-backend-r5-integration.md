@@ -495,3 +495,111 @@ Evidence is in `/tmp/kassiber-r5b-verification/`: `inputs.json`, `replay.json`,
 `stopped-original.patch`, `partial-fmt.log`, `partial-metadata.json`, and
 `partial-{inventory,contracts}-shared-cache.log`. These artifacts describe the
 partial code tip, not a completed R5b integration.
+
+## Round 2 continuation: stopped at the shared datetime replacement
+
+The orchestrator authorized resolution of the first stop: derive test witnesses
+from `IMPLEMENTED`, union separate method additions, and continue stopping when
+the same function body changes differently. Under that decision, replay resumed
+through setup commit `4674a1b5`. The last replayed code tip is
+`581b1a8875d473dd1d9fb8840e5e202f8489baaf`. **The integration remains incomplete:**
+`14e5a23a` introduces a different same-function conflict and was not picked.
+
+### Completed work and test-witness integration
+
+There are now **92 completed picks**: all 86 base commits and six of the seven
+setup increments. Every original message still matches in full, and the history
+is linear. Of the originally requested 126 picks, 34 remain: setup 1,
+transactions 10, wallets 8, chain 3, secrets 2, backup 5, and reports 5.
+No skip has yet been executed. The previously identified 96 contained chain
+commits still need to be skipped when that range is reached.
+
+Integration commit `91112304` ("Derive unported witnesses from the catalog so
+slice integrations preserve the refusal gate") replaces the hard-coded list in
+`describes_all_commands_and_keeps_unported_execution_closed`. It iterates over
+every catalog leaf absent from `IMPLEMENTED`, derives required arguments and
+required mutually exclusive choices from the parser specification, and retains
+the existing catalog assertions, exit/refusal assertions and no-bootstrap check.
+This runs the full set rather than a sampled subset. Formatting of this addition
+was included in the following setup conflict resolution.
+
+The focused native check passed:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo test -p kassiber --test binary \
+  --locked --offline describes_all_commands_and_keeps_unported_execution_closed
+```
+
+It selected one test and passed with zero failures/ignores in 1.25 seconds.
+The partial stack has 80 implemented leaves out of the 313-leaf catalog, so
+the test exercises all 233 unported leaves. The dynamic witnesses remain valid
+as later slices extend `IMPLEMENTED`.
+
+### Additional conflicts and resolutions
+
+This table supplements the first-stop table above; its resolution of
+`64d8a78d` supersedes that commit's earlier pending disposition.
+
+| Original commit | Conflicting paths | Resolution |
+| --- | --- | --- |
+| `64d8a78d` | `Cargo.lock`; `crates/kassiber/src/real_store.rs`; `crates/runtime/src/store.rs`; `crates/kassiber/tests/binary.rs`; `docs/reference/rust-port.md`; `tests/rust_port/dispositions.json` | Unioned separate `rates` and `current_default_backend` methods and retained both fields; kept catalog-derived test witnesses under the orchestrator decision; kept the current lock side and supplied the CLI/secrets and setup/JSON dependency edges through offline metadata; regenerated inventory. |
+| `a69ad9fa` | `docs/reference/rust-port.md` | Regenerated counts and dispositions. |
+| `19e2f7ef` | `docs/reference/rust-shell.md` | Combined the full existing service summary with backend configuration: 35 setup leaves and 80 implemented leaves overall. Both sides' service content survives. |
+| `14e5a23a` (not picked) | `Cargo.lock`; `crates/custody/src/components/time.rs`; `crates/daemon/src/lib.rs`; `docs/reference/rust-port.md`; `tests/rust_port/dispositions.json`; `tests/rust_port/reviews.py` | Saved all conflict/staged/original evidence and aborted only this pending pick. No resolution from it is retained. |
+
+### Required second stop
+
+The conflicting function is `crates/custody/src/components/time.rs::parsed`.
+The integrated custody implementation retains its expanded local parser,
+including trailing-`Z` rewriting and CPython's separator/fraction/offset
+admission. Incoming `14e5a23a` removes the local parser helpers and replaces
+the body after the empty/null guard with:
+
+```rust
+kassiber_pytext::iso_datetime(pystr(v).py_strip()).map(|dt| dt.utc_us())
+```
+
+The incoming shared parser was extracted against an older version of the
+custody parser. Git reports both helper-removal and `parsed`-body conflicts.
+This is a same-function body change, not separate method additions or example
+command lists, so the orchestrator's remaining stop rule applies. Neither the
+local implementation nor the shared replacement was chosen as the resolution.
+Proving the expanded shared parser preserves every custody boundary needs an
+explicit integration decision before this commit can proceed.
+
+Resume with `14e5a23a`, then the remaining inputs in their original order.
+Custody advance `a4e017a3..cc18b710` is exactly one commit, `cc18b710` (HTLC
+production and reservations). It was neither rebased nor cherry-picked here:
+the user's prerequisite of finishing and verifying the remaining slice picks
+has not been reached. The branch still has the requested `a4e017a3` base.
+
+### Updated partial verification
+
+The lockfile retains all 337 registry package identities from the previous base
+with exact versions, sources and checksums; no identity outside the supplied
+origin locks appears, and no package was upgraded. The only lockfile differences
+from `65c74e84` are the CLI's local dependency on `kassiber-secrets` and setup's
+dependency on the already locked `serde_json`. Locked offline metadata succeeds
+without changing it.
+
+SHA-256: `6cf2e3f4a4804ccc13381bbac16093d217fa33de263cbe167407f80a44349b3e`.
+
+Formatting and the full catalog-witness test pass. The initial inventory and
+contract checks correctly detected the newly picked Python regression and
+shifted source contracts; both were regenerated with their checked-in generators
+and checked again. These generated changes are recorded with this continuation
+audit, separately from the original slice messages.
+
+Workspace/harness clippy, workspace/net tests, mutation catalogs, the harness
+build, the required Python suite, and per-slice hybrid acceptance were not run:
+replay stopped at the explicitly retained same-function boundary. No per-slice
+served-by totals or zero-fallback claim is established in this continuation.
+No new unresolved sandbox failure was encountered; shared cache/Git metadata
+operations used approved elevation and native tests used disposable books.
+The full census and custody-shadow shards remain for the orchestrator after
+the stack is completed. Nothing was pushed, no input ref was changed by this
+run, and no stash was popped or dropped.
+
+Additional evidence in `/tmp/kassiber-r5b-verification/`:
+`resolutions.json`, `resumed-partial-audit.json`, `catalog-witness-test.log`,
+`resume-metadata.json`, and `stop-14e5a23a/{conflicts.diff,staged.diff,status.txt,original.patch}`.

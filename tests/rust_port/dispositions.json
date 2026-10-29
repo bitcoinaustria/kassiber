@@ -162,7 +162,8 @@
     },
     "tests/test_backend_configuration.py": {
       "test_configuration_mutations_keep_daemon_running": {"disposition": "subprocess-scenario", "flags": ["sql"], "group": "chain-sync", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
-      "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
+      "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.backends directly", "reviewed": false, "tests": 1}
     },
     "tests/test_backend_privacy.py": {
       "BackendPrivacyTest": {"disposition": "rust-test", "flags": ["sql"], "group": "network-egress", "reason": "calls kassiber.backends, kassiber.db directly", "reviewed": false, "tests": 1}

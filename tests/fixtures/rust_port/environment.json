@@ -290,8 +290,8 @@
       "kassiber/backends.py:335",
       "kassiber/backends.py:355",
       "kassiber/backends.py:388",
-      "kassiber/backends.py:1469",
-      "kassiber/backends.py:1476",
+      "kassiber/backends.py:1483",
+      "kassiber/backends.py:1490",
       "kassiber/secrets/credentials.py:32",
       "kassiber/secrets/credentials.py:50"
     ],
@@ -307,7 +307,7 @@
       "kassiber/backends.py:376",
       "kassiber/backends.py:378",
       "kassiber/backends.py:380",
-      "kassiber/backends.py:1486",
+      "kassiber/backends.py:1500",
       "kassiber/secrets/credentials.py:59"
     ],
     "KASSIBER_DISABLE_UPDATE_CHECK": [
