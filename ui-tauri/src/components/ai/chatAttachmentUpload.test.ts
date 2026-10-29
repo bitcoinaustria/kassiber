@@ -57,7 +57,11 @@ describe("uploadChatAttachment", () => {
     expect(calls[1]).not.toHaveProperty("filename");
     // Each request stays below the daemon's 1,000,000-character line limit.
     for (const args of calls) expect(String(args.chunk_base64).length).toBeLessThan(800_000);
-    expect(decode(calls.map((args) => String(args.chunk_base64)))).toEqual(bytes);
+    // Compared byte by byte: a deep equality over 1.2 MB is slow enough to
+    // time out on a busy machine.
+    const decoded = decode(calls.map((args) => String(args.chunk_base64)));
+    expect(decoded.length).toBe(bytes.length);
+    expect(decoded.every((value, index) => value === bytes[index])).toBe(true);
   });
 
   it("refuses a file type the chat does not take without sending it", async () => {

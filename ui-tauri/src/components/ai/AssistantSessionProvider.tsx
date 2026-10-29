@@ -1220,8 +1220,13 @@ export function AssistantSessionProvider({
 
   const chatFiles = React.useMemo<AssistantChatFile[]>(
     () => [
-      ...attachments.map(({ book: _book, ...file }) => ({
-        ...file,
+      // The book stamp stays here; the composer gets what it shows.
+      ...attachments.map((file) => ({
+        token: file.token,
+        filename: file.filename,
+        kind: file.kind,
+        sizeBytes: file.sizeBytes,
+        previewUrl: file.previewUrl,
         key: file.token,
         state: shownTokens.has(file.token) ? ("sent" as const) : ("ready" as const),
       })),
