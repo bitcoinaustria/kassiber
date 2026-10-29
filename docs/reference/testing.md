@@ -272,15 +272,20 @@ checkout's Python otherwise, on the same book:
 
 ```bash
 cargo build -p kassiber --features test-harness --locked
-KASSIBER_TEST_CLI="[\"$PWD/.venv/bin/python\", \"tests/rust_port/hybrid_cli.py\"]" \
-KASSIBER_HYBRID_RUST_BIN="$PWD/target/debug/kassiber" \
-KASSIBER_HYBRID_LOG=/tmp/served.jsonl \
+KASSIBER_TEST_CLI="[\"$PWD/.venv/bin/python\", \"$PWD/tests/rust_port/hybrid_cli.py\", \"--hybrid-rust-bin=$PWD/target/debug/kassiber\", \"--hybrid-log=/tmp/served.jsonl\"]" \
   uv run --locked python -m pytest -q tests/test_<module>.py
 ```
+
+Use absolute paths: some tests run the CLI from another directory. Each
+`KASSIBER_HYBRID_*` setting can also come from the environment, which wins,
+but tests that scrub `KASSIBER_*` variables from a child only keep settings
+given as `--hybrid-<name>=<value>` on the candidate command line.
 
 Each call first runs the binary with `KASSIBER_RUST_TEST_PROBE=1` (test
 builds only). It parses the command line, prints the command path, and exits
 0 when Rust implements the command or 3 when it does not, touching nothing.
+A call carrying a global flag Rust still refuses, such as `--diagnostics-out`,
+probes as not implemented.
 Usage errors also run in Rust. `daemon` stays in Python unless
 `KASSIBER_HYBRID_RUST_DAEMON=1`, because one session mixes kinds.
 

@@ -16,6 +16,12 @@ session mixes kinds, and most are not ported yet.
 `KASSIBER_HYBRID_LOG=<file>` appends one JSON line per call,
 `{"command": "wallets.list", "served_by": "rust"}`, so a slice can prove its
 commands ran in Rust rather than falling back.
+
+Leading `--hybrid-<name>=<value>` arguments set the same `KASSIBER_HYBRID_*`
+settings from the candidate command line, for example
+`["<python>", "<abs path>/hybrid_cli.py", "--hybrid-rust-bin=<bin>"]`. Tests
+that scrub `KASSIBER_*` variables from a child's environment then still reach
+the candidate. A variable present in the environment wins.
 """
 
 from __future__ import annotations
@@ -28,6 +34,8 @@ import sys
 RUST_ENV = "KASSIBER_HYBRID_RUST_BIN"
 LOG_ENV = "KASSIBER_HYBRID_LOG"
 RUST_DAEMON_ENV = "KASSIBER_HYBRID_RUST_DAEMON"
+IMPORT_ORACLE_ENV = "KASSIBER_HYBRID_IMPORT_ORACLE"
+OPTION_PREFIX = "--hybrid-"
 PROBE_NOT_IMPLEMENTED = 3  # crates/cli PROBE_NOT_IMPLEMENTED
 USAGE_ERROR = 2
 
@@ -57,11 +65,22 @@ def route(rust: str, args: list[str]) -> tuple[str, str]:
     return command, "rust"
 
 
+def configure(argv: list[str]) -> list[str]:
+    """Apply leading `--hybrid-*` settings and return the Kassiber arguments."""
+    args = list(argv)
+    while args and args[0].startswith(OPTION_PREFIX):
+        name, separator, value = args.pop(0)[len(OPTION_PREFIX):].partition("=")
+        if not separator:
+            raise SystemExit(f"hybrid candidate: {OPTION_PREFIX}{name} needs =<value>")
+        os.environ.setdefault("KASSIBER_HYBRID_" + name.upper().replace("-", "_"), value)
+    return args
+
+
 def main() -> None:
+    args = configure(sys.argv[1:])
     rust = os.environ.get(RUST_ENV)
     if not rust:
         raise SystemExit(f"hybrid candidate: set {RUST_ENV} to a test-harness Rust build")
-    args = sys.argv[1:]
     command, served_by = route(rust, args)
     log = os.environ.get(LOG_ENV)
     if log:
@@ -74,7 +93,7 @@ def main() -> None:
     # exec keeps stdin, inherited descriptors (--db-passphrase-fd) and the
     # working directory exactly as the test passed them.
     if served_by == "rust":
-        if command in {"wallets.import-csv", "wallets.import-phoenix"} and os.environ.get("KASSIBER_HYBRID_IMPORT_ORACLE") == "1":
+        if command in {"wallets.import-csv", "wallets.import-phoenix"} and os.environ.get(IMPORT_ORACLE_ENV) == "1":
             # Direct script execution puts tests/rust_port first on sys.path.
             sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
             from tests.rust_port.file_import_oracle import run

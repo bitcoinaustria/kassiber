@@ -1973,7 +1973,7 @@
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_hybrid_candidate.py": {
-      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 6}
+      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 7}
     },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 7}

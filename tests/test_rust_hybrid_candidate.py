@@ -144,6 +144,16 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"].startswith("wallets.")]
         self.assertEqual(calls, [{"command":"wallets."+command,"served_by":"rust"} for command in ("create","update","get","list","delete")])
 
+    def test_command_line_settings_survive_a_scrubbed_environment(self):
+        candidate = [sys.executable, str(HYBRID), f"--hybrid-rust-bin={Path(RUST_BIN).resolve()}", f"--hybrid-log={self.log}"]
+        environment = {key: value for key, value in os.environ.items() if not key.startswith(("KASSIBER_HYBRID_", cli_runner.CLI_ENV))}
+        result = subprocess.run(
+            [*candidate, "--machine", "--data-root", str(self.data_root), "init"],
+            capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL, env=environment, cwd=self.log.parent,
+        )
+        self.assertEqual(self.ok(result)["kind"], "init")
+        self.assertEqual(self.served(), [{"command": "init", "served_by": "rust"}])
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)
