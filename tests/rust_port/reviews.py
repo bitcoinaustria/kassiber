@@ -40,6 +40,7 @@ SAMPLES = {
 }
 
 REVIEWS = {
+    "tests/test_custody_native_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares native HTLC production and reservations with Python using raw snapshots, direct branch witnesses, independent scenario counts and full interpreter controls"}},
     "tests/test_custody_channel_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw channel lifecycle and persisted loan roles with Python, freezes helper branches, and pins exact per-scenario engine counts plus authoring direction rules"}},
     "tests/test_custody_safety_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts"}},
     "tests/test_backend_configuration.py": {

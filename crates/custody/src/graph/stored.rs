@@ -150,6 +150,12 @@ fn script(entry: &Py) -> Py {
         get(nested, "scriptpubkey").clone()
     }
 }
+pub(crate) fn output_sats(entry: &Py) -> Option<BigInt> {
+    match sats(entry) {
+        Py::Int(n) => Some(n),
+        _ => None,
+    }
+}
 fn sats(entry: &Py) -> Py {
     let explicit = !matches!(get(entry, "value_sats"), Py::Null);
     let value = get(entry, if explicit { "value_sats" } else { "value" });

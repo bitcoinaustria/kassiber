@@ -344,7 +344,7 @@ fn interpretation_consolidation_projection() {
 #[test]
 fn interpretation_pipeline_projection() {
     let vectors = vectors();
-    assert_eq!(vectors.len(), 288);
+    assert_eq!(vectors.len(), 343);
     for vector in vectors {
         let snapshot: Snapshot = serde_json::from_value(vector["input"].clone()).unwrap();
         assert_eq!(
@@ -380,5 +380,27 @@ fn interpretation_channel_projection() {
     assert_eq!(cases.len(), 34);
     for vector in cases {
         check(vector["case"].as_str().unwrap());
+    }
+}
+
+#[test]
+fn interpretation_native_projection() {
+    let vectors = vectors();
+    let cases: Vec<_> = vectors
+        .iter()
+        .filter(|v| {
+            v["case"].as_str().unwrap().starts_with("native_")
+                || matches!(
+                    v["case"].as_str().unwrap(),
+                    "shared_reservations"
+                        | "samourai_fanout"
+                        | "recorded_lightning_lnd"
+                        | "channel_role_reservation"
+                )
+        })
+        .collect();
+    assert_eq!(cases.len(), 59);
+    for v in cases {
+        check(v["case"].as_str().unwrap());
     }
 }

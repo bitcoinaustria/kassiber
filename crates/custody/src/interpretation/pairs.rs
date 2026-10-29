@@ -1,5 +1,5 @@
 //! Generic pair compilation. A source label never substitutes for endpoint
-//! authority. Native proof production remains in a later interpreter slice.
+//! authority. Native proof production supplies bound compiler-only proofs.
 use super::{
     anchor,
     claims::{claim, principal, slice},
@@ -14,8 +14,8 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-// Internal compiler input, never a field of Snapshot. The later HTLC
-// producer must construct this from independently recomputed matcher facts.
+// Internal compiler input, never a field of Snapshot. The native HTLC
+// producer constructs this from independently recomputed matcher facts.
 #[derive(serde::Deserialize)]
 pub(super) struct NativeTransitionProof {
     candidate: Value,
@@ -223,6 +223,14 @@ pub(super) fn compile(
     context: &Context,
     snapshot: &Snapshot,
 ) -> Result<Value, String> {
+    compile_with_proofs(pairs, context, snapshot, &BTreeMap::new())
+}
+pub(super) fn compile_with_proofs(
+    pairs: &[Value],
+    context: &Context,
+    snapshot: &Snapshot,
+    proofs: &BTreeMap<(String, String), NativeTransitionProof>,
+) -> Result<Value, String> {
     let scopes = snapshot
         .transactions
         .iter()
@@ -240,7 +248,7 @@ pub(super) fn compile(
             .map(|w| (text(&w["id"]), json!(w)))
             .collect(),
         &scopes,
-        &BTreeMap::new(),
+        proofs,
     )
 }
 pub(super) fn compile_with_scopes(

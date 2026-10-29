@@ -8902,5 +8902,1465 @@
       "channel_lifecycle_helper_vectors"
     ],
     "rule": "Role classification without atomic channel rows must not admit pair-only transaction amounts."
+  },
+  {
+    "id": "native11-htlc-guard-01",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if matches!(nested, Py::Dict(_)) {",
+    "replace": "if !(matches!(nested, Py::Dict(_))) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: matches!(nested, Py::Dict(_))."
+  },
+  {
+    "id": "native11-htlc-guard-02",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !evidence::current_observation(row).map_err(|e| e.code.to_owned())? {",
+    "replace": "if !(!evidence::current_observation(row).map_err(|e| e.code.to_owned())?) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !evidence::current_observation(row).map_err(|e| e.code.to_owned())?."
+  },
+  {
+    "id": "native11-htlc-guard-03",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if matches!(observer, Py::List(_) | Py::Dict(_)) {",
+    "replace": "if !(matches!(observer, Py::List(_) | Py::Dict(_))) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: matches!(observer, Py::List(_) | Py::Dict(_))."
+  },
+  {
+    "id": "native11-htlc-guard-04",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !matches!(observer, Py::Str(v) if matches!(v.as_str(),Some(\"lwk\"|\"bitcoinrpc\")))\n        || !kinds.contains(observer)\n    {",
+    "replace": "if !(!matches!(observer, Py::Str(v) if matches!(v.as_str(),Some(\"lwk\"|\"bitcoinrpc\")))\n        || !kinds.contains(observer)) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !matches!(observer, Py::Str(v) if matches!(v.as_str(),Some(\"lwk\"|\"bitcoinrpc\")))         || !kinds.contains(observer)."
+  },
+  {
+    "id": "native11-htlc-guard-05",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !matches!(proof, Py::Dict(_)) || s::get(proof, \"role\") != &Py::Str(role.into()) {",
+    "replace": "if !(!matches!(proof, Py::Dict(_)) || s::get(proof, \"role\") != &Py::Str(role.into())) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !matches!(proof, Py::Dict(_)) || s::get(proof, \"role\") != &Py::Str(role.into())."
+  },
+  {
+    "id": "native11-htlc-guard-06",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !matches!(s::get(proof,\"version\"), Py::Int(n) if *n == BigInt::from(1))\n        || !matches!(s::get(proof,\"input_count\"), Py::Int(n) if *n == BigInt::from(1))\n    {",
+    "replace": "if !(!matches!(s::get(proof,\"version\"), Py::Int(n) if *n == BigInt::from(1))\n        || !matches!(s::get(proof,\"input_count\"), Py::Int(n) if *n == BigInt::from(1))) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !matches!(s::get(proof,\"version\"), Py::Int(n) if *n == BigInt::from(1))         || !matches!(s::get(proof,\"input_count\"), Py::Int(n) if *n == BigInt::from(1))."
+  },
+  {
+    "id": "native11-htlc-guard-07",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if vins.len() != 1 || !matches!(&vins[0], Py::Dict(_)) {",
+    "replace": "if !(vins.len() != 1 || !matches!(&vins[0], Py::Dict(_))) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: vins.len() != 1 || !matches!(&vins[0], Py::Dict(_))."
+  },
+  {
+    "id": "native11-htlc-guard-08",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if txid(s::get(&vins[0], \"txid\")) != Some(funding)\n        || uint(s::get(&vins[0], \"vout\")) != Some(vout)\n    {",
+    "replace": "if !(txid(s::get(&vins[0], \"txid\")) != Some(funding)\n        || uint(s::get(&vins[0], \"vout\")) != Some(vout)) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: txid(s::get(&vins[0], \"txid\")) != Some(funding)         || uint(s::get(&vins[0], \"vout\")) != Some(vout)."
+  },
+  {
+    "id": "native11-htlc-guard-09",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if matches!(a, b' ' | b'\\t' | b'\\n' | b'\\r' | b'\\x0b' | b'\\x0c') {",
+    "replace": "if !(matches!(a, b' ' | b'\\t' | b'\\n' | b'\\r' | b'\\x0b' | b'\\x0c')) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: matches!(a, b' ' | b'\\t' | b'\\n' | b'\\r' | b'\\x0b' | b'\\x0c')."
+  },
+  {
+    "id": "native11-htlc-guard-10",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if bytes.len() == at + 22 && bytes.get(at..at + 2) == Some(&[0xa9, 20]) {",
+    "replace": "if !(bytes.len() == at + 22 && bytes.get(at..at + 2) == Some(&[0xa9, 20])) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: bytes.len() == at + 22 && bytes.get(at..at + 2) == Some(&[0xa9, 20])."
+  },
+  {
+    "id": "native11-htlc-guard-11",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if bytes.get(at..at + 2)? != [0xa9, 20] {",
+    "replace": "if !(bytes.get(at..at + 2)? != [0xa9, 20]) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: bytes.get(at..at + 2)? != [0xa9, 20]."
+  },
+  {
+    "id": "native11-htlc-guard-12",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if bytes.get(at..at + 3)? != [0x87, 0x63, 33] {",
+    "replace": "if !(bytes.get(at..at + 3)? != [0x87, 0x63, 33]) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: bytes.get(at..at + 3)? != [0x87, 0x63, 33]."
+  },
+  {
+    "id": "native11-htlc-guard-13",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if *bytes.get(at)? != 0x67 {",
+    "replace": "if !(*bytes.get(at)? != 0x67) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: *bytes.get(at)? != 0x67."
+  },
+  {
+    "id": "native11-htlc-guard-14",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if bytes.get(at..at + 3)? != [0xb1, 0x75, 33] {",
+    "replace": "if !(bytes.get(at..at + 3)? != [0xb1, 0x75, 33]) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: bytes.get(at..at + 3)? != [0xb1, 0x75, 33]."
+  },
+  {
+    "id": "native11-htlc-guard-15",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if bytes.get(at..)? != [0x68, 0xac] {",
+    "replace": "if !(bytes.get(at..)? != [0x68, 0xac]) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: bytes.get(at..)? != [0x68, 0xac]."
+  },
+  {
+    "id": "native11-htlc-guard-16",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if items.len() < 2 {",
+    "replace": "if !(items.len() < 2) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: items.len() < 2."
+  },
+  {
+    "id": "native11-htlc-guard-17",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if item.len() == 32 && hash160::Hash::hash(item).as_byte_array() == expected {",
+    "replace": "if !(item.len() == 32 && hash160::Hash::hash(item).as_byte_array() == expected) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: item.len() == 32 && hash160::Hash::hash(item).as_byte_array() == expected."
+  },
+  {
+    "id": "native11-htlc-guard-18",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !present || null_fallback && matches!(w, Py::Null) {",
+    "replace": "if !(!present || null_fallback && matches!(w, Py::Null)) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !present || null_fallback && matches!(w, Py::Null)."
+  },
+  {
+    "id": "native11-htlc-guard-19",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if vins.len() != 1\n        || !matches!(&vins[0], Py::Dict(_))\n        || txid(s::get(&vins[0], \"txid\")).is_none()\n        || uint(s::get(&vins[0], \"vout\")).is_none()\n    {",
+    "replace": "if !(vins.len() != 1\n        || !matches!(&vins[0], Py::Dict(_))\n        || txid(s::get(&vins[0], \"txid\")).is_none()\n        || uint(s::get(&vins[0], \"vout\")).is_none()) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: vins.len() != 1         || !matches!(&vins[0], Py::Dict(_))         || txid(s::get(&vins[0], \"txid\")).is_none()         || uint(s::get(&vins[0], \"vout\")).is_none()."
+  },
+  {
+    "id": "native11-htlc-guard-20",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !matches!(vin, Py::Dict(_)) || !witness(witness_field(vin, true))?.is_some_and(|v| !v.0)\n        {",
+    "replace": "if !(!matches!(vin, Py::Dict(_)) || !witness(witness_field(vin, true))?.is_some_and(|v| !v.0)) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !matches!(vin, Py::Dict(_)) || !witness(witness_field(vin, true))?.is_some_and(|v| !v.0)."
+  },
+  {
+    "id": "native11-htlc-guard-21",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if vout < BigInt::from(0) {",
+    "replace": "if !(vout < BigInt::from(0)) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: vout < BigInt::from(0)."
+  },
+  {
+    "id": "native11-htlc-guard-22",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !matches.contains(&key) {",
+    "replace": "if !(!matches.contains(&key)) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !matches.contains(&key)."
+  },
+  {
+    "id": "native11-htlc-guard-23",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if matches.len() == 1 {",
+    "replace": "if !(matches.len() == 1) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: matches.len() == 1."
+  },
+  {
+    "id": "native11-htlc-guard-24",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if codec::truth(&row[\"swap_refund_funding_outpoint\"]) {",
+    "replace": "if !(codec::truth(&row[\"swap_refund_funding_outpoint\"])) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: codec::truth(&row[\"swap_refund_funding_outpoint\"])."
+  },
+  {
+    "id": "native11-htlc-guard-25",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !id.is_empty() {",
+    "replace": "if !(!id.is_empty()) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !id.is_empty()."
+  },
+  {
+    "id": "native11-htlc-guard-26",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if id.is_empty() {",
+    "replace": "if !(id.is_empty()) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: id.is_empty()."
+  },
+  {
+    "id": "native11-htlc-guard-27",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !raw_index.is_null() && raw_index != \"\" {",
+    "replace": "if !(!raw_index.is_null() && raw_index != \"\") {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !raw_index.is_null() && raw_index != \"\"."
+  },
+  {
+    "id": "native11-htlc-guard-28",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if t == id.py_strip().py_lower() {",
+    "replace": "if !(t == id.py_strip().py_lower()) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: t == id.py_strip().py_lower()."
+  },
+  {
+    "id": "native11-htlc-guard-29",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if !matches!(out, Py::Dict(_)) {",
+    "replace": "if !(!matches!(out, Py::Dict(_))) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: !matches!(out, Py::Dict(_))."
+  },
+  {
+    "id": "native11-htlc-guard-30",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if &index != vout {",
+    "replace": "if !(&index != vout) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: &index != vout."
+  },
+  {
+    "id": "native11-htlc-guard-31",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if codec::truth(&row[\"swap_refund_funding_txid\"])\n            || codec::truth(&row[\"swap_refund_funding_outpoint\"])\n            || row[\"payment_hash_source\"] == \"chain_script_unique_outpoint\"\n        {",
+    "replace": "if !(codec::truth(&row[\"swap_refund_funding_txid\"])\n            || codec::truth(&row[\"swap_refund_funding_outpoint\"])\n            || row[\"payment_hash_source\"] == \"chain_script_unique_outpoint\") {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: codec::truth(&row[\"swap_refund_funding_txid\"])             || codec::truth(&row[\"swap_refund_funding_outpoint\"])             || row[\"payment_hash_source\"] == \"chain_script_unique_outpoint\"."
+  },
+  {
+    "id": "native11-htlc-guard-32",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "if raw\n            .as_str()\n            .is_some_and(|v| !v.contains(\"htlc_spend\") && !v.contains(\"witness\"))\n        {",
+    "replace": "if !(raw\n            .as_str()\n            .is_some_and(|v| !v.contains(\"htlc_spend\") && !v.contains(\"witness\"))) {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Preserve the Python htlc admission branch: raw             .as_str()             .is_some_and(|v| !v.contains(\"htlc_spend\") && !v.contains(\"witness\"))."
+  },
+  {
+    "id": "native11-matcher-guard-01",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if !codec::truth(v) {",
+    "replace": "if !(!codec::truth(v)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: !codec::truth(v)."
+  },
+  {
+    "id": "native11-matcher-guard-02",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if !f.is_finite() {",
+    "replace": "if !(!f.is_finite()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: !f.is_finite()."
+  },
+  {
+    "id": "native11-matcher-guard-03",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if recorded::lightning_row(row) {",
+    "replace": "if !(recorded::lightning_row(row)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: recorded::lightning_row(row)."
+  },
+  {
+    "id": "native11-matcher-guard-04",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if htlc::claim(row)? {",
+    "replace": "if !(htlc::claim(row)?) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: htlc::claim(row)?."
+  },
+  {
+    "id": "native11-matcher-guard-05",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if codec::truth(&row[\"excluded\"]) {",
+    "replace": "if !(codec::truth(&row[\"excluded\"])) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: codec::truth(&row[\"excluded\"])."
+  },
+  {
+    "id": "native11-matcher-guard-06",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if known.is_empty() {",
+    "replace": "if !(known.is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: known.is_empty()."
+  },
+  {
+    "id": "native11-matcher-guard-07",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if !unknown[0].is_empty() && !unknown[1].is_empty() {",
+    "replace": "if !(!unknown[0].is_empty() && !unknown[1].is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: !unknown[0].is_empty() && !unknown[1].is_empty()."
+  },
+  {
+    "id": "native11-matcher-guard-08",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if !rows[0].is_empty() && !rows[1].is_empty() {",
+    "replace": "if !(!rows[0].is_empty() && !rows[1].is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: !rows[0].is_empty() && !rows[1].is_empty()."
+  },
+  {
+    "id": "native11-matcher-guard-09",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if asset(&out[\"asset\"]).is_none() || asset(&incoming[\"asset\"]).is_none() {",
+    "replace": "if !(asset(&out[\"asset\"]).is_none() || asset(&incoming[\"asset\"]).is_none()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: asset(&out[\"asset\"]).is_none() || asset(&incoming[\"asset\"]).is_none()."
+  },
+  {
+    "id": "native11-matcher-guard-10",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if ln(&b) && !ln(&a) {",
+    "replace": "if !(ln(&b) && !ln(&a)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: ln(&b) && !ln(&a)."
+  },
+  {
+    "id": "native11-matcher-guard-11",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if chain(&a)\n        && chain(&b)\n        && asset(&out[\"asset\"]) == Some(\"BTC\")\n        && asset(&incoming[\"asset\"]) == Some(\"LBTC\")\n    {",
+    "replace": "if !(chain(&a)\n        && chain(&b)\n        && asset(&out[\"asset\"]) == Some(\"BTC\")\n        && asset(&incoming[\"asset\"]) == Some(\"LBTC\")) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: chain(&a)         && chain(&b)         && asset(&out[\"asset\"]) == Some(\"BTC\")         && asset(&incoming[\"asset\"]) == Some(\"LBTC\")."
+  },
+  {
+    "id": "native11-matcher-guard-12",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if chain(&a)\n        && chain(&b)\n        && asset(&out[\"asset\"]) == Some(\"LBTC\")\n        && asset(&incoming[\"asset\"]) == Some(\"BTC\")\n    {",
+    "replace": "if !(chain(&a)\n        && chain(&b)\n        && asset(&out[\"asset\"]) == Some(\"LBTC\")\n        && asset(&incoming[\"asset\"]) == Some(\"BTC\")) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: chain(&a)         && chain(&b)         && asset(&out[\"asset\"]) == Some(\"LBTC\")         && asset(&incoming[\"asset\"]) == Some(\"BTC\")."
+  },
+  {
+    "id": "native11-matcher-guard-13",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if outs.len() != 1 || ins.len() != 1 {",
+    "replace": "if !(outs.len() != 1 || ins.len() != 1) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: outs.len() != 1 || ins.len() != 1."
+  },
+  {
+    "id": "native11-matcher-guard-14",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if out[\"wallet_id\"] == incoming[\"wallet_id\"] {",
+    "replace": "if !(out[\"wallet_id\"] == incoming[\"wallet_id\"]) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: out[\"wallet_id\"] == incoming[\"wallet_id\"]."
+  },
+  {
+    "id": "native11-matcher-guard-15",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if !exact && !strong {",
+    "replace": "if !(!exact && !strong) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: !exact && !strong."
+  },
+  {
+    "id": "native11-matcher-guard-16",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if a.is_some() && b.is_some() && a != b || exact && (a.is_none() || b.is_none()) {",
+    "replace": "if !(a.is_some() && b.is_some() && a != b || exact && (a.is_none() || b.is_none())) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: a.is_some() && b.is_some() && a != b || exact && (a.is_none() || b.is_none())."
+  },
+  {
+    "id": "native11-matcher-guard-17",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if conserves(out, incoming)? {",
+    "replace": "if !(conserves(out, incoming)?) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: conserves(out, incoming)?."
+  },
+  {
+    "id": "native11-matcher-guard-18",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if funding.is_empty() {",
+    "replace": "if !(funding.is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: funding.is_empty()."
+  },
+  {
+    "id": "native11-matcher-guard-19",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if sources.len() != 1 {",
+    "replace": "if !(sources.len() != 1) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: sources.len() != 1."
+  },
+  {
+    "id": "native11-matcher-guard-20",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if codec::text(&out[\"asset\"]).py_upper() != codec::text(&incoming[\"asset\"]).py_upper()\n            || !conserves(out, incoming)?\n        {",
+    "replace": "if !(codec::text(&out[\"asset\"]).py_upper() != codec::text(&incoming[\"asset\"]).py_upper()\n            || !conserves(out, incoming)?) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: codec::text(&out[\"asset\"]).py_upper() != codec::text(&incoming[\"asset\"]).py_upper()             || !conserves(out, incoming)?."
+  },
+  {
+    "id": "native11-matcher-guard-21",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if value != amount(out)? {",
+    "replace": "if !(value != amount(out)?) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: value != amount(out)?."
+  },
+  {
+    "id": "native11-matcher-guard-22",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if rank(&c) < rank(&edges[at]) {",
+    "replace": "if !(rank(&c) < rank(&edges[at])) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: rank(&c) < rank(&edges[at])."
+  },
+  {
+    "id": "native11-matcher-guard-24",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if n < BigInt::from(0) {",
+    "replace": "if !(n < BigInt::from(0)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher admission branch: n < BigInt::from(0)."
+  },
+  {
+    "id": "native11-native-guard-01",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if codec::truth(&r[\"expires_at\"]) {",
+    "replace": "if !(codec::truth(&r[\"expires_at\"])) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: codec::truth(&r[\"expires_at\"])."
+  },
+  {
+    "id": "native11-native-guard-02",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if expiry <= now {",
+    "replace": "if !(expiry <= now) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: expiry <= now."
+  },
+  {
+    "id": "native11-native-guard-03",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if codec::truth(&r[\"out_transaction_id\"]) && codec::truth(&r[\"in_transaction_id\"]) {",
+    "replace": "if !(codec::truth(&r[\"out_transaction_id\"]) && codec::truth(&r[\"in_transaction_id\"])) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: codec::truth(&r[\"out_transaction_id\"]) && codec::truth(&r[\"in_transaction_id\"])."
+  },
+  {
+    "id": "native11-native-guard-04",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if matcher::asset(&o[\"asset\"]).is_some() && endpoint(row, o)? {",
+    "replace": "if !(matcher::asset(&o[\"asset\"]).is_some() && endpoint(row, o)?) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: matcher::asset(&o[\"asset\"]).is_some() && endpoint(row, o)?."
+  },
+  {
+    "id": "native11-native-guard-05",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if roles.get(&id) == Some(&role) && !occupied.contains(&id) {",
+    "replace": "if !(roles.get(&id) == Some(&role) && !occupied.contains(&id)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: roles.get(&id) == Some(&role) && !occupied.contains(&id)."
+  },
+  {
+    "id": "native11-native-guard-06",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if n > BigInt::from(0) {",
+    "replace": "if !(n > BigInt::from(0)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: n > BigInt::from(0)."
+  },
+  {
+    "id": "native11-native-guard-07",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if sources.is_empty() || targets.is_empty() {",
+    "replace": "if !(sources.is_empty() || targets.is_empty()) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: sources.is_empty() || targets.is_empty()."
+  },
+  {
+    "id": "native11-native-guard-08",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if codec::text(out).py_strip().py_upper() == codec::text(incoming).py_strip().py_upper() {",
+    "replace": "if !(codec::text(out).py_strip().py_upper() == codec::text(incoming).py_strip().py_upper()) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: codec::text(out).py_strip().py_upper() == codec::text(incoming).py_strip().py_upper()."
+  },
+  {
+    "id": "native11-native-guard-09",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if !matches!(country.as_str(), \"\" | \"generic\" | \"at\") {",
+    "replace": "if !(!matches!(country.as_str(), \"\" | \"generic\" | \"at\")) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: !matches!(country.as_str(), \"\" | \"generic\" | \"at\")."
+  },
+  {
+    "id": "native11-native-guard-10",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if country == \"at\"\n            || BTreeSet::from([\n                codec::text(out).py_strip().py_upper(),\n                codec::text(incoming).py_strip().py_upper(),\n            ]) == BTreeSet::from([\"BTC\".into(), \"LBTC\".into()])\n                && snapshot\n                    .profile\n                    .get(\"bitcoin_rail_carrying_value\")\n                    .is_none_or(codec::truth)\n        {",
+    "replace": "if !(country == \"at\"\n            || BTreeSet::from([\n                codec::text(out).py_strip().py_upper(),\n                codec::text(incoming).py_strip().py_upper(),\n            ]) == BTreeSet::from([\"BTC\".into(), \"LBTC\".into()])\n                && snapshot\n                    .profile\n                    .get(\"bitcoin_rail_carrying_value\")\n                    .is_none_or(codec::truth)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: country == \"at\"             || BTreeSet::from([                 codec::text(out).py_strip().py_upper(),                 codec::text(incoming).py_strip().py_upper(),             ]) == BTreeSet::from([\"BTC\".into(), \"LBTC\".into()])                 && snapshot                     .profile                     .get(\"bitcoin_rail_carrying_value\")                     .is_none_or(codec::truth)."
+  },
+  {
+    "id": "native11-native-guard-11",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if !htlc::presence(&rows) {",
+    "replace": "if !(!htlc::presence(&rows)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: !htlc::presence(&rows)."
+  },
+  {
+    "id": "native11-native-guard-12",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if candidate[\"confidence\"] != \"exact\"\n            || candidate[\"conflict_size\"] != 1\n            || !matches!(\n                candidate[\"method\"].as_str(),\n                Some(\"payment_hash\" | \"htlc_refund\")\n            )\n            || dismissed.contains(&key)\n            || occupied.contains(&key.0)\n            || occupied.contains(&key.1)\n        {",
+    "replace": "if !(candidate[\"confidence\"] != \"exact\"\n            || candidate[\"conflict_size\"] != 1\n            || !matches!(\n                candidate[\"method\"].as_str(),\n                Some(\"payment_hash\" | \"htlc_refund\")\n            )\n            || dismissed.contains(&key)\n            || occupied.contains(&key.0)\n            || occupied.contains(&key.1)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: candidate[\"confidence\"] != \"exact\"             || candidate[\"conflict_size\"] != 1             || !matches!(                 candidate[\"method\"].as_str(),                 Some(\"payment_hash\" | \"htlc_refund\")             )             || dismissed.contains(&key)             || occupied.contains(&key.0)             || occupied.contains(&key.1)."
+  },
+  {
+    "id": "native11-native-guard-13",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if matcher::asset(&out[\"asset\"]).is_none() || matcher::asset(&incoming[\"asset\"]).is_none() {",
+    "replace": "if !(matcher::asset(&out[\"asset\"]).is_none() || matcher::asset(&incoming[\"asset\"]).is_none()) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: matcher::asset(&out[\"asset\"]).is_none() || matcher::asset(&incoming[\"asset\"]).is_none()."
+  },
+  {
+    "id": "native11-native-guard-14",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if !endpoint(out, source)? || !endpoint(incoming, target)? {",
+    "replace": "if !(!endpoint(out, source)? || !endpoint(incoming, target)?) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: !endpoint(out, source)? || !endpoint(incoming, target)?."
+  },
+  {
+    "id": "native11-native-guard-15",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if a <= BigInt::from(0) || b <= BigInt::from(0) || shortfall < BigInt::from(0) {",
+    "replace": "if !(a <= BigInt::from(0) || b <= BigInt::from(0) || shortfall < BigInt::from(0)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: a <= BigInt::from(0) || b <= BigInt::from(0) || shortfall < BigInt::from(0)."
+  },
+  {
+    "id": "native11-native-guard-16",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if shortfall > BigInt::from(0)\n                && source_when.zip(target_when).is_none_or(|(a, b)| {\n                    a.div_euclid(86_400_000_000) != b.div_euclid(86_400_000_000)\n                })\n            {",
+    "replace": "if !(shortfall > BigInt::from(0)\n                && source_when.zip(target_when).is_none_or(|(a, b)| {\n                    a.div_euclid(86_400_000_000) != b.div_euclid(86_400_000_000)\n                })) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: shortfall > BigInt::from(0)                 && source_when.zip(target_when).is_none_or(|(a, b)| {                     a.div_euclid(86_400_000_000) != b.div_euclid(86_400_000_000)                 })."
+  },
+  {
+    "id": "native11-native-guard-17",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "if shortfall > BigInt::from(0) {",
+    "replace": "if !(shortfall > BigInt::from(0)) {",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve the Python native admission branch: shortfall > BigInt::from(0)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-01",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if (0xd800..=0xdfff).contains(&point) {",
+    "replace": "if !((0xd800..=0xdfff).contains(&point)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: (0xd800..=0xdfff).contains(&point)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-02",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if (0xf0000..=0xf0800).contains(&point) {",
+    "replace": "if !((0xf0000..=0xf0800).contains(&point)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: (0xf0000..=0xf0800).contains(&point)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-03",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if matches!(v, Py::Null) {",
+    "replace": "if !(matches!(v, Py::Null)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: matches!(v, Py::Null)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-04",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if !v.is_empty() && v.chars().all(is_digit) {",
+    "replace": "if !(!v.is_empty() && v.chars().all(is_digit)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: !v.is_empty() && v.chars().all(is_digit)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-05",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if v.contains(\"bullbitcoin\") || v == \"bull\" {",
+    "replace": "if !(v.contains(\"bullbitcoin\") || v == \"bull\") {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: v.contains(\"bullbitcoin\") || v == \"bull\"."
+  },
+  {
+    "id": "native11-matcher-providers-guard-06",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if v.contains(\"boltz\") {",
+    "replace": "if !(v.contains(\"boltz\")) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: v.contains(\"boltz\")."
+  },
+  {
+    "id": "native11-matcher-providers-guard-07",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if matches!(provider.as_str(), \"boltz\" | \"bullbitcoin\") {",
+    "replace": "if !(matches!(provider.as_str(), \"boltz\" | \"bullbitcoin\")) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: matches!(provider.as_str(), \"boltz\" | \"bullbitcoin\")."
+  },
+  {
+    "id": "native11-matcher-providers-guard-08",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if id.is_empty() {",
+    "replace": "if !(id.is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: id.is_empty()."
+  },
+  {
+    "id": "native11-matcher-providers-guard-09",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if kind.is_none() && send.is_empty() && receive.is_empty() {",
+    "replace": "if !(kind.is_none() && send.is_empty() && receive.is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: kind.is_none() && send.is_empty() && receive.is_empty()."
+  },
+  {
+    "id": "native11-matcher-providers-guard-10",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if a.is_empty() {",
+    "replace": "if !(a.is_empty()) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: a.is_empty()."
+  },
+  {
+    "id": "native11-matcher-providers-guard-11",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if a.2 != send || b.2 != receive {",
+    "replace": "if !(a.2 != send || b.2 != receive) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: a.2 != send || b.2 != receive."
+  },
+  {
+    "id": "native11-matcher-providers-guard-12",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if a.is_none()\n        || b.is_none()\n        || a != b\n        || e.amount_conflict\n        || e.route_conflict\n        || e.identity_conflict\n        || e.semantic_conflict\n    {",
+    "replace": "if !(a.is_none()\n        || b.is_none()\n        || a != b\n        || e.amount_conflict\n        || e.route_conflict\n        || e.identity_conflict\n        || e.semantic_conflict) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: a.is_none()         || b.is_none()         || a != b         || e.amount_conflict         || e.route_conflict         || e.identity_conflict         || e.semantic_conflict."
+  },
+  {
+    "id": "native11-matcher-providers-guard-13",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if e.send_amount != Some(amount(out)?) || e.receive_amount != Some(amount(incoming)?) {",
+    "replace": "if !(e.send_amount != Some(amount(out)?) || e.receive_amount != Some(amount(incoming)?)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: e.send_amount != Some(amount(out)?) || e.receive_amount != Some(amount(incoming)?)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-14",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if !keys.contains(&k) {",
+    "replace": "if !(!keys.contains(&k)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: !keys.contains(&k)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-15",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if !compatible(out, incoming) {",
+    "replace": "if !(!compatible(out, incoming)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: !compatible(out, incoming)."
+  },
+  {
+    "id": "native11-matcher-providers-guard-16",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "if !route(&e.send, out) || !route(&e.receive, incoming) {",
+    "replace": "if !(!route(&e.send, out) || !route(&e.receive, incoming)) {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve the Python matcher/providers admission branch: !route(&e.send, out) || !route(&e.receive, incoming)."
+  },
+  {
+    "id": "native11-shortfall",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "let shortfall = &a - &b;",
+    "replace": "let shortfall = &b - &a;",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition shortfall."
+  },
+  {
+    "id": "native11-source-principal",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "let a = BigInt::from(super::claims::principal(source));",
+    "replace": "let a = BigInt::from(0);",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition source principal."
+  },
+  {
+    "id": "native11-target-principal",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "let b = BigInt::from(super::claims::principal(target));",
+    "replace": "let b = BigInt::from(0);",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition target principal."
+  },
+  {
+    "id": "native11-source-proof-hash",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"source_quantity_hash\":source[\"quantity_hash\"]",
+    "replace": "\"source_quantity_hash\":target[\"quantity_hash\"]",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition source proof hash."
+  },
+  {
+    "id": "native11-target-proof-hash",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"target_quantity_hash\":target[\"quantity_hash\"]",
+    "replace": "\"target_quantity_hash\":source[\"quantity_hash\"]",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition target proof hash."
+  },
+  {
+    "id": "native11-pair-id-domain",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "format!(\"native-htlc-{}\",codec::sha256(&preimage))",
+    "replace": "format!(\"native-htlc-wrong-{}\",codec::sha256(&preimage))",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition pair id domain."
+  },
+  {
+    "id": "native11-pair-amount",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"out_amount_msat\":number(&a)",
+    "replace": "\"out_amount_msat\":number(&b)",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition pair amount."
+  },
+  {
+    "id": "native11-proof-policy",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"policy\":policy});",
+    "replace": "\"policy\":\"wrong\"});",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition proof policy."
+  },
+  {
+    "id": "native11-ambiguity-reason",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"reason\":\"native_transition_ambiguous\"",
+    "replace": "\"reason\":\"native_transition_amount_mismatch\"",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition ambiguity reason."
+  },
+  {
+    "id": "native11-ambiguity-detail",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"unique_scoped_native_transition\"",
+    "replace": "\"wrong_requirement\"",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition ambiguity detail."
+  },
+  {
+    "id": "native11-quantity-reason",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"native_transition_amount_mismatch\",",
+    "replace": "\"wrong_quantity_reason\",",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition quantity reason."
+  },
+  {
+    "id": "native11-timing-reason",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"native_transition_fee_timing_unresolved\",",
+    "replace": "\"wrong_fee_reason\",",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition timing reason."
+  },
+  {
+    "id": "native11-missing-date",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "source_when.zip(target_when).is_none_or",
+    "replace": "source_when.zip(target_when).is_some_and",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition missing date."
+  },
+  {
+    "id": "native11-utc-date",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "a.div_euclid(86_400_000_000) != b.div_euclid(86_400_000_000)",
+    "replace": "a != b",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Preserve native transition utc date."
+  },
+  {
+    "id": "native11-quarantine-both",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "for row in [out, incoming]",
+    "replace": "for row in [out, out]",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition quarantine both."
+  },
+  {
+    "id": "native11-pair-kind",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"kind\":candidate[\"default_kind\"]",
+    "replace": "\"kind\":\"manual\"",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition pair kind."
+  },
+  {
+    "id": "native11-pair-source",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "\"source\":\"native_htlc_transition\"",
+    "replace": "\"source\":\"row_matched\"",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition pair source."
+  },
+  {
+    "id": "native11-ambiguity-available",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "!exact.contains(&key)",
+    "replace": "exact.contains(&key)",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition ambiguity available."
+  },
+  {
+    "id": "native11-ambiguity-dismissed",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "!dismissed.contains(&key)",
+    "replace": "dismissed.contains(&key)",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition ambiguity dismissed."
+  },
+  {
+    "id": "native11-ambiguity-wallet",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "out[\"wallet_id\"] != incoming[\"wallet_id\"]",
+    "replace": "out[\"wallet_id\"] == incoming[\"wallet_id\"]",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition ambiguity wallet."
+  },
+  {
+    "id": "native11-ambiguity-occupied",
+    "file": "crates/custody/src/interpretation/native.rs",
+    "find": "!occupied.contains(&id)",
+    "replace": "occupied.contains(&id)",
+    "expect_failing": [
+      "native_production_helper_vectors"
+    ],
+    "rule": "Preserve native transition ambiguity occupied."
+  },
+  {
+    "id": "native11-fee-percentage",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "f.abs() * 0.01",
+    "replace": "f.abs() * 0.02",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve matcher fee percentage."
+  },
+  {
+    "id": "native11-fee-floor",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "value.max(BigInt::from(2_500_000))",
+    "replace": "value.max(BigInt::from(2_400_000))",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve matcher fee floor."
+  },
+  {
+    "id": "native11-role-exact",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "BTreeSet::from([\"lightning_node\", \"chain_htlc\"])",
+    "replace": "BTreeSet::from([\"lightning_node\", \"provider_or_import\"])",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve matcher role exact."
+  },
+  {
+    "id": "native11-wallet-kind",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "\"reverse-submarine-swap\"",
+    "replace": "\"submarine-swap\"",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve matcher wallet kind."
+  },
+  {
+    "id": "native11-cluster-size",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "json!(sizes[&r])",
+    "replace": "json!(1)",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve matcher cluster size."
+  },
+  {
+    "id": "native11-method-rank",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "Some(\"htlc_refund\") => 0",
+    "replace": "Some(\"htlc_refund\") => 9",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Preserve matcher method rank."
+  },
+  {
+    "id": "native11-reserve-loans",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": ".filter(|&id| codec::truth(id))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native reserve loans in Python order."
+  },
+  {
+    "id": "native11-reserve-roles",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "occupied.extend(channel_roles.keys().cloned());",
+    "replace": "occupied.extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native reserve roles in Python order."
+  },
+  {
+    "id": "native11-reserve-reviewed",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "let mut occupied = context.excluded.clone();",
+    "replace": "let mut occupied = Ids::new();",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native reserve reviewed in Python order."
+  },
+  {
+    "id": "native11-reserve-recorded",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "occupied.extend(recorded::resolved_ids(&auto, context, true));",
+    "replace": "occupied.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native reserve recorded in Python order."
+  },
+  {
+    "id": "native11-reserve-samourai",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "occupied.extend(ids(&samourai[\"touched_ids\"]));",
+    "replace": "occupied.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native reserve samourai in Python order."
+  },
+  {
+    "id": "native11-native-blocked",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "other_blocked.extend(native_blocked);",
+    "replace": "other_blocked.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native native blocked in Python order."
+  },
+  {
+    "id": "native11-native-privacy",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "&native_ids,",
+    "replace": "&Ids::new(),",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native native privacy in Python order."
+  },
+  {
+    "id": "native11-native-derivation",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "reserved.extend(native_blocked.iter().cloned());",
+    "replace": "reserved.extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native native derivation in Python order."
+  },
+  {
+    "id": "native11-native-pairs",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "candidates.extend(native.pairs.iter().cloned());",
+    "replace": "candidates.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native native pairs in Python order."
+  },
+  {
+    "id": "native11-native-quarantines",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "quarantines.extend(native.quarantines);",
+    "replace": "quarantines.extend(Vec::<Value>::new());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native native quarantines in Python order."
+  },
+  {
+    "id": "native11-native-proof-admission",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "pairs::compile_with_proofs(&kept, context, snapshot, &native.proofs)?",
+    "replace": "pairs::compile_with_proofs(&kept, context, snapshot, &BTreeMap::new())?",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Compose native native proof admission in Python order."
+  },
+  {
+    "id": "native11-reserve-derivation",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "handled.extend(reserved.iter().cloned());",
+    "replace": "handled.extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "interpretation_native_projection"
+    ],
+    "rule": "Native transition and quarantine anchors reserve graph derivation."
+  },
+  {
+    "id": "native11-union-roots",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if a != b {",
+    "replace": "if false && a != b {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Independent evidence edges sharing a leg stay in one full conflict cluster."
+  },
+  {
+    "id": "native11-union-minimum",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if a < b { (a, b) } else { (b, a) }",
+    "replace": "if a > b { (a, b) } else { (b, a) }",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Conflict ids use the minimum candidate key."
+  },
+  {
+    "id": "native11-edge-count",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "or_insert(0_usize) += 1",
+    "replace": "or_insert(0_usize) += 2",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Conflict cardinality counts edges once."
+  },
+  {
+    "id": "native11-fee-amount",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "number(&(a-b+fee))",
+    "replace": "number(&(a-b))",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Candidate sorting includes the source fee exactly once."
+  },
+  {
+    "id": "native11-fee-overflow",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "Err(e) => return Err(e.into()),",
+    "replace": "Err(_) => BigInt::from(0),",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Propagate uncaught outbound fee OverflowError, preserving the reference error family."
+  },
+  {
+    "id": "native11-reverse-prefix",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "fn script_shape(bytes: &[u8]) -> Option<&[u8]> {\n    let mut at = if bytes.starts_with(&[0x82, 1, 32, 0x88]) {",
+    "replace": "fn script_shape(bytes: &[u8]) -> Option<&[u8]> {\n    let mut at = if false {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Replay the reverse-swap prefix before admitting the common script template."
+  },
+  {
+    "id": "native11-witness-shape",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "let Py::List(items) = value else {\n        return Ok(None);",
+    "replace": "let Py::List(items) = value else {\n        return Err(\"TypeError\".into());",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Non-list witness stacks decline without inventing an exception."
+  },
+  {
+    "id": "native11-attestation-kinds",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "let Some(Py::List(kinds)) = kinds else {\n        return Ok(None);",
+    "replace": "let Some(Py::List(kinds)) = kinds else {\n        return Err(\"TypeError\".into());",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Malformed observer-kind lists decline before attestation admission."
+  },
+  {
+    "id": "native11-refund-whole-row",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "matches!(vins,Py::List(v) if v.len()==1)",
+    "replace": "matches!(vins,Py::List(v) if !v.is_empty())",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "A recovered refund covers the whole row only for a single input."
+  },
+  {
+    "id": "native11-funding-nonnegative",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": ".filter(|n| *n >= BigInt::from(0))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Negative funding outputs cannot establish exact whole-row coverage."
+  },
+  {
+    "id": "native11-script-small-integer",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "0 | 0x51..=0x60 => {}",
+    "replace": "0 => {}",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Recognize minimal OP_1 through OP_16 locktime pushes."
+  },
+  {
+    "id": "native11-script-integer-width",
+    "file": "crates/custody/src/interpretation/htlc.rs",
+    "find": "1..=5 => {",
+    "replace": "1..=4 => {",
+    "expect_failing": [
+      "native_htlc_helper_vectors"
+    ],
+    "rule": "Recognize five-byte minimally encoded locktime pushes."
+  },
+  {
+    "id": "native11-eligible-exclusions",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "!codec::truth(&r[\"excluded\"])",
+    "replace": "true",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Exclude raw rows before every producer, including provider and refund edges."
+  },
+  {
+    "id": "native11-fee-included",
+    "file": "crates/custody/src/interpretation/matcher.rs",
+    "find": "if codec::truth(&out[\"amount_includes_fee\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Already-included outbound fees do not inflate candidate sorting deltas."
+  },
+  {
+    "id": "native11-provider-uniqueness",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "let exact = unique && whole(&e, out, incoming)?;",
+    "replace": "let exact = whole(&e, out, incoming)?;",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Duplicate provider rows remain strong manual-review candidates."
+  },
+  {
+    "id": "native11-provider-amount-conflict",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "|| e.amount_conflict",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Independent provider amount contradictions deny exact confidence."
+  },
+  {
+    "id": "native11-provider-route-conflict",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "|| e.route_conflict",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Independent provider route contradictions deny exact confidence."
+  },
+  {
+    "id": "native11-provider-identity-conflict",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "|| e.identity_conflict",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Independent provider identity contradictions deny exact confidence."
+  },
+  {
+    "id": "native11-provider-semantic-conflict",
+    "file": "crates/custody/src/interpretation/matcher/providers.rs",
+    "find": "|| e.semantic_conflict",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_matcher_helper_vectors"
+    ],
+    "rule": "Independent provider semantic contradictions deny exact confidence."
   }
 ]

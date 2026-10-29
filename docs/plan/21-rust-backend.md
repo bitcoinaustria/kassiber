@@ -748,8 +748,17 @@ the partial seam in Python order. Its 2,000-book generator asserts all 32
 scenarios independently for both engines, including mixed transfer producers and
 authoring direction controls. Splice/other record tags follow Python's funding
 branch; no new splice semantics or ownership inference is added. Snapshot v1
-stays raw-only and production still skips `interpretation`. Continue with
-native transition production, component reconciliation and final
+stays raw-only and production still skips `interpretation`. The subsequent
+[native HTLC checkpoint](../reference/custody-engine.md#native-htlc-production-and-reservations-checkpoint-r2c-partial)
+ports full-population hash/refund matching, independent provider conflicts,
+canonical quantity/fee-date guards and dismissal expiry. Reservations compose
+before graph derivation and before holds/claim arbitration, in Python order.
+Its 55-scenario, 2,000-book generator pins counts for both engines, with 110
+permutations and 110 full-Python controls. LND/CLN settlement and timeout refunds
+compare; NWC is a negative authority control because Python admits no native
+NWC payment-hash row. Failed attempts contribute no native transition.
+Snapshot v1 remains raw-only, Python remains authoritative, and `interpretation`
+stays skipped. Continue with native component reconciliation and final
 composition.
 
 After interpretation, port gap search, quantity arbitration and finalized

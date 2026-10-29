@@ -1,6 +1,6 @@
 //! Consolidation -> recorded fan-out -> ownership. This is still a partial
-//! interpreter: safety composes holds/privacy separately; channels, HTLC
-//! production and reconciliation remain pending.
+//! interpreter: safety composes channel/native reservations, privacy and holds;
+//! native component reconciliation remains pending.
 use super::{anchor, array, consolidation, fanout, ownership, pairs, recorded, samourai, Context};
 use crate::{
     codec::{self, truth},
@@ -176,7 +176,18 @@ pub(super) fn prepare_with_pairs(
     rows: Vec<Value>,
     recorded: Vec<Value>,
 ) -> Result<Prepared, String> {
+    prepare_with_reserved(snapshot, context, rows, recorded, &BTreeSet::new())
+}
+
+pub(super) fn prepare_with_reserved(
+    snapshot: &Snapshot,
+    context: &Context,
+    rows: Vec<Value>,
+    recorded: Vec<Value>,
+    reserved: &BTreeSet<String>,
+) -> Result<Prepared, String> {
     let mut handled = recorded::resolved_ids(&recorded, context, true);
+    handled.extend(reserved.iter().cloned());
     handled.extend(
         array(&samourai::compile(snapshot, context)?["touched_ids"])
             .iter()

@@ -66,6 +66,10 @@ def books():
     malformed["channel_records"][1]["raw_json"]=json.dumps(dict(_kassiber_provenance=dict(import_source=[])))
     yield "channel_unhashable_provenance",malformed
 
+    from tests.custody_native_generator import NATIVE_SCENARIOS, native_snapshot
+    for seed, case in enumerate(NATIVE_SCENARIOS):
+        yield "native_"+case,native_snapshot(seed,case=case)
+
 
 def vectors():
     return [{"case": case, "input": book, "partial": python_results(book)} for case, book in books()]

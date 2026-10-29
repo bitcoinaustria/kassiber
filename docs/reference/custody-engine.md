@@ -999,3 +999,230 @@ component reconciliation, and final interpreter composition. Keep interpretation
 skipped until that entire stage compares. Gap search, quantity arbitration and
 finalized projection follow before custody joins the ledger. No push or PR is
 made at this checkpoint.
+
+## Native HTLC production and reservations checkpoint (R2c partial)
+
+Branch `t3code/r2c-interpretation-11` starts at `a4e017a3`. The test-only
+`partial.interpretation.native` projection now ports the native producer;
+`partial.interpretation.safety` composes its pairs, proofs, quarantines and
+reservations with the existing producers. Python remains authoritative.
+Snapshot v1 stays raw-only, and production keeps `interpretation` in
+`skipped_stages` until reconciliation and the complete stage compare.
+
+The producer matches the original hash/refund/provider population before
+applying dismissals or occupied anchors. A dismissed or reviewed sibling cannot
+promote an ambiguous route into an exact one. Independent provider conflicts
+remain in the global candidate graph. Ordered edge deduplication and union-find
+preserve Python's minimum conflict key and edge cardinality without repeatedly
+expanding the complete graph. Ambiguity holds use the reference's sorted amount
+windows rather than materializing duplicate hash populations' Cartesian product.
+
+Current LWK/Core attestations bind observer kind, graph and quantity hashes,
+role, single-input topology and funding outpoint. Legacy public witness replay
+checks the Boltz script template and hashlock before recovering a claim hash or
+timeout funding outpoint. Metadata precedence, whole funding-output coverage,
+known network domains, exact canonical principals, policy and UTC fee dates
+remain separate admission checks. A cross-date shortfall stays quarantined;
+a zero-shortfall route does not acquire that fee-date barrier.
+
+LND and CLN settlement and aliases compare. NWC is a negative authority control:
+Python's native payment-hash predicate does not admit NWC. Failed attempts
+contribute no native transition; failed swaps with a proven timeout refund use
+the refund path. A legacy failed-attempt row is a negative control, not a new
+adapter ingestion rule. No node adapter, acquisition, network,
+logging, storage or disclosure behavior changes. Synthetic public script
+fixtures exercise legacy witness compatibility; no node preimage, payment secret,
+route or credential field is added to snapshots or product surfaces.
+
+Composition follows Python's order: authored exclusions, Samourai touches,
+complete recorded pairs, channel roles/anchors and persisted loan marks occupy
+anchors before native production. Native proof anchors and quarantines reserve
+graph derivation; proven native anchors also resolve privacy holds. Native pairs
+then join the existing candidate order before raw holds, proof-aware pair
+compilation and dependency closure. Test-only `native_transitions` and
+`handled_ids` outputs independently witness these reservation boundaries.
+Native component reconciliation is intentionally absent from this checkpoint.
+
+### Branch witnesses and equivalences
+
+The frozen partial corpus has **343 raw snapshots**, including 55 new native
+scenarios. The **1,078 direct helper vectors** in
+`tests/fixtures/custody_native_helpers.json` are separate from snapshot `input`.
+They pin malformed attestations, witness bytes, script truncation, funding values,
+provider aliases and contradictions, Unicode integer admission, nonfinite raw
+metadata, timestamp errors, policy, full-population conflicts and proof binding.
+The 59-case native projection test includes four existing reservation witnesses.
+
+| Mutation group | Entries | Named killing tests |
+| --- | ---: | --- |
+| Retained catalog | 889 | Existing evidence, component, producer, graph and safety tests |
+| HTLC proof helpers | 39 | `native_htlc_helper_vectors` |
+| Matcher and independent provider conflicts | 57 | `native_matcher_helper_vectors` |
+| Native production | 38 | `native_production_helper_vectors`, `interpretation_native_projection` |
+| Reservation/composition | 12 | `interpretation_native_projection` |
+| Total | **1,035** | **All killed** |
+
+Every ported Python branch is mutation-witnessed or has this explicit disposition:
+
+- Native compilation fixes `include_heuristics=False`, with empty matcher pair
+  records, dismissals and booked-MOVE inputs. Their heuristic, existing-pair and
+  matcher-level veto branches are unreachable here; native dismissals remain a
+  separately witnessed producer admission. Removing empty iteration shortcuts,
+  path compression, or repeated identical set inserts is equivalent.
+- Snapshot records normalize sqlite rows/mappings. Arbitrary Python objects,
+  raw bytes/tuples and unsupported mapping implementations cannot cross v1.
+  Transaction amounts/fees are signed-64 integers at snapshot admission; direct
+  helper vectors additionally preserve Python's unbounded conversions and
+  uncaught fee `OverflowError`. Helper-only infinity decoding never changes v1.
+- CPython case/strip and integer helpers are reused. Provider `isdigit` preserves
+  CPython 3.11 Unicode 14's distinction from decimal digits: digit-only strings
+  that `int` rejects still raise `ValueError`. Private surrogate identities use
+  lossless internal encoding; they never escape the candidate topology module.
+- The corrected microsecond/offset time parser is reused. The explicit matcher
+  clock is parsed before row admission, as in Python. Caught `TypeError` and
+  `ValueError` remain distinct from propagated `OverflowError`; an unhashable
+  observer retains `TypeError`. The reference script parser's indexed equality
+  read on a recognized 22-byte truncation retains `IndexError`.
+- The native proof consumes candidate topology, ordering, confidence, method,
+  default kind and conflict fields. Display labels, evidence descriptions and
+  unused default policy are omitted from the comparison projection; all fields
+  used in pair production, proof validation and candidate ordering compare.
+  Raw asset/quantity/authority fields remain available on the original rows.
+- Presence checks preserve the string marker shortcut, including escaped-marker
+  behavior, and mapping/nested-vin alternatives. Empty/nonmapping decoded raw
+  payloads produce no attestation, witness or funding value. Empty loops over
+  those shapes are equivalent to their explicit short-circuits.
+- Script/witness guards, claim-vs-timeout classification, metadata-vs-recovery
+  precedence, one-vs-many inputs, duplicate funding candidates and exact whole
+  output coverage are independently witnessed. HASH160 requires RIPEMD160,
+  absent from std and the existing SHA-256 dependency; `bitcoin_hashes` adds only
+  pure hashing, with the lockfile and license inventory updated.
+- Provider display-version/taproot/cooperative/spend-path fields do not affect
+  the consumed projection or any native proof. Missing/false metadata fallbacks
+  are equivalent when they select the same absent evidence. Provider identity,
+  semantic, route and amount conflicts and the independently competing edge
+  branches have killed mutations.
+- Native anchors already occur in native pair inputs when holds calculates
+  covered ids, so removing only their duplicate resolved-id insert is equivalent.
+  Channel pair anchors already occur in typed channel roles for occupancy;
+  removing only that duplicate occupancy insert is equivalent. Role-only,
+  Samourai, recorded, loan, derivation and privacy reservations have independent
+  mutation witnesses. These equivalent mutations are excluded from the catalog.
+
+### Scenario counts
+
+Each row is asserted independently for **Python and Rust**. Books are compared
+per engine; all other columns are exact counts **per book in both engines**.
+Candidates and claims remain pre-arbitration evidence, not ownership or report
+readiness. Standalone native counts precede the composed occupancy checks, so
+an occupied loan/channel can still have a standalone native pair while the
+composed interpreter reserves it.
+
+| Scenario | Books Python / Rust | Candidates | Native pairs | Proofs | Native quarantines | Claims | Audits | Non-events | Blocked | Transient |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lnd_settle` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `cln_settle` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `cln_alias_settle` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `nwc_untrusted` | 37 / 37 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `lnd_forged` | 37 / 37 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `reverse_settle` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `timeout_refund` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `raw_refund` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `raw_claim` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `core_attestation` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `fee_next_day` | 37 / 37 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | 2 | 0 |
+| `fee_unknown_time` | 37 / 37 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | 2 | 0 |
+| `zero_fee_next_day` | 37 / 37 | 1 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `utc_same_day` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `utc_different_day` | 37 / 37 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | 2 | 0 |
+| `dismiss_active` | 37 / 37 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `dismiss_expired` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `dismiss_equal` | 37 / 37 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `dismiss_invalid` | 37 / 37 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `dismiss_future` | 37 / 37 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `duplicate_ln` | 36 / 36 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 3 | 0 |
+| `duplicate_chain` | 36 / 36 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 3 | 0 |
+| `duplicate_occupied` | 36 / 36 | 0 | 0 | 0 | 3 | 0 | 0 | 1 | 2 | 0 |
+| `duplicate_dismissed` | 36 / 36 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 2 | 0 |
+| `network_mismatch` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `network_unknown` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `amount_increase` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `amount_excess_fee` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `canonical_mismatch` | 36 / 36 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | 2 | 0 |
+| `source_untrusted` | 36 / 36 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `target_stale` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `observer_mismatch` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `occupied_loan` | 36 / 36 | 1 | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
+| `occupied_channel` | 36 / 36 | 1 | 1 | 1 | 0 | 0 | 1 | 1 | 0 | 0 |
+| `privacy_native` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `pending_claim` | 36 / 36 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 2 | 2 |
+| `failed_payment` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `timeout_missing_proof` | 36 / 36 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `refund_wrong_outpoint` | 36 / 36 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `refund_duplicate_funding` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `refund_partial_output` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `refund_batched` | 36 / 36 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `provider_conflict` | 36 / 36 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 2 | 0 |
+| `provider_same_edge` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `provider_only` | 36 / 36 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `provider_different_network` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `policy_taxable` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `policy_austria` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `alias_asset` | 36 / 36 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `raw_reverse_prefix` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `raw_wrong_hash` | 36 / 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `mixed_recorded` | 36 / 36 | 1 | 1 | 1 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `mixed_pipeline` | 36 / 36 | 1 | 1 | 1 | 0 | 6 | 1 | 0 | 0 | 0 |
+| `mixed_samourai` | 36 / 36 | 1 | 1 | 1 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `mixed_channel` | 36 / 36 | 1 | 1 | 1 | 0 | 2 | 2 | 2 | 0 | 0 |
+
+The generator compares **2,000 books per engine**, **110 permutations** and
+**110 full-Python interpreter controls**. Per engine, totals are **1,458
+candidates, 948 native pairs, 948 proofs, 762 native quarantines, 1,787 composed
+claims, 144 audits, 180 non-events, 798 blocked ids and 72 transient ids**.
+Existing producers retain their independent scenario matrices.
+
+### Verification and remaining work
+
+Verification uses `mise exec rust@1.99.1 uv@latest -- ...`, a locked Python
+3.11 environment created with `uv sync --locked --python 3.11`,
+`MATURIN_NO_INSTALL_RUST=1`, offline Cargo (including child builds) and disposable
+roots. Formatting, Clippy and the workspace suite also pass after the final
+helper-witness additions.
+
+- `cargo fmt --all --check` and workspace/all-target Clippy with warnings denied
+  pass. Offline locked workspace tests excluding `kassiber-net` pass **732
+  tests**. The selected native/helper Rust run passes **13 tests**, including
+  the 59-snapshot projection. The final signed-fee ordering witness also passes
+  its named unmutated baseline before killing the ordering mutation.
+- Inventory classification and contracts checks pass; inventory/contracts/shared
+  mutation-runner contracts pass **13 tests and 14 subtests**. Catalog
+  applicability reports **1,035 entries apply**, naming **315 test filters**.
+  The ledger feature comparison retains **145 byte-identical outputs**.
+- Focused census and recording pass **69 tests and 21 subtests**, comparing
+  every partial projection for **10 raw requests**. Fresh-process integrity
+  replay passes all **10 snapshots**. Rust replay compares **10 requests and
+  10 permutations**, with **zero pre-request refusals and zero differences**.
+- All **1,035 mutations are killed**: **889 retained** and **146 new**. Four
+  disjoint partitions account for 256/255/255/254 kills, 14 added branch
+  mutations are killed separately, and one signed-fee-order mutation is killed
+  after adding an independent multi-candidate ordering witness. Its earlier
+  single-candidate witness survived and is not counted as a kill. The final
+  kill-id union equals the catalog exactly, without duplicates, missing ids,
+  nonbuilding mutations or surviving entries. Every run proves its named
+  baseline before applying a mutation.
+- The broad custody, lifecycle, loan, ownership and transfer modules report
+  **787 passed and 2,674 subtests passed, with four failures**. All ten seeded
+  2,000-book corpora complete, including the new native suite and its independent
+  per-engine counts, 110 permutations and 110 full-Python interpreter controls.
+  The four failures are the two `CustodyComponentDaemonSurfaceTests` and the two
+  real-JSONL `CustodyGapDaemonProtocolAcceptanceTests`: their unchanged stable
+  owner-lock namespace is `~/.kassiber/run`, which is read-only in this sandbox.
+  A focused diagnostic rerun confirms `internal_error` / `Read-only file system`
+  for that namespace in all four error envelopes. No product guard is weakened
+  and none of these four failures is reported as passing.
+
+Remaining R2 slices: native component reconciliation and final interpreter
+composition, followed by gaps, quantity arbitration and finalized projection
+before custody joins the ledger. Full census and custody-shadow shards remain
+assigned to the orchestrator. No push or PR belongs to this checkpoint.

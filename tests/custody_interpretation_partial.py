@@ -68,14 +68,14 @@ def producer_results(snapshot, observations, excluded, *, consolidation=False):
         return {"error": type(exc).__name__}
 
 
-def pipeline_results(snapshot, observations, excluded, canonical, touched, *, production_only=False, recorded_pairs=None):
+def pipeline_results(snapshot, observations, excluded, canonical, touched, *, production_only=False, recorded_pairs=None, reserved=()):
     from kassiber.core.custody_snapshot import decode_owned_index
     from kassiber.core.ownership_transfers import derive_profile_transfers, ProfileTransferDerivation, OwnershipDeriveResult, _rows_after_derivation
     from kassiber.transfers import onchain_transfer_scope
     try:
         rows=snapshot["transactions"]
         recorded=reference.detect_intra_transfers(rows)[0] if recorded_pairs is None else recorded_pairs
-        handled=set(touched)|reference._complete_recorded_pair_ids(recorded,observations)
+        handled=set(touched)|reference._complete_recorded_pair_ids(recorded,observations)|set(reserved)
         eligible=any(event.event_key.native_namespace=="chain" for event in canonical.events) or snapshot["owned_index"] is not None
         normalized=[]
         for row in rows:
@@ -161,7 +161,8 @@ def python_results(snapshot):
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
     from tests.custody_safety_partial import safety_results
-    return to_jsonable({"channels": channel_results(snapshot), "safety": safety_results(snapshot, observations, excluded, canonical), "graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
+    from tests.custody_native_partial import native_results
+    return to_jsonable({"native": native_results(snapshot, observations), "channels": channel_results(snapshot), "safety": safety_results(snapshot, observations, excluded, canonical), "graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
         "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
         "handled_ids": sorted(handled), "claims": fanout_claims,
         "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,

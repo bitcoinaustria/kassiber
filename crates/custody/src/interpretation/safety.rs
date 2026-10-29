@@ -1,9 +1,9 @@
 //! Composed comparison seam through privacy, raw holds and dependency closure.
-//! Native HTLC production and reconciliation remain unported.
+//! Native HTLC production is composed before graph derivation; reconciliation remains pending.
 use super::{
     array, channels,
     holds::{self, Ids},
-    pairs, pipeline, privacy, recorded, samourai, Context,
+    native, pairs, pipeline, privacy, recorded, samourai, Context,
 };
 use crate::{codec, snapshot::Snapshot};
 use serde_json::{json, Value};
@@ -50,7 +50,31 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         } else {
             Vec::new()
         };
-        let mut prepared = pipeline::prepare_with_pairs(snapshot, context, rows, auto)?;
+        let mut occupied = context.excluded.clone();
+        occupied.extend(ids(&samourai["touched_ids"]));
+        occupied.extend(channel_roles.keys().cloned());
+        occupied.extend(recorded::resolved_ids(&auto, context, true));
+        occupied.extend(array(&channel["pairs"]).iter().flat_map(holds::anchors));
+        occupied.extend(
+            snapshot
+                .loan_legs
+                .iter()
+                .filter_map(|leg| leg.get("transaction_id"))
+                .filter(|&id| codec::truth(id))
+                .map(codec::pystr),
+        );
+        let native = native::compute(snapshot, context, &occupied)?;
+        let native_trace = json!({"occupied_ids":occupied,"pairs":native.pairs,"proofs":native.proof_values,"quarantines":native.quarantines});
+        let native_ids: Ids = native
+            .proofs
+            .keys()
+            .flat_map(|(a, b)| [a.clone(), b.clone()])
+            .collect();
+        let native_blocked = blocked(&native.quarantines);
+        let mut reserved = native_ids.clone();
+        reserved.extend(native_blocked.iter().cloned());
+        let mut prepared =
+            pipeline::prepare_with_reserved(snapshot, context, rows, auto, &reserved)?;
         prepared
             .candidates
             .extend(array(&channel["pairs"]).iter().cloned());
@@ -68,7 +92,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
             context,
             &wallets,
             &ids(&samourai["candidate_ids"]),
-            &Ids::new(),
+            &native_ids,
         )?;
         let derivation_blocked = blocked(&prepared.derivation_quarantines);
         let mut touched = derivation_blocked.clone();
@@ -81,11 +105,14 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
             .collect();
         candidates.extend(array(&samourai["pairs"]).iter().cloned());
         candidates.extend(derived.iter().cloned());
+        candidates.extend(native.pairs.iter().cloned());
         let mut other_blocked = derivation_blocked;
         other_blocked.extend(channel_blocked);
+        other_blocked.extend(native_blocked);
         other_blocked.extend(ids(&privacy["blocked_transaction_ids"]));
         other_blocked.extend(ids(&samourai["blocked_transaction_ids"]));
         let mut resolved = context.excluded.clone();
+        resolved.extend(native_ids);
         resolved.extend(ids(&samourai["touched_ids"]));
         resolved.extend(recorded::resolved_ids(&prepared.recorded, context, true));
         resolved.extend(channel_roles.keys().cloned());
@@ -123,7 +150,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         })?;
         let kept = holds::without_held(&candidates, &holds.blocked_ids);
         let derived = holds::without_held(derived, &holds.blocked_ids);
-        let compiled = pairs::compile(&kept, context, snapshot)?;
+        let compiled = pairs::compile_with_proofs(&kept, context, snapshot, &native.proofs)?;
         let mut claims = array(&compiled["claims"]).to_vec();
         claims.extend(array(&samourai["fee_claims"]).iter().cloned());
         let pair_blocked = ids(&compiled["blocked_transaction_ids"]);
@@ -141,9 +168,10 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         quarantines.extend(channel_quarantines);
         quarantines.extend(array(&privacy["quarantines"]).iter().cloned());
         quarantines.extend(array(&samourai["quarantines"]).iter().cloned());
+        quarantines.extend(native.quarantines);
         quarantines.extend(holds.quarantines.iter().cloned());
         Ok::<_, String>(
-            json!({"non_event_transaction_ids":non_events,"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient}),
+            json!({"native_transitions":native_trace,"handled_ids":prepared.handled,"non_event_transaction_ids":non_events,"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient}),
         )
     };
     Ok(run().unwrap_or_else(|error| json!({"error":error})))

@@ -10,7 +10,7 @@ from tests.custody_interpretation_activity import assert_scenario_activity
 
 def test_shared_compilation_aliases_and_product_skip():
     book = snapshot(SCENARIOS.index("duplicate_slot"))
-    assert compare(book) == ("channels", "safety", "graph", "pipeline", "consolidation", "ownership", "fanout", "recorded", "samourai", "shared")
+    assert compare(book) == ("native", "channels", "safety", "graph", "pipeline", "consolidation", "ownership", "fanout", "recorded", "samourai", "shared")
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert "interpretation" in response["skipped_stages"]
     assert "interpretation" not in response["stages"]

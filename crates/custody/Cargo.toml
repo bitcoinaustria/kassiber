@@ -17,3 +17,5 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
 # std has no SHA-256; persisted observer/evidence commitments require it.
 sha2 = "0.10"
+# Legacy HTLC witness replay needs HASH160; std and sha2 have no RIPEMD160.
+bitcoin_hashes = "0.14.101"

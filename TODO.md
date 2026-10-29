@@ -41,9 +41,8 @@ raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Finish interpreter compilation after the [channel lifecycle and loan roles checkpoint](docs/reference/custody-engine.md#channel-lifecycle-and-loan-roles-checkpoint-r2c-partial):
-  HTLC transitions; native component
-  reconciliation and final composition. Keep `interpretation` skipped until the
+- [ ] Finish interpreter compilation after the [native HTLC production and reservations checkpoint](docs/reference/custody-engine.md#native-htlc-production-and-reservations-checkpoint-r2c-partial):
+  native component reconciliation and final composition. Keep `interpretation` skipped until the
   complete stage passes.
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration
   and finalized tax projection, comparing each stage before fusing it.

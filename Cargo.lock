@@ -1549,6 +1549,7 @@ dependencies = [
 name = "kassiber-custody"
 version = "0.1.0"
 dependencies = [
+ "bitcoin_hashes",
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "serde",
