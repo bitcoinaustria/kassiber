@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   // Set to hold the next upload chunk open until the test settles it.
   uploadHeld: null as null | (() => void),
   holdUpload: false,
+  // Tokens the next turn reports as no longer readable.
+  expired: [] as string[],
 }));
 
 vi.hoisted(() => {
@@ -63,9 +65,15 @@ vi.mock("@/daemon/transport", async (importOriginal) => ({
         request_id: (request as { request_id?: string }).request_id,
         data: { delta: { content: mocks.answer } },
       });
+      const expired = mocks.expired;
+      mocks.expired = [];
       return Promise.resolve({
         kind: "ai.chat",
-        data: { session_id: mocks.savedAs, finish_reason: "stop" },
+        data: {
+          session_id: mocks.savedAs,
+          finish_reason: "stop",
+          ...(expired.length ? { expired_attachments: expired } : {}),
+        },
       });
     },
     invoke: async (request: Request) => {
@@ -168,6 +176,7 @@ describe("a pasted chat file", () => {
     mocks.holdNext = false;
     mocks.uploadHeld = null;
     mocks.holdUpload = false;
+    mocks.expired = [];
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
       notifications: [],
@@ -239,6 +248,22 @@ describe("a pasted chat file", () => {
     view.rerender(provider());
     await act(async () => session.sendPrompt("Without the image"));
     expect(lastChat().attachments).toEqual([{ token: "grant-a.csv" }, { token: "grant-c.csv" }]);
+  });
+
+  it("drops a file whose access expired, and says so", async () => {
+    const view = render(provider());
+    await act(async () => session.attachFiles!([csv("a.csv"), csv("receipt.png")]));
+    view.rerender(provider());
+    mocks.expired = ["grant-receipt.png"];
+    await act(async () => session.sendPrompt("Still there?"));
+    view.rerender(provider());
+    expect(session.attachments.map((file) => file.filename)).toEqual(["a.csv"]);
+    const notice = useUiStore.getState().notifications[0];
+    expect(notice?.title).toBe("An attached file expired");
+    expect(notice?.body).toContain("receipt.png");
+    // The next turn no longer offers it.
+    await act(async () => session.sendPrompt("And now?"));
+    expect(lastChat().attachments).toEqual([{ token: "grant-a.csv" }]);
   });
 
   it("skips what it cannot take and stops at the chat's limit", async () => {

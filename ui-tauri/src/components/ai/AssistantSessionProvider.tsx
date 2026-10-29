@@ -503,6 +503,25 @@ export function AssistantSessionProvider({
             }))
           : undefined,
       )).then((outcome) => {
+        // Files whose staging grant ended: the turn went on without them, and
+        // the chat drops them so later turns do not offer them either.
+        const expired = outcome?.expiredAttachments;
+        if (expired?.length) {
+          const gone = new Set(expired);
+          const names = attachmentsRef.current
+            .filter((file) => gone.has(file.token))
+            .map((file) => file.filename);
+          setAttachments(attachmentsRef.current.filter((file) => !gone.has(file.token)));
+          useUiStore.getState().addNotification({
+            title: tRef.current("composer.attachmentExpired.title", { count: expired.length }),
+            body: tRef.current("composer.attachmentExpired.body", {
+              count: expired.length,
+              filenames: names.join(", "),
+            }),
+            tone: "info",
+            dedupeKey: "assistant-attachment-expired",
+          });
+        }
         // Refused because another book was open when it arrived: the same
         // rule as a client-side mismatch. A handoff or evidence continuation
         // was written from that book's data and is dropped; the user's own
@@ -516,7 +535,7 @@ export function AssistantSessionProvider({
       });
       return true;
     },
-    [bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, setShownTokens, thinkingEffort, toolProfileFor],
+    [bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, setAttachments, setShownTokens, thinkingEffort, toolProfileFor],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn });

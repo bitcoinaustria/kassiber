@@ -391,6 +391,16 @@ interface AiChatTerminalShape {
   finish_reason?: string | null;
   provenance?: AiAnswerProvenance;
   session_id?: string | null;
+  /** Tokens of attached files this turn could no longer read (expired grants). */
+  expired_attachments?: string[];
+}
+
+/** How a sent turn ended, for the caller that sent it. */
+export interface AiChatSendOutcome {
+  /** Refused before it started because another book is open. */
+  refused: boolean;
+  /** Attached files the daemon could no longer read, by their tokens. */
+  expiredAttachments?: string[];
 }
 
 export interface AiChatToolCallShape {
@@ -526,7 +536,7 @@ export interface UseAiChatStreamResult {
     request: AiChatRequest,
     userMessageContent: string,
     userAttachments?: AiChatMessageAttachment[],
-  ) => Promise<{ refused: boolean }>;
+  ) => Promise<AiChatSendOutcome>;
   sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
   /**
    * Switch the running turn to `mode` (`ai.chat.permission_mode`). Nothing
@@ -1099,8 +1109,9 @@ export function useAiChatStream(): UseAiChatStreamResult {
       request: AiChatRequest,
       userMessageContent: string,
       userAttachments?: AiChatMessageAttachment[],
-    ): Promise<{ refused: boolean }> => {
+    ): Promise<AiChatSendOutcome> => {
       if (isStreaming) return { refused: false };
+      let expiredAttachments: string[] | undefined;
       setError(null);
       setIsStreaming(true);
       setPendingConsents([]);
@@ -1196,6 +1207,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
         }
 
         const finishReason = envelope.data?.finish_reason ?? null;
+        const expired = envelope.data?.expired_attachments;
+        if (Array.isArray(expired) && expired.length) {
+          expiredAttachments = expired.filter((token): token is string => typeof token === "string");
+        }
         // Flush any pending tag-prefix bytes still in the parser.
         const parser = parserRef.current;
         if (parser && !controller.signal.aborted) {
@@ -1274,7 +1289,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           requestIdRef.current = null;
         }
       }
-      return { refused: false };
+      return expiredAttachments ? { refused: false, expiredAttachments } : { refused: false };
     },
     [flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );

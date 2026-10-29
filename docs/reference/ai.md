@@ -1712,8 +1712,11 @@ while a pasted file is still on its way.
 `ai.chat` takes the chat's files as `attachments: [{token, label?, new?}]`, in
 order; the daemon names them `file-1` … `file-8` and adds a note to the turn
 listing each one and how the model can read it. `new` marks the files the
-message first sends. What the model sees depends on its
-[agent access](#agent-access):
+message first sends. A file whose staging grant ended (30 minutes unused)
+or belongs to another book is left out instead of failing the turn: the note
+says that id is no longer available, the result's `expired_attachments`
+returns its token, and the chat drops the file with a notice. What the model
+sees depends on its [agent access](#agent-access):
 
 - **Spreadsheets** (CSV, TSV, XLSX) are read through `ui_wallets_analyze_file`
   and imported through the plan and apply below, naming the file by id
