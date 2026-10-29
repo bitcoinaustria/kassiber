@@ -1615,6 +1615,18 @@ composition is deferred until the Python dependency-origin reference is fixed.
 Conversion metadata does not read quarantine origins. Journal fusion remains
 separate.
 
+### Projection restack on reviewed quantity (R2f, partial)
+
+The local `t3code/r2f-projection-5` branch restacks the five projection commits
+onto `fc63c1e0`, retaining the quantity-review corrections, then includes Python
+fixes `117eb35d` (finite pricing) and `ca9a672f` (fixed-point, sorted dependency
+origins). Rust base rows, principal rates and payout pricing now follow the
+fixed Python refusals. This is a step-1 checkpoint: issue/quarantine composition
+and its Rust origin-completeness test remain unported. Finalized projection
+stays skipped in PyO3, census, shadow and replay. Complete that stage before
+journal fusion with `ledger`. See the
+[restack evidence](../reference/custody-engine.md#projection-restack-on-reviewed-quantity-r2f-partial).
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

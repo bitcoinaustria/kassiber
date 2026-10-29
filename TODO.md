@@ -50,7 +50,9 @@ mutation entries.
   [quantity now participates in full-stage comparison](docs/reference/custody-engine.md#complete-quantity-runtime-checkpoint-r2e).
 - [ ] Complete finalized tax projection and compare it before journal fusion.
   Reviewed conversion audit metadata is ported as a private comparison primitive;
-  issue/quarantine composition awaits the Python dependency-origin fix. The
+  issue/quarantine composition remains unported. The Python dependency-origin
+  and nonfinite-pricing fixes are included in the
+  [verified restack](docs/reference/custody-engine.md#projection-restack-on-reviewed-quantity-r2f-partial). The
   finalized stage remains skipped; see the [checkpoint](docs/reference/custody-engine.md#reviewed-conversion-metadata-checkpoint-r2f-partial).
   [The row primitive checkpoint](docs/reference/custody-engine.md#finalized-row-primitive-checkpoint-r2f-partial)
   ports row identities, validation, base rows and fee-only rows. The

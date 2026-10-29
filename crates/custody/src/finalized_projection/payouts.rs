@@ -331,11 +331,12 @@ pub(super) fn settlement(obs: &Value, payout: &Value, rows: &Value) -> Result<Va
     if amount <= BigInt::from(0) || empty(value) {
         return Ok(Value::Null);
     }
-    let value = Money::parse(value)?;
+    let value = Money::finite(value)?;
     if !value.positive()? {
         return Ok(Value::Null);
     }
     let rate = value.rate(&amount)?;
+    rate.require_finite()?;
     let id = if codec::truth(&payout["id"]) {
         string(&payout["id"])
     } else {
@@ -376,8 +377,9 @@ pub(super) fn settlement(obs: &Value, payout: &Value, rows: &Value) -> Result<Va
 }
 pub(super) fn price(mut row: Value, payout: &Value, amount: &BigInt) -> Result<Value, String> {
     if !empty(&payout["payout_fiat_value"]) && amount > &BigInt::from(0) {
-        let value = Money::parse(&payout["payout_fiat_value"])?;
+        let value = Money::finite(&payout["payout_fiat_value"])?;
         let rate = value.rate(amount)?;
+        rate.require_finite()?;
         row["fiat_rate"] = rate.float()?;
         row["fiat_rate_exact"] = json!(rate.fixed()?);
         row["fiat_value"] = value.float()?;

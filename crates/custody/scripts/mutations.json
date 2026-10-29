@@ -21156,12 +21156,12 @@
   {
     "id": "projection2-money-sign",
     "file": "crates/custody/src/finalized_projection/money.rs",
-    "find": "if negative { \"-\" } else { \"\" }",
-    "replace": "if negative { \"\" } else { \"\" }",
+    "find": "let raw = string(v);",
+    "replace": "let raw = string(v).trim_start_matches('-').to_owned();",
     "expect_failing": [
       "projection_slice_pricing_vectors"
     ],
-    "rule": "Nonfinite exact values preserve their Python decimal sign."
+    "rule": "Finite exact principal prices preserve their Python decimal sign after nonfinite prices are refused."
   },
   {
     "id": "projection2-money-underflow",
@@ -21742,5 +21742,75 @@
       "projection_reviewed_conversion_vectors"
     ],
     "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection5-base-price-admission",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "money::Money::finite(&result[field])?;",
+    "replace": "let _ = &result[field];",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Base row prices are validated before quantity and chain evidence parsing."
+  },
+  {
+    "id": "projection5-finite-legacy-float",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "Self::Finite(d) if d.to_string().parse::<f64>().is_ok_and(f64::is_finite) => Ok(()),",
+    "replace": "Self::Finite(_) => Ok(()),",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Finite decimals must also have finite legacy float representations."
+  },
+  {
+    "id": "projection5-finite-error-family",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "Self::parse(v).map_err(|_| \"AppError\".to_owned())?",
+    "replace": "Self::parse(v)?",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Malformed payout values retain the AppError family."
+  },
+  {
+    "id": "projection5-settlement-value",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "let value = Money::finite(value)?;",
+    "replace": "let value = Money::parse(value)?;",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Settlement rejects every nonfinite payout value before sign checks."
+  },
+  {
+    "id": "projection5-settlement-rate",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "    rate.require_finite()?;\n    let id",
+    "replace": "    let id",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Settlement refuses derived rate float overflow before timestamp parsing."
+  },
+  {
+    "id": "projection5-price-rate",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "        rate.require_finite()?;",
+    "replace": "        let _ = &rate;",
+    "expect_failing": [
+      "projection_payout_price_vectors"
+    ],
+    "rule": "Direct payout price overrides refuse derived rate float overflow."
+  },
+  {
+    "id": "projection5-slice-rate",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "                rate.require_finite()?;",
+    "replace": "                let _ = &rate;",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal slices refuse derived rate float overflow."
   }
 ]

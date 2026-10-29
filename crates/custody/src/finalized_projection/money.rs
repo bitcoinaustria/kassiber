@@ -56,6 +56,18 @@ impl Money {
             Err(e) => Err(error(e)),
         }
     }
+    // finite_decimal rejects parse errors, Decimal specials, and legacy float overflow.
+    pub(super) fn finite(v: &Value) -> Result<Self, String> {
+        let value = Self::parse(v).map_err(|_| "AppError".to_owned())?;
+        value.require_finite()?;
+        Ok(value)
+    }
+    pub(super) fn require_finite(&self) -> Result<(), String> {
+        match self {
+            Self::Finite(d) if d.to_string().parse::<f64>().is_ok_and(f64::is_finite) => Ok(()),
+            _ => Err("AppError".into()),
+        }
+    }
     pub(super) fn positive(&self) -> Result<bool, String> {
         match self {
             Self::Finite(d) => Ok(d.is_positive()),

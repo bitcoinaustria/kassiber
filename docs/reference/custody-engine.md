@@ -2674,3 +2674,118 @@ trials are excluded. The final per-entry audit is
 `target/r2f4-verify/mutation-summary.json`; batch logs, target mapping, runner
 adapter and audit script are retained beside it. Every final catalog id has
 exactly one audited kill, with no missing or duplicate entries.
+
+## Projection restack on reviewed quantity (R2f, partial)
+
+Local branch `t3code/r2f-projection-5` starts at `fc63c1e0`. This checkpoint
+completes the requested restack and inherited verification only. The complete
+issue/quarantine compiler, barrier-held receipt explanations and dependency
+origins still need a Rust port. `finalized_projection` remains skipped in PyO3,
+census, custody-shadow and replay. Python owns production accounting and
+persistence; snapshot v1 remains raw-only. Journal fusion follows complete
+projection parity.
+
+| Requested commit | Restacked commit | Scope |
+| --- | --- | --- |
+| `a178a48f` | `fc30eeb8` | Finalized row primitives |
+| `e589c9a3` | `aa44ab11` | Pricing, payouts and fees |
+| `1526b1dc` | `6ba5f6bf` | Selected rows and scoped barriers |
+| `ddeec82f` | `dfb72b16` | Reviewed conversion metadata |
+| `d73a348b` | `6300605e` | Conversion checkpoint evidence |
+| `117eb35d` | `077d9f28` | Shipped Python finite-pricing fix |
+| `ca9a672f` | `c80ee752` | Shipped Python fixed-point origin fix |
+
+Only the first cherry-pick conflicted. Its mutation-catalog and custody-engine
+reference conflicts were additive: both the quantity-review additions and the
+projection additions were retained, with valid JSON object boundaries. The
+remaining six commits applied cleanly. The quantity refusal harness, own-seed
+activity rules, distinct compiler/runtime operands and mutation corrections from
+`fc63c1e0` remain intact.
+
+Rust now admits all four base-row price fields before chain evidence or quantity
+parsing, rejects malformed/nonfinite payout values with Python's `AppError`
+family, and checks derived rates before timestamps or base-row construction.
+Positive-amount and empty-value guards retain Python's earlier precedence.
+Scientific notation is used only for the mandatory legacy-float finiteness
+check, avoiding fixed-format padding for extreme exponents; amounts and decimal
+values retain their exact representations. Frozen `payout_settlement_inf` now
+expects `AppError`. Nonfinite negative payouts no longer count as empty controls.
+The fixtures also pin finite legacy-float overflow, derived-rate overflow,
+price-before-amount errors and all four raw pricing fields, including very small
+finite decimals.
+
+Each projection seed owns its activity. Explicit empty-success controls remain
+separate; refusals count only after comparison. Primitive engine evaluations are
+deduplicated across labels as well as repeated variants. The named
+`test_projection_duplicate_operands_evaluated_once` pins that rule;
+`test_projection_primitive_vacuous_is_rejected`,
+`test_projection_composition_vacuous_is_rejected`, and
+`test_projection_conversion_vacuous_is_rejected` reject empty activity claims.
+The quantity generator's independent-input and vacuity regressions also remain.
+
+No new Python reference bug was found. The old origin reproduction, copied to
+`target/r2f5-verify/origin-repro.py`, now prints `['source', 'target']` under
+both `PYTHONHASHSEED=1` and `PYTHONHASHSEED=2`, using the fixed Python. Its
+Rust-side completeness/sorting witness belongs to the deferred composition port.
+The formerly accepted nonfinite-price reproduction is now a matched refusal.
+
+| Verification | Result |
+| --- | --- |
+| Inherited generator/primitive pytest lane | 62 tests passed |
+| Earlier five stages, inherited raw suites | 24,000 books, 1,030 permutations; zero differences; 21,941 distinct primary inputs across the 12 suites |
+| Primitive projection generator | 173 scenarios, 1,153 distinct inputs per engine; zero differences; 358 distinct refusals compared (265 AppError, 50 TypeError, 41 ValueError, 2 OverflowError) |
+| Selected-row composition generator | 1,260 distinct inputs and permutations per engine; zero differences; 140 refusals compared |
+| Reviewed conversion generator | 480 distinct inputs and permutations per engine; zero differences; 100 refusals compared |
+| Activity falsification | Direct vacuous primitive probe exits 1; named primitive/composition/conversion regressions pass |
+| Retained read-only replay | 159 requests and 159 permutations; zero differences or pre-request refusals |
+| Focused census | 146 tests; components 13 comparisons, remaining implemented stages 12 each; zero mismatches |
+| Focused custody-shadow | 146 tests; same stage counts, plus 11 frozen Python comparisons; zero mismatches |
+| Finalized projection inventory | 0 compared, 14 skipped in each focused lane, including refused/injected builds |
+| Fresh synthetic recording integrity and replay | 25 snapshots, zero integrity problems; 25 requests and 25 permutations, zero differences or pre-request refusals |
+| Projection / harness contracts | 11 final projection tests; 77 recorder/shadow/mutation/inventory contract tests and 14 subtests; all passed |
+| Rust workspace | 817 tests passed, including disposable owned loopback-server tests |
+| Formatting and Clippy | Workspace fmt and all-target Clippy with `-D warnings` passed |
+
+Raw book totals above are corpus iterations, not distinct-input totals. The
+primitive generator retains five shared operands across scenario labels, but
+evaluates each only once per engine; scenario activity is not added together
+and presented as an independent-input total. No companion contributes activity.
+
+The locked Python 3.11 environment and binding use Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1`, offline uv after setup, and offline Cargo. All fresh
+recordings and verification artifacts stay under `target/r2f5-verify/`; the
+retained corpus was read only. The full quality gate is not claimed and no
+push or pull request is in scope. A manual second pass reviewed the restack,
+pricing admission order, exact arithmetic boundary, fixtures and activity counts.
+
+### Restacked mutation catalog
+
+All **2,180 final recipes** have audited named-test kills: **2,173 inherited**
+(including one adapted recipe) and **7 new**. All 384 named witness filters pass
+unmutated. The full inherited catalog was rerun; no inherited kill was assumed.
+
+| New pricing guard | Named witness |
+| --- | --- |
+| Base-row admission before quantity/chain parsing | `projection_slice_pricing_vectors` |
+| Legacy-float finiteness and malformed-value error family | `projection_payout_settlement_vectors` |
+| Settlement value admission and derived-rate overflow | `projection_payout_settlement_vectors` |
+| Price-override derived-rate overflow | `projection_payout_price_vectors` |
+| Principal derived-rate overflow | `projection_slice_pricing_vectors` |
+
+The inherited `projection2-money-sign` recipe changed only a nonfinite decimal's
+sign. Fixed Python rejects that value before its sign matters, so the old
+recipe survives and is obsolete. It is replaced with a finite-price sign
+mutation, killed by the same named `projection_slice_pricing_vectors` witness.
+The old trial is explicitly excluded from kill accounting; its batch exits 1
+for that obsolete recipe alone. The replacement has its own passing baseline,
+building mutant and failing witness. All other batch entries passed their
+original checker. The final per-entry audit verifies recipe equality against
+the final catalog and rejects any missing, duplicate or unexpected failure.
+
+The first full run was interrupted after the scientific-notation admission
+correction; none of its trials count. The final eight-batch run plus the one
+replacement recipe are audited in `target/r2f5-verify/mutation-summary.json`.
+`audit-catalog.py`, the targeted Cargo adapter, baseline/build/kill logs and
+recipe inputs remain alongside it. The final catalog has no surviving recipe
+or build error. No equivalent, interrupted or failed-baseline trial is counted
+as a kill.

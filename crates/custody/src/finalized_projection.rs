@@ -133,6 +133,16 @@ pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, String> {
     } else {
         json!({})
     };
+    for field in [
+        "fiat_value",
+        "fiat_value_exact",
+        "fiat_rate",
+        "fiat_rate_exact",
+    ] {
+        if !money::empty(&result[field]) {
+            money::Money::finite(&result[field])?;
+        }
+    }
     result["custody_chain_order"] = chain_order(&result)?;
     for key in ["wallet_id", "asset", "direction", "occurred_at"] {
         result[key] = observation[key].clone();

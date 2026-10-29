@@ -23,7 +23,8 @@ pub fn slice_row(
         };
         if !money::empty(value) {
             // Python catches arithmetic/parse failures here, but not base-row admission.
-            if let Ok(rate) = money::Money::parse(value).and_then(|v| v.rate(&original)) {
+            if let Ok(rate) = money::Money::finite(value).and_then(|v| v.rate(&original)) {
+                rate.require_finite()?;
                 base["fiat_rate"] = rate.float()?;
                 base["fiat_rate_exact"] = json!(rate.fixed()?);
             }

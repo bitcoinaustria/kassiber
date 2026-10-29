@@ -71,6 +71,10 @@ def operands():
     yield dict(case='base_source_precedence',op='base',observation=dict(obs,anchor_transaction_id='anchor'),rows={'source':row,'anchor':dict(row,extra='fallback')})
     yield dict(case='fee_anchor',op='fee',observation=dict(obs,anchor_transaction_id='anchor'),rows={'anchor':row},amount=7,side='non-event-fee')
     yield dict(case='base_raw_exact',op='base',observation=dict(obs,occurred_at='2025-W01-3X12:34:56.123456+00:00'),rows={'source':dict(row,amount=10**150+1,fee=10**100+3,kind='StraßeΣİ')})
+    for field in ('fiat_value', 'fiat_value_exact', 'fiat_rate', 'fiat_rate_exact'):
+        for name, value in [('nonfinite', 'Infinity'), ('overflow', '1e999999999'), ('tiny', '1e-100000001')]:
+            yield dict(case=f'base_price_{field}_{name}', op='base', observation=obs,
+                       rows={'source': dict(row, **{field: value})})
     for external, raw in [(None,None),('',[]),(False,''),('kept',{'x':1})]:
         yield dict(case='fallback_'+str(external),op='base',observation=obs,rows={'source':dict(row,external_id=external,raw_json=raw)})
     for authority, attribution in [(False,'exact'),(True,'shared'),(True,'exact')]:
@@ -92,6 +96,16 @@ def operands():
 
 def vectors():
     return [dict(v,**evaluate(v)) for v in operands()]
+
+
+_evaluated = {}
+
+
+def evaluate_distinct(value):
+    key = json.dumps(value, sort_keys=True)
+    if key not in _evaluated:
+        _evaluated[key] = evaluate(value)
+    return deepcopy(_evaluated[key])
 
 
 def scenario(i,variant):
@@ -131,7 +145,7 @@ def scenario(i,variant):
         for d in v['decisions']:
             d['source']['start_msat']*=factor;d['source']['end_msat']*=factor
         for o in v['observations'].values():o['fee_msat']*=factor
-    return base['case'],[v],[evaluate(v)]
+    return base['case'],[v],[evaluate_distinct(v)]
 
 
 def activity(result):
