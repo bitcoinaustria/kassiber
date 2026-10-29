@@ -217,7 +217,7 @@ fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result
     Ok(())
 }
 
-fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
+fn capital_gains_rows(conn: &Connection, profile: &Value) -> Result<(Option<String>, Vec<Value>)> {
     let database: Option<String> = conn
         .query_row(
             "SELECT value FROM settings WHERE key='database_instance_id'",
@@ -225,9 +225,9 @@ fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
             |r| r.get(0),
         )
         .ok();
-    let mut result = rows(conn,"SELECT je.id AS journal_entry_id,je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,je.capital_gains_type FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[text(profile,"id")])?;
-    for row in &mut result {
-        let db = database
+    let result = rows(conn,"SELECT je.id AS journal_entry_id,je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,je.capital_gains_type FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[text(profile,"id")])?;
+    if !result.is_empty() {
+        database
             .as_deref()
             .filter(|s| {
                 s.len() == 32
@@ -240,6 +240,16 @@ fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
                     "database instance identity is missing or invalid",
                 )
             })?;
+    }
+    Ok((database, result))
+}
+
+fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
+    let (database, mut result) = capital_gains_rows(conn, profile)?;
+    for row in &mut result {
+        let db = database
+            .as_deref()
+            .expect("validated capital gains identity");
         let reference = dict([
             ("database_id", s(db)),
             ("workspace_id", value(profile, "workspace_id").clone()),

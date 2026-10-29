@@ -982,6 +982,23 @@ records exact parity, mutations, routing counts and verification limits.
 The [historical read checkpoint](../reference/rust-shell.md#reports-historical-read-checkpoint-r5-third-continuation-partial)
 records this continuation's process-boundary evidence and deferrals.
 
+### R5 read-path performance
+
+Existing-book opens compare exact current schema definitions before falling
+back to the normalized structural gate. Compatibility repairs avoid replacing
+unchanged indexes, views and triggers, reuse column inventories within ordered
+ranges, and probe Liquid assets through existing covering indexes. All audit,
+semantic, ownership, unlock and no-egress gates remain in place; no schema or
+dependency changes are introduced.
+
+Report admission uses the same network evidence interpreter without building
+the review-only digest and presentation payload. Neutral observations reuse
+wallet/asset evidence facts within that read, without caching admission across
+reads. Holdings stream candidate quotes with the original error precedence;
+summary reuses ordered capital-gains rows without constructing unused public
+references. Python accounting and report output remain the reference. See
+[measurements and verification](../reference/rust-read-performance.md).
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

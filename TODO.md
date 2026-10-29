@@ -237,6 +237,9 @@ read Python-produced journals through ten CLI leaves and five daemon kinds.
 - [ ] Port exit-tax reads and the associated amendment disclosures.
 - [x] Port historical balance/holdings reads and the desktop balance-history
   kind with native parity and killed mutations.
+- [x] Reduce Rust read startup and report scaling costs without changing schema,
+  admission checks or output bytes; see the
+  [read-path measurements](docs/reference/rust-read-performance.md).
 - [ ] Port individual snapshot lookup and amendment-review state when process
   callers exist and the stack includes phase 5; preserve append-only history.
 - [ ] Finish the remaining report read inventory and desktop kinds, including

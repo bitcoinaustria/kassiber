@@ -2,6 +2,7 @@
 use super::*;
 use kassiber_pyjson::{dumps, Options};
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 #[path = "network_partition.rs"]
 pub mod partition;
@@ -42,6 +43,25 @@ fn object(v: &Value) -> Value {
             .filter(|v| matches!(v, Value::Dict(_)))
             .unwrap_or_else(|| dict::<&str>([])),
         _ => dict::<&str>([]),
+    }
+}
+// A negative lexical test only: without escapes, a JSON object cannot
+// contain a relevant key unless its quoted spelling occurs in the input.
+// Invalid JSON and nonobjects also become {} in object(). Possible evidence,
+// including escaped keys, always takes the Python parser.
+fn irrelevant_json(v: &Value) -> bool {
+    matches!(v, Value::Str(text) if text.as_str().is_some_and(|raw| {
+        !raw.contains('\\') && ![
+            "\"chain\"", "\"network\"", "\"bitcoin_network\"",
+            "\"chain_network\"", "\"chain_instance_id\"",
+        ].iter().any(|key| raw.contains(key))
+    }))
+}
+fn evidence_object(v: &Value) -> Cow<'_, Value> {
+    match v {
+        Value::Dict(_) => Cow::Borrowed(v),
+        v if irrelevant_json(v) => Cow::Owned(dict::<&str>([])),
+        _ => Cow::Owned(object(v)),
     }
 }
 pub(crate) fn json(v: &Value, compact: bool, sorted: bool) -> Result<String> {
@@ -112,26 +132,31 @@ fn domain_evidence(raw: &Value, config: &Value, asset: &Value) -> (Option<String
     }
     (domains.first().map(|v| (*v).into()), true)
 }
+type EvidenceFacts = (Option<String>, Option<String>, bool);
 /// Distinguish absent evidence from contradictory evidence; never infer mainnet.
-pub fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
-    let mut raw = object(value(row, "raw_json"));
-    let config = object(
-        optional(row, "config_json")
-            .filter(|v| truthy(v))
-            .unwrap_or_else(|| value(row, "wallet_config_json")),
-    );
-    let instance_config = object(
-        optional(row, "wallet_config_json")
-            .filter(|v| truthy(v))
-            .unwrap_or_else(|| value(row, "config_json")),
-    );
+pub fn evidence(row: &Value) -> EvidenceFacts {
+    let mut raw = evidence_object(value(row, "raw_json"));
+    let config_input = optional(row, "config_json")
+        .filter(|v| truthy(v))
+        .unwrap_or_else(|| value(row, "wallet_config_json"));
+    let config = evidence_object(config_input);
+    let instance_input = optional(row, "wallet_config_json")
+        .filter(|v| truthy(v))
+        .unwrap_or_else(|| value(row, "config_json"));
+    let other_config;
+    let instance_config = if std::ptr::eq(config_input, instance_input) {
+        config.as_ref()
+    } else {
+        other_config = evidence_object(instance_input);
+        other_config.as_ref()
+    };
     if value(&raw, "source") == &s("bullbitcoin_wallet_csv")
         && ["bitcoin", "liquid", "lightning"]
             .contains(&py_str(value(&raw, "network")).to_lowercase().as_str())
         || value(row, "wallet_kind") == &s("coinbase")
             && matches!(value(&raw, "network"), Value::Dict(_))
     {
-        if let Value::Dict(fields) = &mut raw {
+        if let Value::Dict(fields) = raw.to_mut() {
             fields.retain(|(k, _)| *k != "network".into());
         }
     }
@@ -143,13 +168,13 @@ pub fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
             .map(|k| (k, value(row, k).clone())),
     );
     if truthy(&columns) {
-        for payload in [&raw, &instance_config] {
+        for payload in [raw.as_ref(), instance_config] {
             let (other, ok) = domain_evidence(&columns, payload, value(row, "asset"));
             valid &= ok && (environment.is_none() || other.is_none() || environment == other);
             environment = environment.or(other);
         }
     }
-    let instances: BTreeSet<String> = [row, &raw, &instance_config]
+    let instances: BTreeSet<String> = [row, raw.as_ref(), instance_config]
         .into_iter()
         .map(|v| value(v, "chain_instance_id"))
         .filter(|v| truthy(v))
@@ -242,7 +267,9 @@ pub fn require_accounting(conn: &Connection, profile: &str) -> Result<()> {
     if !table_exists(conn, "book_network_bindings")? {
         return Ok(());
     }
-    let inventory = inventory(conn, profile)?;
+    // Admission needs all the evidence checks, but no review commitment or
+    // per-wallet presentation. Keep both paths on the same interpreter.
+    let inventory = read_snapshot(conn, || inventory_snapshot(conn, profile, false))?;
     if ["mixed", "conflicted"].contains(&text(&inventory, "state").as_str()) {
         return Err(error(
             "book_network_review_required",
@@ -361,9 +388,9 @@ pub fn read_snapshot<T>(conn: &Connection, operation: impl FnOnce() -> Result<T>
     result
 }
 pub fn inventory(conn: &Connection, profile: &str) -> Result<Value> {
-    read_snapshot(conn, || inventory_snapshot(conn, profile))
+    read_snapshot(conn, || inventory_snapshot(conn, profile, true))
 }
-fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
+fn inventory_snapshot(conn: &Connection, profile: &str, review: bool) -> Result<Value> {
     let profiles = rows(
         conn,
         "SELECT id,journal_input_version FROM profiles WHERE id=?",
@@ -378,11 +405,15 @@ fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
         [profile],
     )?;
     let observations = rows(conn, "SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? ORDER BY t.id", [profile])?;
-    let mut fingerprint = vec![
-        profile_row.clone(),
-        Value::List(wallets.clone()),
-        Value::List(observations.clone()),
-    ];
+    let mut fingerprint = if review {
+        vec![
+            profile_row.clone(),
+            Value::List(wallets.clone()),
+            Value::List(observations.clone()),
+        ]
+    } else {
+        Vec::new()
+    };
     let mut all_environments = BTreeSet::new();
     let mut all_instances = BTreeSet::new();
     let mut wallet_rows = Vec::new();
@@ -391,24 +422,39 @@ fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
         let transactions: Vec<_> = observations
             .iter()
             .filter(|r| value(r, "wallet_id") == value(&wallet, "id"))
-            .cloned()
             .collect();
-        let evidence_rows = if transactions.is_empty() {
-            vec![dict([
-                ("wallet_kind", value(&wallet, "kind").clone()),
-                ("config_json", value(&wallet, "config_json").clone()),
-            ])]
-        } else {
-            transactions.clone()
-        };
+        let fallback = dict([
+            ("wallet_kind", value(&wallet, "kind").clone()),
+            ("config_json", value(&wallet, "config_json").clone()),
+        ]);
         let mut known = BTreeSet::new();
         let mut instances = BTreeSet::new();
         let mut conflicts = Vec::new();
         let mut unknown = 0;
-        for row in evidence_rows {
-            let (environment, instance, valid) = evidence(&row);
+        // Joined wallet kind/config are constant within this wallet. When the
+        // raw observation provably contains no network facts, only its asset
+        // can change the evidence result. Cache that result, not admission.
+        let mut neutral_assets: Vec<(Value, EvidenceFacts)> = Vec::new();
+        for row in transactions
+            .iter()
+            .copied()
+            .chain(transactions.is_empty().then_some(&fallback))
+        {
+            let facts = if irrelevant_json(value(row, "raw_json")) {
+                let asset = value(row, "asset");
+                if let Some((_, facts)) = neutral_assets.iter().find(|(key, _)| key == asset) {
+                    facts.clone()
+                } else {
+                    let facts = evidence(row);
+                    neutral_assets.push((asset.clone(), facts.clone()));
+                    facts
+                }
+            } else {
+                evidence(row)
+            };
+            let (environment, instance, valid) = facts;
             if !valid {
-                conflicts.push(value(&row, "id").clone());
+                conflicts.push(value(row, "id").clone());
             } else if let Some(environment) = environment {
                 if environment == "regtest" {
                     if let Some(instance) = instance {
@@ -423,23 +469,25 @@ fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
         all_environments.extend(known.iter().cloned());
         all_instances.extend(instances.iter().cloned());
         wallet_conflicts |= !conflicts.is_empty();
-        wallet_rows.push(dict([
-            ("wallet_id", value(&wallet, "id").clone()),
-            ("label", value(&wallet, "label").clone()),
-            ("environments", strings(&known)),
-            ("chain_instances", strings(&instances)),
-            ("transaction_count", Value::Int(transactions.len().into())),
-            ("unknown_count", Value::Int(unknown.into())),
-            ("conflict_count", Value::Int(conflicts.len().into())),
-            (
-                "conflicting_transaction_ids",
-                Value::List(conflicts.into_iter().filter(truthy).collect()),
-            ),
-            (
-                "requires_declaration",
-                Value::Bool(unknown != 0 || known.contains("regtest") && instances.is_empty()),
-            ),
-        ]));
+        if review {
+            wallet_rows.push(dict([
+                ("wallet_id", value(&wallet, "id").clone()),
+                ("label", value(&wallet, "label").clone()),
+                ("environments", strings(&known)),
+                ("chain_instances", strings(&instances)),
+                ("transaction_count", Value::Int(transactions.len().into())),
+                ("unknown_count", Value::Int(unknown.into())),
+                ("conflict_count", Value::Int(conflicts.len().into())),
+                (
+                    "conflicting_transaction_ids",
+                    Value::List(conflicts.into_iter().filter(truthy).collect()),
+                ),
+                (
+                    "requires_declaration",
+                    Value::Bool(unknown != 0 || known.contains("regtest") && instances.is_empty()),
+                ),
+            ]));
+        }
     }
     let mut references = Vec::new();
     let mut reference_conflicts = false;
@@ -459,10 +507,12 @@ fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
             &format!("SELECT * FROM \"{table}\" WHERE profile_id=?"),
             [profile],
         )?;
-        fingerprint.push(Value::List(vec![
-            s(table),
-            Value::List(source_rows.clone()),
-        ]));
+        if review {
+            fingerprint.push(Value::List(vec![
+                s(table),
+                Value::List(source_rows.clone()),
+            ]));
+        }
         for source in source_rows {
             let mut row = dict([
                 ("raw_json", object(value(&source, "payload_json"))),
@@ -495,12 +545,14 @@ fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
                     all_instances.insert(instance.clone());
                 }
             }
-            references.push(dict([
-                ("source", s(table)),
-                ("environment", environment.map_or(Value::Null, s)),
-                ("chain_instance_id", instance.map_or(Value::Null, s)),
-                ("valid", Value::Bool(valid)),
-            ]));
+            if review {
+                references.push(dict([
+                    ("source", s(table)),
+                    ("environment", environment.map_or(Value::Null, s)),
+                    ("chain_instance_id", instance.map_or(Value::Null, s)),
+                    ("valid", Value::Bool(valid)),
+                ]));
+            }
         }
     }
     let state = if wallet_conflicts || reference_conflicts {
@@ -517,7 +569,14 @@ fn inventory_snapshot(conn: &Connection, profile: &str) -> Result<Value> {
         ("chain_instances", strings(&all_instances)),
         ("wallets", Value::List(wallet_rows)),
         ("reference_scopes", Value::List(references)),
-        ("inventory_digest", s(digest(&Value::List(fingerprint))?)),
+        (
+            "inventory_digest",
+            if review {
+                s(digest(&Value::List(fingerprint))?)
+            } else {
+                Value::Null
+            },
+        ),
         ("transaction_count", Value::Int(observations.len().into())),
     ]))
 }
@@ -766,5 +825,87 @@ pub fn execute(
             "not_implemented",
             "network operation is not implemented in the Rust backend yet",
         )),
+    }
+}
+
+#[cfg(test)]
+mod read_tests {
+    use super::*;
+
+    #[test]
+    fn lexical_negative_filter_keeps_escaped_nested_and_conflicting_evidence() {
+        for (raw, expected) in [
+            (r#"{"txid":"generic","amount":"1"}"#, (None, None, true)),
+            (r#"{"invalid": "unterminated"#, (None, None, true)),
+            (r#"{"nested":{"network":"test"}}"#, (None, None, true)),
+            (r#"{"\u006eetwork":"test"}"#, (Some("test"), None, true)),
+            (
+                r#"{"network":"test","network":"main"}"#,
+                (Some("main"), None, true),
+            ),
+            (
+                r#"{"network":"regtest","chain_instance_id":"one"}"#,
+                (Some("regtest"), Some("one"), true),
+            ),
+            (
+                r#"{"network":"regtest","chain":"liquid"}"#,
+                (None, None, false),
+            ),
+            (r#"{"network":"bad"}"#, (None, None, false)),
+        ] {
+            let row = dict([("raw_json", s(raw)), ("asset", s("BTC"))]);
+            let (domain, instance, valid) = evidence(&row);
+            assert_eq!(
+                (domain.as_deref(), instance.as_deref(), valid),
+                expected,
+                "{raw}"
+            );
+        }
+        let row = dict([
+            ("raw_json", s(r#"{"network":"main"}"#)),
+            ("wallet_config_json", s(r#"{"network":"test"}"#)),
+            ("asset", s("BTC")),
+        ]);
+        assert!(!evidence(&row).2);
+    }
+
+    #[test]
+    fn accounting_and_review_read_the_same_network_facts_without_writes() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE profiles(id TEXT,journal_input_version INTEGER); CREATE TABLE wallets(id TEXT,label TEXT,kind TEXT,config_json TEXT,profile_id TEXT); CREATE TABLE transactions(id TEXT,wallet_id TEXT,asset TEXT,raw_json TEXT,profile_id TEXT); INSERT INTO profiles VALUES('p',1); INSERT INTO wallets VALUES('w','Wallet','custom','{}','p'),('empty','Empty','custom','{}','p'); INSERT INTO transactions VALUES('t','w','BTC','{}','p');").unwrap();
+        for raw in [
+            "{}",
+            r#"{"network":"main"}"#,
+            r#"{"network":"unknown"}"#,
+            r#"{"network":"regtest","chain_instance_id":"one"}"#,
+            r#"{"\u006eetwork":"test"}"#,
+        ] {
+            conn.execute("UPDATE transactions SET raw_json=?", [raw])
+                .unwrap();
+            let before = conn.total_changes();
+            let full = inventory_snapshot(&conn, "p", true).unwrap();
+            let compact = inventory_snapshot(&conn, "p", false).unwrap();
+            for key in [
+                "profile_id",
+                "state",
+                "environments",
+                "chain_instances",
+                "transaction_count",
+            ] {
+                assert_eq!(value(&full, key), value(&compact, key), "{key}: {raw}");
+            }
+            assert_eq!(conn.total_changes(), before);
+            assert!(truthy(value(&full, "inventory_digest")));
+            assert_eq!(value(&compact, "inventory_digest"), &Value::Null);
+        }
+        conn.execute_batch("UPDATE wallets SET config_json='{\"chain\":\"bitcoin\"}' WHERE id='w'; UPDATE transactions SET raw_json='{}'; INSERT INTO transactions VALUES('t2','w','LBTC','{}','p'),('t3','w','BTC','{}','p');").unwrap();
+        let inventory = inventory_snapshot(&conn, "p", true).unwrap();
+        assert_eq!(value(&inventory, "state"), &s("conflicted"));
+        let wallet = list(value(&inventory, "wallets"))
+            .iter()
+            .find(|row| value(row, "wallet_id") == &s("w"))
+            .unwrap();
+        assert_eq!(value(wallet, "unknown_count"), &Value::Int(2.into()));
+        assert_eq!(value(wallet, "conflict_count"), &Value::Int(1.into()));
     }
 }

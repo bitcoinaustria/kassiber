@@ -2736,3 +2736,14 @@ modules, plus rates/chain candidate modules and the Core probe regression
 module, passed together: 96 tests and 178 subtests. Live regtest was not run;
 the existing Core/Fulcrum integration scenarios still exercise Python wallet
 sync and do not establish native Rust sync parity.
+
+## Read-path performance
+
+Rust read commands retain their existing output and admission contracts while
+avoiding fresh-schema reconstruction and redundant compatibility DDL on current
+books. Report admission omits review-only inventory serialization, reuses neutral
+wallet/asset evidence within its snapshot, streams holdings quote candidates,
+and avoids unused capital-gains presentation in summary. No network, schema,
+dependency or accounting-policy changes are introduced. The
+[read-path report](rust-read-performance.md) records release measurements,
+startup spans, verification and remaining costs.

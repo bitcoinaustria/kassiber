@@ -42,28 +42,52 @@ fn raw_rows(conn: &Connection, query: &str, args: impl Params) -> rusqlite::Resu
     let mut stmt = conn.prepare(query)?;
     let names: Vec<_> = stmt.column_names().iter().map(|s| s.to_string()).collect();
     let result = stmt
-        .query_map(args, |row| {
-            let mut fields = Vec::new();
-            for (i, name) in names.iter().enumerate() {
-                let v = match row.get_ref(i)? {
-                    ValueRef::Null => Value::Null,
-                    ValueRef::Integer(n) => Value::Int(n.into()),
-                    ValueRef::Real(n) => Value::Float(n),
-                    ValueRef::Text(t) => s(std::str::from_utf8(t).map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            i,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?),
-                    ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
-                };
-                fields.push((name.clone(), v));
-            }
-            Ok(dict(fields))
-        })?
+        .query_map(args, |row| row_value(row, &names))?
         .collect::<std::result::Result<Vec<_>, _>>();
     result
+}
+fn row_value(row: &rusqlite::Row<'_>, names: &[String]) -> rusqlite::Result<Value> {
+    let mut fields = Vec::with_capacity(names.len());
+    for (i, name) in names.iter().enumerate() {
+        let v = match row.get_ref(i)? {
+            ValueRef::Null => Value::Null,
+            ValueRef::Integer(n) => Value::Int(n.into()),
+            ValueRef::Real(n) => Value::Float(n),
+            ValueRef::Text(t) => s(std::str::from_utf8(t).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    i,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?),
+            ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
+        };
+        fields.push((name.clone(), v));
+    }
+    Ok(dict(fields))
+}
+
+/// Stream rows without retaining an unused table projection. As with rows()
+/// followed by a loop, SQL/codec errors anywhere take precedence over errors
+/// from interpreting the first rows. Keep the first interpretation error while
+/// finishing SQL conversion, then return it after the query succeeds.
+pub fn visit_rows(
+    conn: &Connection,
+    query: &str,
+    args: impl Params,
+    mut visit: impl FnMut(Value) -> Result<()>,
+) -> Result<()> {
+    let mut stmt = conn.prepare(query).map_err(sql_error)?;
+    let names: Vec<_> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+    let mut query = stmt.query(args).map_err(sql_error)?;
+    let mut interpreted = Ok(());
+    while let Some(row) = query.next().map_err(sql_error)? {
+        let converted = row_value(row, &names).map_err(sql_error)?;
+        if interpreted.is_ok() {
+            interpreted = visit(converted);
+        }
+    }
+    interpreted
 }
 
 #[cfg(test)]
@@ -81,5 +105,23 @@ mod tests {
             ffi::Error::new(ffi::SQLITE_CORRUPT),
             None,
         )));
+    }
+    #[test]
+    fn streaming_preserves_late_sql_error_precedence() {
+        let conn = Connection::open_in_memory().unwrap();
+        let invalid = || AppError::new("app_error", "invalid decimal");
+        let query = "SELECT 'bad' AS rate UNION ALL SELECT x'aa'";
+        let expected = rows(&conn, query, []).unwrap_err();
+        let actual = visit_rows(&conn, query, [], |_| Err(invalid())).unwrap_err();
+        assert_eq!(
+            (actual.code, actual.message),
+            (expected.code, expected.message)
+        );
+        let actual = visit_rows(&conn, "SELECT 'bad' AS rate UNION ALL SELECT 1", [], |_| {
+            Err(invalid())
+        })
+        .unwrap_err();
+        assert_eq!(actual.code, "app_error");
+        assert_eq!(actual.message, "invalid decimal");
     }
 }

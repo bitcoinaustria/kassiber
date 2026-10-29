@@ -211,9 +211,10 @@ pub fn report(
     let Value::List(mut holdings) = holdings::report(conn, profile, true)? else {
         unreachable!()
     };
-    let Value::List(mut capital) = capital_gains(conn, profile)? else {
-        unreachable!()
-    };
+    // Keep the complete SQL conversion and identity checks, and the original
+    // row order for float sums. Summary does not emit per-entry references or
+    // quantities, so it need not construct those presentation fields.
+    let (_, mut capital) = capital_gains_rows(conn, profile)?;
     if let Some(w) = &wallet {
         holdings.retain(|r| value(r, "wallet") == value(w, "label"));
         capital.retain(|r| value(r, "wallet") == value(w, "label"));
