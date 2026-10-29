@@ -523,7 +523,7 @@ pub(crate) fn observation_fields(row: &Value, key: &EventKey) -> Result<Value, E
     let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).py_upper(),"direction":text(&row["direction"]).py_lower(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
     Ok(result)
 }
-fn issue(key: &EventKey, code: &str, message: &str, rows: &[Value], details: Value) -> Value {
+fn issue(key: &EventKey, code: &str, message: &str, rows: &[&Value], details: Value) -> Value {
     let ids: BTreeSet<String> = rows
         .iter()
         .filter(|row| !row["id"].is_null() && row["id"] != "")
@@ -536,15 +536,19 @@ pub fn canonical_input(
     reconciliations: &Value,
     non_events: &BTreeSet<String>,
 ) -> Result<Value, Error> {
-    let mut groups: BTreeMap<EventKey, Vec<Value>> = BTreeMap::new();
+    let mut groups: BTreeMap<EventKey, Vec<&Value>> = BTreeMap::new();
     let mut rejected = Vec::new();
     let mut events = Vec::new();
-    for (ordinal, row) in rows.iter().enumerate() {
-        if non_events.contains(&codec::pystr(&row["id"])) {
+    // Event keys are pure per row; derive them concurrently, then group in order.
+    let keys = crate::par::map(rows, |row| {
+        (!non_events.contains(&codec::pystr(&row["id"]))).then(|| event_key(row))
+    });
+    for (ordinal, (row, key)) in rows.iter().zip(keys).enumerate() {
+        let Some(key) = crate::par::unwrap(key) else {
             continue;
-        }
-        match event_key(row) {
-            Ok(key) => groups.entry(key).or_default().push(row.clone()),
+        };
+        match key {
+            Ok(key) => groups.entry(key).or_default().push(row),
             Err(message) if message.is_value_or_type() => {
                 let id = if truth(&row["id"]) {
                     text(&row["id"])
@@ -563,146 +567,26 @@ pub fn canonical_input(
                     &key,
                     "canonical_event_identity_invalid",
                     &message.message,
-                    std::slice::from_ref(row),
+                    &[row],
                     json!({}),
                 ));
             }
             Err(error) => return Err(error),
         }
     }
-    for (key, group) in groups {
-        if group.iter().any(|r| {
-            reconciliations
-                .get(text(&r["id"]))
-                .is_some_and(Value::is_null)
-        }) {
-            rejected.push(issue(
-                &key,
-                "source_overlap_quantity_unresolved",
-                "overlapping wallet receipts lack complete disjoint output coverage",
-                &group,
-                json!({}),
-            ));
-            continue;
+    // Groups are independent; build them concurrently and apply the outcomes
+    // in key order, so the first refusal and every output keep their order.
+    let groups: Vec<_> = groups.into_iter().collect();
+    let span = crate::timing::span("evidence.canonical.events");
+    let outcomes = crate::par::map(&groups, |(key, group)| {
+        canonical_event(key, group, reconciliations)
+    });
+    drop(span);
+    for outcome in outcomes {
+        match crate::par::unwrap(outcome)? {
+            Ok(event) => events.push(event),
+            Err(issue) => rejected.push(issue),
         }
-        let mut observations = Vec::new();
-        let mut errors = BTreeSet::new();
-        for row in &group {
-            let built = (|| {
-                let mut observation = observation(row, &key)?;
-                if let Some(proof) = reconciliations
-                    .get(text(&row["id"]))
-                    .filter(|v| !v.is_null())
-                {
-                    observation["quantity_hash"]=json!(codec::hash(&json!({"observed_quantity_hash":observation["quantity_hash"],"receipt_reconciliation":proof}),false)?.0);
-                    let mut payload =
-                        codec::loads(observation["evidence_payload_json"].as_str().unwrap())?;
-                    if let Py::Dict(ref mut values) = payload {
-                        values.push((
-                            Key::Str("receipt_reconciliation".into()),
-                            codec::from_json(proof)?,
-                        ));
-                    }
-                    let (hash, text) = codec::hash_py(&payload, false)?;
-                    observation["evidence_detail_hash"] = json!(hash);
-                    observation["evidence_payload_json"] = json!(text);
-                    observation["amount_msat"] = proof["amount_msat"].clone();
-                    validate_observation(&observation)?;
-                }
-                Ok::<_, Error>(observation)
-            })();
-            match built {
-                Ok(o) => observations.push(o),
-                Err(e) if e.is_value_or_type() => {
-                    errors.insert(e.message);
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        if !errors.is_empty() {
-            rejected.push(issue(
-                &key,
-                "canonical_event_leg_invalid",
-                "one or more wallet-event aggregate legs are invalid",
-                &group,
-                json!({"errors":errors}),
-            ));
-            continue;
-        }
-        let mut slots: BTreeMap<(String, String, String), Vec<Value>> = BTreeMap::new();
-        for observation in &observations {
-            slots
-                .entry((
-                    text(&observation["wallet_id"]),
-                    text(&observation["direction"]),
-                    text(&observation["asset"]),
-                ))
-                .or_default()
-                .push(observation.clone());
-        }
-        let mut contradictions = Vec::new();
-        for ((wallet, direction, asset), items) in &slots {
-            let semantics: BTreeSet<(i128, i128, bool)> = items
-                .iter()
-                .map(|i| {
-                    (
-                        wide(&i["amount_msat"]),
-                        wide(&i["fee_msat"]),
-                        truth(&i["amount_includes_fee"]),
-                    )
-                })
-                .collect();
-            if semantics.len() > 1 {
-                contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
-            }
-        }
-        if !contradictions.is_empty() {
-            rejected.push(issue(
-                &key,
-                "canonical_event_leg_contradiction",
-                "wallet-event aggregate observations disagree",
-                &group,
-                json!({"contradictory_slots":contradictions}),
-            ));
-            continue;
-        }
-        let legs: Vec<Value> = slots
-            .values()
-            .map(|items| {
-                items
-                    .iter()
-                    .min_by_key(|i| {
-                        (
-                            text(&i["occurred_at"]),
-                            text(&i["evidence_detail_hash"]),
-                            text(&i["transaction_id"]),
-                        )
-                    })
-                    .unwrap()
-                    .clone()
-            })
-            .collect();
-        let mut aliases = Vec::new();
-        let mut snapshots = BTreeMap::new();
-        let mut ids = BTreeSet::new();
-        for item in &observations {
-            let selected = legs
-                .iter()
-                .find(|v| {
-                    v["wallet_id"] == item["wallet_id"]
-                        && v["direction"] == item["direction"]
-                        && v["asset"] == item["asset"]
-                })
-                .unwrap();
-            aliases.push((
-                text(&item["transaction_id"]),
-                text(&selected["quantity_hash"]),
-            ));
-            ids.insert(text(&item["transaction_id"]));
-            snapshots.insert(text(&item["evidence_detail_hash"]),json!({"$type":"EvidenceSnapshot","quantity_hash":item["quantity_hash"],"detail_hash":item["evidence_detail_hash"],"payload_json":item["evidence_payload_json"]}));
-        }
-        aliases.sort();
-        events.push(json!({"$type":"CanonicalQuantityEvent","event_key":key.value(),"legs":legs,"evidence_snapshots":snapshots.into_values().collect::<Vec<_>>(),"source_transaction_ids":ids,"observation_aliases":aliases}));
     }
     rejected.sort_by_key(|v| {
         (
@@ -714,18 +598,180 @@ pub fn canonical_input(
             v["transaction_ids"].to_string(),
         )
     });
-    Ok(json!({"$type":"CanonicalQuantityInput","events":events,"rejected_events":rejected}))
+    // The object json! would build, with the lists moved rather than copied.
+    let mut input = serde_json::Map::new();
+    input.insert("$type".into(), json!("CanonicalQuantityInput"));
+    input.insert("events".into(), Value::Array(events));
+    input.insert("rejected_events".into(), Value::Array(rejected));
+    Ok(Value::Object(input))
+}
+
+/// One canonical event group: its event, a rejection issue, or a refusal.
+fn canonical_event(
+    key: &EventKey,
+    group: &[&Value],
+    reconciliations: &Value,
+) -> Result<Result<Value, Value>, Error> {
+    if group.iter().any(|r| {
+        reconciliations
+            .get(text(&r["id"]))
+            .is_some_and(Value::is_null)
+    }) {
+        return Ok(Err(issue(
+            &key,
+            "source_overlap_quantity_unresolved",
+            "overlapping wallet receipts lack complete disjoint output coverage",
+            group,
+            json!({}),
+        )));
+    }
+    let mut observations = Vec::new();
+    let mut errors = BTreeSet::new();
+    for row in group {
+        let built = (|| {
+            let mut observation = observation(row, &key)?;
+            if let Some(proof) = reconciliations
+                .get(text(&row["id"]))
+                .filter(|v| !v.is_null())
+            {
+                observation["quantity_hash"]=json!(codec::hash(&json!({"observed_quantity_hash":observation["quantity_hash"],"receipt_reconciliation":proof}),false)?.0);
+                let mut payload =
+                    codec::loads(observation["evidence_payload_json"].as_str().unwrap())?;
+                if let Py::Dict(ref mut values) = payload {
+                    values.push((
+                        Key::Str("receipt_reconciliation".into()),
+                        codec::from_json(proof)?,
+                    ));
+                }
+                let (hash, text) = codec::hash_py(&payload, false)?;
+                observation["evidence_detail_hash"] = json!(hash);
+                observation["evidence_payload_json"] = json!(text);
+                observation["amount_msat"] = proof["amount_msat"].clone();
+                validate_observation(&observation)?;
+            }
+            Ok::<_, Error>(observation)
+        })();
+        match built {
+            Ok(o) => observations.push(o),
+            Err(e) if e.is_value_or_type() => {
+                errors.insert(e.message);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    if !errors.is_empty() {
+        return Ok(Err(issue(
+            &key,
+            "canonical_event_leg_invalid",
+            "one or more wallet-event aggregate legs are invalid",
+            group,
+            json!({"errors":errors}),
+        )));
+    }
+    let mut slots: BTreeMap<(String, String, String), Vec<Value>> = BTreeMap::new();
+    for observation in &observations {
+        slots
+            .entry((
+                text(&observation["wallet_id"]),
+                text(&observation["direction"]),
+                text(&observation["asset"]),
+            ))
+            .or_default()
+            .push(observation.clone());
+    }
+    let mut contradictions = Vec::new();
+    for ((wallet, direction, asset), items) in &slots {
+        let semantics: BTreeSet<(i128, i128, bool)> = items
+            .iter()
+            .map(|i| {
+                (
+                    wide(&i["amount_msat"]),
+                    wide(&i["fee_msat"]),
+                    truth(&i["amount_includes_fee"]),
+                )
+            })
+            .collect();
+        if semantics.len() > 1 {
+            contradictions.push(json!({"wallet_id":wallet,"direction":direction,"asset":asset,"semantics":semantics}));
+        }
+    }
+    if !contradictions.is_empty() {
+        return Ok(Err(issue(
+            &key,
+            "canonical_event_leg_contradiction",
+            "wallet-event aggregate observations disagree",
+            group,
+            json!({"contradictory_slots":contradictions}),
+        )));
+    }
+    let legs: Vec<Value> = slots
+        .values()
+        .map(|items| {
+            items
+                .iter()
+                .min_by_key(|i| {
+                    (
+                        text(&i["occurred_at"]),
+                        text(&i["evidence_detail_hash"]),
+                        text(&i["transaction_id"]),
+                    )
+                })
+                .unwrap()
+                .clone()
+        })
+        .collect();
+    let mut aliases = Vec::new();
+    let mut snapshots = BTreeMap::new();
+    let mut ids = BTreeSet::new();
+    for item in &observations {
+        let selected = legs
+            .iter()
+            .find(|v| {
+                v["wallet_id"] == item["wallet_id"]
+                    && v["direction"] == item["direction"]
+                    && v["asset"] == item["asset"]
+            })
+            .unwrap();
+        aliases.push((
+            text(&item["transaction_id"]),
+            text(&selected["quantity_hash"]),
+        ));
+        ids.insert(text(&item["transaction_id"]));
+        snapshots.insert(text(&item["evidence_detail_hash"]),json!({"$type":"EvidenceSnapshot","quantity_hash":item["quantity_hash"],"detail_hash":item["evidence_detail_hash"],"payload_json":item["evidence_payload_json"]}));
+    }
+    aliases.sort();
+    Ok(Ok(
+        json!({"$type":"CanonicalQuantityEvent","event_key":key.value(),"legs":legs,"evidence_snapshots":snapshots.into_values().collect::<Vec<_>>(),"source_transaction_ids":ids,"observation_aliases":aliases}),
+    ))
 }
 
 pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
+    let span = crate::timing::span("evidence.rows");
     let rows = snapshot.rows();
+    drop(span);
+    let span = crate::timing::span("evidence.zero_delta");
     let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
+    drop(span);
+    let span = crate::timing::span("evidence.enriched");
     let enriched = enriched_rows(&snapshot.transactions)?;
+    drop(span);
+    let span = crate::timing::span("evidence.receipts");
     let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
+    drop(span);
+    let span = crate::timing::span("evidence.canonical");
     let canonical = canonical_input(&enriched, &reconciliations, &non_events)?;
-    Ok(
-        json!({"enriched_rows":enriched,"canonical_input":canonical,"receipt_reconciliations":reconciliations,"native_non_event_ids":non_events}),
-    )
+    drop(span);
+    let _span = crate::timing::span("evidence.value");
+    // The object json! would build, with the stage parts moved rather than copied.
+    let mut stage = serde_json::Map::new();
+    stage.insert("enriched_rows".into(), Value::Array(enriched));
+    stage.insert("canonical_input".into(), canonical);
+    stage.insert("receipt_reconciliations".into(), reconciliations);
+    stage.insert(
+        "native_non_event_ids".into(),
+        Value::Array(non_events.into_iter().map(Value::String).collect()),
+    );
+    Ok(Value::Object(stage))
 }
 
 #[cfg(test)]

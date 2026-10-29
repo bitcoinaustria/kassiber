@@ -8,6 +8,7 @@ mod gates;
 mod graph;
 pub mod interpretation;
 mod liquid;
+mod par;
 mod python_text;
 pub mod quantity;
 pub mod snapshot;

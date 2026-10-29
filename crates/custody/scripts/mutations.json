@@ -43,8 +43,8 @@
   {
     "id": "E-aggregate-leg-tie",
     "file": "crates/custody/src/evidence.rs",
-    "find": "                    .min_by_key(|i| {\n                        (\n                            text(&i[\"occurred_at\"]),",
-    "replace": "                    .max_by_key(|i| {\n                        (\n                            text(&i[\"occurred_at\"]),",
+    "find": "                .min_by_key(|i| {\n                    (\n                        text(&i[\"occurred_at\"]),",
+    "replace": "                .max_by_key(|i| {\n                    (\n                        text(&i[\"occurred_at\"]),",
     "expect_failing": [
       "duplicate_slot"
     ],
