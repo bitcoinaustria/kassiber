@@ -754,6 +754,11 @@
       "test_proven_privacy_tagged_fanout_clears_the_generic_privacy_blocker": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_evidence directly", "reviewed": false, "tests": 1},
       "test_unproven_privacy_tagged_fanout_still_blocks": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_evidence directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_custody_projection_port.py": {
+      "test_projection_frozen_python_vectors": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1},
+      "test_projection_generated_counts_both_engines": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1},
+      "test_projection_stage_still_skipped": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_quantity.py": {
       "CustodyQuantityTests": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_quantity directly", "reviewed": false, "tests": 29}
     },

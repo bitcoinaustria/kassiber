@@ -2152,3 +2152,115 @@ native support retain exact integers instead of narrowing component amounts to
 `i128`. No projection code or production Python accounting rules change.
 
 The local correction report is [custody-r2e-quantity-review.md](custody-r2e-quantity-review.md).
+
+
+## Finalized row primitive checkpoint (R2f, partial)
+
+The local `t3code/r2f-projection` checkpoint starts at `9d2ab49c` and ports the
+first finalized-projection primitives in `crates/custody/src/finalized_projection.rs`:
+
+- `FinalizedTaxProjection` row marker, unique id and intra-pair membership
+  validation, retaining Python's row-before-pair admission order and errors;
+- slice, fee and direct-payout row identities with unbounded integer coordinates;
+- original transaction/anchor fallback and base-row construction, including
+  unchanged raw fields and timestamps, canonical observation overrides and
+  falsey external-id/raw-JSON defaults;
+- chain-order evidence captured against the original graph and quantity
+  commitments before changing the id or principal; nested graph parents retain
+  strict Python `int` outpoint semantics, exclude booleans/floats/strings and
+  preserve unbounded nonnegative indices;
+- fee-only rows, with zero principal, exact fee, anchor linkage, cleared absolute
+  fiat values and the exact-authority privacy-marker exception.
+
+The current-observation predicate is deliberately distinct from the full
+evidence authority predicate: the former checks the stored version and current
+hashes, then physical transfer scope. Additional evidence-stage admission gates
+must not change the Python row builder. Graph commitment failure short-circuits
+raw amount parsing; committed raw amount and fee failures retain Python's
+`TypeError`/`ValueError` families. No raw amount uses bounded or float conversion.
+
+This is a **partial comparison checkpoint**. `finalized_projection` remains
+explicitly skipped by PyO3, census and custody-shadow. Its production comparison
+count is zero. `projection-primitives` is an unpackaged JSONL example using
+separate typed primitive operands; no intermediate output is added to snapshot
+v1. No Rust result reaches persistence or the tax engine. Python remains the
+production reference.
+
+### Frozen and generated evidence
+
+`tests/custody_projection_primitives.py` independently computes the Python
+outputs. It covers malformed row/pair admission, coercion and duplicate ids,
+source/anchor precedence, rowless observations, falsey defaults, exact raw
+quantities, lexical timestamps, fee privacy, stale provenance and nested parents.
+Every scenario has an independently compared active companion, including refusal
+controls. Primary outputs and refusal families are compared separately; the
+companion cannot mask a difference. Both engines assert the checked-in per-scenario
+activity manifest in `tests/fixtures/custody_projection_counts.json`.
+
+| Primitive family | Frozen scenarios | Generated batches per engine | Active results per engine |
+| --- | ---: | ---: | ---: |
+| Projection row contract | 15 | 300 | 1,000 |
+| Exact row identities | 2 | 40 | 240 |
+| Base rows | 10 | 200 | 800 |
+| Fee-only rows and original chain proof | 15 | 300 | 1,140 |
+| **Total** | **42** | **840** | **3,180** |
+
+The generated batches make **1,680 calls per engine**, plus **1,680 dictionary
+order permutations**. Fee amounts and row-id coordinates cross machine ranges;
+canonical wallet/time overrides and untouched raw row fields vary independently.
+Dictionary permutations change lookup insertion order, preserving transaction
+versus anchor precedence.
+
+### Remaining finalization work
+
+The next slice is principal slice construction, including derived exact pricing
+from absolute fiat values. Reviewed payout admission, timestamp handling and
+settlement rows follow. Full composition still needs connected-path blocking,
+fee allocation and deduplication, selected MOVE/external/inbound rows, scoped
+basis barriers, issue/quarantine composition and reviewed conversion metadata.
+Only after those agree may finalized projection enter the stage inventories.
+Journal fusion with `ledger` remains outside R2f. No Python reference bug has
+been identified in this checkpoint.
+
+### Mutation catalog and verification
+
+The catalog now has **1,955 entries: 1,918 inherited and 37 new**. The complete
+inherited catalog was rerun in independent disposable source/target batches.
+The final new catalog was checked with the shared scratch-tree runner. Each
+counted entry has a passing unmutated baseline, a building mutant and a failing
+named witness. One initial uniqueness mutation did not build because removing
+insertion left a set's type ambiguous; an explicit `BTreeSet<String>` annotation
+makes the omission independently testable. Its successful rerun replaces that
+trial; the nonbuilding attempt contributes no kill.
+
+| New named witness | Killed mutations |
+| --- | ---: |
+| `projection_contract_vectors` | 5 |
+| `projection_identity_vectors` | 3 |
+| `projection_base_row_vectors` | 6 |
+| `projection_fee_row_vectors` | 23 |
+| **Total** | **37** |
+
+All **1,955 entries are killed**. The local per-entry audit is
+`target/r2f-verify/mutation-summary.json`; initial batch records and the shared
+runner's final projection logs are retained beside it.
+
+| Verification | Result |
+| --- | --- |
+| Inherited raw generators | 24,000 books and 1,030 permutations; zero differences in implemented stages |
+| New primitive generators | 42 scenarios, 840 batches, 1,680 calls and 1,680 dictionary permutations per engine; every scenario active |
+| Retained read-only replay | 159 requests and 159 permutations; zero differences or pre-request refusals |
+| Fresh worktree replay | 100 requests and 100 permutations; zero differences or pre-request refusals |
+| Focused census | 98 tests; 50 comparisons per implemented stage; zero mismatches |
+| Focused custody-shadow | 98 tests; 50 comparisons per implemented stage and 50 frozen Python comparisons; zero mismatches |
+| Finalized projection inventory | 0 compared, 50 skipped in each focused lane |
+| Generator/primitive pytest lane | 25 tests passed |
+| Snapshot, shadow, mutation and Rust-port contracts | 41 tests and 14 subtests passed |
+| Rust workspace | 786 tests passed: 768 outside net, 18 net tests with owned loopback servers |
+| Formatting and Clippy | Workspace fmt and all-target Clippy with `-D warnings` passed |
+
+The locked Python 3.11 environment and binding were rebuilt from this checkout
+with Rust 1.99.1 and offline Cargo. Net tests ran separately after the sandbox
+refused their local fake-server binds. Recordings are fresh worktree artifacts;
+the retained corpus was read only. Full census/shadow shards remain with the
+orchestrator. This checkpoint does not claim finalization-stage parity.

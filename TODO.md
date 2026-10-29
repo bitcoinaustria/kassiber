@@ -48,7 +48,10 @@ mutation entries.
 - [x] Complete quantity arbitration and runtime composition, including gap
   holds, whole-state issues and scoped tax barriers;
   [quantity now participates in full-stage comparison](docs/reference/custody-engine.md#complete-quantity-runtime-checkpoint-r2e).
-- [ ] Port finalized tax projection and compare it before journal fusion.
+- [ ] Complete finalized tax projection and compare it before journal fusion.
+  [The row primitive checkpoint](docs/reference/custody-engine.md#finalized-row-primitive-checkpoint-r2f-partial)
+  ports row identities, validation, base rows and fee-only rows; selection,
+  slice pricing, payout settlement and runtime composition remain unported.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 

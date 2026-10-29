@@ -20292,5 +20292,375 @@
       "tests/test_custody_shadow_harness.py::test_recorder_failure_has_explicit_injected_skip"
     ],
     "rule": "Recorder error capture explicitly annotates its deliberate stage failure in both live modes."
+  },
+  {
+    "id": "projection-row-marker",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if !codec::truth(&row[\"custody_finalized_tax_projection\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_contract_vectors"
+    ],
+    "rule": "Finalized projection preserves Python row marker semantics."
+  },
+  {
+    "id": "projection-row-unique",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if id.is_empty() || !ids.insert(id) {",
+    "replace": "if id.is_empty() {",
+    "expect_failing": [
+      "projection_contract_vectors"
+    ],
+    "rule": "Finalized projection preserves Python row unique semantics."
+  },
+  {
+    "id": "projection-row-empty",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if id.is_empty() || !ids.insert(id) {",
+    "replace": "if !ids.insert(id) {",
+    "expect_failing": [
+      "projection_contract_vectors"
+    ],
+    "rule": "Finalized projection preserves Python row empty semantics."
+  },
+  {
+    "id": "projection-pair-shape",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if !out.is_object() || !input.is_object() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_contract_vectors"
+    ],
+    "rule": "Finalized projection preserves Python pair shape semantics."
+  },
+  {
+    "id": "projection-pair-membership",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if !ids.contains(&string(&out[\"id\"])) || !ids.contains(&string(&input[\"id\"])) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_contract_vectors"
+    ],
+    "rule": "Finalized projection preserves Python pair membership semantics."
+  },
+  {
+    "id": "projection-slice-id",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "format!(\"custody-tax:{hash}:{start}:{end}:{side}\")",
+    "replace": "format!(\"custody-tax:{hash}:{end}:{start}:{side}\")",
+    "expect_failing": [
+      "projection_identity_vectors"
+    ],
+    "rule": "Finalized projection preserves Python slice id semantics."
+  },
+  {
+    "id": "projection-fee-id",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "format!(\"custody-tax:{hash}:{side}:{amount}\")",
+    "replace": "format!(\"custody-tax:{hash}:{amount}:{side}\")",
+    "expect_failing": [
+      "projection_identity_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee id semantics."
+  },
+  {
+    "id": "projection-payout-id",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "format!(\"direct-payout:{id}:{side}\")",
+    "replace": "format!(\"direct-payout:{side}:{id}\")",
+    "expect_failing": [
+      "projection_identity_vectors"
+    ],
+    "rule": "Finalized projection preserves Python payout id semantics."
+  },
+  {
+    "id": "projection-authority-version",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "!= Some(json!(1))",
+    "replace": "!= Some(json!(2))",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python authority version semantics."
+  },
+  {
+    "id": "projection-graph-commitment",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "text(&row[\"observation_graph_hash\"])\n        != evidence::graph_hash(&row[\"raw_json\"])\n            .map_err(|e| e.code.to_owned())?\n            .0",
+    "replace": "false",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python graph commitment semantics."
+  },
+  {
+    "id": "projection-quantity-commitment",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "text(&row[\"observation_quantity_hash\"]) != observed_hash(row)?.0",
+    "replace": "false",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python quantity commitment semantics."
+  },
+  {
+    "id": "projection-scope",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "graph::onchain_scope(row)",
+    "replace": "graph::onchain_scope(&json!({}))",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python scope semantics."
+  },
+  {
+    "id": "projection-nested-tx",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "get(&raw, \"tx\"), get(&raw, \"ownership_graph\")",
+    "replace": "&Py::Null, get(&raw, \"ownership_graph\")",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python nested tx semantics."
+  },
+  {
+    "id": "projection-nested-ownership",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "get(&raw, \"tx\"), get(&raw, \"ownership_graph\")",
+    "replace": "get(&raw, \"tx\"), &Py::Null",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python nested ownership semantics."
+  },
+  {
+    "id": "projection-parent-negative",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if *vout < BigInt::from(0) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python parent negative semantics."
+  },
+  {
+    "id": "projection-base-anchor",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "&rows[text(&observation[\"anchor_transaction_id\"])]",
+    "replace": "&Value::Null",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python base anchor semantics."
+  },
+  {
+    "id": "projection-base-source",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "let source = if codec::truth(source) {",
+    "replace": "let source = if false {",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python base source semantics."
+  },
+  {
+    "id": "projection-base-order",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "result[\"custody_chain_order\"] = chain_order(&result)?;",
+    "replace": "result[\"custody_chain_order\"] = Value::Null;",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python base order semantics."
+  },
+  {
+    "id": "projection-base-copy",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "source.clone()",
+    "replace": "json!({})",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python base copy semantics."
+  },
+  {
+    "id": "projection-base-identity",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "result[key] = observation[key].clone();",
+    "replace": "result[key] = Value::Null;",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python base identity semantics."
+  },
+  {
+    "id": "projection-external-fallback",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if !codec::truth(&result[\"external_id\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python external fallback semantics."
+  },
+  {
+    "id": "projection-raw-fallback",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if !codec::truth(&result[\"raw_json\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python raw fallback semantics."
+  },
+  {
+    "id": "projection-privacy-authority",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "if codec::truth(&observation[\"authoritative_chain_observation\"])",
+    "replace": "if true",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python privacy authority semantics."
+  },
+  {
+    "id": "projection-privacy-exact",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "&& observation[\"fee_attribution\"] == \"exact\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python privacy exact semantics."
+  },
+  {
+    "id": "projection-privacy-clear",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"privacy_boundary\"] = Value::Null;",
+    "replace": "base[\"privacy_boundary\"] = json!(\"unresolved\");",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python privacy clear semantics."
+  },
+  {
+    "id": "projection-fee-anchor",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"journal_transaction_id\"] = observation[\"anchor_transaction_id\"].clone();",
+    "replace": "base[\"journal_transaction_id\"] = observation[\"transaction_id\"].clone();",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee anchor semantics."
+  },
+  {
+    "id": "projection-fee-principal",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"amount\"] = json!(0);",
+    "replace": "base[\"amount\"] = json!(1);",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee principal semantics."
+  },
+  {
+    "id": "projection-fee-amount",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "serde_json::from_str(&amount.to_string()).expect(\"exact computed integer\")",
+    "replace": "json!(1)",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee amount semantics."
+  },
+  {
+    "id": "projection-fee-fiat",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"fiat_value\"] = Value::Null;",
+    "replace": "base[\"fiat_value\"] = json!(0);",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee fiat semantics."
+  },
+  {
+    "id": "projection-fee-fiat-exact",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"fiat_value_exact\"] = Value::Null;",
+    "replace": "base[\"fiat_value_exact\"] = json!(\"0\");",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee fiat exact semantics."
+  },
+  {
+    "id": "projection-fee-marker",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"custody_finalized_tax_projection\"] = json!(true);",
+    "replace": "base[\"custody_finalized_tax_projection\"] = json!(false);",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee marker semantics."
+  },
+  {
+    "id": "projection-fee-hash",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"custody_quantity_hash\"] = observation[\"quantity_hash\"].clone();",
+    "replace": "base[\"custody_quantity_hash\"] = Value::Null;",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee hash semantics."
+  },
+  {
+    "id": "projection-fee-start",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"custody_slice_start_msat\"] = json!(0);",
+    "replace": "base[\"custody_slice_start_msat\"] = json!(1);",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee start semantics."
+  },
+  {
+    "id": "projection-fee-end",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "base[\"custody_slice_end_msat\"] = json!(0);",
+    "replace": "base[\"custody_slice_end_msat\"] = json!(1);",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Finalized projection preserves Python fee end semantics."
+  },
+  {
+    "id": "projection-parent-type",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "let Py::Int(vout) = get(entry, \"vout\") else {\n                continue;\n            };",
+    "replace": "let coerced = graph::stored::integer(get(entry, \"vout\")).unwrap_or(BigInt::from(0));\n            let vout = &coerced;",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Chain parents require a Python int, excluding booleans, floats and numeric strings."
+  },
+  {
+    "id": "projection-hash-type-family",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "        crate::interpretation::integer_or_zero(&row[key])?;",
+    "replace": "        let _ = &row[key];",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Malformed committed raw quantities retain Python TypeError rather than becoming a ValueError from generic hash encoding."
+  },
+  {
+    "id": "projection-hash-admission-order",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "    if codec::integer(&row[\"observation_authority_version\"]).ok() != Some(json!(1)) {",
+    "replace": "    let _ = observed_hash(row)?;\n    if codec::integer(&row[\"observation_authority_version\"]).ok() != Some(json!(1)) {",
+    "expect_failing": [
+      "projection_fee_row_vectors"
+    ],
+    "rule": "Version and graph commitment checks precede parsing the original amount and fee."
   }
 ]

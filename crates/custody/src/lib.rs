@@ -2,6 +2,7 @@
 pub mod codec;
 pub mod components;
 pub mod evidence;
+pub mod finalized_projection;
 pub mod gaps;
 mod gates;
 mod graph;

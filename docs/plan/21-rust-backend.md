@@ -1547,6 +1547,23 @@ Finalized projection and journal fusion remain separate work. Python continues
 to own production decisions and persistence, and snapshot v1 contains no Rust
 compiler operands or verdicts.
 
+### Finalized row primitives (R2f, partial)
+
+The local `t3code/r2f-projection` checkpoint, based on `9d2ab49c`, ports the
+finalized row contract, exact synthetic slice/fee/payout identities, original
+row/anchor fallback, chain-order proof capture and fee-only row construction.
+The private comparison example consumes independent primitive operands; it is
+not snapshot admission and does not provide a partially implemented product
+stage. Frozen Python vectors and generated per-engine activity counts preserve
+raw quantities, timestamps, provenance, privacy markers and validation order.
+See the [checkpoint evidence](../reference/custody-engine.md#finalized-row-primitive-checkpoint-r2f-partial).
+
+`finalized_projection` remains skipped in PyO3, census and custody-shadow.
+Slice pricing, direct payouts, fee allocation, selected MOVE/external/inbound
+composition, connected blocking, basis barriers and quarantine composition must
+match before enabling it. Journal fusion remains separate. Python stays
+authoritative, Rust never supplies persisted state, and snapshot v1 stays raw-only.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
