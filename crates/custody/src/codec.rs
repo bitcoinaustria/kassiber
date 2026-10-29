@@ -524,6 +524,22 @@ pub(crate) fn memo(kind: Memo, text: &str, convert: impl FnOnce() -> Value) -> V
     value
 }
 
+/// Appends `item` to its key's group, creating groups in first-seen order:
+/// the order a linear search over `groups` keeps, with a hashed lookup.
+pub(crate) fn push_grouped<K: Eq + std::hash::Hash + Clone, T>(
+    groups: &mut Vec<(K, Vec<T>)>,
+    index: &mut std::collections::HashMap<K, usize>,
+    key: K,
+    item: T,
+) {
+    if let Some(&at) = index.get(&key) {
+        groups[at].1.push(item);
+    } else {
+        index.insert(key.clone(), groups.len());
+        groups.push((key, vec![item]));
+    }
+}
+
 /// Releases memoized conversions at the end of an operation.
 pub(crate) fn clear_memos() {
     MEMOS.with(|m| {

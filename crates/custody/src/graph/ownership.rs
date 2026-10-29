@@ -336,6 +336,7 @@ pub(crate) fn profile_parsed_typed(
     index: Index<'_>,
 ) -> Result<BTreeMap<String, kassiber_pyjson::Value>, String> {
     let mut parsed_rows = Vec::new();
+    let mut parsed_positions = std::collections::HashMap::new();
     let mut groups: BTreeMap<(String, String, String), Vec<kassiber_pyjson::Value>> =
         BTreeMap::new();
     for row in rows {
@@ -354,12 +355,13 @@ pub(crate) fn profile_parsed_typed(
             .or_default()
             .push(raw_graph.clone());
         let id = codec::pystr(&row["id"]);
-        if let Some((_, old_graph, old_key)) =
-            parsed_rows.iter_mut().find(|(old_id, _, _)| old_id == &id)
-        {
+        // A repeated id replaces its first entry in place.
+        if let Some(&at) = parsed_positions.get(&id) {
+            let (_, old_graph, old_key) = &mut parsed_rows[at];
             *old_graph = raw_graph;
             *old_key = key;
         } else {
+            parsed_positions.insert(id.clone(), parsed_rows.len());
             parsed_rows.push((id, raw_graph, key));
         }
     }

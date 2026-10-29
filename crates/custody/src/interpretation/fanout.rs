@@ -103,15 +103,11 @@ fn clone_out(row: &Value, amount_msat: &BigInt, fee: &BigInt, id: &str) -> Resul
 
 pub(super) fn derive(rows: &[Value], handled: &BTreeSet<String>) -> Result<Value, String> {
     // A Vec retains Python's first-seen scope order, including interleaved groups.
-    let mut groups = Vec::new();
+    let mut groups: Vec<(_, Vec<&Value>)> = Vec::new();
+    let mut index = std::collections::HashMap::new();
     for row in rows {
         if let Some(scope) = graph::onchain_scope(row) {
-            if let Some((_, group)) = groups.iter_mut().find(|(key, _)| key == &scope) {
-                let group: &mut Vec<&Value> = group;
-                group.push(row);
-            } else {
-                groups.push((scope, vec![row]));
-            }
+            crate::codec::push_grouped(&mut groups, &mut index, scope, row);
         }
     }
     let mut derived_pairs = Vec::new();

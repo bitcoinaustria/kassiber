@@ -171,13 +171,10 @@ type Groups<'a, K> = Vec<(K, Vec<&'a Value>)>;
 
 pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), String> {
     let mut chain_groups: Groups<(String, String, String, String)> = Vec::new();
+    let mut index = std::collections::HashMap::new();
     for row in rows {
         if let Some(scope) = graph::onchain_scope(row) {
-            if let Some((_, group)) = chain_groups.iter_mut().find(|(key, _)| key == &scope) {
-                group.push(row);
-            } else {
-                chain_groups.push((scope, vec![row]));
-            }
+            crate::codec::push_grouped(&mut chain_groups, &mut index, scope, row);
         }
     }
     let mut pairs = Vec::new();
@@ -189,6 +186,9 @@ pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), S
         &mut matched,
     )?;
     let mut hash_groups: Groups<(String, Value, String)> = Vec::new();
+    // Asset values are keyed by their encoding, which is injective.
+    let mut hash_index: std::collections::HashMap<(String, String, String), usize> =
+        std::collections::HashMap::new();
     for row in rows {
         if matched.contains(&text(&row["id"])) || !lightning_row(row) {
             continue;
@@ -199,9 +199,11 @@ pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), S
             continue;
         };
         let key = (hash, row["asset"].clone(), domain);
-        if let Some((_, group)) = hash_groups.iter_mut().find(|(k, _)| k == &key) {
-            group.push(row);
+        let encoded = (key.0.clone(), key.1.to_string(), key.2.clone());
+        if let Some(&at) = hash_index.get(&encoded) {
+            hash_groups[at].1.push(row);
         } else {
+            hash_index.insert(encoded, hash_groups.len());
             hash_groups.push((key, vec![row]));
         }
     }

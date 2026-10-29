@@ -33,14 +33,17 @@ fn positive(row: &Value) -> Result<bool, String> {
 /// The conflict sentinel has no asset authority. Unlike transfer matching,
 /// Liquid confirmation safety also works without a trusted asset component.
 fn conflict_scope(row: &Value, parsed: Option<&Py>) -> Option<Physical> {
-    let mut probe = row.clone();
+    // Only a synthetic id is renamed; other rows are probed as they are.
+    let mut renamed = None;
     if SYNTHETIC
         .iter()
         .any(|prefix| codec::text(&row["id"]).starts_with(prefix))
     {
+        let probe = renamed.insert(row.clone());
         probe["id"] = json!(format!("physical-anchor:{}", codec::pystr(&row["id"])));
     }
-    if let Some((chain, network, txid, _)) = graph::onchain_scope(&probe) {
+    let probe = renamed.as_ref().unwrap_or(row);
+    if let Some((chain, network, txid, _)) = graph::onchain_scope(probe) {
         return Some((chain, network, txid));
     }
     let parsed = parsed?;
@@ -282,6 +285,7 @@ pub(super) fn pending(rows: &[Value]) -> Result<Ids, String> {
 
 pub(super) fn fanout(rows: &[Value], covered: &Ids) -> Result<Ids, String> {
     let mut groups: Vec<(graph::ownership::TransferScope, Vec<&Value>)> = Vec::new();
+    let mut index = std::collections::HashMap::new();
     for row in rows {
         if SYNTHETIC
             .iter()
@@ -292,11 +296,7 @@ pub(super) fn fanout(rows: &[Value], covered: &Ids) -> Result<Ids, String> {
         let Some(scope) = graph::onchain_scope(row) else {
             continue;
         };
-        if let Some((_, group)) = groups.iter_mut().find(|(key, _)| key == &scope) {
-            group.push(row);
-        } else {
-            groups.push((scope, vec![row]));
-        }
+        codec::push_grouped(&mut groups, &mut index, scope, row);
     }
     let mut held = Ids::new();
     for (_, group) in groups {
@@ -360,6 +360,8 @@ pub(super) fn fanout(rows: &[Value], covered: &Ids) -> Result<Ids, String> {
 
 pub(super) fn unscoped(rows: &[Value]) -> Result<Ids, String> {
     let mut groups: Vec<((String, String), Vec<&Value>)> = Vec::new();
+    let mut positions: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
     for row in rows {
         let id = codec::text(&row["id"]);
         if id.starts_with("custody-tax:")
@@ -375,9 +377,11 @@ pub(super) fn unscoped(rows: &[Value]) -> Result<Ids, String> {
         }
         let external = graph::strict_txid(&json!(external)).unwrap_or_else(|| external.to_owned());
         let key = (external, codec::text(&row["asset"]).py_strip().py_upper());
-        if let Some((_, group)) = groups.iter_mut().find(|(k, _)| *k == key) {
-            group.push(row);
+        // Groups keep first-occurrence order, as a linear search kept them.
+        if let Some(&at) = positions.get(&key) {
+            groups[at].1.push(row);
         } else {
+            positions.insert(key.clone(), groups.len());
             groups.push((key, vec![row]));
         }
     }

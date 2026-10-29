@@ -389,13 +389,10 @@ pub(super) fn connectivity(legs: &[Value], allocs: &[Value], mode: &str) -> Vec<
         }
     }
     let mut groups: Vec<(usize, Vec<Value>)> = Vec::new();
+    let mut index = std::collections::HashMap::new();
     for (i, l) in unique.iter().enumerate() {
         let r = root(&parent, i);
-        if let Some((_, ls)) = groups.iter_mut().find(|(k, _)| *k == r) {
-            ls.push(l.clone());
-        } else {
-            groups.push((r, vec![l.clone()]));
-        }
+        crate::codec::push_grouped(&mut groups, &mut index, r, l.clone());
     }
     let mut issues = Vec::new();
     for (_, ls) in groups {

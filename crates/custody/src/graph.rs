@@ -664,13 +664,10 @@ type ChainScope = (String, String, String, String);
 
 pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, String> {
     let mut grouped: Vec<(ChainScope, Vec<Value>)> = Vec::new();
+    let mut index = std::collections::HashMap::new();
     for row in rows {
         if let Some(scope) = onchain_scope(row) {
-            if let Some((_, items)) = grouped.iter_mut().find(|(s, _)| s == &scope) {
-                items.push(row.clone());
-            } else {
-                grouped.push((scope, vec![row.clone()]));
-            }
+            codec::push_grouped(&mut grouped, &mut index, scope, row.clone());
         }
     }
     let mut result = serde_json::Map::new();
