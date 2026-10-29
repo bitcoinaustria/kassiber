@@ -378,11 +378,19 @@ fn install_observed(
     }
     recover(data, observer)?;
     durable::directory(&state)?;
-    let prepared = tempfile::Builder::new()
-        .prefix(".restore-install-")
-        .tempdir_in(&state)
-        .map_err(Error::io)?
-        .keep();
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".restore-install-");
+    // Deterministic wire-oracle path, never enabled in a shipping binary.
+    #[cfg(feature = "test-hooks")]
+    let fixed_prefix = std::env::var("KASSIBER_RUST_TEST_RESTORE_SUFFIX")
+        .ok()
+        .filter(|s| !s.is_empty() && s.len() <= 32 && s.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .map(|s| format!(".restore-install-{s}"));
+    #[cfg(feature = "test-hooks")]
+    if let Some(prefix) = fixed_prefix.as_deref() {
+        builder.prefix(prefix).rand_bytes(0);
+    }
+    let prepared = builder.tempdir_in(&state).map_err(Error::io)?.keep();
     let mut recovery = None;
     let mut published = false;
     let mut committed = false;

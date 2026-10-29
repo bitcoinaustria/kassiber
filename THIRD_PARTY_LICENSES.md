@@ -33,6 +33,9 @@ The Rust backup service reuses those same locked `age` and `tar` crates for
 Python-compatible `.kassiber` archives. In-process passphrase encryption avoids
 passing secrets to a child process; recipient mode retains Python's fixed
 `age`/`rage` invocation. No registry version or checksum changes.
+Desktop backup previews also reuse the locked `sha2` 0.11 staging digest and
+`getrandom` 0.4.3 preview capabilities; the standard library provides neither
+SHA-256 nor a portable cryptographic random-byte API.
 They reuse SHA-256, UUID parsing, temporary-file publication and the existing
 lookaround regex engine for Python's public-watch-material projection.
 Machine preferences also reuse `tempfile` in storage at runtime to atomically
@@ -45,7 +48,7 @@ the standard library has no portable cryptographic random-byte API.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment and invalidation generations | MIT OR Apache-2.0 |
+| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities | MIT OR Apache-2.0 |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
@@ -101,7 +104,7 @@ the standard library has no portable cryptographic random-byte API.
 
 | `rusqlite` / `libsqlite3-sys` | `0.40.1` (exact) / locked transitive | Existing-book Rust runtime; SQLite's backup/transaction APIs and bundled SQLCipher are unavailable in the standard library | MIT / MIT (bindings); public domain (SQLite), BSD-style (SQLCipher community) |
 | `openssl-src` / `openssl-sys` | locked transitive | Vendored SQLCipher crypto on Linux/Windows avoids an undeclared system OpenSSL runtime; macOS selects CommonCrypto | Apache-2.0 / MIT |
-| `sha2` | `0.10` (custody), `0.11` (storage and attachments) | Persisted custody evidence/observation commitments, Python-compatible project/schema/remembered-account digests and managed attachment hashes; unified with native Secret Service's RustCrypto generation; no standard-library cryptographic hash | MIT OR Apache-2.0 |
+| `sha2` | `0.10` (custody), `0.11` (storage, attachments and backup staging) | Persisted custody evidence/observation commitments, Python-compatible project/schema/remembered-account digests, managed attachment hashes and desktop restore staging commitments; unified with native Secret Service's RustCrypto generation; no standard-library cryptographic hash | MIT OR Apache-2.0 |
 | `zeroize` | `1` | Erases application-owned passphrase, fd input and key-literal buffers on drop, including error paths | MIT OR Apache-2.0 |
 | `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup, no-follow file flags, exclusive atomic storage publication unavailable in the standard library, and consuming raw passphrase fds without assuming a valid Rust descriptor | MIT / MIT OR Apache-2.0 |
 | `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |

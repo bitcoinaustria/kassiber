@@ -1496,6 +1496,7 @@ name = "kassiber-backup"
 version = "0.1.0"
 dependencies = [
  "age",
+ "getrandom 0.4.3",
  "kassiber-envelope",
  "kassiber-ownership",
  "kassiber-paths",
@@ -1504,6 +1505,7 @@ dependencies = [
  "kassiber-secrets",
  "kassiber-store",
  "rpassword",
+ "sha2 0.11.1",
  "tar",
  "tempfile",
  "zeroize",
@@ -1555,6 +1557,7 @@ dependencies = [
 name = "kassiber-daemon"
 version = "0.1.0"
 dependencies = [
+ "kassiber-backup",
  "kassiber-envelope",
  "kassiber-imports",
  "kassiber-pyjson",
@@ -1671,6 +1674,7 @@ dependencies = [
 name = "kassiber-runtime"
 version = "0.1.0"
 dependencies = [
+ "kassiber-backup",
  "kassiber-envelope",
  "kassiber-imports",
  "kassiber-pyjson",

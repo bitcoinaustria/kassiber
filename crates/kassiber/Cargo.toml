@@ -27,6 +27,7 @@ test-harness = [
   "kassiber-daemon/test-kinds",
   "kassiber-store/test-hooks",
   "kassiber-secrets/test-hooks",
+  "kassiber-backup/test-hooks",
 ]
 
 [dependencies]

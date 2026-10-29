@@ -209,6 +209,13 @@ impl Input {
         self.next_new(None).unwrap_or(Chunk::Eof)
     }
 
+    pub fn next_chunk_timeout(&mut self, timeout: Option<Duration>) -> Option<Chunk> {
+        self.deferred
+            .pop_front()
+            .map(Some)
+            .unwrap_or_else(|| self.next_new(timeout))
+    }
+
     /// The next chunk read from stdin, ignoring set-aside ones; `None` when
     /// `timeout` passes first.
     pub fn next_new(&mut self, timeout: Option<Duration>) -> Option<Chunk> {

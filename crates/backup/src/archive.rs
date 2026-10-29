@@ -8,6 +8,14 @@ use std::path::{Path, PathBuf};
 
 const MAX_MEMBER: u64 = 4 * 1024 * 1024 * 1024;
 
+pub(crate) fn finish(mut tar: tar::Builder<File>) -> Result<()> {
+    tar.finish().map_err(io_error)?;
+    let tar = tar.into_inner().map_err(io_error)?;
+    // Python tarfile closes on a twenty-block record boundary.
+    let size = tar.metadata().map_err(io_error)?.len();
+    tar.set_len(size.div_ceil(10240) * 10240).map_err(io_error)
+}
+
 fn py_name(mut bytes: &[u8]) -> kassiber_pyjson::PyStr {
     // CPython tarfile's UTF-8 + surrogateescape decoding.
     let mut points = Vec::new();
@@ -201,15 +209,13 @@ pub(crate) fn append_tree(
             append_file(tar, &path, &name)?;
             count += 1;
         } else if metadata.is_dir() {
-            let mut header = tar::Header::new_gnu();
+            let mut header = tar::Header::new_ustar();
             header.set_metadata(&metadata);
             header.set_uid(0);
             header.set_gid(0);
             header.set_size(0);
             header.set_entry_type(tar::EntryType::Directory);
-            header.set_cksum();
-            tar.append_data(&mut header, name, std::io::empty())
-                .map_err(io_error)?;
+            append_metadata(tar, &mut header, &metadata, &name, std::io::empty())?;
         }
     }
     Ok(count)
@@ -221,13 +227,73 @@ pub(crate) fn append_file(
     name: impl AsRef<Path>,
 ) -> Result<()> {
     let metadata = fs::symlink_metadata(source).map_err(io_error)?;
-    let mut header = tar::Header::new_gnu();
+    let mut header = tar::Header::new_ustar();
     header.set_metadata(&metadata);
     header.set_uid(0);
     header.set_gid(0);
+    append_metadata(
+        tar,
+        &mut header,
+        &metadata,
+        name.as_ref(),
+        File::open(source).map_err(io_error)?,
+    )
+}
+
+fn append_metadata(
+    tar: &mut tar::Builder<File>,
+    header: &mut tar::Header,
+    metadata: &fs::Metadata,
+    name: &Path,
+    contents: impl std::io::Read,
+) -> Result<()> {
+    #[cfg(unix)]
+    let mut name = {
+        use std::os::unix::ffi::OsStrExt;
+        name.as_os_str().as_bytes().to_vec()
+    };
+    #[cfg(not(unix))]
+    let mut name = name.to_string_lossy().as_bytes().to_vec();
+    if header.entry_type().is_dir() && !name.ends_with(b"/") {
+        name.push(b'/');
+    }
+    #[cfg(unix)]
+    let modified = {
+        use std::os::unix::fs::MetadataExt;
+        metadata.mtime() as f64 + metadata.mtime_nsec() as f64 / 1e9
+    };
+    #[cfg(not(unix))]
+    let modified = metadata
+        .modified()
+        .map_err(io_error)?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(io_error)?
+        .as_secs_f64();
+    // gettarinfo always stores stat.st_mtime as a float. Python's default PAX
+    // format therefore emits an extended mtime record for every disk member.
+    let mtime = kassiber_pyjson::dumps(
+        &kassiber_pyjson::Value::Float(modified),
+        &Default::default(),
+    )
+    .map_err(io_error)?;
+    let mut pax = vec![];
+    if std::str::from_utf8(&name).is_err() {
+        pax.push(("hdrcharset", b"BINARY".as_slice()));
+    }
+    if !name.is_ascii() || name.len() > 100 {
+        pax.push(("path", name.as_slice()));
+    }
+    pax.push(("mtime", mtime.as_bytes()));
+    tar.append_pax_extensions(pax).map_err(io_error)?;
+    let fallback: String = py_name(&name)
+        .code_points()
+        .map(|c| if c < 128 { char::from(c as u8) } else { '?' })
+        .take(100)
+        .collect();
+    header.set_path(fallback).map_err(io_error)?;
+    header.set_mtime(modified.round_ties_even().max(0.0) as u64);
     header.set_cksum();
-    tar.append_data(&mut header, name, File::open(source).map_err(io_error)?)
-        .map_err(io_error)
+    tar.append(header, contents).map_err(io_error)
 }
 pub(crate) fn append_bytes(tar: &mut tar::Builder<File>, name: &str, bytes: &[u8]) -> Result<()> {
     let mut header = tar::Header::new_gnu();
@@ -246,6 +312,54 @@ pub(crate) fn append_bytes(tar: &mut tar::Builder<File>, name: &str, bytes: &[u8
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disk_members_preserve_pax_names_mtimes_and_python_record_padding() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        fs::write(&source, b"evidence").unwrap();
+        let output = root.path().join("bundle.tar");
+        let mut tar = tar::Builder::new(File::create(&output).unwrap());
+        let mut names = vec![
+            PathBuf::from("attachments/ascii"),
+            PathBuf::from("attachments/₿"),
+            PathBuf::from(format!("attachments/{}", "long".repeat(60))),
+        ];
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            names.push(PathBuf::from(std::ffi::OsString::from_vec(
+                b"attachments/raw-\xff".to_vec(),
+            )));
+        }
+        for name in &names {
+            append_file(&mut tar, &source, name).unwrap();
+        }
+        finish(tar).unwrap();
+        assert_eq!(output.metadata().unwrap().len() % 10240, 0);
+        let mut tar = tar::Archive::new(File::open(output).unwrap());
+        let entries = tar.entries().unwrap();
+        for (entry, name) in entries.zip(&names) {
+            let mut entry = entry.unwrap();
+            assert_eq!(&entry.path().unwrap(), name);
+            let extensions = entry
+                .pax_extensions()
+                .unwrap()
+                .unwrap()
+                .map(|p| {
+                    let p = p.unwrap();
+                    (p.key_bytes().to_vec(), p.value_bytes().to_vec())
+                })
+                .collect::<Vec<_>>();
+            assert!(extensions.iter().any(|(k, _)| k == b"mtime"));
+        }
+        // One short file still receives PAX metadata and full record padding.
+        let short = root.path().join("short.tar");
+        let mut tar = tar::Builder::new(File::create(&short).unwrap());
+        append_file(&mut tar, &source, "attachments/short").unwrap();
+        finish(tar).unwrap();
+        assert_eq!(short.metadata().unwrap().len(), 10240);
+    }
 
     #[test]
     fn path_types_sizes_and_normalized_duplicates_match_python() {

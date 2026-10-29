@@ -15,6 +15,7 @@
 
 mod attachments;
 mod backends;
+mod backup;
 pub mod control;
 mod documents;
 mod imports;
@@ -80,6 +81,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     }));
     kinds.extend(rates::KINDS);
     kinds.push("ui.profiles.reset_data");
+    kinds.extend(backup::KINDS);
     kinds.extend(secrets::KINDS);
     kinds.extend(imports::KINDS);
     kinds.extend(documents::KINDS);
@@ -239,6 +241,7 @@ pub(crate) struct Daemon {
     ownership_generation: String,
     /// The passphrase that unlocked the book, for later background opens.
     unlocked_passphrase: Option<Secret>,
+    backup_sessions: kassiber_backup::desktop::Sessions,
 }
 
 impl Daemon {
@@ -258,6 +261,7 @@ impl Daemon {
             retired: Vec::new(),
             ownership_generation: format!("desktop-{}-{}", std::process::id(), token_hex8()),
             unlocked_passphrase: None,
+            backup_sessions: Default::default(),
         }
     }
 
@@ -267,7 +271,11 @@ impl Daemon {
 
     fn run(&mut self, input: &mut Input) -> i32 {
         loop {
-            let line = match input.next_chunk() {
+            self.backup_sessions.expire();
+            let Some(chunk) = input.next_chunk_timeout(self.backup_sessions.remaining()) else {
+                continue;
+            };
+            let line = match chunk {
                 Chunk::Eof => return 0,
                 Chunk::Undecodable => {
                     let details = dict([("error", s("request line is not valid UTF-8"))]);
@@ -488,6 +496,10 @@ impl Daemon {
                         .collect(),
                 ));
             }
+        }
+        self.backup_sessions.expire();
+        if backup::KINDS.contains(&kind_text.as_str()) {
+            return backup::handle(self, &kind_text, args.as_ref(), &request_id);
         }
         if documents::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {
@@ -947,6 +959,7 @@ impl Daemon {
         }
         self.release_owner()?;
         self.unlocked_passphrase = None;
+        self.backup_sessions.clear();
         Ok(())
     }
 
@@ -1038,6 +1051,7 @@ impl Daemon {
     /// The `finally` of Python's `run`: forget the passphrase, close the
     /// book, and release ownership.
     fn shutdown_resources(&mut self) {
+        self.backup_sessions.clear();
         self.unlocked_passphrase = None;
         self.retry_retired();
         let book = self.book.take();

@@ -134,8 +134,10 @@ starts from `0d4fbc28`; the complete service slice remains open.
   interruption recovery. Export and staging-only import have a
   [partial checkpoint](docs/reference/rust-shell.md#backup-archive-checkpoint-r5-partial);
   [installation and shared restart recovery](docs/reference/rust-shell.md#backup-install-and-recovery-continuation-r5)
-  are now ported. The four desktop kinds and remaining archive/platform parity
-  remain open.
+  are now ported. All four desktop kinds have a
+  [native continuation](docs/reference/rust-shell.md#desktop-backup-continuation-r5),
+  including scoped previews, cancellation and locked safe restore. Compressed
+  archives, hardlink export and remaining archive/platform parity remain open.
 - [ ] Consider attachment content hashes in a future backup format/product
   change. The current Python-compatible manifest records only file counts;
   this Rust port deliberately retains that behavior.

@@ -1160,6 +1160,177 @@ publication, native age/rage, platform/TTY checks and the remaining backup
 dispositions are open. No external dependency or lockfile change is introduced
 by this continuation. The complete backup service slice is not accepted.
 
+## Desktop backup continuation (R5)
+
+`t3code/r5-backup-3` starts at `0d775706`. All four desktop kinds are native:
+`ui.backup.export`, `ui.backup.preview`, `ui.backup.apply` and
+`ui.backup.cancel`. They share `crates/backup/src/desktop.rs`; the daemon's
+family adapter only supplies the live book, lifecycle and ownership seams.
+There is no Python dispatch or new egress. AI projections remain in Python.
+Python product code, including the independently reviewed `64378ed2` restore
+installer, is unchanged.
+
+The checkpoint supersedes the desktop omissions in the preceding two backup
+checkpoints. It preserves the reference's desktop contract:
+
+- Export validates an absolute `.kassiber` destination outside the active
+  container, refuses plaintext before requesting an outer passphrase, and
+  maps destination I/O failures to `backup_export_failed`. Python's PAX disk
+  metadata and 10 KiB tar record padding now preserve the reported encrypted
+  artifact size. Unix surrogateescape names, Unicode and long paths survive.
+- Preview clears the previous staging first, requires both passphrases,
+  authenticates the encrypted inner database without migration or the active
+  operator binding, and checks integrity. SQLCipher authentication diagnostics
+  are suppressed only for this incoming validation, restoring the prior log
+  level afterwards. Invalid archives/credentials/integrity use the same
+  redacted refusal; missing files and required passphrases retain their codes.
+- Summaries contain sorted workspace/book labels (100 of each), the full book
+  count, attachment file count, existing replaced entries, unavailable-secret
+  flag and the 600-second lifetime. They contain no wallet/configuration
+  projection, attachment hashes or passphrases. A preview retains one private
+  validated snapshot and no password.
+- Capabilities use 32 OS-random bytes. Expiry cleans decrypted staging while
+  idle as well as on requests; lock and shutdown clear it. Cancel works while
+  locked, clears only the matching capability and otherwise succeeds as a
+  no-op. These are synchronous handlers: Python emits no backup progress
+  records and cancel does not interrupt an in-flight export/import/apply.
+- Apply requires exact `RESTORE` confirmation, the current capability, and
+  unchanged target and staging commitments. The target fingerprint includes
+  canonical container/project, connection identity, database and recursive
+  restore-sidecar metadata, connection changes and SQLite data version. The
+  staging digest commits relative names and bytes and refuses symbolic links.
+- Apply retains the desktop lease, excludes the broker role, rechecks the
+  target immediately before checkpoint/close and refuses busy WAL readers.
+  It installs the validated snapshot through the shared restore transaction,
+  retains the rollback copy, invalidates native credential guards and disables
+  remembered unlock without probing a credential store. It reloads local
+  runtime configuration/project metadata and leaves the restored book locked.
+  Credential-setting failures warn on a completed restore. Failures after
+  close carry `details.locked: true`; pre-close failures retain the connection.
+  Owner refusals retain the preview; consumed previews clean up on either
+  outcome. Rust has no ported background backup/analysis workers to retire.
+
+`tests/test_rust_backup_desktop.py` compares raw response JSONL, including
+field order, separators, request IDs and the absence of extra progress records.
+It injects only OS-random preview/credential tokens and the private install
+suffix through compile-time test hooks; it normalizes no response fields.
+Both runs use the same database inode, moving it back from retained recovery
+between runs rather than allowing hard-link aliases. Tests compare complete
+logical incoming books and retained exports, and assert native routing through
+the hybrid candidate. The deterministic hooks are absent in production.
+
+### Desktop verification
+
+The fresh hybrid desktop oracle passes **11 cases** with byte-identical JSONL
+on the same fixtures. Its measured routing includes successful and refused
+requests; every daemon session is served by Rust:
+
+| Kind | Rust | Python fallback |
+| --- | ---: | ---: |
+| `ui.backup.export` | 13 | 0 |
+| `ui.backup.preview` | 20 | 0 |
+| `ui.backup.apply` | 14 | 0 |
+| `ui.backup.cancel` | 4 | 0 |
+
+Formatting and both workspace/all-targets and `kassiber --features test-harness`
+clippy checks pass with warnings denied. The harness and both restore probes
+build offline. The Python desktop/restore reference regressions pass 19 cases.
+The archive hybrid oracle passes 27 cases, routing four exports and 26 imports
+through Rust with zero Python fallbacks. The required shell parity, hybrid
+candidate, CLI runner and `tests/rust_port` suite passes 63 tests and 178 subtests;
+inventory, contracts and shard validation pass.
+
+The workspace excluding `kassiber-net` and `kassiber-rates` passes **892 tests**;
+the harness tests pass 14. Full workspace acceptance remains blocked by sandbox
+loopback permissions: `kassiber-net` reaches 30 passed / 16 failed and the
+separate rates run reaches 16 passed / 11 failed, all failures at socket creation
+with `Operation not permitted`. Workspace verification uses a separate build
+directory so it cannot replace the harness during the byte oracles.
+The fresh install/recovery oracle passes **1,370 cases**, including the retained
+1,348 killed-process interruption scenarios across Python/Rust starters and
+restarters. No Python reference bug was found or fixed in this continuation.
+
+The mutation catalog now has **107 entries**: the retained 47 archive/install/
+recovery rules, 58 desktop rules and two export-format rules. The initial run
+exposed a missing assertion: removing the early target check still failed at
+close with the same error code. Its named test now checks the full refusal and
+that ownership was never acquired. A fresh complete run passes all 22 named
+unmutated baselines and kills **all 107 mutations**.
+
+The new entries and their named native killers follow. The catalog contains
+the exact source replacements and rule descriptions; run
+`python crates/backup/scripts/mutation_check.py` to repeat the scratch-tree
+check. Every named baseline must pass before mutation.
+
+| Mutation | Killing Rust test filter |
+| --- | --- |
+| `D-cancel-token` | `cancel_capabilities_expiry_and_cleanup_match_reference` |
+| `D-cancel-locked` | `cancel_capabilities_expiry_and_cleanup_match_reference` |
+| `D-cancel-cleanup` | `cancel_capabilities_expiry_and_cleanup_match_reference` |
+| `D-expiry` | `cancel_capabilities_expiry_and_cleanup_match_reference` |
+| `D-target-locked` | `export_paths_plaintext_and_secret_refusals_match_reference` |
+| `D-export-suffix` | `export_paths_plaintext_and_secret_refusals_match_reference` |
+| `D-export-contained` | `export_paths_plaintext_and_secret_refusals_match_reference` |
+| `D-export-plaintext` | `export_paths_plaintext_and_secret_refusals_match_reference` |
+| `D-preview-replace` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-path` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-outer` | `preview_secret_path_and_validation_error_contracts_match_reference` |
+| `D-preview-inner` | `preview_secret_path_and_validation_error_contracts_match_reference` |
+| `D-preview-encrypted` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-integrity` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-workspaces` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-books` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-book-count` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-redacted-target` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-unavailable` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-lifetime` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-error-mask` | `preview_secret_path_and_validation_error_contracts_match_reference` |
+| `D-preview-token-random` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-fingerprint-project` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-fingerprint-connection` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-fingerprint-database` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-fingerprint-sidecars` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-fingerprint-changes` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-fingerprint-version` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-fingerprint-stat` | `fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations` |
+| `D-digest-links` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-digest-paths` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-digest-content` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-apply-confirm` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-apply-token` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-apply-target` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-apply-staging` | `apply_confirmation_tokens_target_and_stage_guards_match_reference` |
+| `D-apply-owner` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-maintenance` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-consumption` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-close` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-install` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-credentials` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-warning` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-locked-error` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-release` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-cleanup` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-close-recheck` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-close-readers` | `close_refuses_busy_wal_readers_before_retiring_connection` |
+| `D-credentials-generations` | `restore_credentials_revoke_remembered_unlock_without_native_access` |
+| `D-credentials-disable` | `restore_credentials_revoke_remembered_unlock_without_native_access` |
+| `D-incoming-quiet` | `incoming_authentication_is_quiet_and_ignores_active_operator_binding` |
+| `D-incoming-binding` | `incoming_authentication_is_quiet_and_ignores_active_operator_binding` |
+| `D-preview-preserved-errors` | `preview_secret_path_and_validation_error_contracts_match_reference` |
+| `D-preview-replaces` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-count-only` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-preview-expiry-field` | `preview_validates_encryption_integrity_summaries_counts_and_redaction` |
+| `D-apply-restored` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `D-apply-locked` | `apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference` |
+| `E-record-padding` | `disk_members_preserve_pax_names_mtimes_and_python_record_padding` |
+| `E-pax-mtime` | `disk_members_preserve_pax_names_mtimes_and_python_record_padding` |
+
+Remaining: compressed tar import, hardlink export/count parity, broader
+malformed-input and filesystem-error byte parity, source-change/output failure
+publication matrices, native age/rage and Windows/macOS/TTY acceptance, and the
+remaining backup test dispositions. The complete backup service slice and
+repository-wide quality/release gates are not claimed by this checkpoint.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

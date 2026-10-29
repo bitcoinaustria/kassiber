@@ -93,6 +93,7 @@ _PROCESS_SERIAL_MODULES = frozenset(
     {
         "test_backup_recovery",
         "test_rust_backup_install",
+        "test_rust_backup_desktop",
         "test_custody_component_surfaces",
         "test_daemon_swap_matching",
         "test_integration_harness_safety",

@@ -1302,6 +1302,34 @@ backup kinds, compressed archives, hardlink-export parity, broader malformed
 input/I/O parity and native-platform acceptance remain open. Attachment counts
 stay unchanged and AI projections remain in Python.
 
+### R5 desktop backup continuation
+
+`t3code/r5-backup-3`, based at `0d775706`, ports all four `ui.backup.*`
+kinds through the backup domain service and a narrow daemon lifecycle adapter.
+Preview authenticates/integrity-checks the encrypted inner payload, exposes only
+the reference's label/count summary, and retains a bound, expiring snapshot
+without either passphrase. Confirmation, target/connection/SQLite generations,
+staging commitments, cancellation and idle/lock/shutdown cleanup preserve the
+Python contract. Apply retains desktop ownership and broker exclusion through
+checkpoint/close and publication, invalidates credential settings without native
+store probes, and reports locked outcomes and retained recovery copies.
+
+The byte oracle normalizes no JSONL response fields: test-only randomness and
+install-name injections and a reused disposable inode make both runs identical.
+Python emits no backup progress events; the synchronous native handlers match.
+Export now retains PAX disk metadata and Python's tar record padding so its
+reported encrypted size also matches. Plaintext export remains refused and
+attachment manifests retain counts without hashes. Python product code and AI
+projections are unchanged; no new dependency version or egress path is added.
+
+The [desktop checkpoint](../reference/rust-shell.md#desktop-backup-continuation-r5)
+records per-kind routing, the 107-entry mutation table, verification and sandbox
+limits. The desktop oracle passes 11 cases with zero fallbacks for each kind,
+the install/recovery oracle passes 1,370 cases, and all 107 mutations are killed.
+This supersedes the preceding desktop omissions, while compressed tar,
+hardlink export, broader malformed/I/O parity, native/platform/TTY acceptance
+and the remaining service dispositions keep the full backup slice open.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

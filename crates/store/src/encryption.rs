@@ -194,6 +194,16 @@ fn quote_secret(value: &str) -> Zeroizing<String> {
 /// Explicit maintenance connection, authenticating before schema access without
 /// initializing or migrating it. Callers must not treat it as an admitted book.
 pub fn open_container(path: &Path, pass: Option<&str>) -> Result<Connection> {
+    open_container_inner(path, pass, false)
+}
+
+/// Desktop preview authenticates an isolated incoming payload. It neither
+/// adopts the active operator binding nor prints SQLCipher unlock diagnostics.
+pub fn open_backup_container(path: &Path, pass: &str) -> Result<Connection> {
+    open_container_inner(path, Some(pass), true)
+}
+
+fn open_container_inner(path: &Path, pass: Option<&str>, backup: bool) -> Result<Connection> {
     validate(path)?;
     let conn = Connection::open_with_flags(
         path,
@@ -204,21 +214,41 @@ pub fn open_container(path: &Path, pass: Option<&str>) -> Result<Connection> {
     if let Some(pass) = pass {
         apply_keying(&conn, pass)?;
     }
-    conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
-        r.get::<_, i64>(0)
-    })
-    .map_err(|e| {
-        if pass.is_some() && !sqlite_is_busy(&e) {
-            Error::new(
-                ErrorKind::UnlockFailed,
-                "wrong passphrase or unsupported database format",
-            )
-            .retryable(true)
-        } else {
-            map_sqlite_error(e)
-        }
-    })?;
-    if std::env::var_os("KASSIBER_OPERATOR_CHILD").is_some_and(|v| v == "1") {
+    let logging: Option<String> = if backup {
+        let previous = conn
+            .query_row("PRAGMA cipher_log_level", [], |r| r.get(0))
+            .map_err(map_sqlite_error)?;
+        conn.execute_batch("PRAGMA cipher_log_level=NONE")
+            .map_err(map_sqlite_error)?;
+        Some(previous)
+    } else {
+        None
+    };
+    let authenticated = conn
+        .query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .map_err(|e| {
+            if pass.is_some() && !sqlite_is_busy(&e) {
+                Error::new(
+                    ErrorKind::UnlockFailed,
+                    "wrong passphrase or unsupported database format",
+                )
+                .retryable(true)
+            } else {
+                map_sqlite_error(e)
+            }
+        });
+    if let Some(level) = logging {
+        let level = match level.as_str() {
+            "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE" => level.as_str(),
+            _ => "NONE",
+        };
+        conn.execute_batch(&format!("PRAGMA cipher_log_level={level}"))
+            .map_err(map_sqlite_error)?;
+    }
+    authenticated?;
+    if !backup && std::env::var_os("KASSIBER_OPERATOR_CHILD").is_some_and(|v| v == "1") {
         let expected =
             std::env::var("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY").map_err(|_| {
                 Error::new(

@@ -163,6 +163,30 @@ pub struct StatusFacts {
 
 /// An open, unlocked book.
 pub trait Book: Send {
+    fn backup_fingerprint(
+        &self,
+        _project: Option<&str>,
+    ) -> Result<kassiber_backup::desktop::Fingerprint, AppError> {
+        Err(not_implemented("backup", "restore fingerprint"))
+    }
+    fn backup_summary(&self) -> Result<Value, AppError> {
+        Err(not_implemented("backup", "book summary"))
+    }
+    fn backup_export(
+        &self,
+        _output: &std::path::Path,
+        _passphrase: &str,
+        _version: &str,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("backup", "desktop export"))
+    }
+    fn close_for_restore(
+        &mut self,
+        _expected: &kassiber_backup::desktop::Fingerprint,
+        _project: Option<&str>,
+    ) -> Result<(), AppError> {
+        Err(not_implemented("backup", "restore close"))
+    }
     /// The rates service family. Unported/test stores fail closed.
     fn rates(&mut self, command: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("rates", command))
@@ -310,6 +334,16 @@ pub enum OwnerKind {
 
 /// The storage operations the shell calls.
 pub trait BookStore: Send + Sync {
+    fn restore_maintenance(&self, _data_root: &str) -> Result<Box<dyn Send>, AppError> {
+        Err(not_implemented("backup", "restore maintenance"))
+    }
+    fn restore_invalidate(
+        &self,
+        _data_root: &str,
+        _project: Option<&str>,
+    ) -> Result<RuntimeConfig, AppError> {
+        Err(not_implemented("backup", "restore credentials"))
+    }
     /// Narrow desktop maintenance seam. Secrets stay separate from argument
     /// maps and ordinary local_service dispatch. The desktop retains its lease.
     fn rotate_passphrase(

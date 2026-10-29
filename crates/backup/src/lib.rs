@@ -1,6 +1,7 @@
 //! The Python backup format: a SQLCipher hot copy and count-checked sidecars
 //! in a tar archive inside an age envelope. No provider or Python dispatch.
 pub mod archive;
+pub mod desktop;
 mod encryption;
 pub mod service;
 
@@ -133,8 +134,7 @@ pub fn export(
     .map_err(io_error)?
         + "\n";
     archive::append_bytes(&mut tar, "manifest.json", bytes.as_bytes())?;
-    tar.finish().map_err(io_error)?;
-    drop(tar);
+    archive::finish(tar)?;
     let mut pending = tempfile::Builder::new()
         .prefix(&format!(
             ".{}.",

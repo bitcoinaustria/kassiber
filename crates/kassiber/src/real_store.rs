@@ -118,6 +118,39 @@ impl ProjectOwner for RealOwner {
 }
 
 impl BookStore for RealStore {
+    fn restore_maintenance(&self, data_root: &str) -> Result<Box<dyn Send>, AppError> {
+        Ok(Box::new(
+            kassiber_store::restore::maintenance(
+                &namespace()?,
+                Path::new(data_root),
+                Some(kassiber_ownership::OwnerKind::Desktop),
+            )
+            .map_err(kassiber_backup::service::restore_error)?,
+        ))
+    }
+    fn restore_invalidate(
+        &self,
+        data_root: &str,
+        project_id: Option<&str>,
+    ) -> Result<RuntimeConfig, AppError> {
+        let namespace = namespace()?;
+        let root = Path::new(data_root);
+        kassiber_backup::desktop::invalidate_credentials(&namespace, root)?;
+        let resolved = context()?
+            .resolve_for_bootstrap(&ResolveOptions {
+                data_root: Some(root.to_owned()),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        let config = backends::Config::load(&resolved.env_file)?;
+        if let Some(id) = project_id {
+            kassiber_setup::projects::get_project(&context()?, id)?;
+        }
+        Ok(RuntimeConfig {
+            default_backend: Some(config.default_backend),
+            env_file: path(&resolved.env_file),
+        })
+    }
     fn rotate_passphrase(
         &self,
         data_root: &str,
@@ -652,6 +685,48 @@ impl RealBook {
 }
 
 impl Book for RealBook {
+    fn backup_fingerprint(
+        &self,
+        project: Option<&str>,
+    ) -> Result<kassiber_backup::desktop::Fingerprint, AppError> {
+        kassiber_backup::desktop::fingerprint(self.conn()?, Path::new(&self.data_root), project)
+    }
+    fn backup_summary(&self) -> Result<Value, AppError> {
+        kassiber_backup::desktop::summary(self.conn()?)
+    }
+    fn backup_export(
+        &self,
+        output: &Path,
+        passphrase: &str,
+        version: &str,
+    ) -> Result<Value, AppError> {
+        let resolved = context()?
+            .resolve_for_bootstrap(&ResolveOptions {
+                data_root: Some(PathBuf::from(&self.data_root)),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        kassiber_backup::desktop::export(
+            &resolved,
+            output,
+            self.db_passphrase.as_ref().map(Secret::expose),
+            passphrase,
+            version,
+        )
+    }
+    fn close_for_restore(
+        &mut self,
+        expected: &kassiber_backup::desktop::Fingerprint,
+        project: Option<&str>,
+    ) -> Result<(), AppError> {
+        kassiber_backup::desktop::check_close(
+            self.conn()?,
+            Path::new(&self.data_root),
+            project,
+            expected,
+        )?;
+        self.close()
+    }
     fn rates(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
         use kassiber_envelope::{py_str, truthy};
         if command.starts_with("ui.") {

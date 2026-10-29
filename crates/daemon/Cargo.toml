@@ -17,6 +17,7 @@ name = "kassiber_daemon"
 test-kinds = []
 
 [dependencies]
+kassiber-backup = { path = "../backup" }
 kassiber-transactions = { path = "../transactions" }
 
 kassiber-imports = { path = "../imports" }
