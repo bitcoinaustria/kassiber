@@ -1,6 +1,100 @@
-//! Private, read-only observer projections. These rows must never be included
+//! Private observer storage and projections. These rows must never be included
 //! in public snapshots, AI context or diagnostics. No dependency sidecar exists.
 use rusqlite::{Connection, OptionalExtension, Result};
+
+/// Already validated private observer state. The caller owns the wallet
+/// transaction, timestamp and compare-and-swap epoch; this function never
+/// begins or commits a transaction.
+pub struct Replacement<'a> {
+    pub id: &'a str,
+    pub workspace_id: &'a str,
+    pub profile_id: &'a str,
+    pub instance: &'a Instance,
+    pub coverage: &'a [Coverage],
+    pub expected_epoch: Option<i64>,
+    pub timestamp: &'a str,
+}
+
+/// Returns false on an epoch conflict, before touching coverage. Errors and
+/// conflicts must roll back the surrounding wallet transaction.
+pub fn replace(conn: &Connection, replacement: &Replacement<'_>) -> Result<bool> {
+    let Replacement {
+        id,
+        workspace_id,
+        profile_id,
+        instance: state,
+        coverage,
+        expected_epoch,
+        timestamp,
+    } = replacement;
+    let changed = if let Some(epoch) = expected_epoch {
+        conn.execute(
+            "UPDATE chain_observer_instances SET workspace_id=?1,profile_id=?2,
+             logical_wallet_id=?3,source_wallet_id=?4,source_key=?5,observer_kind=?6,
+             chain=?7,network=?8,state_version=?9,state_json=?10,
+             state_epoch=state_epoch+1,updated_at=?11 WHERE id=?12 AND state_epoch=?13",
+            rusqlite::params![
+                workspace_id,
+                profile_id,
+                state.logical_wallet_id,
+                state.source_wallet_id,
+                state.source_key,
+                state.observer_kind,
+                state.chain,
+                state.network,
+                state.state_version,
+                state.state_json,
+                timestamp,
+                id,
+                epoch
+            ],
+        )?
+    } else {
+        conn.execute(
+            "INSERT INTO chain_observer_instances(id,workspace_id,profile_id,logical_wallet_id,
+             source_wallet_id,source_key,observer_kind,chain,network,state_version,state_epoch,
+             state_json,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?11,?12,?12)
+             ON CONFLICT(id) DO NOTHING",
+            rusqlite::params![
+                id,
+                workspace_id,
+                profile_id,
+                state.logical_wallet_id,
+                state.source_wallet_id,
+                state.source_key,
+                state.observer_kind,
+                state.chain,
+                state.network,
+                state.state_version,
+                state.state_json,
+                timestamp
+            ],
+        )?
+    };
+    if changed != 1 {
+        return Ok(false);
+    }
+    conn.execute(
+        "DELETE FROM chain_observer_coverage WHERE observer_id=?",
+        [id],
+    )?;
+    for point in *coverage {
+        conn.execute(
+            "INSERT INTO chain_observer_coverage(observer_id,branch_key,coverage_version,
+             highest_used,scanned_to,details_json,updated_at) VALUES(?,?,?,?,?,?,?)",
+            rusqlite::params![
+                id,
+                point.branch_key,
+                point.coverage_version,
+                point.highest_used,
+                point.scanned_to,
+                point.details_json,
+                timestamp
+            ],
+        )?;
+    }
+    Ok(true)
+}
 
 pub struct Instance {
     pub observer_kind: String,

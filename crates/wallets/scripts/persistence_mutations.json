@@ -1,0 +1,242 @@
+[
+  {
+    "id": "persist-transaction",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if conn.is_autocommit() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "observer_persistence_matches_reference_rows_and_epoch_fences"
+    ],
+    "rule": "State writes require the caller transaction."
+  },
+  {
+    "id": "persist-unicode-json",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": ".ensure_ascii(false)",
+    "replace": ".ensure_ascii(true)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer JSON preserves literal Unicode."
+  },
+  {
+    "id": "persist-branch-order",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "a.branch_key.cmp(&b.branch_key)",
+    "replace": "b.branch_key.cmp(&a.branch_key)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Coverage replacement is inserted in sorted branch order."
+  },
+  {
+    "id": "persist-duplicate-branch",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if !seen.insert(branch) {",
+    "replace": "if false && !seen.insert(branch) {",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Duplicate coverage branches refuse before any write."
+  },
+  {
+    "id": "persist-known-branch",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if !prepared.branch_keys.contains(&branch) {",
+    "replace": "if false && !prepared.branch_keys.contains(&branch) {",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Coverage cannot introduce an unknown source branch."
+  },
+  {
+    "id": "persist-negative-scan",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "point.scanned_to < 0 ||",
+    "replace": "point.scanned_to < -1 ||",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Negative scan boundaries refuse before writes."
+  },
+  {
+    "id": "persist-negative-used",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "index < 0",
+    "replace": "index < -1",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Negative highest-used indices refuse before writes."
+  },
+  {
+    "id": "persist-exclusive-boundary",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "index >= point.scanned_to",
+    "replace": "index > point.scanned_to",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Highest-used must be below the exclusive scan boundary."
+  },
+  {
+    "id": "persist-zero-boundary",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "point.scanned_to < 0 ||",
+    "replace": "point.scanned_to <= 0 ||",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "An empty unused branch may have a zero exclusive scan boundary."
+  },
+  {
+    "id": "persist-coverage-version",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "coverage_version: 2,",
+    "replace": "coverage_version: 1,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Coverage rows retain the Python version-two contract."
+  },
+  {
+    "id": "persist-state-version",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "state_version: 1,",
+    "replace": "state_version: 2,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer JSON state rows retain version one."
+  },
+  {
+    "id": "persist-workspace",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "workspace_id: prepared.workspace_id,",
+    "replace": "workspace_id: prepared.profile_id,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer state retains its workspace scope."
+  },
+  {
+    "id": "persist-profile",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "profile_id: prepared.profile_id,",
+    "replace": "profile_id: prepared.workspace_id,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer state retains its profile scope."
+  },
+  {
+    "id": "persist-epoch-increment",
+    "file": "crates/store/src/observer.rs",
+    "find": "state_epoch=state_epoch+1",
+    "replace": "state_epoch=state_epoch",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Successful replacements increment the captured epoch."
+  },
+  {
+    "id": "persist-epoch-compare",
+    "file": "crates/store/src/observer.rs",
+    "find": "WHERE id=?12 AND state_epoch=?13",
+    "replace": "WHERE id=?12 AND (?13 IS NOT NULL)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Existing-state replacements compare the captured epoch."
+  },
+  {
+    "id": "persist-new-epoch",
+    "file": "crates/store/src/observer.rs",
+    "find": "?9,?10,1,?11,?12,?12)",
+    "replace": "?9,?10,0,?11,?12,?12)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Initial observer state starts at epoch one."
+  },
+  {
+    "id": "persist-duplicate-insert",
+    "file": "crates/store/src/observer.rs",
+    "find": "ON CONFLICT(id) DO NOTHING",
+    "replace": "ON CONFLICT(id) DO UPDATE SET state_json=excluded.state_json",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "A newly prepared observer cannot overwrite an existing observer."
+  },
+  {
+    "id": "persist-stale-result",
+    "file": "crates/store/src/observer.rs",
+    "find": "if changed != 1 {",
+    "replace": "if false && changed != 1 {",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "An unsuccessful compare-and-swap refuses before replacing coverage."
+  },
+  {
+    "id": "persist-clear-coverage",
+    "file": "crates/store/src/observer.rs",
+    "find": "DELETE FROM chain_observer_coverage WHERE observer_id=?",
+    "replace": "DELETE FROM chain_observer_coverage WHERE observer_id=? AND 0",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Coverage is a full replacement including an empty snapshot."
+  },
+  {
+    "id": "persist-scan-value",
+    "file": "crates/store/src/observer.rs",
+    "find": "point.scanned_to,",
+    "replace": "point.scanned_to + 1,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Stored scan boundaries remain exact."
+  },
+  {
+    "id": "persist-used-value",
+    "file": "crates/store/src/observer.rs",
+    "find": "point.highest_used,",
+    "replace": "point.highest_used.map(|value| value + 1),",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Stored highest-used indices remain exact."
+  },
+  {
+    "id": "persist-created-time",
+    "file": "crates/store/src/observer.rs",
+    "find": "state_epoch=state_epoch+1,updated_at=?11",
+    "replace": "state_epoch=state_epoch+1,created_at=?11,updated_at=?11",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Replacing state preserves its creation timestamp."
+  },
+  {
+    "id": "persist-nonfinite",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "text.parse::<f64>().is_ok_and(|value| !value.is_finite())",
+    "replace": "text.parse::<f64>().is_ok_and(|value| value.is_nan())",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Non-finite nested observer JSON refuses before any write."
+  },
+  {
+    "id": "persist-details-default",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if point.details.is_null() {",
+    "replace": "if false && point.details.is_null() {",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Absent coverage details are stored as an empty object."
+  }
+]

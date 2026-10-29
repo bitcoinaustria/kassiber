@@ -5024,3 +5024,84 @@ Remaining numbered work for the next run:
    `ui.workspace.freshness.run`. Keep unsupported hybrid routes on Python and
    prove complete normalized book dumps for every fixture and sequence with
    per-command native counts and zero in-scope Python fallbacks.
+
+### Bitcoin observer persistence prerequisite (R5)
+
+Local branch `t3code/r5-sync-7` starts at `9517c6ff`. This checkpoint completes
+only the private JSON/coverage writer needed by numbered step 2 above. **Step 2
+is incomplete**; there is no atomic wallet coordinator or post-sync book-dump
+acceptance claim.
+
+`wallets::observer_apply::persist` validates JSON and every coverage branch
+before writing through `store::observer::replace`. It requires an existing
+caller transaction and the epoch captured during preparation. Initial inserts
+refuse an existing identity; replacements compare and increment the epoch,
+preserve `created_at`, update the private state and replace sorted version-two
+coverage. Empty coverage clears the previous snapshot. Nested non-finite
+numbers, negative indices, duplicate/unknown branches and a highest-used index
+at or beyond the exclusive scan boundary refuse. Neither function commits;
+the future wallet coordinator must roll back its savepoint on any error.
+
+`generate_persistence_vectors.py` calls the unchanged Python
+`persist_observer_state` against a disposable in-memory database using the real
+Python schema. Fifteen sequential vectors compare all observer/coverage columns,
+JSON bytes, epochs, timestamps and typed errors (including details and hints).
+They include initial insert, stale/duplicate writes, invalid coverage, nested
+non-finite JSON, absent details, zero boundaries and empty replacement. SQLite
+trigger failures separately cover the initial insert, state replacement,
+coverage deletion and each coverage insertion, proving caller-savepoint rollback.
+These tests cover observer tables only, not complete wallet-sync persistence or
+physical SQLCipher file identity. No Python product code, upstream dependencies,
+schema, network path, public projection or product registration changes.
+
+| Acceptance evidence | This checkpoint |
+| --- | --- |
+| Private observer storage row/error parity | 15 Python oracle vectors |
+| Empty, receive/change, checkpoint, multi-script, fixed, gap-one, reorg, retraction, mempool, coinbase full post-sync dumps on both protocols | Not implemented |
+| Eight canonical sequences (`reanchor`, `reorg-drop`, `preflight-race`, `mempool-drop-return`, `replacement`, `height-change`, `force-full`, `force-without-state`), including restarts | No full post-sync dump proof |
+| Failure injection | Five SQL write points in the observer writer only |
+| Four product-sync routes | Unregistered; served-by counts remain zero |
+
+`persistence_mutations.json` catalogs 24 observer-persistence rules, killed by
+`observer_persistence_matches_unchanged_python_vectors`,
+`observer_persistence_matches_reference_rows_and_epoch_fences` and
+`observer_persistence_rejects_invalid_coverage_before_writing`. Build errors do
+not count as kills. The inherited 340 sync mutations are unchanged and all
+catalog application checks pass; their full kill runs were **not** repeated in
+this sandbox. The separate twelve descriptor entries also pass `--check`.
+
+Rust 1.99.1 offline/locked builds, workspace and harness clippy with
+`-D warnings`, formatting and the four focused observer tests pass. The workspace
+run with `--no-fail-fast` has 985 passes and 59 failures: loopback fixtures fail
+with `PermissionDenied`, and one chokepoint scan also found the temporary
+mutation checkout nested under `.kassiber-test`. A retry found pytest's generated
+symlinks there. Moving these disposable artifacts under the exact root `target`
+exclusion resolves both: all nine scanner tests pass. Future mutation/pytest
+scratch should use that excluded directory. The wallet/binary
+harness run has 91 passes and 19 forbidden-loopback failures. Harness binaries
+and all wallet/chain examples build. The four sync parity modules
+(`test_rust_bitcoin_records`, `test_rust_observer_state`,
+`test_rust_bdk_execution`, `test_rust_wallet_acquisition`) have 42 passes and
+52 forbidden-loopback failures. Inventory, source contracts, CI shard checks
+and the pure record/persistence vector oracles pass together (31 tests and
+50 subtests). No Python reference bug was found.
+
+The full inherited mutation kill runs, successful loopback-dependent workspace,
+harness and protocol parity runs, full frontend/Python quality gate, Docker
+regtest and owner-lock integration runs remain unverified here. Test transcripts
+are local ignored artifacts in `target/r5-sync-7-artifacts/`.
+
+The remaining step-2 implementation is still substantial: complete native
+output/coverage facts; authoritative transaction matching, enrichment and
+retractions; provenance and graph; output inventory and durable policy epochs;
+saved-report impacts; wallet sync metadata; freshness rows and journal-input
+invalidation. Connect all of those to one scope/network/source-overlap/epoch-
+fenced savepoint with cancellation rollback and no commit-capable progress
+callbacks. Then add full normalized book dumps for every fixture/sequence and
+failure injection for every additional write, including physical rollback proof.
+
+Step 3 still requires scoped descriptor-wallet registration for `wallets sync`,
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`; preserve
+unsupported hybrid routes on Python, and prove per-command native served-by
+counts with zero in-scope Python fallbacks. Do not add `IMPLEMENTED` entries
+before step 2's complete-book acceptance is met.

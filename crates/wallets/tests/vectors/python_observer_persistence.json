@@ -1,0 +1,1116 @@
+[
+  {
+    "name": "insert",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": null
+    },
+    "timestamp": "time-0",
+    "error": null,
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "duplicate-insert",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": null
+    },
+    "timestamp": "time-1",
+    "error": {
+      "code": "observer_state_stale",
+      "message": "Chain observer state changed after this refresh was prepared",
+      "details": {
+        "observer_id": "observer",
+        "expected_epoch": null
+      },
+      "hint": "Retry the wallet refresh against the latest observer state.",
+      "retryable": true
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "stale-0",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 0
+    },
+    "timestamp": "time-2",
+    "error": {
+      "code": "observer_state_stale",
+      "message": "Chain observer state changed after this refresh was prepared",
+      "details": {
+        "observer_id": "observer",
+        "expected_epoch": 0
+      },
+      "hint": "Retry the wallet refresh against the latest observer state.",
+      "retryable": true
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "stale-2",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 2
+    },
+    "timestamp": "time-3",
+    "error": {
+      "code": "observer_state_stale",
+      "message": "Chain observer state changed after this refresh was prepared",
+      "details": {
+        "observer_id": "observer",
+        "expected_epoch": 2
+      },
+      "hint": "Retry the wallet refresh against the latest observer state.",
+      "retryable": true
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-branch_key-unknown",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "unknown",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-4",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer coverage names an unknown branch",
+      "details": {
+        "branch_key": "unknown"
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-branch_key-change",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "change",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-5",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer coverage contains a duplicate branch",
+      "details": {
+        "branch_key": "change"
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-highest_used--1",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": -1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-6",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer coverage indices must be non-negative",
+      "details": {
+        "branch_key": "receive"
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-scanned_to--1",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": -1,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-7",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer coverage indices must be non-negative",
+      "details": {
+        "branch_key": "receive"
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-highest_used-22",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 22,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-8",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer coverage cannot contain a used index outside its exclusive scan boundary",
+      "details": {
+        "branch_key": "receive",
+        "highest_used": 22,
+        "scanned_to": 22
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-highest_used-23",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 23,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-9",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer coverage cannot contain a used index outside its exclusive scan boundary",
+      "details": {
+        "branch_key": "receive",
+        "highest_used": 23,
+        "scanned_to": 22
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "invalid-state",
+    "input": {
+      "state": [],
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-10",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer state payload must be an object",
+      "details": null,
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "nonfinite-nested-state",
+    "input": {
+      "state": {},
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "highest_used": 1,
+          "scanned_to": 22,
+          "details": {
+            "z": 2,
+            "a": 1
+          }
+        },
+        {
+          "branch_key": "change",
+          "highest_used": null,
+          "scanned_to": 20,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 1,
+      "raw_state": "{\"nested\":[1e9999]}"
+    },
+    "timestamp": "time-11",
+    "error": {
+      "code": "observer_state_invalid",
+      "message": "Observer state contains a non-finite number",
+      "details": {
+        "path": "$.nested[0]"
+      },
+      "hint": null,
+      "retryable": false
+    },
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          1,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-0"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          20,
+          "{}",
+          "time-0"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          1,
+          22,
+          "{\"a\":1,\"z\":2}",
+          "time-0"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "default-details",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "scanned_to": 1,
+          "highest_used": 0,
+          "details": null
+        }
+      ],
+      "expected_epoch": 1
+    },
+    "timestamp": "time-12",
+    "error": null,
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          2,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-12"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "receive",
+          2,
+          0,
+          1,
+          "{}",
+          "time-12"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "zero-boundary",
+    "input": {
+      "state": {
+        "z": "é",
+        "a": [
+          1,
+          true,
+          null
+        ]
+      },
+      "coverage": [
+        {
+          "branch_key": "receive",
+          "scanned_to": 1,
+          "highest_used": 0,
+          "details": {}
+        },
+        {
+          "branch_key": "change",
+          "scanned_to": 0,
+          "highest_used": null,
+          "details": {}
+        }
+      ],
+      "expected_epoch": 2
+    },
+    "timestamp": "time-13",
+    "error": null,
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          3,
+          "{\"a\":[1,true,null],\"z\":\"é\"}",
+          "time-0",
+          "time-13"
+        ]
+      ],
+      "chain_observer_coverage": [
+        [
+          "observer",
+          "change",
+          2,
+          null,
+          0,
+          "{}",
+          "time-13"
+        ],
+        [
+          "observer",
+          "receive",
+          2,
+          0,
+          1,
+          "{}",
+          "time-13"
+        ]
+      ]
+    }
+  },
+  {
+    "name": "replace-empty",
+    "input": {
+      "state": {
+        "replaced": true
+      },
+      "coverage": [],
+      "expected_epoch": 3
+    },
+    "timestamp": "time-14",
+    "error": null,
+    "snapshot": {
+      "chain_observer_instances": [
+        [
+          "observer",
+          "workspace",
+          "profile",
+          "wallet",
+          "wallet",
+          "descriptor:default",
+          "bdk",
+          "bitcoin",
+          "bitcoin",
+          1,
+          4,
+          "{\"replaced\":true}",
+          "time-0",
+          "time-14"
+        ]
+      ],
+      "chain_observer_coverage": []
+    }
+  }
+]

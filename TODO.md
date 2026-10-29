@@ -155,6 +155,8 @@ through the shared setup crate.
   freshness/journal invalidation atomically, with full normalized book dumps.
   Prepare complete native output/coverage facts, preserve named observer routes
   and recheck source-overlap/book-network/scope/epoch before application.
+  The private observer JSON/coverage writer now has captured-epoch fencing and
+  Python row/error oracles; it is not connected to a wallet apply coordinator.
 - [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
   hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
   Silent Payments sync remain `not_implemented` in the Rust binary.
