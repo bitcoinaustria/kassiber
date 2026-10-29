@@ -101,7 +101,7 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
             drop(span);
             let span = timing::span("finalized_projection");
             let projection = if finalized {
-                match finalized_projection::runtime::stage_with_rows(&snapshot, &projection_rows, &quantity, &interpretation) {
+                match finalized_projection::runtime::stage_with_rows(&snapshot, projection_rows, &quantity, &interpretation) {
                     Ok(value) => Some(value),
                     Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"finalized_projection","code":code,"message":code}}).to_string(),
                 }

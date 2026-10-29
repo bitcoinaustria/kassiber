@@ -63,10 +63,11 @@ pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
 /// Interpreter diagnostics bypass serde, including grouping and sorting.
 pub fn stage_with_rows(
     snapshot: &Snapshot,
-    rows: &Value,
+    rows: Value,
     quantity: &Py,
     interpreter: &Py,
 ) -> Result<Py, String> {
+    let span = crate::timing::span("finalized.input");
     let projection = stored::get(quantity, "projection");
     let eligibility = stored::get(quantity, "tax_eligibility");
     let eligible = stored::list(stored::get(eligibility, "eligible_decisions"))
@@ -110,20 +111,48 @@ pub fn stage_with_rows(
             .into_iter()
             .map(Value::String),
     );
-    let input = json!({
-        "op":"finalize", "profile":snapshot.profile, "rows":rows,
-        "observations":exact(stored::get(projection,"observations"))?,
-        "decisions":exact(stored::get(projection,"decisions"))?,
-        "eligible":eligible,
-        "events":exact(stored::get(canonical,"events"))?,
-        "pool_barriers":pools(stored::get(eligibility,"pool_barriers"))?,
-        "pool_barrier_roots":pools(stored::get(eligibility,"pool_barrier_roots"))?,
-        "issues":issues, "blocked_anchor_ids":blocked_anchors,
-        "blocked_transaction_ids":blocked_ids(interpreter, projection)?,
-        "non_event_transaction_ids":non_events,
-        "payouts":exact(stored::get(quantity,"reviewed_direct_payouts"))?,
-        "reviewed":exact(stored::get(quantity,"reviewed_conversion_pairs"))?
-    });
+    // Operands move into the input object in their original evaluation
+    // order, so the first refusal is unchanged and nothing is copied twice.
+    let mut input = Map::new();
+    input.insert("op".into(), json!("finalize"));
+    input.insert("profile".into(), Value::Object(snapshot.profile.clone()));
+    input.insert("rows".into(), rows);
+    input.insert(
+        "observations".into(),
+        exact(stored::get(projection, "observations"))?,
+    );
+    input.insert(
+        "decisions".into(),
+        exact(stored::get(projection, "decisions"))?,
+    );
+    input.insert("eligible".into(), Value::Array(eligible));
+    input.insert("events".into(), exact(stored::get(canonical, "events"))?);
+    input.insert(
+        "pool_barriers".into(),
+        pools(stored::get(eligibility, "pool_barriers"))?,
+    );
+    input.insert(
+        "pool_barrier_roots".into(),
+        pools(stored::get(eligibility, "pool_barrier_roots"))?,
+    );
+    input.insert("issues".into(), Value::Array(issues));
+    input.insert("blocked_anchor_ids".into(), Value::Array(blocked_anchors));
+    input.insert(
+        "blocked_transaction_ids".into(),
+        blocked_ids(interpreter, projection)?,
+    );
+    input.insert("non_event_transaction_ids".into(), Value::Array(non_events));
+    input.insert(
+        "payouts".into(),
+        exact(stored::get(quantity, "reviewed_direct_payouts"))?,
+    );
+    input.insert(
+        "reviewed".into(),
+        exact(stored::get(quantity, "reviewed_conversion_pairs"))?,
+    );
+    let input = Value::Object(input);
+    drop(span);
+    let _span = crate::timing::span("finalized.compose");
     super::compose_lossless(
         &input,
         stored::list(stored::get(interpreter, "quarantines")),
@@ -140,7 +169,7 @@ pub fn stage_with_rows(
 pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py, String> {
     stage_with_rows(
         snapshot,
-        &confirmation_rows(snapshot)?,
+        confirmation_rows(snapshot)?,
         quantity,
         interpreter,
     )

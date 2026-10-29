@@ -22166,8 +22166,8 @@
   {
     "id": "projection8-raw-rows",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"profile\":snapshot.profile, \"rows\":rows,",
-    "replace": "\"profile\":snapshot.profile, \"rows\":{},",
+    "find": "    input.insert(\"rows\".into(), rows);",
+    "replace": "    input.insert(\"rows\".into(), json!({}));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22186,8 +22186,8 @@
   {
     "id": "projection8-observations",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"observations\":exact(stored::get(projection,\"observations\"))?",
-    "replace": "\"observations\":[]",
+    "find": "    input.insert(\n        \"observations\".into(),\n        exact(stored::get(projection, \"observations\"))?,\n    );",
+    "replace": "    input.insert(\"observations\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22196,8 +22196,8 @@
   {
     "id": "projection8-decisions",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"decisions\":exact(stored::get(projection,\"decisions\"))?",
-    "replace": "\"decisions\":[]",
+    "find": "    input.insert(\n        \"decisions\".into(),\n        exact(stored::get(projection, \"decisions\"))?,\n    );",
+    "replace": "    input.insert(\"decisions\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22206,8 +22206,8 @@
   {
     "id": "projection8-events",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"events\":exact(stored::get(canonical,\"events\"))?",
-    "replace": "\"events\":[]",
+    "find": "    input.insert(\"events\".into(), exact(stored::get(canonical, \"events\"))?);",
+    "replace": "    input.insert(\"events\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22216,8 +22216,8 @@
   {
     "id": "projection8-barriers",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"pool_barriers\":pools(stored::get(eligibility,\"pool_barriers\"))?",
-    "replace": "\"pool_barriers\":[]",
+    "find": "    input.insert(\n        \"pool_barriers\".into(),\n        pools(stored::get(eligibility, \"pool_barriers\"))?,\n    );",
+    "replace": "    input.insert(\"pool_barriers\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22226,8 +22226,8 @@
   {
     "id": "projection8-roots",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"pool_barrier_roots\":pools(stored::get(eligibility,\"pool_barrier_roots\"))?",
-    "replace": "\"pool_barrier_roots\":[]",
+    "find": "    input.insert(\n        \"pool_barrier_roots\".into(),\n        pools(stored::get(eligibility, \"pool_barrier_roots\"))?,\n    );",
+    "replace": "    input.insert(\"pool_barrier_roots\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22236,8 +22236,8 @@
   {
     "id": "projection8-payouts",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"payouts\":exact(stored::get(quantity,\"reviewed_direct_payouts\"))?",
-    "replace": "\"payouts\":[]",
+    "find": "    input.insert(\n        \"payouts\".into(),\n        exact(stored::get(quantity, \"reviewed_direct_payouts\"))?,\n    );",
+    "replace": "    input.insert(\"payouts\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22246,8 +22246,8 @@
   {
     "id": "projection8-conversions",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"reviewed\":exact(stored::get(quantity,\"reviewed_conversion_pairs\"))?",
-    "replace": "\"reviewed\":[]",
+    "find": "    input.insert(\n        \"reviewed\".into(),\n        exact(stored::get(quantity, \"reviewed_conversion_pairs\"))?,\n    );",
+    "replace": "    input.insert(\"reviewed\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22256,8 +22256,8 @@
   {
     "id": "projection8-blocks",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"blocked_transaction_ids\":blocked_ids(interpreter, projection)?",
-    "replace": "\"blocked_transaction_ids\":[]",
+    "find": "    input.insert(\n        \"blocked_transaction_ids\".into(),\n        blocked_ids(interpreter, projection)?,\n    );",
+    "replace": "    input.insert(\"blocked_transaction_ids\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22266,8 +22266,8 @@
   {
     "id": "projection8-eligibility",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"eligible\":eligible,",
-    "replace": "\"eligible\":[],",
+    "find": "    input.insert(\"eligible\".into(), Value::Array(eligible));",
+    "replace": "    input.insert(\"eligible\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22276,8 +22276,8 @@
   {
     "id": "projection8-issues",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"issues\":issues,",
-    "replace": "\"issues\":[],",
+    "find": "    input.insert(\"issues\".into(), Value::Array(issues));",
+    "replace": "    input.insert(\"issues\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22286,8 +22286,8 @@
   {
     "id": "projection8-non-events",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"non_event_transaction_ids\":non_events,",
-    "replace": "\"non_event_transaction_ids\":[],",
+    "find": "    input.insert(\"non_event_transaction_ids\".into(), Value::Array(non_events));",
+    "replace": "    input.insert(\"non_event_transaction_ids\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22316,8 +22316,8 @@
   {
     "id": "projection8-profile-field",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"profile\":snapshot.profile",
-    "replace": "\"profile\":{}",
+    "find": "    input.insert(\"profile\".into(), Value::Object(snapshot.profile.clone()));",
+    "replace": "    input.insert(\"profile\".into(), json!({}));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22346,8 +22346,8 @@
   {
     "id": "projection8-blocked-anchors",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "\"blocked_anchor_ids\":blocked_anchors",
-    "replace": "\"blocked_anchor_ids\":[]",
+    "find": "    input.insert(\"blocked_anchor_ids\".into(), Value::Array(blocked_anchors));",
+    "replace": "    input.insert(\"blocked_anchor_ids\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
