@@ -417,7 +417,9 @@ def check_configuration(
     wallet_labels = [str(item["label"]) for item in wallet_refs_by_id.values() if item.get("label") not in (None, "")]
     assets = {str(_get(row, "asset")) for row in rows}
     sorted_wallet_labels = sorted(_config_token(label, "wallet_label") for label in wallet_labels)
-    sorted_assets = sorted(_config_token(asset, "asset") for asset in assets)
+    # Validate in sorted order so the first refused asset never depends on
+    # set iteration order (PYTHONHASHSEED).
+    sorted_assets = sorted(_config_token(asset, "asset") for asset in sorted(assets))
     holder_label = _config_token(_profile_str(profile, "label"), "profile_label")
     if not sorted_wallet_labels:
         raise AppError("RP2 configuration requires at least one wallet")

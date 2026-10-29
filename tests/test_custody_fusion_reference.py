@@ -1,7 +1,8 @@
-"""R2g admission blocker: identical raw facts have hash-dependent refusals.
+"""Competing invalid assets refuse the same way under every hash seed.
 
-Keep Python unchanged. The fusion compiler cannot derive this first failure
-from its specified operands (profile, projection, ordered wallet references).
+`check_configuration()` once validated assets in set iteration order, so the
+first refused asset depended on PYTHONHASHSEED. It now validates them sorted,
+which the Rust fusion builder can reproduce from its operands.
 """
 from __future__ import annotations
 
@@ -10,8 +11,6 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-
-import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,10 +50,9 @@ else:
 '''
 
 
-def test_fusion_reference_competing_asset_refusals(tmp_path):
-    """Characterize the unfixed reference bug, including structured details."""
+def test_competing_asset_refusals_do_not_depend_on_the_hash_seed(tmp_path):
     outcomes = []
-    for seed in (1, 3):
+    for seed in range(8):
         result = subprocess.run(
             [sys.executable, "-c", REPRO], cwd=ROOT,
             env={**os.environ, "PYTHONHASHSEED": str(seed),
@@ -63,19 +61,15 @@ def test_fusion_reference_competing_asset_refusals(tmp_path):
             capture_output=True, text=True, check=True, timeout=30,
         )
         outcomes.append(json.loads(result.stdout))
-    for outcome in outcomes:
-        assert outcome["family"] == "AppError"
-        assert outcome["message"] == "RP2 configuration asset contains unsupported characters"
-        assert outcome["code"] == "validation"
-        assert outcome["retryable"] is False
-        assert outcome["hint"] == (
+    assert outcomes[0] == {
+        "family": "AppError",
+        "message": "RP2 configuration asset contains unsupported characters",
+        "code": "validation",
+        "details": {"field": "asset", "value": "BTC#", "characters": ["#"]},
+        "hint": (
             "Rename the wallet, profile, or asset label to remove commas, "
             "newlines, brackets, comments, or key delimiters before processing reports."
-        )
-    assert [outcome["details"] for outcome in outcomes] == [
-        {"field": "asset", "value": "ETH:", "characters": [":"]},
-        {"field": "asset", "value": "BTC#", "characters": ["#"]},
-    ]
-    # A first-failure equality check would fail even for Python vs Python.
-    with pytest.raises(AssertionError):
-        assert outcomes[0] == outcomes[1]
+        ),
+        "retryable": False,
+    }
+    assert all(outcome == outcomes[0] for outcome in outcomes)
