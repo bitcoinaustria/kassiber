@@ -3569,5 +3569,805 @@
       "snapshot_write_python_rows_and_refusals"
     ],
     "rule": "Only JSONDecodeError becomes a CLI summary validation error; integer-limit ValueError retains the reference internal error."
+  },
+  {
+    "id": "artifact-readiness",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "require_context(conn, &profile, false)?;",
+    "replace": "// readiness omitted",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Artifact preparation preserves every live report-readiness barrier."
+  },
+  {
+    "id": "artifact-history-negative",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "if parsed < 0.into() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Negative history limits are refused before report admission."
+  },
+  {
+    "id": "artifact-history-normalized",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "replace(&mut args, \"history_limit\", limit);",
+    "replace": "replace(&mut args, \"history_limit\", Value::Int(0.into()));",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Normalized history limits reach the full report."
+  },
+  {
+    "id": "artifact-history-bool",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "Value::Bool(v) => i64::from(*v).into(),",
+    "replace": "Value::Bool(v) => i64::from(!*v).into(),",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "History limits retain Python boolean-to-integer behavior."
+  },
+  {
+    "id": "artifact-csv-null",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "String::new()\n    } else {\n        py_str(v)",
+    "replace": "\"None\".into()\n    } else {\n        py_str(v)",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "CSV null cells remain empty."
+  },
+  {
+    "id": "artifact-csv-comma",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "out.push(',');",
+    "replace": "out.push(';');",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "Artifacts use the comma-delimited excel dialect."
+  },
+  {
+    "id": "artifact-csv-crlf",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "out.push_str(\"\\r\\n\");",
+    "replace": "out.push_str(\"\\n\");",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "Every artifact row ends with CRLF."
+  },
+  {
+    "id": "artifact-csv-quote-escape",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "raw.replace('\"', \"\\\"\\\"\")",
+    "replace": "raw.replace('\"', \"\\\"\")",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "Embedded CSV quotes are doubled."
+  },
+  {
+    "id": "artifact-csv-quote-cr",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "[',', '\"', '\\r', '\\n']",
+    "replace": "[',', '\"', '\\n']",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "A carriage return alone requires a quoted cell."
+  },
+  {
+    "id": "artifact-csv-quote-lf",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "[',', '\"', '\\r', '\\n']",
+    "replace": "[',', '\"', '\\r']",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "A linefeed alone requires a quoted cell."
+  },
+  {
+    "id": "artifact-csv-empty-single",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "(row.len() == 1 && raw.is_empty())",
+    "replace": "false",
+    "expect_failing": [
+      "artifact_csv_excel_dialect"
+    ],
+    "rule": "A single empty cell is quoted and differs from an empty row."
+  },
+  {
+    "id": "artifact-column-id",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "\"id\" => \"ID\".into(),",
+    "replace": "\"id\" => \"Id\".into(),",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The artifact keeps Python's id column label."
+  },
+  {
+    "id": "artifact-column-msat",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "\"msat\" => \"msat\".into(),",
+    "replace": "\"msat\" => \"Msat\".into(),",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The artifact keeps Python's msat column label."
+  },
+  {
+    "id": "artifact-column-sat",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "\"sat\" => \"sat\".into(),",
+    "replace": "\"sat\" => \"Sat\".into(),",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The artifact keeps Python's sat column label."
+  },
+  {
+    "id": "artifact-column-pnl",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "\"pnl\" => \"PnL\".into(),",
+    "replace": "\"pnl\" => \"Pnl\".into(),",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The artifact keeps Python's pnl column label."
+  },
+  {
+    "id": "artifact-column-fmv",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "\"fmv\" => \"FMV\".into(),",
+    "replace": "\"fmv\" => \"Fmv\".into(),",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The artifact keeps Python's fmv column label."
+  },
+  {
+    "id": "artifact-empty-section",
+    "file": "crates/reports/src/artifact_csv.rs",
+    "find": "s(\"No rows in scope.\")",
+    "replace": "s(\"No rows.\")",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "An empty section has the explicit reference placeholder."
+  },
+  {
+    "id": "artifact-quantity-float-sum",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "let sum = number(&grouped[index], key) + number(row, key);",
+    "replace": "let sum = number(row, key);",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Full-report balances aggregate wallet floats in encounter order."
+  },
+  {
+    "id": "artifact-balance-msat",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "Decimal::from(100_000_000_000_i64)",
+    "replace": "Decimal::from(100_000_000_i64)",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Balance quantities round-trip through Python BTC-to-msat units."
+  },
+  {
+    "id": "artifact-inventory-scope",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "wallet.is_some_and(|id| text(&row, \"id\") != id)",
+    "replace": "false",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "A wallet-scoped full report limits the inventory."
+  },
+  {
+    "id": "artifact-inventory-order",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "profile_id=? ORDER BY label",
+    "replace": "profile_id=? ORDER BY label DESC",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Wallet inventory retains the reference label order."
+  },
+  {
+    "id": "artifact-inventory-chain",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "(\"chain\", s(chain))",
+    "replace": "(\"chain\", s(network.clone()))",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Inventory retains the normalized Bitcoin-family chain."
+  },
+  {
+    "id": "artifact-inventory-gap",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "Value::Int(100.into())",
+    "replace": "Value::Int(20.into())",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Descriptor inventory uses the reference default gap limit."
+  },
+  {
+    "id": "artifact-portfolio-scope",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "portfolio.retain(|r| text(r, \"wallet\") == wallet.label);",
+    "replace": "portfolio.retain(|_| true);",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Portfolio rows obey the selected wallet."
+  },
+  {
+    "id": "artifact-capital-scope",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "capital.retain(|r| text(r, \"wallet\") == wallet.label);",
+    "replace": "capital.retain(|_| true);",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Capital-detail rows obey the selected wallet."
+  },
+  {
+    "id": "artifact-history-limit-tail",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": ".saturating_sub(usize::try_from(limit.clone()).unwrap_or(usize::MAX))",
+    "replace": ".saturating_sub(0)",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "History limits keep only the newest requested rows."
+  },
+  {
+    "id": "artifact-generated-time",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "s(generated_at));",
+    "replace": "s(\"incorrect-time\"));",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Overview generation time comes from the injected application clock."
+  },
+  {
+    "id": "artifact-capital-summary-sum",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "let sum = number(bucket, key) + number(row, key);",
+    "replace": "let sum = number(row, key);",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Capital summaries aggregate the selected realized rows."
+  },
+  {
+    "id": "artifact-quality-scope",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "(?2 IS NULL OR t.wallet_id=?2)",
+    "replace": "(?2 IS NULL OR 1=1)",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Quality counts use the selected transaction wallet."
+  },
+  {
+    "id": "artifact-title",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "\"Kassiber Report - {}\"",
+    "replace": "\"Kassiber CSV - {}\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The artifact title matches Python exactly."
+  },
+  {
+    "id": "artifact-row-count",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "sections.iter().map(|s| s.rows.len()).sum()",
+    "replace": "sections.iter().map(|s| s.rows.len() + 1).sum()",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Artifact row metadata counts data rows, including overview rows."
+  },
+  {
+    "id": "artifact-section-order",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "let title = format!(",
+    "replace": "let mut sections = sections; sections.reverse();\n    let title = format!(",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Full-report sections retain their reference order."
+  },
+  {
+    "id": "artifact-section-overview",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Overview\"",
+    "replace": "name: \"Overview changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Overview."
+  },
+  {
+    "id": "artifact-section-wallets",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Wallets\"",
+    "replace": "name: \"Wallets changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Wallets."
+  },
+  {
+    "id": "artifact-section-asset-flow",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Asset Flow\"",
+    "replace": "name: \"Asset Flow changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Asset Flow."
+  },
+  {
+    "id": "artifact-section-wallet-metrics",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Wallet Metrics\"",
+    "replace": "name: \"Wallet Metrics changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Wallet Metrics."
+  },
+  {
+    "id": "artifact-section-transfers-and-swaps",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Transfers & Swaps\"",
+    "replace": "name: \"Transfers & Swaps changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Transfers & Swaps."
+  },
+  {
+    "id": "artifact-section-balance-sheet",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Balance Sheet\"",
+    "replace": "name: \"Balance Sheet changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Balance Sheet."
+  },
+  {
+    "id": "artifact-section-portfolio",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Portfolio\"",
+    "replace": "name: \"Portfolio changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Portfolio."
+  },
+  {
+    "id": "artifact-section-capital-summary",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Capital Summary\"",
+    "replace": "name: \"Capital Summary changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Capital Summary."
+  },
+  {
+    "id": "artifact-section-capital-detail",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Capital Detail\"",
+    "replace": "name: \"Capital Detail changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Capital Detail."
+  },
+  {
+    "id": "artifact-section-balance-history",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Balance History\"",
+    "replace": "name: \"Balance History changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Balance History."
+  },
+  {
+    "id": "artifact-section-data-quality",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Data Quality\"",
+    "replace": "name: \"Data Quality changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Data Quality."
+  },
+  {
+    "id": "artifact-section-transactions",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "name: \"Transactions\"",
+    "replace": "name: \"Transactions changed\"",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The full-report section catalog retains Transactions."
+  },
+  {
+    "id": "artifact-transaction-active",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "t.excluded=0 ORDER BY t.occurred_at",
+    "replace": "1=1 ORDER BY t.occurred_at",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Excluded observations never enter the transaction sheet."
+  },
+  {
+    "id": "artifact-transaction-order",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "ORDER BY t.occurred_at,t.created_at,t.id",
+    "replace": "ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Transaction rows use occurred, created, id order."
+  },
+  {
+    "id": "artifact-transaction-wallet",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "text(r, \"wallet_id\") == wallet",
+    "replace": "true",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The transaction sheet obeys the wallet scope."
+  },
+  {
+    "id": "artifact-transaction-realized",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "je.entry_type IN ('disposal','income')",
+    "replace": "je.entry_type IN ('fee','disposal','income')",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Transaction realized basis excludes fee journal entries."
+  },
+  {
+    "id": "artifact-transaction-taxability",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "COALESCE(t.taxability_override,1)!=0",
+    "replace": "1=1",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Non-taxable transactions have no realized basis or gain."
+  },
+  {
+    "id": "artifact-transaction-neu-swap",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "COALESCE(je.at_category,'')!='neu_swap'",
+    "replace": "1=1",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Carrying swaps do not enter realized transaction figures."
+  },
+  {
+    "id": "artifact-transaction-tag-order",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "ORDER BY tg.code",
+    "replace": "ORDER BY tg.code DESC",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Tags are comma-joined in code order."
+  },
+  {
+    "id": "artifact-transaction-attachment-order",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "ORDER BY a.created_at",
+    "replace": "ORDER BY a.created_at DESC",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Attachment labels retain creation order."
+  },
+  {
+    "id": "artifact-transaction-price-exact",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "optional(&row, \"fiat_rate_exact\", \"fiat_rate\")?",
+    "replace": "optional(&row, \"fiat_rate\", \"fiat_rate_exact\")?",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "An exact recorded execution price precedes the float column."
+  },
+  {
+    "id": "artifact-transaction-value-exact",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "optional(&row, \"fiat_value_exact\", \"fiat_value\")?",
+    "replace": "optional(&row, \"fiat_value\", \"fiat_value_exact\")?",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "An exact recorded cash leg precedes the float column."
+  },
+  {
+    "id": "artifact-transaction-fmv",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "amount_btc.mul(p, &DECIMAL)",
+    "replace": "fee_btc.mul(p, &DECIMAL)",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "FMV prices the principal rather than the fee-adjusted cash leg."
+  },
+  {
+    "id": "artifact-transaction-fiat-fee",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "fee_btc.mul(p, &DECIMAL)",
+    "replace": "amount_btc.mul(p, &DECIMAL)",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "The fiat fee prices the separately recorded crypto fee."
+  },
+  {
+    "id": "artifact-transaction-fee-only",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "} else if fee != 0 {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "A zero-principal transaction may derive its price from the recorded fee value."
+  },
+  {
+    "id": "artifact-transaction-transfer-exact",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "int(r, \"quantity_msat\") == int(out, \"quantity_msat\")",
+    "replace": "int(r, \"quantity_msat\") != int(out, \"quantity_msat\")",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Booked transfer labels match exact quantities before fee-bearing amounts."
+  },
+  {
+    "id": "artifact-transaction-transfer-fee",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "(delta >= 0).then_some((delta, i))",
+    "replace": "(delta < 0).then_some((delta, i))",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Fee-bearing transfer labels only use inbound principal at or below the debit."
+  },
+  {
+    "id": "artifact-transaction-null-basis",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "if int(journal, count) > 0 {",
+    "replace": "if true {",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Missing realized figures stay blank, distinct from real zeroes."
+  },
+  {
+    "id": "artifact-austrian-validation",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "austrian::validate(profile)?;",
+    "replace": "// Austrian gate omitted",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "The bundle validates Austrian profile policy after ordinary readiness."
+  },
+  {
+    "id": "artifact-austrian-cents",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "Decimal::from(100)",
+    "replace": "Decimal::from(1000)",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Bundle money divides exact euro cents by one hundred."
+  },
+  {
+    "id": "artifact-austrian-quantity-places",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": ".to_fixed_places(8, Rounding::HalfEven)",
+    "replace": ".to_fixed_places(7, Rounding::HalfEven)",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Austrian quantity cells use eight decimal places."
+  },
+  {
+    "id": "artifact-austrian-quantity-rounding",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "Rounding::HalfEven",
+    "replace": "Rounding::HalfUp",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Austrian rendered quantity ties use half-even."
+  },
+  {
+    "id": "artifact-austrian-overview-split",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "if index < 3 { 174 } else { 176 }",
+    "replace": "if index < 3 { 176 } else { 174 }",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Overview separates gains from losses using the current Kennzahl."
+  },
+  {
+    "id": "artifact-austrian-overview-value",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "[index % 3]",
+    "replace": "[(index+1) % 3]",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Overview proceeds, basis and form amounts occupy their reference rows."
+  },
+  {
+    "id": "artifact-austrian-holding-days",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "[\"1.3\", \"3.1\"].contains(&id)",
+    "replace": "[\"1.3\"].contains(&id)",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Altbestand holding-duration placeholders retain the column position."
+  },
+  {
+    "id": "artifact-austrian-income",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "[\"2.1\", \"2.2\"].contains(&id)",
+    "replace": "[\"2.1\"].contains(&id)",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Both income sections use the income column layout."
+  },
+  {
+    "id": "artifact-austrian-total-split",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "if index == 0 { 174 } else { 176 }",
+    "replace": "if index == 0 { 176 } else { 174 }",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Section 1.1 has separate exact gain and loss totals."
+  },
+  {
+    "id": "artifact-austrian-total-width",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "value_column + 1",
+    "replace": "value_column + 2",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Total rows keep the reference CSV width, including trailing empty cells."
+  },
+  {
+    "id": "artifact-austrian-overview-file",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "\"00_uebersicht.csv\"",
+    "replace": "\"00_overview.csv\"",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Bundle overview basename is part of the artifact identity."
+  },
+  {
+    "id": "artifact-austrian-explanation-file",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "\"99_erlaeuterungen_zum_steuerreport.csv\"",
+    "replace": "\"99_explanation.csv\"",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "The required explanation sheet has its reference basename."
+  },
+  {
+    "id": "artifact-austrian-sheet-order",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "list(value(austrian::metadata(), \"section_tables\"))",
+    "replace": "list(value(austrian::metadata(), \"section_tables\")).get(1..).unwrap()",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "All thirteen numbered sheets are present in order."
+  },
+  {
+    "id": "artifact-austrian-empty-sheet",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "s(\"No rows in scope.\")",
+    "replace": "s(\"No data.\")",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Empty tax sections contain the reference placeholder and zero totals."
+  },
+  {
+    "id": "artifact-austrian-file-row-count",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "rows.len().saturating_sub(1)",
+    "replace": "rows.len()",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Bundle file metadata excludes exactly the first row."
+  },
+  {
+    "id": "artifact-austrian-mismatch",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "if !mismatches.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Stored Kennzahl mismatches remain disclosed in the bundle."
+  },
+  {
+    "id": "artifact-austrian-assumptions",
+    "file": "crates/reports/src/austrian_csv.rs",
+    "find": "for row in list(value(report, \"assumptions\")) {",
+    "replace": "for row in list(value(report, \"assumptions\")).iter().take(0) {",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "The required explanation sheet includes every report assumption."
+  },
+  {
+    "id": "artifact-inventory-typed-error",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "return Err(error)",
+    "replace": "descriptor = true",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Wallet inventory propagates typed descriptor refusals instead of displaying them as an invalid descriptor."
+  },
+  {
+    "id": "artifact-inventory-all-wallet-validation",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": ")? {\n        let raw = value(&row, \"config_json\");",
+    "replace": ")? {\n        if wallet.is_some_and(|id| text(&row, \"id\") != id) { continue; }\n        let raw = value(&row, \"config_json\");",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Wallet listing validates every wallet before applying the report wallet scope."
+  },
+  {
+    "id": "artifact-inventory-error-order",
+    "file": "crates/reports/src/full_csv.rs",
+    "find": "let inventory = inventory(conn, &id, wallet_id)?;\n    let summary = summary::report(conn, workspace, profile, args)?;",
+    "replace": "let summary = summary::report(conn, workspace, profile, args)?;\n    let inventory = inventory(conn, &id, wallet_id)?;",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Wallet inventory errors precede holdings/pricing errors, matching full-report context construction."
   }
 ]

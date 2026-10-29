@@ -990,6 +990,24 @@ both clippy configurations, 966 workspace tests, 14 harness tests, the required
 shell/hybrid suite, and inventory/contracts pass. This evidence accepts the
 explicit marker boundary only; it does not complete the requested export slice.
 
+The sixth continuation (`t3code/r5-reports-6`, based on `3b20eecc`) adds an
+internal CSV preparation boundary for the twelve-section full report and all
+fifteen Austrian bundle files. It reuses the stored-journal report services,
+retains readiness admission in one read savepoint, and neither publishes files
+nor registers snapshots. Its Python-generated oracle checks 123 preparation
+cases and 543 file contents, including quoting, exact prices, wallet scope,
+history limits, booked transfer labels and Austrian rendering. These are frozen
+synthetic journal fixtures, not completed export sequences on processed books.
+The transaction-sheet builder is preparation for the full report only; standalone
+transaction draft/range behavior is still unported. No CLI command or daemon
+kind is enabled. The
+[CSV preparation checkpoint](../reference/rust-shell.md#reports-csv-preparation-checkpoint-r5-sixth-continuation-partial)
+records the verification and remaining publication/save boundary. The fresh
+mutation audit kills all 435 entries (355 inherited and 80 renderer rules),
+after all 37 baseline selections pass. Formatting, both clippy configurations,
+969 workspace tests, 14 harness tests, the 22 report process scenarios and the
+required shell/hybrid/runner/port suite pass; inventory and contracts pass too.
+
 This is **not full reports slice acceptance**. Exit-tax outputs,
 capital-gain explanations and desktop capital gains remain unported.
 So do privacy, Lightning and cross-check reads, commercial/source-funds reads,

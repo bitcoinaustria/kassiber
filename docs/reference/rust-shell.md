@@ -2738,6 +2738,143 @@ XLSX/PDF, exit-tax, explanations, privacy/Lightning/cross-check/commercial reads
 and network reads also keep `not_implemented`. AI projections remain Python.
 This is **not complete reports slice acceptance**.
 
+## Reports CSV preparation checkpoint (R5 sixth continuation, partial)
+
+`t3code/r5-reports-6`, based on `3b20eecc`, adds native artifact preparation in
+`crates/reports`. This is an internal rendering checkpoint within requested
+step 1. It does not complete artifact CSV exports, automatic export-completion
+saving or daemon export kinds. The CLI still implements eleven report leaves
+and the daemon still implements five report reads. The three export commands
+and four direct CSV export kinds remain `not_implemented`; the generic
+`ui.reports.export` router still answers `unsupported_kind` under the inherited
+Rust kind inventory. Explicit fail-closed probes confirm no artifact publication.
+
+The full-report renderer emits all twelve reference sections, including wallet
+inventory, financial summaries, booked transfers and the transaction sheet.
+Recorded exact prices/cash legs precede legacy float columns. Realized basis
+and gain come only from eligible journal entries; transfer labels come from
+booked transfer entries and eligible, non-quarantined carrying conversions.
+Tags and attachment names/URLs remain literal presentation without fetching.
+Wallet scoping, history-limit normalization, float aggregation and BTC-to-msat
+round trips follow Python's artifact rules.
+
+The Austrian renderer emits the overview, thirteen numbered detail/placeholder
+files and the required explanation file, preserving their filenames, sheet
+order, eight-place half-even quantities, money cells, totals and Kennzahl
+mismatch disclosure. This bundled explanation text does not enable the deferred
+capital-gain explanation commands. Both renderers use Python's CSV excel
+dialect: UTF-8, comma delimiters, CRLF, doubled quotes and explicit empty
+section placeholders.
+
+The internal entry point is `kassiber_reports::artifact_csv::prepare`.
+Preparation admits the ordinary report context before Austrian export policy
+validation, matching Python's export path. It holds a read savepoint, uses an
+injected application clock, and returns bytes/metadata without publishing files,
+requesting a UUID, appending snapshots or capturing dependencies. Every oracle
+case checks that SQLite's cumulative `total_changes` stays unchanged; the test
+identity source panics if preparation asks for an identity. No schema,
+dependency, Python product or AI projection changes are included.
+
+The Python-only generator freezes 123 cases: 78 full-report preparations
+(48 successful, 30 refusals) and 45 Austrian bundle preparations (33 successful,
+12 refusals). Native tests compare every byte of 543 files and their metadata.
+Coverage includes long decimal prices, fee-only rows, quoting/Unicode, literal
+evidence references, booked exact/fee-bearing transfer pairing, empty data,
+wallet scopes, malformed wallet configuration, typed descriptor refusals and
+their precedence, history limits, readiness and Austrian sections/rounding.
+The manual review corrected native wallet-inventory handling: typed descriptor
+errors propagate, every wallet is validated before applying scope, and inventory
+errors precede price construction. Regression fixtures fail before these fixes.
+These are synthetic stored-journal fixtures; changing
+the configured algorithm is not evidence of export-sequence parity on freshly
+processed FIFO, HIFO or Austrian books.
+
+| Byte comparison | Evidence in this continuation |
+| --- | --- |
+| Full-report CSV preparation | 48 successful frozen byte comparisons, all twelve sections |
+| Austrian CSV bundle preparation | 33 successful frozen comparisons, all fifteen files each |
+| Refusals and preparation metadata | 123 frozen cases, no database writes |
+| Report-owned standalone transaction CSV | unported; only the full-report transaction sheet is prepared |
+| Atomic artifact publication | unported |
+| Automatic export-completion snapshot rows and captured dependencies | unported; no export-sequence normalized-dump acceptance |
+
+All 22 inherited report process scenarios pass on the rebuilt harness. Their
+fresh hybrid log records 309 ported report CLI calls, all Rust-served. The nine
+native daemon sessions compare 207 report responses as raw bytes, excluding
+their intentionally different ready-handshake inventories. Per-command/kind
+counts are unchanged from the previous checkpoint:
+
+| Command or kind | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.summary` | 36 | 0 |
+| `reports.capital-gains` | 25 | 0 |
+| `reports.balance-sheet` | 25 | 0 |
+| `reports.portfolio-summary` | 25 | 0 |
+| `reports.tax-summary` | 25 | 0 |
+| `reports.journal-entries` | 25 | 0 |
+| `reports.austrian-e1kv` | 23 | 0 |
+| `reports.austrian-tax-summary` | 23 | 0 |
+| `reports.balance-history` | 60 | 0 |
+| `reports.filed-snapshots.list` | 16 | 0 |
+| `reports.filed-snapshots.create` | 26 | 0 |
+| `ui.reports.summary` | 24 | 0 |
+| `ui.reports.balance_sheet` | 3 | 0 |
+| `ui.reports.portfolio_summary` | 3 | 0 |
+| `ui.reports.tax_summary` | 27 | 0 |
+| `ui.reports.balance_history` | 150 | 0 |
+
+The inherited FIFO/HIFO/Austrian explicit saved/filed sequences still compare
+normalized database dumps exactly, including frozen dependency copies and
+unchanged impact history. They do not establish automatic export-completion
+parity. The broader hybrid regression suite passes 127 tests and four subtests:
+its 41 ported report calls run in Rust, while its 15 deferred report/export calls
+and unported setup/AI calls remain Python in the test-only hybrid candidate.
+No new export command or kind is Rust-served in this continuation.
+
+The mutation catalog contains 435 entries: the 355 inherited rules and 80 new
+rules. The final fresh-target invocation passes all 37 unmutated test selections
+and kills all 435 entries, including the complete inherited catalog, with no
+survivors or build errors. All 80 new entries are killed by these named tests:
+
+| New rules | Entries | Named killer |
+| --- | ---: | --- |
+| Full-report admission, history, inventory, scope, section catalog, metadata and transaction-sheet values | 56 | `full_report_csv_artifact_vectors` |
+| CSV excel dialect, null/empty cells and quoting | 7 | `artifact_csv_excel_dialect` |
+| Austrian bundle files, layouts, quantities, money, totals and disclosures | 17 | `austrian_bundle_csv_artifact_vectors` |
+
+Verification uses Rust 1.99.1, offline/locked Cargo and locked Python 3.11.
+Workspace and binary formatting, both workspace and test-harness clippy with
+`-D warnings`, all 969 workspace tests, all 14 harness integration tests and
+the harness build pass. The required shell/hybrid/runner/port suite passes
+63 tests and 178 subtests; inventory/contract/shard checks pass 44 tests and
+54 subtests; the Python snapshot/chain reference modules pass 39 tests. The
+artifact, inherited read, snapshot-write and Austrian metadata generators
+check cleanly. An earlier required-suite run timed out in Python's fallback
+`secrets init`; its isolated rerun and the complete 63-test rerun pass.
+Quota-failed attempts and an interrupted-cache baseline are excluded from
+the evidence. Every book/data root is disposable; the owned-loopback workspace
+fixtures use the access their contracts require. No full quality-gate or
+push-readiness claim is made.
+
+Remaining work, in order: finish artifact publication and standalone transaction
+CSV (including draft/multi-wallet/range semantics); implement automatic saved
+registration with app-computed hashes/summaries and authoritative dependency
+capture; then register the CLI commands and corresponding daemon exports,
+including capital-gains CSV. Compare the same complete export sequences and raw
+stored JSON/dependency rows on FIFO, HIFO and Austrian books before enabling
+those surfaces. Completion must bind the bytes and captured dependencies to the
+same admitted book/input version; preparation alone releases its read savepoint.
+Match Python's save ownership: standalone transaction CSV does not register a
+report snapshot.
+Export completion may establish a saved artifact; only an
+explicit user action may file it. Saved/filed snapshots and impact history
+remain append-only.
+
+XLSX/PDF, exit-tax, explanations, privacy/Lightning/cross-check/commercial reads
+and network reads remain `not_implemented`. AI projections stay Python. No
+Python reference bug was found or fixed. This is **not complete reports slice
+acceptance**.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug
