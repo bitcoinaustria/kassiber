@@ -1329,3 +1329,31 @@ def test_native_review_activation_failure_leaves_no_committed_draft(tmp_path, fa
     conn.rollback()
     assert list(conn.iterdump()) == before
     conn.close()
+
+
+@pytest.mark.parametrize("operation", ["create", "update", "unpair"])
+def test_pair_invalidation_failure_keeps_complete_database_unchanged(tmp_path, operation):
+    from kassiber.cli.handlers import delete_transaction_pair, update_transaction_pair
+
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "out", "btc", "outbound", "BTC", 1000, NOW)
+    _tx(conn, "in", "btc2", "inbound", "BTC", 1000, NOW)
+    conn.commit()
+    if operation != "create":
+        pair = create_transaction_pair(conn, "ws", "profile", "out", "in")
+    before = list(conn.iterdump())
+    with patch(
+        "kassiber.core.custody_review_terms.invalidate_journals",
+        side_effect=RuntimeError("injected invalidation failure"),
+    ):
+        with pytest.raises(RuntimeError, match="injected invalidation failure"):
+            if operation == "create":
+                create_transaction_pair(conn, "ws", "profile", "out", "in")
+            elif operation == "update":
+                update_transaction_pair(conn, "ws", "profile", pair["id"], notes="revised")
+            else:
+                delete_transaction_pair(conn, "ws", "profile", pair["id"])
+    conn.rollback()
+    assert list(conn.iterdump()) == before
+    conn.close()
