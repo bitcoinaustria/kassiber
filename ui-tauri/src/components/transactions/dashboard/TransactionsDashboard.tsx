@@ -12,12 +12,6 @@ import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import type { TransactionsList } from "@/mocks/transactions";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
-import {
-  DocumentImportDialog,
-  NewTransactionDialog,
-  createNewTransactionDraft,
-  type NewTransactionDraft,
-} from "@/components/transactions";
 import { TransactionsExportDialog } from "./TransactionsExportDialog";
 import { useAssistantColumnClaim } from "@/components/kb/assistant-panel/useAssistantColumnClaim";
 import { TransactionsTable } from "./TransactionsTable";
@@ -126,10 +120,7 @@ const TransactionsDashboard = ({
     (value: BreakdownSelection | null) => patchFilterState({ breakdownSelection: value }),
     [],
   );
-  const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [tableExpanded, setTableExpanded] = React.useState(false);
-  const [newTransactionDraft, setNewTransactionDraft] =
-    React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
@@ -243,22 +234,6 @@ const TransactionsDashboard = ({
   }, [availablePeriods, period]);
   const effectiveCandidateRefs =
     dashboardSnapshot?.candidates ?? pairingCandidateRefs;
-  // In daemon-backed (real/regtest) mode the New Transaction picker must not
-  // offer fabricated MOCK wallet names; derive single-wallet labels from the
-  // loaded book instead (skipping synthesized "A → B" transfer strings).
-  const realWalletSourceOptions = React.useMemo(() => {
-    const labels = new Set<string>();
-    for (const label of dashboardSnapshot?.history.walletOptions ?? []) {
-      if (label && !label.includes("→")) labels.add(label);
-    }
-    if (labels.size === 0) {
-      for (const record of records) {
-        const label = record.wallet;
-        if (label && !label.includes("→")) labels.add(label);
-      }
-    }
-    return [...labels, "External"];
-  }, [dashboardSnapshot, records]);
   const periodRecords = React.useMemo(
     () =>
       resolvedPeriod === "all"
@@ -443,20 +418,8 @@ const TransactionsDashboard = ({
           />
         ) : (
           <div className={pageHeaderActionsClassName}>
-            <DocumentImportDialog />
             <TransactionsExportDialog
               bookTimezone={dashboardSnapshot?.history.accountingTimezone}
-            />
-            <NewTransactionDialog
-              open={newTxnOpen}
-              draft={newTransactionDraft}
-              walletSourceOptions={realWalletSourceOptions}
-              movementCandidates={[]}
-              onOpenChange={setNewTxnOpen}
-              onDraftChange={setNewTransactionDraft}
-              onSaveDraft={() => {
-                setNewTxnOpen(false);
-              }}
             />
           </div>
         )}
