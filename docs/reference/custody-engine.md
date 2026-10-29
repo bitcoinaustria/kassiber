@@ -3043,6 +3043,84 @@ This establishes the whole-stage gate before enabling normal comparison
 admission. Neither the binding nor census/shadow admission changes at this
 boundary. The complete inherited mutation campaign remains outstanding.
 
+## Journal fusion design (R2g; implementation pending)
+
+This design-only checkpoint starts at `1b62f405`. It does not add a compared
+stage or complete R2. The existing six-stage inventory remains unchanged;
+fusion is unimplemented, and none of the R2f counts below proves fusion parity.
+
+### Inputs, outputs and authority
+
+The production join is `CustodyJournalBuilder.build()` in
+`kassiber/core/custody_journal.py`. It passes the finalized projection, ordered
+wallet references and direct-payout metadata to `TaxEngineLedgerInputs`.
+`KassiberTaxEngine` in `core/engines/ledger.py` checks supported tax processing,
+requires a `FinalizedTaxProjection`, and returns `empty_result(inputs)` when
+there are no projected rows. That empty path skips configuration validation
+and the engine call; it still follows the constructor's tax-support check.
+
+For a non-empty projection, `ledger_request.build_request()` produces the
+schema-2 `ledger` request. The PyO3 `kassiber_tax.ledger` function calls
+`kassiber_tax_core::ledger`; `ledger_response.read_ledger()` renders the result.
+The fusion port must build that same request from Rust custody's finalized
+projection, ordered wallet references and raw profile facts, then invoke the
+existing Rust tax engine. It must not reconstruct taxable rows from observations
+or use Python's request as its own compiler input. Direct-payout records are
+compatibility/report metadata, not an alternate source of tax rows.
+
+The comparison output should expose the exact admitted request and the exact
+ledger response, or the refusal and its admission stage. Empty projection is
+an explicit no-engine outcome, not an empty schema-2 call. These outputs alone
+do not prove the complete `build()` result: Python additionally renders journal
+entries, enriches quarantines, accumulates holdings, compares quantity balances,
+and builds ownership-review candidates/counts. Those joins need their own parity
+evidence before claiming the joined `journal` operation complete.
+
+### Admission and representation
+
+Preserve the executed order in `ledger_request.build_request()`: configuration
+checks; crossed-asset same-asset-move assertion; pool-scope validation; wallet,
+row and pair invariants; asset-wide holds; then request construction. Within
+construction, preserve field evaluation and row/pair order, including deferred
+timestamp error objects versus immediately raised conversion failures. Compare
+competing-invalid-input cases, not only one invalid field per case.
+
+Keep amounts as BigInt msat throughout. Preserve canonical decimal coefficient,
+exponent and signed zero, exact-pricing fallback order, CPython truthiness,
+string conversion, timestamp semantics and exception families. Do not route
+amounts through floats or bounded integers. Wallet order, projection order,
+pair order, conflict-before-pending priority and sorted chain parents are
+observable request facts. Unresolved custody stays excluded or quarantined;
+fusion cannot infer a taxable event or basis to make the ledger accept it.
+
+### Parity gate and R4 boundary
+
+Use the unchanged Python request builder as an independent oracle over Python's
+finalized projection. Compare it with the Rust-built request over Rust's
+projection, then compare ledger responses from those independently built inputs.
+Compare refusals as well as successes, including error family, structured
+details and first-failure order. Keep empty controls distinct from active output.
+Extend PyO3, census, custody-shadow and recorded replay together so fusion is
+always compared or explicitly skipped, including decision-only builds, upstream
+refusals and intentional injections. Snapshot v1 remains raw-only.
+
+Generated activity must count only distinct inputs belonging to each seed;
+companion output cannot satisfy activity. Add a deliberately vacuous probe that
+fails the activity assertion. Add named mutation witnesses for ordering,
+field-choice, omission and comparison operators, and rerun all 2,236 inherited
+recipes. Rerun the 24,000-book/1,030-permutation generators and read-only retained
+replay with every earlier stage still accounted for. Fresh artifacts belong
+under this worktree's `target/`. No such fusion runs are claimed here.
+
+Until R4 switches authority, Python remains authoritative for production
+snapshot loading, pre-build repairs, pricing, custody selection, request
+preparation, ledger-response rendering, balance/ownership joins, persistence,
+freshness and worker orchestration. The tax engine remains authoritative for
+tax computation as it is today. New Rust fusion results are comparison-only
+and must never supply persisted journal state. R4 must verify the complete CLI
+and daemon journal path, including these Python-owned joins and report-readiness
+barriers, before replacing that authority.
+
 ## Complete finalized projection runtime (R2f)
 
 The whole-stage gate above precedes normal admission. The binding now compares
