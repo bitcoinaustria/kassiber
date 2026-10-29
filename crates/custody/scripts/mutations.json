@@ -20019,7 +20019,7 @@
     "find": "while remaining > BigInt::from(0) {",
     "replace": "while remaining >= BigInt::from(0) {",
     "expect_failing": [
-      "quantity_operator_audit_vectors"
+      "quantity_fifo_exact_capacity_terminates"
     ],
     "rule": "Independent quantity operator audit: allocation line 114."
   },
@@ -20029,7 +20029,7 @@
     "find": "while source_used[source] == sources[source].1 {",
     "replace": "while source_used[source] != sources[source].1 {",
     "expect_failing": [
-      "quantity_operator_audit_vectors"
+      "quantity_fifo_exact_capacity_terminates"
     ],
     "rule": "Independent quantity operator audit: allocation line 115."
   },
@@ -20039,7 +20039,7 @@
     "find": "while sink_used[sink] == sinks[sink].1 {",
     "replace": "while sink_used[sink] != sinks[sink].1 {",
     "expect_failing": [
-      "quantity_operator_audit_vectors"
+      "quantity_fifo_exact_capacity_terminates"
     ],
     "rule": "Independent quantity operator audit: allocation line 118."
   },
@@ -20084,6 +20084,66 @@
     "rule": "The target slice constructor retains Python's empty-hash refusal message."
   },
   {
+    "id": "R2-review-live-refusal",
+    "file": "tests/custody_engine_compare.py",
+    "find": "            compare_outcome(exc)",
+    "replace": "            pass",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_quantity_refusal_compared_after_gaps"
+    ],
+    "rule": "Late Python refusals must be compared and recorded in both live modes."
+  },
+  {
+    "id": "R2-review-live-stage-inventory",
+    "file": "tests/custody_engine_compare.py",
+    "find": "        errors.append(\"custody stage inventory is incomplete\")",
+    "replace": "        pass",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_session_rejects_unaccounted_quantity_stage"
+    ],
+    "rule": "Sessions reject unaccounted implemented stages."
+  },
+  {
+    "id": "R2-review-raw-activity",
+    "file": "tests/test_custody_quantity_stage.py",
+    "find": "counts[case] > 0",
+    "replace": "counts[case] >= 0",
+    "expect_failing": [
+      "tests/test_custody_quantity_stage.py::test_vacuous_quantity_scenario_fails_activity_check"
+    ],
+    "rule": "Raw activity assertions reject zero activity."
+  },
+  {
+    "id": "R2-review-distinct-runtime",
+    "file": "tests/custody_quantity_runtime_generator.py",
+    "find": "        if key not in seen:",
+    "replace": "        if True:",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_generated_quantity_variants_are_distinct[runtime]"
+    ],
+    "rule": "Repeated variants do not count as independent operands."
+  },
+  {
+    "id": "R2-review-distinct-composition",
+    "file": "tests/custody_quantity_composition_generator.py",
+    "find": "        if key not in seen:",
+    "replace": "        if True:",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_generated_quantity_variants_are_distinct[composition]"
+    ],
+    "rule": "Repeated variants do not count as independent operands."
+  },
+  {
+    "id": "R2-review-distinct-calls",
+    "file": "tests/test_custody_quantity_port.py",
+    "find": "driver(list(unique.values()))",
+    "replace": "driver(values)",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_duplicate_operands_are_not_counted_as_calls"
+    ],
+    "rule": "Duplicate operands produce one actual compiler invocation."
+  },
+  {
     "id": "R2-review-bundle-min",
     "file": "crates/custody/src/quantity/runtime.rs",
     "find": "involved.iter().map(|o|text(&o[\"occurred_at\"])).min()",
@@ -20092,6 +20152,76 @@
       "quantity_bundle_earliest_timestamp"
     ],
     "rule": "Malformed bundles retain the earliest involved observation timestamp."
+  },
+  {
+    "id": "R2-review-runtime-evaluate-once",
+    "file": "tests/custody_quantity_runtime_generator.py",
+    "find": "if key not in _evaluated:",
+    "replace": "if True:",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[runtime]"
+    ],
+    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
+  },
+  {
+    "id": "R2-review-runtime-copy-outcome",
+    "file": "tests/custody_quantity_runtime_generator.py",
+    "find": "return deepcopy(_evaluated[key])",
+    "replace": "return _evaluated[key]",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[runtime]"
+    ],
+    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
+  },
+  {
+    "id": "R2-review-runtime-operand-key",
+    "file": "tests/custody_quantity_runtime_generator.py",
+    "find": "key = json.dumps(value, sort_keys=True, separators=(',', ':'))",
+    "replace": "key = 'constant'",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[runtime]"
+    ],
+    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
+  },
+  {
+    "id": "R2-review-composition-evaluate-once",
+    "file": "tests/custody_quantity_composition_generator.py",
+    "find": "if key not in _evaluated:",
+    "replace": "if True:",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[composition]"
+    ],
+    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
+  },
+  {
+    "id": "R2-review-composition-copy-outcome",
+    "file": "tests/custody_quantity_composition_generator.py",
+    "find": "return deepcopy(_evaluated[key])",
+    "replace": "return _evaluated[key]",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[composition]"
+    ],
+    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
+  },
+  {
+    "id": "R2-review-composition-operand-key",
+    "file": "tests/custody_quantity_composition_generator.py",
+    "find": "key = json.dumps(value, sort_keys=True, separators=(',', ':'))",
+    "replace": "key = 'constant'",
+    "expect_failing": [
+      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[composition]"
+    ],
+    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
+  },
+  {
+    "id": "R2-review-raw-refusal-branch",
+    "file": "tests/test_custody_quantity_stage.py",
+    "find": "        if seed == 2000:",
+    "replace": "        if False:",
+    "expect_failing": [
+      "tests/test_custody_quantity_stage.py::test_every_quantity_raw_generator_matches_both_engines[evidence-scenarios0-snapshot]"
+    ],
+    "rule": "The raw corpus comparison loop must execute and count its refusal scenario."
   },
   {
     "id": "R2-review-injection-stage",

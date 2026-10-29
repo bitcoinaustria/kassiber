@@ -101,20 +101,21 @@ def test_quantity_composition_frozen_python_outputs():
 
 
 def test_quantity_composition_generated_active_counts_both_engines(primitive_driver):
-    from tests.custody_quantity_composition_generator import COUNTS, activity, scenario, scenarios
+    from tests.custody_quantity_composition_generator import COUNTS, activity, scenario, scenarios, variants
     counts = {engine: Counter() for engine in ('Python', 'Rust')}
     values = []
     expected = []
     names = []
     for i in range(len(scenarios())):
-        for variant in range(20):
+        for variant in variants(i):
             name, operands, results, active = scenario(i, variant)
             assert active > 0
             values.extend(operands)
             expected.extend(results)
             names.append(name)
             counts['Python'][name] += active
-    actual = primitive_driver(values)
+    assert len({json.dumps(v, sort_keys=True) for v in values}) == 660
+    actual = distinct_results(primitive_driver, values)
     assert actual == expected
     for i, name in enumerate(names):
         active = sum(activity(v) for v in actual[2*i:2*i+2])
@@ -138,7 +139,7 @@ def test_quantity_composition_generated_active_counts_both_engines(primitive_dri
             for event in value['canonical']['events']:
                 for field in ('legs', 'evidence_snapshots', 'observation_aliases'):
                     event[field].reverse()
-    assert primitive_driver(permuted) == [evaluate(v) for v in permuted]
+    assert distinct_results(primitive_driver, permuted) == distinct_results(lambda operands: [evaluate(v) for v in operands], permuted)
 
 
 def test_quantity_runtime_frozen_outputs():
@@ -147,16 +148,17 @@ def test_quantity_runtime_frozen_outputs():
 
 
 def test_quantity_runtime_generated_active_counts_both_engines(primitive_driver):
-    from tests.custody_quantity_runtime_generator import COUNTS, activity, scenario, scenarios
+    from tests.custody_quantity_runtime_generator import COUNTS, activity, scenario, scenarios, variants
     counts = {engine: Counter() for engine in ('Python', 'Rust')}
     values=[]; expected=[]; names=[]
     for i in range(len(scenarios())):
-        for variant in range(20):
+        for variant in variants(i):
             name,operands,results,active=scenario(i,variant)
             assert active>0
             values.extend(operands);expected.extend(results);names.append(name)
             counts['Python'][name]+=active
-    actual=primitive_driver(values)
+    assert len({json.dumps(v, sort_keys=True) for v in values}) == 1216
+    actual=distinct_results(primitive_driver, values)
     assert actual==expected
     for i,name in enumerate(names):
         active=sum(activity(v) for v in actual[2*i:2*i+2])
@@ -175,9 +177,80 @@ def test_quantity_runtime_generated_active_counts_both_engines(primitive_driver)
             v['projection']['decisions'].reverse()
         elif v['op'] in ('runtime','component_runtime'):
             v['components'].reverse()
-    assert primitive_driver(permuted)==[evaluate(v) for v in permuted]
+    assert distinct_results(primitive_driver, permuted)==distinct_results(lambda operands: [evaluate(v) for v in operands], permuted)
 
 
 def test_quantity_runtime_wrappers_are_python_outputs():
     from tests.custody_quantity_stage import wrappers
     assert json.loads(Path('tests/fixtures/custody_quantity_wrappers.json').read_text())==wrappers()
+
+
+@pytest.mark.parametrize('module', ['runtime', 'composition'])
+def test_generated_quantity_variants_are_distinct(module):
+    import importlib
+    generator = importlib.import_module('tests.custody_quantity_' + module + '_generator')
+    for index in range(len(generator.scenarios())):
+        operands = [generator.scenario(index, variant)[1][0] for variant in generator.variants(index)]
+        encoded = [json.dumps(value, sort_keys=True) for value in operands]
+        assert len(encoded) == len(set(encoded))
+
+
+def test_quantity_review_fixtures_match_python():
+    from tests.custody_quantity_runtime_vectors import evaluate
+    from tests.custody_quantity_composition_generator import evaluate as compile_outcome
+    from tests.custody_quantity_stage import python_stage
+    from tests.custody_quantity_composition_vectors import outcome
+    cases = json.loads(Path('tests/fixtures/custody_quantity_review.json').read_text())
+    for case in cases:
+        expected = {key: case[key] for key in ('expected', 'error', 'message', 'details') if key in case}
+        if case['op'] == 'project':
+            from tests.custody_quantity_runtime_vectors import restore
+            from kassiber.core.custody_quantity import project_quantities
+            actual = outcome(lambda: project_quantities(restore(case['observations']), restore(case['claims'])))
+        else:
+            actual = compile_outcome(case) if case['op'] == 'reviewed' else evaluate(case)
+        assert actual == expected
+    for case in json.loads(Path('tests/fixtures/custody_quantity_review_wrappers.json').read_text()):
+        assert outcome(lambda: python_stage(case['input'])) == {'expected': case['expected']}
+    from kassiber.core.custody_compute import compute_components_stage
+    from tests.custody_snapshot import to_jsonable
+    for case in json.loads(Path('tests/fixtures/custody_component_review.json').read_text()):
+        components, blockers = compute_components_stage(case['input'])
+        assert to_jsonable(dict(components=components, blockers=blockers), redact_config=False) == case['expected']
+
+
+def distinct_results(driver, values):
+    """Execute each distinct private operand once, retaining scenario labels."""
+    unique = {}
+    keys = [json.dumps(value, sort_keys=True, separators=(',', ':')) for value in values]
+    for key, value in zip(keys, values):
+        unique.setdefault(key, value)
+    actual = dict(zip(unique, driver(list(unique.values())), strict=True))
+    return [actual[key] for key in keys]
+
+
+def test_quantity_duplicate_operands_are_not_counted_as_calls():
+    calls = []
+    def driver(values):
+        calls.extend(values)
+        return values
+    operands = [{'op': 'control'}, {'op': 'control'}]
+    assert distinct_results(driver, operands) == operands
+    assert calls == operands[:1]
+
+
+@pytest.mark.parametrize('module', ['runtime', 'composition'])
+def test_quantity_python_duplicate_operands_are_evaluated_once(module, monkeypatch):
+    import importlib
+    generator = importlib.import_module('tests.custody_quantity_' + module + '_generator')
+    calls = []
+    monkeypatch.setattr(generator, 'evaluate', lambda value: calls.append(value) or {'expected': []})
+    generator._evaluated.clear()
+    try:
+        first = generator.evaluate_distinct({'op': 'control'})
+        first['expected'].append('mutated by caller')
+        assert generator.evaluate_distinct({'op': 'control'}) == {'expected': []}
+        generator.evaluate_distinct({'op': 'other-control'})
+        assert calls == [{'op': 'control'}, {'op': 'other-control'}]
+    finally:
+        generator._evaluated.clear()

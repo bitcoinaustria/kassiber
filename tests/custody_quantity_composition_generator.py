@@ -50,6 +50,16 @@ def scenarios():
     return json.loads(PATH.read_text())
 
 
+_evaluated = {}
+
+
+def evaluate_distinct(value):
+    key = json.dumps(value, sort_keys=True, separators=(',', ':'))
+    if key not in _evaluated:
+        _evaluated[key] = evaluate(value)
+    return deepcopy(_evaluated[key])
+
+
 def scenario(index, variant):
     corpus = scenarios()
     template = corpus[index]
@@ -79,7 +89,7 @@ def scenario(index, variant):
     else:
         if isinstance(value['observations'], dict):
             value['observations'] = list(value['observations'].items())
-    expected = evaluate(value)
+    expected = evaluate_distinct(value)
     # Same operation's separately compiled positive witness. It cannot mask
     # any mismatch/refusal in the scenario's first result.
     companion = next(c for c in corpus if c['op'] == value['op'] and activity(c) > 0)
@@ -87,17 +97,30 @@ def scenario(index, variant):
     if companion['op'] == 'reviewed':
         if isinstance(companion['observations'], dict):
             companion['observations'] = list(companion['observations'].items())
-    positive = evaluate(companion)
+    positive = evaluate_distinct(companion)
     active = activity(expected) + activity(positive)
     assert active > 0
     return template['op'] + ':' + template['case'], [value, companion], [expected, positive], active
+
+
+
+
+def variants(index):
+    """Yield only distinct primary operands; repetitions are not evidence."""
+    seen = set()
+    for variant in range(8):
+        _, operands, _, _ = scenario(index, variant)
+        key = json.dumps(operands[0], sort_keys=True, separators=(',', ':'))
+        if key not in seen:
+            seen.add(key)
+            yield variant
 
 
 if __name__ == '__main__':
     from collections import Counter
     counts = Counter()
     for i in range(len(scenarios())):
-        for variant in range(20):
+        for variant in variants(i):
             name, _, _, active = scenario(i, variant)
             counts[name] += active
     COUNTS.write_text(json.dumps(counts, sort_keys=True, indent=2) + '\n')

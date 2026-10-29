@@ -11,25 +11,26 @@ from tests.custody_quantity_composition_vectors import outcome
 @pytest.mark.parametrize('suite,scenarios,generate',suites(),ids=lambda v:v if isinstance(v,str) else None)
 def test_every_quantity_raw_generator_matches_both_engines(suite,scenarios,generate):
     counts={e:Counter() for e in ('Python','Rust')}
-    # Empty/refusal scenarios retain a separately compared positive companion.
-    # Their primary result is still compared and cannot be masked by it.
-    from tests.custody_gap_generator import snapshot
-    companion=snapshot(0,case='untyped')
-    positive=outcome(lambda:python_stage(companion))['expected']
-    rust_positive=rust_results(companion)[0]['quantity']
-    assert_same(positive,rust_positive,'positive companion')
-    active={engine:len(state['projection']['decisions'])+len(state['issues']) for engine,state in (('Python',positive),('Rust',rust_positive))}
-    assert all(active.values())
-    for seed in range(2000):
-        book=generate(seed);case=scenarios[seed%len(scenarios)]
+    from pathlib import Path
+    inactive = set(json.loads(Path('tests/fixtures/custody_quantity_inactive_controls.json').read_text())[suite])
+    # Preserve the inherited corpus and add one raw refusal to the same loop,
+    # so the refusal-comparison branch is exercised rather than merely present.
+    required = set(scenarios) - inactive
+    if suite == 'evidence':
+        required.add('raw_refusal')
+    for seed in range(2000 + (suite == 'evidence')):
+        if seed == 2000:
+            book, case = raw_refusal_snapshot(), 'raw_refusal'
+        else:
+            book=generate(seed);case=scenarios[seed%len(scenarios)]
         for shuffled,b in enumerate((book,permuted_snapshot(book)) if seed<len(scenarios)*2 else (book,)):
             expected=outcome(lambda:python_stage(b))
-            if not shuffled:
-                for engine in counts:counts[engine][case]+=active[engine]
             if 'error' in expected:
                 import kassiber_tax
                 actual=json.loads(kassiber_tax.custody(json.dumps(b)))
                 assert actual['error']['code']==expected['error']
+                if not shuffled:
+                    for engine in counts: counts[engine][case] += 1
                 continue
             stages,skipped=rust_results(b)
             assert 'quantity' in stages and skipped==('finalized_projection',)
@@ -38,6 +39,29 @@ def test_every_quantity_raw_generator_matches_both_engines(suite,scenarios,gener
                 for engine,state in (('Python',expected['expected']),('Rust',stages['quantity'])):
                     counts[engine][case]+=len(state['projection']['decisions'])+len(state['issues'])
     assert counts['Python']==counts['Rust']
-    assert set(counts['Python'])==set(scenarios)
-    assert all(counts['Python'].values())
+    assert_activity(counts['Python'], required)
+    assert not any(counts['Python'][case] for case in inactive)
     print(suite+' quantity active counts: '+json.dumps(counts,sort_keys=True))
+
+
+def assert_activity(counts, required):
+    assert required, "no active scenarios selected"
+    assert all(counts[case] > 0 for case in required), "vacuous quantity scenario"
+
+
+def test_vacuous_quantity_scenario_fails_activity_check():
+    with pytest.raises(AssertionError, match="vacuous"):
+        assert_activity(Counter({'vacuous': 0}), {'vacuous'})
+
+
+def raw_refusal_snapshot():
+    from pathlib import Path
+    return next(c['input'] for c in json.loads(Path('tests/fixtures/custody_quantity_wrappers.json').read_text()) if c.get('error') == 'ValueError')
+
+
+def test_raw_refusal_compares_both_engines():
+    import kassiber_tax
+    book = raw_refusal_snapshot()
+    expected = outcome(lambda: python_stage(book))
+    actual = json.loads(kassiber_tax.custody(json.dumps(book)))
+    assert actual['error']['code'] == expected['error'] == 'ValueError'

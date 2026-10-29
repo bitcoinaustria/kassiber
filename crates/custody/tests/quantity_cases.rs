@@ -492,3 +492,14 @@ fn quantity_empty_target_hash_message() {
 fn quantity_bundle_earliest_timestamp() {
     review_case("bundle_earliest_timestamp");
 }
+
+#[test]
+fn quantity_fifo_exact_capacity_terminates() {
+    let result = allocation::allocate_msat_fifo(
+        &serde_json::json!([["source", 1]]),
+        &serde_json::json!([["sink", 1]]),
+        None,
+    )
+    .unwrap();
+    assert_eq!(result["allocated_msat"], 1);
+}
