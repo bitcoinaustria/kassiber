@@ -3437,3 +3437,62 @@ transaction id. Real books do not share a txid that way.
   They call the binding with `finalized=True` against interpretation- and
   gap-only references, so the finalized stage's `validation` refusal
   surfaces.
+## Private ledger-response checkpoint (R2g step 2, bounded)
+
+Branch `t3code/r2g-fusion-5`, based on `580015d8`, extends the unpackaged
+`ledger-request` probe with an explicit `fusion` control. Active outcomes expose
+both the independently Rust-built request and the existing Rust ledger's complete
+response. Empty projections remain explicit no-engine outcomes; upstream and
+builder refusals bypass the ledger. The probe uses a development dependency on
+the existing tax engine; production custody has no new runtime dependency.
+
+The request's exact compact JSON text is also compared with Python's production
+`ledger_request.dumps()`. This is necessary for refusal parity: a request with
+an integer amount above the ledger's `u64` range reports the JSON column in its
+`RequestError`. Sorting object keys changed that diagnostic even when the
+request documents compared equal. `request_json()` retains Python's field order
+and literal Unicode; it does not normalize engine errors or discard columns.
+Five independently regenerated wire witnesses cover normal rows, oversized
+amounts, typed timestamp errors, Unicode timestamp diagnostics and closed
+confirmation provenance.
+
+| Bounded ledger-response comparisons | Result |
+| --- | --- |
+| Independent builder vectors and inherited ledger golden operands | 311: 243 admitted requests, 67 builder refusals, 1 empty control; zero differences |
+| Ledger results for those admitted requests | 213 successes, 30 exact refusals; zero differences |
+| Ledger refusal stages | request 2, prepare 3, validate 3, compute_multi 15, compute 5, classify 2 |
+| Raw books, one seed for each inherited scenario | 515: 265 active ledger successes, 243 empty controls, 3 builder refusals, 4 upstream refusals; zero differences |
+| Activity | 265 distinct active inputs owned by their current seeds; companion output excluded; vacuous-probe rejection retained |
+
+These are live comparisons against the unchanged Python builder and the same
+existing ledger engine invoked separately on each engine's request. Direct
+payout cases are labeled **reference bug, expected to change** when encountered;
+none occurred in this bounded raw sample, and no new payout golden is added.
+No new Python reference bug was found. Python source is unchanged.
+
+This is a private probe boundary, not normal fusion admission. PyO3, census,
+custody-shadow and recorded replay still have their prior stage inventory and
+do not compare fusion. Builder/upstream refusing-stage comparisons remain with
+the separate harness work. Constructor tax-support admission remains a caller
+responsibility. The 24,000-book/1,030-permutation campaign, 159-request retained
+replay, fresh census/shadow recordings, all 2,236 inherited mutation reruns, and
+new end-to-end fusion mutation witnesses remain outstanding. Rust fusion results
+never reach persisted state; snapshot v1 remains raw-only. Fresh artifacts are
+under `target/r2g5-verify/`. No push, PR or full quality gate is claimed.
+
+| Checkpoint verification | Result |
+| --- | --- |
+| Python fusion/builder/reference comparisons | 7 passed; separate wire-fixture regeneration test passed |
+| New wire-order/field-choice/omission/comparison mutation recipes | All 4 building named-test kills; successful unmutated baseline |
+| Complete current mutation catalog applicability | All 2,246 entries apply; inherited kills are not claimed as rerun |
+| Workspace formatting and all-target Clippy `-D warnings` | Passed |
+| Rust workspace tests | 833 passed; zero failed |
+| `classify_tests update` and required preflight shard | Refreshed; 57 passed, 56 subtests passed |
+
+Verification used Rust 1.99.1, locked Python 3.11 and offline Cargo, without
+changing `HOME`. The workspace rerun permits only the tests' disposable local
+servers. An initial mutation baseline failed to link (linker bus error); it
+counts as neither a kill nor a baseline. The complete four-recipe rerun used
+bounded build concurrency and worktree-local scratch storage and passed.
+Manual review checked exact wire order, empty-path engine exclusion, independent
+request inputs, full response comparison and production authority boundaries.

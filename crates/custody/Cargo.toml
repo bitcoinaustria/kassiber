@@ -27,3 +27,6 @@ timing = []
 [[example]]
 name = "custody-bench"
 required-features = ["timing"]
+[dev-dependencies]
+# The private fusion probe invokes the existing ledger; product custody remains independent.
+kassiber-tax-core = { path = "../../tax-engine/core" }

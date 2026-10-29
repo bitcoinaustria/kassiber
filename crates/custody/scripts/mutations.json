@@ -22742,6 +22742,8 @@
       "tests/test_custody_shadow_harness.py::test_earlier_stages_account_matching_finalized_refusal"
     ],
     "rule": "Earlier-stage comparisons can only bypass a finalized refusal after matching both Python code and stage."
+  },
+  {
     "id": "FUSION-ORDER-assets",
     "file": "crates/custody/src/ledger_request/config.rs",
     "find": "let mut assets = assets\n        .iter()",
@@ -22800,5 +22802,45 @@
       "fusion_builder_field_choice"
     ],
     "rule": "A basic date or shortened ISO clock retains CPython constructor diagnostics at the cutoff boundary."
+  },
+  {
+    "id": "FUSION-WIRE-ORDER",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "keys.iter()\n                        .filter_map",
+    "replace": "keys.iter().rev()\n                        .filter_map",
+    "expect_failing": [
+      "fusion_request_wire_order"
+    ],
+    "rule": "Request wire keys retain Python insertion order, including engine refusal columns."
+  },
+  {
+    "id": "FUSION-WIRE-FIELD",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "&Options::new().compact().ensure_ascii(false)",
+    "replace": "&Options::new().compact().ensure_ascii(true)",
+    "expect_failing": [
+      "fusion_request_wire_order"
+    ],
+    "rule": "The engine request retains literal Unicode as Python dumps does."
+  },
+  {
+    "id": "FUSION-WIRE-OMISSION",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "keys.iter()\n                        .filter_map",
+    "replace": "keys.iter().skip(1)\n                        .filter_map",
+    "expect_failing": [
+      "fusion_request_wire_order"
+    ],
+    "rule": "Request wire serialization retains every admitted field."
+  },
+  {
+    "id": "FUSION-WIRE-COMPARISON",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "items.get(\"kind\").is_some_and(|v| v == \"at\")",
+    "replace": "items.get(\"kind\").is_some_and(|v| v != \"at\")",
+    "expect_failing": [
+      "fusion_request_wire_order"
+    ],
+    "rule": "Only Austrian country objects use the country wire shape without long_term_days."
   }
 ]

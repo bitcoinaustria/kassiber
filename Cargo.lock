@@ -1552,6 +1552,7 @@ dependencies = [
  "bitcoin_hashes",
  "kassiber-pydecimal",
  "kassiber-pyjson",
+ "kassiber-tax-core",
  "serde",
  "serde_json",
  "sha2 0.10.9",

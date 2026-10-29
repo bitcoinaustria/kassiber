@@ -1,7 +1,7 @@
-//! Unpackaged builder probe. Raw mode computes its own finalized projection.
+//! Unpackaged builder/fusion probe. Raw mode computes its own finalized projection.
 use kassiber_custody::{
     codec,
-    ledger_request::{build_request, Outcome},
+    ledger_request::{build_request, request_json, Outcome},
 };
 use std::io::{self, BufRead};
 fn main() {
@@ -40,7 +40,15 @@ fn main() {
         ) {
             Ok(Outcome::Empty) => serde_json::json!({"outcome":"empty"}),
             Ok(Outcome::Request(request)) => {
-                serde_json::json!({"outcome":"request","request":request})
+                if input["fusion"] == true {
+                    let request_text = request_json(&request);
+                    let response: serde_json::Value =
+                        serde_json::from_str(&kassiber_tax_core::ledger(&request_text))
+                            .expect("ledger response");
+                    serde_json::json!({"outcome":"request","request":request,"response":response,"request_text":request_text})
+                } else {
+                    serde_json::json!({"outcome":"request","request":request})
+                }
             }
             Err(error) => serde_json::json!({"outcome":"refusal","error":error.document()}),
         };

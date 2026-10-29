@@ -108,6 +108,114 @@ pub fn build_request(
         json!({"schema_version":2,"operation":operation,"policy":policy,"config":names,"holder":holder,"wallets":refs,"rows":rows,"intra_pairs":intra,"cross_asset_pairs":cross}),
     ))
 }
+/// Python's compact request wire order is observable in engine parse errors.
+/// Restrict ordering to the builder's schema; never serialize caller metadata.
+pub fn request_json(request: &Value) -> String {
+    use kassiber_pyjson::{Key, Options, Value as Py};
+    fn ordered(value: &Value) -> Py {
+        match value {
+            Value::Object(items) => {
+                let keys: &[&str] = if items.contains_key("schema_version") {
+                    &[
+                        "schema_version",
+                        "operation",
+                        "policy",
+                        "config",
+                        "holder",
+                        "wallets",
+                        "rows",
+                        "intra_pairs",
+                        "cross_asset_pairs",
+                    ]
+                } else if items.contains_key("country") {
+                    &["country", "method", "method_label", "require_coarse_review"]
+                } else if items.contains_key("long_term_days")
+                    || items.get("kind").is_some_and(|v| v == "at")
+                {
+                    &["kind", "long_term_days"]
+                } else if items.contains_key("assets") {
+                    &["assets", "exchanges", "holders"]
+                } else if items.contains_key("amount_msat") {
+                    &[
+                        "id",
+                        "anchor",
+                        "asset",
+                        "wallet_id",
+                        "direction",
+                        "ts",
+                        "cutoff_instant",
+                        "amount_msat",
+                        "fee_msat",
+                        "rate",
+                        "value",
+                        "coarse",
+                        "kind",
+                        "text",
+                        "regime_override",
+                        "category_override",
+                        "taxability_off",
+                        "privacy_hop",
+                        "hold",
+                        "chain_order",
+                    ]
+                } else if items.contains_key("raw") {
+                    &[
+                        "raw",
+                        "error",
+                        "error_class",
+                        "us",
+                        "offset_s",
+                        "date",
+                        "year",
+                        "vienna_date",
+                        "display",
+                        "iso",
+                    ]
+                } else if items.contains_key("out_id") {
+                    &[
+                        "pair_id",
+                        "out_id",
+                        "in_id",
+                        "out_transaction_id",
+                        "in_transaction_id",
+                        "out_asset",
+                        "in_asset",
+                        "policy",
+                        "bitcoin_rail",
+                    ]
+                } else if items.contains_key("out") {
+                    &["out", "in", "source", "group_id"]
+                } else if items.contains_key("scope") {
+                    &["scope", "parents"]
+                } else if items.contains_key("label") {
+                    &["id", "label"]
+                } else {
+                    &["error", "us"]
+                };
+                assert!(
+                    items.keys().all(|key| keys.contains(&key.as_str())),
+                    "unknown ledger request field"
+                );
+                Py::Dict(
+                    keys.iter()
+                        .filter_map(|key| {
+                            items
+                                .get(*key)
+                                .map(|value| (Key::Str((*key).into()), ordered(value)))
+                        })
+                        .collect(),
+                )
+            }
+            Value::Array(items) => Py::List(items.iter().map(ordered).collect()),
+            _ => codec::from_json(value).expect("builder scalar"),
+        }
+    }
+    kassiber_pyjson::dumps(
+        &ordered(request),
+        &Options::new().compact().ensure_ascii(false),
+    )
+    .expect("builder request serialization")
+}
 fn required<'a>(value: &'a Value, key: &str) -> Result<&'a Value, Refusal> {
     value
         .get(key)
@@ -434,6 +542,35 @@ fn request_row(row: &Value, holds: &BTreeMap<String, &str>) -> Result<Value, Ref
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fusion_request_wire_order() {
+        let cases: Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_fusion_wire.json"
+        ))
+        .unwrap();
+        for case in cases.as_array().unwrap() {
+            let input = &case["input"];
+            let wallets = input["wallets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|pair| (pair[0].clone(), pair[1].clone()))
+                .collect::<Vec<_>>();
+            let Outcome::Request(request) =
+                build_request(&input["profile"], &input["projection"], &wallets, "ledger").unwrap()
+            else {
+                panic!("active wire witness");
+            };
+            assert_eq!(
+                request_json(&request),
+                case["request_text"],
+                "{}",
+                case["case"]
+            );
+        }
+        assert_eq!(cases.as_array().unwrap().len(), 5);
+    }
 
     fn vectors(prefix: &str) {
         let cases: Value = serde_json::from_str(include_str!(
