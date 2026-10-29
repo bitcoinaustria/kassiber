@@ -51,9 +51,21 @@ pub struct Snapshot {
     pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,
+    /// `transactions` as JSON objects, built once on first use.
+    #[serde(skip)]
+    rows: std::sync::OnceLock<Vec<Value>>,
 }
 
 impl Snapshot {
+    /// Each transaction row as a JSON object, in order; shared by every reader.
+    pub fn rows(&self) -> &[Value] {
+        self.rows.get_or_init(|| {
+            self.transactions
+                .iter()
+                .map(|row| Value::Object(row.clone()))
+                .collect()
+        })
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != 1 || self.operation != "custody" {
             return Err("unsupported custody snapshot schema or operation".into());

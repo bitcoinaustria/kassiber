@@ -182,8 +182,8 @@ pub(super) fn compute(
     context: &Context,
     occupied: &Ids,
 ) -> Result<Production, String> {
-    let rows: Vec<_> = snapshot.transactions.iter().map(|r| json!(r)).collect();
-    if !htlc::presence(&rows) {
+    let rows = snapshot.rows();
+    if !htlc::presence(rows) {
         return Ok(Production {
             pairs: Vec::new(),
             proofs: BTreeMap::new(),
@@ -197,7 +197,7 @@ pub(super) fn compute(
     instant(&json!(snapshot.as_of))?;
     let candidates = matcher::suggest(&rows)?;
     let dismissed = dismissed(snapshot)?;
-    for row in &rows {
+    for row in rows {
         row.get("id").ok_or_else(|| "KeyError".to_owned())?;
     }
     let by_id: BTreeMap<_, _> = rows.iter().map(|r| (codec::pystr(&r["id"]), r)).collect();

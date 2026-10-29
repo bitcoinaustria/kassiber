@@ -232,12 +232,9 @@ pub(super) fn compile_with_proofs(
     proofs: &BTreeMap<(String, String), NativeTransitionProof>,
 ) -> Result<Value, String> {
     let scopes = snapshot
-        .transactions
+        .rows()
         .iter()
-        .filter_map(|r| {
-            let r = json!(r);
-            Some((anchor(&r), graph::onchain_scope(&r)?))
-        })
+        .filter_map(|r| Some((anchor(r), graph::onchain_scope(r)?)))
         .collect();
     compile_with_scopes(
         pairs,

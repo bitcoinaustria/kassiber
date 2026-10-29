@@ -46,7 +46,7 @@ pub(super) fn compose(
         }
         let channel_blocked = blocked(&channel_quarantines);
         let samourai = samourai::compile(snapshot, context)?;
-        let rows: Vec<_> = snapshot.transactions.iter().map(|row| json!(row)).collect();
+        let rows = snapshot.rows().to_vec();
         let has_chain = array(&context.canonical["events"])
             .iter()
             .any(|event| event["event_key"]["native_namespace"] == "chain");

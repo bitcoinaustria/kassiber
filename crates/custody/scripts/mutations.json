@@ -9556,8 +9556,8 @@
   {
     "id": "native11-native-guard-11",
     "file": "crates/custody/src/interpretation/native.rs",
-    "find": "if !htlc::presence(&rows) {",
-    "replace": "if !(!htlc::presence(&rows)) {",
+    "find": "if !htlc::presence(rows) {",
+    "replace": "if !(!htlc::presence(rows)) {",
     "expect_failing": [
       "native_production_helper_vectors"
     ],

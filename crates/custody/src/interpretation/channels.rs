@@ -712,11 +712,7 @@ pub(super) fn compute(snapshot: &Snapshot) -> Result<Value, String> {
             .iter()
             .map(|r| json!(r))
             .collect::<Vec<_>>(),
-        &snapshot
-            .transactions
-            .iter()
-            .map(|r| json!(r))
-            .collect::<Vec<_>>(),
+        snapshot.rows(),
         &snapshot
             .wallets
             .iter()

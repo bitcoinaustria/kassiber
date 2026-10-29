@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
-    let rows: Vec<Value> = snapshot.transactions.iter().map(|row| json!(row)).collect();
+    let rows = snapshot.rows();
     let present = rows.iter().any(|row| {
         row.get("config_text_mentions_samourai")
             .map(truth)
@@ -25,7 +25,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
     });
     let mut grouped: BTreeMap<(String, String), Vec<(&Value, String)>> = BTreeMap::new();
     if present {
-        for row in &rows {
+        for row in rows {
             // json.loads accepts text, not an already decoded mapping.
             let config = if truth(&row["config_json"]) {
                 row["config_json"].as_str()
