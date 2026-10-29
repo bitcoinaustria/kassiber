@@ -82,11 +82,13 @@ fn txid_from_outpoint(v: &Value) -> Option<String> {
     graph::strict_txid(&json!(s)).or_else(|| outpoint(&Py::Str(s.into())).map(|v| v.0))
 }
 fn tx_scope(row: &Value) -> Option<Scope> {
-    let mut probe = row.clone();
-    if codec::text(&probe["asset"]).py_strip().is_empty() {
+    // Only a row without an asset is copied to default it.
+    if codec::text(&row["asset"]).py_strip().is_empty() {
+        let mut probe = row.clone();
         probe["asset"] = json!("BTC");
+        return bitcoin_scope(&probe);
     }
-    bitcoin_scope(&probe)
+    bitcoin_scope(row)
 }
 fn bitcoin_scope(probe: &Value) -> Option<Scope> {
     let (chain, network, txid, asset) = graph::onchain_scope(probe)?;

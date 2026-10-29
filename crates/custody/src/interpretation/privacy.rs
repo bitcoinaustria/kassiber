@@ -159,7 +159,7 @@ mod tests {
             };
             let context = Context {
                 observations: serde_json::from_value(vector["observations"].clone()).unwrap(),
-                canonical: Value::Null,
+                canonical: std::borrow::Cow::Owned(Value::Null),
                 excluded: ids("excluded"),
             };
             let result = compute(

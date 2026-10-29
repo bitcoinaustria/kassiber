@@ -27,6 +27,7 @@ use crate::{
     snapshot::Snapshot,
 };
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) use holds::capture_confirmation;
@@ -158,7 +159,7 @@ pub(super) fn anchor(row: &Value) -> String {
 
 /// Keep the canonical event alias iteration: an alias may resolve to a keeper
 /// whose transaction id differs from the original row's id.
-fn observations(canonical: &Value) -> BTreeMap<String, Value> {
+fn observations(canonical: &Value) -> BTreeMap<String, Cow<'_, Value>> {
     let by_hash: BTreeMap<_, _> = array(&canonical["events"])
         .iter()
         .flat_map(|event| array(&event["legs"]))
@@ -167,25 +168,40 @@ fn observations(canonical: &Value) -> BTreeMap<String, Value> {
     let mut result = BTreeMap::new();
     for event in array(&canonical["events"]) {
         for alias in array(&event["observation_aliases"]) {
-            result.insert(text(&alias[0]), by_hash[&text(&alias[1])].clone());
+            result.insert(text(&alias[0]), Cow::Borrowed(by_hash[&text(&alias[1])]));
         }
     }
     result
 }
 
+/// Canonical evidence and its observations are borrowed from the evidence
+/// stage; interpreters only replace whole observations in their own copies.
 #[derive(Clone)]
-pub(super) struct Context {
-    pub observations: BTreeMap<String, Value>,
-    pub canonical: Value,
+pub(super) struct Context<'a> {
+    pub observations: BTreeMap<String, Cow<'a, Value>>,
+    pub canonical: Cow<'a, Value>,
     pub excluded: BTreeSet<String>,
 }
-impl Context {
-    fn load(snapshot: &Snapshot) -> Result<Self, String> {
+impl Context<'_> {
+    fn load(snapshot: &Snapshot) -> Result<Context<'static>, String> {
         let components = components::compute(snapshot).map_err(|e| e.code.to_owned())?;
         let evidence = evidence::compute(snapshot)?;
-        Ok(Self::from_stages(&components, &evidence))
+        Ok(Context::from_stages(&components, &evidence).into_owned())
     }
-    fn from_stages(components: &Value, evidence: &Value) -> Self {
+    fn into_owned(self) -> Context<'static> {
+        Context {
+            observations: self
+                .observations
+                .into_iter()
+                .map(|(k, v)| (k, Cow::Owned(v.into_owned())))
+                .collect(),
+            canonical: Cow::Owned(self.canonical.into_owned()),
+            excluded: self.excluded,
+        }
+    }
+}
+impl<'a> Context<'a> {
+    fn from_stages(components: &Value, evidence: &'a Value) -> Self {
         let excluded = array(&components["components"])
             .iter()
             .flat_map(|item| array(&item["legs"]))
@@ -200,7 +216,7 @@ impl Context {
             .collect();
         Self {
             observations: observations(&evidence["canonical_input"]),
-            canonical: evidence["canonical_input"].clone(),
+            canonical: Cow::Borrowed(&evidence["canonical_input"]),
             excluded,
         }
     }

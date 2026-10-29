@@ -269,7 +269,7 @@ mod tests {
                 "quarantine" => {
                     let context = Context {
                         observations: BTreeMap::new(),
-                        canonical: vector["canonical"].clone(),
+                        canonical: std::borrow::Cow::Owned(vector["canonical"].clone()),
                         excluded: array(&vector["excluded"]).iter().map(codec::text).collect(),
                     };
                     json!(quarantines(

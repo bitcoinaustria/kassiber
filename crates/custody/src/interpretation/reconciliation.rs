@@ -76,7 +76,7 @@ pub(super) fn digest(expected: &Expected) -> Result<String, String> {
 
 pub(super) fn reconcile(
     components: &[Value],
-    observations: &BTreeMap<String, Value>,
+    observations: &BTreeMap<String, std::borrow::Cow<'_, Value>>,
     native_claims: &[Value],
     blocked: &Ids,
     rows: &BTreeMap<String, Value>,
@@ -234,7 +234,7 @@ pub(super) fn reconcile(
         let scoped = observations
             .iter()
             .filter(|(id, _)| anchors.contains(*id))
-            .map(|(k, v)| (k.clone(), v.clone()))
+            .map(|(k, v)| (k.clone(), Value::clone(v)))
             .collect();
         let reviewed = match reviewed::compile(component, &scoped) {
             Ok(claims) => claims,

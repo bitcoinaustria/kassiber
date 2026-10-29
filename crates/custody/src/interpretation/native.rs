@@ -314,6 +314,7 @@ mod tests {
                         .observations
                         .get_mut(id)
                         .unwrap()
+                        .to_mut()
                         .as_object_mut()
                         .unwrap()
                         .extend(fields.as_object().unwrap().clone());
