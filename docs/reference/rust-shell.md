@@ -31,6 +31,9 @@ verification, including per-command Rust routing counts.
 | `crates/reports` | read-only stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, and saved/filed snapshot listing |
 | `crates/transfers` | stored effective pairs/payouts, gap history, historical receipts, local matching-rule configuration and advisory dismissals |
 
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
+| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, and append-only saved/filed snapshot markers |
+
 ## Command line
 
 `crates/cli/scripts/gen_parser_spec.py` walks `build_parser()` and writes
@@ -111,6 +114,13 @@ forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`
 the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
 `offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 119 recognized leaves total). Each family registers through its own
+
+and forward-edit reverts), `imports list`, `imports rollback`, `wallets derive`,
+the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
+the [explicit snapshot marker write](#reports-explicit-snapshot-write-checkpoint-r5-fifth-continuation-partial),
+and every leaf of
+`workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
+and `offline` (26 setup leaves; 82 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -2608,6 +2618,125 @@ and the corresponding daemon exports, including capital-gains CSV. All remain
 XLSX/PDF, exit-tax, explanations, privacy/Lightning/cross-check/commercial
 reads and network reads remain `not_implemented`. AI projections and journal
 production stay Python. No Python reference bug was found or fixed.
+
+## Reports explicit snapshot write checkpoint (R5 fifth continuation, partial)
+
+`t3code/r5-reports-5`, based on `349bf2ca`, adds
+`reports filed-snapshots create`. Eleven report CLI leaves and the existing five
+desktop read kinds are implemented. This is a partial checkpoint within the
+requested snapshot-write step; automatic export-completion saving, artifact CSV
+exports and daemon export kinds remain unported.
+
+The native write retains the phase-4 compatibility command for external saved
+and filed markers. It validates bounded kinds, years, state, authored source,
+notes, classification counts/exact msat, finite exact gain strings, and replayable
+wallet/time scope before appending. Stored JSON uses `crates/pyjson` with Python's
+recursive key sorting, ASCII escaping and compact separators. Supplied content
+digests are normalized and validated; computing an artifact or bundle hash stays
+with the unported export-completion path.
+
+An explicit filed action can reference a locally captured saved snapshot. It
+inherits the sealed kind, period, content digest, summaries and scope, refuses
+every conflicting override, and copies frozen dependency observations without
+reading current journals. The new capture retains its source snapshot id.
+Filing the same capture twice appends two markers. External markers do not
+acquire local capture authority. The write's savepoint rolls back parent and
+child rows together on failure and preserves an enclosing caller transaction.
+Existing snapshot, capture, dependency, custody-impact, chain-impact and
+resolution rows stay intact; filing does not recalculate or copy impact history.
+
+Explicit markers remain available when journals are stale, as in Python. All
+live report-readiness barriers remain in place. The implementation adds no AI
+projection, schema, external dependency, network action or Python product change.
+No Python reference bug was found.
+
+The frozen write oracle contains 182 cases, including Unicode/surrogate JSON,
+exact decimal scale, bounds and refusal precedence, sealed identity overrides,
+profile-scoped dependency copying, duplicate identities and forced child-write
+failures. It compares full raw rows in seven snapshot/dependency/impact tables.
+Native dispatch and transaction tests pin persistence and savepoint ownership.
+The process oracle performs the same external-save, external-file and repeated
+local-capture filing sequence on FIFO, HIFO and Austrian books; it compares
+normalized envelopes and database dumps, replacing only generated UUIDs and
+creation/capture timestamps. Stored JSON text and dependency observations are
+never normalized. The two inherited snapshot-creation fixture calls now route
+to Rust.
+
+The read oracle reuses a disposable schema with a rolled-back fixture per case.
+Its `total_changes` assertion still rejects writes during every report read;
+the isolation avoids repeated schema initialization during the full mutation
+audit.
+
+All 22 report scenarios pass. The fresh hybrid log records 309 report calls,
+all served by Rust, including the two inherited creation fixture calls:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.summary` | 36 | 0 |
+| `reports.capital-gains` | 25 | 0 |
+| `reports.balance-sheet` | 25 | 0 |
+| `reports.portfolio-summary` | 25 | 0 |
+| `reports.tax-summary` | 25 | 0 |
+| `reports.journal-entries` | 25 | 0 |
+| `reports.austrian-e1kv` | 23 | 0 |
+| `reports.austrian-tax-summary` | 23 | 0 |
+| `reports.balance-history` | 60 | 0 |
+| `reports.filed-snapshots.list` | 16 | 0 |
+| `reports.filed-snapshots.create` | 26 | 0 |
+
+The nine inherited native daemon sessions still compare 207 report responses
+as raw bytes, excluding their intentionally different ready-handshake inventories.
+No new daemon kind is enabled. The broader hybrid selection adds 41 ported report
+calls, all Rust-served; its unported setup/export/AI calls remain Python.
+
+| Byte comparison | Generic FIFO | Generic HIFO | Austrian moving average AT |
+| --- | --- | --- | --- |
+| Explicit saved/filed snapshot rows | exact normalized dump | exact normalized dump | exact normalized dump |
+| Copied captures and frozen dependency observations | exact normalized dump | exact normalized dump | exact normalized dump |
+| Existing custody/chain impacts and resolutions | unchanged, frozen oracle | unchanged, frozen oracle | unchanged, frozen oracle |
+| Ten tabular read CSV projections, 64 / 3,000 transactions | exact bytes/profile refusals | exact bytes/profile refusals | exact bytes |
+| Automatic export-completion snapshot rows | unported | unported | unported |
+| Full-report, Austrian bundle and transaction CSV artifacts | unported | unported | unported |
+
+The mutation catalog has 355 entries: the 278 inherited entries and these 77
+new entries, each tied to its named native killer:
+
+| New rules | Entries | Named killer |
+| --- | ---: | --- |
+| Bounded values, canonical JSON, sealed identity, frozen dependencies and failure rollback | 62 | `snapshot_write_python_rows_and_refusals` |
+| Caller transaction ownership | 1 | `snapshot_write_preserves_callers_transaction` |
+| Native write dispatch and durable standalone append | 1 | `snapshot_create_dispatch_is_persistent` |
+| CLI authored fields and explicit envelope kind | 13 | `snapshot_create_transport_keeps_authored_fields` |
+
+The final fresh-target audit passes all 34 baseline selections and kills all
+355 mutations in one invocation, including every inherited entry. An earlier
+audit found one equivalent redundant-sort mutation and a surrogate mutation
+that did not compile. The redundant sort/entry was removed, the mutation was
+made well typed, and that earlier audit is superseded by the complete green run.
+
+Verification uses Rust 1.99.1, offline/locked Cargo and locked Python 3.11.
+Workspace and binary formatting, both workspace and test-harness clippy with
+`-D warnings`, all 966 workspace tests, all 14 harness integration tests and the
+harness build pass. The required shell/hybrid/runner/port suite passes 63 tests
+and 178 subtests; the broader hybrid smoke/blocker/contract/year-handoff suite
+passes 127 tests and four subtests. Inventory/contract/shard checks pass 29 tests
+and 47 subtests; the Python snapshot/chain reference modules pass 39 tests.
+The generated read and write oracles check cleanly. Owned-loopback and Python
+account-home owner-lock fixtures use the access their contracts require; every
+book/data root is disposable. A sandbox-only workspace attempt fails on loopback
+fixture creation, then the unrestricted full rerun passes. Early report reruns
+whose binary was replaced by a concurrent workspace build are discarded; the
+final 22-scenario run uses the stable rebuilt harness. No full quality-gate or
+push-readiness claim is made.
+
+Remaining work is export-completion saved registration, app-computed summaries
+and artifact/bundle hashes, dependency capture from booked authoritative inputs,
+full-report CSV, the Austrian E1kv CSV bundle, report-owned transaction CSV
+(including draft/range semantics), and their daemon export kinds, including
+capital-gains CSV. Those commands and kinds keep `not_implemented`.
+XLSX/PDF, exit-tax, explanations, privacy/Lightning/cross-check/commercial reads
+and network reads also keep `not_implemented`. AI projections remain Python.
+This is **not complete reports slice acceptance**.
 
 ## Not yet ported
 

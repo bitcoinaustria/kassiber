@@ -9,9 +9,12 @@ fn check(group: &str) {
         cases.iter().any(|v| v["group"] == group),
         "empty oracle group: {group}"
     );
+    let root = tempfile::tempdir().unwrap();
+    let book = Book::create(&root.path().join("data"), None).unwrap();
     for case in cases.iter().filter(|v| v["group"] == group) {
-        let root = tempfile::tempdir().unwrap();
-        let book = Book::create(&root.path().join("data"), None).unwrap();
+        book.connection()
+            .execute_batch("SAVEPOINT oracle_fixture")
+            .unwrap();
         if case["base"].as_bool().unwrap_or(true) {
             book.connection()
                 .execute_batch(include_str!("data/book.sql"))
@@ -57,6 +60,9 @@ fn check(group: &str) {
             book.connection().total_changes(),
             "a report wrote to the book"
         );
+        book.connection()
+            .execute_batch("ROLLBACK TO oracle_fixture; RELEASE oracle_fixture")
+            .unwrap();
     }
 }
 #[test]

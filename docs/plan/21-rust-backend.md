@@ -971,11 +971,30 @@ the CSV artifact, snapshot-mutation or daemon-export steps. The
 [CSV checkpoint](../reference/rust-shell.md#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial)
 records verification and the precise remaining work.
 
+The fifth continuation (`t3code/r5-reports-5`, based on `349bf2ca`) ports
+`reports filed-snapshots create`: external saved/filed markers and explicit filing
+of captured local exports. Bounded summaries and scope serialize through
+`crates/pyjson`; filing inherits sealed identity and copies frozen dependencies
+in an atomic append, preserving existing impact/resolution history. The 182-case
+write oracle and FIFO/HIFO/Austrian process sequences compare raw stored rows,
+and the two formerly Python-served creation fixtures now run in Rust.
+Automatic export-completion saving, app-computed hashes/summaries, dependency
+capture, artifact CSV exporters and daemon export kinds remain open. See the
+[snapshot-write checkpoint](../reference/rust-shell.md#reports-explicit-snapshot-write-checkpoint-r5-fifth-continuation-partial)
+for verification and the exact remaining boundary.
+
+The final snapshot checkpoint passes all 22 report process scenarios: 309 report
+CLI calls are Rust-served with zero fallback. All 355 report mutations (278
+inherited and 77 new) are killed in one fresh-target audit. Workspace formatting,
+both clippy configurations, 966 workspace tests, 14 harness tests, the required
+shell/hybrid suite, and inventory/contracts pass. This evidence accepts the
+explicit marker boundary only; it does not complete the requested export slice.
+
 This is **not full reports slice acceptance**. Exit-tax outputs,
 capital-gain explanations and desktop capital gains remain unported.
 So do privacy, Lightning and cross-check reads, commercial/source-funds reads,
 all PDF/XLSX/artifact exports (including full-report and Austrian bundle CSV),
-standalone transaction CSV, snapshot save/file actions and every
+standalone transaction CSV, automatic export-completion saved registration and every
 network-dependent operation. Unsupported commands retain `not_implemented`;
 the [continuation checkpoint](../reference/rust-shell.md#reports-austrian-and-journal-read-checkpoint-r5-continuation-partial)
 records exact parity, mutations, routing counts and verification limits.

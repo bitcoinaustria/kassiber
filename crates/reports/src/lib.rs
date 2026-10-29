@@ -1,4 +1,4 @@
-//! Read-only reports over Python-produced journals. No acquisition or rebuilding.
+//! Reports over Python-produced journals. No acquisition or rebuilding.
 mod austrian;
 mod austrian_text;
 mod calendar;
@@ -7,6 +7,7 @@ mod desktop;
 mod history;
 mod holdings;
 mod journal;
+mod snapshot_write;
 mod snapshots;
 mod sql;
 mod summary;
@@ -76,6 +77,20 @@ fn replace(row: &mut Value, key: &str, v: Value) {
 /// Each read holds one SQLite snapshot across admission and report construction.
 /// Saved snapshots deliberately remain readable even when live journals are stale.
 pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> {
+    execute_with_sources(conn, command, args, &kassiber_setup::SystemSources)
+}
+
+/// Injectable identities and clock for byte-exact snapshot write oracles.
+pub fn execute_with_sources(
+    conn: &Connection,
+    command: &str,
+    args: &Value,
+    sources: &dyn kassiber_setup::Sources,
+) -> Result<Value> {
+    if command == "reports.filed-snapshots.create" {
+        let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+        return snapshot_write::create_cli(conn, &workspace, &profile, args, sources);
+    }
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {

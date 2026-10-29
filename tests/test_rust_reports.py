@@ -268,6 +268,95 @@ def test_snapshot_listing_remains_readable_when_live_journals_are_stale(tmp_path
     assert len(result["data"]["snapshots"])==2
     calls=[json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
     assert {"command":"reports.filed-snapshots.list","served_by":"rust"} in calls
+    creates = [c for c in calls if c["command"] == "reports.filed-snapshots.create"]
+    assert len(creates) == 2 and all(c["served_by"] == "rust" for c in creates)
+
+
+@pytest.mark.parametrize("country,algorithm", [
+    ("generic", "fifo"), ("generic", "hifo"), ("at", "moving_average_at"),
+])
+def test_snapshot_creation_rows_and_frozen_dependency_copy(tmp_path, monkeypatch, country, algorithm):
+    """Only generated identities/times are normalized; stored JSON stays literal."""
+    import uuid
+    from kassiber.core import custody_filed_reports as snapshots
+
+    root, env, call = _setup(tmp_path, monkeypatch, country, algorithm)
+    conn = open_db(root)
+    workspace, profile = conn.execute("SELECT workspace_id,id FROM profiles WHERE label='Book'").fetchone()
+    # A phase-4 local capture is a frozen fixture, independent of current journals.
+    snapshots.create_filed_report_snapshot(conn, workspace_id=workspace, profile_id=profile,
+        report_kind="full-report.csv", report_state="saved", period_start_year=2020, period_end_year=2024,
+        content_sha256="b" * 64, classification_summary={"income":{"count":1,"amount_msat":1001}},
+        gain_summary={"gain_loss_exact":"1.2300000", "status":"final"},
+        report_scope={"wallet_ids":["frozen-wallet"]}, snapshot_id="captured", created_at="2025-01-01T00:00:00Z")
+    conn.execute("INSERT INTO filed_report_chain_captures(snapshot_id,profile_id,captured_at) VALUES(?,?,?)",
+                 ("captured", profile, "original"))
+    conn.execute("""INSERT INTO filed_report_chain_dependencies(snapshot_id,profile_id,transaction_id,wallet_id,
+        chain,network,txid,observation_json) VALUES(?,?,?,?,?,?,?,?)""",
+        ("captured", profile, "frozen-transaction", "frozen-wallet", "bitcoin", "main", "c"*64,
+         '{"status":"observed","confirmed":true,"quantity_hash":"sealed","domain_id":"original"}'))
+    conn.execute("UPDATE profiles SET last_processed_at=NULL WHERE id=?", (profile,))
+    conn.commit()
+    database = Path(conn.execute("PRAGMA database_list").fetchone()[2])
+    conn.close()
+    original = database.read_bytes()
+    tables = ("filed_report_snapshots", "filed_report_chain_captures", "filed_report_chain_dependencies",
+              "custody_filed_report_impacts", "custody_filed_report_impact_resolutions",
+              "filed_report_chain_impacts", "filed_report_chain_resolutions")
+    args = ("--report-kind", " FULL.Report-CSV ", "--period-start-year", "2020", "--period-end-year", "2024",
+            "--content-sha256", " A" + "A"*63 + " ", "--classification-summary-json",
+            '{"Income":{"count":2,"amount_msat":1001},"fee":{}}', "--gain-summary-json",
+            '{"gain_loss_exact":"1.23000000000000000000000001","status":"FINAL","fiat_currency":"eur"}',
+            "--report-scope-json", '{"wallet_ids":["hot","cold","cold"]}', "--notes", ' Reviewed € 🪙, "quote"\n')
+
+    def sequence(reference):
+        replacements = {}
+        outcomes = []
+        for i, extra in enumerate((
+            ("--state", "saved", *args), ("--state", "filed", *args),
+            ("--state", "filed", "--saved-snapshot-id", "captured"),
+            ("--state", "filed", "--saved-snapshot-id", "captured"),
+        )):
+            result = call("reports", "filed-snapshots", "create", *extra, reference=reference)
+            assert result.returncode == 0, result.stdout
+            envelope = json.loads(result.stdout)
+            created = envelope["data"]
+            assert uuid.UUID(created["id"]).version == 4
+            replacements[created["id"]] = f"action-{i}"
+            replacements[created["created_at"]] = "<creation-time>"
+            outcomes.append(result.stdout)
+        conn = open_db(root)
+        rows = {table:[dict(row) for row in conn.execute(f"SELECT * FROM {table}")] for table in tables}
+        conn.close()
+        def normalize(v):
+            if isinstance(v, dict):return {k:normalize(item) for k,item in v.items()}
+            if isinstance(v, list):return [normalize(item) for item in v]
+            if isinstance(v, str):return replacements.get(v,v)
+            return v
+        for capture in rows["filed_report_chain_captures"]:
+            if capture["snapshot_id"] != "captured":capture["captured_at"] = "<creation-time>"
+        rows = normalize(rows)
+        for items in rows.values():items.sort(key=lambda r: json.dumps(r,sort_keys=True))
+        normalized_wire = []
+        for wire in outcomes:
+            for actual, normalized in replacements.items():
+                wire = wire.replace(actual.encode(), normalized.encode())
+            normalized_wire.append(wire.decode())
+        return json.dumps({"outcomes":normalized_wire,"rows":rows}, ensure_ascii=False,
+                          sort_keys=True,separators=(",", ":")).encode()
+
+    expected = sequence(True)
+    database.write_bytes(original)
+    assert sequence(False) == expected
+    for extra in (("--saved-snapshot-id", "missing"),
+                  ("--saved-snapshot-id", "captured", "--gain-summary-json", "{}"),
+                  ("--saved-snapshot-id", "captured", "--report-scope-json", "{}"),
+                  ("--report-kind", "summary", "--period-start-year", "2024", "--content-sha256", "a"*64,
+                   "--classification-summary-json", "[]")):
+        _same(call, "reports", "filed-snapshots", "create", "--state", "filed", *extra, success=False)
+    _same(call, "reports", "filed-snapshots", "list")
+    calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
+    assert all(c["served_by"] == "rust" for c in calls if c["command"].startswith("reports."))
 
 
 def test_table_and_plain_reads_match_bytes(tmp_path,monkeypatch):

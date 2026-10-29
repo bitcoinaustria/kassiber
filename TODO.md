@@ -227,6 +227,7 @@ projections stay Python. Progress and remaining work for this slice:
 
 The [report-read boundaries](docs/plan/21-rust-backend.md#r5-reports-first-read-boundary-partial)
 read Python-produced journals through ten CLI leaves and five daemon kinds.
+The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
 
 - [x] Port live summary, gains, balance sheet, wallet holdings and saved/filed
   snapshot listing, retaining readiness gates and exact JSON/table/plain output.
@@ -248,8 +249,10 @@ read Python-produced journals through ten CLI leaves and five daemon kinds.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
   explanation, privacy, Lightning and cross-check reads.
 - [ ] Port full-report, Austrian bundle and transaction CSV artifacts, saved
-  export registration, explicit filed markers and their daemon kinds. Preserve
+  export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.
+- [x] Port explicit saved/filed markers and filing a captured local export,
+  preserving sealed identity, frozen dependency copies and existing impact history.
 - [ ] Port PDF/XLSX artifacts in a later slice. Keep unsupported commands
   disabled and all AI projections in Python.
 

@@ -21,3 +21,10 @@ pub fn list(conn: &Connection, profile: &str) -> Result<Vec<Value>> {
         ]))
     }).collect()
 }
+
+pub(super) fn get_snapshot(conn: &Connection, id: &str, profile: &str) -> Result<Value> {
+    list(conn, profile)?
+        .into_iter()
+        .find(|row| text(row, "id") == id)
+        .ok_or_else(|| AppError::new("not_found", "filed report snapshot was not found"))
+}

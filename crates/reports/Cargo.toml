@@ -1,6 +1,6 @@
 [package]
 name = "kassiber-reports"
-description = "Read-only stored journal reports and readiness gates"
+description = "Stored journal reports, readiness gates and append-only report markers"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true

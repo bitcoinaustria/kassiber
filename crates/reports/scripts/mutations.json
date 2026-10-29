@@ -2799,5 +2799,775 @@
       "scaled_sqlite_quantities_match_context_division"
     ],
     "rule": "Every SQLite quantity converts integer msat to BTC at exactly 10^-11."
+  },
+  {
+    "id": "snapshot-validation-code",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "AppError::new(\"filed_report_snapshot_validation\", message)",
+    "replace": "AppError::new(\"validation\", message)",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot domain refusals retain their typed validation code."
+  },
+  {
+    "id": "snapshot-validation-field",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "Some(field) => error.with_details(dict([(\"field\", s(field))]))",
+    "replace": "Some(_field) => error",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot domain refusals identify the offending bounded field."
+  },
+  {
+    "id": "snapshot-token-empty",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if text.is_empty()",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot kind and classification tokens cannot be empty."
+  },
+  {
+    "id": "snapshot-token-bound",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "|| text.len() > 64",
+    "replace": "|| text.len() > 65",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot tokens are bounded to 64 ASCII characters."
+  },
+  {
+    "id": "snapshot-token-start",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "|| !text.as_bytes()[0].is_ascii_alphanumeric()",
+    "replace": "|| false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot tokens must start with a letter or digit."
+  },
+  {
+    "id": "snapshot-token-alphabet",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "|| b\"_.-\".contains(&b)",
+    "replace": "|| b\"_.- \".contains(&b)",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot tokens reject spaces and unsupported punctuation."
+  },
+  {
+    "id": "snapshot-year-bool",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "Value::Int(n) => Some(n.clone()),",
+    "replace": "Value::Bool(b) => Some(i64::from(*b).into()),\n        Value::Int(n) => Some(n.clone()),",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot years reject bools even though Python bool is an int subtype."
+  },
+  {
+    "id": "snapshot-year-lower",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "parsed < 1900.into()",
+    "replace": "parsed < 1899.into()",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot years start at 1900."
+  },
+  {
+    "id": "snapshot-year-upper",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "parsed > 9999.into()",
+    "replace": "parsed > 10000.into()",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot years end at 9999."
+  },
+  {
+    "id": "snapshot-period-order",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if end < start {",
+    "replace": "if false {",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "A saved/filed period cannot end before it starts."
+  },
+  {
+    "id": "snapshot-classification-bound",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "        32,\n        None,",
+    "replace": "        33,\n        None,",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Classification summaries contain at most 32 categories."
+  },
+  {
+    "id": "snapshot-classification-fields",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "Some(&[\"count\", \"amount_msat\"])",
+    "replace": "Some(&[\"count\", \"amount_msat\", \"extra\"])",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Classification buckets contain only count and exact msat."
+  },
+  {
+    "id": "snapshot-classification-count",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if !matches!(count, Value::Int(n) if n >= &0.into())",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Classification counts are nonnegative integers, excluding bools and floats."
+  },
+  {
+    "id": "snapshot-classification-msat",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "|| !matches!(amount, Value::Int(n) if n >= &0.into())",
+    "replace": "|| false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Classification msat amounts are nonnegative integers, excluding bools and text."
+  },
+  {
+    "id": "snapshot-classification-default",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "let zero = Value::Int(0.into());",
+    "replace": "let zero = Value::Int(1.into());",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Missing bounded classification fields default to zero."
+  },
+  {
+    "id": "snapshot-classification-large-msat",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "(\"amount_msat\", amount.clone())",
+    "replace": "(\"amount_msat\", Value::Int(0.into()))",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Stored classification msat retain exact unbounded integers."
+  },
+  {
+    "id": "snapshot-gain-fields",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "\"gain_loss_exact\",\n            \"status\",",
+    "replace": "\"gain_loss_exact\",\n            \"status\",\n            \"extra\",",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Gain summaries reject unknown fields."
+  },
+  {
+    "id": "snapshot-currency-bound",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if !(3..=12).contains(&currency.len())",
+    "replace": "if !(2..=13).contains(&currency.len())",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Gain currencies contain between 3 and 12 uppercase ASCII letters."
+  },
+  {
+    "id": "snapshot-currency-alphabet",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "|| !currency.bytes().all(|b| b.is_ascii_uppercase())",
+    "replace": "|| false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Gain currencies cannot contain digits or punctuation."
+  },
+  {
+    "id": "snapshot-gain-nonfinite",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "return Err(invalid(format!(\"{name} must be finite\"), Some(&name)));",
+    "replace": "return Err(invalid(format!(\"{name} must be an exact decimal string\"), Some(&name)));",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Nonfinite gain decimals are refused distinctly from malformed decimals."
+  },
+  {
+    "id": "snapshot-gain-decimal",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if text.parse::<Decimal>().is_err() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Gain summaries require valid finite exact decimal strings."
+  },
+  {
+    "id": "snapshot-gain-precision",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "replace(&mut result, field, s(text));",
+    "replace": "replace(&mut result, field, s(\"0\"));",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Gain summaries preserve authored decimal text, scale and precision."
+  },
+  {
+    "id": "snapshot-gain-status",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if ![\"final\", \"pending_journal_rebuild\"].contains(&status.as_str())",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Gain summaries only admit final or explicitly pending rebuild status."
+  },
+  {
+    "id": "snapshot-scope-fields",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "Some(&[\"wallet_ids\", \"occurred_at_start\", \"occurred_at_end\"])",
+    "replace": "Some(&[\"wallet_ids\", \"occurred_at_start\", \"occurred_at_end\", \"extra\"])",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report scope contains only wallet ids and bounded UTC timestamps."
+  },
+  {
+    "id": "snapshot-wallet-bound",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if wallets.len() > 256 {",
+    "replace": "if wallets.len() > 257 {",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report scope accepts at most 256 input wallet ids before deduplication."
+  },
+  {
+    "id": "snapshot-wallet-id-bound",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "w.code_points().count() > 128",
+    "replace": "w.code_points().count() > 129",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report wallet ids are bounded by Python code points, not bytes."
+  },
+  {
+    "id": "snapshot-wallet-id-empty",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "w.code_points().count() == 0",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report wallet ids cannot be empty after Python stripping."
+  },
+  {
+    "id": "snapshot-wallet-dedup",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "wallets.dedup();",
+    "replace": "// duplicate ids retained",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report scope deduplicates sorted internal wallet ids."
+  },
+  {
+    "id": "snapshot-wallet-sort",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "wallets.sort();",
+    "replace": "wallets.reverse();",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report scope sorts wallet ids by Python code point order."
+  },
+  {
+    "id": "snapshot-wallet-surrogate",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "wallets.iter().map(stripped_py).collect()",
+    "replace": "wallets.iter().map(|v| kassiber_pyjson::PyStr::from(stripped(v))).collect()",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Stored scope JSON preserves Python surrogate wallet ids without lossy coercion."
+  },
+  {
+    "id": "snapshot-utc-shape",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if chars.len() != pattern.len()",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report scope bounds must have whole-second RFC3339 UTC shape."
+  },
+  {
+    "id": "snapshot-utc-calendar",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "let timestamp = stripped(raw);",
+    "replace": "let timestamp = stripped(raw);\n            if kassiber_rates::time::parse(&timestamp).is_none() { return Err(invalid(\"unexpected calendar validation\",None)); }",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Phase-4 report scope validates timestamp shape without adding calendar validation."
+  },
+  {
+    "id": "snapshot-utc-order",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "&& text(&result, \"occurred_at_end\") < text(&result, \"occurred_at_start\")",
+    "replace": "&& false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Report scope end cannot precede the start."
+  },
+  {
+    "id": "snapshot-json-sorted",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "sort_keys: true,\n            separators:",
+    "replace": "sort_keys: false,\n            separators:",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Stored snapshot JSON uses Python sorted keys recursively."
+  },
+  {
+    "id": "snapshot-json-ascii",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "&kassiber_pyjson::Options {\n            sort_keys: true,",
+    "replace": "&kassiber_pyjson::Options {\n            ensure_ascii: false,\n            sort_keys: true,",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Stored snapshot JSON uses Python ASCII escaping."
+  },
+  {
+    "id": "snapshot-json-compact",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "sort_keys: true,\n            separators: Some((\",\".into(), \":\".into())),",
+    "replace": "sort_keys: true,\n            separators: Some((\", \".into(), \": \".into())),",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Stored snapshot JSON retains compact Python separators."
+  },
+  {
+    "id": "snapshot-cli-json-object",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": ".any(|field| !matches!(value(&args, field), Value::Null | Value::Dict(_)))",
+    "replace": ".any(|_field| false)",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "CLI summary JSON must be an object or null, before domain validation."
+  },
+  {
+    "id": "snapshot-cli-source",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "replace(&mut args, \"authored_source\", s(\"cli\"));",
+    "replace": "replace(&mut args, \"authored_source\", s(\"user\"));",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Explicit CLI snapshot writes retain their authored CLI source."
+  },
+  {
+    "id": "snapshot-saved-reference-capture",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "            || !captured",
+    "replace": "            || false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a local saved reference requires an explicit capture row."
+  },
+  {
+    "id": "snapshot-saved-reference-state",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if text(&saved, \"report_state\") != \"saved\"",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "A filed snapshot cannot be reused as a locally saved reference."
+  },
+  {
+    "id": "snapshot-saved-reference-workspace",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "|| text(&saved, \"workspace_id\") != workspace_id",
+    "replace": "|| false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "A saved reference must belong to the requested book."
+  },
+  {
+    "id": "snapshot-saved-reference-file-only",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if kassiber_pytext::strip(&py_str(value(&args, \"report_state\"))).to_lowercase() != \"filed\"",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Only an explicit filed action can reference a captured local export."
+  },
+  {
+    "id": "snapshot-state",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if ![\"saved\", \"filed\"].contains(&state.as_str())",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot state must be saved or filed."
+  },
+  {
+    "id": "snapshot-digest-length",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if digest.len() != 64",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot content identities require 64 hexadecimal digits."
+  },
+  {
+    "id": "snapshot-digest-alphabet",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": ".all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))",
+    "replace": ".all(|b| b.is_ascii_alphanumeric())",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot content identities reject nonhexadecimal characters."
+  },
+  {
+    "id": "snapshot-source",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if ![\"user\", \"cli\", \"gui\", \"ai_tool\"].contains(&source.as_str())",
+    "replace": "if false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot authored sources use the phase-4 closed allowlist."
+  },
+  {
+    "id": "snapshot-notes-bound",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "n.chars().count() > 1000",
+    "replace": "n.chars().count() > 1001",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Snapshot notes are bounded to 1000 Python characters."
+  },
+  {
+    "id": "snapshot-notes-empty",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "v if *v == s(\"\") => None,",
+    "replace": "v if *v == s(\"\") => Some(String::new()),",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "An empty note is stored as SQL null, while stripped whitespace stays empty."
+  },
+  {
+    "id": "snapshot-book-scope",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if !matching {",
+    "replace": "if false {",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "A snapshot cannot target a profile from another book."
+  },
+  {
+    "id": "snapshot-sealed-kind",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "kind != text(saved, \"report_kind\")",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed kind identity."
+  },
+  {
+    "id": "snapshot-sealed-start",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "start != int(saved, \"period_start_year\")",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed start identity."
+  },
+  {
+    "id": "snapshot-sealed-end",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "end != int(saved, \"period_end_year\")",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed end identity."
+  },
+  {
+    "id": "snapshot-sealed-digest",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "digest != text(saved, \"content_sha256\")",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed digest identity."
+  },
+  {
+    "id": "snapshot-sealed-classification",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "!same_object(&classifications, value(saved, \"classification_summary\"))?",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed classification identity."
+  },
+  {
+    "id": "snapshot-sealed-gain",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "!same_object(&gains, value(saved, \"gain_summary\"))?",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed gain identity."
+  },
+  {
+    "id": "snapshot-sealed-scope",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "!same_object(&scope, value(saved, \"report_scope\"))?",
+    "replace": "false",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing a captured export cannot override its sealed scope identity."
+  },
+  {
+    "id": "snapshot-append-only",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "INSERT INTO filed_report_snapshots(id,",
+    "replace": "INSERT OR REPLACE INTO filed_report_snapshots(id,",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Each snapshot is appended; a colliding identity cannot replace an existing row."
+  },
+  {
+    "id": "snapshot-copy-source-profile",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "FROM filed_report_chain_dependencies WHERE snapshot_id=? AND profile_id=?",
+    "replace": "FROM filed_report_chain_dependencies WHERE snapshot_id=? AND ? IS NOT NULL",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing copies only the source snapshot profile dependencies."
+  },
+  {
+    "id": "snapshot-copy-observation",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "SELECT ?,profile_id,transaction_id,wallet_id,chain,network,txid,observation_json",
+    "replace": "SELECT ?,profile_id,transaction_id,wallet_id,chain,network,txid,'{}'",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Filing copies frozen dependency observations byte for byte."
+  },
+  {
+    "id": "snapshot-copy-source-id",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "params![id,profile_id,text(&saved,\"id\"),sources.now(conn)?]",
+    "replace": "params![id,profile_id,id,sources.now(conn)?]",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "The filed capture references the original saved snapshot."
+  },
+  {
+    "id": "snapshot-failure-rollback",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "Err(error) => {\n            let _ = conn\n                .execute_batch(\"ROLLBACK TO filed_snapshot_create; RELEASE filed_snapshot_create\");",
+    "replace": "Err(error) => {\n            let _ = conn\n                .execute_batch(\"RELEASE filed_snapshot_create\");",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Failed snapshot actions preserve both old history and the enclosing caller transaction."
+  },
+  {
+    "id": "snapshot-caller-transaction",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if let Err(error) = conn.execute_batch(\"RELEASE SAVEPOINT filed_snapshot_create\")",
+    "replace": "if let Err(error) = conn.execute_batch(\"RELEASE SAVEPOINT filed_snapshot_create; COMMIT\")",
+    "expect_failing": [
+      "snapshot_write_preserves_callers_transaction"
+    ],
+    "rule": "Snapshot writes do not commit an enclosing caller transaction."
+  },
+  {
+    "id": "snapshot-persistent-dispatch",
+    "file": "crates/reports/src/lib.rs",
+    "find": "return snapshot_write::create_cli(conn, &workspace, &profile, args, sources);",
+    "replace": "return Ok(dict::<&str>([]));",
+    "expect_failing": [
+      "snapshot_create_dispatch_is_persistent"
+    ],
+    "rule": "The explicit snapshot command executes a persistent native write before the read-only report savepoint."
+  },
+  {
+    "id": "snapshot-kind",
+    "file": "crates/cli/src/reports.rs",
+    "find": "\"reports.filed-snapshots.create\" => Some(\"reports.filed-snapshots.create\"),",
+    "replace": "\"reports.filed-snapshots.create\" => Some(\"reports.filed-snapshots.list\"),",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "Snapshot-create envelopes retain their explicit command kind."
+  },
+  {
+    "id": "snapshot-forward-workspace",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n                \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards workspace without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-profile",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n                \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards profile without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-report_kind",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n                \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards report_kind without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-state",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n                \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards state without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-period_start_year",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n                \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards period_start_year without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-period_end_year",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n                \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards period_end_year without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-content_sha256",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n                \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards content_sha256 without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-saved_snapshot_id",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n                \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards saved_snapshot_id without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-classification_summary_json",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n                \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards classification_summary_json without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-gain_summary_json",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n                \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards gain_summary_json without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-report_scope_json",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n                \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards report_scope_json without dropping authored intent."
+  },
+  {
+    "id": "snapshot-forward-notes",
+    "file": "crates/cli/src/reports.rs",
+    "find": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            \"notes\",\n        ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "replace": "fn snapshot_request(args: &Namespace) -> Value {\n    dict(\n        [\n            \"workspace\",\n            \"profile\",\n            \"report_kind\",\n            \"state\",\n            \"period_start_year\",\n            \"period_end_year\",\n            \"content_sha256\",\n            \"saved_snapshot_id\",\n            \"classification_summary_json\",\n            \"gain_summary_json\",\n            \"report_scope_json\",\n            ]\n        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),\n    )\n}\n",
+    "expect_failing": [
+      "snapshot_create_transport_keeps_authored_fields"
+    ],
+    "rule": "The CLI snapshot adapter forwards notes without dropping authored intent."
+  },
+  {
+    "id": "snapshot-cli-json-error-class",
+    "file": "crates/reports/src/snapshot_write.rs",
+    "find": "if error.is_decode_error() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "snapshot_write_python_rows_and_refusals"
+    ],
+    "rule": "Only JSONDecodeError becomes a CLI summary validation error; integer-limit ValueError retains the reference internal error."
   }
 ]
