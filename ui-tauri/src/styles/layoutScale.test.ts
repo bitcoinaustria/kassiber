@@ -48,6 +48,8 @@ const ALLOWED: Partial<Record<Rule, Record<string, string>>> = {
     "components/kb/WalletMaterialScannerDialog.tsx": "the viewfinder's cutout mask",
     "components/transactions/dashboard/TransactionsDashboard.tsx":
       "the sticky period bar's bottom edge",
+    "components/transactions/TransactionDetailSheet.tsx":
+      "the pinned tab strip masks the detail scrolling under it",
   },
   backdropBlur: {
     "components/kb/assistant-panel/RightPanel.tsx":
