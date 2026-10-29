@@ -27,6 +27,87 @@ pub fn from_json(v: &Value) -> Result<Py, String> {
     })
 }
 
+/// Appends `kassiber_pyjson::dumps(&from_json(v)?, options)` for a value
+/// `level` containers deep, or returns `None` where that conversion or
+/// encoding could fail or differ, so the caller takes the original path.
+pub(crate) fn dumps_json_into(
+    v: &Value,
+    options: &Options,
+    level: usize,
+    out: &mut String,
+) -> Option<()> {
+    match v {
+        Value::Null => out.push_str("null"),
+        Value::Bool(true) => out.push_str("true"),
+        Value::Bool(false) => out.push_str("false"),
+        Value::String(s) => kassiber_pyjson::dumps_str_into(s, options, out),
+        Value::Number(n) => {
+            let s = n.to_string();
+            if s.contains(['.', 'e', 'E']) {
+                let f = s.parse::<f64>().ok()?;
+                if !f.is_finite() || options.separators.is_some() || !options.allow_nan {
+                    return None;
+                }
+                out.push_str(&kassiber_pyjson::float_repr(f));
+            } else {
+                // A plain integer of at most 18 digits is written as its i64.
+                let digits = s.strip_prefix('-').unwrap_or(&s);
+                if digits.is_empty()
+                    || digits.len() > 18
+                    || !digits.bytes().all(|b| b.is_ascii_digit())
+                {
+                    return None;
+                }
+                out.push_str(&s.parse::<i64>().ok()?.to_string());
+            }
+        }
+        Value::Array(items) => {
+            if items.is_empty() {
+                out.push_str("[]");
+                return Some(());
+            }
+            if level >= kassiber_pyjson::MAX_DEPTH
+                || options.indent.is_some()
+                || options.separators.is_some()
+            {
+                return None;
+            }
+            out.push('[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push_str(", ");
+                }
+                dumps_json_into(item, options, level + 1, out)?;
+            }
+            out.push(']');
+        }
+        Value::Object(items) => {
+            if items.is_empty() {
+                out.push_str("{}");
+                return Some(());
+            }
+            if level >= kassiber_pyjson::MAX_DEPTH
+                || options.indent.is_some()
+                || options.separators.is_some()
+                || options.sort_keys
+            {
+                return None;
+            }
+            out.push('{');
+            for (index, (key, item)) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push_str(", ");
+                }
+                kassiber_pyjson::dumps_str_into(key, options, out);
+                out.push_str(": ");
+                dumps_json_into(item, options, level + 1, out)?;
+            }
+            out.push('}');
+        }
+    }
+    Some(())
+}
+
 pub fn to_json(v: &Py) -> Value {
     match v {
         Py::Null => Value::Null,

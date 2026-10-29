@@ -108,6 +108,16 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
             } else { None };
             drop(span);
             let _span = timing::span("response");
+            if let Some(text) = response_text(
+                &components,
+                &evidence,
+                &gaps,
+                &interpretation,
+                &quantity,
+                projection.as_ref(),
+            ) {
+                return text;
+            }
             let response = serde_json::json!({
                 "schema_version":1,
                 "engine_version":ENGINE_VERSION,
@@ -127,4 +137,44 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
         },
         Err(message) => serde_json::json!({"schema_version": 1, "engine_version": ENGINE_VERSION, "error": {"stage":"snapshot","code": "custody_snapshot_invalid", "message": message}}).to_string(),
     }
+}
+
+/// The successful response exactly as `kassiber_pyjson::dumps` writes the
+/// composed document (serde stages convert through `codec::from_json`, so
+/// object keys are sorted), without materializing it; `None` defers to that
+/// path for any value it would treat differently.
+fn response_text(
+    components: &serde_json::Value,
+    evidence: &serde_json::Value,
+    gaps: &serde_json::Value,
+    interpretation: &kassiber_pyjson::Value,
+    quantity: &kassiber_pyjson::Value,
+    projection: Option<&kassiber_pyjson::Value>,
+) -> Option<String> {
+    let options = kassiber_pyjson::Options::new();
+    let mut out = String::new();
+    out.push_str("{\"engine_version\": ");
+    kassiber_pyjson::dumps_str_into(ENGINE_VERSION, &options, &mut out);
+    out.push_str(", \"schema_version\": 1, \"skipped_stages\": ");
+    out.push_str(if projection.is_some() {
+        "[]"
+    } else {
+        "[\"finalized_projection\"]"
+    });
+    out.push_str(", \"stages\": {\"components\": ");
+    codec::dumps_json_into(components, &options, 2, &mut out)?;
+    out.push_str(", \"evidence\": ");
+    codec::dumps_json_into(evidence, &options, 2, &mut out)?;
+    out.push_str(", \"gaps\": ");
+    codec::dumps_json_into(gaps, &options, 2, &mut out)?;
+    out.push_str(", \"interpretation\": ");
+    kassiber_pyjson::dumps_into(interpretation, &options, 2, &mut out).ok()?;
+    out.push_str(", \"quantity\": ");
+    kassiber_pyjson::dumps_into(quantity, &options, 2, &mut out).ok()?;
+    if let Some(projection) = projection {
+        out.push_str(", \"finalized_projection\": ");
+        kassiber_pyjson::dumps_into(projection, &options, 2, &mut out).ok()?;
+    }
+    out.push_str("}}");
+    Some(out)
 }
