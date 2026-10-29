@@ -146,3 +146,66 @@ def test_python_gate_refusal_is_compared_even_when_caught(cli_book, tmp_path, mo
         if previous:
             compare.install_custody_mode(previous)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("mode", ["census", "shadow"])
+@pytest.mark.parametrize("rust_refuses", [False, True])
+def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_refuses):
+    """Review fail-open reproducer: late Python errors cannot escape comparison."""
+    import kassiber_tax
+    from kassiber.core import custody_quantity_runtime
+    from kassiber.core.custody_journal import CustodyJournalBuilder
+    from kassiber.db import open_db
+    from tests.test_custody_native_transitions import seed_native_transition_book
+
+    records = tmp_path / 'records.jsonl'
+    monkeypatch.setenv(compare.RECORDS_ENV, str(records))
+    monkeypatch.delenv(compare.INJECT_ENV, raising=False)
+    def refuse(*args, **kwargs):
+        raise ValueError('simulated Python quantity-stage refusal')
+    monkeypatch.setattr(custody_quantity_runtime, 'build_canonical_quantity_state', refuse)
+    if rust_refuses:
+        monkeypatch.setattr(kassiber_tax, 'custody', lambda _: json.dumps({'error': {'code': 'ValueError'}}))
+    compare.install_custody_mode(mode)
+    conn = open_db(tmp_path / 'book')
+    try:
+        seed_native_transition_book(conn, 'claim')
+        profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+        exception = ValueError if rust_refuses else AssertionError
+        with pytest.raises(exception):
+            CustodyJournalBuilder(conn, profile, as_of='2026-01-01T00:00:00Z').build_custody_projection()
+    finally:
+        conn.close()
+        compare.uninstall_custody_mode()
+    rows = compare.read_records(records)
+    assert rows[-1]['outcome'] == ('error' if rust_refuses else 'difference')
+    if rust_refuses:
+        assert rows[-1]['compared'] == ['quantity']
+        assert set(rows[-1]['compared']) | set(rows[-1]['skipped']) == set(compare.STAGES)
+    assert bool(compare.session_report(rows)[1]) == (not rust_refuses)
+
+
+def test_session_rejects_unaccounted_quantity_stage():
+    record = dict(outcome='result', compared=compare.STAGES[:4], skipped=['finalized_projection'], reference=False)
+    assert 'custody stage inventory is incomplete' in compare.session_report([record])[1]
+
+
+@pytest.mark.parametrize('mode', ['census', 'shadow'])
+def test_rust_quantity_refusal_against_python_success(tmp_path, monkeypatch, mode):
+    import kassiber_tax
+    from kassiber.core.custody_journal import CustodyJournalBuilder
+    from tests.custody_snapshot_generator import snapshot
+    book = snapshot(0)
+    monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
+    monkeypatch.setattr(kassiber_tax, 'custody', lambda _: json.dumps({'error': {'code': 'ValueError'}}))
+    monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
+    previous = compare._INSTALLED_MODE
+    compare.install_custody_mode(mode)
+    try:
+        with pytest.raises(AssertionError, match='refused'):
+            CustodyJournalBuilder(None, book['profile']).build_custody_decisions()
+    finally:
+        compare.uninstall_custody_mode()
+        if previous:
+            compare.install_custody_mode(previous)
+    assert compare.read_records(tmp_path / 'records')[-1]['outcome'] == 'difference'

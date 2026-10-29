@@ -144,32 +144,42 @@ def _build(self, *, finalized):
     expected = expected_error = None
     audit_reference = _INSTALLED_MODE == "shadow"
     snapshot = None
-    python_stages, rust_stages = {}, None
+    python_stages = {}
     def emit(name, value):
-        nonlocal compared, skipped, recorded, rust_stages
         if observer is not None:
             observer.stage(name, value)
         python_stages[name] = value
-        comparing = name
+
+    def compare_outcome(error=None):
+        nonlocal compared, skipped, recorded
+        failed = next((stage for stage in STAGES if stage not in python_stages), None)
         try:
-            if name == "gaps":
-                rust_stages, skipped = rust_results(snapshot)
-            if rust_stages is not None:
+            # The binding returns an atomic refusal, without earlier outputs.
+            # Compare its code at the failed implemented stage, and explicitly
+            # skip unavailable outputs. Finalized projection is still unported.
+            if error is not None and failed != "finalized_projection":
+                rust_results(snapshot, python_error=error)
+                compared = (failed or "admission",)
+                skipped = tuple(stage for stage in STAGES if stage != failed)
+            else:
+                results, skipped = rust_results(snapshot)
                 for stage in STAGES:
-                    if stage in rust_stages and stage in python_stages and stage not in compared:
-                        comparing = stage
-                        assert_same(python_stages[stage], rust_stages[stage], stage)
+                    if stage in results:
+                        assert stage in python_stages, "Python omitted implemented stage: " + stage
                         compared = (*compared, stage)
+                        assert_same(python_stages[stage], results[stage], stage)
+            assert not set(compared) & set(skipped)
+            assert set(compared) | set(skipped) >= set(STAGES)
         except BaseException:
-            record("difference", compared=(*compared, comparing), skipped=skipped, reference=False)
+            record("difference", compared=compared, skipped=skipped)
             recorded = True
             raise
+
     try:
         snapshot = self.load_snapshot()
         if observer is not None:
             observer.stage("snapshot", snapshot)
-        # Shadow audits the pre-refactor SQL flow as well. Census keeps
-        # structural read-budget probes on the one production computation.
+        # Census preserves the one-build read budget; shadow also audits SQL.
         if audit_reference:
             reference = ReferenceBuilder(self.conn, self.profile, as_of=snapshot["as_of"])
             try:
@@ -177,21 +187,18 @@ def _build(self, *, finalized):
             except Exception as exc:
                 expected_error = exc
         compute = compute_custody_projection if finalized else compute_custody_decisions
-        result = compute(snapshot, stage_observer=emit, owned_index_observer=observer.owned_index if observer is not None else None)
+        try:
+            result = compute(snapshot, stage_observer=emit, owned_index_observer=observer.owned_index if observer is not None else None)
+        except BaseException as exc:
+            compare_outcome(exc)
+            raise
+        compare_outcome()
         if expected_error is not None:
             raise AssertionError("snapshot custody succeeded where the frozen flow failed")
         if audit_reference:
             expected = normalized_reference(expected)
             assert_same(expected, result, "Python snapshot/reference")
     except BaseException as exc:
-        if snapshot is not None and rust_stages is None and not recorded:
-            try:
-                rust_results(snapshot, python_error=exc)
-                compared = ("admission",)
-            except BaseException:
-                record("difference", compared=("admission",), skipped=skipped)
-                recorded = True
-                raise
         if observer is not None:
             observer.fail(exc)
         matched_error = expected_error is not None and type(exc) is type(expected_error) and str(exc) == str(expected_error)
@@ -231,6 +238,11 @@ def session_report(records):
     failures = [row for row in records if row["outcome"] == "difference"]
     empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
     errors = ([f"custody differences: {len(failures)}"] if failures else [])
+    incomplete = [row for row in records if row["outcome"] in {"result", "error"} and
+                  (set(row["compared"]) & set(row["skipped"]) or
+                   set(row["compared"]) | set(row["skipped"]) != set(STAGES))]
+    if incomplete:
+        errors.append("custody stage inventory is incomplete")
     if empty:
         errors.append("custody binding compared no stages")
     return lines, errors
