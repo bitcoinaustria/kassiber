@@ -1627,6 +1627,21 @@ stays skipped in PyO3, census, shadow and replay. Complete that stage before
 journal fusion with `ledger`. See the
 [restack evidence](../reference/custody-engine.md#projection-restack-on-reviewed-quantity-r2f-partial).
 
+### Issue/quarantine composition (R2f, partial)
+
+Local branch `t3code/r2f-projection-6` starts at `72325e38`. The private
+compiler now joins selected rows, conversion metadata and explaining diagnostics.
+It preserves fixed-point, sorted connected origins, interpreter explanations,
+quantity-blocker priority, scoped barrier roots, unbooked receipt explanations,
+missing payout prices and eager Python diagnostic admission.
+
+`finalized_projection` remains explicitly skipped. The remaining gate is a
+lossless raw-stage adapter followed by complete-stage comparisons, including
+refusals, generators, recorded replay and the census/shadow inventories. The
+private operand comparison cannot prove that adapter. Snapshot v1 stays raw-only
+and Rust results never reach stored state. Journal fusion with `ledger` follows
+complete projection parity. See the [checkpoint evidence](../reference/custody-engine.md#issuequarantine-composition-checkpoint-r2f-partial).
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

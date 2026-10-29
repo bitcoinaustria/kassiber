@@ -1,5 +1,5 @@
-//! Finalized-row primitives only. The complete stage remains explicitly skipped.
-//! These helpers neither select custody slices nor grant tax/persistence authority.
+//! Private finalized-projection compiler and comparison primitives.
+//! Snapshot stage admission remains skipped; no result grants persistence authority.
 use crate::{codec, evidence, graph, interpretation::python_value_string};
 use kassiber_pyjson::{BigInt, Value as Py};
 use serde_json::{json, Value};
@@ -11,6 +11,7 @@ mod fees;
 mod money;
 mod payouts;
 mod principal;
+mod quarantines;
 pub use fees::FeeAllocation;
 pub use principal::slice_row;
 
@@ -240,7 +241,7 @@ pub fn primitive(value: &Value) -> Value {
         }
         "fees" => fees::evaluate(value),
         "conversions" => conversions::evaluate(value),
-        "compose" | "connected" | "basis" => composition::evaluate(value),
+        "finalize" | "compose" | "connected" | "basis" => composition::evaluate(value),
         "base" => base_row(&value["observation"], &value["rows"]),
         "fee" => fee_row(
             &value["observation"],

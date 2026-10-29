@@ -118,3 +118,50 @@ fn projection_reviewed_conversion_vectors() {
         );
     }
 }
+
+#[test]
+fn projection_quarantine_composition_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_quarantines.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap() {
+        let expected = if let Some(error) = case.get("error") {
+            serde_json::json!({"error":error})
+        } else {
+            serde_json::json!({"expected":case["expected"]})
+        };
+        assert_eq!(
+            finalized_projection::primitive(case),
+            expected,
+            "{}",
+            case["case"]
+        );
+    }
+}
+
+#[test]
+fn projection_dependency_origins_complete_and_sorted() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_quarantines.json"
+    ))
+    .unwrap();
+    let case = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["case"] == "origins_fixed_point")
+        .unwrap();
+    let actual = finalized_projection::primitive(case);
+    let quarantine = actual["expected"]["quarantines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|q| q["transaction_id"] == "other")
+        .unwrap();
+    let detail: Value = serde_json::from_str(quarantine["detail_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        detail["blocked_by_transaction_ids"],
+        serde_json::json!(["source", "target"])
+    );
+}

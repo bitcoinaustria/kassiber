@@ -21812,5 +21812,295 @@
       "projection_slice_pricing_vectors"
     ],
     "rule": "Principal slices refuse derived rate float overflow."
+  },
+  {
+    "id": "projection6-root-bridge",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if !inherited.is_subset(known) {",
+    "replace": "if !inherited.is_subset(known) && !explicit.contains(neighbor) {",
+    "expect_failing": [
+      "projection_dependency_origins_complete_and_sorted"
+    ],
+    "rule": "Explicit roots must propagate additional connected origins."
+  },
+  {
+    "id": "projection6-origin-union",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "known.extend(inherited.clone());",
+    "replace": "known.extend([id.clone()]);",
+    "expect_failing": [
+      "projection_dependency_origins_complete_and_sorted"
+    ],
+    "rule": "Every inherited root propagates, not the intermediate anchor."
+  },
+  {
+    "id": "projection6-origin-set-order",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "\"origins\":origins",
+    "replace": "\"origins\":origins.into_iter().map(|(id, roots)| (id, roots.into_iter().rev().collect::<Vec<_>>())).collect::<BTreeMap<_,_>>()",
+    "expect_failing": [
+      "projection_dependency_origins_complete_and_sorted"
+    ],
+    "rule": "Origin arrays have deterministic ascending order."
+  },
+  {
+    "id": "projection6-dependency-explicit",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "!explicit.contains(&id) &&",
+    "replace": "explicit.contains(&id) &&",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Only dependent anchors receive dependency quarantines."
+  },
+  {
+    "id": "projection6-dependency-origin-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "closure[\"origins\"][&id]",
+    "replace": "closure[\"blocked\"]",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Dependency explanations exclude unrelated explicit roots."
+  },
+  {
+    "id": "projection6-workspace-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "profile.get(\"workspace_id\")",
+    "replace": "profile.get(\"id\")",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Quarantine workspace and profile identities remain distinct."
+  },
+  {
+    "id": "projection6-basis-reason",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if implausible {",
+    "replace": "if !implausible {",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Implausible fees keep their specific barrier reason."
+  },
+  {
+    "id": "projection6-basis-root-pool",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "pair[0] == own",
+    "replace": "pair[0] != own",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Barrier roots are scoped to the observation exposure pool."
+  },
+  {
+    "id": "projection6-basis-hash-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "\"source_quantity_hash\":source[\"quantity_hash\"]",
+    "replace": "\"source_quantity_hash\":source[\"transaction_id\"]",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Barrier explanation names the canonical quantity hash."
+  },
+  {
+    "id": "projection6-issue-interpreter-skip",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if issue[\"issue_type\"] == \"custody_interpreter_blocked\" {",
+    "replace": "if issue[\"issue_type\"] == \"never\" {",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Interpreter diagnostics do not create generic quantity duplicates."
+  },
+  {
+    "id": "projection6-issue-minimum",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": ".min_by(|a, b| {",
+    "replace": ".max_by(|a, b| {",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Choose the highest priority blocker, independently of issue hash order."
+  },
+  {
+    "id": "projection6-issue-tie-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "string(&a[\"issue_id\"])",
+    "replace": "string(&a[\"reason\"])",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Equal reasons use issue identity to select the explaining blocker."
+  },
+  {
+    "id": "projection6-issue-multiplicity",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if issues.len() > 1 {",
+    "replace": "if issues.len() >= 1 {",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Only multiple issues add the aggregate code and identity fields."
+  },
+  {
+    "id": "projection6-issue-ids-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": ".map(|i| string(&i[\"issue_id\"]))",
+    "replace": ".map(|i| string(&i[\"reason\"]))",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Issue identities are distinct from blocker reasons."
+  },
+  {
+    "id": "projection6-issue-gap-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "&i[\"details\"][\"gap_id\"]",
+    "replace": "&i[\"details\"][\"issue_id\"]",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Gap references come from each issue detail mapping."
+  },
+  {
+    "id": "projection6-issue-gap-empty",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if !gaps.is_empty() {",
+    "replace": "if gaps.is_empty() {",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Only nonempty gap sets are emitted."
+  },
+  {
+    "id": "projection6-issue-resolution",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "|| issue[\"issue_type\"] == \"component_claim_compile_failed\"",
+    "replace": "|| issue[\"issue_type\"] == \"never\"",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Compiler failures explain the required authored component review."
+  },
+  {
+    "id": "projection6-receipt-anchor-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "text(&r[\"journal_transaction_id\"])",
+    "replace": "text(&r[\"id\"])",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Booked receipt anchors suppress redundant barrier diagnostics."
+  },
+  {
+    "id": "projection6-receipt-existing",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "!projected.contains(&id) && !quarantined.contains(&id)",
+    "replace": "!projected.contains(&id)",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Receipts with an existing explanation do not gain a generic barrier hold."
+  },
+  {
+    "id": "projection6-interpreter-order",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "!self.interpreter.contains(&key)",
+    "replace": "self.interpreter.contains(&key)",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Interpreter explanations sort ahead of generic reasons for the same anchor."
+  },
+  {
+    "id": "projection6-keep-specific",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "if keep && self.records.contains_key(&key) {",
+    "replace": "if false && keep && self.records.contains_key(&key) {",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Specific existing explanations survive generic setdefault composition."
+  },
+  {
+    "id": "projection6-payout-field",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "\"payout_id\":payout[\"id\"]",
+    "replace": "\"payout_id\":payout[\"out_transaction_id\"]",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Missing payout price diagnostics name the reviewed payout."
+  },
+  {
+    "id": "projection6-issue-set-reason",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": ".map(|i| string(&i[\"reason\"]))\n                    .collect::<BTreeSet<_>>()",
+    "replace": ".map(|i| string(&i[\"reason\"]))\n                    .collect::<Vec<_>>()",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Aggregate blocker arrays are sorted distinct sets, independently of insertion order."
+  },
+  {
+    "id": "projection6-issue-set-issue_id",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": ".map(|i| string(&i[\"issue_id\"]))\n                    .collect::<BTreeSet<_>>()",
+    "replace": ".map(|i| string(&i[\"issue_id\"]))\n                    .collect::<Vec<_>>()",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Aggregate blocker arrays are sorted distinct sets, independently of insertion order."
+  },
+  {
+    "id": "projection6-gap-order",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "json!(gaps);",
+    "replace": "json!(gaps.into_iter().rev().collect::<Vec<_>>());",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Gap identities are sorted before serialization."
+  },
+  {
+    "id": "projection6-component-anchor",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "text(&issue[\"reason\"]).starts_with(\"custody_component_\")",
+    "replace": "text(&issue[\"reason\"]).starts_with(\"never\")",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Component issue anchors cannot leak an inbound economic row."
+  },
+  {
+    "id": "projection6-bundle-anchor",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "Some(\"component_claim_compile_failed\" | \"quantity_claim_bundle_invalid\")",
+    "replace": "Some(\"component_claim_compile_failed\")",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Invalid quantity bundles block their inbound anchors."
+  },
+  {
+    "id": "projection6-eager-diagnostic",
+    "file": "crates/custody/src/finalized_projection/quarantines.rs",
+    "find": "let profile = &self.input[\"profile\"];",
+    "replace": "if keep && self.records.contains_key(&key) { return Ok(()); }\n        let profile = &self.input[\"profile\"];",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Python eagerly admits a diagnostic even when setdefault preserves a specific existing record."
+  },
+  {
+    "id": "projection6-finalize-branch",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "let finalize = v[\"op\"] == \"finalize\";",
+    "replace": "let finalize = v[\"op\"] != \"finalize\";",
+    "expect_failing": [
+      "projection_quarantine_composition_vectors"
+    ],
+    "rule": "Only the full private operation composes the complete projection contract."
   }
 ]

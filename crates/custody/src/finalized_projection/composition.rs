@@ -1,5 +1,5 @@
-//! Private selected-row comparison. Issues and conversion audits are deliberately
-//! absent; callers cannot use this partial result as a finalized tax projection.
+//! Private selected-row and complete diagnostic composition.
+//! Snapshot stage admission remains a separate parity gate.
 use super::*;
 use crate::python_text::PythonText;
 use std::collections::BTreeMap;
@@ -35,8 +35,7 @@ fn observation<'a>(
         .get(&string(&slice["observation_hash"]))
         .ok_or_else(|| "KeyError".into())
 }
-/// Close selected internal paths before row selection; dependency quarantine
-/// origin metadata is outside this checkpoint.
+/// Close selected internal paths and propagate their complete root origins.
 pub(super) fn connected(
     decisions: &[Value],
     observations: &BTreeMap<String, Value>,
@@ -58,9 +57,25 @@ pub(super) fn connected(
             }
         }
     }
-    Ok(json!({"blocked":blocked}))
+    let mut origins: BTreeMap<String, BTreeSet<String>> = explicit
+        .iter()
+        .map(|id| (id.clone(), BTreeSet::from([id.clone()])))
+        .collect();
+    let mut frontier: Vec<_> = explicit.iter().cloned().collect();
+    while let Some(id) = frontier.pop() {
+        let inherited = origins[&id].clone();
+        for neighbor in neighbors.get(&id).into_iter().flatten() {
+            let known = origins.entry(neighbor.clone()).or_default();
+            if !inherited.is_subset(known) {
+                known.extend(inherited.clone());
+                // Roots can bridge other roots; propagate every growing set.
+                frontier.push(neighbor.clone());
+            }
+        }
+    }
+    Ok(json!({"blocked":blocked,"origins":origins}))
 }
-fn pool(o: &Value) -> Value {
+pub(super) fn pool(o: &Value) -> Value {
     let network = match o["event_key"]["network"].as_str().unwrap_or("") {
         "liquidv1" => "main",
         "liquidtestnet" => "test",
@@ -75,7 +90,7 @@ fn pool(o: &Value) -> Value {
     };
     json!({"profile_id":o["profile_id"],"network":network,"exposure":exposure,"unit":"msat"})
 }
-fn barrier(o: &Value, v: &Value) -> Option<Value> {
+pub(super) fn barrier(o: &Value, v: &Value) -> Option<Value> {
     let own = pool(o);
     array(&v["pool_barriers"])
         .iter()
@@ -124,7 +139,8 @@ fn privacy(row: &Value) -> bool {
     )
 }
 pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
-    let payouts = if v["op"] == "compose" {
+    let finalize = v["op"] == "finalize";
+    let payouts = if v["op"] == "compose" || finalize {
         payouts::valid(&v["payouts"], &v["rows"])?
     } else {
         Value::Null
@@ -148,11 +164,23 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     let explicit = strings(&v["blocked_transaction_ids"]);
     let closure = connected(&decisions, &observations, &explicit)?;
     if v["op"] == "connected" {
-        return Ok(closure);
+        return Ok(json!({"blocked":closure["blocked"]}));
     }
     let blocked = strings(&closure["blocked"]);
     let non_events = strings(&v["non_event_transaction_ids"]);
-    let blocked_anchors = strings(&v["blocked_anchor_ids"]);
+    let mut blocked_anchors = strings(&v["blocked_anchor_ids"]);
+    if finalize {
+        for issue in array(&v["issues"]) {
+            if text(&issue["reason"]).starts_with("custody_component_")
+                || matches!(
+                    issue["issue_type"].as_str(),
+                    Some("component_claim_compile_failed" | "quantity_claim_bundle_invalid")
+                )
+            {
+                blocked_anchors.extend(array(&issue["transaction_ids"]).iter().map(string));
+            }
+        }
+    }
     let order = orders(&v["events"]);
     if v["op"] == "basis" {
         return Ok(json!(array(&v["observations"])
@@ -165,12 +193,13 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
         .map(slice_key)
         .collect::<Result<_, _>>()?;
     let rows = &v["rows"];
-    let mut fees = FeeAllocation::new(&decisions)?;
     let mut projected = Vec::new();
     let mut intra = Vec::new();
     let mut cross = Vec::new();
     let mut moves = Vec::new();
     let mut barrier_receipts = Vec::new();
+    let mut quarantines = super::quarantines::Quarantines::new(v, &closure)?;
+    let mut fees = FeeAllocation::new(&decisions)?;
     for d in &decisions {
         let source = observation(&observations, &d["source"])?;
         let target = if d["target"].is_null() {
@@ -184,6 +213,9 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
             continue;
         }
         if !eligible.contains(&slice_key(&d["source"])?) {
+            if finalize {
+                quarantines.basis(source)?;
+            }
             continue;
         }
         if internal(d) {
@@ -255,6 +287,9 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
         if carry {
             let settlement = payouts::settlement(source, payout, rows)?;
             if settlement.is_null() {
+                if finalize {
+                    quarantines.payout(source, payout)?;
+                }
                 continue;
             }
             let out = slice_row(
@@ -344,6 +379,21 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     }
     projected.sort_by_key(|r| (string(&r["occurred_at"]), string(&r["id"])));
     moves.sort_by_key(string);
+    if finalize {
+        quarantines.finish(&projected, &barrier_receipts, &observations)?;
+        cross = super::conversions::evaluate(
+            &json!({"rows":projected,"pairs":cross,"reviewed":array(&v["reviewed"])}),
+        )?
+        .as_array()
+        .expect("conversion array")
+        .clone();
+        let quarantines = quarantines.sorted()?;
+        validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
+        return Ok(
+            json!({"$type":"FinalizedTaxProjection","rows":projected,"intra_pairs":intra,
+            "cross_asset_pairs":cross,"selected_move_ids":moves,"quarantines":quarantines}),
+        );
+    }
     validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
     Ok(
         json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),

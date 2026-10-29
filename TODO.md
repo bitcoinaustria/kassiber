@@ -49,8 +49,9 @@ mutation entries.
   holds, whole-state issues and scoped tax barriers;
   [quantity now participates in full-stage comparison](docs/reference/custody-engine.md#complete-quantity-runtime-checkpoint-r2e).
 - [ ] Complete finalized tax projection and compare it before journal fusion.
-  Reviewed conversion audit metadata is ported as a private comparison primitive;
-  issue/quarantine composition remains unported. The Python dependency-origin
+  Reviewed conversion metadata and issue/quarantine composition are ported in
+  the private compiler. Raw-stage admission and whole-stage comparison remain;
+  see the [diagnostic checkpoint](docs/reference/custody-engine.md#issuequarantine-composition-checkpoint-r2f-partial). The Python dependency-origin
   and nonfinite-pricing fixes are included in the
   [verified restack](docs/reference/custody-engine.md#projection-restack-on-reviewed-quantity-r2f-partial). The
   finalized stage remains skipped; see the [checkpoint](docs/reference/custody-engine.md#reviewed-conversion-metadata-checkpoint-r2f-partial).
@@ -60,7 +61,8 @@ mutation entries.
   adds principal pricing, payouts and fee allocation. The
   [selected-row checkpoint](docs/reference/custody-engine.md#selected-row-composition-checkpoint-r2f-partial)
   adds MOVE/external/inbound composition, connected blocking and scoped basis
-  barriers. Issue/quarantine composition remains unported.
+  barriers. The diagnostic checkpoint adds fixed-point dependency origins,
+  ranked issue explanations and barrier-held receipts.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 

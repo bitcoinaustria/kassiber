@@ -2789,3 +2789,133 @@ replacement recipe are audited in `target/r2f5-verify/mutation-summary.json`.
 recipe inputs remain alongside it. The final catalog has no surviving recipe
 or build error. No equivalent, interrupted or failed-baseline trial is counted
 as a kill.
+
+## Issue/quarantine composition checkpoint (R2f, partial)
+
+Local branch `t3code/r2f-projection-6` starts at `72325e38`, including the
+restacked quantity corrections and both shipped Python fixes. The new private
+`finalize` operation composes selected rows, reviewed conversion metadata and
+quarantines. It is an unpackaged comparison operation, not snapshot admission.
+`finalized_projection` remains skipped in PyO3, census, custody-shadow and
+recorded replay. Rust results never reach stored state; snapshot v1 stays
+raw-only. Python accounting is unchanged.
+
+`finalized_projection/quarantines.rs` preserves interpreter record copies and
+last-write precedence, dependency explanations, ranked quantity issues,
+component-review instructions, exact sorted distinct issue/gap arrays, scoped
+basis roots and missing payout prices. Barrier-held receipts gain an explanation
+only when they book no row and have no existing explanation. Dependency roots
+propagate to a fixed point through explicit roots as well as dependent nodes;
+unrelated roots stay outside the explanation. JSON detail strings use the
+CPython codec with Python's default separators and sorted keys. Eager diagnostic
+construction before `setdefault` retention and quarantine sorting before the
+projection constructor preserve refusal order.
+
+### Independent comparison and activity
+
+`tests/custody_projection_quarantines.py` calls the unchanged original Python
+compiler. The Rust fixture witness is
+`projection_quarantine_composition_vectors`;
+`projection_dependency_origins_complete_and_sorted` independently asserts that
+the old source/target/other path's dependent names exactly `['source', 'target']`.
+The original `origin-repro.py`, retained under `target/r2f6-verify/`, prints the
+same result under Python hash seeds 1 and 2. No new Python reference bug was found.
+
+| New comparison | Count |
+| --- | ---: |
+| Frozen scenarios | 52 |
+| Distinct raw private inputs per engine, excluding scenario labels | 1,040 |
+| Row-order, root-order and issue-order permutations per engine | 1,040 |
+| Active results per engine | 1,020 |
+| Compared refusals | 180: 20 AppError, 120 KeyError, 40 ValueError |
+| Differences | 0 |
+
+Activity belongs only to each seed's own distinct input; there are no companion
+calls. `dependency_absent_row` is an explicit empty-success parity control with
+zero activity, rather than a claimed active scenario. Every other scenario
+must be active. `test_projection_quarantine_vacuous_is_rejected` pins this
+assertion, and a direct deliberately vacuous probe exits 1 with
+`AssertionError: vacuous quarantine scenario`. Refusals are compared before
+they contribute activity. The checked-in counts manifest freezes these totals.
+
+### Mutation witnesses and verification
+
+The new catalog adds 29 recipes. Comparison witnesses include explicit-root
+exclusion, pool identity, issue multiplicity and receipt suppression.
+`projection6-issue-minimum` changes minimum blocker selection to maximum.
+Set/ordering witnesses reverse origins and gap ids, replace aggregate sets with
+vectors and invert interpreter priority. Field-choice witnesses exchange
+workspace/profile ids, issue ids/reasons, quantity hashes/anchors and payout ids.
+Separate witnesses cover fixed-point root propagation, eager `setdefault`
+admission and blocked inbound component/bundle anchors. Every recipe names a
+frozen Rust witness, independently of the generated comparison.
+
+| New named witness | Recipes |
+| --- | ---: |
+| `projection_quarantine_composition_vectors` | 26 |
+| `projection_dependency_origins_complete_and_sorted` | 3 |
+| **Total** | **29** |
+
+All **2,209 final recipes** have audited named-test kills: the complete
+**2,180-entry inherited catalog** and **29 additions**, with **386 named filters**
+passing unmutated. Eight independent disposable source/target batches reran the
+inherited catalog. After the final admission-order correction, a separate run
+reran all 152 inherited projection recipes against the final source; those kills
+replace their earlier attempts in the per-entry audit. The final new-catalog run
+killed all 29 additions. No failed baseline, nonbuilding mutant, survivor or
+interrupted attempt contributes a kill. The shared checker's targeted Cargo
+adapter, recipes, logs and exact per-entry audit remain in
+`target/r2f6-verify/mutation-summary.json`.
+
+| Verification | Result |
+| --- | --- |
+| Earlier five stages, inherited raw generators | 24,000 books and 1,030 permutations; zero differences; 21,941 distinct primary inputs across 12 suites |
+| Retained read-only replay | 159 requests and 159 permutations; zero differences or pre-request refusals |
+| Fresh synthetic recording integrity/replay | 21 snapshots; zero integrity problems; 21 requests and 21 permutations, zero differences or pre-request refusals |
+| Projection comparison pytest lane | 14 passed |
+| Inherited quantity primitive lane | 16 passed |
+| Snapshot/shadow/mutation/inventory contracts | 66 passed and 14 subtests |
+| Additional raw refusal/vacuity/catalog contracts | 5 passed and 14 subtests |
+| Focused census | 78 passed; components 9 comparisons, remaining implemented stages 8 each; zero mismatches |
+| Focused custody-shadow | 78 passed; same stage counts plus 7 frozen Python comparisons; zero mismatches |
+| Finalized projection inventory | 0 compared, 10 skipped in each focused lane, including one explicitly injected build |
+| Complete mutation audit | 2,209 killed: 2,180 inherited and 29 new; no survivors or build errors |
+| Required preflight shard | 57 passed, including complete reviewed test inventory and source/wire contracts |
+| Rust workspace | 819 passed |
+| Formatting and Clippy | Workspace fmt and all-target Clippy with `-D warnings` passed |
+
+The locked Python 3.11 environment uses Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1` and offline Cargo. The first workspace attempt hit
+four sandbox-denied networking-test binds; the complete rerun with disposable
+owned loopback servers permitted passed. Fresh recordings and all verification
+artifacts remain under this worktree's `target/r2f6-verify/`; the retained replay
+corpus was read only. No full quality gate, push or PR is claimed. A manual
+second pass reviewed diagnostic precedence, fixed-point closure, exact JSON,
+receipt suppression, refusal order and activity accounting.
+
+The inventory was refreshed using `uv run --locked python -m tests.rust_port.classify_tests update`, and all quantity/projection entries were reviewed against their existing
+oracle dispositions. The refresh is a separate small local commit. Preflight
+also exposed inherited `error_codes.json` drift: ignoring source locations, its
+only changes are the two existing `custody_pricing.py` validation sites from the
+shipped Python fix. The reviewed fixture refresh is separate from the handwritten
+port; no Python source changed. The final command
+`uv run --locked python scripts/python_test_shards.py run preflight --ci` passes.
+Preflight is included in this checkpoint's verification.
+
+### Exactly what remains
+
+1. Add a lossless raw-stage adapter from the already computed Rust stages and
+   snapshot facts into this compiler. It must use the original confirmation-
+   decorated row population, quantity observations/decisions/eligibility and
+   pool roots, reviewed payouts/conversions, interpreter blocks/quarantines,
+   and channel/interpreter non-event ids in Python's order. Preserve CPython
+   special values and surrogate strings in copied interpreter diagnostics;
+   converting them through serde's ordinary JSON values cannot establish parity.
+2. Compare the **whole** finalized stage, including refusals, over the inherited
+   raw generators, recorded requests and permutations. The private-operand
+   comparison above does not prove that adapter or its admission order.
+3. Only after that parity gate, enable the stage in PyO3 and all comparison
+   inventories, proving nonzero finalized comparisons and zero mismatches in
+   census/shadow and replay. Every stage must remain compared or explicitly
+   skipped, including refused and intentionally injected builds.
+4. Journal fusion with `ledger` follows complete projection parity.
