@@ -354,7 +354,7 @@ def _replay_elsewhere(
 ) -> dict[str, Any] | None:
     """Replay only the raw request in a child with another hash seed."""
 
-    request = {"snapshot": document["input"], "finalized": "error" in document or "finalized_tax_projection" in document.get("output", {})}
+    request = {"snapshot": document["input"], "fusion": "fusion" in document.get("stages", {}), "finalized": "error" in document or "finalized_tax_projection" in document.get("output", {})}
     env = {
         key: value
         for key, value in os.environ.items()
@@ -390,6 +390,9 @@ def _replay_stdin() -> int:
         try:
             compute = compute_custody_projection if request["finalized"] else compute_custody_decisions
             result = compute(request["snapshot"], stage_observer=observer.stage, owned_index_observer=observer.owned_index)
+            if request.get("fusion"):
+                from tests.custody_fusion_stage import python_fusion
+                observer.stage("fusion", python_fusion(request["snapshot"], result.finalized_tax_projection))
         except Exception as exc:
             observer.fail(exc)
         else:
@@ -541,6 +544,8 @@ def check_rust(directory: Path, *, permuted: bool = False):
             from tests.custody_finalized_stage import python_stages
             try:
                 stages = python_stages(request)
+                from tests.custody_fusion_stage import add_fusion
+                add_fusion(request, stages)
             except Exception as exc:
                 rust_results(request, python_error=exc)
                 compared += 1
@@ -548,12 +553,12 @@ def check_rust(directory: Path, *, permuted: bool = False):
                     rust_results(permuted_snapshot(request), python_error=exc)
                     permutations += 1
                 continue
-            for name in ("interpretation", "gaps", "quantity", "finalized_projection"):
+            for name in ("interpretation", "gaps", "quantity", "finalized_projection", "fusion"):
                 recorded = document.get("stages", {}).get(name)
                 if recorded is not None:
                     assert_same(recorded, to_jsonable(stages[name]) if name == "finalized_projection" else stages[name], "recorded/replayed Python " + name)
             implemented, _ = compare_rust(request, evidence, python_stages=stages)
-            if not {"components", "evidence", "interpretation", "gaps", "quantity", "finalized_projection"}.issubset(implemented):
+            if not {"components", "evidence", "interpretation", "gaps", "quantity", "finalized_projection", "fusion"}.issubset(implemented):
                 raise AssertionError("Rust complete custody stage inventory is unavailable")
             compared += 1
             if permuted:

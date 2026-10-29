@@ -52,7 +52,10 @@ def assert_same(expected, actual, label="custody"):
 import os
 from pathlib import Path
 from kassiber.core import custody_journal
-from kassiber.core.custody_compute import STAGES, compute_custody_decisions, compute_custody_projection
+from kassiber.core.custody_compute import STAGES as CUSTODY_STAGES, compute_custody_decisions, compute_custody_projection
+from tests.custody_fusion_stage import add_fusion
+
+STAGES = (*CUSTODY_STAGES, "fusion")
 
 MODE_ENV = "KASSIBER_TEST_CUSTODY_ENGINE"
 RECORDS_ENV = "KASSIBER_TEST_CUSTODY_RECORDS"
@@ -79,10 +82,12 @@ def injected_stage_failure(stage, error):
         _INJECTED_FAILURE.reset(token)
 
 
-def record(outcome, *, compared=(), skipped=(), reference=False, reason=None):
+def record(outcome, *, compared=(), skipped=(), reference=False, reason=None, refusing_stage=None):
     path = os.environ.get(RECORDS_ENV)
     if path:
         row = {"module": os.environ.get(MODULE_ENV), "outcome": outcome, "compared": list(compared), "skipped": list(skipped), "reference": reference}
+        if refusing_stage is not None:
+            row["refusing_stage"] = refusing_stage
         if reason is not None:
             row["reason"] = reason
         line = json.dumps(row) + "\n"
@@ -157,6 +162,7 @@ def compare_rust(snapshot, evidence, *, python_stages=None):
         stages["evidence"] = evidence
     else:
         stages = python_stages
+    stages = add_fusion(snapshot, dict(stages))
     results, skipped = rust_results(snapshot, finalized="finalized_projection" in stages)
     compared = []
     for name in STAGES:
@@ -205,7 +211,7 @@ def _build(self, *, finalized):
         injection = _INJECTED_FAILURE.get()
         if injection is not None and injection[0] == failed and injection[1] is error:
             compared, skipped = (), STAGES
-            record("injected", skipped=skipped, reason="injected")
+            record("injected", skipped=skipped, reason="injected", refusing_stage=failed)
             recorded = True
             return
         try:
@@ -244,6 +250,9 @@ def _build(self, *, finalized):
         compute = compute_custody_projection if finalized else compute_custody_decisions
         try:
             result = compute(snapshot, stage_observer=emit, owned_index_observer=observer.owned_index if observer is not None else None)
+            if finalized:
+                from tests.custody_fusion_stage import python_fusion
+                emit("fusion", python_fusion(snapshot, python_stages["finalized_projection"]))
         except BaseException as exc:
             compare_outcome(exc)
             raise
@@ -258,7 +267,7 @@ def _build(self, *, finalized):
             observer.fail(exc)
         matched_error = expected_error is not None and type(exc) is type(expected_error) and str(exc) == str(expected_error)
         if not recorded:
-            record("error" if not audit_reference or matched_error or snapshot is None else "difference", compared=compared, skipped=skipped, reference=matched_error)
+            record("error" if not audit_reference or matched_error or snapshot is None else "difference", compared=compared, skipped=skipped, reference=matched_error, refusing_stage=next((s for s in STAGES if s not in python_stages), None))
         raise
     if observer is not None:
         observer.finish(result)

@@ -288,7 +288,10 @@ mod tests {
                     "{}",
                     case["case"]
                 );
-                assert_eq!(response["skipped_stages"], json!(["finalized_projection"]));
+                assert_eq!(
+                    response["skipped_stages"],
+                    json!(["finalized_projection", "fusion"])
+                );
             }
         }
     }

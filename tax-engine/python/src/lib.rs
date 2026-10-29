@@ -52,17 +52,12 @@ fn ledger(py: Python<'_>, request: &str) -> PyResult<String> {
 #[pyfunction(signature = (request, *, finalized=true))]
 fn custody(py: Python<'_>, request: &str, finalized: bool) -> PyResult<String> {
     fn decisions(request: &str) -> String {
-        kassiber_custody::custody_with_finalized(request, false)
+        kassiber_custody::custody_with_fusion(request, false, kassiber_tax_core::ledger)
     }
-    run(
-        py,
-        request,
-        if finalized {
-            kassiber_custody::custody
-        } else {
-            decisions
-        },
-    )
+    fn fusion(request: &str) -> String {
+        kassiber_custody::custody_with_fusion(request, true, kassiber_tax_core::ledger)
+    }
+    run(py, request, if finalized { fusion } else { decisions })
 }
 
 #[pymodule]

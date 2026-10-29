@@ -34,7 +34,7 @@ def cli_book():
 
 
 @pytest.mark.parametrize("mode", ["shadow", "census"])
-@pytest.mark.parametrize("inject", [False, "evidence", "interpretation", "gaps", "quantity", "finalized_projection"])
+@pytest.mark.parametrize("inject", [False, "evidence", "interpretation", "gaps", "quantity", "finalized_projection", "fusion"])
 def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode, inject):
     records = tmp_path / "records.jsonl"
     env = child_env(mode, inject=inject)
@@ -54,6 +54,8 @@ def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode
         assert "quantity" in routes[0]["compared"]
     if inject not in {"evidence", "interpretation", "gaps", "quantity"}:
         assert "finalized_projection" in routes[0]["compared"]
+    if not inject or inject == "fusion":
+        assert "fusion" in routes[0]["compared"]
     assert bool(compare.session_report(routes)[1]) == bool(inject)
 
 
@@ -216,7 +218,7 @@ def test_rust_quantity_refusal_against_python_success(tmp_path, monkeypatch, mod
 
 
 @pytest.mark.parametrize('mode', ['census', 'shadow'])
-@pytest.mark.parametrize('stage', ['quantity', 'finalized_projection'])
+@pytest.mark.parametrize('stage', ['quantity', 'finalized_projection', 'fusion'])
 @pytest.mark.parametrize('injection', ['exact', 'different_exception', 'different_stage'])
 def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypatch, mode, injection, stage):
     from kassiber.core import custody_quantity_runtime, custody_tax_projection
@@ -226,8 +228,12 @@ def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypat
     error = ValueError('intentional test failure')
     def refuse(*args, **kwargs):
         raise error
-    monkeypatch.setattr(custody_quantity_runtime if stage == 'quantity' else custody_tax_projection,
-                        'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
+    if stage == 'fusion':
+        from tests import custody_fusion_stage
+        monkeypatch.setattr(custody_fusion_stage, 'python_fusion', refuse)
+    else:
+        monkeypatch.setattr(custody_quantity_runtime if stage == 'quantity' else custody_tax_projection,
+                            'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
     monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
     monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
     previous = compare._INSTALLED_MODE
@@ -294,6 +300,7 @@ def test_real_finalized_refusal_has_complete_stage_inventory(tmp_path, monkeypat
         compare._build(Builder(), finalized=True)
     row = compare.read_records(tmp_path / 'records')[-1]
     assert row['outcome'] == 'error'
+    assert row['refusing_stage'] == 'finalized_projection'
     assert row['compared'] == ['finalized_projection']
     assert set(row['skipped']) == set(compare.STAGES) - {'finalized_projection'}
     assert not compare.session_report([row])[1]
@@ -323,9 +330,27 @@ def test_earlier_stages_account_matching_finalized_refusal(monkeypatch, differen
     if difference is None:
         stages, skipped = compare.rust_results(book, finalized_refusals=counts)
         assert 'interpretation' in stages and 'gaps' in stages
-        assert skipped == ('finalized_projection',)
+        assert skipped == ('finalized_projection', 'fusion')
         assert counts == {'finalized_projection:validation': 1}
     else:
         with pytest.raises(AssertionError):
             compare.rust_results(book, finalized_refusals=counts)
         assert not counts
+
+
+def test_fusion_decision_only_skip_and_independent_projection():
+    """Fusion consumes Rust projection, while the oracle consumes Python's."""
+    import kassiber_tax
+    from tests.custody_snapshot_generator import snapshot
+    from tests.custody_finalized_stage import python_stages
+    from tests.custody_fusion_stage import add_fusion
+    book = snapshot(0)
+    decisions = json.loads(kassiber_tax.custody(json.dumps(book), finalized=False))
+    assert decisions['skipped_stages'] == ['finalized_projection', 'fusion']
+    assert 'fusion' not in decisions['stages']
+    expected = add_fusion(book, python_stages(book))
+    actual = json.loads(kassiber_tax.custody(json.dumps(book)))
+    assert actual['skipped_stages'] == []
+    compare.assert_same(expected['fusion'], actual['stages']['fusion'], 'fusion')
+    assert expected['fusion']['outcome'] == 'request'
+    assert expected['fusion']['request']['rows']

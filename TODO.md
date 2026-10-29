@@ -57,8 +57,9 @@ mutation entries.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
   The [R2g request-builder checkpoint](docs/reference/custody-engine.md#rust-journal-request-builder-checkpoint-r2g-step-1)
-  ports request construction; ledger-response parity, full campaign reruns and
-  PyO3/census/shadow/replay fusion admission remain outstanding.
+  ports request construction; [fusion harness integration](docs/reference/custody-engine.md#fusion-harness-integration-checkpoint-r2g-step-3)
+  now compares requests and ledger responses in PyO3/census/shadow/replay.
+  Complete campaign reruns and post-ledger journal joins remain outstanding.
 
 ## Rust backend R3 storage
 

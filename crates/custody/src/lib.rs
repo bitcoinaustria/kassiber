@@ -16,13 +16,14 @@ pub mod snapshot;
 pub mod timing;
 
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const STAGES: [&str; 6] = [
+pub const STAGES: [&str; 7] = [
     "components",
     "evidence",
     "interpretation",
     "gaps",
     "quantity",
     "finalized_projection",
+    "fusion",
 ];
 
 /// Versioned JSON operation; missing stages are explicit and never fabricated.
@@ -138,7 +139,7 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
                 "schema_version":1,
                 "engine_version":ENGINE_VERSION,
                 "stages":{"components":components,"evidence":evidence,"gaps":gaps},
-                "skipped_stages":if finalized { Vec::<&str>::new() } else { vec!["finalized_projection"] }
+                "skipped_stages":if finalized { vec!["fusion"] } else { vec!["finalized_projection", "fusion"] }
             });
             let mut response = codec::from_json(&response).expect("computed custody response");
             let mut stages = graph::stored::get(&response, "stages").clone();
@@ -225,9 +226,9 @@ fn response_text(
     kassiber_pyjson::dumps_str_into(ENGINE_VERSION, &options, &mut out);
     out.push_str(", \"schema_version\": 1, \"skipped_stages\": ");
     out.push_str(if projection.is_some() {
-        "[]"
+        "[\"fusion\"]"
     } else {
-        "[\"finalized_projection\"]"
+        "[\"finalized_projection\", \"fusion\"]"
     });
     out.push_str(", \"stages\": {");
     for (index, ((name, _), text)) in stages.iter().zip(texts).enumerate() {
@@ -240,4 +241,41 @@ fn response_text(
     }
     out.push_str("}}");
     Some(out)
+}
+
+/// Comparison-only fusion. The caller supplies the existing ledger engine;
+/// custody itself retains no tax-engine dependency or persistence authority.
+pub fn custody_with_fusion(request: &str, finalized: bool, ledger: fn(&str) -> String) -> String {
+    let response = custody_with_finalized(request, finalized);
+    let mut response = codec::to_json(&codec::loads(&response).expect("custody response"));
+    if !finalized || response.get("error").is_some() {
+        return codec::dumps(&codec::from_json(&response).expect("response"), true)
+            .expect("response");
+    }
+    let snapshot = codec::to_json(&codec::loads(request).expect("admitted snapshot"));
+    let wallets = snapshot["wallets"]
+        .as_array()
+        .expect("wallets")
+        .iter()
+        .map(|wallet| (wallet["id"].clone(), wallet.clone()))
+        .collect::<Vec<_>>();
+    let fusion = match ledger_request::build_request(
+        &snapshot["profile"],
+        &response["stages"]["finalized_projection"],
+        &wallets,
+        "ledger",
+    ) {
+        Ok(ledger_request::Outcome::Empty) => serde_json::json!({"outcome":"empty"}),
+        Ok(ledger_request::Outcome::Request(request)) => {
+            let text = ledger_request::request_json(&request);
+            let result: serde_json::Value =
+                serde_json::from_str(&ledger(&text)).expect("ledger response");
+            serde_json::json!({"outcome":"request","request":request,"request_text":text,"response":result})
+        }
+        Err(error) => serde_json::json!({"outcome":"refusal","error":error.document()}),
+    };
+    response["stages"]["fusion"] = fusion;
+    response["skipped_stages"] = serde_json::json!([]);
+    codec::dumps(&codec::from_json(&response).expect("fusion response"), true)
+        .expect("fusion response")
 }

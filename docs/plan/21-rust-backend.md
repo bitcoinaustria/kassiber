@@ -1767,3 +1767,15 @@ new named mutations are killed. The empty outcome makes no engine call.
 This is a local compiler checkpoint: ledger-response comparison, complete
 campaign reruns and normal fusion comparison/skip admission remain outstanding.
 Python retains production authority and post-ledger joins remain R4.
+
+### Fusion harness integration checkpoint (R2g step 3)
+
+The local `t3code/r2g-fusion-6` checkpoint based on `e2be9b41` compares fusion
+through PyO3, census, custody-shadow and recorded replay. It preserves exact
+request text and full ledger responses, explicit decision-only and injected
+skips, and upstream refusing stages. Both focused lanes have non-zero fusion
+comparisons and zero differences; retained and fresh recordings replay cleanly.
+See the [integration evidence](../reference/custody-engine.md#fusion-harness-integration-checkpoint-r2g-step-3).
+Rust fusion remains comparison-only, snapshot v1 remains raw-only, and the
+production journal joins and authority switch remain R4. Complete mutation
+campaign evidence is still a separate acceptance boundary.

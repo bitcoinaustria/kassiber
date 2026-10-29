@@ -392,7 +392,7 @@ mod stage_tests {
                 );
                 assert_eq!(
                     stored::get(&response, "skipped_stages"),
-                    &codec::from_json(&json!(["finalized_projection"])).unwrap()
+                    &codec::from_json(&json!(["finalized_projection", "fusion"])).unwrap()
                 );
             }
         }

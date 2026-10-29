@@ -3496,3 +3496,45 @@ counts as neither a kill nor a baseline. The complete four-recipe rerun used
 bounded build concurrency and worktree-local scratch storage and passed.
 Manual review checked exact wire order, empty-path engine exclusion, independent
 request inputs, full response comparison and production authority boundaries.
+
+## Fusion harness integration checkpoint (R2g step 3)
+
+Local branch `t3code/r2g-fusion-6`, based on `e2be9b41`, adds comparison-only
+`fusion` to the PyO3, census, custody-shadow and recorded-replay inventories.
+The binding supplies the existing ledger function to custody's pure fusion
+adapter, retaining custody's runtime dependency boundary. Rust builds from its
+own finalized projection and ordered raw wallet facts; the independent Python
+oracle builds from Python's projection. Comparisons include the request document,
+exact request text and full ledger response, including ledger refusal stages.
+Empty projections remain explicit no-engine outcomes. The standalone custody
+operation explicitly skips fusion when no ledger callback was supplied.
+
+Decision-only builds skip finalized projection and fusion. Atomic upstream
+refusals identify the refusing custody stage; the harness compares that stage
+and skips unavailable outputs. Same-code/wrong-stage responses fail comparison.
+Exact intentional failure annotations skip all seven stages, including injected
+fusion failures, and record their refusing stage. Fresh-process verification
+regenerates fusion when present in the recording. These controls live outside
+snapshot v1, which remains raw-only. No Rust result supplies production state.
+
+| Integration verification | Result |
+| --- | --- |
+| Focused census | 58 passed; fusion 58 compared / 1 intentionally skipped; zero differences |
+| Focused shadow | 58 passed; same stage counts; 57 frozen Python comparisons; zero differences |
+| Refusal, injection, child-discrepancy and decision-only harness | 59 passed |
+| Read-only retained replay | 159 requests + 159 permutations; zero differences |
+| Fresh census recordings | 50 snapshots; zero integrity problems; 50 requests + 50 permutations; zero differences |
+| Fresh shadow recordings | 50 snapshots; zero integrity problems; 50 requests + 50 permutations; zero differences |
+| Rust workspace | 833 passed |
+| Workspace formatting and all-target Clippy `-D warnings` | Passed |
+| Inventory refresh and preflight | Updated; 57 passed, 56 subtests passed |
+
+Verification uses Rust 1.99.1, locked Python 3.11, offline Cargo and
+`MATURIN_NO_INSTALL_RUST=1`, without changing `HOME`. Fresh artifacts are under
+`target/r2g6-verify/`. Initial `/tmp` SQLite I/O and sandbox quota failures were
+superseded by successful runs using worktree-local temporary storage; the
+workspace rerun permits its disposable loopback servers. No push, PR or full
+quality gate is claimed. The full campaign is recorded separately below;
+this integration checkpoint does not claim all inherited mutation kills.
+Python production source is unchanged; partial-payout cases remain
+**reference bug, expected to change** on restack.
