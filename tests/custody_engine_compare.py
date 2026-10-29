@@ -2,6 +2,8 @@
 from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
+from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 from collections.abc import Mapping
 
@@ -58,12 +60,32 @@ MODULE_ENV = "KASSIBER_TEST_CUSTODY_MODULE"
 INJECT_ENV = "KASSIBER_TEST_CUSTODY_INJECT_DIFFERENCE"
 _ORIGINAL = None
 _INSTALLED_MODE = None
+_INJECTED_FAILURE = ContextVar("custody_injected_failure", default=None)
 
 
-def record(outcome, *, compared=(), skipped=(), reference=False):
+@contextmanager
+def injected_stage_failure(stage, error):
+    """Opt one intentional test failure out of parity, by stage and identity.
+
+    This is test plumbing only. Equal messages, other exceptions, other stages
+    and later builds still undergo ordinary refusal comparison.
+    """
+    if stage not in STAGES or not isinstance(error, BaseException):
+        raise ValueError("an injected custody failure requires a stage and exception")
+    token = _INJECTED_FAILURE.set((stage, error))
+    try:
+        yield
+    finally:
+        _INJECTED_FAILURE.reset(token)
+
+
+def record(outcome, *, compared=(), skipped=(), reference=False, reason=None):
     path = os.environ.get(RECORDS_ENV)
     if path:
-        line = json.dumps({"module": os.environ.get(MODULE_ENV), "outcome": outcome, "compared": list(compared), "skipped": list(skipped), "reference": reference}) + "\n"
+        row = {"module": os.environ.get(MODULE_ENV), "outcome": outcome, "compared": list(compared), "skipped": list(skipped), "reference": reference}
+        if reason is not None:
+            row["reason"] = reason
+        line = json.dumps(row) + "\n"
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             os.write(fd, line.encode("utf-8"))
@@ -153,14 +175,20 @@ def _build(self, *, finalized):
     def compare_outcome(error=None):
         nonlocal compared, skipped, recorded
         failed = next((stage for stage in STAGES if stage not in python_stages), None)
+        injection = _INJECTED_FAILURE.get()
+        if injection is not None and injection[0] == failed and injection[1] is error:
+            compared, skipped = (), STAGES
+            record("injected", skipped=skipped, reason="injected")
+            recorded = True
+            return
         try:
             # The binding returns an atomic refusal, without earlier outputs.
             # Compare its code at the failed implemented stage, and explicitly
             # skip unavailable outputs. Finalized projection is still unported.
-            if error is not None and failed != "finalized_projection":
-                rust_results(snapshot, python_error=error)
-                compared = (failed or "admission",)
+            if error is not None and failed in STAGES[:-1]:
+                compared = (failed,)
                 skipped = tuple(stage for stage in STAGES if stage != failed)
+                rust_results(snapshot, python_error=error)
             else:
                 results, skipped = rust_results(snapshot)
                 for stage in STAGES:
@@ -169,7 +197,7 @@ def _build(self, *, finalized):
                         compared = (*compared, stage)
                         assert_same(python_stages[stage], results[stage], stage)
             assert not set(compared) & set(skipped)
-            assert set(compared) | set(skipped) >= set(STAGES)
+            assert set(compared) | set(skipped) == set(STAGES)
         except BaseException:
             record("difference", compared=compared, skipped=skipped)
             recorded = True
@@ -235,14 +263,18 @@ def session_report(records):
     skipped = {name: sum(name in row["skipped"] for row in records) for name in STAGES}
     lines = [f"custody snapshots: {len(records)}; frozen Python comparisons: {sum(row['reference'] for row in records)}"]
     lines.extend(f"{name}: {counts[name]} compared, {skipped[name]} skipped" for name in STAGES)
+    injected = [row for row in records if row["outcome"] == "injected"]
+    lines.append(f"injected builds: {len(injected)} (all stages skipped)")
     failures = [row for row in records if row["outcome"] == "difference"]
     empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
     errors = ([f"custody differences: {len(failures)}"] if failures else [])
-    incomplete = [row for row in records if row["outcome"] in {"result", "error"} and
+    incomplete = [row for row in records if row["outcome"] in {"result", "error", "injected"} and
                   (set(row["compared"]) & set(row["skipped"]) or
                    set(row["compared"]) | set(row["skipped"]) != set(STAGES))]
     if incomplete:
         errors.append("custody stage inventory is incomplete")
+    if any(row.get("reason") != "injected" or row["compared"] or set(row["skipped"]) != set(STAGES) for row in injected):
+        errors.append("custody injected skip record is invalid")
     if empty:
         errors.append("custody binding compared no stages")
     return lines, errors

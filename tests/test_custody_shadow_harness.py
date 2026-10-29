@@ -149,7 +149,7 @@ def test_python_gate_refusal_is_compared_even_when_caught(cli_book, tmp_path, mo
 
 
 @pytest.mark.parametrize("mode", ["census", "shadow"])
-@pytest.mark.parametrize("rust_refuses", [False, True])
+@pytest.mark.parametrize("rust_refuses", [False, True, "wrong_code"])
 def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_refuses):
     """Review fail-open reproducer: late Python errors cannot escape comparison."""
     import kassiber_tax
@@ -165,24 +165,24 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
         raise ValueError('simulated Python quantity-stage refusal')
     monkeypatch.setattr(custody_quantity_runtime, 'build_canonical_quantity_state', refuse)
     if rust_refuses:
-        monkeypatch.setattr(kassiber_tax, 'custody', lambda _: json.dumps({'error': {'code': 'ValueError'}}))
+        monkeypatch.setattr(kassiber_tax, 'custody', lambda _: json.dumps({'error': {'code': 'ValueError' if rust_refuses is True else 'TypeError'}}))
     compare.install_custody_mode(mode)
     conn = open_db(tmp_path / 'book')
     try:
         seed_native_transition_book(conn, 'claim')
         profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
-        exception = ValueError if rust_refuses else AssertionError
+        exception = ValueError if rust_refuses is True else AssertionError
         with pytest.raises(exception):
             CustodyJournalBuilder(conn, profile, as_of='2026-01-01T00:00:00Z').build_custody_projection()
     finally:
         conn.close()
         compare.uninstall_custody_mode()
     rows = compare.read_records(records)
-    assert rows[-1]['outcome'] == ('error' if rust_refuses else 'difference')
-    if rust_refuses:
+    assert rows[-1]['outcome'] == ('error' if rust_refuses is True else 'difference')
+    if rust_refuses is True:
         assert rows[-1]['compared'] == ['quantity']
         assert set(rows[-1]['compared']) | set(rows[-1]['skipped']) == set(compare.STAGES)
-    assert bool(compare.session_report(rows)[1]) == (not rust_refuses)
+    assert bool(compare.session_report(rows)[1]) == (rust_refuses is not True)
 
 
 def test_session_rejects_unaccounted_quantity_stage():
@@ -209,3 +209,61 @@ def test_rust_quantity_refusal_against_python_success(tmp_path, monkeypatch, mod
         if previous:
             compare.install_custody_mode(previous)
     assert compare.read_records(tmp_path / 'records')[-1]['outcome'] == 'difference'
+
+
+@pytest.mark.parametrize('mode', ['census', 'shadow'])
+@pytest.mark.parametrize('injection', ['exact', 'different_exception', 'different_stage'])
+def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypatch, mode, injection):
+    from kassiber.core import custody_quantity_runtime
+    from kassiber.core.custody_journal import CustodyJournalBuilder
+    from tests.custody_snapshot_generator import snapshot
+    book = snapshot(0)
+    error = ValueError('intentional test failure')
+    def refuse(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(custody_quantity_runtime, 'build_canonical_quantity_state', refuse)
+    monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
+    monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
+    previous = compare._INSTALLED_MODE
+    compare.install_custody_mode(mode)
+    try:
+        declared_error = ValueError(str(error)) if injection == 'different_exception' else error
+        declared_stage = 'gaps' if injection == 'different_stage' else 'quantity'
+        with compare.injected_stage_failure(declared_stage, declared_error):
+            with pytest.raises(ValueError if injection == 'exact' else AssertionError):
+                CustodyJournalBuilder(None, book['profile']).build_custody_decisions()
+        # The annotation must not leak to a later build.
+        with pytest.raises(AssertionError):
+            CustodyJournalBuilder(None, book['profile']).build_custody_decisions()
+    finally:
+        compare.uninstall_custody_mode()
+        if previous:
+            compare.install_custody_mode(previous)
+    rows = compare.read_records(tmp_path / 'records')
+    first = rows[0]
+    if injection == 'exact':
+        assert first['outcome'] == first['reason'] == 'injected'
+        assert first['compared'] == [] and set(first['skipped']) == set(compare.STAGES)
+        lines, errors = compare.session_report(rows[:1])
+        assert not errors
+        assert 'injected builds: 1 (all stages skipped)' in lines
+    else:
+        assert first['outcome'] == 'difference'
+    assert rows[-1]['outcome'] == 'difference'
+
+
+@pytest.mark.parametrize('change', [{'reason': None}, {'compared': ['quantity']}, {'skipped': []}])
+def test_session_rejects_invalid_injected_skip(change):
+    row = dict(outcome='injected', compared=[], skipped=list(compare.STAGES), reference=False, reason='injected')
+    row.update(change)
+    assert 'custody injected skip record is invalid' in compare.session_report([row])[1]
+
+
+@pytest.mark.parametrize('mode', ['census', 'shadow'])
+def test_recorder_failure_has_explicit_injected_skip(mode):
+    result = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_custody_snapshot.py::test_a_failed_build_records_its_error'], cwd=ROOT, env=child_env(mode), capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    # Pytest owns and removes its private records directory. Its session
+    # report validates the record and exposes the explicit skip inventory.
+    assert 'injected builds: 1 (all stages skipped)' in result.stdout
+    assert 'quantity: 0 compared, 1 skipped' in result.stdout

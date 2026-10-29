@@ -20092,5 +20092,75 @@
       "quantity_bundle_earliest_timestamp"
     ],
     "rule": "Malformed bundles retain the earliest involved observation timestamp."
+  },
+  {
+    "id": "R2-review-injection-stage",
+    "file": "tests/custody_engine_compare.py",
+    "find": "injection[0] == failed and injection[1] is error",
+    "replace": "injection[1] is error",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
+    ],
+    "rule": "Only the explicitly declared failing stage may skip comparison."
+  },
+  {
+    "id": "R2-review-injection-identity",
+    "file": "tests/custody_engine_compare.py",
+    "find": "injection[1] is error",
+    "replace": "type(injection[1]) is type(error)",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
+    ],
+    "rule": "Only the declared exception instance is an injected failure."
+  },
+  {
+    "id": "R2-review-injection-scope",
+    "file": "tests/custody_engine_compare.py",
+    "find": "        _INJECTED_FAILURE.reset(token)",
+    "replace": "        pass",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
+    ],
+    "rule": "Injection annotations cannot leak to later builds."
+  },
+  {
+    "id": "R2-review-injection-reason",
+    "file": "tests/custody_engine_compare.py",
+    "find": "reason=\"injected\"",
+    "replace": "reason=\"patched\"",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
+    ],
+    "rule": "Injected skips carry an explicit stable reason."
+  },
+  {
+    "id": "R2-review-injection-record-validation",
+    "file": "tests/custody_engine_compare.py",
+    "find": "        errors.append(\"custody injected skip record is invalid\")",
+    "replace": "        pass",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_session_rejects_invalid_injected_skip"
+    ],
+    "rule": "Session reports reject malformed injected skip inventories."
+  },
+  {
+    "id": "R2-review-injection-count",
+    "file": "tests/custody_engine_compare.py",
+    "find": "{len(injected)} (all stages skipped)",
+    "replace": "{0} (all stages skipped)",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
+    ],
+    "rule": "Session reporting counts each annotated injected build."
+  },
+  {
+    "id": "R2-review-injection-recorder-optout",
+    "file": "tests/test_custody_snapshot.py",
+    "find": "with injected_stage_failure(\"gaps\", error), patch.object",
+    "replace": "with patch.object",
+    "expect_failing": [
+      "tests/test_custody_shadow_harness.py::test_recorder_failure_has_explicit_injected_skip"
+    ],
+    "rule": "Recorder error capture explicitly annotates its deliberate stage failure in both live modes."
   }
 ]

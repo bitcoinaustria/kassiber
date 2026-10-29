@@ -152,7 +152,9 @@ def test_a_snapshot_with_wallet_key_material_is_never_written(owned_book, record
 
 
 def test_a_failed_build_records_its_error(owned_book, recorder_dir):
-    with patch.object(custody_gaps, "compute_gap_search_result", side_effect=RuntimeError("boom")):
+    from tests.custody_engine_compare import injected_stage_failure
+    error = RuntimeError("boom")
+    with injected_stage_failure("gaps", error), patch.object(custody_gaps, "compute_gap_search_result", side_effect=error):
         with pytest.raises(RuntimeError, match="boom"):
             _build(owned_book)
     (document,) = [custody_snapshot.load(path) for path in _snapshots(recorder_dir)]
