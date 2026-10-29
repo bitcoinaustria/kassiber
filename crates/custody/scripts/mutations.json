@@ -14656,8 +14656,8 @@
   {
     "id": "QR-003",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": " &Value) -> Result<BigInt, Error> {\n    let v = if codec::truth(v) { v.clone() } else { json!(0) };\n    if v.is_array() || v.is_object() {\n        return Err(family(\"TypeError\"));\n    }\n    exact(&codec::integer(&v).map_err(|_| family(\"Va",
-    "replace": " &Value) -> Result<BigInt, Error> {\n    let v = if codec::truth(v) { v.clone() } else { json!(0) };\n    if false && (v.is_array() || v.is_object()) {\n        return Err(family(\"TypeError\"));\n    }\n    exact(&codec::integer(&v).map_err(|_| family(\"Va",
+    "find": "v.is_array() || v.is_object()",
+    "replace": "false && (v.is_array() || v.is_object())",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -14926,12 +14926,12 @@
   {
     "id": "QR-036",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "_msat\":number(&cap)}),\n            ));\n        }\n        sources.insert(hash.clone(), end.clone());\n        if start < BigInt::from(0) || end <= start {\n            return Err(family(\"ValueError\"));\n        }\n        let term = array(&c[\"economic_terms",
-    "replace": "_msat\":number(&cap)}),\n            ));\n        }\n        sources.insert(hash.clone(), end.clone());\n        if false && (start < BigInt::from(0) || end <= start) {\n            return Err(family(\"ValueError\"));\n        }\n        let term = array(&c[\"economic_terms",
+    "find": "start < BigInt::from(0) || end <= start",
+    "replace": "start <= BigInt::from(0) || end <= start",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
-    "rule": "Reviewed admission and composition preserve the reference branch: start < BigInt::from(0) || end <= start."
+    "rule": "Reviewed source slices admit zero offsets and reject negative or empty ranges; omission is redundant with final claim construction, so the mutation changes the reachable lower boundary."
   },
   {
     "id": "QR-037",
@@ -14976,8 +14976,8 @@
   {
     "id": "QR-041",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "              ));\n                    }\n                    targets.insert(th.clone(), te.clone());\n                    if !conversion || (o[\"asset\"] == t[\"asset\"] && amount == target_amount) {\n                        if ts < BigInt::from(0) || te <= ts {\n                            return Er",
-    "replace": "              ));\n                    }\n                    targets.insert(th.clone(), te.clone());\n                    if false && (!conversion || (o[\"asset\"] == t[\"asset\"] && amount == target_amount)) {\n                        if ts < BigInt::from(0) || te <= ts {\n                            return Er",
+    "find": "!conversion || (o[\"asset\"] == t[\"asset\"] && amount == target_amount)",
+    "replace": "false && (!conversion || (o[\"asset\"] == t[\"asset\"] && amount == target_amount))",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -14986,12 +14986,12 @@
   {
     "id": "QR-042",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "e());\n                    if !conversion || (o[\"asset\"] == t[\"asset\"] && amount == target_amount) {\n                        if ts < BigInt::from(0) || te <= ts {\n                            return Err(family(\"ValueError\"));\n                        }\n           ",
-    "replace": "e());\n                    if !conversion || (o[\"asset\"] == t[\"asset\"] && amount == target_amount) {\n                        if false && (ts < BigInt::from(0) || te <= ts) {\n                            return Err(family(\"ValueError\"));\n                        }\n           ",
+    "find": "ts < BigInt::from(0) || te <= ts",
+    "replace": "ts <= BigInt::from(0) || te <= ts",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
-    "rule": "Reviewed admission and composition preserve the reference branch: ts < BigInt::from(0) || te <= ts."
+    "rule": "Reviewed target slices admit zero offsets and reject negative or empty ranges; omission is redundant with final claim construction, so the mutation changes the reachable lower boundary."
   },
   {
     "id": "QR-043",
@@ -15046,8 +15046,8 @@
   {
     "id": "QR-049",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "&c[\"conversion_policy\"],&json!(\"taxable\"))))} else {Value::Null},\"allow_cross_rail\":cross}));\n        super::arbitration::validate_claim(claims.last().expect(\"just appended\"))\n            .map_err(|e| family(&e))?;\n    }\n    if !conversion {\n        for (transaction, o) in &observations {\n            if o[\"direction\"] != \"outbound\"\n       ",
-    "replace": "&c[\"conversion_policy\"],&json!(\"taxable\"))))} else {Value::Null},\"allow_cross_rail\":cross}));\n    }\n    if false && (!conversion) {\n        for (transaction, o) in &observations {\n            if o[\"direction\"] != \"outbound\"\n       ",
+    "find": "        super::arbitration::validate_claim(claims.last().expect(\"just appended\")).map_err(|e| {\n            let mut e = family(&e);\n            e.message =\n                if matches!(state, \"internal_reviewed\" | \"internal_verified\") && target.is_null() {\n                    format!(\"{state} claims require an observed target slice\")\n                } else {\n                    \"only targetless external_confirmed claims may classify an external destination\"\n                        .into()\n                };\n            e\n        })?;\n    }\n    if !conversion {",
+    "replace": "    }\n    if false && (!conversion) {",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -15056,8 +15056,8 @@
   {
     "id": "QR-050",
     "file": "crates/custody/src/quantity/reviewed.rs",
-    "find": "ow_cross_rail\":cross}));\n        super::arbitration::validate_claim(claims.last().expect(\"just appended\"))\n            .map_err(|e| family(&e))?;\n    }\n    if !conversion {\n        for (transaction, o) in &observations {\n            if o[\"direction\"] != \"outbound\"\n                || !legs\n                    .values()\n                    .any(|l| tx(l) == *transaction && l[\"role\"] == \"source\")\n            {\n                continue;\n            }\n            let n = sources\n                .get(&text(&o[\"",
-    "replace": "ow_cross_rail\":cross}));\n        super::arbitration::validate_claim(claims.last().expect(\"just appended\"))\n            .map_err(|e| family(&e))?;\n    }\n    if !conversion {\n        for (transaction, o) in &observations {\n            if false && (o[\"direction\"] != \"outbound\"\n                || !legs\n                    .values()\n                    .any(|l| tx(l) == *transaction && l[\"role\"] == \"source\")) {\n                continue;\n            }\n            let n = sources\n                .get(&text(&o[\"",
+    "find": "o[\"direction\"] != \"outbound\"\n                || !legs\n                    .values()\n                    .any(|l| tx(l) == *transaction && l[\"role\"] == \"source\")",
+    "replace": "false && (o[\"direction\"] != \"outbound\"\n                || !legs\n                    .values()\n                    .any(|l| tx(l) == *transaction && l[\"role\"] == \"source\"))",
     "expect_failing": [
       "quantity_reviewed_compilation_vectors"
     ],
@@ -17982,5 +17982,1215 @@
       "quantity_reviewed_compilation_vectors"
     ],
     "rule": "Reviewed conversion claims obey the complete claim constructor before a bundle escapes."
+  },
+  {
+    "id": "QRT-001",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "ids.is_empty() || ids != sorted",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Hold boundaries are nonempty and canonically sorted."
+  },
+  {
+    "id": "QRT-002",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "unique(ids.iter().cloned()).len() != ids.len()",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Hold boundaries are unique."
+  },
+  {
+    "id": "QRT-003",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "super::validate_observation(o).is_err()",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Canonical observations are validated before candidate scope."
+  },
+  {
+    "id": "QRT-004",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "o[\"transaction_id\"] != id",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Alias mapping keys equal physical transaction ids."
+  },
+  {
+    "id": "QRT-005",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "o[\"direction\"] != direction",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source and return directions are independently checked."
+  },
+  {
+    "id": "QRT-006",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "!codec::truth(&c[\"profile_id\"])",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "An explicit nonempty profile is mandatory."
+  },
+  {
+    "id": "QRT-007",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "profiles != vec![text(&c[\"profile_id\"])]",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Every boundary belongs to the candidate profile."
+  },
+  {
+    "id": "QRT-008",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "c[\"gap_id\"] != expected_id",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Candidate identity binds its boundaries."
+  },
+  {
+    "id": "QRT-009",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "assets != vec![text(&c[\"asset\"])]",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "All observations match the candidate asset."
+  },
+  {
+    "id": "QRT-010",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "chains.len() != 1 || networks.len() != 1",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Holds cannot cross chain or network domains."
+  },
+  {
+    "id": "QRT-011",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "sw != strings(&c[\"source_wallet_ids\"]) || dw != strings(&c[\"destination_wallet_ids\"])",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Candidate wallets equal canonical wallets."
+  },
+  {
+    "id": "QRT-012",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "expected != Value::Object(actual.clone())",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "All candidate quantity fields match exact observation arithmetic."
+  },
+  {
+    "id": "QRT-013",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "total.clone().min(ret.clone())",
+    "replace": "total.clone().max(ret.clone())",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retained quantity is the lower boundary principal."
+  },
+  {
+    "id": "QRT-014",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"coverage_ppm\":number(&(&retained*1_000_000/&total))",
+    "replace": "\"coverage_ppm\":number(&(&retained*999_999/&total))",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Coverage uses exact integer parts per million."
+  },
+  {
+    "id": "QRT-015",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if !codec::truth(&search[\"search_complete\"]) {",
+    "replace": "if codec::truth(&search[\"search_complete\"]) {",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Only incomplete search activates capacity holds."
+  },
+  {
+    "id": "QRT-016",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if ignored.contains(&id)",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Ignored capacity sources remain suppressed."
+  },
+  {
+    "id": "QRT-017",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "o[\"direction\"] != \"outbound\" || principal(o)? <= BigInt::from(0)",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Capacity holds require a positive outbound principal."
+  },
+  {
+    "id": "QRT-018",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "!codec::truth(&c[\"promotion_eligible\"])",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Ineligible suggestions never hold quantities."
+  },
+  {
+    "id": "QRT-019",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "Some(crate::gaps::candidate_fingerprint(c)?.as_str())",
+    "replace": "Some(\"wrong\")",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Only the current candidate fingerprint dismisses the hold."
+  },
+  {
+    "id": "QRT-020",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "ids.extend(source_ids.iter().chain(&return_ids).cloned());",
+    "replace": "ids.extend(source_ids.iter().cloned());",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Candidate transaction ids include both boundaries."
+  },
+  {
+    "id": "QRT-021",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if principal(o)? > BigInt::from(0)",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Positive independent boundaries produce holds."
+  },
+  {
+    "id": "QRT-022",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "holds.sort_by_key(|h| text(&h[\"hold_id\"]));",
+    "replace": "holds.reverse();",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Hold rows have deterministic identity ordering."
+  },
+  {
+    "id": "QRT-023",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if !claimed.contains(&h[\"quantity\"])",
+    "replace": "if true",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "One exact source slice produces only one hold claim."
+  },
+  {
+    "id": "QRT-024",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"CustodyGapHold\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-025",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"QuantitySlice\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-026",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"gap-capacity-hold:{}\"",
+    "replace": "\"mutated:{}\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-027",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"capacity-incomplete\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-028",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"custody_gap_search_incomplete_structured_source\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-029",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate:{gap}:compile-failed\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-030",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"custody_gap_hold_compile_failed\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Retain the exact hold or diagnostic identity and vocabulary."
+  },
+  {
+    "id": "QRT-031",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate transaction ids must be non-empty and canonically ordered\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-032",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate transaction ids must be unique\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-033",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate references a missing canonical observation\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-034",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate references an invalid canonical observation\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-035",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"observation mapping key does not match transaction identity\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-036",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate observation has the wrong direction\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-037",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate profile scope must be non-empty\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-038",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate profile scope does not match every observation\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-039",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate identity does not match its boundary transactions\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-040",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate asset does not match every observation\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-041",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate observations cross chain or network scope\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-042",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate wallet scope does not match canonical observations\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-043",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"candidate quantities do not match canonical observations\"",
+    "replace": "\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Preserve the Python compiler diagnostic and admission order."
+  },
+  {
+    "id": "QRT-044",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "text(&o[\"profile_id\"]),",
+    "replace": "\"wrong\".into(),",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Tax pools isolate profiles."
+  },
+  {
+    "id": "QRT-045",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "text(&d[\"network\"]),",
+    "replace": "\"wrong\".into(),",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Tax pools isolate networks."
+  },
+  {
+    "id": "QRT-046",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "text(&d[\"exposure\"]),",
+    "replace": "\"wrong\".into(),",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Tax pools use shared Bitcoin exposure across rails."
+  },
+  {
+    "id": "QRT-047",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "Some(current) if current < &order",
+    "replace": "Some(current) if current > &order",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "The earliest issue sets a pool barrier."
+  },
+  {
+    "id": "QRT-048",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "roots.entry(p).or_default().extend(ids);",
+    "replace": "roots.entry(p).or_default().clear();",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Equal barriers merge their root transactions."
+  },
+  {
+    "id": "QRT-049",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "direct.insert(hash.clone());",
+    "replace": "direct.insert(String::new());",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Failed native and gap evidence directly blocks named observations."
+  },
+  {
+    "id": "QRT-050",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if !known.is_empty()",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Known canonical identities determine scoped event barriers."
+  },
+  {
+    "id": "QRT-051",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if !codec::truth(&issue[\"occurred_at\"])",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Untimed unknown issues do not invent temporal barriers."
+  },
+  {
+    "id": "QRT-052",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "rejected.extend(pools.values().cloned());",
+    "replace": "rejected.clear();",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Unscoped contradictions fail closed across observed pools."
+  },
+  {
+    "id": "QRT-053",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if direct.contains(&hash)",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Directly blocked observations cannot become presumed disposals."
+  },
+  {
+    "id": "QRT-054",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "o[0] < b[0] || o == b",
+    "replace": "o[0] <= b[0]",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Only finalized siblings at the barrier event remain eligible."
+  },
+  {
+    "id": "QRT-055",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "let barrier = barriers.values().min();",
+    "replace": "let barrier = barriers.values().max();",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "The global display barrier is the earliest pool barrier."
+  },
+  {
+    "id": "QRT-056",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".filter(|d| !eligible.iter().any(|e| e[\"source\"] == d[\"source\"]))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "quantity_scoped_tax_barrier_vectors"
+    ],
+    "rule": "Ineligible slices exclude all eligible source slices."
+  },
+  {
+    "id": "QRT-057",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if c[\"effective_state\"] != \"active\"",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Authored-active invalid components fail closed."
+  },
+  {
+    "id": "QRT-058",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if current != expected",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Author-local quantity evidence drift blocks compilation."
+  },
+  {
+    "id": "QRT-059",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"custody_component_authored_active_invalid\".to_owned()",
+    "replace": "\"wrong\".to_owned()",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Invalid authored state retains its Python error code."
+  },
+  {
+    "id": "QRT-060",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"custody_component_evidence_drift\".into()",
+    "replace": "\"wrong\".into()",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Evidence drift retains its Python error code."
+  },
+  {
+    "id": "QRT-061",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"expected_snapshot_count\":expected.len()",
+    "replace": "\"expected_snapshot_count\":0",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Evidence diagnostics report unique expected snapshots."
+  },
+  {
+    "id": "QRT-062",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"current_snapshot_count\":current.len()",
+    "replace": "\"current_snapshot_count\":0",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Evidence diagnostics report unique current snapshots."
+  },
+  {
+    "id": "QRT-063",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "conversions.extend(array(&v[\"reviewed_conversion_pairs\"]).iter().cloned());",
+    "replace": "conversions.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Successful reviewed conversion records survive composition."
+  },
+  {
+    "id": "QRT-064",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "payouts.extend(array(&v[\"reviewed_direct_payouts\"]).iter().cloned());",
+    "replace": "payouts.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Successful direct payout records survive composition."
+  },
+  {
+    "id": "QRT-065",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "issues.extend_from_slice(component);",
+    "replace": "issues.extend_from_slice(&[]);",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Component diagnostics join whole-state issues."
+  },
+  {
+    "id": "QRT-066",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "issues.extend_from_slice(gaps);",
+    "replace": "issues.extend_from_slice(&[]);",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Gap diagnostics join whole-state issues."
+  },
+  {
+    "id": "QRT-067",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "n[\"issue_type\"] = json!(\"native_audit_evidence_invalid\");",
+    "replace": "n[\"issue_type\"] = json!(\"wrong\");",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Native audit issues receive their runtime issue family."
+  },
+  {
+    "id": "QRT-068",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if assets.len()==1",
+    "replace": "if false",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Single-asset malformed bundles retain their asset scope."
+  },
+  {
+    "id": "QRT-069",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "i[\"state\"] = d[\"state\"].clone();",
+    "replace": "i[\"state\"] = json!(\"wrong\");",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Unresolved decision issues preserve arbitration state."
+  },
+  {
+    "id": "QRT-070",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "i[\"amount_msat\"] = amount;",
+    "replace": "i[\"amount_msat\"] = json!(0);",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Blocker diagnostics quantify only a positive observed amount."
+  },
+  {
+    "id": "QRT-071",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "claims.extend_from_slice(array(&gaps[0]));",
+    "replace": "claims.extend_from_slice(&[]);",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Gap source holds participate in arbitration."
+  },
+  {
+    "id": "QRT-072",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "claims.extend_from_slice(array(&native[\"claims\"]));",
+    "replace": "claims.extend_from_slice(&[]);",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Native claims participate in arbitration."
+  },
+  {
+    "id": "QRT-073",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "claims.extend_from_slice(array(&v[\"claims\"]));",
+    "replace": "claims.extend_from_slice(&[]);",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Interpreter claims participate in arbitration."
+  },
+  {
+    "id": "QRT-074",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "issues.sort_by_key(|i| (text(&i[\"occurred_at\"]), text(&i[\"issue_id\"])));",
+    "replace": "issues.reverse();",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Whole-state issues sort by lexical timestamp and identity."
+  },
+  {
+    "id": "QRT-075",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"hold_id\":id",
+    "replace": "\"hold_id\":null",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Independent hold rows preserve their exact boundary field: hold_id."
+  },
+  {
+    "id": "QRT-076",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "        json!({\"$type\":\"CustodyGapHold\",\"hold_id\":id,\"gap_id\":gap,\"transaction_id\":o[\"transaction_id\"],\"direction\":o[\"direction\"],\"quantity\":slice(o)?,\"evidence_detail_hash\":o[\"evidence_detail_hash\"]}),",
+    "replace": "        json!({\"$type\":\"CustodyGapHold\",\"hold_id\":id,\"gap_id\":null,\"transaction_id\":o[\"transaction_id\"],\"direction\":o[\"direction\"],\"quantity\":slice(o)?,\"evidence_detail_hash\":o[\"evidence_detail_hash\"]}),",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Independent hold rows preserve their exact boundary field: gap_id."
+  },
+  {
+    "id": "QRT-077",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"transaction_id\":o[\"transaction_id\"]",
+    "replace": "\"transaction_id\":null",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Independent hold rows preserve their exact boundary field: transaction_id."
+  },
+  {
+    "id": "QRT-078",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"direction\":o[\"direction\"]",
+    "replace": "\"direction\":null",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Independent hold rows preserve their exact boundary field: direction."
+  },
+  {
+    "id": "QRT-079",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"quantity\":slice(o)?",
+    "replace": "\"quantity\":null",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Independent hold rows preserve their exact boundary field: quantity."
+  },
+  {
+    "id": "QRT-080",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"evidence_detail_hash\":o[\"evidence_detail_hash\"]",
+    "replace": "\"evidence_detail_hash\":null",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Independent hold rows preserve their exact boundary field: evidence_detail_hash."
+  },
+  {
+    "id": "QRT-081",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"claim_id\":h[\"hold_id\"]",
+    "replace": "\"claim_id\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: claim_id."
+  },
+  {
+    "id": "QRT-082",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"source\":h[\"quantity\"]",
+    "replace": "\"source\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: source."
+  },
+  {
+    "id": "QRT-083",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"state\":\"custody_suspense\"",
+    "replace": "\"state\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: state."
+  },
+  {
+    "id": "QRT-084",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"priority\":{\"$enum\":\"ClaimPriority.ACCOUNTING_CONVENTION\",\"value\":40}",
+    "replace": "\"priority\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: priority."
+  },
+  {
+    "id": "QRT-085",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "    json!({\"$type\":\"QuantityClaim\",\"claim_id\":h[\"hold_id\"],\"source\":h[\"quantity\"],\"target\":null,\"state\":\"custody_suspense\",\"priority\":{\"$enum\":\"ClaimPriority.ACCOUNTING_CONVENTION\",\"value\":40},\"reason\":reason,\"atomic_bundle_id\":null,\"destination_kind\":null,\"external_economic_subtype\":null,\"transfer_kind\":null,\"transfer_policy\":null,\"component_id\":null,\"allow_cross_rail\":false})",
+    "replace": "    json!({\"$type\":\"QuantityClaim\",\"claim_id\":h[\"hold_id\"],\"source\":h[\"quantity\"],\"target\":null,\"state\":\"custody_suspense\",\"priority\":{\"$enum\":\"ClaimPriority.ACCOUNTING_CONVENTION\",\"value\":40},\"reason\":\"mutated\",\"atomic_bundle_id\":null,\"destination_kind\":null,\"external_economic_subtype\":null,\"transfer_kind\":null,\"transfer_policy\":null,\"component_id\":null,\"allow_cross_rail\":false})",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: reason."
+  },
+  {
+    "id": "QRT-086",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"atomic_bundle_id\":null",
+    "replace": "\"atomic_bundle_id\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: atomic_bundle_id."
+  },
+  {
+    "id": "QRT-087",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"destination_kind\":null",
+    "replace": "\"destination_kind\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: destination_kind."
+  },
+  {
+    "id": "QRT-088",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"external_economic_subtype\":null",
+    "replace": "\"external_economic_subtype\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: external_economic_subtype."
+  },
+  {
+    "id": "QRT-089",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"transfer_kind\":null",
+    "replace": "\"transfer_kind\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: transfer_kind."
+  },
+  {
+    "id": "QRT-090",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"transfer_policy\":null",
+    "replace": "\"transfer_policy\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: transfer_policy."
+  },
+  {
+    "id": "QRT-091",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"component_id\":null",
+    "replace": "\"component_id\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: component_id."
+  },
+  {
+    "id": "QRT-092",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "\"allow_cross_rail\":false",
+    "replace": "\"allow_cross_rail\":\"mutated\"",
+    "expect_failing": [
+      "quantity_gap_hold_composition_vectors"
+    ],
+    "rule": "Source-only hold claims preserve the exact constructor field: allow_cross_rail."
+  },
+  {
+    "id": "QRT-093",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"issue_id\":id",
+    "replace": "\"issue_id\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: issue_id."
+  },
+  {
+    "id": "QRT-094",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"issue_type\":kind",
+    "replace": "\"issue_type\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: issue_type."
+  },
+  {
+    "id": "QRT-095",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"state\":\"conflicting\"",
+    "replace": "\"state\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: state."
+  },
+  {
+    "id": "QRT-096",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"asset\":asset",
+    "replace": "\"asset\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: asset."
+  },
+  {
+    "id": "QRT-097",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"amount_msat\":null",
+    "replace": "\"amount_msat\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: amount_msat."
+  },
+  {
+    "id": "QRT-098",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"occurred_at\":at",
+    "replace": "\"occurred_at\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: occurred_at."
+  },
+  {
+    "id": "QRT-099",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"transaction_ids\":ids",
+    "replace": "\"transaction_ids\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: transaction_ids."
+  },
+  {
+    "id": "QRT-100",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"reason\":reason",
+    "replace": "\"reason\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: reason."
+  },
+  {
+    "id": "QRT-101",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"details\":details",
+    "replace": "\"details\":\"mutated\"",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Runtime issue composition preserves the exact issue field: details."
+  },
+  {
+    "id": "QRT-102",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"canonical_input\":canonical",
+    "replace": "\"canonical_input\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: canonical_input."
+  },
+  {
+    "id": "QRT-103",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"projection\":projection",
+    "replace": "\"projection\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: projection."
+  },
+  {
+    "id": "QRT-104",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"issues\":issues",
+    "replace": "\"issues\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: issues."
+  },
+  {
+    "id": "QRT-105",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"tax_eligibility\":tax",
+    "replace": "\"tax_eligibility\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: tax_eligibility."
+  },
+  {
+    "id": "QRT-106",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"gap_candidate_transaction_ids\":gaps[2]",
+    "replace": "\"gap_candidate_transaction_ids\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: gap_candidate_transaction_ids."
+  },
+  {
+    "id": "QRT-107",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"gap_holds\":gaps[3]",
+    "replace": "\"gap_holds\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: gap_holds."
+  },
+  {
+    "id": "QRT-108",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"reviewed_conversion_pairs\":comp[2]",
+    "replace": "\"reviewed_conversion_pairs\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: reviewed_conversion_pairs."
+  },
+  {
+    "id": "QRT-109",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "\"reviewed_direct_payouts\":comp[3]",
+    "replace": "\"reviewed_direct_payouts\":null",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Complete state composition retains its exact runtime field: reviewed_direct_payouts."
+  },
+  {
+    "id": "QRT-110",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "let code = if e.code.starts_with(\"custody_\")",
+    "replace": "let code = if true",
+    "expect_failing": [
+      "quantity_component_runtime_vectors"
+    ],
+    "rule": "Runtime compilation maps Python exception families to diagnostics with the exact message."
+  },
+  {
+    "id": "QRT-111",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "error = Some((code, e.message, e.details));",
+    "replace": "error = Some((code, \"mutated\".into(), e.details));",
+    "expect_failing": [
+      "quantity_component_runtime_vectors"
+    ],
+    "rule": "Runtime compilation maps Python exception families to diagnostics with the exact message."
+  },
+  {
+    "id": "QRT-112",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "blocked.contains(id) && !transient.contains(id)",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The raw-only stage preserves migration blocker selection, CPython identity and details."
+  },
+  {
+    "id": "QRT-113",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "stored::put(q, \"issue_id\", Py::Str(exact_hash.into()));",
+    "replace": "stored::put(q, \"issue_id\", Py::Str(\"mutated\".into()));",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The raw-only stage preserves migration blocker selection, CPython identity and details."
+  },
+  {
+    "id": "QRT-114",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "stored::put(q, \"reason\", reason);",
+    "replace": "stored::put(q, \"reason\", Py::Null);",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The raw-only stage preserves migration blocker selection, CPython identity and details."
+  },
+  {
+    "id": "QRT-115",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "stored::put(q, \"details\", detail);",
+    "replace": "stored::put(q, \"details\", Py::Null);",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The raw-only stage preserves migration blocker selection, CPython identity and details."
+  },
+  {
+    "id": "QRT-116",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "Some(v @ Py::Dict(_)) => v,",
+    "replace": "Some(v @ Py::Dict(_)) => {let _=v;Py::Null},",
+    "expect_failing": [
+      "quantity_runtime_wrapper_vectors"
+    ],
+    "rule": "The raw-only stage preserves migration blocker selection, CPython identity and details."
+  },
+  {
+    "id": "QRT-117",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if f.is_nan() {\"nan\"} else if *f>0.0 {\"inf\"} else {\"-inf\"}",
+    "replace": "if f.is_nan() {\"wrong\"} else if *f>0.0 {\"inf\"} else {\"-inf\"}",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Diagnostic JSON preserves CPython NaN."
+  },
+  {
+    "id": "QRT-118",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "Some(value @ kassiber_pyjson::Value::Dict(_)) => diagnostic_json(&value)?,",
+    "replace": "Some(value@kassiber_pyjson::Value::Dict(_))=>{let _=value;json!({})},",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Structured diagnostic dictionaries preserve nested values."
+  },
+  {
+    "id": "QRT-119",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "\"invalid literal for int() with base 10: {}\"",
+    "replace": "\"mutated {}\"",
+    "expect_failing": [
+      "quantity_component_runtime_vectors"
+    ],
+    "rule": "Runtime component issues preserve integer ValueError text."
+  },
+  {
+    "id": "QRT-120",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "\"int() argument must be a string, a bytes-like object or a real number, not '{}'\"",
+    "replace": "\"mutated {}\"",
+    "expect_failing": [
+      "quantity_component_runtime_vectors"
+    ],
+    "rule": "Runtime component issues preserve integer TypeError text."
+  },
+  {
+    "id": "QRT-121",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "format!(\"{state} claims require an observed target slice\")",
+    "replace": "format!(\"{state} mutated\")",
+    "expect_failing": [
+      "quantity_component_runtime_vectors"
+    ],
+    "rule": "Runtime component issues preserve targetless constructor error text."
   }
 ]

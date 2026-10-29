@@ -35,7 +35,7 @@ the feasibility spikes are in place; these remain:
 
 ## Rust backend R2
 
-The [raw custody v1 snapshot, pure Python stages and Rust components/evidence/interpretation/gaps stages](docs/reference/custody-engine.md)
+The [raw custody v1 snapshot, pure Python stages and Rust components/evidence/interpretation/gaps/quantity stages](docs/reference/custody-engine.md)
 are in place with required shadow/census comparison, CPython parser vectors,
 raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
@@ -45,13 +45,10 @@ mutation entries.
   [interpretation now participates in full-stage comparison](docs/reference/custody-engine.md#complete-interpretation-checkpoint-r2c).
 - [x] Port bounded gap search over the captured SQL worklist, including matcher
   capacity and source blockers; [gaps now participates in full-stage comparison](docs/reference/custody-engine.md#gap-search-checkpoint-r2d).
-- [ ] Port quantity arbitration and finalized tax projection, comparing each
-  stage before fusing it. Exact quantity primitives and
-  [canonical transfer rows](docs/reference/custody-engine.md#canonical-transfer-row-checkpoint-r2e-partial)
-  are ported, together with the [reviewed component/conversion compiler and
-  native augmentation](docs/reference/custody-engine.md#reviewed-compilation-and-native-augmentation-checkpoint-r2e-partial).
-  Gap holds, whole-state issues and scoped tax barriers still block
-  quantity-stage comparison.
+- [x] Complete quantity arbitration and runtime composition, including gap
+  holds, whole-state issues and scoped tax barriers;
+  [quantity now participates in full-stage comparison](docs/reference/custody-engine.md#complete-quantity-runtime-checkpoint-r2e).
+- [ ] Port finalized tax projection and compare it before journal fusion.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 

@@ -45,9 +45,26 @@ fn fallback(a: &Value, b: &Value) -> Value {
 fn integer(v: &Value) -> Result<BigInt, Error> {
     let v = if codec::truth(v) { v.clone() } else { json!(0) };
     if v.is_array() || v.is_object() {
-        return Err(family("TypeError"));
+        let mut e = family("TypeError");
+        e.message = format!(
+            "int() argument must be a string, a bytes-like object or a real number, not '{}'",
+            if v.is_array() { "list" } else { "dict" }
+        );
+        return Err(e);
     }
-    exact(&codec::integer(&v).map_err(|_| family("ValueError"))?).map_err(|_| family("ValueError"))
+    let parsed = codec::integer(&v).map_err(|_| {
+        let mut e = family("ValueError");
+        e.message = format!(
+            "invalid literal for int() with base 10: {}",
+            crate::interpretation::python_value_string(&kassiber_pyjson::Value::List(vec![
+                codec::from_json(&v).expect("JSON operand")
+            ]))
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+        );
+        e
+    })?;
+    exact(&parsed).map_err(|_| family("ValueError"))
 }
 fn tx(l: &Value) -> String {
     text(&fallback(&l["anchor_transaction_id"], &l["transaction_id"]))
@@ -478,7 +495,9 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
         }
         sources.insert(hash.clone(), end.clone());
         if start < BigInt::from(0) || end <= start {
-            return Err(family("ValueError"));
+            let mut e = family("ValueError");
+            e.message = "quantity slices require a non-empty half-open msat range".into();
+            return Err(e);
         }
         let term = array(&c["economic_terms"])
             .iter()
@@ -525,7 +544,10 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
                     targets.insert(th.clone(), te.clone());
                     if !conversion || (o["asset"] == t["asset"] && amount == target_amount) {
                         if ts < BigInt::from(0) || te <= ts {
-                            return Err(family("ValueError"));
+                            let mut e = family("ValueError");
+                            e.message =
+                                "quantity slices require a non-empty half-open msat range".into();
+                            return Err(e);
                         }
                         target = json!({"$type":"QuantitySlice","observation_hash":th,"start_msat":number(&ts),"end_msat":number(&te)});
                         cross = o["event_key"]["chain"] != t["event_key"]["chain"];
@@ -613,11 +635,27 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
         if !target.is_null() && amount != target_amount
             || destination == "retained_custody" && state != "internal_reviewed"
         {
-            return Err(family("ValueError"));
+            let mut e = family("ValueError");
+            e.message = if !target.is_null() {
+                "source and target quantity slices must conserve exact msat"
+            } else {
+                "retained_custody requires a targetless reviewed component claim"
+            }
+            .into();
+            return Err(e);
         }
         claims.push(json!({"$type":"QuantityClaim","claim_id":format!("component:{id}:allocation:{}",if codec::truth(&a["id"]) {s(&a["id"])} else {i.to_string()}),"source":{"$type":"QuantitySlice","observation_hash":hash,"start_msat":number(&start),"end_msat":number(&end)},"target":target,"state":state,"priority":{"$enum":"ClaimPriority.REVIEWED_COMPONENT","value":10},"reason":reason,"atomic_bundle_id":format!("component:{id}"),"component_id":id,"destination_kind":destination,"external_economic_subtype":subtype,"transfer_kind":if conversion {json!(text(&fallback(&c["component_type"],&json!("swap"))))} else {transfer_kind.clone()},"transfer_policy":if conversion {json!(text(&fallback(&c["conversion_policy"],&json!("taxable"))))} else {Value::Null},"allow_cross_rail":cross}));
-        super::arbitration::validate_claim(claims.last().expect("just appended"))
-            .map_err(|e| family(&e))?;
+        super::arbitration::validate_claim(claims.last().expect("just appended")).map_err(|e| {
+            let mut e = family(&e);
+            e.message =
+                if matches!(state, "internal_reviewed" | "internal_verified") && target.is_null() {
+                    format!("{state} claims require an observed target slice")
+                } else {
+                    "only targetless external_confirmed claims may classify an external destination"
+                        .into()
+                };
+            e
+        })?;
     }
     if !conversion {
         for (transaction, o) in &observations {

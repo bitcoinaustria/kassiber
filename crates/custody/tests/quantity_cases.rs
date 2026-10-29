@@ -119,3 +119,176 @@ fn quantity_reviewed_compilation_vectors() {
 fn quantity_native_augmentation_vectors() {
     composition_vectors("native");
 }
+
+#[test]
+fn quantity_scoped_tax_barrier_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_runtime.json"
+    ))
+    .unwrap();
+    for c in cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["op"] == "tax_eligibility")
+    {
+        let actual = kassiber_custody::quantity::runtime::tax_eligibility(
+            &c["canonical"],
+            &c["projection"],
+            c["issues"].as_array().unwrap(),
+            &c["rows"],
+        );
+        if let Some(error) = c["error"].as_str() {
+            assert_eq!(actual.unwrap_err(), error, "{}", c["case"]);
+        } else {
+            assert_eq!(
+                actual.unwrap_or_else(|e| panic!("{}: {e}", c["case"])),
+                c["expected"],
+                "{}",
+                c["case"]
+            );
+        }
+    }
+}
+
+#[test]
+fn quantity_gap_hold_composition_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_runtime.json"
+    ))
+    .unwrap();
+    for c in cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["op"] == "gap_holds")
+    {
+        let actual = kassiber_custody::quantity::holds::compose(
+            &c["canonical"],
+            c["ignored"].as_array().unwrap(),
+            &c["dismissed"],
+            &c["search"],
+        );
+        if let Some(error) = c["error"].as_str() {
+            assert_eq!(actual.unwrap_err(), error, "{}", c["case"]);
+        } else {
+            assert_eq!(
+                actual.unwrap_or_else(|e| panic!("{}: {e}", c["case"])),
+                c["expected"],
+                "{}",
+                c["case"]
+            );
+        }
+    }
+}
+
+#[test]
+fn quantity_whole_state_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_runtime.json"
+    ))
+    .unwrap();
+    for c in cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["op"] == "runtime")
+    {
+        let actual = kassiber_custody::quantity::runtime::build(c).unwrap();
+        assert_eq!(actual, c["expected"], "{}", c["case"]);
+    }
+}
+
+#[test]
+fn quantity_runtime_wrapper_vectors() {
+    use kassiber_custody::{
+        codec, components, evidence, gaps, interpretation, quantity, snapshot::Snapshot,
+    };
+    use kassiber_pyjson::Value as Py;
+    fn get<'a>(v: &'a Py, key: &str) -> &'a Py {
+        if let Py::Dict(v) = v {
+            if let Some((_, v)) = v
+                .iter()
+                .find(|(k, _)| *k == kassiber_pyjson::Key::Str(key.into()))
+            {
+                return v;
+            }
+        }
+        &Py::Null
+    }
+    fn restore(v: &Py) -> Py {
+        if let Py::Str(s) = get(v, "$float") {
+            return Py::Float(match s.as_str().unwrap() {
+                "nan" => f64::NAN,
+                "inf" => f64::INFINITY,
+                "-inf" => f64::NEG_INFINITY,
+                _ => panic!("float tag"),
+            });
+        }
+        match v {
+            Py::List(v) => Py::List(v.iter().map(restore).collect()),
+            Py::Dict(v) => Py::Dict(v.iter().map(|(k, v)| (k.clone(), restore(v))).collect()),
+            _ => v.clone(),
+        }
+    }
+    let Py::List(cases) = codec::loads(include_str!(
+        "../../../tests/fixtures/custody_quantity_wrappers.json"
+    ))
+    .unwrap() else {
+        panic!("vectors")
+    };
+    for c in &cases {
+        let run = || -> Result<Py, String> {
+            let s: Snapshot = serde_json::from_value(codec::to_json(get(c, "input"))).unwrap();
+            s.validate()?;
+            interpretation::admit_channels(&s)?;
+            let comp = components::compute(&s).map_err(|e| e.code.to_owned())?;
+            let migration = interpretation::migration_quarantines(&s)?;
+            let ev = evidence::compute(&s)?;
+            let i = interpretation::stage(&s, &comp, &ev, migration)?;
+            let g = gaps::stage(&s, &comp, &ev, &i)?;
+            quantity::runtime::stage(&s, &comp, &ev, &i, &g)
+        };
+        let actual = run();
+        if let Py::Str(e) = get(c, "error") {
+            assert_eq!(
+                actual.unwrap_err(),
+                e.as_str().unwrap(),
+                "{:?}",
+                get(c, "case")
+            );
+        } else {
+            assert_eq!(
+                codec::dumps(&actual.unwrap(), true).unwrap(),
+                codec::dumps(&restore(get(c, "expected")), true).unwrap(),
+                "{:?}",
+                get(c, "case")
+            );
+        }
+    }
+}
+
+#[test]
+fn quantity_component_runtime_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_runtime.json"
+    ))
+    .unwrap();
+    for c in cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["op"] == "component_runtime")
+    {
+        let actual = kassiber_custody::quantity::runtime::component_claims(
+            &c["canonical"],
+            c["components"].as_array().unwrap(),
+            &c["evidence"],
+        );
+        if let Some(e) = c["error"].as_str() {
+            assert_eq!(actual.unwrap_err(), e, "{}", c["case"]);
+        } else {
+            assert_eq!(actual.unwrap(), c["expected"], "{}", c["case"]);
+        }
+    }
+}

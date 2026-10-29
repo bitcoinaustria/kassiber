@@ -11,7 +11,10 @@ pub fn issue_id(parts: &[Py]) -> Result<(String, String), String> {
     compact_hash(
         parts
             .iter()
-            .map(|p| Py::Str(python_value_string(p).into()))
+            .map(|p| match p {
+                Py::Str(_) => p.clone(),
+                _ => Py::Str(python_value_string(p).into()),
+            })
             .collect(),
     )
 }

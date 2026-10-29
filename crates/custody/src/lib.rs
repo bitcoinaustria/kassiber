@@ -57,15 +57,20 @@ pub fn custody(request: &str) -> String {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
             };
+            let quantity = match quantity::runtime::stage(&snapshot, &components, &evidence, &interpretation, &gaps) {
+                Ok(value) => value,
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+            };
             let response = serde_json::json!({
                 "schema_version":1,
                 "engine_version":ENGINE_VERSION,
                 "stages":{"components":components,"evidence":evidence,"gaps":gaps},
-                "skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence"|"interpretation"|"gaps")).collect::<Vec<_>>()
+                "skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence"|"interpretation"|"gaps"|"quantity")).collect::<Vec<_>>()
             });
             let mut response = codec::from_json(&response).expect("computed custody response");
             let mut stages = graph::stored::get(&response, "stages").clone();
             graph::stored::put(&mut stages, "interpretation", interpretation);
+            graph::stored::put(&mut stages, "quantity", quantity);
             graph::stored::put(&mut response, "stages", stages);
             kassiber_pyjson::dumps(&response, &kassiber_pyjson::Options::new())
                 .expect("computed JSON values")

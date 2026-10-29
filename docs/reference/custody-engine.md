@@ -74,17 +74,18 @@ a partial successful stage. Persisted hashes always use CPython-compatible JSON
 from `kassiber-pyjson`; decimal arithmetic uses `kassiber-pydecimal`.
 
 Rust currently implements `components`, `evidence`, the complete
-`interpretation` stage and `gaps`. The component
+`interpretation` stage, `gaps` and `quantity`. The component
 result is `{"components": [...], "blockers": [...]}` with the exact Python
 materialization and integrity blockers. Its invalid authored-active rows stay
 visible with `effective_state="draft"`; their anchor quarantine and readiness
-barriers remain intact. Quantity and finalized projection are explicitly
-skipped. Interpretation includes native component reconciliation and the final
+barriers remain intact. Only finalized projection is explicitly skipped. Interpretation includes native component reconciliation and the final
 Python compilation/precedence; the [completion checkpoint](#complete-interpretation-checkpoint-r2c)
 records its proof. The [gap checkpoint](#gap-search-checkpoint-r2d) records the
-bounded search and separate advisory/accounting populations. The checkpoints
-below describe historical states. Schema 1's existing raw facts suffice; neither
-stage adds a Python verdict to the input.
+bounded search and separate advisory/accounting populations. The
+[quantity checkpoint](#complete-quantity-runtime-checkpoint-r2e) records complete
+runtime composition and scoped tax barriers. The checkpoints below describe
+historical states. Schema 1's existing raw facts suffice; no stage adds a Python
+verdict to the input.
 
 ## Test-only recording and comparison
 
@@ -2000,3 +2001,108 @@ whole-state issues (including authored-component evidence drift/fail-closed
 composition), scoped tax barriers, finalized projection and journal fusion
 remain unported. Python stays authoritative and Rust results never reach
 stored state. No Python reference bug was identified in this checkpoint.
+
+## Complete quantity runtime checkpoint (R2e)
+
+Branch `t3code/r2e-quantity-4`, based on `a4151d44`, ports the remaining
+quantity runtime composition: advisory gap holds, whole-state issues and scoped
+tax eligibility. `quantity` now participates in the PyO3, census and custody-shadow
+stage inventories. Only `finalized_projection` remains skipped. Python remains
+authoritative, Rust results never reach stored state, and snapshot v1 remains
+raw-only. Finalized tax projection and journal fusion are outside this checkpoint.
+
+Gap candidates validate their ordered boundary ids, observations, profile,
+identity, asset/chain/network, wallets and exact quantities before producing
+independent holds. Current dismissal fingerprints suppress only that candidate;
+capacity holds select only an affected outbound principal. Compiler disagreements
+keep both boundaries in review and emit source suspense, never a destination edge.
+Overlapping suggestions retain independent diagnostic/return identities while
+source claims are deduplicated by their exact slices.
+
+Runtime composition includes authored-active invalidity, author-local evidence
+drift and compiler failures; canonical rejections; malformed bundles; native
+audit and interpreter blockers; and unresolved decisions. Compiler `TypeError`
+and `ValueError` become `custody_component_claim_compile` issues with their
+original messages, rather than leaking the exception family as the issue reason.
+Uncaught families preserve Python admission order. Diagnostic issues remain
+unquantified where source decisions already quantify the same suspense.
+
+Tax barriers isolate profile/network/exposure/unit while sharing Bitcoin basis
+across rails. Each pool keeps its earliest canonical event and all roots at that
+event. Finalized sibling slices remain eligible; a different event at the same
+lexical timestamp fails closed. Native/gap issues directly block their named
+observations. Rejected rows resolve only pool scope, without granting event
+identity; a truly unscoped contradiction affects every observed pool.
+
+All msat arithmetic uses `BigInt`. CPython case and lexical timestamp semantics
+are retained. Migration quarantines keep nonfinite diagnostic values and
+surrogate identifiers in the CPython value representation through serialization.
+A surrogate identifier cannot match a UTF-8 raw row; its temporary absent-row
+lookup supplies neither quantity nor a temporal barrier. Exact ids, reasons and
+details are restored before output. The private primitive fixture serializer
+uses the existing `$float` tags for nonfinite details; this is not a snapshot
+field or a product interface.
+
+### Generated and frozen evidence
+
+The frozen runtime corpus captures the existing Python behavior assertions and
+adds malformed-boundary, capacity/dismissal, blocker JSON and compiler-diagnostic
+controls. Every generated scenario has a separately compared positive companion;
+its primary result is also compared, including refusals. Both engines assert the
+checked-in per-scenario activity manifest, and reversed operands are independently
+re-evaluated by Python.
+
+| Runtime operand family | Frozen scenarios | Generated batches per engine | Active results per engine |
+| --- | ---: | ---: | ---: |
+| Gap-hold composition | 97 | 1,940 | 5,920 |
+| Scoped tax barriers | 68 | 1,360 | 4,120 |
+| Whole-state composition | 63 | 1,260 | 5,290 |
+| Component runtime diagnostics | 83 | 1,660 | 7,800 |
+| **Total** | **311** | **6,220** | **23,130** |
+
+These batches make **12,440 calls per engine**, plus **12,440 reversed calls**.
+The 106 inherited admission/migration wrapper cases also compare complete
+quantity, including CPython diagnostic scalars, surrogate identities and refusal
+families. The inherited twelve raw snapshot suites compare quantity on
+**24,000 books and 1,030 permutations**, with zero differences. Empty/refusal
+scenarios retain an independently checked active companion.
+
+### Mutation catalog and verification
+
+The catalog contains **1,918 entries: 1,797 inherited and 121 new**. New entries
+name `quantity_gap_hold_composition_vectors`,
+`quantity_scoped_tax_barrier_vectors`, `quantity_whole_state_vectors`,
+`quantity_component_runtime_vectors` and `quantity_runtime_wrapper_vectors`.
+Six inherited recipes are recontextualized for the richer compiler diagnostics.
+Two of those now change the reachable zero-offset boundary: omitting the local
+range check alone is equivalent to the later claim constructor's range check,
+and is not counted as a mutation kill.
+
+All **1,918 mutations are killed**, including the complete **1,797-entry inherited
+catalog**. Every counted result retains a passing unmutated named test, a building
+mutant and a failing named witness.
+Interrupted trials, equivalent omissions, nonbuilding mutants and failed
+baselines contribute no result. Each concurrent batch owns its target directory;
+targeted reruns build the test binary that contains the catalog's named witness.
+The per-entry audit is `target/r2e4-verify/mutation-summary.json`.
+
+Verified integration evidence at this boundary:
+
+- Focused census and custody-shadow each pass **91 tests and 36 subtests**.
+  Each compares quantity on **40 builds**, with **zero mismatches**; shadow
+  also completes **40 frozen Python comparisons**. Finalized projection stays
+  at **0 compared, 40 skipped** in each lane.
+- Read-only retained replay compares **159 requests and 159 permutations**,
+  requires quantity and reports **zero differences and pre-request refusals**.
+  Fresh worktree recordings replay as **80 requests and 80 permutations**, also
+  with zero differences or pre-request refusals.
+- The enabled-stage generator run passes **41 tests**, including the inherited
+  raw generators, complete quantity comparisons, primitive/compiler fixtures,
+  scenario activity and permutations. Harness/snapshot/mutation contracts pass
+  **44 tests and 14 subtests**, including quantity discrepancy injection.
+- Rust formatting and workspace all-target Clippy with `-D warnings` pass.
+  Workspace tests pass **782 tests** (764 ordinary and 18 isolated socket tests).
+  Full census/shadow shards remain assigned to the orchestrator.
+
+No Python reference bug has been identified. Remaining work is finalized
+projection, followed by journal fusion with `ledger` after its own parity gate.

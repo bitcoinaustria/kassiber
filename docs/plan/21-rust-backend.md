@@ -1534,6 +1534,19 @@ Quantity remains skipped. Gap holds, whole-state issue composition, scoped tax
 barriers and finalized projection still precede journal fusion. Python owns
 production decisions and persistence; snapshot v1 stays raw-only.
 
+### Complete quantity runtime (R2e)
+
+The local `t3code/r2e-quantity-4` checkpoint, based on `a4151d44`, adds gap-hold
+composition, component/runtime diagnostics, whole-state issues and scoped tax
+barriers. Quantity now participates in PyO3, census and custody-shadow comparison;
+only finalized projection remains skipped. Exact msat, CPython diagnostics and
+raw-only admission retain their existing boundaries. See the
+[checkpoint evidence](../reference/custody-engine.md#complete-quantity-runtime-checkpoint-r2e).
+
+Finalized projection and journal fusion remain separate work. Python continues
+to own production decisions and persistence, and snapshot v1 contains no Rust
+compiler operands or verdicts.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

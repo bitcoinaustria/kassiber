@@ -1,5 +1,7 @@
 //! Test-only JSONL driver for primitive parity; this is not snapshot admission.
-use kassiber_custody::quantity::{allocation, balances, native, project, reviewed, transfers};
+use kassiber_custody::quantity::{
+    allocation, balances, holds, native, project, reviewed, runtime, transfers,
+};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 fn main() {
@@ -29,6 +31,24 @@ fn main() {
                 &v["projection"],
                 v["eligible"].as_array().unwrap(),
                 &v["refs"],
+            ),
+            "component_runtime" => runtime::component_claims(
+                &v["canonical"],
+                v["components"].as_array().unwrap(),
+                &v["evidence"],
+            ),
+            "runtime" => runtime::build(&v),
+            "gap_holds" => holds::compose(
+                &v["canonical"],
+                v["ignored"].as_array().unwrap(),
+                &v["dismissed"],
+                &v["search"],
+            ),
+            "tax_eligibility" => runtime::tax_eligibility(
+                &v["canonical"],
+                &v["projection"],
+                v["issues"].as_array().unwrap(),
+                &v["rows"],
             ),
             "native" => native::compile(
                 &v["canonical"],

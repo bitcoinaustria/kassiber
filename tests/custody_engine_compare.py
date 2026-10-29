@@ -105,8 +105,8 @@ def rust_results(snapshot, *, python_error=None):
 def compare_rust(snapshot, evidence, *, python_stages=None):
     results, skipped = rust_results(snapshot)
     if python_stages is None:
-        from tests.custody_gap_stage import python_stages as gap_stages
-        stages = {**gap_stages(snapshot), "evidence": evidence}
+        from tests.custody_quantity_stage import python_stages as quantity_stages
+        stages = {**quantity_stages(snapshot), "evidence": evidence}
     else:
         stages = python_stages
     compared = []
