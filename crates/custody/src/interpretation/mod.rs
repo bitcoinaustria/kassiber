@@ -31,6 +31,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use migration::quarantines as migration_quarantines;
 
+pub(crate) fn canonical_event_repr(event: &Value) -> String {
+    text::event_repr(event)
+}
+
 /// Python loads channel context before materializing components.
 pub fn admit_channels(snapshot: &Snapshot) -> Result<(), String> {
     channels::compute(snapshot).map(|_| ())

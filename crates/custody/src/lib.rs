@@ -8,6 +8,7 @@ mod graph;
 pub mod interpretation;
 mod liquid;
 mod python_text;
+pub mod quantity;
 pub mod snapshot;
 
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");

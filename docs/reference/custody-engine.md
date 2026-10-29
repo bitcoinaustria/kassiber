@@ -1637,3 +1637,165 @@ Full census/custody-shadow shards remain assigned to the orchestrator; they were
 not run here. The next stage is **quantity arbitration**, followed by finalized
 projection and journal fusion with `ledger`. Quantity still owns the complete
 reviewed-component/tax-claim arbitration and downstream report blockers.
+
+## Quantity primitive checkpoint (R2e, partial)
+
+Branch `t3code/r2e-quantity` starts at `23c059dc`. This checkpoint ports
+`custody_quantity.py`'s arbitration kernel, `allocate_msat_fifo`,
+`compare_wallet_balances`, and the quantity issue, custody-decision and economic
+relation identity helpers. It does **not** implement the complete `quantity`
+stage. PyO3, census and custody-shadow continue to list `quantity` and
+`finalized_projection` as skipped. A regression pins that inventory.
+
+The new pure `crates/custody/src/quantity` module validates observations and
+claim bundles, isolates malformed bundles as source suspense, splits source
+slices, rejects incompatible authoritative interpretations and equal-priority
+overlap, rejects transitive destination collisions, enforces atomic completeness,
+and emits balanced wallet/fee/external/suspense/conflict postings. Integer msat
+arithmetic uses `BigInt` throughout, including capacities, coordinates and
+balances above `i128`. No new code calls `codec::wide()`. CPython case,
+whitespace, Unicode decimal and compact JSON helpers preserve identities and
+error families. Arbitration retains Python's lexical ordering of recorded
+timestamps; it introduces no timestamp parser. The inherited corrected parser
+continues to own chronological admission in earlier stages.
+
+FIFO returns source and sink offsets, allocated quantity and both ordered
+residual lists. It admits source buckets before sink buckets, requested quantity
+and capacity checks, retaining Python's allocation codes, messages and details.
+The JSON test seam accepts the finite iterable shapes represented in fixtures;
+arbitrary Python objects and custom iterators cannot reach a Rust snapshot.
+Wallet differences compare exact derived postings with current engine balances
+without granting the engine authority. Only one distinct known non-event reason
+may explain a difference. The hash helpers match **44 issue ids and 28 stored
+decision/relation ids**, including every preimage byte; the 12 component
+commitment ids remain covered by the earlier component port. Hash fixtures are
+embedded so cached test binaries do not depend on deleted mutation scratch paths.
+
+### Evidence and branch dispositions
+
+The frozen CPython primitive corpus contains **374 arbitration cases** (320
+successful projections and 54 refusals), **519 distinct claim-constructor
+controls**, **80 FIFO cases** and **36 wallet comparisons**. It captures the
+existing Python quantity and runtime behavior pins independently of Rust, then
+adds isolated constructor guards, semantic metadata disagreements, malformed
+bundles, exact boundary capacities and integer quantities beyond machine size.
+The fixture regeneration check executes the original Python assertions too.
+
+The separate generator compares **2,000 projections and 2,000 permutations**.
+Both engines independently assert this per-scenario count matrix; signatures
+and exact counts are checked in
+[`custody_quantity_primitive_counts.json`](../../tests/fixtures/custody_quantity_primitive_counts.json).
+These are primitive inputs, separate from raw v1 snapshots and stage outputs.
+
+| Scenario | Books per engine | Decision states |
+| --- | ---: | --- |
+| `unmatched` | 118 | 1 external presumed |
+| `fee_only` | 118 | No principal decision |
+| `fee_inclusive` | 118 | 1 external presumed |
+| `native` | 118 | 1 internal verified |
+| `partial_native` | 118 | 1 internal verified, 1 external presumed |
+| `source_conflict` | 118 | 1 conflicting |
+| `equal_priority` | 118 | 1 conflicting |
+| `destination_conflict` | 118 | 2 conflicting |
+| `atomic` | 118 | 1 internal reviewed, 1 custody suspense |
+| `atomic_partial` | 118 | 2 conflicting |
+| `retained` | 118 | 1 internal reviewed |
+| `reviewed_external` | 117 | 1 external confirmed, gift subtype retained |
+| `external_fee` | 117 | 1 external confirmed fee |
+| `negative_balance_hold` | 117 | 1 custody suspense |
+| `domain_reject` | 117 | 1 custody suspense |
+| `cross_rail` | 117 | 1 internal verified |
+| `one_msat` | 117 | 1 internal verified |
+
+The negative-balance case supplies an explicit interpreter hold against an
+observed debit without prior funding. It proves arbitration preserves that hold;
+it does not claim a new automatic negative-balance detector. Frozen replay also
+compares all 374 cases and permutes all 320 successful projections. Refusal
+inputs retain admission order.
+
+Every ported Python decision has a mutation witness or this disposition:
+
+- The Python dataclasses are constructed before arbitration. Their JSON forms
+  are private intermediate inputs, not new raw facts or snapshot fields.
+  Constructor tests isolate guards otherwise masked by later conservation or
+  posting checks, preserving `ValueError` families without counting a later
+  failure as a constructor witness.
+- Enum membership admits only priorities 10, 20 and 40. Every nonempty bundle
+  therefore has a suspense-compatible minimum. The Python empty-priority
+  fallback and Rust `unwrap_or(40)` cannot run for admitted claims. Dataclass
+  state/priority, target, subtype, destination and bundle guards are independently
+  exercised.
+- Source boundaries are a sorted set, so Python's adjacent `start == end`
+  branch cannot run. Every target-bearing decision has a nonempty selected id;
+  overlap-cluster missing/empty-id filters are equivalent after admission.
+  Likewise, targetless internal posting failures are unreachable after claim
+  construction except the explicitly permitted reviewed retained location.
+- Exact integer parsing independently rejects nonintegers through `BigInt`'s
+  grammar. Removing only its preliminary JSON-type guard is equivalent, so the
+  surviving trial was excluded, not counted as a kill. Observation and FIFO
+  amount/type guards have independent witnesses.
+- The final conservation assertion cannot fail for valid inputs with the
+  preceding arithmetic intact. Posting, fee, origin, domain and target mutations
+  exercise the invariant through actual regressions; no fabricated unbalanced
+  successful input is used to claim a separate assertion mutation.
+- Complete projections bind every wallet posting to its observation; the
+  balance helper's missing-observation lookup is defensive and cannot occur
+  in the stage. Python custom object/iterator behavior and non-string reason
+  sets are outside the typed, JSON-representable caller contract.
+- The remaining quantity runtime branches are **unported**, not unreachable:
+  full reviewed conversion/economic terms and diagnostics, native audit virtual
+  sources/targets, gap-hold validation and dismissal/capacity composition,
+  rejected-event/interpreter issues, scoped eligibility barriers and canonical
+  internal-transfer rows still belong to the next quantity checkpoint.
+
+### Mutation catalog and verification
+
+The catalog has **1,431 entries: 1,315 retained and 116 new**. Named witnesses
+are selected independently; every counted kill requires a successful baseline,
+a building mutant and a failing named test. Equivalent trials and failed
+baselines are excluded.
+
+| Area | New entries | Named witnesses |
+| --- | ---: | --- |
+| Exact observation admission, domain and boundary arithmetic | 23 | `quantity_arbitration_vectors` |
+| Claim construction, bundle validation, source/target arbitration and postings | 65 | `quantity_claim_constructor_vectors`, `quantity_arbitration_vectors` |
+| FIFO admission, capacity, offsets and residuals | 17 | `quantity_fifo_vectors` |
+| Wallet differences and explanations | 5 | `quantity_balance_vectors` |
+| Quantity identity preimages | 6 | `quantity_issue_ids_match_all_r0_vectors`, `quantity_store_ids_match_all_r0_vectors` |
+| **New total** | **116** | |
+
+All **1,431 ids have named-test kills in this run**, including all **1,315
+inherited entries** in four disjoint runs of 329, 329, 329 and 328. New-rule
+rechecks use the final isolated constructor/semantic/FIFO witnesses; no survivor,
+nonbuilding mutant, failed baseline or equivalent trial counts as a kill.
+
+Verification uses Rust 1.99.1, locked Python 3.11, `MATURIN_NO_INSTALL_RUST=1`,
+offline Cargo including mutation children, and disposable data/target roots.
+The Python implementation, snapshot schema, production authority and persistence
+remain unchanged. Full census/custody-shadow shards remain assigned to the
+orchestrator; the focused lanes deliberately report zero quantity comparisons
+until complete runtime composition is implemented.
+
+- Workspace formatting, all-target workspace Clippy with warnings denied and
+  locked workspace tests excluding `kassiber-net` pass **756 tests**.
+- The primitive Python suite passes its frozen regeneration, generated counts,
+  2,000 permutations, 374 recorded primitive replays, 320 successful replay
+  permutations and skipped-stage inventory guard. The inherited full generator
+  suite passes **17 tests**, retaining **24,000 books and 1,030 permutations**
+  across its twelve raw snapshot suites and 515 scenarios.
+- Focused quantity/runtime/view/handler/hash Python modules pass **101 tests
+  and 2,605 subtests**. Focused census and custody-shadow each pass **84 tests
+  and 22 subtests**; each compares the four implemented stages on **40 builds**,
+  and shadow also completes **40 frozen Python comparisons**.
+- Raw recorded replay passes **159 requests and 159 permutations**: the
+  retained 73 census and 6 shadow recordings plus 40 fresh recordings from each
+  focused lane. There are zero differences and zero pre-request refusals.
+- Inventory/contracts and mutation-runner contracts pass **13 tests and 14
+  subtests**; shard inventory and all 1,431 mutation applicability checks pass.
+  The shared JSON-feature check retains **145 byte-identical ledger outputs**.
+- Manual second review checks branch correspondence, exact msat, CPython
+  identity preimages, admission order, overlap/atomic fail-closed behavior,
+  unchanged raw snapshot admission and the absence of production Rust writes.
+
+Remaining work is the complete quantity runtime composition listed above,
+followed by **finalized projection** and journal fusion with `ledger`.

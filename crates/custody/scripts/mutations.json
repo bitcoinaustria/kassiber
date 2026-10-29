@@ -13162,5 +13162,1165 @@
     "expect_failing": [
       "gaps_cursor_vectors"
     ]
+  },
+  {
+    "id": "quantity-admission-included-principal",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "\n            amount - exact(&v[\"fee_msat\"])?",
+    "replace": "amount + exact(&v[\"fee_msat\"])?",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "An included outbound fee is removed exactly once from principal."
+  },
+  {
+    "id": "quantity-admission-inbound-delta",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "if v[\"direction\"] == \"inbound\" {\n        amount",
+    "replace": "if v[\"direction\"] == \"inbound\" {\n        -amount",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Inbound observed wallet deltas are positive."
+  },
+  {
+    "id": "quantity-admission-inclusive-delta",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "} else if codec::truth(&v[\"amount_includes_fee\"]) {\n        -amount",
+    "replace": "} else if codec::truth(&v[\"amount_includes_fee\"]) {\n        -amount - exact(&v[\"fee_msat\"])?",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Fee-inclusive wallet debits do not charge a second fee."
+  },
+  {
+    "id": "quantity-admission-exclusive-delta",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "\n        -amount - exact(&v[\"fee_msat\"])?",
+    "replace": "-amount + exact(&v[\"fee_msat\"])?",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Fee-exclusive wallet debits include the fee."
+  },
+  {
+    "id": "quantity-admission-network-liquidv1",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "\"liquidv1\" => \"main\"",
+    "replace": "\"liquidv1\" => \"changed\"",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Reviewed cross-rail domains normalize Liquid network names."
+  },
+  {
+    "id": "quantity-admission-network-liquidtestnet",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "\"liquidtestnet\" => \"test\"",
+    "replace": "\"liquidtestnet\" => \"changed\"",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Reviewed cross-rail domains normalize Liquid network names."
+  },
+  {
+    "id": "quantity-admission-network-elementsregtest",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "\"elementsregtest\" => \"regtest\"",
+    "replace": "\"elementsregtest\" => \"changed\"",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Reviewed cross-rail domains normalize Liquid network names."
+  },
+  {
+    "id": "quantity-admission-asset-exposure",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "matches!(asset.as_str(), \"BTC\" | \"LBTC\")",
+    "replace": "matches!(asset.as_str(), \"BTC\")",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "BTC and LBTC share Bitcoin exposure."
+  },
+  {
+    "id": "quantity-admission-identity",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "if !codec::truth(&v[key]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Observations require transaction, anchor and wallet identities."
+  },
+  {
+    "id": "quantity-admission-hash-size",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "s.chars().count() != 64",
+    "replace": "s.chars().count() == 64",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Observation hashes must have SHA-256 length."
+  },
+  {
+    "id": "quantity-admission-hash-case",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "s != s.py_lower()",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Observation hashes must use CPython lowercase."
+  },
+  {
+    "id": "quantity-admission-hash-leading-underscore",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "!previous_digit && !(i == 0 && stripped.contains(\"0x\"))",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Hexadecimal hash admission rejects a leading or consecutive underscore."
+  },
+  {
+    "id": "quantity-admission-hash-hex",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": ".map(|digit| char::from(b'0' + digit))",
+    "replace": ".map(|_| c)",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "CPython hexadecimal parsing accepts Unicode decimal digits."
+  },
+  {
+    "id": "quantity-admission-hash-character",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "} else {\n                return fail();\n            }",
+    "replace": "} else {\n                previous_digit = true;\n            }",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Non-hex characters cannot establish a quantity identity."
+  },
+  {
+    "id": "quantity-admission-hash-trailing-underscore",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "if !previous_digit {",
+    "replace": "if false {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "A hexadecimal hash cannot end with an underscore."
+  },
+  {
+    "id": "quantity-admission-direction",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "!matches!(v[\"direction\"].as_str(), Some(\"inbound\" | \"outbound\"))",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only inbound and outbound quantities are admitted."
+  },
+  {
+    "id": "quantity-admission-asset-required",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "|| !codec::truth(&v[\"asset\"])",
+    "replace": "|| false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Observations require an asset."
+  },
+  {
+    "id": "quantity-admission-negative-amount",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "amount < BigInt::from(0) || fee < BigInt::from(0)",
+    "replace": "fee < BigInt::from(0)",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Negative observed principal is rejected."
+  },
+  {
+    "id": "quantity-admission-negative-fee",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "amount < BigInt::from(0) || fee < BigInt::from(0)",
+    "replace": "amount < BigInt::from(0)",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Negative observed fees are rejected."
+  },
+  {
+    "id": "quantity-admission-inbound-included",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "v[\"direction\"] == \"inbound\" && inclusive",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Inbound quantities cannot include fees."
+  },
+  {
+    "id": "quantity-admission-zero-principal",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "amount == BigInt::from(0) && !(v[\"direction\"] == \"outbound\" && fee > BigInt::from(0))",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only a fee-only outbound may have zero observed quantity."
+  },
+  {
+    "id": "quantity-admission-included-capacity",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "inclusive && fee > amount",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "An included fee cannot exceed the observed amount."
+  },
+  {
+    "id": "quantity-arbitration-empty-hash",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "hash.is_empty() || start < BigInt::from(0) || end <= start",
+    "replace": "start < BigInt::from(0) || end <= start",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Slices require an observation identity."
+  },
+  {
+    "id": "quantity-arbitration-negative-start",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "hash.is_empty() || start < BigInt::from(0) || end <= start",
+    "replace": "hash.is_empty() || end <= start",
+    "expect_failing": [
+      "quantity_claim_constructor_vectors"
+    ],
+    "rule": "Slice offsets cannot be negative."
+  },
+  {
+    "id": "quantity-arbitration-empty-slice",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "hash.is_empty() || start < BigInt::from(0) || end <= start",
+    "replace": "hash.is_empty() || start < BigInt::from(0)",
+    "expect_failing": [
+      "quantity_claim_constructor_vectors"
+    ],
+    "rule": "Slices are nonempty half-open ranges."
+  },
+  {
+    "id": "quantity-arbitration-claim-id",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "id.is_empty() || !codec::truth(&v[\"reason\"])",
+    "replace": "!codec::truth(&v[\"reason\"])",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Claims require a stable id."
+  },
+  {
+    "id": "quantity-arbitration-claim-reason",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "id.is_empty() || !codec::truth(&v[\"reason\"])",
+    "replace": "id.is_empty()",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Claims require an evidence reason."
+  },
+  {
+    "id": "quantity-arbitration-priority-reviewed",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "Some(10) => 10",
+    "replace": "Some(10) => 20",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Reviewed evidence retains its strongest priority."
+  },
+  {
+    "id": "quantity-arbitration-priority-native",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "Some(20) => 20",
+    "replace": "Some(20) => 40",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Exact native evidence retains its evidence rank."
+  },
+  {
+    "id": "quantity-arbitration-priority-convention",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "Some(40) => 40",
+    "replace": "Some(40) => 20",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Advisory holds remain accounting conventions."
+  },
+  {
+    "id": "quantity-arbitration-state-native",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "\"internal_verified\" => priority == 20",
+    "replace": "\"internal_verified\" => true",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only exact native claims may assert verified custody."
+  },
+  {
+    "id": "quantity-arbitration-state-reviewed",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "\"internal_reviewed\" => priority == 10",
+    "replace": "\"internal_reviewed\" => true",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only reviewed components may assert reviewed custody."
+  },
+  {
+    "id": "quantity-arbitration-state-external",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "\"external_confirmed\" => matches!(priority, 10 | 20)",
+    "replace": "\"external_confirmed\" => true",
+    "expect_failing": [
+      "quantity_claim_constructor_vectors"
+    ],
+    "rule": "An accounting convention cannot confirm an external destination."
+  },
+  {
+    "id": "quantity-arbitration-state-unsupported",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "_ => false,\n        };\n        if !supported",
+    "replace": "_ => true,\n        };\n        if !supported",
+    "expect_failing": [
+      "quantity_claim_constructor_vectors"
+    ],
+    "rule": "Unsupported claim states are rejected."
+  },
+  {
+    "id": "quantity-arbitration-target-required",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "target_state && target.is_none() && !retained",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_claim_constructor_vectors"
+    ],
+    "rule": "An internal claim needs a target except reviewed retained custody."
+  },
+  {
+    "id": "quantity-arbitration-target-forbidden",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "!target_state && target.is_some()",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_claim_constructor_vectors"
+    ],
+    "rule": "Targetless states cannot consume an observed destination."
+  },
+  {
+    "id": "quantity-arbitration-target-conservation",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "target\n                .as_ref()\n                .is_some_and(|t| t.amount() != source.amount())",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Source and target slices conserve exact msat."
+  },
+  {
+    "id": "quantity-arbitration-bundle-nonempty",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "&& codec::pystr(&v[\"atomic_bundle_id\"]).py_strip().is_empty()",
+    "replace": "&& false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Atomic bundle identities cannot contain only CPython whitespace."
+  },
+  {
+    "id": "quantity-arbitration-destination-supported",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "!matches!(destination, Some(\"external\" | \"fee\" | \"retained_custody\"))",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Claims reject unsupported destination kinds."
+  },
+  {
+    "id": "quantity-arbitration-external-destination",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "&& !(state == \"external_confirmed\" && target.is_none())",
+    "replace": "&& false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only targetless external-confirmed claims classify external and fee destinations."
+  },
+  {
+    "id": "quantity-arbitration-retained-review",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "destination == Some(\"retained_custody\") && !retained",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Retained custody must be a targetless reviewed component claim."
+  },
+  {
+    "id": "quantity-arbitration-subtype-supported",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "Some(\"payment\" | \"disposal\" | \"gift\" | \"lost\")",
+    "replace": "Some(\"payment\" | \"disposal\" | \"gift\")",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "All supported external economic subtypes preserve their meaning."
+  },
+  {
+    "id": "quantity-arbitration-subtype-review",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "&& priority == 10\n                && target.is_none()",
+    "replace": "&& priority == 20\n                && target.is_none()",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "External economic subtypes need reviewed component authority."
+  },
+  {
+    "id": "quantity-arbitration-cross-rail-target",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "codec::truth(&v[\"allow_cross_rail\"]) && target.is_none()",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only target-bearing claims may bridge rails."
+  },
+  {
+    "id": "quantity-arbitration-single-review-bundle",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "} else if priority == 10 {",
+    "replace": "} else if priority == 20 {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Unbundled reviewed claims receive an atomic single-claim bundle."
+  },
+  {
+    "id": "quantity-arbitration-target-offset",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "&t.start + &source.start - &self.source.start",
+    "replace": "&t.start + &source.start + &self.source.start",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Selected subranges retain target offsets relative to their original source."
+  },
+  {
+    "id": "quantity-arbitration-semantic-state",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.value[\"state\"],",
+    "replace": "Value::Null,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative semantic agreement includes state."
+  },
+  {
+    "id": "quantity-arbitration-semantic-destination_kind",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.value[\"destination_kind\"],",
+    "replace": "Value::Null,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative semantic agreement includes destination_kind."
+  },
+  {
+    "id": "quantity-arbitration-semantic-external_economic_subtype",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.value[\"external_economic_subtype\"],",
+    "replace": "Value::Null,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative semantic agreement includes external_economic_subtype."
+  },
+  {
+    "id": "quantity-arbitration-semantic-transfer_kind",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.value[\"transfer_kind\"],",
+    "replace": "Value::Null,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative semantic agreement includes transfer_kind."
+  },
+  {
+    "id": "quantity-arbitration-semantic-transfer_policy",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.value[\"transfer_policy\"],",
+    "replace": "Value::Null,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative semantic agreement includes transfer_policy."
+  },
+  {
+    "id": "quantity-arbitration-semantic-component_id",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.value[\"component_id\"]\n        ])",
+    "replace": "Value::Null\n        ])",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative semantic agreement includes component identity."
+  },
+  {
+    "id": "quantity-arbitration-semantic-target",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.target_at(source).map(|s| s.value()),",
+    "replace": "Value::Null,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Authoritative agreement includes the exact projected target slice."
+  },
+  {
+    "id": "quantity-arbitration-duplicate-observation",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ".is_some()\n        {\n            return Err(\"ValueError\".into());",
+    "replace": ".is_none()\n        {\n            return Err(\"ValueError\".into());",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Duplicate canonical observation hashes are refused."
+  },
+  {
+    "id": "quantity-arbitration-bundle-rank",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "!= 1\n        {\n            reasons.insert(\"atomic_bundle_priority_mismatch\");",
+    "replace": "== 1\n        {\n            reasons.insert(\"atomic_bundle_priority_mismatch\");",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "An atomic bundle must have one evidence rank."
+  },
+  {
+    "id": "quantity-arbitration-duplicate-claim",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "counts[&c.id] > 1",
+    "replace": "counts[&c.id] > 2",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Duplicate claim ids invalidate their whole bundles."
+  },
+  {
+    "id": "quantity-arbitration-source-direction",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ".filter(|s| s[\"direction\"] == \"outbound\")",
+    "replace": ".filter(|s| s[\"direction\"] == \"inbound\")",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only observed outbound slices may be claimed as sources."
+  },
+  {
+    "id": "quantity-arbitration-source-capacity",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "claim.source.end > principal(source)?",
+    "replace": "claim.source.end >= principal(source)?",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Source endpoints may equal but never exceed principal."
+  },
+  {
+    "id": "quantity-arbitration-target-direction",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ".filter(|t| t[\"direction\"] == \"inbound\")",
+    "replace": ".filter(|t| t[\"direction\"] == \"outbound\")",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only observed inbound slices may be consumed as destinations."
+  },
+  {
+    "id": "quantity-arbitration-target-capacity",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "target_slice.end > principal(target)?",
+    "replace": "target_slice.end >= principal(target)?",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Destination endpoints may equal but never exceed principal."
+  },
+  {
+    "id": "quantity-arbitration-domain-fields",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "[\"network\", \"exposure\", \"unit\"].iter().any(|k| a[k] != b[k])",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Claims conserve the network and exposure domain."
+  },
+  {
+    "id": "quantity-arbitration-domain-rail",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "a[\"rail\"] != b[\"rail\"] && !codec::truth(&claim.value[\"allow_cross_rail\"])",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Cross-rail claims require explicit authority."
+  },
+  {
+    "id": "quantity-arbitration-invalid-priority",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "(*p).min(priority)",
+    "replace": "(*p).max(priority)",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "A source invalidated by several bundles retains the strongest hold rank."
+  },
+  {
+    "id": "quantity-arbitration-malformed-hold",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "\"reason\":\"malformed_claim_bundle\"",
+    "replace": "\"reason\":\"unmatched_outbound_default\"",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Malformed bundles are represented by fail-closed source suspense."
+  },
+  {
+    "id": "quantity-arbitration-residual-suspense",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "claims\n            .iter()\n            .any(|c| c.value[\"state\"] == \"custody_suspense\")",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "A positive suspense claim holds its unclaimed source remainder."
+  },
+  {
+    "id": "quantity-arbitration-claim-start",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "c.source.start <= source.start",
+    "replace": "c.source.start < source.start",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Claim starts are inclusive."
+  },
+  {
+    "id": "quantity-arbitration-claim-end",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "c.source.end >= source.end",
+    "replace": "c.source.end > source.end",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Claim endpoints cover their half-open segment exactly."
+  },
+  {
+    "id": "quantity-arbitration-authority-boundary",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "c.priority <= 20",
+    "replace": "c.priority < 20",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Reviewed and native interpretations must agree even across ranks."
+  },
+  {
+    "id": "quantity-arbitration-authority-agreement",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "c.semantics(&source) != first.semantics(&source)",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Incompatible authoritative claims fail closed."
+  },
+  {
+    "id": "quantity-arbitration-strongest-rank",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "contenders.iter().map(|c| c.priority).min().unwrap()",
+    "replace": "contenders.iter().map(|c| c.priority).max().unwrap()",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Unique strongest compatible evidence wins over weaker conventions."
+  },
+  {
+    "id": "quantity-arbitration-equal-rank",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "if winners.len() != 1 {",
+    "replace": "if winners.len() > 2 {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Equal-rank overlapping source claims fail closed."
+  },
+  {
+    "id": "quantity-arbitration-overlap-cluster",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "if cluster.len() > 1 {",
+    "replace": "if cluster.len() > 2 {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Two sources cannot consume the same destination slice."
+  },
+  {
+    "id": "quantity-arbitration-touching-targets",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "t.start >= end",
+    "replace": "t.start > end",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Adjacent target ranges are disjoint, including exactly touching endpoints."
+  },
+  {
+    "id": "quantity-arbitration-transitive-targets",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "end = end.max(t.end.clone());",
+    "replace": "end = t.end.clone();",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Destination overlap clusters retain the greatest endpoint transitively."
+  },
+  {
+    "id": "quantity-arbitration-atomic-source",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "*source == c.source.amount()",
+    "replace": "*source != c.source.amount()",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Every atomic claim must be fully selected at its source."
+  },
+  {
+    "id": "quantity-arbitration-atomic-target",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "*target == t.amount()",
+    "replace": "*target != t.amount()",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Every atomic target must be selected in full."
+  },
+  {
+    "id": "quantity-arbitration-atomic-targetless",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "unwrap_or(!has_target)",
+    "replace": "unwrap_or(*has_target)",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "A targetless atomic claim cannot select an observed target."
+  },
+  {
+    "id": "quantity-arbitration-atomic-hold",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "decision.conflict(\"atomic_bundle_incomplete\", ids);",
+    "replace": "decision.value[\"reason\"] = json!(\"unmatched_outbound_default\");",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Incomplete atomic bundles hold every selected sibling."
+  },
+  {
+    "id": "quantity-arbitration-fee-posting",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "o[\"direction\"] == \"outbound\" && fee != BigInt::from(0)",
+    "replace": "o[\"direction\"] == \"inbound\" && fee != BigInt::from(0)",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Only outbound observed fees post independent network fee amounts."
+  },
+  {
+    "id": "quantity-arbitration-target-posting",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "targets.entry(target.hash.clone()).or_default().push(target);",
+    "replace": "targets.entry(String::new()).or_default().push(target);",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Consumed targets suppress only their exact inbound origin quantities."
+  },
+  {
+    "id": "quantity-arbitration-source-location",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "Some(\"custody_suspense\") => \"custody_suspense\"",
+    "replace": "Some(\"custody_suspense\") => \"external\"",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Unresolved source quantities never become external disposal postings."
+  },
+  {
+    "id": "quantity-arbitration-conflict-location",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "Some(\"conflicting\") => \"conflicting\"",
+    "replace": "Some(\"conflicting\") => \"external\"",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Conflicting source quantities remain in their conflict location."
+  },
+  {
+    "id": "quantity-arbitration-inbound-gap",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "if t.start > cursor {",
+    "replace": "if t.start < cursor {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Unconsumed inbound gaps retain external-origin counterpostings."
+  },
+  {
+    "id": "quantity-arbitration-inbound-tail",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "if cursor < end {",
+    "replace": "if cursor > end {",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "The final uncovered inbound suffix has its own origin posting."
+  },
+  {
+    "id": "quantity-arbitration-origin-sign",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "start - end,",
+    "replace": "end - start,",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Inbound external-origin postings balance positive wallet receipts."
+  },
+  {
+    "id": "quantity-arbitration-decision-order",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "decisions.sort_by_key(|d| d.source.clone());",
+    "replace": "decisions.sort_by_key(|d| std::cmp::Reverse(d.source.clone()));",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Output source slices use deterministic ascending hash and offsets."
+  },
+  {
+    "id": "quantity-arbitration-posting-order",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "result.sort_by_key(|p| codec::text(&p[\"posting_id\"]));",
+    "replace": "result.sort_by_key(|p| std::cmp::Reverse(codec::text(&p[\"posting_id\"])));",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Output postings retain deterministic posting-id order."
+  },
+  {
+    "id": "quantity-fifo-bucket-shape",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "v.len() == 2",
+    "replace": "v.len() == 3",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Each allocation bucket contains exactly an id and amount."
+  },
+  {
+    "id": "quantity-fifo-nonnegative",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "exact(&pair[1]).ok().filter(|n| *n >= BigInt::from(0))",
+    "replace": "exact(&pair[1]).ok().filter(|n| *n > BigInt::from(0))",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Zero-capacity boundary buckets are valid and skipped."
+  },
+  {
+    "id": "quantity-fifo-bucket-id",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "id.is_empty() || n.is_none()",
+    "replace": "n.is_none()",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Allocation bucket identities must be nonempty."
+  },
+  {
+    "id": "quantity-fifo-bucket-unique",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "!= result.len()",
+    "replace": "== result.len()",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Allocation bucket identities must be unique after Python string coercion."
+  },
+  {
+    "id": "quantity-fifo-requested-nonnegative",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "Some(value) => exact(value)\n            .ok()\n            .filter(|n| *n >= BigInt::from(0))",
+    "replace": "Some(value) => exact(value).ok().filter(|n| *n > BigInt::from(0))",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Zero requested quantity is valid."
+  },
+  {
+    "id": "quantity-fifo-source-capacity",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "requested > source_total",
+    "replace": "requested >= source_total",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Exact source capacity is sufficient."
+  },
+  {
+    "id": "quantity-fifo-sink-capacity",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "requested > sink_total",
+    "replace": "requested >= sink_total",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Exact sink capacity is sufficient."
+  },
+  {
+    "id": "quantity-fifo-source-skip",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "source += 1;",
+    "replace": "source += 2;",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "The FIFO source cursor skips exhausted capacities."
+  },
+  {
+    "id": "quantity-fifo-sink-skip",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "sink += 1;",
+    "replace": "sink += 2;",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "The FIFO sink cursor skips exhausted capacities."
+  },
+  {
+    "id": "quantity-fifo-source-offset",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "\"source_start_msat\":number(&source_used[source])",
+    "replace": "\"source_start_msat\":number(&sink_used[sink])",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Source offsets are local to each source bucket."
+  },
+  {
+    "id": "quantity-fifo-sink-offset",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "\"sink_start_msat\":number(&sink_used[sink])",
+    "replace": "\"sink_start_msat\":number(&source_used[source])",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Sink offsets are local to each sink bucket."
+  },
+  {
+    "id": "quantity-fifo-source-residual",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "number(&(n - used))",
+    "replace": "number(&(n + used))",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Allocation returns exact unused capacity."
+  },
+  {
+    "id": "quantity-balances-wallet-only",
+    "file": "crates/custody/src/quantity/balances.rs",
+    "find": "posting[\"location_kind\"] != \"wallet\"",
+    "replace": "posting[\"location_kind\"] == \"wallet\"",
+    "expect_failing": [
+      "quantity_balance_vectors"
+    ],
+    "rule": "Wallet comparison excludes fee, suspense and external counterpostings."
+  },
+  {
+    "id": "quantity-balances-observation-reason",
+    "file": "crates/custody/src/quantity/balances.rs",
+    "find": "&known_reasons[codec::text(&o[\"transaction_id\"])]",
+    "replace": "&known_reasons[codec::text(&o[\"quantity_hash\"])]",
+    "expect_failing": [
+      "quantity_balance_vectors"
+    ],
+    "rule": "Balance explanations bind canonical transaction identity."
+  },
+  {
+    "id": "quantity-balances-equal-balances",
+    "file": "crates/custody/src/quantity/balances.rs",
+    "find": "if a == b {",
+    "replace": "if a != b {",
+    "expect_failing": [
+      "quantity_balance_vectors"
+    ],
+    "rule": "Only unequal wallet balances are returned."
+  },
+  {
+    "id": "quantity-balances-unique-reason",
+    "file": "crates/custody/src/quantity/balances.rs",
+    "find": "r.len() == 1",
+    "replace": "!r.is_empty()",
+    "expect_failing": [
+      "quantity_balance_vectors"
+    ],
+    "rule": "Multiple different non-event explanations do not select a guessed reason."
+  },
+  {
+    "id": "quantity-balances-current-only",
+    "file": "crates/custody/src/quantity/balances.rs",
+    "find": "canonical.keys().chain(balances.keys())",
+    "replace": "canonical.keys().chain(canonical.keys())",
+    "expect_failing": [
+      "quantity_balance_vectors"
+    ],
+    "rule": "Current-only wallet/asset balances remain visible as differences."
+  },
+  {
+    "id": "quantity-hashes-issue-ascii",
+    "file": "crates/custody/src/quantity/hashes.rs",
+    "find": "&Options::new().compact()",
+    "replace": "&Options::new().compact().ensure_ascii(false)",
+    "expect_failing": [
+      "quantity_issue_ids_match_all_r0_vectors"
+    ],
+    "rule": "Quantity ids retain ASCII JSON escape preimages."
+  },
+  {
+    "id": "quantity-hashes-issue-stringification",
+    "file": "crates/custody/src/quantity/hashes.rs",
+    "find": "python_value_string(p).into()",
+    "replace": "format!(\"{p:?}\").into()",
+    "expect_failing": [
+      "quantity_issue_ids_match_all_r0_vectors"
+    ],
+    "rule": "Quantity issue parts use CPython string conversion."
+  },
+  {
+    "id": "quantity-hashes-decision-version",
+    "file": "crates/custody/src/quantity/hashes.rs",
+    "find": "canonical-custody-decision-v1",
+    "replace": "canonical-custody-decision-v2",
+    "expect_failing": [
+      "quantity_store_ids_match_all_r0_vectors"
+    ],
+    "rule": "Stored custody decision ids retain their versioned preimage."
+  },
+  {
+    "id": "quantity-hashes-relation-version",
+    "file": "crates/custody/src/quantity/hashes.rs",
+    "find": "canonical-custody-economic-relation-v3",
+    "replace": "canonical-custody-economic-relation-v2",
+    "expect_failing": [
+      "quantity_store_ids_match_all_r0_vectors"
+    ],
+    "rule": "Stored economic relation ids retain their v3 preimage."
+  },
+  {
+    "id": "quantity-hashes-decision-fields",
+    "file": "crates/custody/src/quantity/hashes.rs",
+    "find": "pub fn custody_decision_id(fields: &[Py]) -> Result<(String, String), String> {\n    let mut values = vec![Py::Str(\"canonical-custody-decision-v1\".into())];\n    values.extend_from_slice(fields);\n    compact_hash(values)\n}",
+    "replace": "pub fn custody_decision_id(fields: &[Py]) -> Result<(String, String), String> {\n    let mut values = vec![Py::Str(\"canonical-custody-decision-v1\".into())];\n    values.extend_from_slice(&fields[..9]);\n    compact_hash(values)\n}",
+    "expect_failing": [
+      "quantity_store_ids_match_all_r0_vectors"
+    ],
+    "rule": "The persisted decision identity binds every quantity, identity and metadata field."
+  },
+  {
+    "id": "quantity-hashes-relation-fields",
+    "file": "crates/custody/src/quantity/hashes.rs",
+    "find": "pub fn economic_relation_id(fields: &[Py]) -> Result<(String, String), String> {\n    let mut values = vec![Py::Str(\"canonical-custody-economic-relation-v3\".into())];\n    values.extend_from_slice(fields);\n    compact_hash(values)\n}",
+    "replace": "pub fn economic_relation_id(fields: &[Py]) -> Result<(String, String), String> {\n    let mut values = vec![Py::Str(\"canonical-custody-economic-relation-v3\".into())];\n    values.extend_from_slice(&fields[..7]);\n    compact_hash(values)\n}",
+    "expect_failing": [
+      "quantity_store_ids_match_all_r0_vectors"
+    ],
+    "rule": "The persisted relation identity binds every quantity, identity and metadata field."
+  },
+  {
+    "id": "quantity-fifo-default-request",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "None => sink_total.clone()",
+    "replace": "None => source_total.clone()",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Default requested quantity is the sink capacity, not surplus source capacity."
+  },
+  {
+    "id": "quantity-fifo-minimum-source",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": ".min(&sources[source].1 - &source_used[source])",
+    "replace": ".max(&sources[source].1 - &source_used[source])",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Each FIFO cell respects remaining source capacity."
+  },
+  {
+    "id": "quantity-fifo-minimum-sink",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": ".min(&sinks[sink].1 - &sink_used[sink])",
+    "replace": ".max(&sinks[sink].1 - &sink_used[sink])",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Each FIFO cell respects remaining sink capacity."
+  },
+  {
+    "id": "quantity-fifo-admission-order",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "let sources = buckets(sources, \"source\")?;\n    let sinks = buckets(sinks, \"sink\")?;",
+    "replace": "let sinks = buckets(sinks, \"sink\")?;\n    let sources = buckets(sources, \"source\")?;",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "Source bucket admission precedes sink admission and requested-amount checks."
+  },
+  {
+    "id": "quantity-fifo-sequence-error",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "\"custody_allocation_invalid_buckets\"",
+    "replace": "\"custody_allocation_invalid_bucket\"",
+    "expect_failing": [
+      "quantity_fifo_vectors"
+    ],
+    "rule": "A noniterable boundary sequence retains its specific error family."
+  },
+  {
+    "id": "quantity-admission-hash-c0-separators",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "s.chars().any(|c| matches!(c, '\\u{1c}'..='\\u{1f}'))",
+    "replace": "false",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "CPython hexadecimal integer parsing rejects C0 separators that str.strip accepts."
   }
 ]

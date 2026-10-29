@@ -760,6 +760,12 @@
     "tests/test_custody_quantity_handler.py": {
       "CustodyQuantityHandlerTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_components, kassiber.cli.handlers directly", "reviewed": false, "tests": 15}
     },
+    "tests/test_custody_quantity_port.py": {
+      "test_frozen_quantity_primitives_are_python_outputs": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "compares frozen and generated exact quantity primitives with Python, asserts per-engine counts and permutations, and preserves the unimplemented runtime-stage barrier", "reviewed": true, "tests": 1},
+      "test_generated_quantity_primitives_count_both_engines_and_permutations": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares frozen and generated exact quantity primitives with Python, asserts per-engine counts and permutations, and preserves the unimplemented runtime-stage barrier", "reviewed": true, "tests": 1},
+      "test_recorded_quantity_primitives_replay_and_permute": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares frozen and generated exact quantity primitives with Python, asserts per-engine counts and permutations, and preserves the unimplemented runtime-stage barrier", "reviewed": true, "tests": 1},
+      "test_quantity_stage_stays_skipped_until_runtime_composition_is_complete": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares frozen and generated exact quantity primitives with Python, asserts per-engine counts and permutations, and preserves the unimplemented runtime-stage barrier", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_quantity_runtime.py": {
       "CustodyQuantityRuntimeTests": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_quantity_runtime directly", "reviewed": false, "tests": 33},
       "CustodyQuantityRuntimeTests::test_gap_search_projection_is_a_required_runtime_input": {"disposition": "python-only", "flags": [], "group": "custody", "reason": "inspects a Python keyword-only signature", "replacement": "Rust API requires the gap-search input in its type signature", "reviewed": true, "tests": 1},

@@ -1487,6 +1487,28 @@ the install/recovery oracle passes 1,370 cases, and all 107 mutations are killed
 This supersedes the preceding desktop omissions, while compressed tar,
 hardlink export, broader malformed/I/O parity, native/platform/TTY acceptance
 and the remaining service dispositions keep the full backup slice open.
+#### Quantity primitive checkpoint (R2e, partial)
+
+Branch `t3code/r2e-quantity`, based on `23c059dc`, ports the exact arbitration
+kernel, ordered N:M FIFO cells and residuals, wallet balance differences and
+quantity issue/decision/economic-relation hashes. All amounts use unbounded
+integer msat. CPython constructor and behavior vectors, independent generated
+counts and permutations exercise conflicting sources, partial allocations,
+one-msat boundaries and explicit negative-balance suspense claims.
+
+This is a verified primitive checkpoint, not completion of the `quantity`
+stage. The PyO3, census and custody-shadow inventories still skip `quantity`.
+The full reviewed component compiler, native-audit augmentation, gap holds,
+issue composition and tax eligibility barriers must be ported and compared
+before changing that inventory. Python remains authoritative, snapshot v1
+remains raw-only and Rust results never reach stored state. The test-only
+primitive driver receives separate intermediate fixture inputs; it is not a
+new product or snapshot interface.
+
+See the [quantity primitive checkpoint](../reference/custody-engine.md#quantity-primitive-checkpoint-r2e-partial)
+for branch dispositions, mutation accounting and verification. After quantity
+composition is complete, the next stage is **finalized projection**, followed
+by journal fusion with `ledger`.
 
 ## Risks
 

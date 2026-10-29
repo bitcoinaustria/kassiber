@@ -1,0 +1,53 @@
+{
+  "atomic": {
+    "custody_suspense:1,internal_reviewed:1": 118
+  },
+  "atomic_partial": {
+    "conflicting:2": 118
+  },
+  "cross_rail": {
+    "internal_verified:1": 117
+  },
+  "destination_conflict": {
+    "conflicting:2": 118
+  },
+  "domain_reject": {
+    "custody_suspense:1": 117
+  },
+  "equal_priority": {
+    "conflicting:1": 118
+  },
+  "external_fee": {
+    "external_confirmed:1": 117
+  },
+  "fee_inclusive": {
+    "external_presumed:1": 118
+  },
+  "fee_only": {
+    "empty": 118
+  },
+  "native": {
+    "internal_verified:1": 118
+  },
+  "negative_balance_hold": {
+    "custody_suspense:1": 117
+  },
+  "one_msat": {
+    "internal_verified:1": 117
+  },
+  "partial_native": {
+    "external_presumed:1,internal_verified:1": 118
+  },
+  "retained": {
+    "internal_reviewed:1": 118
+  },
+  "reviewed_external": {
+    "external_confirmed:1": 117
+  },
+  "source_conflict": {
+    "conflicting:1": 118
+  },
+  "unmatched": {
+    "external_presumed:1": 118
+  }
+}

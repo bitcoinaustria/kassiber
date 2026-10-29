@@ -3,16 +3,32 @@ use kassiber_custody::{codec, evidence};
 use kassiber_pydecimal::Decimal;
 use kassiber_pyjson::{BigInt, Key, Value as Py};
 use serde_json::{json, Value};
-use std::path::PathBuf;
 use std::str::FromStr;
 
 fn fixtures(name: &str) -> Vec<Value> {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/custody_hash_vectors")
-        .join(format!("{name}.jsonl"));
-    std::fs::read_to_string(path)
-        .unwrap()
-        .lines()
+    // A reused Cargo target must not retain a removed mutation scratch path.
+    let text = match name {
+        "quantity_issue_id" => {
+            include_str!("../../../tests/fixtures/custody_hash_vectors/quantity_issue_id.jsonl")
+        }
+        "quantity_store_ids" => {
+            include_str!("../../../tests/fixtures/custody_hash_vectors/quantity_store_ids.jsonl")
+        }
+        "observed_quantity_hash" => include_str!(
+            "../../../tests/fixtures/custody_hash_vectors/observed_quantity_hash.jsonl"
+        ),
+        "graph_hash" => {
+            include_str!("../../../tests/fixtures/custody_hash_vectors/graph_hash.jsonl")
+        }
+        "evidence_snapshot" => {
+            include_str!("../../../tests/fixtures/custody_hash_vectors/evidence_snapshot.jsonl")
+        }
+        "reconciled_observation" => include_str!(
+            "../../../tests/fixtures/custody_hash_vectors/reconciled_observation.jsonl"
+        ),
+        _ => panic!("unknown hash vector family"),
+    };
+    text.lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
 }
@@ -48,6 +64,11 @@ fn bytes_repr(v: &[u8]) -> String {
     s
 }
 fn decode(v: &Value) -> Py {
+    if let Some(fields) = v.get("$event_key").and_then(Value::as_array) {
+        let event = json!({"chain":fields[0],"network":fields[1],"native_namespace":fields[2],"native_event_id":fields[3]});
+        // The dataclass string is prepared by the production hash helper below.
+        return codec::from_json(&event).unwrap();
+    }
     if let Some(s) = v.get("$float").and_then(Value::as_str) {
         return Py::Float(match s {
             "nan" => f64::NAN,
@@ -79,6 +100,47 @@ fn decode(v: &Value) -> Py {
         );
     }
     codec::from_json(v).unwrap()
+}
+
+#[test]
+fn quantity_issue_ids_match_all_r0_vectors() {
+    use kassiber_custody::quantity::hashes;
+    for v in fixtures("quantity_issue_id") {
+        let parts = v["input"]["parts"]["$tuple"].as_array().unwrap();
+        let actual = if parts.get(1).is_some_and(|p| p.get("$event_key").is_some()) {
+            let event = codec::to_json(&decode(&parts[1]));
+            hashes::rejected_event_issue_id(&event, parts[2].as_str().unwrap()).unwrap()
+        } else {
+            hashes::issue_id(&parts.iter().map(decode).collect::<Vec<_>>()).unwrap()
+        };
+        assert_eq!(actual.0, v["output"]["issue_id"]);
+        assert_eq!(actual.1, v["output"]["issue_preimage"]);
+    }
+}
+
+#[test]
+fn quantity_store_ids_match_all_r0_vectors() {
+    use kassiber_custody::quantity::hashes;
+    for v in fixtures("quantity_store_ids") {
+        let kind = v["input"]["kind"].as_str().unwrap();
+        if kind == "commitment_id" {
+            continue;
+        } // Already ported with components.
+        let fields = v["input"]["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(decode)
+            .collect::<Vec<_>>();
+        let actual = if kind == "decision_id" {
+            hashes::custody_decision_id(&fields)
+        } else {
+            hashes::economic_relation_id(&fields)
+        }
+        .unwrap();
+        assert_eq!(actual.0, v["output"]["id"]);
+        assert_eq!(actual.1, v["output"]["id_preimage"]);
+    }
 }
 fn row(v: &Value) -> Value {
     let mut r = codec::to_json(&decode(v));
