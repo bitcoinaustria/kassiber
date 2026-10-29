@@ -29,6 +29,9 @@ struct Leg {
     debit: BigInt,
     signals: BTreeSet<String>,
     disqualifiers: BTreeSet<String>,
+    /// Dense rank of `id` among the searched legs: sorted ranks order and
+    /// compare exactly as the sorted id strings do.
+    rank: u32,
 }
 type Group = Vec<usize>;
 
@@ -45,6 +48,12 @@ fn ids(group: &[usize], legs: &[Leg]) -> Vec<String> {
     let mut ids: Vec<_> = group.iter().map(|&i| legs[i].id.clone()).collect();
     ids.sort();
     ids
+}
+/// The group's identity key: `ids(group)` as ranks, with the same order.
+fn key(group: &[usize], legs: &[Leg]) -> Vec<u32> {
+    let mut ranks: Vec<u32> = group.iter().map(|&i| legs[i].rank).collect();
+    ranks.sort_unstable();
+    ranks
 }
 fn total(group: &[usize], legs: &[Leg]) -> BigInt {
     group.iter().map(|&i| &legs[i].principal).sum()

@@ -1,6 +1,6 @@
 use super::{
     candidate::{self, Candidate},
-    distance, ids, normalize, seconds, total, zero, Group, Leg,
+    distance, key, normalize, seconds, total, zero, Group, Leg,
 };
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
@@ -108,6 +108,20 @@ pub fn search(
         if let Some(leg) = normalize::leg(row, ignored)? {
             legs.push(leg);
         }
+    }
+    let mut sorted_ids: Vec<&str> = legs.iter().map(|leg: &Leg| leg.id.as_str()).collect();
+    sorted_ids.sort_unstable();
+    sorted_ids.dedup();
+    let ranks: Vec<u32> = legs
+        .iter()
+        .map(|leg| {
+            sorted_ids
+                .binary_search(&leg.id.as_str())
+                .expect("ranked id") as u32
+        })
+        .collect();
+    for (leg, rank) in legs.iter_mut().zip(ranks) {
+        leg.rank = rank;
     }
     let worklist_limited = legs.len() > limits.max_input_rows;
     let mut limited_ids = BTreeSet::new();
@@ -222,7 +236,7 @@ pub fn search(
                 }
                 groups.extend(aggregates);
                 let deduped: BTreeMap<_, _> =
-                    groups.into_iter().map(|g| (ids(&g, &legs), g)).collect();
+                    groups.into_iter().map(|g| (key(&g, &legs), g)).collect();
                 for group in deduped.into_values() {
                     let candidate = candidate::build(&source_group, &group, &legs);
                     if candidate.score < 650 {
@@ -273,11 +287,11 @@ fn bounded_pool(rows: &[usize], legs: &[Leg], target: &BigInt, maximum: usize) -
     if ordered.len() <= maximum {
         return ordered;
     }
-    ordered.sort_by_key(|&i| {
+    ordered.sort_by_cached_key(|&i| {
         (
             distance(target, &legs[i].principal),
             legs[i].when,
-            legs[i].id.clone(),
+            legs[i].rank,
         )
     });
     ordered.truncate(maximum);
@@ -360,11 +374,11 @@ fn return_eras(rows: &[usize], legs: &[Leg], gap: i64) -> Vec<Era> {
             group,
         })
         .collect();
-    eras.sort_by_key(|era| {
+    eras.sort_by_cached_key(|era| {
         (
             era.total.clone(),
             era.group.iter().map(|&i| legs[i].when).max().unwrap(),
-            ids(&era.group, legs),
+            key(&era.group, legs),
         )
     });
     eras
@@ -426,18 +440,19 @@ fn wallet_eras(
     (groups, false)
 }
 fn rank_groups(groups: &mut Vec<Group>, legs: &[Leg], target: &BigInt, maximum: usize) {
-    groups.sort_by_key(|g| candidate::group_key(g, legs, target));
+    groups.sort_by_cached_key(|g| candidate::group_key(g, legs, target));
     groups.truncate(maximum);
 }
 fn return_groups(rows: &[usize], legs: &[Leg], target: &BigInt, limits: &Limits) -> Vec<Group> {
     let (minimum, maximum) = bounds(target, limits);
     let mut ordered = rows.to_vec();
     chronological(&mut ordered, legs);
-    let mut states: Vec<(Group, BigInt)> = vec![(Vec::new(), zero())];
+    // Each state carries its identity key, so keys are computed once.
+    let mut states: Vec<(Group, BigInt, Vec<u32>)> = vec![(Vec::new(), zero(), Vec::new())];
     let mut qualifying = BTreeMap::new();
     for row in ordered {
         let mut additions = Vec::new();
-        for (group, total) in &states {
+        for (group, total, _) in &states {
             if group.len() >= limits.max_return_legs {
                 continue;
             }
@@ -447,23 +462,27 @@ fn return_groups(rows: &[usize], legs: &[Leg], target: &BigInt, limits: &Limits)
             }
             let mut next = group.clone();
             next.push(row);
+            let next_key = key(&next, legs);
             if next_total >= minimum {
-                qualifying.insert(ids(&next, legs), next.clone());
+                qualifying.insert(next_key.clone(), next.clone());
             }
-            additions.push((next, next_total));
+            additions.push((next, next_total, next_key));
         }
         states.extend(additions);
         let mut deduped = BTreeMap::new();
-        for (group, total) in states {
-            deduped.insert(ids(&group, legs), (group, total));
+        for (group, total, key) in states {
+            deduped.insert(key, (group, total));
         }
-        states = deduped.into_values().collect();
-        states.sort_by_key(|(group, total)| {
+        states = deduped
+            .into_iter()
+            .map(|(key, (group, total))| (group, total, key))
+            .collect();
+        states.sort_by_cached_key(|(group, total, key)| {
             (
                 usize::from(!group.is_empty()),
                 distance(target, total),
                 group.len(),
-                ids(group, legs),
+                key.clone(),
             )
         });
         states.truncate(limits.beam_width);
