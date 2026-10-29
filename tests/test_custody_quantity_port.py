@@ -64,3 +64,32 @@ def test_quantity_stage_stays_skipped_until_runtime_composition_is_complete():
     stages,skipped=rust_results(snapshot(0))
     assert set(stages)=={"components","evidence","interpretation","gaps"}
     assert skipped==("quantity","finalized_projection")
+
+
+def test_quantity_transfer_vectors_and_active_generated_counts(primitive_driver):
+    from tests.custody_quantity_transfers import PATH, SCENARIOS, scenario, vectors
+    assert json.loads(PATH.read_text()) == vectors()
+    inputs = []
+    expected = []
+    cases = []
+    counts = {engine: Counter() for engine in ("Python", "Rust")}
+    for seed in range(1200):
+        case, value, result, active = scenario(seed)
+        assert active > 0
+        counts["Python"][case] += active
+        cases.append((case, active))
+        inputs.append(value)
+        expected.append({"expected": result})
+    actual = primitive_driver(inputs)
+    assert actual == expected
+    for (case, active), result in zip(cases, actual):
+        assert len(result["expected"]) == active
+        counts["Rust"][case] += len(result["expected"])
+    expected_counts = {case: 100 * (4 if case in {"slice", "sort"} else 1 if case in {"retained", "external"} else 2) for case in SCENARIOS}
+    assert counts["Python"] == counts["Rust"] == expected_counts
+    shuffled = deepcopy(inputs)
+    for value in shuffled:
+        value["projection"]["observations"].reverse()
+        value["projection"]["decisions"].reverse()
+        value["eligible"].reverse()
+    assert primitive_driver(shuffled) == expected

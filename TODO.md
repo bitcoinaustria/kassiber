@@ -46,7 +46,10 @@ mutation entries.
 - [x] Port bounded gap search over the captured SQL worklist, including matcher
   capacity and source blockers; [gaps now participates in full-stage comparison](docs/reference/custody-engine.md#gap-search-checkpoint-r2d).
 - [ ] Port quantity arbitration and finalized tax projection, comparing each
-  stage before fusing it.
+  stage before fusing it. Exact quantity primitives and
+  [canonical transfer rows](docs/reference/custody-engine.md#canonical-transfer-row-checkpoint-r2e-partial)
+  are ported; reviewed compilation, native augmentation, gap holds, issues and
+  scoped tax barriers still block quantity-stage comparison.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
 

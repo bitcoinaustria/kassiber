@@ -57,3 +57,24 @@ fn quantity_balance_vectors() {
         }
     }
 }
+
+#[test]
+fn quantity_transfer_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_transfers.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap() {
+        let actual = kassiber_custody::quantity::transfers::canonical_internal_transfer_rows(
+            &case["projection"],
+            case["eligible"].as_array().unwrap(),
+            &case["refs"],
+        )
+        .unwrap();
+        assert_eq!(actual, case["expected"], "{}", case["case"]);
+        assert_eq!(
+            actual.as_array().unwrap().len(),
+            case["active"].as_u64().unwrap() as usize
+        );
+    }
+}

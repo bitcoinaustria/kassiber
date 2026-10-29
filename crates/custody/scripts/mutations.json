@@ -14322,5 +14322,315 @@
       "quantity_arbitration_vectors"
     ],
     "rule": "CPython hexadecimal integer parsing rejects C0 separators that str.strip accepts."
+  },
+  {
+    "id": "QT-verified",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "Some(\"internal_verified\" | \"internal_reviewed\")",
+    "replace": "Some(\"internal_reviewed\")",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python verified semantics."
+  },
+  {
+    "id": "QT-reviewed",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "Some(\"internal_verified\" | \"internal_reviewed\")",
+    "replace": "Some(\"internal_verified\")",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python reviewed semantics."
+  },
+  {
+    "id": "QT-targetless",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "|| decision[\"target\"].is_null()",
+    "replace": "|| !decision[\"target\"].is_null()",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python targetless semantics."
+  },
+  {
+    "id": "QT-label",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "r.get(\"label\")",
+    "replace": "r.get(\"missing_label\")",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python label semantics."
+  },
+  {
+    "id": "QT-source-offset",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "exact(&decision[\"source\"][\"start_msat\"])?",
+    "replace": "kassiber_pyjson::BigInt::from(0)",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python source-offset semantics."
+  },
+  {
+    "id": "QT-eligibility",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "eligible.contains(decision)",
+    "replace": "eligible.is_empty()",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python eligibility semantics."
+  },
+  {
+    "id": "QT-optional-ids",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "if codec::truth(&decision[key])",
+    "replace": "if !codec::truth(&decision[key])",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python optional-ids semantics."
+  },
+  {
+    "id": "QT-order",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "a.0.cmp(&b.0)",
+    "replace": "b.0.cmp(&a.0)",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python order semantics."
+  },
+  {
+    "id": "QT-anchor-source",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "source[\"anchor_transaction_id\"]",
+    "replace": "source[\"transaction_id\"]",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python anchor-source semantics."
+  },
+  {
+    "id": "QT-anchor-target",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "target[\"anchor_transaction_id\"]",
+    "replace": "target[\"transaction_id\"]",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python anchor-target semantics."
+  },
+  {
+    "id": "QT-source-wallet_id",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "source[\"wallet_id\"]",
+    "replace": "target[\"wallet_id\"]",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python source-wallet_id semantics."
+  },
+  {
+    "id": "QT-field-out_transaction_id",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"out_transaction_id\":",
+    "replace": "\"mutated_out_transaction_id\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-out_transaction_id semantics."
+  },
+  {
+    "id": "QT-field-in_transaction_id",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"in_transaction_id\":",
+    "replace": "\"mutated_in_transaction_id\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-in_transaction_id semantics."
+  },
+  {
+    "id": "QT-field-occurred_at",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"occurred_at\":",
+    "replace": "\"mutated_occurred_at\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-occurred_at semantics."
+  },
+  {
+    "id": "QT-field-asset",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"asset\":",
+    "replace": "\"mutated_asset\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-asset semantics."
+  },
+  {
+    "id": "QT-field-amount_msat",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"amount_msat\":",
+    "replace": "\"mutated_amount_msat\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-amount_msat semantics."
+  },
+  {
+    "id": "QT-field-from_wallet_id",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"from_wallet_id\":",
+    "replace": "\"mutated_from_wallet_id\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-from_wallet_id semantics."
+  },
+  {
+    "id": "QT-field-from_wallet",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"from_wallet\":",
+    "replace": "\"mutated_from_wallet\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-from_wallet semantics."
+  },
+  {
+    "id": "QT-field-to_wallet_id",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"to_wallet_id\":",
+    "replace": "\"mutated_to_wallet_id\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-to_wallet_id semantics."
+  },
+  {
+    "id": "QT-field-to_wallet",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"to_wallet\":",
+    "replace": "\"mutated_to_wallet\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-to_wallet semantics."
+  },
+  {
+    "id": "QT-field-custody_state",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"custody_state\":",
+    "replace": "\"mutated_custody_state\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-custody_state semantics."
+  },
+  {
+    "id": "QT-field-basis_state",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"basis_state\":",
+    "replace": "\"mutated_basis_state\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-basis_state semantics."
+  },
+  {
+    "id": "QT-field-evidence_reason",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"evidence_reason\":",
+    "replace": "\"mutated_evidence_reason\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-evidence_reason semantics."
+  },
+  {
+    "id": "QT-field-network",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"network\":",
+    "replace": "\"mutated_network\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-network semantics."
+  },
+  {
+    "id": "QT-field-rail",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "\"rail\":",
+    "replace": "\"mutated_rail\":",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python field-rail semantics."
+  },
+  {
+    "id": "QT-source-time",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "source[\"occurred_at\"]",
+    "replace": "target[\"occurred_at\"]",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python source-time semantics."
+  },
+  {
+    "id": "QT-source-asset",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "source[\"asset\"]",
+    "replace": "target[\"asset\"]",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python source-asset semantics."
+  },
+  {
+    "id": "QT-source-domain",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "let scope = domain(source);",
+    "replace": "let scope = domain(target);",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python source-domain semantics."
+  },
+  {
+    "id": "QT-numeric-sort",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "                amount,",
+    "replace": "                kassiber_pyjson::BigInt::from(0),",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python numeric-sort semantics."
+  },
+  {
+    "id": "QT-label-fallback",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": ".unwrap_or(&o[\"wallet_id\"])",
+    "replace": ".unwrap_or(&Value::Null)",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python label-fallback semantics."
+  },
+  {
+    "id": "QT-whole-decision",
+    "file": "crates/custody/src/quantity/transfers.rs",
+    "find": "eligible.contains(decision)",
+    "replace": "eligible.iter().any(|e| e[\"selected_claim_id\"] == decision[\"selected_claim_id\"])",
+    "expect_failing": [
+      "quantity_transfer_vectors"
+    ],
+    "rule": "Canonical transfer rows retain Python whole-decision semantics."
   }
 ]

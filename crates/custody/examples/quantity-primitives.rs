@@ -1,5 +1,5 @@
 //! Test-only JSONL driver for primitive parity; this is not snapshot admission.
-use kassiber_custody::quantity::{allocation, balances, project};
+use kassiber_custody::quantity::{allocation, balances, project, transfers};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 fn main() {
@@ -15,6 +15,11 @@ fn main() {
                 &v["projection"],
                 v["current"].as_array().unwrap(),
                 &v["known"],
+            ),
+            "transfers" => transfers::canonical_internal_transfer_rows(
+                &v["projection"],
+                v["eligible"].as_array().unwrap(),
+                &v["refs"],
             ),
             "project" => project(
                 v["observations"].as_array().unwrap(),

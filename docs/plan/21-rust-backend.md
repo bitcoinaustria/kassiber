@@ -1510,6 +1510,17 @@ for branch dispositions, mutation accounting and verification. After quantity
 composition is complete, the next stage is **finalized projection**, followed
 by journal fusion with `ledger`.
 
+### Canonical quantity transfer rows (R2e, partial)
+
+The follow-on `t3code/r2e-quantity-2` checkpoint ports canonical internal-transfer
+rows as a private comparison primitive, including full-decision tax eligibility,
+anchor ids, wallet labels, provenance and exact numeric ordering. Its independent
+Python generator asserts active counts for every scenario, including exclusion
+controls with a separate exact companion edge. See the
+[checkpoint evidence](../reference/custody-engine.md#canonical-transfer-row-checkpoint-r2e-partial).
+Quantity remains skipped until reviewed compilation, native augmentation,
+gap holds, issues and scoped tax barriers match the Python runtime.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

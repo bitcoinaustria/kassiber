@@ -1799,3 +1799,83 @@ until complete runtime composition is implemented.
 
 Remaining work is the complete quantity runtime composition listed above,
 followed by **finalized projection** and journal fusion with `ledger`.
+
+## Canonical transfer row checkpoint (R2e, partial)
+
+Branch `t3code/r2e-quantity-2`, based on `7969fa8e`, additionally ports
+`canonical_internal_transfer_rows` to the private Rust quantity primitive seam.
+It emits only targeted internal verified/reviewed decisions, uses anchor
+transaction ids, preserves explicit null/empty wallet labels, and retains
+component/bundle provenance only when truthy. Basis readiness compares the
+whole finalized decision, rather than its claim id. An exact custody edge
+therefore stays visible behind a prior basis barrier. Amount subtraction and
+numeric sort ties use `BigInt`; timestamps retain Python lexical ordering.
+Missing observation lookup returns Python's `KeyError` family, though complete
+arbitration projections always bind both sides. Non-JSON mapping implementations
+remain outside this private fixture seam.
+
+The frozen CPython corpus contains 12 scenarios. Each generated case includes
+a separate exact companion edge so exclusion scenarios cannot pass vacuously.
+Both engines assert these per-scenario active row totals across 1,200 inputs:
+
+| Scenarios | Inputs each | Active rows each |
+| --- | ---: | ---: |
+| verified, reviewed, blocked, labels, empty_ids, anchor_ids, liquid, wide | 100 | 200 |
+| retained, external | 100 | 100 |
+| slice, sort | 100 | 400 |
+| **Total** | **1,200** | **2,600** |
+
+The generator also reverses observations, decisions and eligible decisions for
+all 1,200 inputs. Frozen vectors cover nonzero source offsets, exact quantities
+above machine width, numeric sort ties and slices sharing a selected claim id
+with different eligibility. The private JSONL driver gains `transfers`; raw
+snapshot v1 and Python production behavior are unchanged.
+
+The mutation catalog adds 31 `QT-*` entries, each naming
+`quantity_transfer_vectors`, for a total of 1,462 entries. They pin state and
+target filtering, anchors, labels, offsets, full-decision eligibility, optional
+provenance, sorting and every emitted field.
+
+Quantity remains skipped in PyO3, census and custody-shadow. Reviewed component
+and conversion compilation, native augmentation, gap-hold composition, issues
+and scoped tax barriers still require porting before quantity can be enabled.
+Rust results never reach stored state. This checkpoint does not claim complete
+runtime quantity parity.
+
+Verification at this boundary:
+
+- Rust 1.99.1 formatting and workspace/all-target Clippy with warnings denied
+  pass. Offline locked workspace tests pass **775 tests**, including the
+  network crate's isolated local test listeners.
+- The quantity primitive suite passes **5 tests**, retaining the earlier
+  2,000 projections/permutations and frozen replays while adding the 1,200
+  transfer inputs/permutations above. The broader retained generator run
+  passes **37 tests**, including the twelve-suite gap comparison's **24,000
+  books and 1,030 permutations** with zero differences.
+- The quantity/runtime/view/handler modules plus primitive suite pass **96
+  tests and 36 subtests**. Focused census and shadow each pass **91 tests and
+  36 subtests**, comparing all four implemented stages on **40 builds** with
+  zero mismatches. Shadow also completes **40 frozen Python comparisons**.
+  Quantity correctly remains at **0 compared, 40 skipped** in each lane.
+- Read-only replay of the retained four recording directories compares
+  **159 requests and 159 permutations**, with zero differences or pre-request
+  refusals. New recordings are separate: **40 census and 40 shadow snapshots**
+  under `target/r2e2-verify/{census,shadow}-snapshots` in this worktree.
+- Inventory/contracts and mutation-runner contracts pass **13 tests and 14
+  subtests**. Manual second review checks exact arithmetic, label presence,
+  source rather than target attributes, full-decision membership, stable
+  lexical/numeric sorting and the unchanged raw-only/persistence boundary.
+
+No Python reference bug was identified in this checkpoint.
+
+All **1,462 catalog ids have named-test kills in this run**: the unchanged
+**1,431 inherited entries** and all **31 new entries**. Every counted result
+has a passing unmutated named test, a building mutant and a failing named test.
+The coverage audit retains 120 completed inherited kills from the initial runs,
+checks the other 1,311 in twelve disjoint runs, and independently rechecks all
+31 transfer mutations against the final arbitration-produced vectors. Interrupted
+trials contribute no result. There are no survivors, nonbuilding mutants or
+failed baselines. The local audit and witness map are
+`target/r2e2-verify/mutation-summary.json`; verification logs stay under that
+ignored artifact root. New snapshots also replay as **80 requests and 80
+permutations**, with zero differences or pre-request refusals.
