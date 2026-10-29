@@ -2,77 +2,85 @@
 // treasury chart and the Transactions workbench. Both screens persist the same
 // key in `bookChartPeriods`, so the key list, the URL codec, and the
 // history-based gating have to agree — they used to be copied per screen and
-// drifted (the Overview chips had no 10y/15y even though "auto" could resolve
-// to them). Date arithmetic stays per screen: the treasury chart windows in UTC
-// against the book's latest data point, the table in local days against today.
+// drifted. A key is either a range (30 days up to the whole history) or one
+// calendar year of the book. Date arithmetic stays per screen: the treasury
+// chart windows in UTC against the book's latest data point, the table in local
+// days against today and a year in the book's own calendar.
 
-export type PeriodKey =
-  | "auto"
-  | "30days"
-  | "3months"
-  | "6months"
-  | "ytd"
-  | "1year"
-  | "5years"
-  | "10years"
-  | "15years"
-  | "all";
+/** A window counted back from the end of the data. */
+export type RangePeriodKey = "30days" | "1year" | "4years" | "10years" | "all";
+/** One calendar year, as its number ("2033"). */
+export type YearPeriodKey = `${number}`;
+export type ResolvedPeriodKey = RangePeriodKey | YearPeriodKey;
+export type PeriodKey = "auto" | ResolvedPeriodKey;
 
-export type ResolvedPeriodKey = Exclude<PeriodKey, "auto">;
+/** A year the history holds, newest first, with what it holds. */
+export type PeriodYear = { year: number; count: number };
 
-export const PERIOD_KEYS: PeriodKey[] = [
-  "auto",
+// Lengths grow roughly by an order of magnitude; 4 years is a halving cycle.
+export const RANGE_PERIOD_KEYS: RangePeriodKey[] = [
   "30days",
-  "3months",
-  "6months",
-  "ytd",
   "1year",
-  "5years",
+  "4years",
   "10years",
-  "15years",
   "all",
 ];
 
-const BASE_PERIOD_KEYS: ResolvedPeriodKey[] = [
-  "30days",
-  "3months",
-  "6months",
-  "ytd",
-  "1year",
-];
-
-const LONG_PERIOD_YEARS = [
-  { key: "5years", years: 5 },
+const LONG_RANGES = [
+  { key: "4years", years: 4 },
   { key: "10years", years: 10 },
-  { key: "15years", years: 15 },
-] as const satisfies ReadonlyArray<{ key: ResolvedPeriodKey; years: number }>;
+] as const satisfies ReadonlyArray<{ key: RangePeriodKey; years: number }>;
 
 const MS_PER_YEAR = 365.2425 * 24 * 60 * 60 * 1000;
 
-// `?period=` accepts what a human would type: case, separators, and the usual
-// short forms (30d, 3mo, 5yrs, max) all fold onto a canonical key.
-export function normalizePeriodParam(value: string | null): PeriodKey | null {
+export function isYearPeriod(period: string): period is YearPeriodKey {
+  return /^\d{4}$/.test(period);
+}
+
+export function yearPeriod(year: number): YearPeriodKey {
+  return `${year}`;
+}
+
+export function isPeriodKey(value: unknown): value is PeriodKey {
+  return (
+    typeof value === "string" &&
+    (value === "auto" ||
+      (RANGE_PERIOD_KEYS as string[]).includes(value) ||
+      isYearPeriod(value))
+  );
+}
+
+// Typed short forms. Ranges the picker no longer offers still arrive from
+// saved settings and old links, and land on the closest one it does.
+const SHORT_FORMS: Record<string, RangePeriodKey> = {
+  "30d": "30days",
+  "3m": "1year",
+  "6m": "1year",
+  "12m": "1year",
+  "1y": "1year",
+  "4y": "4years",
+  "5y": "4years",
+  "10y": "10years",
+  "15y": "10years",
+};
+
+// `?period=` accepts what a human would type: case, separators, the usual
+// short forms (30d, 6mo, 4yrs, max), and a bare year.
+export function normalizePeriodParam(
+  value: string | null,
+  now = new Date(),
+): PeriodKey | null {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
-  if (normalized === "automatic") return "auto";
-  if (normalized === "max") return "all";
+  if (normalized === "auto" || normalized === "automatic") return "auto";
+  if (normalized === "all" || normalized === "max") return "all";
+  if (normalized === "ytd") return yearPeriod(now.getFullYear());
+  if (isYearPeriod(normalized)) return normalized;
   const shortForm = /^(\d+)(d|day|days|m|mo|mos|month|months|y|yr|yrs|year|years)$/.exec(
     normalized,
   );
-  if (!shortForm) {
-    return PERIOD_KEYS.find((key) => key === normalized) ?? null;
-  }
-  // Keys are inconsistently pluralized ("1year" but "5years"), so accept both.
-  const unit = shortForm[2].startsWith("d")
-    ? "days"
-    : shortForm[2].startsWith("m")
-      ? "months"
-      : "years";
-  const spellings = [
-    `${shortForm[1]}${unit}`,
-    `${shortForm[1]}${unit.slice(0, -1)}`,
-  ];
-  return PERIOD_KEYS.find((key) => spellings.includes(key)) ?? null;
+  if (!shortForm) return null;
+  return SHORT_FORMS[`${Number(shortForm[1])}${shortForm[2][0]}`] ?? null;
 }
 
 export function periodParamFromUrl(fallback: PeriodKey): PeriodKey {
@@ -86,10 +94,11 @@ export function historyYearsBetween(earliest: Date, latest: Date): number {
 }
 
 // Ranges a user can pick: never offer a window longer than the book's history.
-export function selectablePeriods(historyYears: number): ResolvedPeriodKey[] {
+export function selectablePeriods(historyYears: number): RangePeriodKey[] {
   return [
-    ...BASE_PERIOD_KEYS,
-    ...LONG_PERIOD_YEARS.filter((period) => historyYears >= period.years).map(
+    "30days",
+    "1year",
+    ...LONG_RANGES.filter((period) => historyYears >= period.years).map(
       (period) => period.key,
     ),
     "all",
@@ -99,11 +108,10 @@ export function selectablePeriods(historyYears: number): ResolvedPeriodKey[] {
 // Windows "auto" may resolve to. Long windows unlock a little earlier than they
 // become selectable (80% of their span) so auto can settle on a bounded window
 // instead of jumping straight to "all" for a nearly-that-old book.
-export function autoCandidatePeriods(historyYears: number): ResolvedPeriodKey[] {
+export function autoCandidatePeriods(historyYears: number): RangePeriodKey[] {
   return [
-    "ytd",
     "1year",
-    ...LONG_PERIOD_YEARS.filter(
+    ...LONG_RANGES.filter(
       (period) => historyYears >= period.years * 0.8,
     ).map((period) => period.key),
     "all",

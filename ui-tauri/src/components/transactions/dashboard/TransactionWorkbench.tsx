@@ -23,10 +23,17 @@ import {
   YAxis,
 } from "recharts";
 
+import { PeriodYearMenu } from "@/components/kb/PeriodYearMenu";
 import { ChartContainer } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { formatBtc, type Currency } from "@/lib/currency";
+import {
+  isYearPeriod,
+  yearPeriod,
+  type PeriodYear,
+  type RangePeriodKey,
+} from "@/lib/period";
 import { cn } from "@/lib/utils";
 import {
   blurClass,
@@ -41,10 +48,11 @@ import {
 import { usePublishAssistantScreenMetrics } from "@/store/assistantScreenMetrics";
 import {
   buildCandidateFlowOverrides,
+  bucketSizeForKey,
   buildFlowChartRows,
   dashboardFlowChartRows,
   flowAxisDomain,
-  flowBucketLabel,
+  flowBucketSize,
   flowChartConfig,
   flowChartMetricLabels,
   flowChartModeLabels,
@@ -58,6 +66,7 @@ import {
   formatCountBarLabel,
   formatFlowTooltipValue,
   periodKeys,
+  periodLabel,
   periodLabels,
   sumByFlow,
   type BreakdownSelection,
@@ -87,43 +96,67 @@ function formatMetricValue(
   );
 }
 
-const PeriodTabs = ({
+/**
+ * A short row of ranges and, beside it, one calendar year. "Auto" has no chip
+ * of its own: the range it settled on shows as chosen until the user picks.
+ */
+const PeriodPicker = ({
   activePeriod,
-  onPeriodChange,
-  periodOptions = periodKeys,
   resolvedPeriod,
+  onPeriodChange,
+  ranges = periodKeys,
+  emptyRanges,
+  years = [],
 }: {
   activePeriod: PeriodKey;
+  resolvedPeriod: ResolvedPeriodKey;
   onPeriodChange: (period: PeriodKey) => void;
-  periodOptions?: PeriodKey[];
-  resolvedPeriod?: ResolvedPeriodKey | null;
+  ranges?: RangePeriodKey[];
+  /** Ranges holding no transactions: shown, but not offered. */
+  emptyRanges?: ReadonlySet<RangePeriodKey>;
+  years?: readonly PeriodYear[];
 }) => {
   const { t } = useTranslation("transactions");
-  const translatePeriod = (key: PeriodKey) =>
-    (t as (key: string) => string)(periodLabels[key]);
+  const shown = activePeriod === "auto" ? resolvedPeriod : activePeriod;
+  const chipClass = (active: boolean) =>
+    cn(
+      "h-7 shrink-0 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-all @4xl/page:px-3 @4xl/page:text-sm",
+      active
+        ? "bg-card text-foreground shadow-sm"
+        : "text-muted-foreground hover:text-foreground",
+    );
   return (
-    // One line at any width: beside a docked panel the strip scrolls
-    // sideways instead of breaking "30 Days" over two lines.
-    <div className="flex h-8 max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {periodOptions.map((key) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onPeriodChange(key)}
-          className={cn(
-            "h-7 shrink-0 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-all @4xl/page:px-3 @4xl/page:text-sm",
-            activePeriod === key
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {key === "auto" && activePeriod === "auto" && resolvedPeriod
-            ? t("period.autoResolved", {
-                period: translatePeriod(resolvedPeriod),
-              })
-            : translatePeriod(key)}
-        </button>
-      ))}
+    <div className="flex h-8 max-w-full items-center gap-1 rounded-lg bg-muted p-0.5">
+      {/* One line at any width: beside a docked panel the ranges scroll
+          sideways instead of breaking "30 Days" over two lines. */}
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {ranges.map((key) => {
+          const empty = emptyRanges?.has(key) === true && shown !== key;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={shown === key}
+              aria-disabled={empty || undefined}
+              title={empty ? t("period.emptyRange") : undefined}
+              onClick={() => {
+                if (!empty) onPeriodChange(key);
+              }}
+              className={cn(chipClass(shown === key), empty && "cursor-default opacity-40 hover:text-muted-foreground")}
+            >
+              {/* loose translator */}
+              {(t as (key: string) => string)(periodLabels[key])}
+            </button>
+          );
+        })}
+      </div>
+      <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+      <PeriodYearMenu
+        years={years}
+        value={isYearPeriod(shown) ? shown : null}
+        onSelect={onPeriodChange}
+        className={chipClass(isYearPeriod(shown))}
+      />
     </div>
   );
 };
@@ -186,6 +219,7 @@ function FlowBucketClickAreas({
 
 const TransactionWorkbench = ({
   period,
+  onPeriodChange,
   records,
   hideSensitive,
   currency,
@@ -201,6 +235,8 @@ const TransactionWorkbench = ({
   isRefreshing,
 }: {
   period: ResolvedPeriodKey;
+  /** A yearly bar opens its year. */
+  onPeriodChange?: (period: PeriodKey) => void;
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
@@ -336,14 +372,30 @@ const TransactionWorkbench = ({
   const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
   const visibleChartRows = activeChartRows.length ? activeChartRows : chartRows;
   const yDomain = flowAxisDomain(visibleChartRows, chartMetric);
+  const bucketSize =
+    dashboardSnapshot?.bucketSize ??
+    bucketSizeForKey(chartRows[0]?.bucketKey ?? "") ??
+    flowBucketSize(period);
   const bucketTitleSuffix = (
     {
       day: "Day",
-      week: "Week",
       month: "Month",
       quarter: "Quarter",
+      year: "Year",
     } as const
-  )[flowBucketLabel(period)];
+  )[bucketSize];
+  // A year's bar is a door into that year, not a filter on the decade.
+  const openBucketYear = React.useCallback(
+    (point: FlowChartPoint) => {
+      if (!onPeriodChange || bucketSizeForKey(point.bucketKey) !== "year") {
+        return false;
+      }
+      onFlowSelectionChange(null);
+      onPeriodChange(yearPeriod(Number(point.bucketKey)));
+      return true;
+    },
+    [onFlowSelectionChange, onPeriodChange],
+  );
   const flowChartCellProps = React.useCallback(
     (row: FlowChartPoint, segment: FlowChartSegment) => {
       const sameBucket =
@@ -367,6 +419,7 @@ const TransactionWorkbench = ({
   const selectFlowBucket = React.useCallback(
     (point: FlowChartPoint) => {
       if (flowPointTotal(point) === 0) return;
+      if (openBucketYear(point)) return;
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
       onTableFiltersReset();
@@ -385,6 +438,7 @@ const TransactionWorkbench = ({
       onFlowSelectionChange,
       onQuickFilterChange,
       onTableFiltersReset,
+      openBucketYear,
       period,
     ],
   );
@@ -392,6 +446,7 @@ const TransactionWorkbench = ({
     (data: FlowChartClickData, segment: FlowChartSegment) => {
       const point = data.payload ?? data.activePayload?.[0]?.payload;
       if (!point || flowPointSegmentValue(point, segment) === 0) return;
+      if (openBucketYear(point)) return;
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
       onTableFiltersReset();
@@ -410,6 +465,7 @@ const TransactionWorkbench = ({
       onFlowSelectionChange,
       onQuickFilterChange,
       onTableFiltersReset,
+      openBucketYear,
       period,
     ],
   );
@@ -423,7 +479,7 @@ const TransactionWorkbench = ({
         period,
         bucketKey: null,
         // loose translator
-        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
+        bucketLabel: periodLabel(period, t as (key: string) => string),
         segment,
         mode: chartMode,
       });
@@ -448,7 +504,7 @@ const TransactionWorkbench = ({
         period,
         bucketKey: null,
         // loose translator
-        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
+        bucketLabel: periodLabel(period, t as (key: string) => string),
         segment,
         mode: "all",
       });
@@ -1078,4 +1134,4 @@ function FlowTooltip({
   );
 }
 
-export { PeriodTabs, TransactionWorkbench };
+export { PeriodPicker, TransactionWorkbench };

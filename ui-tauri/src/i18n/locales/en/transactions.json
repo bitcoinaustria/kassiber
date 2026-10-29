@@ -173,16 +173,12 @@
   },
   "period": {
     "auto": "Auto",
-    "autoResolved": "Auto: {{period}}",
-    "ytd": "YTD",
-    "1year": "1 Year",
-    "3months": "3 Months",
-    "6months": "6 Months",
     "30days": "30 Days",
-    "5years": "5 Years",
+    "1year": "1 Year",
+    "4years": "4 Years",
     "10years": "10 Years",
-    "15years": "15 Years",
-    "all": "All"
+    "all": "All",
+    "emptyRange": "No transactions in this range"
   },
   "chartMetric": {
     "amount": "Amount",
@@ -355,17 +351,17 @@
     },
     "chart": {
       "titleDay": "Flow by active day",
-      "titleWeek": "Flow by active week",
       "titleMonth": "Flow by active month",
       "titleQuarter": "Flow by active quarter",
       "subtitleDay_one": "{{count}} tx across {{buckets}} active day",
       "subtitleDay_other": "{{count}} tx across {{buckets}} active days",
-      "subtitleWeek_one": "{{count}} tx across {{buckets}} active week",
-      "subtitleWeek_other": "{{count}} tx across {{buckets}} active weeks",
       "subtitleMonth_one": "{{count}} tx across {{buckets}} active month",
       "subtitleMonth_other": "{{count}} tx across {{buckets}} active months",
       "subtitleQuarter_one": "{{count}} tx across {{buckets}} active quarter",
-      "subtitleQuarter_other": "{{count}} tx across {{buckets}} active quarters"
+      "subtitleQuarter_other": "{{count}} tx across {{buckets}} active quarters",
+      "titleYear": "Flow by active year",
+      "subtitleYear_one": "{{count}} tx across {{buckets}} active year",
+      "subtitleYear_other": "{{count}} tx across {{buckets}} active years"
     },
     "tooltip": {
       "txCount": "{{count}} tx",

@@ -4,11 +4,14 @@ import { currentUiLocale } from "@/lib/localeFormat";
 import {
   autoCandidatePeriods,
   historyYearsBetween,
+  isYearPeriod,
   normalizePeriodParam,
-  PERIOD_KEYS,
   periodParamFromUrl,
+  RANGE_PERIOD_KEYS,
   selectablePeriods,
   type PeriodKey as SharedPeriodKey,
+  type PeriodYear,
+  type RangePeriodKey,
   type ResolvedPeriodKey as SharedResolvedPeriodKey,
 } from "@/lib/period";
 import { type Tx } from "@/mocks/seed";
@@ -29,6 +32,9 @@ import {
 type PeriodKey = SharedPeriodKey;
 type ResolvedPeriodKey = SharedResolvedPeriodKey;
 type FlowChartMetric = "amount" | "count";
+type FlowBucketSize = "day" | "month" | "quarter" | "year";
+/** A calendar year of the book, with the exact bounds it scopes to. */
+type DashboardYear = PeriodYear & { since: string; until: string };
 type FlowChartMode = "external" | "all";
 type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
 
@@ -77,10 +83,14 @@ type TransactionDashboardSnapshot = {
     /** IANA timezone of the book's calendar (Europe/Vienna for Austrian books). */
     accountingTimezone?: string;
     latest: string | null;
+    /** Years holding activity, newest first, bounded in the book's calendar. */
+    years?: DashboardYear[];
     walletOptions: string[];
     paymentMethods?: string[];
     autoPeriod?: ResolvedPeriodKey;
   };
+  /** How the daemon grouped `buckets`. */
+  bucketSize?: FlowBucketSize;
   counts: { all: number; external: number };
   summary: Record<FlowChartSegment, FlowChartSegmentStats> & {
     review: number;
@@ -168,6 +178,8 @@ type TransactionListFilterInput = {
   breakdownSelection: BreakdownSelection | null;
   tableFilterState: TransactionTableFilterState;
   pairingCandidateRefs?: readonly SwapCandidateReference[];
+  /** The book's years, for a chosen year's exact bounds. */
+  years?: readonly DashboardYear[];
   now?: Date;
 };
 
@@ -610,16 +622,17 @@ function isAttachmentListQueryKeyForTransaction(
 // The following label maps hold i18n keys (resolved with t() at the call site).
 const periodLabels = {
   auto: "transactions:period.auto",
-  ytd: "transactions:period.ytd",
-  "1year": "transactions:period.1year",
-  "3months": "transactions:period.3months",
-  "6months": "transactions:period.6months",
   "30days": "transactions:period.30days",
-  "5years": "transactions:period.5years",
+  "1year": "transactions:period.1year",
+  "4years": "transactions:period.4years",
   "10years": "transactions:period.10years",
-  "15years": "transactions:period.15years",
   all: "transactions:period.all",
-} as const satisfies Record<PeriodKey, string>;
+} as const satisfies Record<"auto" | RangePeriodKey, string>;
+
+// A range by its name; a year is its number.
+function periodLabel(period: PeriodKey, t: (key: string) => string) {
+  return isYearPeriod(period) ? period : t(periodLabels[period]);
+}
 
 const flowChartMetricLabels = {
   amount: "transactions:chartMetric.amount",
@@ -654,19 +667,40 @@ const emptyFlowChartStats = (): Record<FlowChartSegment, FlowChartSegmentStats> 
   swaps: emptyFlowChartSegmentStats(),
 });
 
-const periodKeys = PERIOD_KEYS;
+const periodKeys = RANGE_PERIOD_KEYS;
 
 const AUTO_MIN_MEANINGFUL_TRANSACTIONS = 3;
 const AUTO_MIN_ACTIVE_BUCKETS = 2;
 const AUTO_MIN_TRANSACTION_VOLUME_BTC = 0.00001;
 
-function isLongHistoryPeriod(period: PeriodKey | ResolvedPeriodKey) {
-  return (
-    period === "5years" ||
-    period === "10years" ||
-    period === "15years" ||
-    period === "all"
-  );
+// Mirrors `_dashboard_bucket_size` in core/ui_snapshot.py: "all" over a
+// decade or more reads as one bar per year, a chosen year as its months.
+const YEARLY_BUCKET_MIN_YEARS = 10;
+
+function flowBucketSize(
+  period: ResolvedPeriodKey,
+  historyYears = 0,
+): FlowBucketSize {
+  if (period === "30days") return "day";
+  if (period === "all" && historyYears >= YEARLY_BUCKET_MIN_YEARS) return "year";
+  if (period === "4years" || period === "10years" || period === "all") {
+    return "quarter";
+  }
+  return "month";
+}
+
+// A bucket key says how wide it is: 2033, 2033-Q2, 2033-05 or 2033-05-01.
+function bucketSizeForKey(bucketKey: string): FlowBucketSize | null {
+  if (/^\d{4}$/.test(bucketKey)) return "year";
+  if (/^\d{4}-Q[1-4]$/.test(bucketKey)) return "quarter";
+  if (/^\d{4}-\d{2}$/.test(bucketKey)) return "month";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(bucketKey)) return "day";
+  return null;
+}
+
+// The daemon takes a range; a chosen year is sent as its bounds, in months.
+function dashboardRequestPeriod(period: ResolvedPeriodKey): RangePeriodKey {
+  return isYearPeriod(period) ? "1year" : period;
 }
 
 function initialPeriodFromUrl(fallback: PeriodKey = "1year"): PeriodKey {
@@ -688,8 +722,17 @@ function transactionListPeriodFilter(
 function transactionPeriodDateWindow(
   period: ResolvedPeriodKey,
   now = new Date(),
+  years?: readonly DashboardYear[],
 ): { since: string; until: string } | null {
   if (period === "all") return null;
+  if (isYearPeriod(period)) {
+    // The book's own calendar once the daemon has named the year; the local
+    // one until then.
+    const exact = years?.find((entry) => String(entry.year) === period);
+    if (exact) return { since: exact.since, until: exact.until };
+    const { start, end } = calendarYearRange(Number(period));
+    return { since: start.toISOString(), until: end.toISOString() };
+  }
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
   const start = periodStartDate(end, period);
@@ -714,12 +757,13 @@ function buildTransactionListFilterArgs({
   breakdownSelection,
   tableFilterState,
   pairingCandidateRefs,
+  years,
   now,
 }: TransactionListFilterInput): Record<string, unknown> {
   const args: Record<string, unknown> = {};
   const periodFilter = transactionListPeriodFilter(period, transactionIds);
   const periodWindow = periodFilter
-    ? transactionPeriodDateWindow(periodFilter, now)
+    ? transactionPeriodDateWindow(periodFilter, now, years)
     : null;
   if (periodWindow) Object.assign(args, periodWindow);
   if (transactionIds.length > 0) args.txids = transactionIds;
@@ -729,6 +773,7 @@ function buildTransactionListFilterArgs({
     const selectionPeriodWindow = transactionPeriodDateWindow(
       flowChartSelection.period,
       now,
+      years,
     );
     const window =
       bucketWindow && selectionPeriodWindow
@@ -809,8 +854,12 @@ function recordsForPeriod(records: Transaction[], period: ResolvedPeriodKey) {
 
   if (!dated.length) return records;
 
-  const end = periodAnchorDate(dated.map((entry) => entry.date));
-  const start = periodStartDate(end, period);
+  const { start, end } = isYearPeriod(period)
+    ? calendarYearRange(Number(period))
+    : (() => {
+        const anchor = periodAnchorDate(dated.map((entry) => entry.date));
+        return { start: periodStartDate(anchor, period), end: anchor };
+      })();
 
   return dated
     .filter((entry) => entry.date >= start && entry.date <= end)
@@ -862,12 +911,12 @@ function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKe
 // numbers say, so auto keeps widening until the flow chart has a shape.
 function activeBucketCount(
   records: Transaction[],
-  period: ResolvedPeriodKey,
+  size: FlowBucketSize,
 ): number {
   const buckets = new Set<string>();
   for (const record of records) {
     const date = parseTransactionDate(record.date);
-    if (date) buckets.add(bucketTransactionDate(date, period).key);
+    if (date) buckets.add(bucketTransactionDate(date, size).key);
   }
   return buckets.size;
 }
@@ -894,7 +943,7 @@ function resolveAutoPeriodForRecords(
   const meaningfulRecords = records.filter(
     (record) => Math.abs(transactionBtc(record)) >= AUTO_MIN_TRANSACTION_VOLUME_BTC,
   );
-  if (!meaningfulRecords.length) return "ytd";
+  if (!meaningfulRecords.length) return "1year";
 
   const targetCount = Math.min(
     AUTO_MIN_MEANINGFUL_TRANSACTIONS,
@@ -920,8 +969,10 @@ function resolveAutoPeriodForRecords(
   return (
     withEnoughActivity.find(
       (candidate) =>
-        activeBucketCount(recordsForPeriod(meaningfulRecords, candidate), candidate) >=
-        AUTO_MIN_ACTIVE_BUCKETS,
+        activeBucketCount(
+          recordsForPeriod(meaningfulRecords, candidate),
+          flowBucketSize(candidate, depthYears),
+        ) >= AUTO_MIN_ACTIVE_BUCKETS,
     ) ??
     withEnoughActivity[0] ??
     "all"
@@ -949,7 +1000,7 @@ function periodAnchorDate(dates: Date[]) {
 
 function periodStartDate(
   end: Date,
-  period: ResolvedPeriodKey,
+  period: RangePeriodKey,
   earliest?: Date,
 ) {
   const start = startOfLocalDay(end);
@@ -964,19 +1015,10 @@ function periodStartDate(
   };
   if (period === "30days") {
     start.setDate(start.getDate() - 29);
-  } else if (period === "3months") {
-    shiftCalendarMonths(3);
-  } else if (period === "6months") {
-    shiftCalendarMonths(6);
-  } else if (period === "ytd") {
-    start.setMonth(0, 1);
-    start.setHours(0, 0, 0, 0);
-  } else if (period === "5years") {
-    shiftCalendarMonths(5 * 12);
+  } else if (period === "4years") {
+    shiftCalendarMonths(4 * 12);
   } else if (period === "10years") {
     shiftCalendarMonths(10 * 12);
-  } else if (period === "15years") {
-    shiftCalendarMonths(15 * 12);
   } else if (period === "all" && earliest) {
     return startOfLocalDay(earliest);
   } else {
@@ -985,12 +1027,12 @@ function periodStartDate(
   return start;
 }
 
-function startOfIsoWeek(date: Date) {
-  const start = new Date(date);
-  const day = start.getDay() || 7;
-  start.setDate(start.getDate() - day + 1);
-  start.setHours(0, 0, 0, 0);
-  return start;
+// A calendar year in local time, first to last instant.
+function calendarYearRange(year: number) {
+  return {
+    start: new Date(year, 0, 1),
+    end: new Date(year + 1, 0, 1, 0, 0, 0, -1),
+  };
 }
 
 function monthLabel(date: Date) {
@@ -1014,13 +1056,13 @@ function localDateKey(date: Date) {
   ].join("-");
 }
 
-function addBucketStep(date: Date, period: ResolvedPeriodKey) {
+function addBucketStep(date: Date, size: FlowBucketSize) {
   const next = new Date(date);
-  if (period === "30days") {
+  if (size === "day") {
     next.setDate(next.getDate() + 1);
-  } else if (period === "3months") {
-    next.setDate(next.getDate() + 7);
-  } else if (isLongHistoryPeriod(period)) {
+  } else if (size === "year") {
+    next.setFullYear(next.getFullYear() + 1, 0, 1);
+  } else if (size === "quarter") {
     next.setMonth(next.getMonth() + 3);
   } else {
     next.setMonth(next.getMonth() + 1);
@@ -1030,25 +1072,18 @@ function addBucketStep(date: Date, period: ResolvedPeriodKey) {
 
 function bucketTransactionDate(
   date: Date,
-  period: ResolvedPeriodKey,
+  size: FlowBucketSize,
 ): FlowBucket {
-  if (period === "30days") {
+  if (size === "day") {
     return {
       key: localDateKey(date),
       label: localDateKey(date),
     };
   }
-  if (period === "3months") {
-    const week = startOfIsoWeek(date);
-    return {
-      key: localDateKey(week),
-      label: `Week ${week.toLocaleDateString(currentUiLocale(), {
-        month: "short",
-        day: "numeric",
-      })}`,
-    };
+  if (size === "year") {
+    return { key: String(date.getFullYear()), label: String(date.getFullYear()) };
   }
-  if (isLongHistoryPeriod(period)) {
+  if (size === "quarter") {
     const quarterStart = new Date(date);
     quarterStart.setMonth(Math.floor(date.getMonth() / 3) * 3, 1);
     quarterStart.setHours(0, 0, 0, 0);
@@ -1069,30 +1104,23 @@ function flowChartSelectionDateWindow(selection: FlowChartSelection): {
   since: string;
   until: string;
 } | null {
-  const { bucketKey, period } = selection;
+  const { bucketKey } = selection;
   if (!bucketKey) return null;
+  const size = bucketSizeForKey(bucketKey);
+  if (!size) return null;
 
-  let start: Date | null = null;
-  let end: Date | null = null;
-
-  if (period === "30days" || period === "3months") {
+  let start: Date;
+  if (size === "day") {
     start = new Date(`${bucketKey}T00:00:00`);
-    if (Number.isNaN(start.getTime())) return null;
-    end = new Date(start);
-    end.setDate(end.getDate() + (period === "3months" ? 7 : 1));
-  } else if (isLongHistoryPeriod(period)) {
-    const match = bucketKey.match(/^(\d{4})-Q([1-4])$/);
-    if (!match) return null;
-    start = new Date(Number(match[1]), (Number(match[2]) - 1) * 3, 1);
-    end = new Date(start);
-    end.setMonth(end.getMonth() + 3);
+  } else if (size === "year") {
+    start = new Date(Number(bucketKey), 0, 1);
+  } else if (size === "quarter") {
+    start = new Date(Number(bucketKey.slice(0, 4)), (Number(bucketKey.slice(-1)) - 1) * 3, 1);
   } else {
-    const match = bucketKey.match(/^(\d{4})-(\d{2})$/);
-    if (!match) return null;
-    start = new Date(Number(match[1]), Number(match[2]) - 1, 1);
-    end = new Date(start);
-    end.setMonth(end.getMonth() + 1);
+    start = new Date(Number(bucketKey.slice(0, 4)), Number(bucketKey.slice(5, 7)) - 1, 1);
   }
+  if (Number.isNaN(start.getTime())) return null;
+  const end = addBucketStep(start, size);
 
   end.setMilliseconds(end.getMilliseconds() - 1);
   return { since: start.toISOString(), until: end.toISOString() };
@@ -1101,6 +1129,7 @@ function flowChartSelectionDateWindow(selection: FlowChartSelection): {
 function buildEmptyFlowBuckets(
   period: ResolvedPeriodKey,
   records: Transaction[],
+  size: FlowBucketSize,
 ): Map<string, FlowChartPoint> {
   const grouped = new Map<string, FlowChartPoint>();
   const dated = records
@@ -1108,17 +1137,21 @@ function buildEmptyFlowBuckets(
     .filter((date): date is Date => date !== null);
   if (!dated.length) return grouped;
 
-  const end = periodAnchorDate(dated);
   const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
-  let cursor = periodStartDate(end, period, earliest);
-  if (period === "3months") cursor = startOfIsoWeek(cursor);
-  if (isLongHistoryPeriod(period)) {
+  const range = isYearPeriod(period) ? calendarYearRange(Number(period)) : null;
+  const end = range?.end ?? periodAnchorDate(dated);
+  const cursor = range?.start ?? periodStartDate(end, period as RangePeriodKey, earliest);
+  if (size === "quarter") {
     cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3, 1);
+    cursor.setHours(0, 0, 0, 0);
+  } else if (size === "year") {
+    cursor.setMonth(0, 1);
     cursor.setHours(0, 0, 0, 0);
   }
 
-  while (cursor <= end) {
-    const bucket = bucketTransactionDate(cursor, period);
+  let step = cursor;
+  while (step <= end) {
+    const bucket = bucketTransactionDate(step, size);
     grouped.set(bucket.key, {
       bucketKey: bucket.key,
       date: bucket.label,
@@ -1128,16 +1161,9 @@ function buildEmptyFlowBuckets(
       swaps: 0,
       stats: emptyFlowChartStats(),
     });
-    cursor = addBucketStep(cursor, period);
+    step = addBucketStep(step, size);
   }
   return grouped;
-}
-
-function flowBucketLabel(period: ResolvedPeriodKey) {
-  if (period === "30days") return "day";
-  if (period === "3months") return "week";
-  if (isLongHistoryPeriod(period)) return "quarter";
-  return "month";
 }
 
 function sumByFlow(records: Transaction[], flow: TransactionFlow) {
@@ -1329,13 +1355,14 @@ function buildFlowChartRows(
   currency: Currency,
   candidateFlowOverrides = new Map<string, TransactionFlow>(),
   metric: FlowChartMetric = "amount",
+  size: FlowBucketSize = flowBucketSize(period),
 ): FlowChartPoint[] {
-  const grouped = buildEmptyFlowBuckets(period, records);
+  const grouped = buildEmptyFlowBuckets(period, records, size);
 
   for (const txn of records) {
     const parsedDate = parseTransactionDate(txn.date);
     const bucket = parsedDate
-      ? bucketTransactionDate(parsedDate, period)
+      ? bucketTransactionDate(parsedDate, size)
       : { key: txn.date || "Unknown", label: txn.date || "Unknown" };
     const row =
       grouped.get(bucket.key) ??
@@ -1373,8 +1400,12 @@ function dashboardFlowChartRows(
   metric: FlowChartMetric,
   mode: FlowChartMode,
 ): FlowChartPoint[] {
+  const size =
+    snapshot.bucketSize ??
+    bucketSizeForKey(snapshot.buckets[0]?.bucketKey ?? "") ??
+    flowBucketSize(snapshot.period);
   return snapshot.buckets.map((bucket) => {
-    const date = bucketTransactionDate(new Date(bucket.bucketStart), snapshot.period).label;
+    const date = bucketTransactionDate(new Date(bucket.bucketStart), size).label;
     const value = (segment: FlowChartSegment) => {
       if (mode === "external" && (segment === "transfers" || segment === "swaps")) {
         return 0;
@@ -1803,8 +1834,10 @@ function matchesFlowChartSelection(
   const parsedDate = parseTransactionDate(txn.date);
   if (selection.bucketKey !== null) {
     if (!parsedDate) return false;
-    const bucket = bucketTransactionDate(parsedDate, selection.period);
-    if (bucket.key !== selection.bucketKey) return false;
+    const size = bucketSizeForKey(selection.bucketKey);
+    if (!size || bucketTransactionDate(parsedDate, size).key !== selection.bucketKey) {
+      return false;
+    }
   }
 
   const flow = displayFlow(txn);
@@ -1868,7 +1901,9 @@ export {
   dashboardRecordsFromTxs,
   filterChipClassName,
   flowAxisDomain,
-  flowBucketLabel,
+  bucketSizeForKey,
+  dashboardRequestPeriod,
+  flowBucketSize,
   flowChartConfig,
   flowChartMetricLabels,
   flowChartModeLabels,
@@ -1891,6 +1926,7 @@ export {
   matchesTransactionDeepLink,
   pairRailLabel,
   periodKeys,
+  periodLabel,
   periodLabels,
   quickFilterLabel,
   readTransactionDetailParams,
@@ -1911,6 +1947,8 @@ export {
 };
 
 export type {
+  DashboardYear,
+  FlowBucketSize,
   AttachmentsCopyData,
   AttachmentOpenData,
   AttachmentRecord,

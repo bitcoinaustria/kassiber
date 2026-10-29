@@ -15,7 +15,8 @@ import { bookIdentityKey, useUiStore } from "@/store/ui";
 import { TransactionsExportDialog } from "./TransactionsExportDialog";
 import { useAssistantColumnClaim } from "@/components/kb/assistant-panel/useAssistantColumnClaim";
 import { TransactionsTable } from "./TransactionsTable";
-import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
+import { PeriodPicker, TransactionWorkbench } from "./TransactionWorkbench";
+import type { RangePeriodKey } from "@/lib/period";
 import {
   availablePeriodKeysForRecords,
   availablePeriodKeysForHistory,
@@ -23,6 +24,8 @@ import {
   buildTransactionListFilterArgs,
   DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
   dashboardRecordsFromTxs,
+  dashboardRequestPeriod,
+  periodKeys,
   toDashboardTransaction,
   historyYearsForBounds,
   initialPeriodFromUrl,
@@ -30,6 +33,7 @@ import {
   resolveAutoPeriodForRecords,
   sortTransactionsByDateDesc,
   serializeTransactionFilterParams,
+  type DashboardYear,
   type FlowChartSelection,
   type PeriodKey,
   type ResolvedPeriodKey,
@@ -169,9 +173,12 @@ const TransactionsDashboard = ({
       ),
     [daemonAutoPeriod, daemonHistoryYears, period, records],
   );
+  // The book's years as the daemon last named them: a chosen year scopes to
+  // their exact bounds in the book's calendar, the local calendar until then.
+  const [bookYears, setBookYears] = React.useState<DashboardYear[]>([]);
   const dashboardWindow = React.useMemo(
-    () => transactionPeriodDateWindow(resolvedPeriod),
-    [resolvedPeriod],
+    () => transactionPeriodDateWindow(resolvedPeriod, undefined, bookYears),
+    [bookYears, resolvedPeriod],
   );
   const dashboardWallet =
     breakdownSelection?.dimension === "wallet" &&
@@ -181,7 +188,7 @@ const TransactionsDashboard = ({
   const dashboardQuery = useDaemon<TransactionDashboardSnapshot>(
     "ui.transactions.dashboard",
     {
-      period: resolvedPeriod,
+      period: dashboardRequestPeriod(resolvedPeriod),
       ...(dashboardWindow ?? {}),
       resolveAuto: period === "auto",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -214,6 +221,9 @@ const TransactionsDashboard = ({
     if (dashboardSnapshot?.history.autoPeriod) {
       setDaemonAutoPeriod(dashboardSnapshot.history.autoPeriod);
     }
+    if (dashboardSnapshot?.history.years) {
+      setBookYears(dashboardSnapshot.history.years);
+    }
   }, [dashboardSnapshot]);
   const availablePeriods = React.useMemo(
     () =>
@@ -225,13 +235,29 @@ const TransactionsDashboard = ({
         : availablePeriodKeysForRecords(records),
     [dashboardSnapshot, records],
   );
-  // Keep the active period selectable even when the book's history no longer
-  // covers it (a range carried over from another book), instead of snapping the
-  // user's choice to something else the moment the tabs re-render.
-  const periodOptions = React.useMemo<PeriodKey[]>(() => {
-    const options: PeriodKey[] = ["auto", ...availablePeriods];
-    return options.includes(period) ? options : [...options, period];
-  }, [availablePeriods, period]);
+  // Keep the range on show offered even when the book's history no longer
+  // covers it (one carried over from another book, or a decade auto reached
+  // early), instead of the picker losing the user's choice.
+  const periodRanges = React.useMemo(
+    () =>
+      periodKeys.filter(
+        (key) => availablePeriods.includes(key) || key === resolvedPeriod,
+      ),
+    [availablePeriods, resolvedPeriod],
+  );
+  // Ranges count back from today; one that ends before the book's latest
+  // transaction would show an empty page, so the picker greys it out.
+  const latestActivity = dashboardSnapshot?.history.latest ?? null;
+  const emptyRanges = React.useMemo(() => {
+    if (!latestActivity) return new Set<RangePeriodKey>();
+    const latest = new Date(latestActivity);
+    return new Set(
+      periodRanges.filter((key) => {
+        const window = transactionPeriodDateWindow(key);
+        return window !== null && latest < new Date(window.since);
+      }),
+    );
+  }, [latestActivity, periodRanges]);
   const effectiveCandidateRefs =
     dashboardSnapshot?.candidates ?? pairingCandidateRefs;
   const periodRecords = React.useMemo(
@@ -281,6 +307,7 @@ const TransactionsDashboard = ({
     previousBookKey.current = bookKey;
     setDaemonHistoryYears(undefined);
     setDaemonAutoPeriod(undefined);
+    setBookYears([]);
     patchFilterState({
       period: scopeParams.period ?? storedBookChartPeriod ?? "auto",
       flowChartSelection: null,
@@ -325,9 +352,11 @@ const TransactionsDashboard = ({
         breakdownSelection,
         tableFilterState,
         pairingCandidateRefs: effectiveCandidateRefs,
+        years: bookYears,
       }),
     );
   }, [
+    bookYears,
     breakdownSelection,
     currency,
     transactionIds,
@@ -402,11 +431,13 @@ const TransactionsDashboard = ({
             : "sticky top-2 z-30 gap-2 py-0 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]",
         )}
       >
-        <PeriodTabs
+        <PeriodPicker
           activePeriod={period}
+          resolvedPeriod={resolvedPeriod}
           onPeriodChange={handlePeriodChange}
-          periodOptions={periodOptions}
-          resolvedPeriod={period === "auto" ? resolvedPeriod : null}
+          ranges={periodRanges}
+          emptyRanges={emptyRanges}
+          years={bookYears}
         />
         {tableExpanded ? (
           <div
@@ -428,6 +459,7 @@ const TransactionsDashboard = ({
       {!tableExpanded && (
         <TransactionWorkbench
           period={resolvedPeriod}
+          onPeriodChange={handlePeriodChange}
           records={periodRecords}
           hideSensitive={hideSensitive}
           currency={currency}

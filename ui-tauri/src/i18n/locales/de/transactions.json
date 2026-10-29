@@ -173,16 +173,12 @@
   },
   "period": {
     "auto": "Auto",
-    "autoResolved": "Auto: {{period}}",
-    "ytd": "Lfd. Jahr",
-    "1year": "1 Jahr",
-    "3months": "3 Monate",
-    "6months": "6 Monate",
     "30days": "30 Tage",
-    "5years": "5 Jahre",
+    "1year": "1 Jahr",
+    "4years": "4 Jahre",
     "10years": "10 Jahre",
-    "15years": "15 Jahre",
-    "all": "Gesamt"
+    "all": "Gesamt",
+    "emptyRange": "Keine Transaktionen in diesem Zeitraum"
   },
   "chartMetric": {
     "amount": "Betrag",
@@ -355,17 +351,17 @@
     },
     "chart": {
       "titleDay": "Fluss je aktivem Tag",
-      "titleWeek": "Fluss je aktiver Woche",
       "titleMonth": "Fluss je aktivem Monat",
       "titleQuarter": "Fluss je aktivem Quartal",
       "subtitleDay_one": "{{count}} Tx über {{buckets}} aktiven Tag",
       "subtitleDay_other": "{{count}} Tx über {{buckets}} aktive Tage",
-      "subtitleWeek_one": "{{count}} Tx über {{buckets}} aktive Woche",
-      "subtitleWeek_other": "{{count}} Tx über {{buckets}} aktive Wochen",
       "subtitleMonth_one": "{{count}} Tx über {{buckets}} aktiven Monat",
       "subtitleMonth_other": "{{count}} Tx über {{buckets}} aktive Monate",
       "subtitleQuarter_one": "{{count}} Tx über {{buckets}} aktives Quartal",
-      "subtitleQuarter_other": "{{count}} Tx über {{buckets}} aktive Quartale"
+      "subtitleQuarter_other": "{{count}} Tx über {{buckets}} aktive Quartale",
+      "titleYear": "Fluss je aktivem Jahr",
+      "subtitleYear_one": "{{count}} Tx über {{buckets}} aktives Jahr",
+      "subtitleYear_other": "{{count}} Tx über {{buckets}} aktive Jahre"
     },
     "tooltip": {
       "txCount": "{{count}} Tx",
