@@ -15,8 +15,8 @@ use crate::sql::{rows, Result, Scope};
 
 pub const KINDS: &[&str] = &[
     "ui.transactions.list",
-    "ui.transactions.search",
     "ui.transactions.extremes",
+    "ui.transactions.search",
 ];
 
 /// The complete desktop projection allowlist; there is no generic kind dispatch.

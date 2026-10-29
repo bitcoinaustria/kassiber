@@ -94,6 +94,16 @@ def main() -> None:
             "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
         )
         os.execv(sys.executable, [sys.executable, "-c", script, owner_root, *args])
+    # Both sides of a disposable hybrid book must share its test-only owner
+    # namespace. Python's production resolver deliberately uses the account home.
+    if owner_root := os.environ.get("KASSIBER_RUST_TEST_OWNER_ROOT"):
+        script = (
+            "import sys; from pathlib import Path; "
+            "from kassiber.operator import project; "
+            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
+            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
+        )
+        os.execv(sys.executable, [sys.executable, "-c", script, owner_root, *args])
     os.execv(sys.executable, [sys.executable, "-m", "kassiber", *args])
 
 

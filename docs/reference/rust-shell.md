@@ -112,11 +112,10 @@ the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fo
 `offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 119 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
-
-Wallet lifecycle remains a partial service checkpoint with the explicit limitations below.
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
 The development-only hybrid candidate may select Python before bootstrap.
+Wallet lifecycle remains a partial service checkpoint with the explicit limitations below.
 
 `commands describe` builds the catalog from the generated tree with the
 registry's rules (capability, effect, `needs_database`, scope flags,

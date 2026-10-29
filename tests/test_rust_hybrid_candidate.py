@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,12 @@ ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 HYBRID = ROOT / "tests" / "rust_port" / "hybrid_cli.py"
 PASSPHRASE = "hybrid candidate passphrase"
+IMPLEMENTED = set(re.findall(
+    r'"([^"\n]+)"',
+    (ROOT / "crates/cli/src/describe.rs").read_text().split(
+        "pub const IMPLEMENTED: &[&str] = &[", 1
+    )[1].split("];", 1)[0],
+))
 
 
 @unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to a `--features test-harness` build of crates/kassiber")
@@ -104,7 +111,7 @@ class HybridCandidateTest(unittest.TestCase):
         expected += [".".join(command[:2]) for command in setup_commands]
         expected += ["views.list", "views.delete"]
         self.assertEqual(self.served(), [
-            {"command": command, "served_by": "python" if command == "wallets.kinds" else "rust"}
+            {"command": command, "served_by": "rust" if command in IMPLEMENTED else "python"}
             for command in expected
         ])
 
@@ -150,7 +157,14 @@ class HybridCandidateTest(unittest.TestCase):
         self.assertTrue(status["database_encrypted"])
         # Encryption now runs in Rust. Keep a separate, unported database read
         # to prove the same inherited descriptor also reaches Python.
-        self.ok(self.cli("backends", "list", passphrase_flag="--db-passphrase-fd"))
+        from kassiber.cli.main import build_parser
+        from kassiber.cli.command_registry import describe_command_catalog
+
+        witness = next(command for command in describe_command_catalog(build_parser())["commands"]
+                       if command["kind"] not in IMPLEMENTED
+                       and command["effect"] == "read_only" and command["needs_database"]
+                       and not any(arg["required"] for arg in command["arguments"]))
+        self.ok(self.cli(*witness["path"], passphrase_flag="--db-passphrase-fd"))
         self.assertEqual(
             [entry["served_by"] for entry in self.served()],
             ["rust", "rust", "rust", "python"],

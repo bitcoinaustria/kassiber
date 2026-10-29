@@ -8781,7 +8781,7 @@
     "expect_failing": [
       "interpretation_channel_projection"
     ],
-    "rule": "Truthy persisted loan ids reserve raw custody anchors."
+    "rule": "Persisted loan IDs reserve raw custody anchors when truthy."
   },
   {
     "id": "channel10-sweep-unhashable-source",

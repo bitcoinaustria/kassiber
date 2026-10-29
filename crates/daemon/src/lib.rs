@@ -66,37 +66,100 @@ pub struct DaemonConfig {
 /// Every kind `daemon.ready` advertises.
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
-    kinds.extend(services::kinds().filter(|kind| offline::KINDS.contains(kind)));
+    kinds.extend(services::kinds().filter(|k| offline::KINDS.contains(k)));
     kinds.extend(transactions::KINDS);
+    kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
+        [
+            "ui.transactions.metadata.update",
+            "ui.transactions.history",
+            "ui.transactions.history.revert",
+            "ui.activity.history",
+            "ui.activity.stale",
+        ]
+        .contains(k)
+    }));
+    kinds.extend(attachments::KINDS);
     kinds.extend(
-        metadata::KINDS
+        wallets::KINDS
             .iter()
             .copied()
-            .filter(|k| !k.starts_with("ui.metadata.bip329.")),
+            .filter(|k| ["ui.wallets.list"].contains(k)),
     );
-    kinds.extend(attachments::KINDS);
     kinds.extend(loans::KINDS);
+    kinds.extend(services::kinds().filter(|k| {
+        backends::KINDS.contains(k)
+            && [
+                "ui.backends.options",
+                "ui.backends.public_defaults",
+                "ui.backends.settings.list",
+                "ui.backends.create",
+                "ui.backends.update",
+                "ui.backends.delete",
+                "ui.backends.set_default",
+                "ui.backends.bitcoinrpc.test",
+                "ui.backends.btcpay.test",
+                "ui.backends.detect_core",
+                "ui.backends.electrum.test",
+                "ui.backends.http.test",
+            ]
+            .contains(k)
+    }));
     kinds.extend(reports::KINDS);
-    kinds.extend(services::kinds().filter(|kind| {
-        !offline::KINDS.contains(kind)
-            && !["backends.reveal_token", "ui.profiles.reset_data"].contains(kind)
+    kinds.extend(documents::KINDS);
+    kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
+    kinds.extend(services::kinds().filter(|k| networks::KINDS.contains(k)));
+    kinds.extend(services::kinds().filter(|k| {
+        profiles::KINDS.contains(k)
+            && [
+                "ui.profiles.snapshot",
+                "ui.profiles.create",
+                "ui.profiles.rename",
+                "ui.profiles.update",
+                "ui.profiles.switch",
+            ]
+            .contains(k)
     }));
     kinds.extend(rates::KINDS);
-    kinds.push("ui.profiles.reset_data");
+    kinds.extend(services::kinds().filter(|k| workspaces::KINDS.contains(k)));
+    kinds.extend(
+        services::kinds()
+            .filter(|k| profiles::KINDS.contains(k) && ["ui.profiles.reset_data"].contains(k)),
+    );
     kinds.extend(backup::KINDS);
     kinds.extend(secrets::KINDS);
-    kinds.extend(imports::KINDS);
-    kinds.extend(documents::KINDS);
-    kinds.extend(wallets::KINDS);
     kinds.extend(
-        metadata::KINDS
+        wallets::KINDS
             .iter()
             .copied()
-            .filter(|k| k.starts_with("ui.metadata.bip329.")),
+            .filter(|k| ["ui.wallets.create"].contains(k)),
+    );
+    kinds.extend(imports::KINDS);
+    kinds.extend(
+        wallets::KINDS
+            .iter()
+            .copied()
+            .filter(|k| ["ui.wallets.preview_descriptor"].contains(k)),
+    );
+    kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
+        [
+            "ui.metadata.bip329.preview",
+            "ui.metadata.bip329.import",
+            "ui.metadata.bip329.export",
+        ]
+        .contains(k)
+    }));
+    kinds.extend(
+        wallets::KINDS
+            .iter()
+            .copied()
+            .filter(|k| ["ui.wallets.update", "ui.wallets.delete"].contains(k)),
     );
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
-    kinds.push("backends.reveal_token");
-    kinds.push("daemon.shutdown");
+    kinds.extend(
+        services::kinds()
+            .filter(|k| backends::KINDS.contains(k) && ["backends.reveal_token"].contains(k)),
+    );
+    kinds.push(SUPPORTED_KINDS[3]);
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds
@@ -1076,7 +1139,6 @@ impl Daemon {
 }
 
 mod accounts;
-mod backends;
 mod context;
 mod networks;
 mod offline;

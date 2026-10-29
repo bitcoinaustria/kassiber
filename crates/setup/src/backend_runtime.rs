@@ -194,7 +194,31 @@ impl Config {
             result.as_object_mut().unwrap().remove("config_json");
         }
         let mut process = BTreeMap::new();
-        apply(&mut process, &std::env::vars().collect());
+        fn apply_probe_fields(
+            backends: &mut BTreeMap<String, Backend>,
+            env: &BTreeMap<String, String>,
+        ) -> BTreeSet<String> {
+            let mut names = BTreeSet::new();
+            for prefix in ["SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"] {
+                for (key, value) in env {
+                    if let Some((name, field)) =
+                        key.strip_prefix(prefix).and_then(|k| k.split_once('_'))
+                    {
+                        if name.is_empty() || field.is_empty() {
+                            continue;
+                        }
+                        let name = name.to_lowercase();
+                        backends
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(canonical(field), kassiber_pytext::strip(value).to_owned());
+                        names.insert(name);
+                    }
+                }
+            }
+            names
+        }
+        apply_probe_fields(&mut process, &std::env::vars().collect());
         if let Some(fields) = process.get(&name) {
             for (k, v) in fields {
                 result[k] = json!(v);

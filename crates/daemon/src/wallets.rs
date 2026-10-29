@@ -9,8 +9,8 @@ use kassiber_wallets::{config, descriptors, material, Operation};
 use serde_json::{json, Value as Json};
 pub const KINDS: &[&str] = &[
     "ui.wallets.list",
-    "ui.wallets.preview_descriptor",
     "ui.wallets.create",
+    "ui.wallets.preview_descriptor",
     "ui.wallets.update",
     "ui.wallets.delete",
 ];

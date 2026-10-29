@@ -811,7 +811,7 @@ class RustRealStoreParityTest(_Roots):
             ("ui.backends.create", {"name":"remote-cookie", "kind":"bitcoinrpc", "url":"http://example.test", "config":{"cookiefile":"/synthetic/.cookie"}}),
             *[(kind,{}) for kind in ("ui.backends.bitcoinrpc.test", "ui.backends.btcpay.test", "ui.backends.electrum.test", "ui.backends.http.test", "ui.backends.lightning.test", "ui.backends.detect_core")],
         ]
-        # Network kinds remain refused in Rust and are not dispatched in Python.
+        # Probe acceptance uses owned loopback fixtures in the chain suite.
         local_requests = requests[:-6]
         lines = [json.dumps({"request_id": i, "kind": kind, "args": args}) + "\n"
                  for i, (kind, args) in enumerate(local_requests)]
@@ -854,8 +854,11 @@ class RustRealStoreParityTest(_Roots):
             actual = exchange()
         self.assertEqual((expected[0], actual[0]), (0, 0))
         self.assertEqual(actual[1][1:], expected[1][1:])
+        served = set(json.loads(actual[1][0])["data"]["supported_kinds"])
+        unported = [(kind, args) for kind, args in requests[-6:] if kind not in served]
+        self.assertTrue(unported)
         refused = _daemon(["--data-root", str(self.root), "daemon"], env,
-                          [json.dumps({"request_id":i,"kind":kind,"args":args})+"\n" for i,(kind,args) in enumerate(requests[-6:])])
+                          [json.dumps({"request_id":i,"kind":kind,"args":args})+"\n" for i,(kind,args) in enumerate(unported)])
         for line in refused[1][1:]:
             self.assertEqual(json.loads(line)["error"]["code"], "not_implemented")
 
