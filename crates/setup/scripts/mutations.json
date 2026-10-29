@@ -569,5 +569,25 @@
       "sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner"
     ],
     "rule": "Sensitive desktop operations hold desktop project ownership."
+  },
+  {
+    "id": "accounting-neutral-wallet-scope",
+    "file": "crates/setup/src/networks.rs",
+    "find": "let cache = &mut neutral[index];",
+    "replace": "let cache = &mut neutral[0];",
+    "expect_failing": [
+      "accounting_neutral_cache_is_wallet_and_asset_scoped"
+    ],
+    "rule": "Neutral observations may reuse evidence only within the same wallet."
+  },
+  {
+    "id": "accounting-neutral-asset-scope",
+    "file": "crates/setup/src/networks.rs",
+    "find": "if cache.contains(asset) { return; }",
+    "replace": "if !cache.is_empty() { return; }",
+    "expect_failing": [
+      "accounting_neutral_cache_is_wallet_and_asset_scoped"
+    ],
+    "rule": "Different assets in one wallet must independently pass the network-family evidence checks."
   }
 ]

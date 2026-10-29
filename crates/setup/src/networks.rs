@@ -390,6 +390,74 @@ pub fn read_snapshot<T>(conn: &Connection, operation: impl FnOnce() -> Result<T>
 pub fn inventory(conn: &Connection, profile: &str) -> Result<Value> {
     read_snapshot(conn, || inventory_snapshot(conn, profile, true))
 }
+// The accounting gate needs only unions and a conflict flag. Decode the same
+// ordered projection as review, without retaining raw observations or cloning
+// wallet configuration for every neutral row. This cache lasts one read only.
+#[derive(Default)]
+struct AccountingFacts {
+    environments: BTreeSet<String>,
+    instances: BTreeSet<String>,
+    conflicted: bool,
+    count: usize,
+}
+fn accounting_observations(
+    conn: &Connection,
+    profile: &str,
+    wallets: &[Value],
+) -> Result<AccountingFacts> {
+    let mut result = AccountingFacts::default();
+    let mut seen = vec![false; wallets.len()];
+    let mut neutral: Vec<Vec<Value>> = vec![Vec::new(); wallets.len()];
+    let wallet_indices: std::collections::BTreeMap<_, _> = wallets
+        .iter()
+        .enumerate()
+        .filter_map(|(i, row)| match value(row, "id") {
+            Value::Str(id) => id.as_str().map(|id| (id, i)),
+            _ => None,
+        })
+        .collect();
+    let mut merge = |facts: EvidenceFacts| {
+        let (environment, instance, valid) = facts;
+        if !valid {
+            result.conflicted = true;
+        } else if let Some(environment) = environment {
+            if environment == "regtest" {
+                if let Some(instance) = instance {
+                    result.instances.insert(instance);
+                }
+            }
+            result.environments.insert(environment);
+        }
+    };
+    visit_rows(conn, "SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? ORDER BY t.id", [profile], |row| {
+        result.count += 1;
+        let index = match value(row,"wallet_id") {
+            Value::Str(id) => id.as_str().and_then(|id| wallet_indices.get(id).copied()),
+            id => wallets.iter().position(|w| value(w,"id") == id),
+        };
+        let Some(index) = index else { return; };
+        seen[index] = true;
+        let facts = if irrelevant_json(value(row,"raw_json")) {
+            let cache = &mut neutral[index];
+            let asset = value(row,"asset");
+            // Unioning the same facts twice cannot change admission. There
+            // are no per-row review counts on this path.
+            if cache.contains(asset) { return; }
+            cache.push(asset.clone());
+            evidence(row)
+        } else { evidence(row) };
+        merge(facts);
+    })?;
+    for (wallet, seen) in wallets.iter().zip(seen) {
+        if !seen {
+            merge(evidence(&dict([
+                ("wallet_kind", value(wallet, "kind").clone()),
+                ("config_json", value(wallet, "config_json").clone()),
+            ])));
+        }
+    }
+    Ok(result)
+}
 fn inventory_snapshot(conn: &Connection, profile: &str, review: bool) -> Result<Value> {
     let profiles = rows(
         conn,
@@ -404,7 +472,21 @@ fn inventory_snapshot(conn: &Connection, profile: &str, review: bool) -> Result<
         "SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY id",
         [profile],
     )?;
-    let observations = rows(conn, "SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? ORDER BY t.id", [profile])?;
+    let observations = if review {
+        rows(conn, "SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? ORDER BY t.id", [profile])?
+    } else {
+        Vec::new()
+    };
+    let accounting = if review {
+        AccountingFacts::default()
+    } else {
+        accounting_observations(conn, profile, &wallets)?
+    };
+    let transaction_count = if review {
+        observations.len()
+    } else {
+        accounting.count
+    };
     let mut fingerprint = if review {
         vec![
             profile_row.clone(),
@@ -414,11 +496,11 @@ fn inventory_snapshot(conn: &Connection, profile: &str, review: bool) -> Result<
     } else {
         Vec::new()
     };
-    let mut all_environments = BTreeSet::new();
-    let mut all_instances = BTreeSet::new();
+    let mut all_environments = accounting.environments;
+    let mut all_instances = accounting.instances;
     let mut wallet_rows = Vec::new();
-    let mut wallet_conflicts = false;
-    for wallet in wallets {
+    let mut wallet_conflicts = accounting.conflicted;
+    for wallet in wallets.into_iter().filter(|_| review) {
         let transactions: Vec<_> = observations
             .iter()
             .filter(|r| value(r, "wallet_id") == value(&wallet, "id"))
@@ -577,7 +659,7 @@ fn inventory_snapshot(conn: &Connection, profile: &str, review: bool) -> Result<
                 Value::Null
             },
         ),
-        ("transaction_count", Value::Int(observations.len().into())),
+        ("transaction_count", Value::Int(transaction_count.into())),
     ]))
 }
 fn strings(values: &BTreeSet<String>) -> Value {
@@ -870,9 +952,31 @@ mod read_tests {
     }
 
     #[test]
+    fn accounting_neutral_cache_is_wallet_and_asset_scoped() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE profiles(id TEXT,journal_input_version INTEGER); CREATE TABLE wallets(id TEXT,label TEXT,kind TEXT,config_json TEXT,profile_id TEXT); CREATE TABLE transactions(id TEXT,wallet_id TEXT,asset TEXT,raw_json TEXT,profile_id TEXT); INSERT INTO profiles VALUES('p',1); INSERT INTO wallets VALUES('a','A','custom','{\"network\":\"main\"}','p'),('b','B','custom','{\"network\":\"test\"}','p'); INSERT INTO transactions VALUES('a1','a','BTC','{}','p'),('a2','a','BTC','{}','p'),('b1','b','BTC','{}','p');").unwrap();
+        let compact = inventory_snapshot(&conn, "p", false).unwrap();
+        assert_eq!(value(&compact, "state"), &s("mixed"));
+        assert_eq!(
+            value(&compact, "environments"),
+            &Value::List(vec![s("main"), s("test")])
+        );
+        conn.execute_batch("UPDATE wallets SET config_json='{\"chain\":\"bitcoin\"}'; UPDATE transactions SET asset='LBTC' WHERE id='a2';").unwrap();
+        let compact = inventory_snapshot(&conn, "p", false).unwrap();
+        assert_eq!(value(&compact, "state"), &s("conflicted"));
+        // Even an otherwise redundant neutral row must still be decoded.
+        conn.execute_batch("UPDATE transactions SET raw_json=x'aa' WHERE id='b1';")
+            .unwrap();
+        assert!(inventory_snapshot(&conn, "p", false).is_err());
+    }
+
+    #[test]
     fn accounting_and_review_read_the_same_network_facts_without_writes() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE profiles(id TEXT,journal_input_version INTEGER); CREATE TABLE wallets(id TEXT,label TEXT,kind TEXT,config_json TEXT,profile_id TEXT); CREATE TABLE transactions(id TEXT,wallet_id TEXT,asset TEXT,raw_json TEXT,profile_id TEXT); INSERT INTO profiles VALUES('p',1); INSERT INTO wallets VALUES('w','Wallet','custom','{}','p'),('empty','Empty','custom','{}','p'); INSERT INTO transactions VALUES('t','w','BTC','{}','p');").unwrap();
+        // Include multiple wallets, repeated neutral assets, a foreign-wallet
+        // observation and configuration-only evidence on an empty wallet.
+        conn.execute_batch("INSERT INTO wallets VALUES('other','Other','custom','{\"network\":\"test\"}','p'),('foreign','Foreign','custom','{}','other-profile'); INSERT INTO transactions VALUES('other-t','other','BTC','{}','p'),('foreign-t','foreign','BTC','{\"network\":\"signet\"}','p'); UPDATE wallets SET config_json='{\"network\":\"main\"}' WHERE id='empty';").unwrap();
         for raw in [
             "{}",
             r#"{"network":"main"}"#,

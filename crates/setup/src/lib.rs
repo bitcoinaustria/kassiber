@@ -56,25 +56,62 @@ fn sql_error(error: rusqlite::Error) -> AppError {
     }
 }
 fn row_value(row: &Row<'_>) -> rusqlite::Result<Value> {
-    let mut fields = Vec::new();
+    let mut fields = Vec::with_capacity(row.as_ref().column_count());
     for (index, name) in row.as_ref().column_names().iter().enumerate() {
-        let value = match row.get_ref(index)? {
-            ValueRef::Null => Value::Null,
-            ValueRef::Integer(n) => Value::Int(n.into()),
-            ValueRef::Real(n) => Value::Float(n),
-            ValueRef::Text(v) => s(std::str::from_utf8(v).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    index,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?),
-            ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
-        };
+        let value = column_value(row, index)?;
         fields.push(((*name).to_owned(), value));
     }
     Ok(dict(fields))
 }
+fn column_value(row: &Row<'_>, index: usize) -> rusqlite::Result<Value> {
+    Ok(match row.get_ref(index)? {
+        ValueRef::Null => Value::Null,
+        ValueRef::Integer(n) => Value::Int(n.into()),
+        ValueRef::Real(n) => Value::Float(n),
+        ValueRef::Text(v) => s(std::str::from_utf8(v).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                index,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })?),
+        ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
+    })
+}
+/// Decode every SQL value in order, but retain only one row dictionary.
+fn visit_rows(
+    conn: &Connection,
+    sql: &str,
+    params: impl Params,
+    mut visit: impl FnMut(&Value),
+) -> Result<()> {
+    let mut stmt = conn.prepare(sql).map_err(sql_error)?;
+    let mut converted = dict(stmt.column_names().iter().map(|name| (*name, Value::Null)));
+    let mut query = stmt.query(params).map_err(sql_error)?;
+    while let Some(row) = query.next().map_err(sql_error)? {
+        if let Value::Dict(fields) = &mut converted {
+            for (index, (_, value)) in fields.iter_mut().enumerate() {
+                if let ValueRef::Text(raw) = row.get_ref(index).map_err(sql_error)? {
+                    let raw = std::str::from_utf8(raw).map_err(|error| {
+                        sql_error(rusqlite::Error::FromSqlConversionFailure(
+                            index,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        ))
+                    })?;
+                    if !matches!(value, Value::Str(old) if old.as_str() == Some(raw)) {
+                        *value = s(raw);
+                    }
+                } else {
+                    *value = column_value(row, index).map_err(sql_error)?;
+                }
+            }
+        }
+        visit(&converted);
+    }
+    Ok(())
+}
+
 fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Value>> {
     conn.prepare(sql)
         .map_err(sql_error)?
