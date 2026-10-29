@@ -13,6 +13,12 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-store = { path = "../store" }
+# Reuse the ported custody validator and exact decimal/JSON boundaries. UUIDv5
+# identities require SHA-1, supplied by the already locked Bitcoin hash library.
+kassiber-custody = { path = "../custody" }
+kassiber-pydecimal = { path = "../pydecimal" }
+bitcoin_hashes = "0.14"
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
 
 [dev-dependencies]
 tempfile = "3"

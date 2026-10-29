@@ -14,6 +14,7 @@ from kassiber.cli.handlers import (
     list_transactions,
 )
 from kassiber.core.custody_authored_migration import (
+    create_pair_review_component,
     find_active_review_for_transaction,
     list_active_review_refs,
     refresh_legacy_authored_components,
@@ -1324,6 +1325,29 @@ def test_native_review_activation_failure_leaves_no_committed_draft(tmp_path, fa
     before = list(conn.iterdump())
     with pytest.raises((AppError, ValueError)):
         create_transaction_pair(conn, "ws", "profile", "out", "in")
+    conn.rollback()
+    assert list(conn.iterdump()) == before
+    # The common native entry point also serves payout and revision callers;
+    # its own atomicity must not depend on the outer pair-service savepoint.
+    with pytest.raises((AppError, ValueError)):
+        create_pair_review_component(
+            conn,
+            review_id="refused-native-review",
+            workspace_id="ws",
+            profile_id="profile",
+            out_transaction_id="out",
+            in_transaction_id="in",
+            kind="manual",
+            policy="carrying-value",
+            notes=None,
+            swap_fee_msat=None,
+            swap_fee_kind=None,
+            confidence_at_pair=None,
+            pair_source="manual",
+            out_amount_msat=None,
+            created_at=NOW,
+            authored_source="cli",
+        )
     conn.rollback()
     assert list(conn.iterdump()) == before
     conn.close()

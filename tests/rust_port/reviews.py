@@ -52,6 +52,8 @@ REVIEWS = {
     "tests/test_rust_backup_desktop.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares unmodified desktop backup JSONL bytes, redacted summaries, cancellation, stale generations, ownership refusals, locked restore outcomes and per-kind native routing on identical disposable database identities"}},
     "tests/test_rust_secrets_lifecycle.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares CLI and daemon secrets wire bytes and complete encrypted states, kills lifecycle writers before either-runtime recovery, and gates native credential cases on a newly launched disposable Linux bus and keyring"}},
     "tests/test_rust_secrets_services.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares encryption CLI bytes and SQLCipher contents with Python and kills publication children before recovery with either runtime; native keyrings are never constructed"}},
+
+    "tests/test_rust_transfer_services.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution"}},
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
     "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
     "tests/test_rust_store_interop.py": {"*": {"group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary"}},
@@ -96,7 +98,11 @@ REVIEWS = {
     },
     "tests/test_custody_components.py": {"CustodySchemaTests": {"group": "store", "reason": "historical SQLite compatibility and immutable-trigger migrations port to store tests"}},
     "tests/test_custody_gaps.py": {"CustodyGapLegacySchemaMigrationTests": {"group": "store", "reason": "checks historical database migration rather than candidate matching"}},
-    "tests/test_custody_authored_migration.py": {"*": {"group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests"}},
+    "tests/test_custody_authored_migration.py": {
+        "*": {"group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests"},
+        "test_native_review_activation_failure_leaves_no_committed_draft": {"disposition": "rust-test", "group": "transactions", "reason": "crates/transfers/tests/pairs.rs pins complete-row refusal parity without retaining a draft"},
+        "test_pair_invalidation_failure_keeps_complete_database_unchanged": {"disposition": "rust-test", "group": "transactions", "reason": "pair_final_invalidation_refusals_are_atomic pins rollback after create, update and unpair invalidation failures"},
+    },
     "tests/test_custody_quantity_runtime.py": {"CustodyQuantityRuntimeTests::test_gap_search_projection_is_a_required_runtime_input": {"disposition": "python-only", "reason": "inspects a Python keyword-only signature", "replacement": "Rust API requires the gap-search input in its type signature"}},
     "tests/test_freshness.py": {"FreshnessTest::test_module_docstring_is_visible_to_ast": {"disposition": "python-only", "reason": "checks Python module docstring placement for AST tooling", "replacement": "Rust module documentation and native inventory checks"}},
     "tests/test_transfer_matching.py": {"HeuristicMatchTests::test_window_slice_matches_naive_all_pairs_reference": {"disposition": "oracle", "reason": "compares optimized window matching with an independent naive all-pairs reference"}},

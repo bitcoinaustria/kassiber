@@ -1819,10 +1819,14 @@ dependencies = [
 name = "kassiber-transfers"
 version = "0.1.0"
 dependencies = [
+ "bitcoin_hashes",
+ "kassiber-custody",
  "kassiber-envelope",
+ "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
+ "serde_json",
  "tempfile",
 ]
 

@@ -3,6 +3,7 @@
 mod anchors;
 mod commitments;
 mod conservation;
+pub mod review;
 mod scope;
 pub(crate) mod time;
 
@@ -447,11 +448,19 @@ fn materialize(
             Ok(v)
         })
         .collect::<Result<_, Error>>()?;
-    let evidence = commitments::evidence_status(shared, &h, &stored, &commitments)?;
+    let evidence = if h["state"] == "active" {
+        commitments::evidence_status(shared, &h, &stored, &commitments)?
+    } else {
+        json!({"valid":true,"status":"not_required_until_activation","expected_count":h["expected_evidence_count"],"commitment_count":0})
+    };
     if !truth(&evidence["valid"]) {
         issues.push(json!({"code":"component_evidence_commitment_invalid","message":"author-bound activation evidence is missing, incomplete, conflicted, or no longer matches local canonical anchors","status":evidence["status"],"expected":evidence["expected_count"],"actual":evidence["commitment_count"]}));
     }
-    let native = commitments::native_status(&stored, &allocs, native)?;
+    let native = if h["state"] == "active" {
+        commitments::native_status(&stored, &allocs, native)?
+    } else {
+        json!({"status":"unverified","usable":true,"boundary_count":0,"supported_boundary_count":0,"partially_supported_boundary_count":0,"contradicted_boundary_count":0})
+    };
     if !truth(&native["usable"]) {
         issues.push(json!({"code":"component_native_support_contradicted","message":"recovered same-native-event policy evidence conflicts with an authored component boundary","supported_boundaries":native["supported_boundary_count"],"contradicted_boundaries":native["contradicted_boundary_count"]}));
     }
@@ -469,7 +478,11 @@ fn materialize(
     }
     validation["anchors"] = anchors;
     issues.extend(lineage(shared, &h)?);
-    let conflicts = membership(shared, c);
+    let conflicts = if h["state"] == "active" {
+        membership(shared, c)
+    } else {
+        Vec::new()
+    };
     if !conflicts.is_empty() {
         issues.push(json!({"code":"active_transaction_membership_conflict","message":"a transaction belongs to another authored active component","conflicts":conflicts}));
     }

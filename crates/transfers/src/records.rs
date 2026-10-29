@@ -4,6 +4,14 @@ use kassiber_envelope::s;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn terms(conn: &Connection, scope: &Scope<'_>, kind: &str) -> Result<Vec<Value>> {
+    terms_with_deleted(conn, scope, kind, false)
+}
+fn terms_with_deleted(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    kind: &str,
+    deleted: bool,
+) -> Result<Vec<Value>> {
     rows(conn, "SELECT term.*, c.superseded_at,
         COALESCE(source.anchor_transaction_id,source.transaction_id) AS out_transaction_id,
         COALESCE(target.anchor_transaction_id,target.transaction_id) AS in_transaction_id,
@@ -15,9 +23,37 @@ fn terms(conn: &Connection, scope: &Scope<'_>, kind: &str) -> Result<Vec<Value>>
         JOIN custody_components c ON c.id=term.component_id
         JOIN custody_component_legs source ON source.id=term.source_leg_id
         JOIN custody_component_legs target ON target.id=term.target_leg_id
-        WHERE term.profile_id=? AND term.term_kind=? AND term.component_id IN
+        WHERE term.profile_id=? AND term.term_kind=? AND (term.component_id IN
           (SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?)
-        ORDER BY term.created_at DESC,term.component_id,term.ordinal", [scope.profile_id,kind,scope.profile_id])
+          OR (? AND c.state='superseded' AND NOT EXISTS (SELECT 1 FROM custody_components successor WHERE successor.supersedes_component_id=c.id)))
+        ORDER BY term.created_at DESC,term.component_id,term.ordinal", kassiber_store::rusqlite::params![scope.profile_id,kind,scope.profile_id,deleted])
+}
+pub(super) fn pair_records(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    deleted: bool,
+) -> Result<Vec<Value>> {
+    let contexts = contexts(conn, scope)?;
+    let mut result = BTreeMap::new();
+    for row in terms_with_deleted(conn, scope, "transaction_pair", deleted)? {
+        let mut pair = common(&row, false)?;
+        append(
+            &mut pair,
+            "out_asset",
+            value(context(&contexts, &row, "out_transaction_id")?, "asset"),
+        );
+        append(
+            &mut pair,
+            "in_asset",
+            value(context(&contexts, &row, "in_transaction_id")?, "asset"),
+        );
+        result.insert(text(&pair, "id"), pair);
+    }
+    if let Value::List(rows) = sorted(result) {
+        Ok(rows)
+    } else {
+        unreachable!()
+    }
 }
 fn contexts(conn: &Connection, scope: &Scope<'_>) -> Result<BTreeMap<String, Value>> {
     Ok(rows(conn, "SELECT t.id,t.external_id,t.asset,t.amount,t.occurred_at,w.label AS wallet,w.kind AS wallet_kind FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=?", [scope.profile_id])?.into_iter().map(|r| (text(&r,"id"),r)).collect())

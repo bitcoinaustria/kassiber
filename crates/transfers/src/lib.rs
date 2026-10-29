@@ -1,6 +1,9 @@
 //! Stored review facts are distinct from observation, matching and journal authority.
+mod component_store;
 mod dismissals;
 mod history;
+mod pair_authoring;
+mod pair_spec;
 mod records;
 mod rules;
 mod sql;
@@ -41,6 +44,9 @@ pub fn execute_with_sources(
     sources: &dyn Sources,
 ) -> Result<Value> {
     match operation {
+        "transfers.pair" | "transfers.unpair" | "transfers.update" => {
+            pair_authoring::execute(conn, scope, operation, args, sources)
+        }
         "transfers.dismiss" => dismissals::dismiss(conn, scope, args, sources),
         "transfers.rules.create"
         | "transfers.rules.delete"

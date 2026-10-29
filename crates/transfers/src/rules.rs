@@ -190,7 +190,7 @@ fn key_text(key: &kassiber_pyjson::Key) -> String {
     })
 }
 
-fn recommended_policy(
+pub(super) fn recommended_policy(
     conn: &Connection,
     scope: &Scope<'_>,
     predicate: &Value,

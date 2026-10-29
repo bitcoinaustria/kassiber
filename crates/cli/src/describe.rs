@@ -136,6 +136,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.balance-history",
 
     "transfers.list",
+    "transfers.pair",
+    "transfers.unpair",
+    "transfers.update",
     "transfers.payouts.list",
     "transfers.gaps.history",
     "transfers.rules.list",

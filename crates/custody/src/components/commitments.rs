@@ -23,7 +23,7 @@ fn anchors(legs: &[Value]) -> BTreeSet<String> {
         .map(|l| pystr(or(&l["anchor_transaction_id"], &l["transaction_id"])))
         .collect()
 }
-fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Error> {
+pub(super) fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Error> {
     let ids = anchors(legs);
     // Anchor rows with these ids, in anchor order.
     let mut candidates: Vec<_> = ids
@@ -84,7 +84,7 @@ fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Err
     Ok(snapshots.into_values().collect())
 }
 // Python computes detail hashes after the canonical-evidence exception guard.
-fn commitment_pairs(snapshots: &[Value]) -> Result<Vec<(String, String)>, Error> {
+pub(super) fn commitment_pairs(snapshots: &[Value]) -> Result<Vec<(String, String)>, Error> {
     let mut result = Vec::new();
     for s in snapshots {
         let mut payload = codec::loads(

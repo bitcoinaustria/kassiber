@@ -67,6 +67,8 @@ age
 tar
 uuid
 bitcoin
+# Existing locked pure hash algorithms; transfer UUIDv5 uses SHA-1, no transport.
+bitcoin_hashes
 miniscript
 elements-miniscript
 regex

@@ -147,3 +147,79 @@ class RustTransferServicesTest(unittest.TestCase):
                 self.assertIsNone(actual['error']['debug'])
                 expected['error']['debug'] = None
             self.assertEqual(actual,expected)
+
+    def _pair_book(self, name):
+        root = self.base / name
+        fixture = json.loads((ROOT / 'crates/transfers/tests/pairs.json').read_text())
+        c = open_db(root)
+        for statement in fixture['scenarios'][0]['sql']:
+            c.execute(statement)
+        c.execute("INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p')")
+        c.commit()
+        c.close()
+        return root
+
+    def test_hybrid_pair_update_unpair_are_served_by_rust(self):
+        root = self._pair_book('hybrid-pairs')
+        log = self.base / 'pair-hybrid.jsonl'
+        env = {**self.env, 'KASSIBER_HYBRID_RUST_BIN':RUST_BIN, 'KASSIBER_HYBRID_LOG':str(log)}
+        def call(*argv, ok=True):
+            result = subprocess.run([sys.executable,str(ROOT/'tests/rust_port/hybrid_cli.py'),'--machine','--data-root',str(root),*argv], env=env,cwd=ROOT,capture_output=True,timeout=120)
+            self.assertEqual(result.returncode,0 if ok else 1,(result.stdout,result.stderr))
+            return json.loads(result.stdout)
+        first=call('transfers','pair','--tx-out','d','--tx-in','e','--note','reviewed')['data']
+        call('transfers','pair','--tx-out','d','--tx-in','e',ok=False)
+        updated=call('transfers','update','--pair-id',first['id'],'--note','revision')['data']
+        self.assertEqual(updated['id'],first['id'])
+        self.assertNotEqual(updated['component_id'],first['component_id'])
+        call('transfers','update','--pair-id',first['id'],'--policy','taxable',ok=False)
+        call('transfers','unpair','--pair-id',first['id'])
+        call('transfers','unpair','--pair-id',first['id'])
+        rows=[json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual([r['command'] for r in rows],['transfers.pair']*2+['transfers.update']*2+['transfers.unpair']*2)
+        self.assertTrue(all(r['served_by']=='rust' for r in rows),rows)
+
+    def test_native_daemon_pair_revision_aliases_and_refusals_match_python(self):
+        import re
+        transcripts=[]
+        for rust in (False,True):
+            root=self._pair_book('daemon-pairs-'+str(rust))
+            args=['--data-root',str(root),'daemon']
+            options=dict(stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=self.env,cwd=ROOT)
+            process=(subprocess.Popen([RUST_BIN,*args],**options) if rust else cli_runner.popen(args,reference=True,**options))
+            self.addCleanup(lambda p=process: p.kill() if p.poll() is None else None)
+            ready=json.loads(process.stdout.readline())
+            self.assertEqual(ready['kind'],'daemon.ready')
+            results=[]
+            def call(kind,args):
+                request=dict(kind=kind,args=args,request_id=str(len(results)))
+                process.stdin.write(json.dumps(request)+'\n');process.stdin.flush()
+                result=json.loads(process.stdout.readline());results.append(result)
+                return result
+            first=call('ui.transfers.pair',dict(out_id='d',in_id='e',note='reviewed',pair_source='bulk_selected'))['data']
+            call('ui.transfers.pair',dict(tx_out='d',tx_in='e'))
+            call('ui.transfers.update',dict(pair_id=first['id'],notes='revision'))
+            call('ui.transfers.update',dict(pair_id=first['id'],notes=''))
+            call('ui.transfers.update',dict(pair_id=first['id'],policy='taxable'))
+            call('ui.transfers.update',{})
+            call('ui.transfers.unpair',dict(pair_id=first['id']))
+            call('ui.transfers.unpair',dict(pair_id=first['id']))
+            call('ui.transfers.pair',dict(tx_out='d',tx_in='excluded'))
+            call('ui.transfers.pair',dict(tx_out='d',tx_in='bad'))
+            call('daemon.shutdown',{})
+            process.stdin.close();process.wait(timeout=60)
+            self.assertEqual(process.returncode,0,process.stderr.read())
+            process.stdout.close();process.stderr.close()
+            # Native fixed-source traces pin every stored byte. Process traces
+            # normalize only generated UUIDs, wall-clock times and Python debug.
+            replacements={}
+            def normalize(value):
+                if isinstance(value,dict):return {k:normalize(v) for k,v in sorted(value.items()) if k!='debug'}
+                if isinstance(value,list):return [normalize(v) for v in value]
+                if isinstance(value,str):
+                    def identity(m):return replacements.setdefault(m[0],f'uuid-{len(replacements)}')
+                    value=re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',identity,value)
+                    return re.sub(r'202[0-9]-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z','<time>',value)
+                return value
+            transcripts.append(normalize(results))
+        self.assertEqual(transcripts[0],transcripts[1])

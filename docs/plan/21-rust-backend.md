@@ -1686,8 +1686,8 @@ and desktop family adapters. No matcher, journal builder, egress path or AI
 projection is enabled by these reads. Native Python vectors and real-process
 byte oracles cover the five stored-read commands.
 
-The authoring checkpoint adds rule create/delete/enable/disable and advisory
-dismissal, giving **10/29 CLI commands** (9 transfers, 1 review) and **9 desktop
+The first authoring checkpoint adds rule create/delete/enable/disable and
+advisory dismissal, giving **10/29 CLI commands** (9 transfers, 1 review) and **9 desktop
 kinds** with no Python execution in a supported path. Rules preserve validated
 Python JSON bytes, Unicode 14 policy defaults and fail-closed enable behavior.
 Dismissals preserve scope, ambiguity rejection, stable identity/creation time,
@@ -1697,14 +1697,35 @@ after 41 sequential operations (11 writes, 30 refusals), and asserts every
 other application table stays unchanged. The mutation table and verification
 evidence live in the linked Rust shell reference.
 
-Nine authoring commands remain: pair/unpair/update, payout create/delete,
-component plan/apply and gap plan/apply. Append-only revisions, immutable
-aggregates, commitments/fingerprints, native residual validation, report impacts
-and invalidation must be ported together before those commands are advertised.
-All ten computation-dependent commands remain `not_implemented`, including
-component materialization, suggestions/bulk/rules matching and review
-cases/plan/apply. AI projections stay Python. This checkpoint does not satisfy
-full transfers/review slice acceptance, and found no Python reference bug.
+The continuation on `t3code/r5-transfers-2` starts at `c9bd660b` and completes
+numbered step 1: pair, unpair and update, including their desktop kinds. The
+supported total is **13/29 CLI commands (12 transfers, 1 review) and 12 desktop
+kinds**, with zero Python fallbacks on those paths. Aggregate persistence reuses
+the existing `crates/custody` component stage through its pure `components::review`
+facade for conservation, anchor/route/lineage and raw-active conflict validation,
+canonical evidence snapshots and commitment pairs. Pair authoring preserves
+append-only revisions, immutable children, deterministic Python UUID/hash/JSON
+bytes, residuals, membership updates and atomic journal invalidation.
+
+The 20-scenario fixed-source oracle pins normalized rows after **115 operations
+(67 successes, 48 refusals)** and requires every unrelated application table to
+stay unchanged. Additional tests retain store immutability triggers, roll back
+late invalidation failures and preserve caller-owned transactions. Focused
+hybrid witnesses record pair 2, update 2 and unpair 2 calls, all served by Rust.
+The [shell reference](../reference/rust-shell.md#transfers-and-review-classification-r5)
+records per-command evidence, mutation entries and verification limits.
+
+Two reference atomicity bugs have separate regression/fix commits: activation
+refusals committed drafts (`26e64be8`); final invalidation failures committed
+pair changes (`2091516c`). Both were demonstrated failing before their fixes.
+
+Steps 2–4 remain: payout create/delete, component plan/apply and gap plan/apply.
+Version-bound fingerprints, filed-report impacts, complete normalized row parity
+and mutations remain acceptance requirements for those six commands. All ten
+computation-dependent commands remain `not_implemented`, including component
+materialization, suggestions/bulk/rules matching and review cases/plan/apply.
+AI projections stay Python. This verified numbered-step boundary does not claim
+full transfers/review slice acceptance.
 
 ## Risks
 

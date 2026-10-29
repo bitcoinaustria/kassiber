@@ -438,5 +438,876 @@
       "desktop_dismissal_expiry_uses_python_integer_coercion"
     ],
     "rule": "Desktop dismissal expiry truncates finite floats using Python int semantics."
+  },
+  {
+    "id": "pair-kind",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&kind, \"pair kind\", KINDS)?;",
+    "replace": "let _ = &kind;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Creation validates the explicit pair kind."
+  },
+  {
+    "id": "pair-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&chosen, \"pair policy\", POLICIES)?;",
+    "replace": "let _ = &chosen;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Creation validates an explicit pair policy."
+  },
+  {
+    "id": "pair-source",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "&[\"manual\", \"bulk_exact\", \"bulk_selected\", \"rule_auto\"],",
+    "replace": "&[\"manual\", \"bulk_exact\", \"bulk_selected\", \"rule_auto\", \"bad\"],",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Pair source must be a supported authoring source."
+  },
+  {
+    "id": "pair-distinct-transactions",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if value(&out, \"id\") == value(&inbound, \"id\") {",
+    "replace": "if value(&out, \"id\") != value(&inbound, \"id\") {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Pair boundaries must be distinct transactions."
+  },
+  {
+    "id": "pair-profile-resolution",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "WHERE t.profile_id=? AND t.id=? AND t.direction=?",
+    "replace": "WHERE ? IS NOT NULL AND t.id=? AND t.direction=?",
+    "expect_failing": [
+      "pair_writes_refuse_other_review_terms_and_profile_references"
+    ],
+    "rule": "Transaction resolution cannot escape the selected profile."
+  },
+  {
+    "id": "pair-external-ambiguity",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 2 {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Ambiguous external transaction IDs are refused."
+  },
+  {
+    "id": "pair-direction",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "AND t.external_id=? AND t.direction=?",
+    "replace": "AND t.external_id=? AND t.direction!=?",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "External references must have the requested direction."
+  },
+  {
+    "id": "pair-network-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if policy != \"carrying-value\" {",
+    "replace": "if true {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Carrying-value reviews validate physical network domains."
+  },
+  {
+    "id": "pair-network-contradictions",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !ov || !iv {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Contradictory network metadata cannot carry value."
+  },
+  {
+    "id": "pair-network-boundaries",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if od != id {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Distinct Bitcoin networks cannot carry value between them."
+  },
+  {
+    "id": "pair-same-asset-taxable",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if same && policy == \"taxable\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Same-asset taxable pairs are refused."
+  },
+  {
+    "id": "pair-cross-asset-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if country != \"at\" && pair != BTreeSet::from([\"BTC\".into(), \"LBTC\".into()]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Generic profiles may carry value across assets only for BTC/LBTC rails."
+  },
+  {
+    "id": "pair-same-asset-out-amount",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if value(&out, \"asset\") == value(&inbound, \"asset\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Explicit outbound portions apply only to cross-asset pairs."
+  },
+  {
+    "id": "pair-positive-amount",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if decimal.signum() != std::cmp::Ordering::Greater {",
+    "replace": "if decimal.signum() == std::cmp::Ordering::Less {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An explicit outbound BTC amount must be positive before rounding."
+  },
+  {
+    "id": "pair-amount-scale",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "&\"100000000000\".parse().unwrap(),",
+    "replace": "&\"100000000\".parse().unwrap(),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "BTC quantities convert exactly to integer msat."
+  },
+  {
+    "id": "pair-amount-rounding",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": ".to_fixed_places(0, Rounding::HalfUp)",
+    "replace": ".to_fixed_places(0, Rounding::HalfEven)",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "BTC to msat rounds halfway values away from zero."
+  },
+  {
+    "id": "pair-amount-exceeds-source",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if p > &full.into() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An explicit portion cannot exceed the outbound principal."
+  },
+  {
+    "id": "pair-duplicate",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "text(r, \"term_kind\") == \"transaction_pair\"\n            && value(r, \"out_transaction_id\")",
+    "replace": "text(r, \"term_kind\") == \"unused\"\n            && value(r, \"out_transaction_id\")",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An already reviewed pair is refused before a new revision is authored."
+  },
+  {
+    "id": "pair-nonpair-conflict",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "text(r, \"term_kind\") != \"transaction_pair\"\n            && [",
+    "replace": "text(r, \"term_kind\") == \"unused\"\n            && [",
+    "expect_failing": [
+      "pair_writes_refuse_other_review_terms_and_profile_references"
+    ],
+    "rule": "Payout and custody-component reviews exclude new pair authoring."
+  },
+  {
+    "id": "pair-leg-reuse",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !(reusable(r) && reusable(row)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Only same-asset privacy/manual carrying-value pairs may reuse a leg."
+  },
+  {
+    "id": "pair-swap-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "spec::num(a - spec::n(&value(inbound, \"amount\")) + network),",
+    "replace": "spec::num(a - spec::n(&value(inbound, \"amount\")) - network),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Swap fees include outbound network fees only when separate and unsplit."
+  },
+  {
+    "id": "pair-included-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if split || truthy(&value(out, \"amount_includes_fee\")) {",
+    "replace": "if split {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A fee already included in outbound amount is not counted twice."
+  },
+  {
+    "id": "pair-split-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if split || truthy(&value(out, \"amount_includes_fee\")) {",
+    "replace": "if truthy(&value(out, \"amount_includes_fee\")) {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Split swap fees exclude the separate full-transaction network fee."
+  },
+  {
+    "id": "pair-update-kind",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&value(&revised, \"kind\"), \"pair kind\", KINDS)?;",
+    "replace": "let _ = KINDS;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Updates validate their resulting pair kind."
+  },
+  {
+    "id": "pair-update-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&value(&revised, \"policy\"), \"pair policy\", POLICIES)?;",
+    "replace": "let _ = POLICIES;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Updates validate their resulting pair policy."
+  },
+  {
+    "id": "pair-update-notes",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if let Some(notes) = get(args, \"notes\") {",
+    "replace": "if let Some(notes) = present(args, \"unused_notes\") {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Update distinguishes omitted notes from explicit empty notes."
+  },
+  {
+    "id": "pair-update-noop",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": ".all(|k| value(old, k) == value(&revised, k))",
+    "replace": ".all(|_| false)",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An unchanged update does not append revisions or invalidate journals."
+  },
+  {
+    "id": "pair-update-fee-recompute",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if value(old, \"kind\") != value(&revised, \"kind\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A kind change recomputes the stored swap fee."
+  },
+  {
+    "id": "pair-group-collection",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "value(r, \"out_transaction_id\") == value(&row, \"out_transaction_id\")\n                || value(r, \"in_transaction_id\") == value(&row, \"in_transaction_id\")",
+    "replace": "value(r, \"out_transaction_id\") == value(&row, \"out_transaction_id\")\n                && value(r, \"in_transaction_id\") == value(&row, \"in_transaction_id\")",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Connected pair terms append one aggregate revision."
+  },
+  {
+    "id": "pair-unpair-history",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !rows(c,\"SELECT 1 FROM custody_component_economic_terms",
+    "replace": "if rows(c,\"SELECT 1 FROM custody_component_economic_terms",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deletion stays idempotent after a group revision removes a term."
+  },
+  {
+    "id": "pair-unpair-reslice",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !remaining.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Removing one group term reslices the remaining review into a forward revision."
+  },
+  {
+    "id": "pair-unpair-memberships",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=?",
+    "replace": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deleting the last term rebuilds effective memberships."
+  },
+  {
+    "id": "pair-service-atomic",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "    atomic(c, || match operation {\n        \"transfers.pair\" => create(c, scope, args, sources),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })",
+    "replace": "    (|| match operation {\n        \"transfers.pair\" => create(c, scope, args, sources),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })()",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership",
+      "pair_final_invalidation_refusals_are_atomic"
+    ],
+    "rule": "Each pair operation rolls back late failures and retains the caller transaction."
+  },
+  {
+    "id": "pair-stable-namespace",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "0x95, 0xed, 0x14, 0x8a",
+    "replace": "0x96, 0xed, 0x14, 0x8a",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Authored component identities preserve the Python UUIDv5 namespace."
+  },
+  {
+    "id": "pair-row-hash",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "hash(&project(r, FIELDS), false)",
+    "replace": "hash(&project(r, FIELDS), true)",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Pair source hashes use Python sorted non-ASCII JSON bytes."
+  },
+  {
+    "id": "pair-order",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "ordered.sort_by_key(|r| (text(r, \"created_at\"), text(r, \"id\")));",
+    "replace": "ordered.sort_by_key(|r| (text(r, \"id\"), text(r, \"created_at\")));",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Group identity and FIFO slices preserve creation-time then identity order."
+  },
+  {
+    "id": "pair-principal",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "amount - n(&value(row, \"fee\"))",
+    "replace": "amount",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Fee-inclusive outbound boundaries expose principal, not gross movement."
+  },
+  {
+    "id": "pair-available",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "let available = total - used.get(&source_id).unwrap_or(&0);",
+    "replace": "let available = total;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Each reused source is sliced only from its remaining principal."
+  },
+  {
+    "id": "pair-conversion-value",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "let b = if conversion { target } else { a };",
+    "replace": "let b = a;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Conversion components keep separate native source and destination quantities."
+  },
+  {
+    "id": "pair-positive-slices",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if a <= 0 || b <= 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Empty or negative reviewed slices are refused."
+  },
+  {
+    "id": "pair-reviewed-source",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "(\"reviewed_source_amount_msat\", num(a)),",
+    "replace": "(\"reviewed_source_amount_msat\", num(b)),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Economic terms retain reviewed source quantity for cross-asset swaps."
+  },
+  {
+    "id": "pair-group-full-residual",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "    if full {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A connected group accounts for residual source principal explicitly."
+  },
+  {
+    "id": "pair-residual-fee",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if text(row, \"kind\") != \"swap-refund\" && fee > 0 && fee <= residual {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A non-refund residual separates known network fee from suspense."
+  },
+  {
+    "id": "pair-refund-residual",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if text(row, \"kind\") == \"swap-refund\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Swap-refund residuals are reviewed network fees."
+  },
+  {
+    "id": "pair-native-residual",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if found.len() != 1 {",
+    "replace": "if true {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A unique exact native remainder becomes an explicitly retained leg."
+  },
+  {
+    "id": "pair-retarget",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "&[\"legacy_review_revision\", &text(spec, \"component_id\"), prior]",
+    "replace": "&[\"legacy_review_revision\", &text(spec, \"component_id\"), \"ignored\"]",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Retargeted revisions bind identities to the preceding immutable aggregate."
+  },
+  {
+    "id": "pair-optional-text",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "return Err(AppError::new(\n            \"custody_component_validation\",\n            format!(\"{field} must be text\"),",
+    "replace": "return Ok(s(py_str(v)));\n        return Err(AppError::new(\n            \"custody_component_validation\",\n            format!(\"{field} must be text\"),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Authored optional text refuses non-text values."
+  },
+  {
+    "id": "pair-invalidation-version",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Each successful aggregate and review write increments the journal input version."
+  },
+  {
+    "id": "pair-invalidation-cache",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "last_processed_at=NULL,last_processed_tx_count=0",
+    "replace": "last_processed_at=last_processed_at,last_processed_tx_count=last_processed_tx_count",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Custody writes clear processed-journal freshness."
+  },
+  {
+    "id": "pair-invalidation-ownership-cache",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "ownership_review_counts_json=NULL",
+    "replace": "ownership_review_counts_json=ownership_review_counts_json",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Custody writes invalidate cached ownership-review counts without granting ownership."
+  },
+  {
+    "id": "pair-activation-gate",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "if validation[\"activatable\"] != true {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Incomplete or nonconserving components cannot activate."
+  },
+  {
+    "id": "pair-revision-counter",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "COALESCE(MAX(revision),0)+1",
+    "replace": "COALESCE(MAX(revision),0)+2",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revisions append in exact lineage order."
+  },
+  {
+    "id": "pair-supersession",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "SET state='superseded',superseded_at=?,superseded_by_component_id=?",
+    "replace": "SET state='superseded',superseded_at=NULL || ?,superseded_by_component_id=?",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Forward revisions record the supersession timestamp."
+  },
+  {
+    "id": "pair-membership-insert",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "INSERT INTO custody_component_transaction_memberships(component_id,profile_id,transaction_id,created_at) VALUES(?,?,?,?)",
+    "replace": "INSERT INTO custody_component_transaction_memberships(component_id,profile_id,transaction_id,created_at) SELECT ?,?,?,? WHERE 0",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Activated anchors establish stored reviewed memberships."
+  },
+  {
+    "id": "pair-evidence-capture",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    for snapshot in snapshots {",
+    "replace": "    for snapshot in snapshots.into_iter().take(0) {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Activation captures author-bound raw evidence snapshots."
+  },
+  {
+    "id": "pair-evidence-count",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "pairs.len() as i64",
+    "replace": "pairs.len() as i64 + 1",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "The active header commits to the exact evidence count."
+  },
+  {
+    "id": "pair-commitment-id",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "s(\"custody-component-evidence-v1\"),",
+    "replace": "s(\"custody-component-evidence-v0\"),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Evidence commitment identities bind component and ordinal through pyjson."
+  },
+  {
+    "id": "pair-child-count",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "(list(spec, \"legs\").len() as i64).into(),",
+    "replace": "(list(spec, \"legs\").len() as i64 + 1).into(),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "The authored header commits to its immutable child counts."
+  },
+  {
+    "id": "pair-raw-active-conflicts",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "    if !conflicts.is_empty() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Raw authored-active conflicts block activation even without memberships."
+  },
+  {
+    "id": "pair-draft-validation",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "let evidence = if h[\"state\"] == \"active\" {",
+    "replace": "let evidence = if true {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A draft validates before activation evidence is captured."
+  },
+  {
+    "id": "pair-retain-trg_custody_authored_evidence_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_authored_evidence_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_authored_evidence_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_allocation_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_allocation_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_allocation_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_allocation_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_allocation_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_allocation_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_evidence_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_evidence_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_evidence_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_evidence_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_evidence_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_evidence_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_leg_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_leg_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_leg_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_leg_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_leg_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_leg_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_terms_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_terms_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_terms_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_terms_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_terms_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_terms_immutable."
+  },
+  {
+    "id": "pair-draft-exists",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "AND state='draft' AND id!=?",
+    "replace": "AND state='draft' AND 0 AND id!=?",
+    "rule": "A lineage with an existing draft cannot author a competing revision.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "pair-lineage-exists",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "WHERE profile_id=? AND lineage_id=? LIMIT 1",
+    "replace": "WHERE profile_id=? AND lineage_id=? AND 0 LIMIT 1",
+    "rule": "A previously authored lineage requires a forward revision.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "pair-native-residual-ambiguity",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if found.len() != 1 {",
+    "replace": "if found.is_empty() {",
+    "rule": "An ambiguous native remainder is never guessed into retained custody.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "pair-asset-id-case",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "        lower\n    } else if",
+    "replace": "        kassiber_pytext::upper(text)\n    } else if",
+    "rule": "Opaque hexadecimal asset IDs normalize to lowercase.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "desktop-pair-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(args, \"authored_source\", s(\"gui\"))",
+    "replace": "set(args, \"authored_source\", s(\"cli\"))",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Desktop authorship is gui regardless of client fields."
+  },
+  {
+    "id": "desktop-pair-aliases",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, name)\n                    .filter(|v| kassiber_envelope::truthy(v))\n                    .or_else(|| get(args, alias))",
+    "replace": "get(args, name)\n                    .or_else(|| get(args, alias))",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Falsy primary transaction selectors fall back to desktop aliases."
+  },
+  {
+    "id": "desktop-pair-defaults",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, name)\n                    .filter(|v| kassiber_envelope::truthy(v))\n                    .map(kassiber_envelope::py_str)",
+    "replace": "get(args, name)\n                    .map(kassiber_envelope::py_str)",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Falsy pair kind and source receive Python defaults."
+  },
+  {
+    "id": "desktop-pair-required-id",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, \"pair_id\")\n                .filter(|v| kassiber_envelope::truthy(v))\n                .ok_or_else",
+    "replace": "get(args, \"pair_id\")\n                .ok_or_else",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Update and unpair require a nonempty pair identity."
+  },
+  {
+    "id": "desktop-pair-notes-unset",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "|| get(args, \"note\").is_some()",
+    "replace": "|| true",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Omitted update notes retain their prior value."
+  },
+  {
+    "id": "desktop-pair-note-alias",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, \"notes\")\n                .filter(|v| kassiber_envelope::truthy(v))\n                .or_else(|| get(args, \"note\"))",
+    "replace": "get(args, \"notes\")\n                .or_else(|| get(args, \"note\"))",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Empty notes fall back to the note alias and otherwise clear stored notes."
+  },
+  {
+    "id": "reference-native-review-atomic",
+    "file": "kassiber/core/custody_authored_migration.py",
+    "find": "with _savepoint(conn, \"custody_native_review\"):",
+    "replace": "if True:",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_native_review_activation_failure_leaves_no_committed_draft"
+    ],
+    "rule": "Refused activation cannot commit a partial authored draft."
+  },
+  {
+    "id": "reference-pair-create-invalidation",
+    "file": "kassiber/core/custody_review_terms.py",
+    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        pair_row = custody_authored_migration.create_pair_review_component(",
+    "replace": "if True:\n        pair_row = custody_authored_migration.create_pair_review_component(",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[create]"
+    ],
+    "rule": "Refused final invalidation rolls back the entire pair create operation."
+  },
+  {
+    "id": "reference-pair-update-invalidation",
+    "file": "kassiber/core/custody_review_terms.py",
+    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        updated = custody_authored_migration.revise_pair_review_component(",
+    "replace": "if True:\n        updated = custody_authored_migration.revise_pair_review_component(",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[update]"
+    ],
+    "rule": "Refused final invalidation rolls back the entire pair update operation."
+  },
+  {
+    "id": "reference-pair-unpair-invalidation",
+    "file": "kassiber/core/custody_review_terms.py",
+    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        custody_authored_migration.delete_authored_review(",
+    "replace": "if True:\n        custody_authored_migration.delete_authored_review(",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[unpair]"
+    ],
+    "rule": "Refused final invalidation rolls back the entire pair unpair operation."
+  },
+  {
+    "id": "desktop-pair-capability-order",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "    \"ui.transfers.payouts.list\",\n    \"ui.transfers.pair\",",
+    "replace": "    \"ui.transfers.pair\",\n    \"ui.transfers.payouts.list\",",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Desktop capability order matches the Python ready envelope."
+  },
+  {
+    "id": "pair-validation-wire-order",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "conservation_mode activatable issues suspense_msat",
+    "replace": "activatable conservation_mode issues suspense_msat",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Validation refusal objects retain Python field order."
   }
 ]

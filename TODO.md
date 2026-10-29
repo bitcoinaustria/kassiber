@@ -276,13 +276,16 @@ and the owner decisions it needs.
 ## Rust backend R5 transfers and review
 
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
-serves all five stored reads and five authoring commands (rule CRUD/toggles and
-dismissals): 10/29 CLI leaves and nine desktop kinds. Full authoring row parity
-is pinned for that subset; AI projections remain Python.
+serves all five stored reads and eight authoring commands (rule CRUD/toggles,
+dismissals, pair/unpair/update): 13/29 CLI leaves and 12 desktop kinds. Full
+normalized authoring row parity is pinned for that subset; AI projections remain
+Python.
 
-- [ ] Port pair/unpair/update and payout create/delete using the shared custody
-  service, including native residual/conflict validation, append-only revisions,
-  immutable rows, Python commitments and atomic journal invalidation.
+- [x] Port pair/unpair/update using the shared custody stage, including native
+  residual/conflict validation, append-only revisions, immutable rows, Python
+  commitments and atomic journal invalidation. Pin 115 operations against Python.
+- [ ] Port payout create/delete with the same complete-row, refusal and mutation
+  acceptance as pair authoring.
 - [ ] Port component plan/apply and gap plan/apply with version-bound candidate
   fingerprints, conservation/hold barriers and filed-report impacts. Require
   complete normalized row parity after mixed authoring/revision sequences.

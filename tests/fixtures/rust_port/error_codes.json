@@ -7304,21 +7304,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_authored_migration.py:1970",
+      "at": "kassiber/core/custody_authored_migration.py:1972",
       "callee": "AppError",
       "code": "custody_component_membership_conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_authored_migration.py:2083",
+      "at": "kassiber/core/custody_authored_migration.py:2085",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_authored_migration.py:2149",
+      "at": "kassiber/core/custody_authored_migration.py:2151",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",

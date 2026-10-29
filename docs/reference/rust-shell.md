@@ -2874,7 +2874,7 @@ advertised as supported. Matching remains in Python; porting it requires a
 separate mutation catalog and an oracle against both the Python matcher and
 its naive all-pairs reference.
 
-The partial checkpoint implements all five group (a) commands and five of the
+The preceding checkpoint implements all five group (a) commands and five of the
 fourteen group (b) commands through `crates/transfers`: **9/25 transfers and
 1/4 review CLI leaves**, with **9 desktop kinds**. The complete classification
 is **(a) 5, (b) 14, (c) 10**. Pair/payout selection uses
@@ -2914,18 +2914,70 @@ interpreter-specific traceback text which Rust does not fabricate. The daemon
 oracle normalizes only that `error.debug` field for internal errors, plus
 production UUID/time fields; error codes/messages and stored bytes remain pinned.
 
-This is a partial service slice. Nine group (b) commands still answer
-`not_implemented`: pair/unpair/update, payout create/delete, component plan/apply,
-and gap plan/apply. They require shared custody hydration/materialization,
-native residual and active-conflict validation, append-only revisions and
-immutability triggers, `pyjson` commitments/fingerprints, filed-report impacts
-and atomic invalidation. No revision/hash parity is claimed for this checkpoint.
-All ten group (c) commands and the additional computation-dependent desktop
-kinds remain unported. Matching was not ported; its mutation catalog and Python
-plus naive-all-pairs oracle remain requirements for that later work. AI
-projections stay in Python. No Python reference behavior was changed.
+The pair revision checkpoint on `t3code/r5-transfers-2`, based at `c9bd660b`,
+adds **pair, unpair and update** plus `ui.transfers.pair`,
+`ui.transfers.unpair` and `ui.transfers.update`. The supported total is now
+**13/29 CLI commands (12/25 transfers, 1/4 review), with 12 desktop kinds**.
+Supported commands and kinds execute no Python. Group (c) and AI projections
+remain unchanged.
 
-### Transfer/review verification
+`pair_authoring.rs` owns scoped resolution, validation, fee treatment, term
+reuse, revision/no-op/delete behavior and atomic invalidation. `pair_spec.rs`
+constructs deterministic UUIDv5 groups, source hashes and residual allocations;
+`component_store.rs` persists append-only aggregates. It reuses
+`crates/custody/src/components/review.rs`: `validate_activation` calls the
+existing component conservation, anchor, route, lineage and raw-active overlap
+checks, and `activation_evidence` reuses canonical raw evidence and commitment
+hashing. `validation_projection` restores Python field order using generated
+field lists; this presentation step makes no custody decisions. No second
+component interpreter was added. Draft validation precedes
+commitment capture; journal computation still selects authored-active rows.
+Raw-active conflicts block activation even when stored memberships are absent.
+
+The fixed-source oracle compares **115 operations: 67 successes and 48
+refusals**, across 20 scenarios. After each call it compares normalized complete
+rows for profiles, aggregates, children, memberships, author-bound evidence,
+commitments and chain-index invalidation. Every other application table must
+stay unchanged. UUIDs, times, source hashes, JSON strings, counts, revision and
+supersession links match Python byte for byte. Refusals cover ambiguity, scope,
+policy, network contradictions, excluded/canonical anchors, empty slices,
+active overlap, existing drafts/lineages and input drift. Sequences also cover
+connected group reslicing, unchanged updates, idempotent unpair, repeated
+payload retargeting, explicit portions, fee inclusion, refunds and unique or
+ambiguous native remainders. Native failure injection checks standalone late
+invalidation rollback and preservation of an outer caller transaction. Existing
+store immutability triggers are exercised on the authored rows.
+
+| Command | Oracle successes | Oracle refusals | Focused hybrid Rust calls | Affected-module Rust calls | Python fallbacks |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `transfers pair` | 27 | 36 | 2 | 6 | 0 |
+| `transfers update` | 22 | 10 | 2 | 0 | 0 |
+| `transfers unpair` | 18 | 2 | 2 | 1 | 0 |
+
+The direct native daemon sequence additionally exercises pair **4**, update
+**4**, and unpair **2** calls, comparing Python responses after normalization of
+generated UUIDs/times and interpreter debug text. A native adapter test pins
+alias priority, falsy defaults, coercion, required IDs, gui authorship and the
+omitted-versus-cleared notes distinction.
+
+Two Python atomicity bugs were fixed in separate commits, with regressions
+shown failing before each fix. `26e64be8` keeps draft creation and activation
+inside one savepoint: an excluded or noncanonical anchor previously left a
+committed draft after refusal. `2091516c` includes final pair journal
+invalidation in the authoring savepoint: injected invalidation failures
+previously left creation, update or deletion committed. All five parameterized
+regression cases compare the complete reference database dump after rollback.
+The successful authoring row format and invalidation counts are unchanged.
+
+This remains a partial service slice. **Six group (b) commands** still answer
+`not_implemented`: payout create/delete, component plan/apply and gap plan/apply.
+They need the same complete-row parity, revision/hash commitments, refusal
+coverage, report impacts and mutation acceptance. All ten group (c) commands
+and the additional computation-dependent desktop kinds remain unported.
+Matching still requires its later Python/naive-all-pairs oracle and mutation
+catalog. AI projections stay in Python.
+
+### Earlier rule/dismissal verification
 
 Verification used Rust 1.99.1 and the locked Python 3.11 environment, Cargo
 `--offline`, and disposable books. Workspace and package formatting, workspace
@@ -2952,9 +3004,10 @@ Earlier attempts collided with a workspace build overwriting the harness
 binary, and a direct hybrid invocation lost its configuration in a scrubbed
 environment. The final runs used the rebuilt harness without concurrent Cargo
 builds and the disposable launcher. Loopback-dependent workspace tests passed
-outside the restricted socket sandbox. No Python reference bug was found.
+outside the restricted socket sandbox. No Python reference bug was found in
+that earlier checkpoint.
 
-### Transfer/review routing evidence
+### Earlier stored/rule/dismissal routing evidence
 
 The two focused hybrid witnesses in `tests/test_rust_transfer_services.py`
 assert the following counts. All thirteen calls were served by Rust; none
@@ -2983,8 +3036,9 @@ Rust binary directly, which has no Python fallback or AI projection dispatch.
 
 The catalog is `crates/transfers/scripts/mutations.json`; its scratch-tree runner
 is `crates/transfers/scripts/mutation_check.py`. Every entry below names a test
-that must pass unmutated and fail after its rule is changed. The full run passed
-all ten named unmutated selections and killed **44/44 mutations**.
+that must pass unmutated and fail after its rule is changed. The earlier
+checkpoint passed all ten named unmutated selections and killed **44/44
+mutations**.
 
 | Mutation | Named killing test |
 | --- | --- |
@@ -3032,3 +3086,141 @@ all ten named unmutated selections and killed **44/44 mutations**.
 | `dismiss-profile-scope` | `rule_scope_dismissal_reference_priority_and_rollback_are_preserved` |
 | `history-reopened-status` | `stored_reads_match_python_bytes_without_touching_rows` |
 | `desktop-expiry-integer` | `desktop_dismissal_expiry_uses_python_integer_coercion` |
+
+### Pair revision mutation additions
+
+The continuation adds 87 entries to the existing 44, including the shared
+activation facade, immutable-trigger retention, desktop adaptation and both
+Python reference fixes. The final full run passed all **19 named unmutated
+selections** and killed **131/131 mutations**. Reused custody
+conservation/anchor/commitment rules
+also retain their existing 318-entry custody catalog; its applicability check
+passes. The transfer runner names the following killing tests:
+
+| Mutation | Named killing test |
+| --- | --- |
+| `pair-kind` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-policy` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-source` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-distinct-transactions` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-profile-resolution` | `pair_writes_refuse_other_review_terms_and_profile_references` |
+| `pair-external-ambiguity` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-direction` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-network-policy` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-network-contradictions` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-network-boundaries` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-same-asset-taxable` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-cross-asset-policy` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-same-asset-out-amount` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-positive-amount` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-amount-scale` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-amount-rounding` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-amount-exceeds-source` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-duplicate` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-nonpair-conflict` | `pair_writes_refuse_other_review_terms_and_profile_references` |
+| `pair-leg-reuse` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-swap-fee` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-included-fee` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-split-fee` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-update-kind` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-update-policy` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-update-notes` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-update-noop` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-update-fee-recompute` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-group-collection` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-unpair-history` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-unpair-reslice` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-unpair-memberships` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-service-atomic` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership`, `pair_final_invalidation_refusals_are_atomic` |
+| `pair-stable-namespace` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-row-hash` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-order` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-principal` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-available` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-conversion-value` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-positive-slices` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-reviewed-source` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-group-full-residual` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-residual-fee` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-refund-residual` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-native-residual` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-retarget` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-optional-text` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-invalidation-version` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-invalidation-cache` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-invalidation-ownership-cache` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-activation-gate` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-revision-counter` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-supersession` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-membership-insert` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-evidence-capture` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-evidence-count` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-commitment-id` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-child-count` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-raw-active-conflicts` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-draft-validation` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-retain-trg_custody_authored_evidence_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_allocation_revision_delete_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_allocation_revision_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_evidence_revision_delete_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_evidence_revision_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_leg_revision_delete_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_leg_revision_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_revision_delete_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_revision_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_terms_delete_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-retain-trg_custody_component_terms_immutable` | `pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership` |
+| `pair-draft-exists` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-lineage-exists` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-native-residual-ambiguity` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `pair-asset-id-case` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+| `desktop-pair-source` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `desktop-pair-aliases` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `desktop-pair-defaults` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `desktop-pair-required-id` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `desktop-pair-notes-unset` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `desktop-pair-note-alias` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `reference-native-review-atomic` | `tests/test_custody_authored_migration.py::test_native_review_activation_failure_leaves_no_committed_draft` |
+| `reference-pair-create-invalidation` | `tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[create]` |
+| `reference-pair-update-invalidation` | `tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[update]` |
+| `reference-pair-unpair-invalidation` | `tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[unpair]` |
+| `desktop-pair-capability-order` | `desktop_pair_aliases_defaults_and_absent_notes_match_python` |
+| `pair-validation-wire-order` | `pair_sequences_match_python_complete_database_rows_and_refusals` |
+
+### Pair revision verification
+
+Final verification used Rust 1.99.1, locked Python 3.11, Cargo `--offline`, and
+disposable books. Workspace formatting, workspace clippy and the harness-feature
+clippy with `-D warnings` passed. `cargo test --offline --workspace --locked`
+passed **948 tests**. The final four pair tests also passed against the expanded
+115-operation oracle, and the harness build passed. The seven real-process
+transfer tests plus the 29-test reference regression module passed **36 tests**.
+The exact requested shell/parity/hybrid-candidate/CLI-runner/`tests/rust_port`
+gate passed **63 tests and 178 subtests**, including inventory and contracts.
+The refreshed error-code snapshot changes source locations only.
+
+All **131 mutations** were killed in a fresh isolated build target after all
+**19 named baseline selections** passed. Initial mutation survivors exposed
+missing oracle scenarios for unsplit separate swap fees, independent active
+memberships and partial group residuals; all were added before the final full
+run. The common activation regression also invokes the native helper directly
+so the outer pair-service savepoint cannot hide its mutation. Transfer and
+shared custody applicability checks passed (131 and 318 entries respectively).
+
+The seven affected hybrid modules passed **386 tests and 35 subtests**, with
+one inherited failure:
+`ReviewRegressionTest.test_diagnostics_out_auto_writes_public_error_report`.
+The global `--diagnostics-out` flag still returns `not_implemented` as it did
+at the base checkpoint. This broader run is not reported green. Its 27 calls
+to the supported transfer/review subset were all served by Rust, including
+pair 6 and unpair 1; the focused witness covers update 2 as well. No supported
+command fell back to Python. Group (c) calls intentionally used Python in the
+hybrid candidate. Direct native daemon sessions have no Python dispatch.
+
+Sandbox setup hit a quota error under `/tmp`, so disposable roots moved to the
+workspace and then memory-backed temporary storage. Early checks also exposed
+an unreviewed direct hash dependency, test-tree source-scan pollution, daemon
+capability order, a direct Python CLI construction in a test and stale contract
+line locations; each was resolved before the final gates. Final Cargo builds
+were completed before process tests; mutation builds used a separate fresh
+target to avoid reusing mutated artifacts. No push or PR was performed.

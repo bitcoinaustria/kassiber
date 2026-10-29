@@ -30,6 +30,10 @@ legacy Liquid fingerprint arithmetic and native file-import amount/pricing norma
 Historical report reads reuse the internal `kassiber-wallets` resolver to
 preserve profile scoping and ambiguous-label refusals. This adds no external
 package or license; existing descriptor-library versions remain unchanged.
+Transfer authoring reuses it for exact BTC-to-msat conversion and the existing
+locked `bitcoin_hashes` SHA-1 implementation for Python-compatible UUIDv5 review
+identities; the standard library has no SHA-1 implementation. Canonical
+commitments reuse the internal custody and `kassiber-pyjson` crates.
 The Rust setup services reuse the internal store, envelope, and Python-compatible
 JSON/text crates for existing book formats. Network partitions add `age` for
 the existing passphrase-encrypted backup format and `tar` for its archive;
@@ -60,6 +64,7 @@ third-party package or runtime requirement is added.
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
+| `bitcoin_hashes` | `0.14` (already locked) | Python-compatible UUIDv5 review identities using the existing SHA-1 primitive | CC0-1.0 |
 | `bitcoin` | `0.32` | Native watch-only BIP32 derivation, key validation, scripts and addresses; cryptography and Bitcoin encodings have no standard-library equivalent | CC0-1.0 |
 | `miniscript` | `12` | Native Bitcoin descriptor grammar, multipath expansion and script derivation; avoids a handwritten script interpreter | CC0-1.0 |
 | `elements-miniscript` / `elements` | `0.4` / locked transitive `0.25` | Liquid descriptor grammar, SLIP-77 blinding and confidential address derivation; avoids reimplementing confidential address cryptography | CC0-1.0 |
