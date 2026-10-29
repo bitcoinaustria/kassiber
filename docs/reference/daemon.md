@@ -86,7 +86,12 @@ period does not block a platform export; an undated one (no known time) still
 does, and undated transactions left out of a period are counted in `warnings`.
 `ui.transactions.dashboard` reports
 the calendar as `history.accountingTimezone` next to
-`history.accountingYears` (undated transactions are not a year).
+`history.accountingYears` (undated transactions are not a year), and
+`history.years`: the years holding activity, newest first, each with its
+`count` and inclusive `since`/`until` bounds in that calendar, which the
+page's year choice scopes to. `bucketSize` names how `buckets` are grouped
+(`day`, `week`, `month`, `quarter`, or `year`); `all` over a decade or more
+groups by year.
 
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
