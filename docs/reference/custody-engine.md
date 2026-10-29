@@ -73,12 +73,15 @@ A refusal has `error` with a stable code and message and cannot be interpreted a
 a partial successful stage. Persisted hashes always use CPython-compatible JSON
 from `kassiber-pyjson`; decimal arithmetic uses `kassiber-pydecimal`.
 
-Rust currently implements `components` followed by `evidence`. The component
+Rust currently implements `components`, `evidence` and the complete
+`interpretation` stage. The component
 result is `{"components": [...], "blockers": [...]}` with the exact Python
 materialization and integrity blockers. Its invalid authored-active rows stay
 visible with `effective_state="draft"`; their anchor quarantine and readiness
-barriers remain intact. Interpretation, gaps, quantity and finalized projection
-are explicitly skipped. Schema 1's existing raw component/anchor/wallet/revision
+barriers remain intact. Gaps, quantity and finalized projection are explicitly
+skipped. Interpretation includes native component reconciliation and the final
+Python compilation/precedence; the [completion checkpoint](#complete-interpretation-checkpoint-r2c)
+records its proof. The partial checkpoints below describe historical states. Schema 1's existing raw component/anchor/wallet/revision
 and transaction facts suffice; R2b adds no input field or Python verdict.
 
 ## Test-only recording and comparison
@@ -1222,7 +1225,205 @@ helper-witness additions.
   for that namespace in all four error envelopes. No product guard is weakened
   and none of these four failures is reported as passing.
 
-Remaining R2 slices: native component reconciliation and final interpreter
-composition, followed by gaps, quantity arbitration and finalized projection
-before custody joins the ledger. Full census and custody-shadow shards remain
-assigned to the orchestrator. No push or PR belongs to this checkpoint.
+At this historical checkpoint native component reconciliation and final
+composition remained. The following checkpoint completes them; gaps, quantity
+and finalized projection still precede journal fusion.
+
+
+## Complete interpretation checkpoint (R2c)
+
+Branch `t3code/r2c-interpretation-12` starts at `cc18b710`. Native component
+reconciliation, the reviewed quantity compiler it consumes, exact FIFO route
+allocation and physical-before-wallet chronology now match Python. The final
+composition preserves producer/hold precedence, temporarily clears authored
+reservations only while examining native candidates, and releases only fully
+reconciled components' anchors before final claim compilation. Complete
+certificates, native audits, quarantines, blocked/transient ids and non-events
+are compared, including native zero-delta and legacy-migration wrappers.
+
+The PyO3 response now lists `interpretation` in `stages`, after `components` and
+`evidence`; only `gaps`, `quantity` and `finalized_projection` remain skipped.
+Census and custody-shadow compare the entire stage. The unpackaged partial
+executable and its automatic comparison path are removed; frozen slice vectors
+remain Rust tests. Python remains authoritative, Rust outputs never reach stored
+state, and snapshot v1 remains raw-only. No storage, dependency, network or
+consent boundary changes.
+
+### Branch coverage and restricted compiler scope
+
+The new mutation entries supplement all 1,035 retained entries. Every entry
+names an unmutated passing test and is killed by a failing test after a successful
+build. The final catalog has **1,178 entries** and **322 named test filters**.
+
+| Area | New entries | Named witnesses |
+| --- | ---: | --- |
+| Native route admission, coverage, pools and certificates | 55 | `reconciliation_helper_vectors`, `reconciliation_compilation_vectors` |
+| Reviewed quantities and transactionless route flattening | 39 | `reconciliation_reviewed_vectors` |
+| Closed chronology and stable source deduplication | 12 | `reconciliation_chronology_vectors`, `reconciliation_helper_vectors` |
+| Exact FIFO allocation | 6 | `reconciliation_fifo_vectors` |
+| Candidate reservations and selective anchor release | 3 | `reconciliation_compilation_vectors` |
+| Migration JSON, iteration, scope and quarantines | 18 | `interpretation_wrapper_vectors` |
+| Complete compilation and wrapper composition | 5 | `interpretation_wrapper_vectors`, `reconciliation_compilation_vectors` |
+| Implemented inventory and admission boundary | 5 | `interpretation_operation_vectors` |
+| **New / retained / total** | **143 / 1,035 / 1,178** | **All killed** |
+
+The following dispositions describe intentionally restricted or equivalent
+branches rather than counting artificial mutations as kills:
+
+- Reconciliation admits only authored-active, quantity-conserving, term-free
+  components. Conversion and economic-term claims are outside this private
+  compiler's call boundary. They retain ordinary authored reservations; their
+  admission guards have negative witnesses. Complete component claim compilation
+  for quantity arbitration remains with the future quantity stage.
+- The private reviewed compiler returns only claim fields consumed by
+  reconciliation. Metadata, priorities and destination presentation omitted
+  here cannot influence its result. Its public final output is the native
+  certificate plus ordinary interpreter claims, compared in full.
+- Internal FIFO buckets have unique string identities and nonnegative BigInt
+  capacities constructed from admitted canonical slices, exact fees and ordered
+  origin credits. Arbitrary Python bucket shape/id/type/duplicate admission is
+  unreachable at this seam. Insufficient capacity and empty/zero capacities have
+  direct witnesses; no raw quantity is narrowed through `codec::wide()`.
+- Compiler failure families caught by Python reject the candidate component.
+  Materialized ids/revisions and canonical observation references make missing
+  map entries and invalid certificate revisions unreachable; test helpers retain
+  malformed amount/role/direction/coverage witnesses. All reachable compiler
+  branches use Python integer families and CPython case helpers.
+- Chronology reuses the closed-observer gate, strict transaction ids, CPython
+  scope case rules and corrected timestamp parsing already ported. Exact integer
+  vout admission excludes bool/float/text, including zero floats. Stable topology,
+  hard-before-soft dependencies and cycle fallback have separate witnesses.
+  Repeated native claim ids are unavailable from the canonical compiler; dict
+  update position is nevertheless retained. Source deduplication is pinned by
+  an independent fan-out witness.
+- Activity exclusion scans the same pool/time interval as Python's sorted
+  bisect window. It is an order-independent `any` test, so a scan is equivalent.
+  Native-source groups retain Python's raw occurred-at ordering and same-time
+  chronology. Claim/source/target ordering, fee positions and intermediate
+  accumulation have independent witnesses.
+- Removing the transactionless stranded-pool guard still reaches the same caught
+  incomplete-source compile failure at this restricted reconciliation seam.
+  Changing digest `ensure_ascii` cannot affect hex quantity hashes and the
+  literal `fee`. These equivalent trial mutations were removed, without being
+  counted as kills.
+- Decoded migration values remain CPython JSON values, preserving surrogate
+  strings, nonfinite detail scalars, object insertion order and character
+  iteration. Decoded keys are always strings and JSON-loaded details are always
+  serializable with Python's default `ensure_ascii`; their impossible key/encoding
+  errors are not synthetic mutation entries. Existing integer/string helper
+  semantics remain covered by their retained mutations.
+- Operation admission remains accounting/rates, channel facts, component
+  materialization, migration admission, evidence, interpretation. A malformed
+  source amount is refused by raw snapshot validation before these stages; it is
+  not a valid witness for moving migration past evidence. Boundary vectors pin
+  channel-before-component, component-before-migration and tax-gate precedence.
+
+### Complete-stage corpus and per-scenario counts
+
+All eleven generators compare **2,000 books each for each engine** and compare
+full output over permutations of unordered inputs. Python and Rust independently
+count each scenario and output signature. Exact checked-in per-scenario counts
+are in [`custody_interpretation_counts.json`](../../tests/fixtures/custody_interpretation_counts.json),
+asserted by `test_every_generator_matches_and_counts_both_engines`. Signature
+columns are claims, native audits, reconciliations, non-event ids, blocked ids,
+transient ids; equality checks compare every field, not just these counts.
+
+| Generator | Scenarios | Books per scenario per engine | Permutations |
+| --- | ---: | --- | ---: |
+| channels | 32 | 62–63 | 64 |
+| components | 156 | 12–13 | 312 |
+| evidence | 29 | 68–69 | 58 |
+| fanout | 47 | 42–43 | 94 |
+| graph | 8 | 250 | 16 |
+| native | 55 | 36–37 | 110 |
+| pipeline | 12 | 166–167 | 24 |
+| reconciliation | 25 | 80 | 50 |
+| recorded | 46 | 43–44 | 92 |
+| safety | 39 | 51–52 | 78 |
+| samourai | 34 | 58–59 | 68 |
+
+Total: **22,000 books and 966 permutations**, exact compilation equality.
+The reconciliation generator has 25 scenarios, each with **80 books per engine**:
+
+| Scenario | Claims per book | Certificates per book | Blocked / transient per book |
+| --- | ---: | ---: | --- |
+| blocked_middle | 0 | 0 | 1 / 1 |
+| direct_only | 0 | 0 | 0 / 0 |
+| draft_component | 2 | 0 | 0 / 0 |
+| economic_terms | 0 | 0 | 0 / 0 |
+| extra_activity | 0 | 0 | 0 / 0 |
+| fifo_mismatch | 0 | 0 | 0 / 0 |
+| inclusive_fee | 2 | 1 | 0 / 0 |
+| inexact_fee | 0 | 0 | 0 / 0 |
+| intermediate_fee | 2 | 1 | 0 / 0 |
+| liquid | 2 | 1 | 0 / 0 |
+| outside_activity | 2 | 1 | 0 / 0 |
+| partial_route | 0 | 0 | 0 / 0 |
+| protected_middle | 0 | 0 | 0 / 0 |
+| recovered | 2 | 1 | 0 / 0 |
+| residual_fee | 2 | 1 | 0 / 0 |
+| residual_suspense | 2 | 1 | 0 / 0 |
+| reverse_txid | 2 | 1 | 0 / 0 |
+| same_time | 2 | 1 | 0 / 0 |
+| source_fee | 2 | 1 | 0 / 0 |
+| two_sources | 3 | 1 | 0 / 0 |
+| two_targets | 4 | 1 | 0 / 0 |
+| untrusted_middle | 0 | 0 | 0 / 0 |
+| untrusted_source | 0 | 0 | 0 / 0 |
+| wallet_cycle | 2 | 1 | 0 / 0 |
+| zero_activity | 2 | 1 | 0 / 0 |
+
+Those books emit **2,640 claims**, **1,120 certificates**, and **80 blocked / 80
+transient ids per engine**; native audits and non-events are zero for this suite.
+Frozen tests retain **25 raw reconciliation cases**, **150 direct witnesses**,
+**343 complete interpreter expectations**, and **106 wrapper/admission controls**.
+The wrapper controls include list/dict/string iteration, duplicates, missing
+fields, malformed JSON, nonfinite details and decoded surrogate ids.
+
+### Verification and remaining stages
+
+Verification uses the pinned Rust 1.99.1 toolchain, locked Python 3.11 environment,
+`MATURIN_NO_INSTALL_RUST=1`, offline Cargo (including mutation children), and
+disposable data/target roots. The environment is installed with
+`uv sync --locked --python 3.11`. No push or PR is created.
+
+- Formatting and workspace/all-target Clippy with warnings denied pass. Locked
+  offline workspace tests excluding `kassiber-net` pass **740 tests**.
+- All **1,178 mutation ids** have kills: 1,035 retained in four disjoint
+  partitions (259/259/259/258), plus 143 new. Initial surviving witnesses were
+  strengthened for inferred allocations, zero allocations, partial FIFO token
+  reuse, merged origin credits, source deduplication, native non-event union and journal-anchor precedence.
+  A nonbuilding string-iteration trial was corrected and rerun; neither it nor
+  any surviving trial is counted as a kill. The final kill-id union equals the
+  catalog, with no missing or extra ids. Catalog applicability also passes.
+- All eleven complete-stage generated suites pass through the actual PyO3
+  binding. Recorded replay passes **88 requests and 88 permutations**, with zero
+  pre-request refusals and zero differences, across both retained recordings.
+  The final fresh-process corpus separately passes **78 requests and 78
+  permutations**, and all **78 snapshots** pass integrity checks.
+- Focused census passes **52 tests and 21 subtests**, comparing interpretation
+  for **78 requests**; fresh-process snapshot replay is enabled. Focused shadow
+  passes **50 tests and 21 subtests**, comparing interpretation and the frozen
+  Python composition for **76 requests**. The two structural read-budget cases
+  stay in census because shadow deliberately computes the frozen flow again.
+- Cutover/failure-injection tests pass **17 tests**, including evidence and
+  interpretation discrepancies in both child modes and a caught-discrepancy
+  session failure. Final wrapper regeneration checks pass separately.
+- Broad custody/lifecycle/chronology/binding/inventory/contracts/mutation-runner
+  tests report **592 passed, 2,685 subtests passed, one skipped, and four
+  failures** (the eleven generated suites ran separately). The four are the
+  unchanged daemon cases in `CustodyComponentDaemonSurfaceTests` and
+  `CustodyGapDaemonProtocolAcceptanceTests`: their account-home owner-lock
+  namespace is outside this sandbox's writable roots, as at the previous
+  checkpoint. These failures are not reported as passing, and the stable owner
+  lock boundary is not weakened. A diagnostic rerun confirms `internal_error` /
+  `Read-only file system` for `~/.kassiber/run` in all four envelopes. Full census/custody-shadow shards and a
+  nonsandboxed rerun of these four tests remain assigned to the orchestrator.
+- Inventory classification, source contracts, mutation applicability and shard
+  inventory validation pass. Manual second review covers the Rust/Python branch
+  correspondence, full response inventory and absence of product Python writes.
+
+The next stages are **gaps → quantity arbitration → finalized projection →
+journal fusion with ledger**. In particular, the quantity stage still owns full
+reviewed component/tax claim arbitration; this reconciliation compiler does not
+replace it.

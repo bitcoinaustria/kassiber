@@ -1,21 +1,16 @@
-"""Independent interpreter slices; test-only and raw snapshot in both engines.
+"""Python builders for retained isolated interpreter vectors.
 
-This does not declare interpretation implemented. Until composition is ported,
-each slice runs in isolation before the other interpreters reserve or hold rows.
+Live comparisons use the complete interpretation stage. No partial executable
+or partial comparison participates in census, shadow or recorded replay.
 """
 from __future__ import annotations
 
-from functools import lru_cache
 import json
-import os
-from pathlib import Path
-import subprocess
 
 from kassiber.core import custody_interpreters as reference
 from kassiber.core.custody_compute import compute_components_stage, compute_evidence_stage
 from tests.custody_snapshot import to_jsonable
 
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def graph_results(snapshot):
@@ -184,27 +179,3 @@ def python_results(snapshot):
         "excluded_transaction_ids": excluded,
         "row_anchor_ids": [reference._anchor_id(row) for row in snapshot["transactions"]],
     }}, redact_config=False)
-
-
-@lru_cache(maxsize=1)
-def executable():
-    subprocess.run(["cargo", "build", "--offline", "--locked", "-q", "-p", "kassiber-custody", "--example", "interpretation_partial"], cwd=ROOT, check=True, timeout=300)
-    target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))
-    if not target.is_absolute():
-        target = ROOT / target
-    return target / "debug/examples" / ("interpretation_partial.exe" if os.name == "nt" else "interpretation_partial")
-
-
-def rust_results(snapshot):
-    result = subprocess.run([str(executable())], input=json.dumps(snapshot) + "\n", capture_output=True, text=True, check=True, timeout=60)
-    value = json.loads(result.stdout)
-    if "partial_error" in value:
-        raise AssertionError("Rust partial interpretation refused the reference snapshot")
-    return value
-
-
-def compare(snapshot):
-    from tests.custody_engine_compare import assert_same
-    expected, actual = python_results(snapshot), rust_results(snapshot)
-    assert_same(expected, actual, "partial interpretation")
-    return tuple(expected)

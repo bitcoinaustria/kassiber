@@ -758,11 +758,33 @@ permutations and 110 full-Python controls. LND/CLN settlement and timeout refund
 compare; NWC is a negative authority control because Python admits no native
 NWC payment-hash row. Failed attempts contribute no native transition.
 Snapshot v1 remains raw-only, Python remains authoritative, and `interpretation`
-stays skipped. Continue with native component reconciliation and final
-composition.
+stays skipped at that checkpoint. The following checkpoint completes native
+component reconciliation and final composition.
 
-After interpretation, port gap search, quantity arbitration and finalized
-projection, then join custody with `ledger`.
+#### Complete interpretation checkpoint (R2c)
+
+Branch `t3code/r2c-interpretation-12`, based on `cc18b710`, completes native
+component reconciliation, the private reviewed quantity compiler, exact FIFO,
+chronology and full interpreter compilation in Python precedence. It promotes
+`interpretation` into the PyO3 implemented-stage inventory and the census/shadow
+comparison, retiring the partial runtime seam while retaining frozen vectors.
+Python remains authoritative and Rust results never reach stored state; v1
+snapshots remain raw-only.
+
+All eleven generators match full output for 22,000 books and 966 permutations,
+with independently asserted per-scenario counts for both engines. Recorded
+replay matches 88 requests and 88 permutations. All 1,178 mutations (1,035
+retained plus 143 new) have named-test kills. Workspace formatting, Clippy and
+740 offline tests outside `kassiber-net` pass. Focused census and shadow compare
+78 and 76 complete interpretations respectively. The broad Python run retains
+four account-home owner-lock sandbox failures, documented honestly with all
+counts, branch dispositions and remaining verification in the
+[completion checkpoint](../reference/custody-engine.md#complete-interpretation-checkpoint-r2c).
+Full census/shadow shards and the four nonsandboxed daemon reruns belong to the
+orchestrator.
+
+Next port gap search, quantity arbitration and finalized projection, then join
+custody with `ledger` in the journal operation.
 
 ### R5 rates checkpoint (partial)
 

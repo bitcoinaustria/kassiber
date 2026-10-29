@@ -32,14 +32,37 @@ pub fn custody(request: &str) -> String {
             if let Err((code, message)) = gates::require_accounting(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":message}}).to_string();
             }
+            if let Err(code) = interpretation::admit_channels(&snapshot) {
+                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string();
+            }
             let components = match components::compute(&snapshot) {
                 Ok(value) => value,
                 Err(error) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":error.code,"message":error.message}}).to_string(),
             };
-            match evidence::compute(&snapshot) {
-            Ok(evidence) => serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"stages":{"components":components,"evidence":evidence},"skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence")).collect::<Vec<_>> ()}).to_string(),
-            Err(message) => serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":"custody_evidence_invalid","message":message}}).to_string(),
-        }
+            let migration = match interpretation::migration_quarantines(&snapshot) {
+                Ok(value) => value,
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+            };
+            let evidence = match evidence::compute(&snapshot) {
+                Ok(value) => value,
+                Err(message) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":"custody_evidence_invalid","message":message}}).to_string(),
+            };
+            let interpretation = match interpretation::stage(&snapshot, &components, &evidence, migration) {
+                Ok(value) => value,
+                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":code}}).to_string(),
+            };
+            let response = serde_json::json!({
+                "schema_version":1,
+                "engine_version":ENGINE_VERSION,
+                "stages":{"components":components,"evidence":evidence},
+                "skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence"|"interpretation")).collect::<Vec<_>>()
+            });
+            let mut response = codec::from_json(&response).expect("computed custody response");
+            let mut stages = graph::stored::get(&response, "stages").clone();
+            graph::stored::put(&mut stages, "interpretation", interpretation);
+            graph::stored::put(&mut response, "stages", stages);
+            kassiber_pyjson::dumps(&response, &kassiber_pyjson::Options::new())
+                .expect("computed JSON values")
         },
         Err(message) => serde_json::json!({"schema_version": 1, "engine_version": ENGINE_VERSION, "error": {"code": "custody_snapshot_invalid", "message": message}}).to_string(),
     }

@@ -1,20 +1,23 @@
-//! Incremental interpreter port. The product operation deliberately does not
-//! publish this stage until every interpreter and their composition are ported.
-//! The example harness accepts only the ordinary raw snapshot, never Python
-//! claims, pairs, authority decisions, or materialized components.
+//! Complete interpreter compilation from raw snapshots and Rust stages.
+//! Python remains authoritative; these results are comparison-only.
 mod channels;
+mod chronology;
 mod claims;
 mod consolidation;
 mod fanout;
+mod fifo;
 mod holds;
 mod htlc;
 mod matcher;
+mod migration;
 mod native;
 mod ownership;
 mod pairs;
 mod pipeline;
 mod privacy;
+mod reconciliation;
 mod recorded;
+mod reviewed;
 mod safety;
 mod samourai;
 mod text;
@@ -25,6 +28,13 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+
+pub use migration::quarantines as migration_quarantines;
+
+/// Python loads channel context before materializing components.
+pub fn admit_channels(snapshot: &Snapshot) -> Result<(), String> {
+    channels::compute(snapshot).map(|_| ())
+}
 
 pub(crate) fn python_value_string(value: &kassiber_pyjson::Value) -> String {
     text::string(value)
@@ -80,6 +90,7 @@ fn observations(canonical: &Value) -> BTreeMap<String, Value> {
     result
 }
 
+#[derive(Clone)]
 pub(super) struct Context {
     pub observations: BTreeMap<String, Value>,
     pub canonical: Value,
@@ -89,6 +100,9 @@ impl Context {
     fn load(snapshot: &Snapshot) -> Result<Self, String> {
         let components = components::compute(snapshot).map_err(|e| e.code.to_owned())?;
         let evidence = evidence::compute(snapshot)?;
+        Ok(Self::from_stages(&components, &evidence))
+    }
+    fn from_stages(components: &Value, evidence: &Value) -> Self {
         let excluded = array(&components["components"])
             .iter()
             .flat_map(|item| array(&item["legs"]))
@@ -101,15 +115,70 @@ impl Context {
                 truth(value).then(|| text(value))
             })
             .collect();
-        Ok(Self {
+        Self {
             observations: observations(&evidence["canonical_input"]),
             canonical: evidence["canonical_input"].clone(),
             excluded,
-        })
+        }
     }
 }
 
-/// Test harness API, independent of `custody` and its implemented-stage list.
+/// Complete interpreter compilation over the already computed raw-fact stages.
+pub fn compute(snapshot: &Snapshot, components: &Value, evidence: &Value) -> Result<Value, String> {
+    let context = Context::from_stages(components, evidence);
+    let mut composition = safety::compose(snapshot, &context, array(&components["components"]))?;
+    let mut non_events: BTreeSet<_> = array(&composition["non_event_transaction_ids"])
+        .iter()
+        .map(crate::codec::text)
+        .collect();
+    non_events.extend(
+        array(&evidence["native_non_event_ids"])
+            .iter()
+            .map(crate::codec::text),
+    );
+    Ok(
+        json!({"$type":"CustodyInterpreterCompilation","claims":composition["claims"].take(),"native_audits":composition["native_audits"].take(),"non_event_transaction_ids":non_events,"blocked_transaction_ids":composition["blocked_transaction_ids"].take(),"quarantines":composition["quarantines"].take(),"native_component_reconciliations":composition.get("native_component_reconciliations").cloned().unwrap_or(json!([])),"transient_blocked_transaction_ids":composition["transient_blocked_transaction_ids"].take()}),
+    )
+}
+
+/// Add the legacy migration wrapper without narrowing decoded CPython strings
+/// or nonfinite values through serde. Python remains the accounting reference.
+pub fn stage(
+    snapshot: &Snapshot,
+    components: &Value,
+    evidence: &Value,
+    migration: Vec<kassiber_pyjson::Value>,
+) -> Result<kassiber_pyjson::Value, String> {
+    use crate::graph::stored;
+    use kassiber_pyjson::Value as Py;
+    let mut result = crate::codec::from_json(&compute(snapshot, components, evidence)?)?;
+    let mut blocked: BTreeSet<_> = stored::list(stored::get(&result, "blocked_transaction_ids"))
+        .iter()
+        .map(|v| {
+            let Py::Str(s) = v else {
+                unreachable!("compiled identifier")
+            };
+            s.clone()
+        })
+        .collect();
+    let mut quarantines = stored::list(stored::get(&result, "quarantines")).to_vec();
+    for quarantine in migration {
+        let Py::Str(id) = stored::get(&quarantine, "transaction_id") else {
+            unreachable!("migration identifier")
+        };
+        blocked.insert(id.clone());
+        quarantines.push(quarantine);
+    }
+    stored::put(
+        &mut result,
+        "blocked_transaction_ids",
+        Py::List(blocked.into_iter().map(Py::Str).collect()),
+    );
+    stored::put(&mut result, "quarantines", Py::List(quarantines));
+    Ok(result)
+}
+
+/// Frozen isolated-vector API; independent of product stage composition.
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
@@ -119,4 +188,114 @@ pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()
         }}),
     )
+}
+
+#[cfg(test)]
+mod stage_tests {
+    use super::*;
+    use crate::{codec, graph::stored};
+    use kassiber_pyjson::Value as Py;
+    fn run(input: &Value) -> Result<Py, String> {
+        let snapshot: Snapshot = serde_json::from_value(input.clone()).unwrap();
+        admit_channels(&snapshot)?;
+        let components = components::compute(&snapshot).map_err(|e| e.code.to_owned())?;
+        let migration = migration_quarantines(&snapshot)?;
+        let evidence = evidence::compute(&snapshot)?;
+        stage(&snapshot, &components, &evidence, migration)
+    }
+    #[test]
+    fn interpretation_full_vectors() {
+        let inputs: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/custody_interpretation_cases.json"
+        ))
+        .unwrap();
+        let expected: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/custody_interpretation_stages.json"
+        ))
+        .unwrap();
+        assert_eq!(inputs.len(), expected.len());
+        for (input, expected) in inputs.iter().zip(expected) {
+            assert_eq!(input["case"], expected["case"]);
+            let actual = run(&input["input"]);
+            if let Some(error) = expected.get("error") {
+                assert_eq!(
+                    actual.err(),
+                    error.as_str().map(str::to_owned),
+                    "{}",
+                    input["case"]
+                );
+            } else {
+                assert_eq!(
+                    actual.unwrap(),
+                    codec::from_json(&expected["expected"]).unwrap(),
+                    "{}",
+                    input["case"]
+                );
+            }
+        }
+    }
+    #[test]
+    fn interpretation_wrapper_vectors() {
+        let vectors = codec::loads(include_str!(
+            "../../../../tests/fixtures/custody_interpretation_wrappers.json"
+        ))
+        .unwrap();
+        for v in stored::list(&vectors) {
+            let actual = run(&codec::to_json(stored::get(v, "input")));
+            let error = stored::get(v, "error");
+            if !matches!(error, Py::Null) {
+                assert_eq!(
+                    actual.err(),
+                    Some(text::string(error)),
+                    "{}",
+                    text::string(stored::get(v, "case"))
+                );
+            } else {
+                assert_eq!(
+                    codec::dumps(&actual.unwrap(), true).unwrap(),
+                    codec::dumps(stored::get(v, "expected"), true).unwrap(),
+                    "{}",
+                    text::string(stored::get(v, "case"))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn interpretation_operation_vectors() {
+        let vectors = codec::loads(include_str!(
+            "../../../../tests/fixtures/custody_interpretation_wrappers.json"
+        ))
+        .unwrap();
+        for v in stored::list(&vectors) {
+            let request = codec::dumps(stored::get(v, "input"), false).unwrap();
+            let response = codec::loads(&crate::custody(&request)).unwrap();
+            let error = stored::get(v, "error");
+            if !matches!(error, Py::Null) {
+                assert_eq!(
+                    stored::get(stored::get(&response, "error"), "code"),
+                    error,
+                    "{}",
+                    text::string(stored::get(v, "case"))
+                );
+                assert!(matches!(stored::get(&response, "stages"), Py::Null));
+            } else {
+                assert_eq!(
+                    codec::dumps(
+                        stored::get(stored::get(&response, "stages"), "interpretation"),
+                        true
+                    )
+                    .unwrap(),
+                    codec::dumps(stored::get(v, "expected"), true).unwrap(),
+                    "{}",
+                    text::string(stored::get(v, "case"))
+                );
+                assert_eq!(
+                    stored::get(&response, "skipped_stages"),
+                    &codec::from_json(&json!(["gaps", "quantity", "finalized_projection"]))
+                        .unwrap()
+                );
+            }
+        }
+    }
 }

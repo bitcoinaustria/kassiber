@@ -19,7 +19,7 @@ def child_env(mode="shadow", *, inject=False):
     env[compare.MODE_ENV] = mode
     env["PYTHONPATH"] = os.pathsep.join((str(ROOT / "tests/_child_hooks"), str(ROOT)))
     if inject:
-        env[compare.INJECT_ENV] = "evidence"
+        env[compare.INJECT_ENV] = inject if isinstance(inject, str) else "evidence"
     return env
 
 
@@ -34,7 +34,7 @@ def cli_book():
 
 
 @pytest.mark.parametrize("mode", ["shadow", "census"])
-@pytest.mark.parametrize("inject", [False, True])
+@pytest.mark.parametrize("inject", [False, "evidence", "interpretation"])
 def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode, inject):
     records = tmp_path / "records.jsonl"
     env = child_env(mode, inject=inject)
@@ -46,9 +46,9 @@ def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode
     assert len(routes) == 1
     assert routes[0]["outcome"] == ("difference" if inject else "result")
     assert routes[0]["compared"][:2] == ["components", "evidence"]
-    if not inject:
-        assert "partial.interpretation.shared" in routes[0]["compared"]
-    assert bool(compare.session_report(routes)[1]) == inject
+    if inject != "evidence":
+        assert "interpretation" in routes[0]["compared"]
+    assert bool(compare.session_report(routes)[1]) == bool(inject)
 
 
 def test_custody_difference_cannot_be_swallowed_by_a_test(tmp_path):

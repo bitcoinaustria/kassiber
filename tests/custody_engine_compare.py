@@ -106,8 +106,9 @@ def compare_rust(snapshot, evidence, *, python_stages=None):
     results, skipped = rust_results(snapshot)
     if python_stages is None:
         from kassiber.core.custody_compute import compute_components_stage
+        from tests.custody_interpretation_stage import python_stage
         components, blockers = compute_components_stage(snapshot)
-        stages = {"components": {"components": components, "blockers": blockers}, "evidence": evidence}
+        stages = {"components": {"components": components, "blockers": blockers}, "evidence": evidence, "interpretation": python_stage(snapshot)}
     else:
         stages = python_stages
     compared = []
@@ -115,8 +116,6 @@ def compare_rust(snapshot, evidence, *, python_stages=None):
         if name in results and name in stages:
             assert_same(stages[name], results[name], name)
             compared.append(name)
-    from tests.custody_interpretation_partial import compare
-    compared.extend("partial.interpretation." + name for name in compare(snapshot))
     return tuple(compared), tuple(skipped)
 
 
@@ -153,19 +152,18 @@ def _build(self, *, finalized):
         if observer is not None:
             observer.stage(name, value)
         python_stages[name] = value
+        comparing = name
         try:
-            if name == "components":
+            if name == "interpretation":
                 rust_stages, skipped = rust_results(snapshot)
             if rust_stages is not None:
                 for stage in STAGES:
                     if stage in rust_stages and stage in python_stages and stage not in compared:
+                        comparing = stage
                         assert_same(python_stages[stage], rust_stages[stage], stage)
                         compared = (*compared, stage)
-            if name == "evidence":
-                from tests.custody_interpretation_partial import compare
-                compared = (*compared, *("partial.interpretation." + part for part in compare(snapshot)))
         except BaseException:
-            record("difference", compared=(*compared, name), skipped=skipped, reference=False)
+            record("difference", compared=(*compared, comparing), skipped=skipped, reference=False)
             recorded = True
             raise
     try:
@@ -188,7 +186,7 @@ def _build(self, *, finalized):
             expected = normalized_reference(expected)
             assert_same(expected, result, "Python snapshot/reference")
     except BaseException as exc:
-        if snapshot is not None and rust_stages is None and not python_stages and not recorded:
+        if snapshot is not None and rust_stages is None and not recorded:
             try:
                 rust_results(snapshot, python_error=exc)
                 compared = ("admission",)
@@ -232,8 +230,6 @@ def session_report(records):
     skipped = {name: sum(name in row["skipped"] for row in records) for name in STAGES}
     lines = [f"custody snapshots: {len(records)}; frozen Python comparisons: {sum(row['reference'] for row in records)}"]
     lines.extend(f"{name}: {counts[name]} compared, {skipped[name]} skipped" for name in STAGES)
-    partials = sorted({name for row in records for name in row["compared"] if name.startswith("partial.interpretation.")})
-    lines.extend(f"{name}: {sum(name in row['compared'] for row in records)} compared (test-only isolated slice)" for name in partials)
     failures = [row for row in records if row["outcome"] == "difference"]
     empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
     errors = ([f"custody differences: {len(failures)}"] if failures else [])

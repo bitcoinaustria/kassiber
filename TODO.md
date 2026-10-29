@@ -35,15 +35,14 @@ the feasibility spikes are in place; these remain:
 
 ## Rust backend R2
 
-The [raw custody v1 snapshot, pure Python stages and Rust components/evidence stages](docs/reference/custody-engine.md)
+The [raw custody v1 snapshot, pure Python stages and Rust components/evidence/interpretation stages](docs/reference/custody-engine.md)
 are in place with required shadow/census comparison, CPython parser vectors,
 raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Finish interpreter compilation after the [native HTLC production and reservations checkpoint](docs/reference/custody-engine.md#native-htlc-production-and-reservations-checkpoint-r2c-partial):
-  native component reconciliation and final composition. Keep `interpretation` skipped until the
-  complete stage passes.
+- [x] Finish native component reconciliation and complete interpreter composition;
+  [interpretation now participates in full-stage comparison](docs/reference/custody-engine.md#complete-interpretation-checkpoint-r2c).
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration
   and finalized tax projection, comparing each stage before fusing it.
 - [ ] Join custody and the tax engine in one `journal` operation only after

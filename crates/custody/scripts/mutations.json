@@ -10362,5 +10362,1435 @@
       "native_matcher_helper_vectors"
     ],
     "rule": "Independent provider semantic contradictions deny exact confidence."
+  },
+  {
+    "id": "REC-RECONCILIATION-01",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "observation[\"direction\"] == \"outbound\"",
+    "replace": "observation[\"direction\"] != \"outbound\"",
+    "rule": "Invert the Python admission or allocation branch: observation[\"direction\"] == \"outbound\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-02",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"priority\"][\"value\"] != 20",
+    "replace": "claim[\"priority\"][\"value\"] == 20",
+    "rule": "Invert the Python admission or allocation branch: claim[\"priority\"][\"value\"] != 20.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-03",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"state\"] != \"internal_verified\"",
+    "replace": "claim[\"state\"] == \"internal_verified\"",
+    "rule": "Invert the Python admission or allocation branch: claim[\"state\"] != \"internal_verified\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-04",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "source[\"event_key\"] != target[\"event_key\"]",
+    "replace": "source[\"event_key\"] == target[\"event_key\"]",
+    "rule": "Invert the Python admission or allocation branch: source[\"event_key\"] != target[\"event_key\"].",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-05",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "source[\"event_key\"][\"native_namespace\"] != \"chain\"",
+    "replace": "source[\"event_key\"][\"native_namespace\"] == \"chain\"",
+    "rule": "Invert the Python admission or allocation branch: source[\"event_key\"][\"native_namespace\"] != \"chain\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-06",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "source[\"asset\"] != target[\"asset\"]",
+    "replace": "source[\"asset\"] == target[\"asset\"]",
+    "rule": "Invert the Python admission or allocation branch: source[\"asset\"] != target[\"asset\"].",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-07",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "source[\"wallet_id\"] == target[\"wallet_id\"]",
+    "replace": "source[\"wallet_id\"] != target[\"wallet_id\"]",
+    "rule": "Invert the Python admission or allocation branch: source[\"wallet_id\"] == target[\"wallet_id\"].",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-08",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "source[\"fee_attribution\"] != \"exact\"",
+    "replace": "source[\"fee_attribution\"] == \"exact\"",
+    "rule": "Invert the Python admission or allocation branch: source[\"fee_attribution\"] != \"exact\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-09",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "amount(&source[\"fee_msat\"])? < BigInt::from(0)",
+    "replace": "amount(&source[\"fee_msat\"])? >= BigInt::from(0)",
+    "rule": "Invert the Python admission or allocation branch: amount(&source[\"fee_msat\"])? < BigInt::from(0).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-10",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "start != cursor",
+    "replace": "start == cursor",
+    "rule": "Invert the Python admission or allocation branch: start != cursor.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-11",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "cursor == *total",
+    "replace": "cursor != *total",
+    "rule": "Invert the Python admission or allocation branch: cursor == *total.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-12",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "end - index == 1",
+    "replace": "end - index != 1",
+    "rule": "Invert the Python admission or allocation branch: end - index == 1.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-13",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "component[\"effective_state\"] != \"active\"",
+    "replace": "component[\"effective_state\"] == \"active\"",
+    "rule": "Invert the Python admission or allocation branch: component[\"effective_state\"] != \"active\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-14",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "component[\"conservation_mode\"] != \"quantity\"",
+    "replace": "component[\"conservation_mode\"] == \"quantity\"",
+    "rule": "Invert the Python admission or allocation branch: component[\"conservation_mode\"] != \"quantity\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-15",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"destination_kind\"] == \"fee\"",
+    "replace": "claim[\"destination_kind\"] != \"fee\"",
+    "rule": "Invert the Python admission or allocation branch: claim[\"destination_kind\"] == \"fee\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-16",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"reason\"] == \"reviewed_network_fee\"",
+    "replace": "claim[\"reason\"] != \"reviewed_network_fee\"",
+    "rule": "Invert the Python admission or allocation branch: claim[\"reason\"] == \"reviewed_network_fee\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-17",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"state\"] == \"custody_suspense\"",
+    "replace": "claim[\"state\"] != \"custody_suspense\"",
+    "rule": "Invert the Python admission or allocation branch: claim[\"state\"] == \"custody_suspense\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-18",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"reason\"] == \"reviewed_residual_suspense\"",
+    "replace": "claim[\"reason\"] != \"reviewed_residual_suspense\"",
+    "rule": "Invert the Python admission or allocation branch: claim[\"reason\"] == \"reviewed_residual_suspense\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-19",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "debit != principal(source)? + amount(&source[\"fee_msat\"])?",
+    "replace": "debit == principal(source)? + amount(&source[\"fee_msat\"])?",
+    "rule": "Invert the Python admission or allocation branch: debit != principal(source)? + amount(&source[\"fee_msat\"])?.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-20",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "credits.iter().map(|(_, n)| n).sum::<BigInt>() < principal(source)? + &fee",
+    "replace": "credits.iter().map(|(_, n)| n).sum::<BigInt>() >= principal(source)? + &fee",
+    "rule": "Invert the Python admission or allocation branch: credits.iter().map(|(_, n)| n).sum::<BigInt>() < principal(source)? + &fee.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-21",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "cell.sink == \"fee\"",
+    "replace": "cell.sink != \"fee\"",
+    "rule": "Invert the Python admission or allocation branch: cell.sink == \"fee\".",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-22",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "seeded != source_hashes",
+    "replace": "seeded == source_hashes",
+    "rule": "Invert the Python admission or allocation branch: seeded != source_hashes.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-23",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "actual != expected",
+    "replace": "actual == expected",
+    "rule": "Invert the Python admission or allocation branch: actual != expected.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-24",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "used.is_subset(&anchors)",
+    "replace": "!(used.is_subset(&anchors))",
+    "rule": "Invert the Python admission or allocation branch: used.is_subset(&anchors).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-25",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "!codec::truth(&source[\"authoritative_chain_observation\"])",
+    "replace": "!(!codec::truth(&source[\"authoritative_chain_observation\"]))",
+    "rule": "Invert the Python admission or allocation branch: !codec::truth(&source[\"authoritative_chain_observation\"]).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-26",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "!codec::truth(&target[\"authoritative_chain_observation\"])",
+    "replace": "!(!codec::truth(&target[\"authoritative_chain_observation\"]))",
+    "rule": "Invert the Python admission or allocation branch: !codec::truth(&target[\"authoritative_chain_observation\"]).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-27",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "codec::truth(&component[\"economic_terms\"])",
+    "replace": "!(codec::truth(&component[\"economic_terms\"]))",
+    "rule": "Invert the Python admission or allocation branch: codec::truth(&component[\"economic_terms\"]).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-28",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "source_hashes.is_empty()",
+    "replace": "!(source_hashes.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: source_hashes.is_empty().",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-29",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "target_hashes.is_empty()",
+    "replace": "!(target_hashes.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: target_hashes.is_empty().",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-30",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "!source_hashes.is_subset(&complete_sources)",
+    "replace": "!(!source_hashes.is_subset(&complete_sources))",
+    "rule": "Invert the Python admission or allocation branch: !source_hashes.is_subset(&complete_sources).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-31",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "credits.is_empty()",
+    "replace": "!(credits.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: credits.is_empty().",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-32",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "protected.contains(&source_id) && !anchors.contains(&source_id)",
+    "replace": "!(protected.contains(&source_id) && !anchors.contains(&source_id))",
+    "rule": "Invert the Python admission or allocation branch: protected.contains(&source_id) && !anchors.contains(&source_id).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-33",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "selected_rows.contains(&target_id)",
+    "replace": "!(selected_rows.contains(&target_id))",
+    "rule": "Invert the Python admission or allocation branch: selected_rows.contains(&target_id).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-34",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "protected.contains(&target_id) && !anchors.contains(&target_id)",
+    "replace": "!(protected.contains(&target_id) && !anchors.contains(&target_id))",
+    "rule": "Invert the Python admission or allocation branch: protected.contains(&target_id) && !anchors.contains(&target_id).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-35",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "target_hashes.contains(&target_hash)",
+    "replace": "!(target_hashes.contains(&target_hash))",
+    "rule": "Invert the Python admission or allocation branch: target_hashes.contains(&target_hash).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-36",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "pools.values().any(|v| !v.is_empty())",
+    "replace": "!(pools.values().any(|v| !v.is_empty()))",
+    "rule": "Invert the Python admission or allocation branch: pools.values().any(|v| !v.is_empty()).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-37",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "!used.contains(&codec::text(&observation[\"transaction_id\"]))",
+    "replace": "!(!used.contains(&codec::text(&observation[\"transaction_id\"])))",
+    "rule": "Invert the Python admission or allocation branch: !used.contains(&codec::text(&observation[\"transaction_id\"])).",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-38",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "claim[\"target\"].is_null()\n",
+    "replace": "!claim[\"target\"].is_null()\n",
+    "rule": "Require a target-bearing native edge before dereferencing it.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-40",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "*balance += amount;",
+    "replace": "*balance = amount;",
+    "rule": "Accumulate credits from the same origin rather than replacing them.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-41",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "if fee != BigInt::from(0) {\n                *expected",
+    "replace": "if fee == BigInt::from(0) {\n                *expected",
+    "rule": "Add observed source-anchor fees to reviewed expected allocations.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-42",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "if fee != BigInt::from(0) {\n                sinks",
+    "replace": "if fee == BigInt::from(0) {\n                sinks",
+    "rule": "Allocate exact native fees through each route source.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-01",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "key.is_empty()",
+    "replace": "!(key.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: key.is_empty().",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-02",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "!explicit.is_empty()",
+    "replace": "!(!explicit.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: !explicit.is_empty().",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-03",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "if amount(&leg[\"amount_msat\"])? > BigInt::from(0)",
+    "replace": "if amount(&leg[\"amount_msat\"])? <= BigInt::from(0)",
+    "rule": "Invert the Python admission or allocation branch: if amount(&leg[\"amount_msat\"])? > BigInt::from(0).",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-04",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "if leg[\"role\"] == \"source\"",
+    "replace": "if leg[\"role\"] != \"source\"",
+    "rule": "Invert the Python admission or allocation branch: if leg[\"role\"] == \"source\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-05",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "sources.len() == 1",
+    "replace": "sources.len() != 1",
+    "rule": "Invert the Python admission or allocation branch: sources.len() == 1.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-06",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "sinks.len() == 1",
+    "replace": "sinks.len() != 1",
+    "rule": "Invert the Python admission or allocation branch: sinks.len() == 1.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-07",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "source[\"role\"] != \"source\"",
+    "replace": "source[\"role\"] == \"source\"",
+    "rule": "Invert the Python admission or allocation branch: source[\"role\"] != \"source\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-08",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "a <= BigInt::from(0) && b <= BigInt::from(0)",
+    "replace": "a > BigInt::from(0) && b <= BigInt::from(0)",
+    "rule": "Invert the Python admission or allocation branch: a <= BigInt::from(0) && b <= BigInt::from(0).",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-09",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "a != b",
+    "replace": "a == b",
+    "rule": "Invert the Python admission or allocation branch: a != b.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-10",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "!anchor(source).is_empty()",
+    "replace": "!(!anchor(source).is_empty())",
+    "rule": "Invert the Python admission or allocation branch: !anchor(source).is_empty().",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-11",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "available < a",
+    "replace": "available >= a",
+    "rule": "Invert the Python admission or allocation branch: available < a.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-12",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "used < capacity",
+    "replace": "used >= capacity",
+    "rule": "Invert the Python admission or allocation branch: used < capacity.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-13",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "path.len() > 1",
+    "replace": "path.len() <= 1",
+    "rule": "Invert the Python admission or allocation branch: path.len() > 1.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-14",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "!progressed",
+    "replace": "!(!progressed)",
+    "rule": "Invert the Python admission or allocation branch: !progressed.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-15",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "component[\"effective_state\"] != \"active\"",
+    "replace": "component[\"effective_state\"] == \"active\"",
+    "rule": "Invert the Python admission or allocation branch: component[\"effective_state\"] != \"active\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-16",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "leg[\"role\"] == \"retained\"",
+    "replace": "leg[\"role\"] != \"retained\"",
+    "rule": "Invert the Python admission or allocation branch: leg[\"role\"] == \"retained\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-17",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "leg[\"notes\"] == \"reviewed_residual:retained_custody\"",
+    "replace": "leg[\"notes\"] != \"reviewed_residual:retained_custody\"",
+    "rule": "Invert the Python admission or allocation branch: leg[\"notes\"] == \"reviewed_residual:retained_custody\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-18",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "leg[\"role\"] == \"suspense\"",
+    "replace": "leg[\"role\"] != \"suspense\"",
+    "rule": "Invert the Python admission or allocation branch: leg[\"role\"] == \"suspense\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-19",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "source_id.is_empty()",
+    "replace": "!(source_id.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: source_id.is_empty().",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-20",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "sink[\"role\"] == \"fee\" && sink[\"notes\"] != \"reviewed_residual:network_fee\"",
+    "replace": "sink[\"role\"] == \"fee\" && sink[\"notes\"] == \"reviewed_residual:network_fee\"",
+    "rule": "Invert the Python admission or allocation branch: sink[\"role\"] == \"fee\" && sink[\"notes\"] != \"reviewed_residual:network_fee\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-21",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "a != amount(&observation[\"fee_msat\"])?",
+    "replace": "a == amount(&observation[\"fee_msat\"])?",
+    "rule": "Invert the Python admission or allocation branch: a != amount(&observation[\"fee_msat\"])?.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-22",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "end > super::reconciliation::principal(observation)?",
+    "replace": "end <= super::reconciliation::principal(observation)?",
+    "rule": "Invert the Python admission or allocation branch: end > super::reconciliation::principal(observation)?.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-23",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "target_id.is_empty()",
+    "replace": "!(target_id.is_empty())",
+    "rule": "Invert the Python admission or allocation branch: target_id.is_empty().",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-24",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "!finalized.contains(&codec::text(&sink[\"id\"]))",
+    "replace": "!(!finalized.contains(&codec::text(&sink[\"id\"])))",
+    "rule": "Invert the Python admission or allocation branch: !finalized.contains(&codec::text(&sink[\"id\"])).",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-25",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "destination[\"direction\"] != \"inbound\"",
+    "replace": "destination[\"direction\"] == \"inbound\"",
+    "rule": "Invert the Python admission or allocation branch: destination[\"direction\"] != \"inbound\".",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-26",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "end > super::reconciliation::principal(destination)?",
+    "replace": "end <= super::reconciliation::principal(destination)?",
+    "rule": "Invert the Python admission or allocation branch: end > super::reconciliation::principal(destination)?.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-27",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "claimed != super::reconciliation::principal(observation)?",
+    "replace": "claimed == super::reconciliation::principal(observation)?",
+    "rule": "Invert the Python admission or allocation branch: claimed != super::reconciliation::principal(observation)?.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-28",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "\"source_amount_msat\":n,\"sink_amount_msat\":n",
+    "replace": "\"source_amount_msat\":n,\"sink_amount_msat\":0",
+    "rule": "Inferred allocations retain exact destination quantities.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-29",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "codec::text(&leg[\"asset\"]).py_upper()",
+    "replace": "codec::text(&leg[\"asset\"])",
+    "rule": "Use CPython uppercase in transactionless location identity.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-30",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "next_path.push(allocation_id.clone());",
+    "replace": "next_path.push(\"wrong\".into());",
+    "rule": "Preserve every intermediate allocation in route claim ids.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-31",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "queue.push_front((origin, capacity - used, path));",
+    "replace": "queue.push_back((origin, capacity - used, path));",
+    "rule": "Partial transactionless tokens stay at the FIFO head.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-FIFO-01",
+    "file": "crates/custody/src/interpretation/fifo.rs",
+    "find": "requested > capacity",
+    "replace": "requested <= capacity",
+    "rule": "Invert the Python admission or allocation branch: requested > capacity.",
+    "expect_failing": [
+      "reconciliation_fifo_vectors"
+    ]
+  },
+  {
+    "id": "REC-FIFO-02",
+    "file": "crates/custody/src/interpretation/fifo.rs",
+    "find": "source_used[source] == sources[source].1",
+    "replace": "source_used[source] != sources[source].1",
+    "rule": "Invert the Python admission or allocation branch: source_used[source] == sources[source].1.",
+    "expect_failing": [
+      "reconciliation_fifo_vectors"
+    ]
+  },
+  {
+    "id": "REC-FIFO-03",
+    "file": "crates/custody/src/interpretation/fifo.rs",
+    "find": "sink_used[sink] == sinks[sink].1",
+    "replace": "sink_used[sink] != sinks[sink].1",
+    "rule": "Invert the Python admission or allocation branch: sink_used[sink] == sinks[sink].1.",
+    "expect_failing": [
+      "reconciliation_fifo_vectors"
+    ]
+  },
+  {
+    "id": "REC-FIFO-04",
+    "file": "crates/custody/src/interpretation/fifo.rs",
+    "find": ".min(&sources[source].1 - &source_used[source])",
+    "replace": ".max(&sources[source].1 - &source_used[source])",
+    "rule": "Bound each FIFO cell by remaining source capacity.",
+    "expect_failing": [
+      "reconciliation_fifo_vectors"
+    ]
+  },
+  {
+    "id": "REC-FIFO-05",
+    "file": "crates/custody/src/interpretation/fifo.rs",
+    "find": ".min(&sinks[sink].1 - &sink_used[sink])",
+    "replace": ".max(&sinks[sink].1 - &sink_used[sink])",
+    "rule": "Bound each FIFO cell by remaining sink capacity.",
+    "expect_failing": [
+      "reconciliation_fifo_vectors"
+    ]
+  },
+  {
+    "id": "REC-FIFO-06",
+    "file": "crates/custody/src/interpretation/fifo.rs",
+    "find": "(id.clone(), n - used)",
+    "replace": "(id.clone(), n + used)",
+    "rule": "Return exact unallocated source capacities.",
+    "expect_failing": [
+      "reconciliation_fifo_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-01",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "!evidence::current_observation(row)?",
+    "replace": "!(!evidence::current_observation(row)?)",
+    "rule": "Invert the Python admission or allocation branch: !evidence::current_observation(row)?.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-02",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "!input.is_object()",
+    "replace": "!(!input.is_object())",
+    "rule": "Invert the Python admission or allocation branch: !input.is_object().",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-03",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "n >= BigInt::from(0)",
+    "replace": "n < BigInt::from(0)",
+    "rule": "Invert the Python admission or allocation branch: n >= BigInt::from(0).",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-04",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "i != j",
+    "replace": "i == j",
+    "rule": "Invert the Python admission or allocation branch: i != j.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-05",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "b.parents.contains(&a.scope)",
+    "replace": "!(b.parents.contains(&a.scope))",
+    "rule": "Invert the Python admission or allocation branch: b.parents.contains(&a.scope).",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-06",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "a.scope == b.scope",
+    "replace": "a.scope != b.scope",
+    "rule": "Invert the Python admission or allocation branch: a.scope == b.scope.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-07",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "i == j || source.to != target.from",
+    "replace": "i == j || source.to == target.from",
+    "rule": "Invert the Python admission or allocation branch: i == j || source.to != target.from.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-08",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "ordered.len() != size",
+    "replace": "ordered.len() == size",
+    "rule": "Invert the Python admission or allocation branch: ordered.len() != size.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-09",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "input[\"vout\"].is_number()",
+    "replace": "input[\"vout\"].is_boolean()",
+    "rule": "Only exact integer outpoint indices establish parents.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-10",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "if hard\n",
+    "replace": "if !hard\n",
+    "rule": "Hard chain dependencies constrain soft wallet hints.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-11",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "ready.pop_first()",
+    "replace": "ready.pop_last()",
+    "rule": "Topological ties keep original insertion order.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-CHRONOLOGY-12",
+    "file": "crates/custody/src/interpretation/chronology.rs",
+    "find": "seen.insert(key.clone()).then(|| key.clone())",
+    "replace": "{ seen.insert(key.clone()); Some(key.clone()) }",
+    "rule": "Emit each native source only once after ordering its claims.",
+    "expect_failing": [
+      "reconciliation_chronology_vectors"
+    ]
+  },
+  {
+    "id": "REC-SAFETY-01",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "!codec::truth(&c[\"economic_terms\"])",
+    "replace": "!(!codec::truth(&c[\"economic_terms\"]))",
+    "rule": "Invert the Python admission or allocation branch: !codec::truth(&c[\"economic_terms\"]).",
+    "expect_failing": [
+      "reconciliation_compilation_vectors"
+    ]
+  },
+  {
+    "id": "REC-SAFETY-02",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "candidate_context.excluded.clear();",
+    "replace": "candidate_context.excluded.insert(\"unused\".into());",
+    "rule": "Test recovered routes before applying authored reservations.",
+    "expect_failing": [
+      "reconciliation_compilation_vectors"
+    ]
+  },
+  {
+    "id": "REC-SAFETY-03",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "released_context\n                        .excluded\n                        .remove(&super::reviewed::anchor(leg));",
+    "replace": "released_context\n                        .excluded\n                        .insert(super::reviewed::anchor(leg));",
+    "rule": "Release only the anchors of fully reconciled components.",
+    "expect_failing": [
+      "reconciliation_compilation_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-01",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "\"KeyError\".to_owned()",
+    "replace": "\"TypeError\".to_owned()",
+    "rule": "Preserve missing-field KeyError before decoding and iteration.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-02",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "if stored::truth(&value)",
+    "replace": "if !stored::truth(&value)",
+    "rule": "Apply Python truth before the JSON default.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-03",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "value.as_str().and_then(|s| codec::loads(s).ok())",
+    "replace": "value.as_str().and_then(|_| None)",
+    "rule": "Decode JSON strings with CPython container and scalar semantics.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-04",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "Py::List(values) => Ok(values)",
+    "replace": "Py::List(values) => Ok(values.into_iter().rev().collect())",
+    "rule": "Keep migration transaction list order, including duplicates.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-05",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "Py::Dict(values) => Ok(values\n            .into_iter()",
+    "replace": "Py::Dict(values) => Ok(values\n            .into_iter().rev()",
+    "rule": "Iterate JSON object identifiers in insertion order.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-06",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": ".code_points()\n            .map",
+    "replace": ".code_points().collect::<Vec<_>>().into_iter().rev()\n            .map",
+    "rule": "Iterate Python strings by Unicode code point in original order.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-07",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "_ => Err(\"TypeError\".into())",
+    "replace": "_ => Ok(Vec::new())",
+    "rule": "Refuse noniterable decoded JSON identifiers.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-08",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "_ => Py::Str(super::text::string(&value).into())",
+    "replace": "_ => Py::Str(\"incorrect\".into())",
+    "rule": "Stringify every non-string identifier with Python str.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-09",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "for row in &snapshot.migration_issues",
+    "replace": "for row in snapshot.migration_issues.iter().rev()",
+    "rule": "Append migration rows in input order.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-10",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "let value @ Py::Dict(_) =",
+    "replace": "let value @ Py::List(_) =",
+    "rule": "Only dictionary details become migration_details.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-11",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "Options::new().sort_keys(true)",
+    "replace": "Options::new().sort_keys(false)",
+    "rule": "Store detail_json with Python sorted dictionary keys.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-12",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "field(row, \"workspace_id\")?",
+    "replace": "field(row, \"profile_id\")?",
+    "rule": "Keep workspace identity distinct from profile identity.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-13",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "field(row, \"profile_id\")?",
+    "replace": "field(row, \"workspace_id\")?",
+    "rule": "Project the migration profile without rewriting scope.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-14",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "\"custody_authored_migration_incomplete\"",
+    "replace": "\"incorrect_reason\"",
+    "rule": "Preserve the authored migration quarantine reason.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-15",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "(\"migration_issue_id\", \"id\")",
+    "replace": "(\"migration_issue_id\", \"issue_code\")",
+    "rule": "Preserve the authored migration issue identity.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-16",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "(\"legacy_table\", \"legacy_table\")",
+    "replace": "(\"legacy_table\", \"legacy_source_id\")",
+    "rule": "Preserve the legacy source table.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-17",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "(\"legacy_source_id\", \"legacy_source_id\")",
+    "replace": "(\"legacy_source_id\", \"legacy_table\")",
+    "rule": "Preserve the legacy source row identity.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-MIGRATION-18",
+    "file": "crates/custody/src/interpretation/migration.rs",
+    "find": "(\"issue_code\", \"issue_code\")",
+    "replace": "(\"issue_code\", \"id\")",
+    "rule": "Preserve the migration issue code.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-STAGE-01",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "blocked.insert(id.clone());",
+    "replace": "blocked.remove(id);",
+    "rule": "Union migration identifiers into blocked identifiers.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-STAGE-02",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "quarantines.push(quarantine);",
+    "replace": "quarantines.insert(0, quarantine);",
+    "rule": "Append migration quarantines after interpreter quarantines.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-STAGE-03",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "blocked.into_iter().map(Py::Str).collect()",
+    "replace": "blocked.into_iter().rev().map(Py::Str).collect()",
+    "rule": "Sort the union by Python Unicode code point order.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-STAGE-04",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "array(&evidence[\"native_non_event_ids\"])",
+    "replace": "array(&json!([]))",
+    "rule": "Union native zero-delta non-events after compilation.",
+    "expect_failing": [
+      "interpretation_wrapper_vectors"
+    ]
+  },
+  {
+    "id": "REC-STAGE-05",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "composition.get(\"native_component_reconciliations\").cloned().unwrap_or(json!([]))",
+    "replace": "json!([])",
+    "rule": "Expose complete native reconciliation certificates.",
+    "expect_failing": [
+      "reconciliation_compilation_vectors"
+    ]
+  },
+  {
+    "id": "REC-OPERATION-01",
+    "file": "crates/custody/src/lib.rs",
+    "find": "\"components\"|\"evidence\"|\"interpretation\"",
+    "replace": "\"components\"|\"evidence\"",
+    "rule": "Advertise interpretation as implemented.",
+    "expect_failing": [
+      "interpretation_operation_vectors"
+    ]
+  },
+  {
+    "id": "REC-OPERATION-02",
+    "file": "crates/custody/src/lib.rs",
+    "find": "graph::stored::put(&mut stages, \"interpretation\", interpretation);",
+    "replace": "graph::stored::put(&mut stages, \"incorrect\", interpretation);",
+    "rule": "Publish the complete stage under its stable operation key.",
+    "expect_failing": [
+      "interpretation_operation_vectors"
+    ]
+  },
+  {
+    "id": "REC-OPERATION-03",
+    "file": "crates/custody/src/lib.rs",
+    "find": "if let Err(code) = interpretation::admit_channels(&snapshot)",
+    "replace": "if let Err(code) = Ok::<(), String>(())",
+    "rule": "Admit channel facts before authored component facts.",
+    "expect_failing": [
+      "interpretation_operation_vectors"
+    ]
+  },
+  {
+    "id": "REC-OPERATION-04",
+    "file": "crates/custody/src/lib.rs",
+    "find": "            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":code,\"message\":code}}).to_string(),\n            };\n",
+    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":code,\"message\":code}}).to_string(),\n            };\n            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n",
+    "rule": "Materialize components before migration quarantine admission.",
+    "expect_failing": [
+      "interpretation_operation_vectors"
+    ]
+  },
+  {
+    "id": "REC-OPERATION-05",
+    "file": "crates/custody/src/lib.rs",
+    "find": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":code,\"message\":code}}).to_string(),\n            };\n",
+    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"code\":\"incorrect_migration_error\",\"message\":code}}).to_string(),\n            };\n",
+    "rule": "Preserve migration admission error families at the operation boundary.",
+    "expect_failing": [
+      "interpretation_operation_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-43",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "&& codec::truth(&observation[\"amount_includes_fee\"])",
+    "replace": "&& !codec::truth(&observation[\"amount_includes_fee\"])",
+    "rule": "Subtract included fees only for fee-inclusive outbound principal.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-44",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "Some(\"bitcoin\" | \"liquid\")",
+    "replace": "Some(\"bitcoin\")",
+    "rule": "Admit authoritative Liquid routes as well as Bitcoin.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-45",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "Some(\"bitcoin\" | \"liquid\")",
+    "replace": "Some(\"liquid\")",
+    "rule": "Admit authoritative Bitcoin routes as well as Liquid.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-46",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "blocked.contains(&codec::text(&v[\"transaction_id\"]))",
+    "replace": "!blocked.contains(&codec::text(&v[\"transaction_id\"]))",
+    "rule": "Refuse a native edge if either transaction is blocked.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-47",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "complete_sources.is_empty()",
+    "replace": "!complete_sources.is_empty()",
+    "rule": "Return no reconciliations when no native source has complete coverage.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-48",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "!anchors.is_disjoint(blocked) || !anchors.is_disjoint(&selected_rows)",
+    "replace": "anchors.is_disjoint(blocked) || anchors.is_disjoint(&selected_rows)",
+    "rule": "Reserve blocked and previously selected component anchors.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-49",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "            {\n                continue\n            }\n            Err(code) => return Err(code),",
+    "replace": "            {\n                return Err(code)\n            }\n            Err(code) => return Err(code),",
+    "rule": "Skip candidates whose reviewed component compiler fails in Python's caught families.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-50",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "            at >= start && at <= end",
+    "replace": "            at > start && at <= end",
+    "rule": "Include the first native source at the reviewed route start.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-51",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "            at >= start && at <= end",
+    "replace": "            at >= start && at < end",
+    "rule": "Include the final same-time native source at the reviewed route end.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-52",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "if principal(observation)? != BigInt::from(0)",
+    "replace": "if principal(observation)? == BigInt::from(0)",
+    "rule": "Ignore zero-quantity, zero-fee pool activity.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-53",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "at >= start\n                    && at <= end",
+    "replace": "at < start\n                    && at <= end",
+    "rule": "Restrict unrelated pool activity to the reviewed time interval.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-54",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "amount(&claim[\"source\"][\"start_msat\"]).expect(\"canonical slice\")",
+    "replace": "-amount(&claim[\"source\"][\"start_msat\"]).expect(\"canonical slice\")",
+    "rule": "Allocate a source's native claims in slice order.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-55",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "selected.sort_by_key(|v| codec::text(&v[\"component_id\"]));",
+    "replace": "selected.sort_by_key(|v| std::cmp::Reverse(codec::text(&v[\"component_id\"])));",
+    "rule": "Sort emitted certificates by component identity, independently of selection order.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-RECONCILIATION-56",
+    "file": "crates/custody/src/interpretation/reconciliation.rs",
+    "find": "let value = json!(expected\n        .iter()",
+    "replace": "let value = json!(expected\n        .iter().rev()",
+    "rule": "Hash reviewed allocations in Python sorted source/target order.",
+    "expect_failing": [
+      "reconciliation_helper_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-32",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "codec::truth(&leg[\"anchor_transaction_id\"])",
+    "replace": "!codec::truth(&leg[\"anchor_transaction_id\"])",
+    "rule": "Prefer the journal anchor over the observation row identity.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-33",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "codec::truth(&leg[\"wallet_id\"])",
+    "replace": "!codec::truth(&leg[\"wallet_id\"])",
+    "rule": "Prefer the wallet identity over a location reference.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-34",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "indices.sort_by_key(|&i| keys[i].clone());",
+    "replace": "indices.sort_by_key(|&i| std::cmp::Reverse(keys[i].clone()));",
+    "rule": "Process explicit allocations by ordinal and stable identity.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-35",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "id.is_empty() || component[\"effective_state\"] != \"active\"",
+    "replace": "!id.is_empty() || component[\"effective_state\"] != \"active\"",
+    "rule": "Require an authored component identity before compiling claims.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-36",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "if observation[\"direction\"] != \"outbound\" {",
+    "replace": "if observation[\"direction\"] == \"outbound\" {",
+    "rule": "Admit only outbound source observations.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-37",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "&& !finalized.contains(&sink_id)",
+    "replace": "&& finalized.contains(&sink_id)",
+    "rule": "Pool transactionless intermediate destinations until their route is complete.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-38",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "Some(\"fee\") => (\"external_confirmed\", \"reviewed_network_fee\")",
+    "replace": "Some(\"fee\") => (\"external_confirmed\", \"incorrect_fee\")",
+    "rule": "Compile reviewed residual network-fee claims distinctly.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
+  },
+  {
+    "id": "REC-REVIEWED-39",
+    "file": "crates/custody/src/interpretation/reviewed.rs",
+    "find": "Some(\"suspense\") => (\"custody_suspense\", \"reviewed_residual_suspense\")",
+    "replace": "Some(\"suspense\") => (\"custody_suspense\", \"incorrect_suspense\")",
+    "rule": "Preserve reviewed residual suspense claims.",
+    "expect_failing": [
+      "reconciliation_reviewed_vectors"
+    ]
   }
 ]

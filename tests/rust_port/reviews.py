@@ -40,9 +40,6 @@ SAMPLES = {
 }
 
 REVIEWS = {
-    "tests/test_custody_native_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares native HTLC production and reservations with Python using raw snapshots, direct branch witnesses, independent scenario counts and full interpreter controls"}},
-    "tests/test_custody_channel_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw channel lifecycle and persisted loan roles with Python, freezes helper branches, and pins exact per-scenario engine counts plus authoring direction rules"}},
-    "tests/test_custody_safety_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts"}},
     "tests/test_backend_configuration.py": {
         "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "calls Python backend redactors directly; Rust replacement is malformed_backend_locations_never_echo_embedded_credentials in crates/setup/tests/backends.rs"},
         "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "pins the Python bare-host disclosure rule; Rust replacement is bare_backend_location_fullmatch_preserves_only_the_python_allowlist in crates/setup/src/backend_output.rs"},
@@ -58,8 +55,12 @@ REVIEWS = {
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
     "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
     "tests/test_rust_store_interop.py": {"*": {"group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary"}},
+    "tests/test_custody_interpretation_stage.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares complete interpretation through PyO3 over every generator with independent per-engine scenario counts and permutations, frozen migration/admission vectors and caught-discrepancy session checks"}},
+    "tests/test_custody_native_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "retains frozen Python native HTLC helper witnesses after full-stage comparison consolidates generated and reservation controls"}},
+    "tests/test_custody_channel_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "retains frozen channel helpers, loan authoring direction controls and complete interpretation comparison of persisted loan roles"}},
+    "tests/test_custody_safety_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "retains frozen holds/privacy/dependency witnesses and pins quarantine reasons against both complete interpreter stages"}},
     "tests/test_custody_generated_books.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin"}},
-    "tests/test_custody_interpretation_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares isolated raw-fact interpreter slices with Python, freezes active/blocked scenarios and text semantics, and proves caught partial differences still fail the comparison session"}},
+    "tests/test_custody_interpretation_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "retains frozen CPython slice and text vectors after whole-stage comparison supersedes the partial executable seam"}},
     "tests/test_custody_engine_snapshot.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "pins the raw snapshot privacy boundary and compares connection-free replay with the frozen SQL flow, including excluded/retracted anchors"}},
     "tests/test_custody_shadow_harness.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error"}},
 
