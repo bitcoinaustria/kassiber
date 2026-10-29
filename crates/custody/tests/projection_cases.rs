@@ -97,3 +97,24 @@ fn projection_connected_path_vectors() {
 fn projection_scoped_basis_vectors() {
     check_composition("basis");
 }
+
+#[test]
+fn projection_reviewed_conversion_vectors() {
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_conversions.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap() {
+        let expected = if let Some(error) = case.get("error") {
+            serde_json::json!({"error":error})
+        } else {
+            serde_json::json!({"expected":case["expected"]})
+        };
+        assert_eq!(
+            finalized_projection::primitive(case),
+            expected,
+            "{}",
+            case["case"]
+        );
+    }
+}

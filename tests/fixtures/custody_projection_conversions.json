@@ -1,0 +1,863 @@
+[
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "basic",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": "1427247692705959881058285969449495136382746624",
+        "in_amount": "2854495385411919762116571938898990272765493248"
+      }
+    ],
+    "case": "exact",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "component_id": "component",
+        "out_asset": "X",
+        "in_asset": "Y",
+        "policy": "carrying-value",
+        "kind": "peg"
+      }
+    ],
+    "case": "overrides",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": "component",
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "X",
+        "in_asset": "Y",
+        "policy": "carrying-value",
+        "kind": "peg"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "component_id": false,
+        "out_asset": [],
+        "in_asset": 0,
+        "policy": false,
+        "kind": ""
+      }
+    ],
+    "case": "falsey",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": false,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      },
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": "bad"
+      }
+    ],
+    "case": "duplicate",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [
+      {
+        "pair_id": "review",
+        "sentinel": true
+      }
+    ],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "existing",
+    "expected": [
+      {
+        "pair_id": "review",
+        "sentinel": true
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 1
+      }
+    ],
+    "case": "wrong_amount",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 2854495385411919762116571938898990272765493248
+      }
+    ],
+    "case": "wrong_amount_high",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "inbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "wrong_direction",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      },
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "ambiguous",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "ambiguous_in",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "missing_leg",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "empty_pair",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": "bad"
+      }
+    ],
+    "case": "lazy_invalid_amount",
+    "expected": []
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": "bad"
+      }
+    ],
+    "case": "bad_review",
+    "error": "ValueError"
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": {
+          "bad": 1
+        },
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 1
+      }
+    ],
+    "case": "bad_row",
+    "error": "TypeError"
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "inbound",
+        "amount": "bad",
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 1
+      }
+    ],
+    "case": "amount_before_direction",
+    "error": "ValueError"
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": {},
+        "in_amount": "bad"
+      }
+    ],
+    "case": "out_before_in",
+    "error": "TypeError"
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in"
+      }
+    ],
+    "case": "missing_row_id",
+    "error": "KeyError"
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1427247692705959881058285969449495136382746624,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": "",
+        "in_amount": null
+      }
+    ],
+    "case": "empty_amount",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": true,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": true
+      }
+    ],
+    "case": "bool_amount",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": 1.9,
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 1.1
+      }
+    ],
+    "case": "float_amount",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": " \u0661_\u0662 ",
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 12
+      }
+    ],
+    "case": "unicode_amount",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  },
+  {
+    "op": "conversions",
+    "rows": [
+      {
+        "id": "out-row",
+        "journal_transaction_id": "out",
+        "direction": "outbound",
+        "amount": [],
+        "asset": "BTC"
+      },
+      {
+        "id": "in-row",
+        "journal_transaction_id": "in",
+        "direction": "inbound",
+        "amount": 2854495385411919762116571938898990272765493248,
+        "asset": "LBTC"
+      }
+    ],
+    "pairs": [],
+    "reviewed": [
+      {
+        "pair_id": "review",
+        "out_id": "out",
+        "in_id": "in",
+        "out_amount": 0
+      }
+    ],
+    "case": "falsey_row_amount",
+    "expected": [
+      {
+        "pair_id": "review",
+        "component_id": null,
+        "out_id": "out-row",
+        "in_id": "in-row",
+        "out_transaction_id": "out",
+        "in_transaction_id": "in",
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "policy": "taxable",
+        "kind": "swap"
+      }
+    ]
+  }
+]

@@ -759,6 +759,11 @@
       "test_projection_composition_frozen": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares selected projection rows, connected path blocking and scoped barriers with Python; counts distinct seed activity and refusals and rejects vacuous scenarios", "reviewed": true, "tests": 1},
       "test_projection_composition_generated": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares selected projection rows, connected path blocking and scoped barriers with Python; counts distinct seed activity and refusals and rejects vacuous scenarios", "reviewed": true, "tests": 1}
     },
+    "tests/test_custody_projection_conversions_port.py": {
+      "test_projection_conversion_vacuous_is_rejected": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares reviewed conversion metadata with unchanged Python AST; counts distinct seed activity and explicit refusals and rejects vacuous scenarios", "reviewed": true, "tests": 1},
+      "test_projection_conversion_frozen": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares reviewed conversion metadata with unchanged Python AST; counts distinct seed activity and explicit refusals and rejects vacuous scenarios", "reviewed": true, "tests": 1},
+      "test_projection_conversion_generated": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares reviewed conversion metadata with unchanged Python AST; counts distinct seed activity and explicit refusals and rejects vacuous scenarios", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_projection_port.py": {
       "test_projection_frozen_python_vectors": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1},
       "test_projection_generated_counts_both_engines": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares finalized-row primitives with independent CPython vectors and per-engine scenario counts; pins complete finalized projection as skipped", "reviewed": true, "tests": 1},

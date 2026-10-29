@@ -21552,5 +21552,195 @@
       "projection_selected_composition_vectors"
     ],
     "rule": "Later fees cannot consume basis behind a barrier."
+  },
+  {
+    "id": "projection4-amount-comparison",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "if actual != reviewed {",
+    "replace": "if actual == reviewed {",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-amount-min",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "if actual != reviewed {",
+    "replace": "if actual.clone().min(reviewed.clone()) != actual {",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-amount-max",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "if actual != reviewed {",
+    "replace": "if actual.clone().max(reviewed.clone()) != actual {",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-out-cardinality",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "out.len() != 1",
+    "replace": "out.len() > 1",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-in-cardinality",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "input.len() != 1",
+    "replace": "input.len() > 1",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-out-cardinality-min",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "out.len() != 1",
+    "replace": "out.len().min(1) != 1",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-in-cardinality-min",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "input.len() != 1",
+    "replace": "input.len().min(1) != 1",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-out-anchor",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "text(&pair[\"out_id\"])",
+    "replace": "text(&pair[\"in_id\"])",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-in-anchor",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "text(&pair[\"in_id\"])",
+    "replace": "text(&pair[\"out_id\"])",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-row-anchor",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "text(&row[\"journal_transaction_id\"])",
+    "replace": "text(&row[\"id\"])",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-out-amount",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "&pair[\"out_amount\"]",
+    "replace": "&pair[\"in_amount\"]",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-in-amount",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "&pair[\"in_amount\"]",
+    "replace": "&pair[\"out_amount\"]",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-row-amount",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "integer_big(&row[\"amount\"])",
+    "replace": "integer_big(&row[\"fee\"])",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-direction",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "row[\"direction\"] == direction",
+    "replace": "row[\"direction\"] != direction",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-out-asset",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "&out[\"asset\"]",
+    "replace": "&input[\"asset\"]",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-in-asset",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "&input[\"asset\"]",
+    "replace": "&out[\"asset\"]",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-dedup",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "existing.insert(id);",
+    "replace": "existing.clear();",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-policy",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "json!(\"taxable\")",
+    "replace": "json!(\"carrying-value\")",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
+  },
+  {
+    "id": "projection4-kind",
+    "file": "crates/custody/src/finalized_projection/conversions.rs",
+    "find": "json!(\"swap\")",
+    "replace": "json!(\"peg\")",
+    "expect_failing": [
+      "projection_reviewed_conversion_vectors"
+    ],
+    "rule": "Reviewed conversion metadata preserves Python selection, cardinality, and field precedence."
   }
 ]
