@@ -59,7 +59,8 @@ mutation entries.
   The [R2g request-builder checkpoint](docs/reference/custody-engine.md#rust-journal-request-builder-checkpoint-r2g-step-1)
   ports request construction; [fusion harness integration](docs/reference/custody-engine.md#fusion-harness-integration-checkpoint-r2g-step-3)
   now compares requests and ledger responses in PyO3/census/shadow/replay.
-  Complete campaign reruns and post-ledger journal joins remain outstanding.
+  Generated/retained/fresh replay campaigns pass; 2,211 inherited mutation
+  recipes still need rerunning. Post-ledger journal joins remain outstanding.
 
 ## Rust backend R3 storage
 

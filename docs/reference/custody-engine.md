@@ -3538,3 +3538,66 @@ quality gate is claimed. The full campaign is recorded separately below;
 this integration checkpoint does not claim all inherited mutation kills.
 Python production source is unchanged; partial-payout cases remain
 **reference bug, expected to change** on restack.
+
+
+### Fusion generated campaign and bounded mutation rerun
+
+With the integration tree committed as `0907ca83`, the normal PyO3 custody
+entry point compared every successful raw input across all seven stages,
+including fusion.
+Each engine computed its own projection and request. Upstream refusals compared
+the code and refusing stage and explicitly left fusion unavailable. The campaign
+script and machine-readable matrix are in `target/r2g6-verify/campaign.py` and
+`campaign.json`; the audited aggregate is `summary.json` in that directory.
+
+| Raw suite | Books | Permutations | Active requests | Empty controls | Builder refusals | Upstream refusals | Active distinct seed inputs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| evidence | 2,000 | 58 | 1,419 | 568 | 71 | 0 | 1,379 |
+| components | 2,000 | 312 | 205 | 2,107 | 0 | 0 | 177 |
+| samourai | 2,000 | 68 | 1,642 | 426 | 0 | 0 | 1,588 |
+| recorded | 2,000 | 92 | 1,731 | 361 | 0 | 0 | 1,655 |
+| fanout | 2,000 | 94 | 1,564 | 352 | 0 | 178 | 1,494 |
+| graph | 2,000 | 16 | 2,016 | 0 | 0 | 0 | 2,000 |
+| pipeline | 2,000 | 24 | 1,856 | 168 | 0 | 0 | 1,834 |
+| safety | 2,000 | 78 | 797 | 1,281 | 0 | 0 | 767 |
+| channels | 2,000 | 64 | 1,613 | 451 | 0 | 0 | 1,563 |
+| native | 2,000 | 110 | 1,689 | 345 | 76 | 0 | 1,601 |
+| reconciliation | 2,000 | 50 | 1,968 | 82 | 0 | 0 | 1,920 |
+| gaps | 2,000 | 64 | 257 | 1,807 | 0 | 0 | 249 |
+| **Total** | **24,000** | **1,030** | **16,757** | **7,948** | **147** | **178** | **16,227** |
+
+All **25,030 input comparisons have zero differences**. Every admitted request
+in this raw campaign produced a successful ledger response. The separate
+311-vector comparison additionally verifies 30 exact ledger refusals across
+request, prepare, validate, compute_multi, compute and classify. The 515-book
+bounded raw probe and the vacuous-probe rejection were rerun successfully.
+Activity is accumulated per current seed using distinct owned input documents;
+permutations and companion output cannot supply the seed's activity. Every
+suite has non-zero activity, and a deliberately vacuous probe fails.
+
+| Mutation evidence | Fresh result |
+| --- | --- |
+| Full catalog applicability | All 2,246 recipes apply |
+| All 10 fusion recipes | 10 building named-test kills; 3 unmutated baseline filters passed |
+| 23 inherited `projection8-*` recipes | 23 building named-test kills |
+| Mechanically updated `REC-OPERATION-04` and `REC-OPERATION-05` | 2 building named-test kills |
+| Baselines for the 25 inherited trials | 5 named filters passed unmutated |
+| Remaining inherited recipes | **2,211 not rerun; no fresh kill claim** |
+
+The two operation recipes changed only to retain the added custody refusing
+stage in their source anchors and replacements. The audit checks exact recipe
+equality against the final catalog, one kill per selected recipe, and successful
+baselines. No survivor or build failure occurred in these 35 final trials.
+This is a bounded mutation rerun, **not completion of the requested full
+2,236-entry inherited campaign**. Finish those 2,211 trials before declaring
+that acceptance gate complete.
+
+The integration verification table above remains applicable: Rust workspace,
+formatting and Clippy passed. Immediately before the final evidence commit,
+`classify_tests update` and preflight were rerun: 57 passed and 56 subtests
+passed. Python production source
+remains unchanged. No new Python bug was found. No direct-payout records were
+encountered in the generated raw campaign; partial-payout cases retain the
+label **reference bug, expected to change** and require revalidation after the
+pending Python fix is restacked. No partial-payout golden was introduced.
+The retained corpus was read only; no push or PR was created.

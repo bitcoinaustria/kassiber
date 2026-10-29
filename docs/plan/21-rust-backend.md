@@ -1779,3 +1779,10 @@ See the [integration evidence](../reference/custody-engine.md#fusion-harness-int
 Rust fusion remains comparison-only, snapshot v1 remains raw-only, and the
 production journal joins and authority switch remain R4. Complete mutation
 campaign evidence is still a separate acceptance boundary.
+
+The [fusion campaign evidence](../reference/custody-engine.md#fusion-generated-campaign-and-bounded-mutation-rerun)
+now covers all 24,000 raw books, 1,030 permutations, 159 retained requests and
+both fresh 50-request recording sets with zero differences. All ten fusion
+mutation recipes and 25 inherited boundary recipes were freshly killed;
+**2,211 inherited recipes still need rerunning**. This bounded mutation result
+does not complete the full inherited-campaign gate or the R4 authority switch.
