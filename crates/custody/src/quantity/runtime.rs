@@ -201,9 +201,13 @@ pub fn tax_eligibility(
         }
         eligible.push(d.clone());
     }
+    // serde_json's encoding of a Value is injective, so text equality is
+    // Value equality; this keeps the membership test linear.
+    let eligible_sources: std::collections::HashSet<String> =
+        eligible.iter().map(|e| e["source"].to_string()).collect();
     let mut ineligible: Vec<_> = array(&projection["decisions"])
         .iter()
-        .filter(|d| !eligible.iter().any(|e| e["source"] == d["source"]))
+        .filter(|d| !eligible_sources.contains(&d["source"].to_string()))
         .map(|d| d["source"].clone())
         .collect();
     ineligible.sort_by(|a, b| {
@@ -250,14 +254,17 @@ fn observations(c: &Value) -> Result<Vec<(String, Value)>, String> {
         .flat_map(|e| array(&e["legs"]))
         .map(|o| (text(&o["quantity_hash"]), o))
         .collect();
-    let mut result = Vec::new();
+    let mut result: Vec<(String, Value)> = Vec::new();
+    let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for event in array(&c["events"]) {
         for a in array(&event["observation_aliases"]) {
             let id = text(&a[0]);
             let o = (*hashes.get(&text(&a[1])).ok_or("KeyError")?).clone();
-            if let Some((_, old)) = result.iter_mut().find(|(key, _)| key == &id) {
-                *old = o;
+            // Insertion order is the first occurrence; a later alias replaces it.
+            if let Some(&at) = positions.get(&id) {
+                result[at].1 = o;
             } else {
+                positions.insert(id.clone(), result.len());
                 result.push((id, o));
             }
         }

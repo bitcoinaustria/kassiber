@@ -18536,7 +18536,7 @@
   {
     "id": "QRT-056",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": ".filter(|d| !eligible.iter().any(|e| e[\"source\"] == d[\"source\"]))",
+    "find": ".filter(|d| !eligible_sources.contains(&d[\"source\"].to_string()))",
     "replace": ".filter(|_| true)",
     "expect_failing": [
       "quantity_scoped_tax_barrier_vectors"
@@ -19326,8 +19326,8 @@
   {
     "id": "R2-review-audit-runtime-258",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "if let Some((_, old)) = result.iter_mut().find(|(key, _)| key == &id) {",
-    "replace": "if let Some((_, old)) = result.iter_mut().find(|(key, _)| key != &id) {",
+    "find": "if let Some(&at) = positions.get(&id) {",
+    "replace": "if let Some(at) = result.iter().position(|(key, _)| key != &id) {",
     "expect_failing": [
       "quantity_operator_audit_vectors"
     ],
