@@ -129,6 +129,12 @@ fn validate<'a>(
             json!({"gap_id":gap,"candidate_profile_id":c["profile_id"],"observation_profile_ids":profiles}),
         ));
     }
+    if !codec::truth(&c["asset"]) {
+        return Err(err(
+            "custody gap ids require profile, asset, source, and return ids",
+            json!({}),
+        ));
+    }
     let mut identity = vec![text(&c["profile_id"]), text(&c["asset"])];
     identity.extend(sources.iter().cloned());
     identity.push("->".into());

@@ -177,9 +177,14 @@ pub fn tax_eligibility(
     let barrier = barriers.values().min();
     let mut eligible = Vec::new();
     for d in array(&projection["decisions"]) {
-        if matches!(
+        if !matches!(
             d["state"].as_str(),
-            Some("custody_suspense" | "conflicting")
+            Some(
+                "internal_verified"
+                    | "internal_reviewed"
+                    | "external_confirmed"
+                    | "external_presumed"
+            )
         ) {
             continue;
         }

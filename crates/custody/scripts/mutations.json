@@ -19192,5 +19192,905 @@
       "quantity_component_runtime_vectors"
     ],
     "rule": "Runtime component issues preserve targetless constructor error text."
+  },
+  {
+    "id": "R2-review-rejected-min",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".map(|r| text(&r[\"occurred_at\"]))\n                .min()",
+    "replace": ".map(|r| text(&r[\"occurred_at\"]))\n                .max()",
+    "expect_failing": [
+      "quantity_rejected_rows_earliest"
+    ],
+    "rule": "Rejected events use their earliest raw timestamp."
+  },
+  {
+    "id": "R2-review-blocker-positive",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if super::exact(&amount)? > kassiber_pyjson::BigInt::from(0)",
+    "replace": "if super::exact(&amount)? >= kassiber_pyjson::BigInt::from(0)",
+    "expect_failing": [
+      "quantity_zero_blocker_unquantified"
+    ],
+    "rule": "Zero blocker amounts remain unquantified."
+  },
+  {
+    "id": "R2-review-bundle-anchor",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "involved.iter().map(|o|text(&o[\"anchor_transaction_id\"]))",
+    "replace": "involved.iter().map(|o|text(&o[\"transaction_id\"]))",
+    "expect_failing": [
+      "quantity_bundle_anchor_identity"
+    ],
+    "rule": "Bundle issues identify anchors."
+  },
+  {
+    "id": "R2-review-reconciled-filter",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".filter(|c| !reconciled.contains(&text(&c[\"id\"])))",
+    "replace": ".filter(|c| reconciled.contains(&text(&c[\"id\"])))",
+    "expect_failing": [
+      "quantity_native_reconciled_filter"
+    ],
+    "rule": "Native reconciliations exclude the authored compiler."
+  },
+  {
+    "id": "R2-review-evidence-subject",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".entry(text(&row[\"subject_id\"]))",
+    "replace": ".entry(text(&row[\"id\"]))",
+    "expect_failing": [
+      "quantity_evidence_subject_identity"
+    ],
+    "rule": "Activation snapshots belong to their subject."
+  },
+  {
+    "id": "R2-review-finalized-allowlist",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "        if !matches!(\n            d[\"state\"].as_str(),\n            Some(\n                \"internal_verified\"\n                    | \"internal_reviewed\"\n                    | \"external_confirmed\"\n                    | \"external_presumed\"\n            )\n        )",
+    "replace": "        if matches!(\n            d[\"state\"].as_str(),\n            Some(\n                \"internal_verified\"\n                    | \"internal_reviewed\"\n                    | \"external_confirmed\"\n                    | \"external_presumed\"\n            )\n        )",
+    "expect_failing": [
+      "quantity_unknown_state_ineligible"
+    ],
+    "rule": "Unknown decision states cannot grant tax eligibility."
+  },
+  {
+    "id": "R2-review-empty-asset",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if !codec::truth(&c[\"asset\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "quantity_empty_asset_identity_refusal"
+    ],
+    "rule": "Gap identity rejects empty assets before identity and quantity checks."
+  },
+  {
+    "id": "R2-review-source-hash-order",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "if hash.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "quantity_empty_observation_hash_refusal"
+    ],
+    "rule": "Source slice construction refuses an empty hash before target checks."
+  },
+  {
+    "id": "R2-review-component-width",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "exact(v).expect(\"converted component integer\")",
+    "replace": "BigInt::from(codec::wide(v))",
+    "expect_failing": [
+      "components_allocation_beyond_i128"
+    ],
+    "rule": "Component arithmetic preserves integers above machine width."
+  },
+  {
+    "id": "R2-review-audit-runtime-88",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "Some(current) if current == &order => {",
+    "replace": "Some(current) if current != &order => {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 88."
+  },
+  {
+    "id": "R2-review-audit-runtime-126",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".filter(|v| v.0 == p)",
+    "replace": ".filter(|v| v.0 != p)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 126."
+  },
+  {
+    "id": "R2-review-audit-runtime-132",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".filter(|v| v.0 == p && v.1 == order)",
+    "replace": ".filter(|v| v.0 != p && v.1 == order)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 132."
+  },
+  {
+    "id": "R2-review-audit-runtime-156",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if o[\"asset\"] == issue[\"asset\"] {",
+    "replace": "if o[\"asset\"] != issue[\"asset\"] {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 156."
+  },
+  {
+    "id": "R2-review-audit-runtime-258",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if let Some((_, old)) = result.iter_mut().find(|(key, _)| key == &id) {",
+    "replace": "if let Some((_, old)) = result.iter_mut().find(|(key, _)| key != &id) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 258."
+  },
+  {
+    "id": "R2-review-audit-runtime-349",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if let Some((_, o)) = obs.iter().find(|(id, _)| id == tx) {",
+    "replace": "if let Some((_, o)) = obs.iter().find(|(id, _)| id != tx) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 349."
+  },
+  {
+    "id": "R2-review-audit-runtime-350",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if o[\"direction\"] == \"outbound\"",
+    "replace": "if o[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 350."
+  },
+  {
+    "id": "R2-review-audit-runtime-353",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".any(|s| s[\"quantity_hash\"] == o[\"quantity_hash\"])",
+    "replace": ".any(|s| s[\"quantity_hash\"] != o[\"quantity_hash\"])",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 353."
+  },
+  {
+    "id": "R2-review-audit-runtime-360",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if super::principal(o)? > kassiber_pyjson::BigInt::from(0) {",
+    "replace": "if super::principal(o)? >= kassiber_pyjson::BigInt::from(0) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 360."
+  },
+  {
+    "id": "R2-review-audit-runtime-366",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if code == \"custody_component_evidence_drift\" {",
+    "replace": "if code != \"custody_component_evidence_drift\" {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 366."
+  },
+  {
+    "id": "R2-review-audit-runtime-626",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".filter(|r| !r[\"id\"].is_null() && r[\"id\"] != \"\")",
+    "replace": ".filter(|r| !r[\"id\"].is_null() && r[\"id\"] == \"\")",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 626."
+  },
+  {
+    "id": "R2-review-audit-runtime-667",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "if codec::dumps(value, true)? != codec::dumps(&codec::from_json(&json)?, true)? {",
+    "replace": "if codec::dumps(value, true)? == codec::dumps(&codec::from_json(&json)?, true)? {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 667."
+  },
+  {
+    "id": "R2-review-audit-runtime-785",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".find(|q| stored::get(q, \"issue_id\") == &Py::Str(safe_hash.clone().into()))",
+    "replace": ".find(|q| stored::get(q, \"issue_id\") != &Py::Str(safe_hash.clone().into()))",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: runtime line 785."
+  },
+  {
+    "id": "R2-review-audit-holds-21",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if text(&o[\"direction\"]).py_strip().py_lower() == \"outbound\"",
+    "replace": "if text(&o[\"direction\"]).py_strip().py_lower() != \"outbound\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 21."
+  },
+  {
+    "id": "R2-review-audit-holds-149",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if unique(all.iter().map(|o| text(&o[\"quantity_hash\"]))).len() != all.len() {",
+    "replace": "if unique(all.iter().map(|o| text(&o[\"quantity_hash\"]))).len() == all.len() {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 149."
+  },
+  {
+    "id": "R2-review-audit-holds-182",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if total == BigInt::from(0) {",
+    "replace": "if total != BigInt::from(0) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 182."
+  },
+  {
+    "id": "R2-review-audit-holds-220",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if exact(&o[k]).map_or(true, |n| n < BigInt::from(0)) {",
+    "replace": "if exact(&o[k]).map_or(true, |n| n <= BigInt::from(0)) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 220."
+  },
+  {
+    "id": "R2-review-audit-holds-224",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if o[\"direction\"] == \"inbound\" && codec::truth(&o[\"amount_includes_fee\"]) {",
+    "replace": "if o[\"direction\"] != \"inbound\" && codec::truth(&o[\"amount_includes_fee\"]) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 224."
+  },
+  {
+    "id": "R2-review-audit-holds-227",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if o[\"amount_msat\"] == 0 {",
+    "replace": "if o[\"amount_msat\"] != 0 {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 227."
+  },
+  {
+    "id": "R2-review-audit-holds-334",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if message == \"division by zero\" {",
+    "replace": "if message != \"division by zero\" {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 334."
+  },
+  {
+    "id": "R2-review-audit-holds-340",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if o[\"direction\"] == \"outbound\"",
+    "replace": "if o[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 340."
+  },
+  {
+    "id": "R2-review-audit-holds-342",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "&& principal(o)? > BigInt::from(0)",
+    "replace": "&& principal(o)? >= BigInt::from(0)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 342."
+  },
+  {
+    "id": "R2-review-audit-holds-367",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "let tag = if kind == \"custody_gap_review_hold\" {",
+    "replace": "let tag = if kind != \"custody_gap_review_hold\" {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 367."
+  },
+  {
+    "id": "R2-review-audit-holds-382",
+    "file": "crates/custody/src/quantity/holds.rs",
+    "find": "if h[\"direction\"] == \"outbound\" {",
+    "replace": "if h[\"direction\"] != \"outbound\" {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: holds line 382."
+  },
+  {
+    "id": "R2-review-audit-reviewed-105",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": ".filter(|(l, n)| l[\"role\"] == \"source\" && *n > BigInt::from(0))",
+    "replace": ".filter(|(l, n)| l[\"role\"] != \"source\" && *n > BigInt::from(0))",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 105."
+  },
+  {
+    "id": "R2-review-audit-reviewed-109",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": ".filter(|(l, n)| l[\"role\"] != \"source\" && *n > BigInt::from(0))",
+    "replace": ".filter(|(l, n)| l[\"role\"] == \"source\" && *n > BigInt::from(0))",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 109."
+  },
+  {
+    "id": "R2-review-audit-reviewed-111",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "let quantity = text(&fallback(&c[\"conservation_mode\"], &json!(\"quantity\"))) == \"quantity\";",
+    "replace": "let quantity = text(&fallback(&c[\"conservation_mode\"], &json!(\"quantity\"))) != \"quantity\";",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 111."
+  },
+  {
+    "id": "R2-review-audit-reviewed-122",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "let pairs: Vec<_> = if sources.len() == 1 {",
+    "replace": "let pairs: Vec<_> = if sources.len() != 1 {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 122."
+  },
+  {
+    "id": "R2-review-audit-reviewed-124",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "} else if sinks.len() == 1",
+    "replace": "} else if sinks.len() != 1",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 124."
+  },
+  {
+    "id": "R2-review-audit-reviewed-152",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "while index < pending.len() {",
+    "replace": "while index <= pending.len() {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 152."
+  },
+  {
+    "id": "R2-review-audit-reviewed-168",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "if amount <= BigInt::from(0) && target <= BigInt::from(0) {",
+    "replace": "if amount < BigInt::from(0) && target <= BigInt::from(0) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 168."
+  },
+  {
+    "id": "R2-review-audit-reviewed-212",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "while remaining != BigInt::from(0) {",
+    "replace": "while remaining == BigInt::from(0) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 212."
+  },
+  {
+    "id": "R2-review-audit-reviewed-233",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "out[\"id\"] = if path.len() > 1 {",
+    "replace": "out[\"id\"] = if path.len() >= 1 {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 233."
+  },
+  {
+    "id": "R2-review-audit-reviewed-308",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "c[\"component_type\"] == \"manual_bridge\" && c[\"evidence_kind\"] == \"custody_gap_review\";",
+    "replace": "c[\"component_type\"] != \"manual_bridge\" && c[\"evidence_kind\"] == \"custody_gap_review\";",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 308."
+  },
+  {
+    "id": "R2-review-audit-reviewed-326",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "t[\"term_kind\"] == \"transaction_pair\"",
+    "replace": "t[\"term_kind\"] != \"transaction_pair\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 326."
+  },
+  {
+    "id": "R2-review-audit-reviewed-328",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "&& t[\"review_kind\"] != \"\"",
+    "replace": "&& t[\"review_kind\"] == \"\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 328."
+  },
+  {
+    "id": "R2-review-audit-reviewed-332",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "let transfer_kind = if kinds.len() == 1 {",
+    "replace": "let transfer_kind = if kinds.len() != 1 {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 332."
+  },
+  {
+    "id": "R2-review-audit-reviewed-340",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "l[\"role\"] == \"retained\"",
+    "replace": "l[\"role\"] != \"retained\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 340."
+  },
+  {
+    "id": "R2-review-audit-reviewed-350",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "t[\"term_kind\"] == \"direct_swap_payout\"",
+    "replace": "t[\"term_kind\"] != \"direct_swap_payout\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 350."
+  },
+  {
+    "id": "R2-review-audit-reviewed-366",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "let conversion = text(&fallback(&c[\"conservation_mode\"], &json!(\"quantity\"))) == \"conversion\";",
+    "replace": "let conversion = text(&fallback(&c[\"conservation_mode\"], &json!(\"quantity\"))) != \"conversion\";",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 366."
+  },
+  {
+    "id": "R2-review-audit-reviewed-393",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": ".find(|(k, _)| k == key)",
+    "replace": ".find(|(k, _)| k != key)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 393."
+  },
+  {
+    "id": "R2-review-audit-reviewed-412",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "if let Some((_, n)) = totals.iter_mut().find(|(h, _)| *h == hash) {",
+    "replace": "if let Some((_, n)) = totals.iter_mut().find(|(h, _)| *h != hash) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 412."
+  },
+  {
+    "id": "R2-review-audit-reviewed-424",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": ".find(|o| o[\"quantity_hash\"] == hash)",
+    "replace": ".find(|o| o[\"quantity_hash\"] != hash)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 424."
+  },
+  {
+    "id": "R2-review-audit-reviewed-456",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "if !conversion && amount != target_amount {",
+    "replace": "if !conversion && amount == target_amount {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 456."
+  },
+  {
+    "id": "R2-review-audit-reviewed-511",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "s(&t[\"source_leg_id\"]) == s(&src[\"id\"]) && s(&t[\"target_leg_id\"]) == s(&sink[\"id\"])",
+    "replace": "s(&t[\"source_leg_id\"]) != s(&src[\"id\"]) && s(&t[\"target_leg_id\"]) == s(&sink[\"id\"])",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 511."
+  },
+  {
+    "id": "R2-review-audit-reviewed-563",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "cross = o[\"event_key\"][\"chain\"] != t[\"event_key\"][\"chain\"];",
+    "replace": "cross = o[\"event_key\"][\"chain\"] == t[\"event_key\"][\"chain\"];",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 563."
+  },
+  {
+    "id": "R2-review-audit-reviewed-621",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "let destination = if role == \"fee\" {",
+    "replace": "let destination = if role != \"fee\" {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 621."
+  },
+  {
+    "id": "R2-review-audit-reviewed-623",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "} else if role == \"external\"",
+    "replace": "} else if role != \"external\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 623."
+  },
+  {
+    "id": "R2-review-audit-reviewed-627",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "} else if role == \"retained\" && target.is_null() {",
+    "replace": "} else if role != \"retained\" && target.is_null() {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 627."
+  },
+  {
+    "id": "R2-review-audit-reviewed-645",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "if !target.is_null() && amount != target_amount",
+    "replace": "if !target.is_null() && amount == target_amount",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 645."
+  },
+  {
+    "id": "R2-review-audit-reviewed-646",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "|| destination == \"retained_custody\" && state != \"internal_reviewed\"",
+    "replace": "|| destination != \"retained_custody\" && state != \"internal_reviewed\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 646."
+  },
+  {
+    "id": "R2-review-audit-reviewed-701",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "Err(error) if error.code == \"custody_component_claim_compile\" => {",
+    "replace": "Err(error) if error.code != \"custody_component_claim_compile\" => {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: reviewed line 701."
+  },
+  {
+    "id": "R2-review-audit-native-119",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": ".filter(|a| a[\"virtual_source\"] == true && a[\"pairing_source\"] == \"channel_lifecycle\")",
+    "replace": ".filter(|a| a[\"virtual_source\"] != true && a[\"pairing_source\"] == \"channel_lifecycle\")",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 119."
+  },
+  {
+    "id": "R2-review-audit-native-131",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "t[\"direction\"] == \"inbound\"",
+    "replace": "t[\"direction\"] != \"inbound\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 131."
+  },
+  {
+    "id": "R2-review-audit-native-132",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "&& text(&a[\"asset\"]).py_upper() == t[\"asset\"]",
+    "replace": "&& text(&a[\"asset\"]).py_upper() != t[\"asset\"]",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 132."
+  },
+  {
+    "id": "R2-review-audit-native-133",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "&& text(&a[\"to_wallet_id\"]) == t[\"wallet_id\"]",
+    "replace": "&& text(&a[\"to_wallet_id\"]) != t[\"wallet_id\"]",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 133."
+  },
+  {
+    "id": "R2-review-audit-native-165",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": ".find(|o| o[\"quantity_hash\"] == *prior_hash)",
+    "replace": ".find(|o| o[\"quantity_hash\"] != *prior_hash)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 165."
+  },
+  {
+    "id": "R2-review-audit-native-167",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "o[\"direction\"] == \"outbound\"",
+    "replace": "o[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 167."
+  },
+  {
+    "id": "R2-review-audit-native-169",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "&& o[\"asset\"] == t[\"asset\"]",
+    "replace": "&& o[\"asset\"] != t[\"asset\"]",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 169."
+  },
+  {
+    "id": "R2-review-audit-native-170",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "&& principal(o).ok() == Some(r.clone())",
+    "replace": "&& principal(o).ok() != Some(r.clone())",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 170."
+  },
+  {
+    "id": "R2-review-audit-native-368",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "o[\"direction\"] == \"inbound\" && o[\"wallet_id\"] == *wallet && o[\"asset\"] == *asset",
+    "replace": "o[\"direction\"] != \"inbound\" && o[\"wallet_id\"] == *wallet && o[\"asset\"] == *asset",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 368."
+  },
+  {
+    "id": "R2-review-audit-native-389",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "if prior.as_ref() == Some(slot) {",
+    "replace": "if prior.as_ref() != Some(slot) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 389."
+  },
+  {
+    "id": "R2-review-audit-native-450",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "o[\"direction\"] == \"inbound\" && o[\"wallet_id\"] == wallet && o[\"asset\"] == asset",
+    "replace": "o[\"direction\"] != \"inbound\" && o[\"wallet_id\"] == wallet && o[\"asset\"] == asset",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: native line 450."
+  },
+  {
+    "id": "R2-review-audit-arbitration-77",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "let retained = state == \"internal_reviewed\"",
+    "replace": "let retained = state != \"internal_reviewed\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 77."
+  },
+  {
+    "id": "R2-review-audit-arbitration-80",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "&& destination == Some(\"retained_custody\");",
+    "replace": "&& destination != Some(\"retained_custody\");",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 80."
+  },
+  {
+    "id": "R2-review-audit-arbitration-106",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ") || !(state == \"external_confirmed\"",
+    "replace": ") || !(state != \"external_confirmed\"",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 106."
+  },
+  {
+    "id": "R2-review-audit-arbitration-109",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "&& destination == Some(\"external\")))",
+    "replace": "&& destination != Some(\"external\")))",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 109."
+  },
+  {
+    "id": "R2-review-audit-arbitration-283",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "let priority = members.iter().map(|c| c.priority).min().unwrap_or(40);",
+    "replace": "let priority = members.iter().map(|c| c.priority).max().unwrap_or(40);",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 283."
+  },
+  {
+    "id": "R2-review-audit-arbitration-314",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ".filter(|(_, o)| o[\"direction\"] == \"outbound\")",
+    "replace": ".filter(|(_, o)| o[\"direction\"] != \"outbound\")",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 314."
+  },
+  {
+    "id": "R2-review-audit-arbitration-322",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ".any(|c| c.value[\"state\"] == \"custody_suspense\");",
+    "replace": ".any(|c| c.value[\"state\"] != \"custody_suspense\");",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 322."
+  },
+  {
+    "id": "R2-review-audit-arbitration-378",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": ".filter(|c| c.priority == priority)",
+    "replace": ".filter(|c| c.priority != priority)",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 378."
+  },
+  {
+    "id": "R2-review-audit-arbitration-590",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "for o in input.iter().filter(|o| o[\"direction\"] == \"inbound\") {",
+    "replace": "for o in input.iter().filter(|o| o[\"direction\"] != \"inbound\") {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 590."
+  },
+  {
+    "id": "R2-review-audit-arbitration-638",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "if totals.values().any(|n| *n != BigInt::from(0)) {",
+    "replace": "if totals.values().any(|n| *n == BigInt::from(0)) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: arbitration line 638."
+  },
+  {
+    "id": "R2-review-audit-allocation-114",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "while remaining > BigInt::from(0) {",
+    "replace": "while remaining >= BigInt::from(0) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: allocation line 114."
+  },
+  {
+    "id": "R2-review-audit-allocation-115",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "while source_used[source] == sources[source].1 {",
+    "replace": "while source_used[source] != sources[source].1 {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: allocation line 115."
+  },
+  {
+    "id": "R2-review-audit-allocation-118",
+    "file": "crates/custody/src/quantity/allocation.rs",
+    "find": "while sink_used[sink] == sinks[sink].1 {",
+    "replace": "while sink_used[sink] != sinks[sink].1 {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: allocation line 118."
+  },
+  {
+    "id": "R2-review-audit-mod-34",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "if v[\"direction\"] == \"outbound\" && codec::truth(&v[\"amount_includes_fee\"]) {",
+    "replace": "if v[\"direction\"] != \"outbound\" && codec::truth(&v[\"amount_includes_fee\"]) {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: mod line 34."
+  },
+  {
+    "id": "R2-review-audit-mod-43",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "Ok(if v[\"direction\"] == \"inbound\" {",
+    "replace": "Ok(if v[\"direction\"] != \"inbound\" {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: mod line 43."
+  },
+  {
+    "id": "R2-review-audit-mod-101",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": "if c == '_' {",
+    "replace": "if c != '_' {",
+    "expect_failing": [
+      "quantity_operator_audit_vectors"
+    ],
+    "rule": "Independent quantity operator audit: mod line 101."
+  },
+  {
+    "id": "R2-review-target-hash-message",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "if th.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "quantity_empty_target_hash_message"
+    ],
+    "rule": "The target slice constructor retains Python's empty-hash refusal message."
+  },
+  {
+    "id": "R2-review-bundle-min",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "involved.iter().map(|o|text(&o[\"occurred_at\"])).min()",
+    "replace": "involved.iter().map(|o|text(&o[\"occurred_at\"])).max()",
+    "expect_failing": [
+      "quantity_bundle_earliest_timestamp"
+    ],
+    "rule": "Malformed bundles retain the earliest involved observation timestamp."
   }
 ]

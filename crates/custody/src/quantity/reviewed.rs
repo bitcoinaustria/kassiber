@@ -494,6 +494,11 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
             ));
         }
         sources.insert(hash.clone(), end.clone());
+        if hash.is_empty() {
+            let mut e = family("ValueError");
+            e.message = "quantity slices require an observation hash".into();
+            return Err(e);
+        }
         if start < BigInt::from(0) || end <= start {
             let mut e = family("ValueError");
             e.message = "quantity slices require a non-empty half-open msat range".into();
@@ -543,6 +548,11 @@ pub fn compile(c: &Value, observations: &Value) -> Result<Value, Error> {
                     }
                     targets.insert(th.clone(), te.clone());
                     if !conversion || (o["asset"] == t["asset"] && amount == target_amount) {
+                        if th.is_empty() {
+                            let mut e = family("ValueError");
+                            e.message = "quantity slices require an observation hash".into();
+                            return Err(e);
+                        }
                         if ts < BigInt::from(0) || te <= ts {
                             let mut e = family("ValueError");
                             e.message =

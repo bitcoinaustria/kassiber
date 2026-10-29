@@ -292,3 +292,203 @@ fn quantity_component_runtime_vectors() {
         }
     }
 }
+
+fn review_case(name: &str) {
+    use kassiber_custody::quantity::{holds, reviewed, runtime};
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_review.json"
+    ))
+    .unwrap();
+    let c = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["case"] == name)
+        .unwrap();
+    let actual = match c["op"].as_str().unwrap() {
+        "runtime" => runtime::build(c),
+        "tax_eligibility" => runtime::tax_eligibility(
+            &c["canonical"],
+            &c["projection"],
+            c["issues"].as_array().unwrap(),
+            &c["rows"],
+        ),
+        "component_runtime" => runtime::component_claims(
+            &c["canonical"],
+            c["components"].as_array().unwrap(),
+            &c["evidence"],
+        ),
+        "project" => project(
+            c["observations"].as_array().unwrap(),
+            c["claims"].as_array().unwrap(),
+        ),
+        "gap_holds" => holds::compose(
+            &c["canonical"],
+            c["ignored"].as_array().unwrap(),
+            &c["dismissed"],
+            &c["search"],
+        ),
+        "reviewed" => {
+            let actual = reviewed::outcome(&c["component"], &c["observations"]);
+            let expected = if c.get("error").is_some() {
+                {
+                    let mut expected = serde_json::Map::new();
+                    for key in ["error", "message", "details"] {
+                        if let Some(value) = c.get(key) {
+                            expected.insert(key.into(), value.clone());
+                        }
+                    }
+                    Value::Object(expected)
+                }
+            } else {
+                serde_json::json!({"expected":c["expected"]})
+            };
+            assert_eq!(actual, expected, "{name}");
+            return;
+        }
+        op => panic!("unknown review operation {op}"),
+    };
+    if let Some(error) = c["error"].as_str() {
+        assert_eq!(actual.unwrap_err(), error, "{name}");
+    } else {
+        assert_eq!(actual.unwrap(), c["expected"], "{name}");
+    }
+}
+
+#[test]
+fn quantity_rejected_rows_earliest() {
+    review_case("rejected_rows_earliest");
+}
+#[test]
+fn quantity_zero_blocker_unquantified() {
+    review_case("zero_blocker_unquantified");
+}
+#[test]
+fn quantity_bundle_anchor_identity() {
+    review_case("bundle_anchor_identity");
+}
+#[test]
+fn quantity_unknown_state_ineligible() {
+    review_case("unknown_state_ineligible");
+}
+#[test]
+fn quantity_empty_asset_identity_refusal() {
+    review_case("empty_asset_identity_refusal");
+}
+#[test]
+fn quantity_empty_observation_hash_refusal() {
+    review_case("empty_observation_hash_refusal");
+}
+
+fn review_wrapper(name: &str) {
+    let cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_review_wrappers.json"
+    ))
+    .unwrap();
+    let c = cases.iter().find(|c| c["case"] == name).unwrap();
+    let actual: Value =
+        serde_json::from_str(&kassiber_custody::custody(&c["input"].to_string())).unwrap();
+    assert_eq!(
+        actual["stages"]["quantity"], c["expected"],
+        "{name}: {actual}"
+    );
+}
+#[test]
+fn quantity_native_reconciled_filter() {
+    review_wrapper("native_reconciled_filter");
+}
+#[test]
+fn quantity_evidence_subject_identity() {
+    review_wrapper("evidence_subject_identity");
+}
+
+#[test]
+fn quantity_operator_audit_vectors() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_review.json"
+    ))
+    .unwrap();
+    for case in cases {
+        review_case(case["case"].as_str().unwrap());
+    }
+    quantity_arbitration_vectors();
+    quantity_fifo_vectors();
+    quantity_balance_vectors();
+    quantity_transfer_vectors();
+    quantity_reviewed_compilation_vectors();
+    quantity_native_augmentation_vectors();
+    quantity_scoped_tax_barrier_vectors();
+    quantity_gap_hold_composition_vectors();
+    quantity_whole_state_vectors();
+    quantity_component_runtime_vectors();
+    quantity_runtime_wrapper_vectors();
+    quantity_rejected_rows_earliest();
+    quantity_zero_blocker_unquantified();
+    quantity_bundle_anchor_identity();
+    quantity_unknown_state_ineligible();
+    quantity_empty_asset_identity_refusal();
+    quantity_empty_observation_hash_refusal();
+    quantity_native_reconciled_filter();
+    quantity_evidence_subject_identity();
+}
+
+#[test]
+fn quantity_inclusive_gap_principal() {
+    review_case("inclusive_gap_principal");
+}
+
+#[test]
+fn quantity_invalid_inbound_inclusive_order() {
+    review_case("invalid_inbound_inclusive_order");
+}
+
+#[test]
+fn quantity_invalid_included_fee_order() {
+    review_case("invalid_included_fee_order");
+}
+
+#[test]
+fn quantity_zero_gap_fallback() {
+    review_case("zero_gap_fallback");
+}
+
+#[test]
+fn quantity_zero_component_fallback() {
+    review_case("zero_component_fallback");
+}
+
+#[test]
+fn quantity_zero_unobserved_allocations() {
+    review_case("zero_unobserved_allocations");
+}
+
+#[test]
+fn quantity_mixed_bundle_priority() {
+    review_case("mixed_bundle_priority");
+}
+
+#[test]
+fn quantity_equal_quantity_direct_payout() {
+    review_case("equal_quantity_direct_payout");
+}
+
+#[test]
+fn quantity_empty_target_hash_message() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_quantity_review.json"
+    ))
+    .unwrap();
+    let c = cases
+        .iter()
+        .find(|c| c["case"] == "empty_target_observation_hash")
+        .unwrap();
+    let error = kassiber_custody::quantity::reviewed::compile(&c["component"], &c["observations"])
+        .unwrap_err();
+    assert_eq!(error.code, "ValueError");
+    assert_eq!(error.message, "quantity slices require an observation hash");
+}
+
+#[test]
+fn quantity_bundle_earliest_timestamp() {
+    review_case("bundle_earliest_timestamp");
+}
