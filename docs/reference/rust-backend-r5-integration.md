@@ -1,5 +1,9 @@
 # R5 integration audit
 
+The completed R5b rebuild and its remaining diagnostics parity failure are
+recorded in [the final round-2 audit](#round-2-completed-audit-r5b). Earlier
+sections retain the previous audit and stopped checkpoints.
+
 Branch: `t3code/rust-backend-r5`, based on custody tip `b61162fc`.
 The verified code tip is `d96664ad`; the final commit records this audit and
 clarifies a daemon registration comment. This integration adds no service
@@ -603,3 +607,587 @@ run, and no stash was popped or dropped.
 Additional evidence in `/tmp/kassiber-r5b-verification/`:
 `resolutions.json`, `resumed-partial-audit.json`, `catalog-witness-test.log`,
 `resume-metadata.json`, and `stop-14e5a23a/{conflicts.diff,staged.diff,status.txt,original.patch}`.
+
+## Round 2 completed audit: R5b
+
+This section supersedes the two stopped R5b checkpoints above. Branch
+`t3code/rust-backend-r5b` starts at `a4e017a3` and includes the requested
+custody increment through `cc18b710`. The verified tip is `8f0fd86e`. The native harness was built at `05a582a7`;
+later commits change only Python refusal witnesses and one mutation entry.
+Native sources and dependency pins are unchanged;
+the final documentation commit records this audit. There is no unresolved
+integration conflict. This rebuild introduces no service feature.
+
+### Ordered provenance and contained commits
+
+All **127 original commits** were cherry-picked in the requested order, with
+their complete messages unchanged. The history has no merge commits. The
+base's 86 non-custody commits were replayed on `a4e017a3`, then each slice
+increment, then the single custody advance. **96 contained chain commits were
+skipped**, including 85 already replayed from the base and 11 inherited custody
+ancestors. No Python fix was applied separately to compensate for a skip.
+
+| Input | Exact range, lower bound excluded | Picked | Skipped |
+| --- | --- | ---: | ---: |
+| base | `b61162fc..65c74e84` | 86 | 0 |
+| setup | `31ccde83..14e5a23a` | 7 | 0 |
+| transactions | `f417d50a..d6d9d4f4` | 10 | 0 |
+| wallets | `5bde6914..2fe3541a` | 8 | 0 |
+| chain | `82f6b77b..5e7e6489` | 3 | 96 |
+| secrets | `0d4fbc28..a051e1ef` | 2 | 0 |
+| backup | `a051e1ef..6271064d` | 5 | 0 |
+| reports | `0d4fbc28..349bf2ca` | 5 | 0 |
+| custody advance | `a4e017a3..cc18b710` | 1 | 0 |
+| Total | | 127 | 96 |
+
+The new chain picks are exactly `3108ac4e`, `3c0e5b7a` and `5e7e6489`.
+After the slice/native checkpoint, **cherry-picked** `cc18b710` as `e44d0d0b`;
+the branch was not rebased. That commit supplies HTLC production and
+reservations. Its custody code applied cleanly; only the lock, license table
+and generated inventory conflicted.
+
+The following is the complete skipped chain list, in its original order
+(`git rev-list --reverse 82f6b77b..0d4fbc28`):
+
+```text
+5cd77225 0cd014ee f583ccd1 7d28cddc fc7aae47 16b5b57d e4184742 32ed9eca
+c7018146 98fc8528 b61162fc 741fceea 19268e9a 482c59bc 6df0385b 8bd0c086
+556b8027 5f4c6047 b65da7ba a1d45b1d b280bbda 1b7fae97 12ae62bb 0dbf105f
+069ee11e f48dac1d ebd461c9 16fce1c2 99b49865 def10ba6 b3e399bb 4d0e35a4
+d2603f56 552c696f 48bdc3f1 664fad05 d601b0bd c9941947 507e8fe5 7084757d
+6ef4e094 17d35a14 d9384377 2dab8f67 aaef1672 163e9554 685c135e 6291fc88
+d430eeb6 281b82a0 6b6d323d 4931fde0 5331f395 fa9107b4 be09872d e2734062
+401caac0 f4e9513b 720219e1 7317432c 048cf379 653b6e71 418b8e94 5eb7dbf6
+6cd69a98 ea5cf87b c327493d 9a5c0808 fe4ace19 4b633e22 c9181145 3f117ab6
+2a8f1454 9dfa92dd f6f55b15 b75b7419 ebb5d2dc 3924ef01 ad9579b1 e6ba90a6
+3ed80fbb 68948812 439c37a9 33eb7482 459bab11 87516f35 033aa56b b9581e0e
+5d68d764 a04e1e1a 375a986f d1116f6d 902b2472 9893bc10 d96664ad 0d4fbc28
+```
+
+The 12 incremental Python production-fix commits are present exactly once,
+and each Python-only stable patch ID equals its originating commit:
+
+- setup: `9c74e890`, `a69ad9fa`, `5f4bf929`.
+- transactions: `d3ec0f94`, `4f3cb12d`, `4fc40b2f`.
+- wallets: `a9bfc1b1`, `129868ae`, `9d4fc3a2`, `79de6256`.
+- chain: `3108ac4e`.
+- backup: `64378ed2`.
+
+This includes the instant-bound timestamp correction, wallet preflight fixes,
+Core credential normalization and durable backup recovery. Base fixes remain
+in their original replay positions. The ordered mapping is `replay.json`;
+`final-audit.json` records message, pin, registration and Python patch checks.
+
+No input branch or stash was modified by this integration; no stash was popped
+or dropped, and nothing was pushed or published. Other workers advanced
+`t3code/rust-backend-r2` from `a4e017a3` through `cc18b710` to `16234030`,
+`t3code/r5-reports-5` from `349bf2ca` to `3b20eecc`, and
+`t3code/r5-sync-4` from `72c18e53` to `f9ff09d0`. Their reflogs identify those
+external updates. The later tips are outside the exact requested inputs and
+were not incorporated. The stash ref is unchanged.
+
+### Complete round-2 conflict table
+
+Every one of the 47 conflicting original commits is listed. `inventory` means
+the generated count table in `docs/reference/rust-port.md`; `dispositions`
+means `tests/rust_port/dispositions.json`. Those files and generated contracts
+were regenerated using their checked-in update commands, then checked. Frozen
+vectors were checked with their generators and were not hand-merged. All
+surrounding prose was preserved. Lock conflicts kept the integrated side before
+`cargo metadata --offline` supplied missing edges; no versions were upgraded.
+
+| Original commit | Conflicting paths | Resolution |
+| --- | --- | --- |
+| `5331f395` | inventory; `tests/rust_port/reviews.py` | Union separate custody-channel/safety and storage review entries; regenerate inventory. |
+| `e2734062` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `fe4ace19` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `4b633e22` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `c9181145` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `2a8f1454` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `9dfa92dd` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `f6f55b15` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `b75b7419` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `3924ef01` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `ad9579b1` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `e6ba90a6` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `3ed80fbb` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `459bab11` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `a04e1e1a` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `9c74e890` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `64d8a78d` | `Cargo.lock`; `crates/kassiber/src/real_store.rs`; `crates/kassiber/tests/binary.rs`; `crates/runtime/src/store.rs`; inventory; dispositions | Union separate rates/current_default_backend methods; retain catalog-derived witnesses under orchestrator decision; retain ours lock then offline metadata; regenerate inventory. |
+| `a69ad9fa` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `19e2f7ef` | `docs/reference/rust-shell.md` | Combine the existing full service summary with backends; 35 setup leaves, 80 implemented total. |
+| `14e5a23a` | `Cargo.lock`; `crates/custody/src/components/time.rs`; `crates/daemon/src/lib.rs`; inventory; dispositions; `tests/rust_port/reviews.py` | Keep custody parsed and its local parser bodies unchanged; retain new pytext iso_datetime for setup-only callers. Only custody file changed by incoming commit was time.rs. Union daemon registrations, review overrides; resolve lock offline; regenerate inventory. |
+| `a6359897` | `crates/cli/src/run.rs`; `crates/daemon/src/lib.rs`; `crates/daemon/src/metadata.rs`; inventory; `docs/reference/rust-shell.md`; `docs/reference/rust-transactions-r5-status.md`; `tests/test_rust_shell_parity.py` | Combine tuple/preparation API with BIP329 emit metadata; union daemon kinds in Python order without duplicate lifecycle registrations; preserve full-catalog byte equality over obsolete subset projections; combine all prose including timestamp alignment and BIP329 limitations; regenerate inventory. |
+| `d3ec0f94` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `17a69a38` | `crates/daemon/src/lib.rs`; `crates/daemon/src/metadata.rs`; inventory; `docs/reference/rust-shell.md` | Union grouped metadata registration in family KINDS and Python order; retain lifecycle-only constants; combine all pytext capabilities including setup ISO parsing; regenerate inventory. |
+| `e66eafae` | `crates/cli/src/describe.rs`; `crates/cli/src/lib.rs`; `crates/cli/src/run.rs`; `crates/kassiber/src/real_store.rs`; `crates/runtime/src/store.rs`; inventory; `docs/reference/rust-shell.md`; `tests/test_rust_shell_parity.py` | Union CLI modules and IMPLEMENTED, separate Book methods; add listing dispatch to existing operation/preparation API; retain full-catalog byte checks; preserve every service and listing prose section; regenerate inventory. |
+| `4f3cb12d` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `d219bed5` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `4fc40b2f` | inventory; `tests/rust_port/reviews.py` | Union separate desktop-validation and custody/setup review dictionary entries; regenerate inventory. |
+| `d5296a02` | `crates/daemon/src/lib.rs`; `crates/kassiber/src/real_store.rs`; `crates/runtime/src/store.rs`; inventory; `docs/reference/rust-shell.md` | Union separate desktop methods and daemon module/registration with existing service families; combine new desktop limits/prose and retain complete implemented catalog summary; regenerate inventory. |
+| `d6d9d4f4` | `crates/cli/src/run.rs`; `crates/daemon/src/lib.rs`; `crates/kassiber/src/real_store.rs`; `crates/runtime/src/store.rs`; inventory; `docs/reference/rust-shell.md`; `tests/test_rust_shell_parity.py` | Union document/commercial modules, methods, CLI and daemon registrations using existing operation tuple; retain full-catalog parity; deduplicate daemon witnesses; preserve all prose and regenerate inventory. |
+| `a9bfc1b1` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `f4769452` | `Cargo.lock`; `THIRD_PARTY_LICENSES.md`; `crates/cli/src/run.rs`; `crates/kassiber/tests/binary.rs`; `crates/runtime/src/store.rs`; inventory; `docs/reference/rust-shell.md`; dispositions; `tests/test_rust_shell_parity.py` | Retain setup credential preparation and full-catalog assertions; derive daemon witnesses from registered supported kinds; union distinct wallet Book method and license purposes; preserve complete service summary plus wallet limits; keep integration lock and resolve offline; regenerate inventory. |
+| `9d4fc3a2` | inventory | Regenerate inventory counts and dispositions; retain surrounding prose. |
+| `ee1551dc` | `crates/kassiber/src/real_store.rs`; `crates/kassiber/src/real_store/backends.rs`; `crates/runtime/src/store.rs`; inventory; dispositions; `tests/test_rust_shell_parity.py` | Union wallet snapshot fields and methods with existing services. Carry the exact added Config::kinds method to the setup backend_runtime module where Config moved; retain the setup re-export. Preserve registration-derived witnesses and regenerate inventory. |
+| `f4b4b341` | `THIRD_PARTY_LICENSES.md`; inventory; dispositions; `tests/test_rust_shell_parity.py` | Retain full-catalog assertions over obsolete subset; combine all license explanations including wallet import numeric normalization; regenerate inventory. |
+| `2fe3541a` | `crates/kassiber/tests/binary.rs`; inventory; `docs/reference/rust-shell.md`; dispositions; `tests/test_rust_shell_parity.py` | Retain catalog-derived counts and all unported witnesses; preserve added wallet catalog assertions; retain full-catalog Python byte equality; combine service prose and import limitations; regenerate inventory. |
+| `5e7e6489` | `TODO.md`; `crates/daemon/src/backends.rs`; `crates/daemon/src/services.rs`; `crates/kassiber/src/real_store.rs`; `crates/kassiber/src/real_store/backends.rs`; inventory; dispositions; `tests/rust_port/reviews.py` | Union backend configuration/probe registration and handler routing, retain workspace routes. Place explicit probe dispatch before broad local-backend dispatch; reuse existing Config and carry exact added resolve method to its moved setup module. Preserve TODO completions and new remaining limitations, union distinct review entries, regenerate inventory/contracts. |
+| `96461ae3` | `TODO.md`; `crates/cli/src/describe.rs`; inventory; `docs/reference/rust-shell.md`; dispositions; `tests/rust_port/reviews.py` | Union IMPLEMENTED and separate review entries; preserve both complete TODO sections and crate/service descriptions with corrected integrated total; regenerate inventory. |
+| `a051e1ef` | `crates/daemon/src/lib.rs`; inventory; `docs/reference/rust-shell.md`; `tests/rust_port/reviews.py` | Union secrets and reset daemon registration, distinct review entries and complete crate/service prose; regenerate inventory. |
+| `2c14fdc0` | `Cargo.lock`; `crates/cli/src/lib.rs`; `crates/kassiber/Cargo.toml`; `docs/plan/21-rust-backend.md`; inventory; `docs/reference/rust-shell.md`; dispositions; `tests/rust_port/reviews.py` | Union CLI modules, binary dependencies and disjoint review entries; preserve all wallet/backup plan sections and service descriptions; keep integration lock, resolve offline, regenerate inventory. |
+| `64378ed2` | inventory; `tests/fixtures/rust_port/environment.json`; `tests/rust_port/reviews.py` | Union distinct review entries; regenerate environment contracts and inventory from the combined Python fixes rather than merge generated line references. |
+| `0d775706` | inventory; `docs/reference/rust-shell.md`; `tests/rust_port/reviews.py` | Preserve all integrated service prose while advancing backup installation boundary; union distinct review entries and regenerate inventory. |
+| `6271064d` | `crates/daemon/src/lib.rs`; inventory | Union backup module/kinds and document/transaction handlers, retain backup-session expiration before these dispatches and existing profile reset; regenerate inventory. |
+| `571190d9` | `crates/cli/src/describe.rs`; `crates/cli/src/lib.rs`; `crates/cli/src/services.rs`; `crates/daemon/src/lib.rs`; `crates/kassiber/Cargo.toml`; `crates/kassiber/src/real_store.rs`; `crates/runtime/src/store.rs`; `docs/plan/21-rust-backend.md`; inventory; `docs/reference/rust-shell.md`; `scripts/python_test_shards.py`; dispositions; `tests/rust_port/reviews.py` | Union report modules, command/daemon registries, distinct Book methods and dependencies; preserve backup expiry and all earlier handlers; union disjoint CI/review entries and full plan/service prose; regenerate inventory. |
+| `89f978ac` | `docs/reference/rust-shell.md` | Preserve all crate/service descriptions while advancing report summary to Austrian forms and nine report reads. |
+| `6d0d7c88` | `THIRD_PARTY_LICENSES.md`; `docs/reference/rust-shell.md` | Preserve all numeric-normalization and historical-resolver license explanations and complete service prose, advancing to ten report reads. |
+| `349bf2ca` | `Cargo.lock`; `THIRD_PARTY_LICENSES.md`; `crates/cli/Cargo.toml`; inventory; `docs/reference/rust-shell.md` | Union CLI dependencies and license purposes; retain complete service summary plus CSV checkpoint; keep integration lock and resolve offline, regenerate inventory. |
+| `cc18b710` | `Cargo.lock`; `THIRD_PARTY_LICENSES.md`; inventory | Cherry-pick the single authorized custody HTLC/reservation increment after the slice/native checkpoint. Union bitcoin_hashes license row with all existing rows, keep integration lock and resolve local dependency edges offline; regenerate inventory/contracts. No custody code conflict. |
+
+Root workspace members merged automatically and equal the input union. License
+rows retain the union and all originating purposes. CLI `IMPLEMENTED` is exactly
+119 unique leaves; daemon registration is exactly 88 product kinds in Python
+wire order, followed by four harness kinds. Full catalog byte comparisons remain
+in place; execution support is separate from the 313-leaf metadata catalog.
+
+### Integration decisions and review corrections
+
+- `91112304` derives refusal witnesses from every catalog leaf absent from
+  `IMPLEMENTED`, including required arguments and mutually exclusive choices.
+  The original catalog/refusal/no-bootstrap assertions remain. At the final tip
+  this covers all 194 unported leaves. Later ported/unported test examples use
+  the same rule, or derive daemon examples from advertised kinds.
+- `62485dab` preserves custody's `time.rs::parsed` body and its trailing-`Z`
+  rewrite/CPython offset semantics. Setup's separate `iso_datetime` remains at
+  setup's own callers. `14e5a23a` touched no other custody source call site.
+  The full 45,477-case CPython timestamp/fuzz corpus passed unchanged, setup and
+  custody tests passed (568 at that checkpoint), and the then-current custody
+  catalog killed 889/889 entries. No parser unification is claimed.
+- Separate `Book`/`RealBook` methods and fields were unioned. The combined CLI
+  retains setup's operation/namespace/preparation contract and dispatches every
+  service family, including chain probes before broad backend configuration.
+- Setup had moved backend `Config` to `backend_runtime.rs`. Wallet `kinds` and
+  chain `resolve` were carried there. Chain's original field-only environment
+  overlay is retained as `apply_probe_fields`; setup's source/name-annotating
+  helper is a different operation and was not substituted.
+- `e0f58310` fixes combined wiring, preserves daemon wire order, removes the
+  duplicate backend module, formats stacked adapters and derives stale test
+  examples from registries. It reviews the existing entropy/backup/test-hook
+  dependencies, exact age and test-child launches, and pure IP parsing in the
+  net guard. Connector/feature bypass regression assertions remain active.
+  A custody mutation description was reworded to avoid the scanner's accidental
+  `hyper` substring match; its mutation and killer are unchanged.
+- The test-only hybrid fallback launcher shares the existing disposable native
+  owner namespace with Python. `05a582a7` removes an unreachable duplicate of
+  that setup. `e9ab3807` adds the required manual census sample for the expanded
+  shell module; `89586485` reviews the already-pinned pure custody hash crate.
+- `68ef0498` derives the two transaction/metadata refusal tests from a deterministic argument-free database-read
+  catalog subset absent from `IMPLEMENTED`, after the parity run exposed their
+  obsolete `reports.summary` examples. Both original refusal/no-bootstrap
+  assertions remain.
+- `8f0fd86e` retargets the equivalent backup logging mutant to enable ERROR
+  logging at the incoming guard. Shared keying already disables logging, so
+  removing the backup-only guard cannot affect the integrated behavior. The
+  ID, rule and existing stderr killer remain; its fresh baseline passes and
+  the new mutant is killed. No product code changes.
+- `8b0aaedd` and `4739bd3c` retain the earlier stop audits. Each extra integration
+  commit uses an imperative why-message and the required Codex coauthor trailer.
+
+### Lockfile verification
+
+Every one of the **337 registry identities** matches an originating lock by name,
+version, source and checksum. No novel identity or upgraded version appears.
+Every source lock identity is retained, including all 51 at `cc18b710`; local
+workspace edges are resolved offline. Locked checks/builds leave the lockfile
+unchanged.
+
+| Origin tip | Registry identities retained |
+| --- | ---: |
+| `a4e017a3` | 44/44 |
+| `65c74e84` | 337/337 |
+| `14e5a23a` | 287/287 |
+| `d6d9d4f4` | 178/178 |
+| `2fe3541a` | 205/205 |
+| `5e7e6489` | 337/337 |
+| `a051e1ef` | 337/337 |
+| `6271064d` | 337/337 |
+| `349bf2ca` | 337/337 |
+| `cc18b710` | 51/51 |
+
+Final `Cargo.lock` SHA-256:
+`ec6b1a871ad0ab34b02d6b3d6445d4fd38dcf3b5751e11a15dbe0606ee149bc1`.
+
+### Verification at the final code tip
+
+Tooling was `mise exec rust@1.99.1 uv@latest --`, Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1`, and the locked CPython 3.11.17 environment created
+by `uv sync --locked --python 3.11 --offline`. Cargo dependency operations used
+`--offline --locked`. Every book, native keyring and mutation scratch tree used
+a disposable root. HOME was never pointed at a tooling installation. Shared
+uv-cache and Git metadata operations used approved elevation.
+
+| Required native check | Result |
+| --- | --- |
+| `cargo fmt --all --check` | Passed |
+| `cargo clippy --workspace --all-targets --locked --offline -- -D warnings` | Passed |
+| `cargo clippy -p kassiber --all-targets --features test-harness --locked --offline -- -D warnings` | Passed |
+| `cargo test --workspace --locked --offline` | 1,176 passed; 0 failed; 0 ignored |
+| `cargo test -p kassiber-net --features test-observer --locked --offline` | 62 passed; 0 failed; 0 ignored |
+| `cargo build -p kassiber --features test-harness --locked --offline` | Passed |
+
+The names above map to the exact requested format, workspace/all-target clippy,
+`kassiber`/all-target/test-harness clippy, locked workspace tests, locked
+`kassiber-net --features test-observer` tests, and locked `kassiber
+--features test-harness` build. Storage/store/secrets/backup probes and the chain
+client fixture were also built offline/locked with their required test hooks.
+No main-target Cargo build overlapped the final required Python suite.
+Per-slice acceptance used a byte-for-byte copy of that final harness binary.
+
+All ten catalogs under `crates/*/scripts/` ran through their checked-in mutation
+checkers, with all named baselines passing before mutation. Partitioning retained
+all catalog entries; scratch trees and build targets were independent. Every
+current entry was killed. The backup quiet-auth entry uses the passing
+supplemental check after retargeting its equivalent mutant; the original
+106 kills and all original baseline checks remain valid. The original failed
+partition report is retained alongside that supplemental proof:
+
+| Catalog | Killed |
+| --- | ---: |
+| custody | 1035/1035 |
+| setup | 57/57 |
+| rates | 9/9 |
+| transactions | 226/226 |
+| wallets | 83/83 |
+| imports | 14/14 |
+| chain | 20/20 |
+| secrets | 18/18 |
+| backup | 107/107 |
+| reports | 278/278 |
+| Total | 1,847/1,847 |
+
+The exact required Python command ran after the final harness build with
+`KASSIBER_RUST_BIN=$PWD/target/debug/kassiber` and `KASSIBER_HYBRID_LOG`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked --offline python -m pytest -q \
+  tests/test_rust_shell_parity.py tests/test_rust_hybrid_candidate.py \
+  tests/test_cli_runner.py tests/rust_port tests/test_ci_shards.py
+```
+
+Result: **92 passed, 331 subtests passed in 617.32s (0:10:17)**.
+
+All 27 frozen-generator/inventory/contract checks pass. These include every
+custody timestamp, component, interpretation, ownership, consolidation, channel,
+HTLC/native and safety corpus; wallets' descriptor/import vectors; reports'
+full generator (including historical cases); transactions' timestamp/desktop
+vectors; and setup's four vector generators. Default check mode or `--check`
+was used. The channel generator has no check flag, so its in-memory output was
+compared with the frozen file without invoking its unconditional write entry
+point. Inventory and contracts were regenerated after integration and checked
+again at the tip.
+
+### Per-slice hybrid parity and served-by totals
+
+The following modules ran against the copied harness. The test-only wrapper
+preserves each module's local routing log while collecting command/served-by
+pairs centrally, even for tests that scrub the environment. The three shell
+helpers also mirror their local logs; 37 duplicate mirror records were removed
+from the coverage stream after checking that each repeated adjacent block is
+identical (networks 9, backends 15, offline 13). Raw records and the deduction
+manifest are retained, so no invocation is counted twice. CSV/Phoenix calls
+also enable `KASSIBER_HYBRID_IMPORT_ORACLE=1` for typed whole-book comparisons.
+Daemon instrumentation records only kind names from native parity exchanges;
+interactive backup sessions use
+the module's existing native request counter. Payloads and secrets are not
+retained. Explicit Python reference-oracle subprocesses are excluded.
+
+| Slice suite | Modules | Result |
+| --- | --- | --- |
+| setup | `test_rust_setup_desktop.py`, `test_backend_configuration.py`, `test_book_network.py`, `test_saved_views.py`, `test_projects.py` | 78 passed in 28.14s |
+| rates | `test_rust_rates_candidate.py`, `test_rates_csv_validation.py`, `test_rates_incremental.py`, `test_rates_kraken_csv.py` | 53 passed in 53.72s |
+| transactions | `test_rust_transaction_services.py`, `test_rust_metadata_services.py`, `test_rust_bip329_services.py`, `test_rust_grouped_metadata_services.py`, `test_rust_transaction_listing.py`, `test_rust_transaction_desktop.py`, `test_rust_document_services.py`, `test_timestamp_filters.py`, `test_transaction_desktop_validation.py`, `test_transaction_edit_history.py` | 53 passed, 97 subtests passed in 518.46s (0:08:38) |
+| wallets | `test_wallet_descriptors.py`, `test_wallet_setup.py`, `test_wallet_config_multi_script.py`, `test_import_batches.py`, `test_review_regressions.py`, `test_cli_smoke.py`, `test_silent_payments.py`, `test_rust_hybrid_candidate.py` | 1 failed, 414 passed, 54 subtests passed in 786.56s (0:13:06) |
+| chain | `test_rust_chain_candidate.py`, `test_daemon_core_probe.py` | 30 passed in 12.23s |
+| secrets | `test_rust_secrets_services.py`, `test_rust_secrets_lifecycle.py` | 120 passed in 218.13s (0:03:38) |
+| backup | `test_rust_backup_services.py`, `test_rust_backup_install.py`, `test_rust_backup_desktop.py`, `test_backup_recovery.py` | 1411 passed in 644.56s (0:10:44) |
+| reports | `test_rust_reports.py` | 19 passed in 534.94s (0:08:54) |
+
+CLI counts below aggregate the required suite and final slice runs, including
+the wallet diagnostics failure, grouped by the owning command family rather than the test module
+that happened to call it. Supplementary coverage reran 11 existing parity
+tests (11 passed and 23 subtests passed) and compared ten additional native
+daemon requests with Python on the existing disposable transaction fixture.
+Direct native CLI calls are identified by the actual executable and its pure
+implementation probe, then recorded with the same command/served-by schema.
+All 115 ported service CLI leaves were observed in
+Rust with **zero Python service fallbacks**. Four shell leaves are reported
+separately. All 88 product daemon kinds were observed in native sessions.
+
+| Owner | Rust CLI calls | Python service fallbacks | Rust daemon requests |
+| --- | ---: | ---: | ---: |
+| shell | 431 | See routing note | 175 |
+| setup | 732 | 0 | 69 |
+| rates | 53 | 0 | 14 |
+| transactions | 493 | 0 | 462 |
+| wallets | 462 | 0 | 185 |
+| imports | 8 | 0 | 2 |
+| chain | 0 | 0 | 17 |
+| secrets | 163 | 0 | 7 |
+| backup | 40 | 0 | 51 |
+| reports | 353 | 0 | 226 |
+
+The hybrid harness intentionally defaults a whole `daemon` session to Python
+unless `KASSIBER_HYBRID_RUST_DAEMON=1`, because a session may mix unported kinds.
+Routing tests exercise that policy. Native-session kind counts above are
+separate from daemon-process CLI counts. Unported commands such as journal
+processing still use explicit reference fallbacks and do not enter the
+zero-service-fallback claim. Usage-error routing counts remain in `served-by-final.json`.
+
+Per-command counts make the coverage claim inspectable:
+
+| CLI command | Rust calls | Python fallbacks |
+| --- | ---: | ---: |
+| `commands.describe` | 10 | 0 |
+| `daemon` | 153 | 1 (intentional session policy) |
+| `init` | 242 | 0 |
+| `status` | 26 | 0 |
+| `accounts.create` | 6 | 0 |
+| `accounts.list` | 4 | 0 |
+| `backends.clear-default` | 4 | 0 |
+| `backends.create` | 25 | 0 |
+| `backends.delete` | 9 | 0 |
+| `backends.get` | 20 | 0 |
+| `backends.kinds` | 2 | 0 |
+| `backends.list` | 12 | 0 |
+| `backends.reveal-token` | 2 | 0 |
+| `backends.set-default` | 5 | 0 |
+| `backends.update` | 14 | 0 |
+| `context.current` | 3 | 0 |
+| `context.set` | 28 | 0 |
+| `context.show` | 4 | 0 |
+| `networks.bind` | 4 | 0 |
+| `networks.inventory` | 4 | 0 |
+| `networks.plan` | 4 | 0 |
+| `networks.split` | 4 | 0 |
+| `networks.split-plan` | 2 | 0 |
+| `offline.off` | 4 | 0 |
+| `offline.on` | 2 | 0 |
+| `offline.status` | 20 | 0 |
+| `profiles.create` | 258 | 0 |
+| `profiles.get` | 8 | 0 |
+| `profiles.list` | 3 | 0 |
+| `profiles.set` | 15 | 0 |
+| `projects.create` | 8 | 0 |
+| `projects.list` | 7 | 0 |
+| `projects.select` | 3 | 0 |
+| `projects.show` | 4 | 0 |
+| `views.create` | 2 | 0 |
+| `views.delete` | 3 | 0 |
+| `views.list` | 4 | 0 |
+| `workspaces.create` | 233 | 0 |
+| `workspaces.list` | 2 | 0 |
+| `rates.latest` | 3 | 0 |
+| `rates.pairs` | 2 | 0 |
+| `rates.range` | 5 | 0 |
+| `rates.rebuild` | 1 | 0 |
+| `rates.set` | 28 | 0 |
+| `rates.sync` | 14 | 0 |
+| `attachments.add` | 11 | 0 |
+| `attachments.gc` | 3 | 0 |
+| `attachments.list` | 4 | 0 |
+| `attachments.remove` | 3 | 0 |
+| `attachments.rename` | 4 | 0 |
+| `attachments.verify` | 3 | 0 |
+| `btcpay.provenance.links` | 1 | 0 |
+| `btcpay.provenance.list` | 1 | 0 |
+| `btcpay.provenance.suggest` | 1 | 0 |
+| `documents.attach` | 5 | 0 |
+| `documents.create` | 5 | 0 |
+| `documents.import-report` | 2 | 0 |
+| `documents.list` | 1 | 0 |
+| `loans.link` | 2 | 0 |
+| `loans.list` | 2 | 0 |
+| `loans.mark` | 7 | 0 |
+| `loans.unmark` | 2 | 0 |
+| `metadata.bip329.export` | 12 | 0 |
+| `metadata.bip329.import` | 17 | 0 |
+| `metadata.bip329.list` | 10 | 0 |
+| `metadata.bip329.preview` | 10 | 0 |
+| `metadata.exclude` | 4 | 0 |
+| `metadata.include` | 3 | 0 |
+| `metadata.notes.clear` | 2 | 0 |
+| `metadata.notes.set` | 10 | 0 |
+| `metadata.records.excluded.clear` | 2 | 0 |
+| `metadata.records.excluded.set` | 5 | 0 |
+| `metadata.records.get` | 6 | 0 |
+| `metadata.records.history.activity` | 15 | 0 |
+| `metadata.records.history.list` | 5 | 0 |
+| `metadata.records.history.revert` | 5 | 0 |
+| `metadata.records.history.stale` | 3 | 0 |
+| `metadata.records.kind.clear` | 4 | 0 |
+| `metadata.records.kind.set` | 5 | 0 |
+| `metadata.records.list` | 27 | 0 |
+| `metadata.records.note.clear` | 3 | 0 |
+| `metadata.records.note.set` | 8 | 0 |
+| `metadata.records.tag.add` | 3 | 0 |
+| `metadata.records.tag.remove` | 2 | 0 |
+| `metadata.tags.add` | 7 | 0 |
+| `metadata.tags.create` | 37 | 0 |
+| `metadata.tags.list` | 3 | 0 |
+| `metadata.tags.remove` | 3 | 0 |
+| `transactions.list` | 225 | 0 |
+| `wallets.create` | 301 | 0 |
+| `wallets.delete` | 2 | 0 |
+| `wallets.derive` | 4 | 0 |
+| `wallets.get` | 10 | 0 |
+| `wallets.import-csv` | 131 | 0 |
+| `wallets.import-phoenix` | 1 | 0 |
+| `wallets.list` | 4 | 0 |
+| `wallets.update` | 9 | 0 |
+| `imports.list` | 4 | 0 |
+| `imports.rollback` | 4 | 0 |
+| `secrets.change-passphrase` | 7 | 0 |
+| `secrets.forget-unlock` | 12 | 0 |
+| `secrets.init` | 15 | 0 |
+| `secrets.init-resume` | 4 | 0 |
+| `secrets.migrate-credentials` | 14 | 0 |
+| `secrets.remember-unlock` | 9 | 0 |
+| `secrets.status` | 64 | 0 |
+| `secrets.verify` | 38 | 0 |
+| `backup.export` | 4 | 0 |
+| `backup.import` | 36 | 0 |
+| `reports.austrian-e1kv` | 36 | 0 |
+| `reports.austrian-tax-summary` | 24 | 0 |
+| `reports.balance-history` | 65 | 0 |
+| `reports.balance-sheet` | 29 | 0 |
+| `reports.capital-gains` | 42 | 0 |
+| `reports.filed-snapshots.list` | 13 | 0 |
+| `reports.journal-entries` | 38 | 0 |
+| `reports.portfolio-summary` | 34 | 0 |
+| `reports.summary` | 43 | 0 |
+| `reports.tax-summary` | 29 | 0 |
+
+| Daemon kind | Rust requests | Python kind fallbacks |
+| --- | ---: | ---: |
+| `daemon.lock` | 2 | 0 |
+| `daemon.shutdown` | 159 | 0 |
+| `daemon.unlock` | 13 | 0 |
+| `status` | 1 | 0 |
+| `backends.reveal_token` | 12 | 0 |
+| `ui.backends.create` | 4 | 0 |
+| `ui.backends.delete` | 1 | 0 |
+| `ui.backends.options` | 1 | 0 |
+| `ui.backends.public_defaults` | 1 | 0 |
+| `ui.backends.set_default` | 1 | 0 |
+| `ui.backends.settings.list` | 1 | 0 |
+| `ui.backends.update` | 1 | 0 |
+| `ui.network.offline` | 2 | 0 |
+| `ui.network.offline.set` | 6 | 0 |
+| `ui.networks.bind` | 1 | 0 |
+| `ui.networks.binding` | 1 | 0 |
+| `ui.networks.inventory` | 1 | 0 |
+| `ui.networks.partition_export` | 1 | 0 |
+| `ui.networks.partition_plan` | 1 | 0 |
+| `ui.networks.plan` | 1 | 0 |
+| `ui.profiles.create` | 1 | 0 |
+| `ui.profiles.rename` | 1 | 0 |
+| `ui.profiles.reset_data` | 7 | 0 |
+| `ui.profiles.snapshot` | 4 | 0 |
+| `ui.profiles.switch` | 2 | 0 |
+| `ui.profiles.update` | 3 | 0 |
+| `ui.saved_views.create` | 2 | 0 |
+| `ui.saved_views.delete` | 2 | 0 |
+| `ui.saved_views.list` | 3 | 0 |
+| `ui.workspace.create` | 1 | 0 |
+| `ui.workspace.delete` | 4 | 0 |
+| `ui.workspace.rename` | 3 | 0 |
+| `ui.rates.coverage` | 5 | 0 |
+| `ui.rates.kraken_csv.import` | 4 | 0 |
+| `ui.rates.latest` | 3 | 0 |
+| `ui.rates.summary` | 2 | 0 |
+| `ui.activity.history` | 17 | 0 |
+| `ui.activity.stale` | 3 | 0 |
+| `ui.attachments.add` | 1 | 0 |
+| `ui.attachments.copy` | 1 | 0 |
+| `ui.attachments.list` | 5 | 0 |
+| `ui.attachments.open` | 1 | 0 |
+| `ui.attachments.remove` | 1 | 0 |
+| `ui.attachments.rename` | 1 | 0 |
+| `ui.btcpay.provenance.links` | 2 | 0 |
+| `ui.btcpay.provenance.list` | 2 | 0 |
+| `ui.btcpay.provenance.suggest` | 1 | 0 |
+| `ui.documents.attach` | 8 | 0 |
+| `ui.documents.create` | 13 | 0 |
+| `ui.documents.import_report` | 5 | 0 |
+| `ui.documents.list` | 8 | 0 |
+| `ui.loans.link` | 1 | 0 |
+| `ui.loans.list` | 1 | 0 |
+| `ui.loans.mark` | 2 | 0 |
+| `ui.loans.unmark` | 1 | 0 |
+| `ui.metadata.bip329.export` | 4 | 0 |
+| `ui.metadata.bip329.import` | 2 | 0 |
+| `ui.metadata.bip329.preview` | 3 | 0 |
+| `ui.transactions.commercial_context` | 6 | 0 |
+| `ui.transactions.extremes` | 13 | 0 |
+| `ui.transactions.history` | 17 | 0 |
+| `ui.transactions.history.revert` | 6 | 0 |
+| `ui.transactions.list` | 158 | 0 |
+| `ui.transactions.metadata.update` | 109 | 0 |
+| `ui.transactions.search` | 70 | 0 |
+| `ui.wallets.create` | 2 | 0 |
+| `ui.wallets.delete` | 6 | 0 |
+| `ui.wallets.list` | 2 | 0 |
+| `ui.wallets.preview_descriptor` | 171 | 0 |
+| `ui.wallets.update` | 4 | 0 |
+| `ui.imports.list` | 1 | 0 |
+| `ui.imports.rollback` | 1 | 0 |
+| `ui.backends.bitcoinrpc.test` | 4 | 0 |
+| `ui.backends.btcpay.test` | 3 | 0 |
+| `ui.backends.detect_core` | 3 | 0 |
+| `ui.backends.electrum.test` | 3 | 0 |
+| `ui.backends.http.test` | 4 | 0 |
+| `ui.secrets.change_passphrase` | 5 | 0 |
+| `ui.secrets.forget_cli_unlock` | 2 | 0 |
+| `ui.backup.apply` | 14 | 0 |
+| `ui.backup.cancel` | 4 | 0 |
+| `ui.backup.export` | 13 | 0 |
+| `ui.backup.preview` | 20 | 0 |
+| `ui.reports.balance_history` | 150 | 0 |
+| `ui.reports.balance_sheet` | 4 | 0 |
+| `ui.reports.portfolio_summary` | 4 | 0 |
+| `ui.reports.summary` | 32 | 0 |
+| `ui.reports.tax_summary` | 36 | 0 |
+
+### Corrected attempts, platform limits and handoff
+
+The first required Python run after slice integration found two integration
+bookkeeping failures: setup's old probe refusal examples and the missing
+manual top-30 census sample for the enlarged shell module. They were corrected,
+focused checks passed, and the complete required suite above was rerun.
+The first final native/vector/mutation attempt exhausted temporary-storage
+quota: SQLite reported `SQLITE_IOERR_WRITE`, and mutation workers reported
+`Disk quota exceeded`. Those outcomes were not counted as kills or passes.
+Only this integration's disposable mutation targets were removed; scratch trees
+and caches were relocated, concurrency was bounded, and every affected check
+was rerun. No product behavior was changed to accommodate those failures.
+
+The wallet suite has **one known parity failure**: `test_diagnostics_out_auto_writes_public_error_report` expects a diagnostics file from `rates range --diagnostics-out`. The native dispatcher deliberately returns `not_implemented` for this global flag; `rust-shell.md` already records that boundary. The run is 414 passed, 54 subtests passed, and 1 failed. Diagnostics was not implemented, routed through an unreported fallback, or marked as a sandbox skip. Every other final slice suite passed.
+
+The chain suite's first attempt lacked `examples/client_fixture` beside the copied binary. Copying the already-built fixture corrected that test setup, and all 30 tests then passed. The first catalog-derived Python witness selection included commands with required argument groups; it was narrowed to the existing deterministic argument-free database-read subset. Both focused witnesses and the full transaction suite then passed.
+
+All Linux suites ran without skips, including the disposable Secret Service enrollment, rotation, revocation and interruption checks. This Linux sandbox cannot establish native macOS Keychain, Windows Credential Manager or Windows path/executable acceptance. Live providers were not contacted; loopback chain fixtures and the no-egress observer checks passed.
+
+The orchestrator still owns the full census and custody-shadow shards. This
+report does not claim those runs. Nothing remains stopped on a conflict.
+The branch is local-only; no push or PR was made.
+
+Evidence is in `/tmp/kassiber-r5b-verification/`: `inputs.json`, `replay.json`,
+`resolutions.json`, `final-audit.json`, `origin-locks.json`, `refs-final.json`,
+`verified-native-results.json` and logs, `final-required-python.log`,
+`verified-*-result.json` and partition mutation logs, `final-hybrid-*-result.json`
+and test logs, `served-by-final.json`, `final-hybrid-*-served.jsonl`,
+`final-hybrid-*-daemon-kinds.jsonl`, `coverage-log-deduplication.json`,
+`final-mutation-entry-audit.json`, `backup-quiet-retarget.log`, and
+`final-generators-results.json`.
