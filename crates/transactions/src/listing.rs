@@ -322,7 +322,10 @@ pub fn list(conn: &Connection, scope: &Scope<'_>, options: &Options) -> Result<V
     let mut page = rows(
         conn,
         &format!(
-            "SELECT {COLUMNS} {FROM} WHERE {} ORDER BY {ordering} LIMIT ?",
+            // Select narrow identities before loading the wide presentation.
+            // Without a matching sort index, SQLite's top-N sorter otherwise
+            // copies pricing/description fields for every candidate row.
+            "WITH page AS MATERIALIZED (SELECT t.rowid AS row_id {FROM} WHERE {} ORDER BY {ordering} LIMIT ?) SELECT {COLUMNS} FROM page JOIN transactions t ON t.rowid=page.row_id JOIN wallets w ON w.id=t.wallet_id ORDER BY {ordering}",
             conditions.join(" AND ")
         ),
         params_from_iter(args),

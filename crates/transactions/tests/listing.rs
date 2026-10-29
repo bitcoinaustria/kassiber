@@ -490,3 +490,26 @@ fn transaction_validation_and_empty_pages_are_read_only() {
     assert_eq!(field(&empty, "next_cursor"), Value::Null);
     assert_eq!(conn.total_changes(), before);
 }
+
+#[test]
+fn narrow_pages_keep_rows_with_null_text_primary_keys() {
+    let (_tmp, book) = book();
+    // A SQLite TEXT PRIMARY KEY on a rowid table permits NULL. The internal
+    // page lookup must still retain each physical row without joining NULLs.
+    book.connection()
+        .execute("UPDATE transactions SET id=NULL WHERE id IN ('a','b')", [])
+        .unwrap();
+    let page = run(&book, &Options::default());
+    let Value::List(records) = get(&page, "records").unwrap() else {
+        panic!("records")
+    };
+    assert_eq!(records.len(), 4);
+    assert_eq!(field(&page, "total"), Value::Int(4.into()));
+    assert_eq!(
+        records
+            .iter()
+            .filter(|row| get(row, "id") == Some(&Value::Null))
+            .count(),
+        2
+    );
+}
