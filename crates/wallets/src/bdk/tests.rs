@@ -12,6 +12,186 @@ fn scope() -> Scope {
         source_revision: "1".into(),
     }
 }
+
+#[test]
+fn bdk_record_projection_preserves_evidence_and_fences_reuse() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 2, true, false);
+    let mut p = a.execute(&mut fake, 100).unwrap();
+    for id in &p.canonical_txids {
+        p.aggregate
+            .tx_graph
+            .first_seen
+            .insert(id.parse().unwrap(), 100);
+    }
+    let records = p.records("fixture", "1:fixture", None, None).unwrap();
+    assert_eq!(records.records.len(), 1);
+    let record = &records.records[0];
+    assert_eq!(record["amount"], "0.00099001");
+    assert_eq!(record["fee"], "0");
+    assert_eq!(record["description"], "Synced from fixture");
+    let raw: Value = serde_json::from_str(record["raw_json"].as_str().unwrap()).unwrap();
+    assert_eq!(raw["observer"], "bdk");
+    assert_eq!(raw["observed_at"], 100);
+    assert_eq!(raw["vin"][0]["prevout"]["value"], 100_003);
+    assert_eq!(raw["vin"][0]["prevout"]["scriptpubkey"], "51");
+    assert_eq!(raw["vout"][0]["value"], 99_001);
+    assert_eq!(raw["confirmation_status"], "confirmed");
+    assert_eq!(raw["confirmations"], 3);
+    assert_eq!(
+        raw["status"]["block_hash"],
+        fake.header.block_hash().to_string()
+    );
+    assert_eq!(raw["status"]["block_time"], fake.header.time);
+    assert_eq!(raw["block_height"], 10);
+    assert_eq!(records.reused_records, 0);
+    let prior = json!({"record_fingerprint_version":"1:fixture","record_fingerprints":records.fingerprints});
+    let current = Some(p.canonical_txids.clone());
+    // A full scan never reuses even an otherwise matching stored row.
+    assert_eq!(
+        p.records("fixture", "1:fixture", Some(&prior), current.clone())
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
+    p.full_scan = false;
+    let reused = p
+        .records("fixture", "1:fixture", Some(&prior), current.clone())
+        .unwrap();
+    assert!(reused.records.is_empty());
+    assert_eq!(reused.reused_records, 1);
+    assert_eq!(reused.fingerprints, records.fingerprints);
+    for (name, version, previous, current) in [
+        ("changed", "1:fixture", Some(&prior), current.clone()),
+        ("fixture", "2:fixture", Some(&prior), current),
+        (
+            "fixture",
+            "1:fixture",
+            None,
+            Some(p.canonical_txids.clone()),
+        ),
+        ("fixture", "1:fixture", Some(&prior), None),
+    ] {
+        assert_eq!(
+            p.records(name, version, previous, current)
+                .unwrap()
+                .records
+                .len(),
+            1
+        );
+    }
+    let a = action(None);
+    let mut p = a.execute(&mut Fake::new(&a, 1, false, false), 200).unwrap();
+    let mempool = p.records("fixture", "1:fixture", None, None).unwrap();
+    let raw: Value =
+        serde_json::from_str(mempool.records[0]["raw_json"].as_str().unwrap()).unwrap();
+    assert_eq!(raw["status"], json!({"confirmed":false}));
+    assert_eq!(raw["confirmation_status"], "mempool");
+    assert_eq!(raw["confirmations"], 0);
+    assert!(raw["block_height"].is_null());
+    assert_eq!(raw["observed_at"], 200);
+    let prior = json!({"record_fingerprint_version":"1:fixture","record_fingerprints":mempool.fingerprints});
+    p.full_scan = false;
+    let unreused = p
+        .records(
+            "fixture",
+            "1:fixture",
+            Some(&prior),
+            Some(p.canonical_txids.clone()),
+        )
+        .unwrap();
+    assert_eq!(unreused.records.len(), 1);
+    assert_eq!(unreused.reused_records, 0);
+    let p = a.execute(&mut Fake::new(&a, 1, true, true), 200).unwrap();
+    let coinbase = p.records("fixture", "1:fixture", None, None).unwrap();
+    let raw: Value =
+        serde_json::from_str(coinbase.records[0]["raw_json"].as_str().unwrap()).unwrap();
+    assert!(raw["vin"][0]["prevout"].is_null());
+    assert_eq!(raw["vin"][0]["txid"], "0".repeat(64));
+    assert_eq!(raw["vin"][0]["vout"], u32::MAX);
+}
+
+fn prepared_spend(missing_prevout: bool) -> Prepared {
+    let a = action(None);
+    let mut wallet = a.fresh_wallet().unwrap();
+    wallet
+        .reveal_addresses_to(KeychainKind::External, 0)
+        .for_each(drop);
+    let script = wallet
+        .public_descriptor(KeychainKind::External)
+        .at_derivation_index(0)
+        .unwrap()
+        .script_pubkey();
+    let owned = OutPoint::new(Txid::from_byte_array([1; 32]), 0);
+    let other = OutPoint::new(Txid::from_byte_array([2; 32]), 1);
+    let mut tx = fixture_tx(script.clone(), false).1;
+    tx.input[0].previous_output = owned;
+    tx.input[0].witness = bitcoin::Witness::from_slice(&[&[0xab, 0xcd][..]]);
+    tx.input.push(TxIn {
+        previous_output: other,
+        ..Default::default()
+    });
+    let mut update = TxUpdate::<ConfirmationBlockTime>::default();
+    update.txs.push(Arc::new(tx.clone()));
+    update.txouts.insert(
+        owned,
+        TxOut {
+            value: Amount::from_sat(100_000),
+            script_pubkey: script.clone(),
+        },
+    );
+    if !missing_prevout {
+        update.txouts.insert(
+            other,
+            TxOut {
+                value: Amount::from_sat(3_000),
+                script_pubkey: script,
+            },
+        );
+    }
+    update.seen_ats.insert((tx.compute_txid(), 100));
+    wallet
+        .apply_update(Update {
+            tx_update: update,
+            ..Default::default()
+        })
+        .unwrap();
+    let aggregate = wallet.take_staged().unwrap();
+    Prepared {
+        wallet,
+        aggregate,
+        canonical_txids: BTreeSet::from([tx.compute_txid().to_string()]),
+        retracted_external_ids: BTreeSet::new(),
+        rebuilt: false,
+        full_scan: true,
+    }
+}
+
+#[test]
+fn bdk_owned_spend_requires_proven_fee_and_preserves_exact_witness_graph() {
+    let p = prepared_spend(false);
+    let record = &p
+        .records("fixture", "1:fixture", None, None)
+        .unwrap()
+        .records[0];
+    assert_eq!(record["direction"], "outbound");
+    assert_eq!(record["amount"], "0");
+    assert_eq!(record["fee"], "0.00003999");
+    let raw: Value = serde_json::from_str(record["raw_json"].as_str().unwrap()).unwrap();
+    assert_eq!(raw["vin"][0]["witness"], json!(["abcd"]));
+    assert_eq!(raw["fee"], 3999);
+    let e = prepared_spend(true)
+        .records("fixture", "1:fixture", None, None)
+        .err()
+        .unwrap();
+    assert_eq!(e.code, "observer_accounting_ambiguous");
+    let details: Value = serde_json::from_str(
+        &kassiber_pyjson::dumps(&e.details.unwrap(), &Default::default()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(details["missing"], "network_fee");
+}
 fn config() -> Value {
     json!({"kind":"electrum","url":"tcp://127.0.0.1:1","batch_size":2})
 }

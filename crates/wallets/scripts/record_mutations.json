@@ -1,0 +1,832 @@
+[
+  {
+    "id": "record-script-normalization",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "kassiber_pytext::strip(v).to_lowercase()",
+    "replace": "v.to_owned()",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Tracked scripts use Python whitespace trimming and lowercase normalization."
+  },
+  {
+    "id": "record-nested-script",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "text(nested)",
+    "replace": "\"\"",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Stored graph scriptPubKey string forms remain recognized."
+  },
+  {
+    "id": "record-sats-field",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "let explicit = !v[\"value_sats\"].is_null();",
+    "replace": "let explicit = false;",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Explicit sat fields take precedence over BTC-valued legacy fields."
+  },
+  {
+    "id": "record-legacy-btc-scale",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "&Decimal::from(100_000_000_u64)",
+    "replace": "&Decimal::from(1_u64)",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Legacy decimal BTC graph quantities convert to sats exactly."
+  },
+  {
+    "id": "record-round-half-even",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": ".to_fixed_places(0, Rounding::HalfEven)",
+    "replace": ".to_fixed_places(0, Rounding::Down)",
+    "expect_failing": [
+      "bitcoin_projection_preserves_integral_values_and_refuses_overflow"
+    ],
+    "rule": "Legacy sub-satoshi graph values use Python half-even rounding."
+  },
+  {
+    "id": "record-overflow",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "a.checked_add(b).ok_or_else(invalid)",
+    "replace": "Ok(a.wrapping_add(b))",
+    "expect_failing": [
+      "bitcoin_projection_preserves_integral_values_and_refuses_overflow"
+    ],
+    "rule": "Quantity accumulation refuses overflow instead of wrapping."
+  },
+  {
+    "id": "record-btc-scale",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "let mut exponent = -8_i32;",
+    "replace": "let mut exponent = -7_i32;",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Record decimal BTC text preserves exact satoshi quantities."
+  },
+  {
+    "id": "record-btc-zero",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "return \"0\".into();",
+    "replace": "return \"0.0\".into();",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Zero record decimal text matches Python."
+  },
+  {
+    "id": "record-btc-scientific",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "digits.len() as i32 + exponent - 1 < -6",
+    "replace": "digits.len() as i32 + exponent - 1 < -8",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Small decimal BTC record text follows Python scientific notation."
+  },
+  {
+    "id": "record-json-format",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "&Options::new().sort_keys(true)",
+    "replace": "&Options::new().sort_keys(true).separators(\",\",\":\")",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Stored raw JSON retains Python default separators and sorted keys."
+  },
+  {
+    "id": "record-graph-unresolved",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "return given.into_iter().collect();",
+    "replace": "return vec![];",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Unresolved graph inputs retain all observed owned scripts."
+  },
+  {
+    "id": "record-graph-scope",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "given.intersection(&found).cloned().collect()",
+    "replace": "given.into_iter().collect()",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Complete graphs attest only owned scripts actually present."
+  },
+  {
+    "id": "record-utc-day",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "n.div_euclid(86400) + 719468",
+    "replace": "n.div_euclid(86400) + 719469",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Occurrence timestamps use the correct UTC civil day."
+  },
+  {
+    "id": "record-time-zero",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": " || value == 0 || value == \"0\"",
+    "replace": " || value == \"0\"",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Zero block time preserves unknown confirmation time."
+  },
+  {
+    "id": "record-observed-time",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "&tx[\"observed_at\"]",
+    "replace": "&Value::Null",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Mempool occurrence uses the source first-seen time when supplied."
+  },
+  {
+    "id": "record-confirmation-time",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "tx[\"status\"][\"confirmed\"] == true || !block_time.is_null()",
+    "replace": "tx[\"status\"][\"confirmed\"] == true && !block_time.is_null()",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "An explicit block time retains its confirmation evidence."
+  },
+  {
+    "id": "record-electrum-total-float",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "graph[\"total_output_sats\"] = json!(value);",
+    "replace": "graph[\"total_output_sats\"] = json!(value as u64);",
+    "expect_failing": [
+      "electrum_raw_graph_preserves_python_decimal_json_bytes"
+    ],
+    "rule": "Electrum raw total_output_sats retains Python json_ready float bytes."
+  },
+  {
+    "id": "record-electrum-output-float",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "output[\"value_sats\"] = json!(value);",
+    "replace": "output[\"value_sats\"] = json!(value as u64);",
+    "expect_failing": [
+      "electrum_raw_graph_preserves_python_decimal_json_bytes"
+    ],
+    "rule": "Electrum raw value_sats retains Python json_ready float bytes."
+  },
+  {
+    "id": "record-electrum-confirmed",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "(occurred_at != UNKNOWN).then_some(occurred_at)",
+    "replace": "Some(occurred_at)",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Unknown Electrum occurrence time does not prove confirmation."
+  },
+  {
+    "id": "record-received",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "received = add(received, value)?;",
+    "replace": "received = add(received, value + 1)?;",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Received sats are the exact sum of tracked outputs."
+  },
+  {
+    "id": "record-sent",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "sent = add(sent, value)?;",
+    "replace": "sent = add(sent, value + 1)?;",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Spent sats are the exact sum of tracked previous outputs."
+  },
+  {
+    "id": "record-all-inputs-owned",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "inputs_owned &= owned && value.is_some();",
+    "replace": "inputs_owned |= owned && value.is_some();",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Fee attribution requires every economic input to be owned and valued."
+  },
+  {
+    "id": "record-ignore-unrelated",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if received == 0 && sent == 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Transactions unrelated to tracked scripts emit no accounting record."
+  },
+  {
+    "id": "record-explicit-fee",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "match explicit_fee.filter(|v| !v.is_null())",
+    "replace": "match explicit_fee.filter(|_| false)",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Explicit source fees take precedence over graph-derived fees."
+  },
+  {
+    "id": "record-calculated-fee",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "sub(total_input, total_output)?.max(0)",
+    "replace": "sub(total_output, total_input)?.max(0)",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Calculated network fee is nonnegative inputs minus outputs."
+  },
+  {
+    "id": "record-collaborative",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "let collaborative = sent > 0 && !inputs_owned;",
+    "replace": "let collaborative = false;",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Mixed-input spends preserve wallet delta without assigning a transaction-wide fee."
+  },
+  {
+    "id": "record-direction",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if received > sent {",
+    "replace": "if received >= sent {",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Zero-net consolidations remain outbound fee observations."
+  },
+  {
+    "id": "record-gross-principal",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "sub(gross, fee)?.max(0)",
+    "replace": "gross",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Wholly owned spends separate principal from the network fee."
+  },
+  {
+    "id": "record-collaborative-fee",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if collaborative { 0 } else { fee }",
+    "replace": "fee",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Collaborative row fees remain unallocated."
+  },
+  {
+    "id": "record-kind",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if amount > 0 { \"withdrawal\" } else { \"fee\" }",
+    "replace": "\"withdrawal\"",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "A fee-only consolidation keeps the fee kind."
+  },
+  {
+    "id": "record-collaborative-marker",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "raw[\"component\"] = json!({\"fee_attribution\":\"implicit_wallet_delta\"});",
+    "replace": "raw[\"component\"] = json!({\"fee_attribution\":\"exact\"});",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Collaborative graph evidence retains implicit wallet delta attribution."
+  },
+  {
+    "id": "record-privacy-preserve",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "let mut boundary = privacy_boundary(tx)?;",
+    "replace": "let mut boundary: Option<String> = None;",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Explicit privacy evidence and invalid privacy boundaries are preserved or refused."
+  },
+  {
+    "id": "record-privacy-infer",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if received != sent && boundary.is_none() {",
+    "replace": "if boundary.is_none() {",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Equal-net collaborative transactions do not acquire an inferred privacy boundary."
+  },
+  {
+    "id": "record-hashlock-template",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "script.get(..2)? != [0xa9, 20]",
+    "replace": "script.get(..2)? != [0xa8, 20]",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "HTLC evidence requires the exact known hashlock script template."
+  },
+  {
+    "id": "record-hashlock-suffix",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "suffix[36..] != [0x68, 0xac]",
+    "replace": "suffix[36..] != [0x68, 0xad]",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "HTLC evidence validates the complete timeout and checksig suffix."
+  },
+  {
+    "id": "record-hashlock-trailing",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "suffix.len() != 38 || suffix[..3] != [0xb1, 0x75, 33] || suffix[36..] != [0x68, 0xac]",
+    "replace": "suffix.len() < 38 || suffix[..3] != [0xb1, 0x75, 33] || suffix[36..38] != [0x68, 0xac]",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Trailing script bytes withhold HTLC authority."
+  },
+  {
+    "id": "record-hashlock-reverse",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": ".strip_prefix(&[0x82, 0x01, 0x20, 0x88])",
+    "replace": ".strip_prefix(&[0x82, 0x01, 0x21, 0x88])",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "The known reverse-swap prefix remains recognized."
+  },
+  {
+    "id": "record-claim-single-input",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if inputs.len() == 1",
+    "replace": "if !inputs.is_empty()",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Whole-row payment hash evidence requires a single economic input."
+  },
+  {
+    "id": "record-claim-outpoint",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "&& canonical.bytes().all(|b| b.is_ascii_hexdigit())\n                && index.is_some()",
+    "replace": "&& canonical.bytes().all(|b| b.is_ascii_hexdigit())\n                && true",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Claims without an exact integer funding outpoint cannot label a whole row."
+  },
+  {
+    "id": "record-claim-source",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "json!(\"chain_script_unique_outpoint\")",
+    "replace": "json!(\"chain_script\")",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Claim provenance retains the unique-outpoint source type."
+  },
+  {
+    "id": "record-refund-unique",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if let [(txid, index)] = refunds.as_slice() {",
+    "replace": "if let Some((txid, index)) = refunds.first() {",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Batched distinct HTLC refunds do not select one whole-row funding link."
+  },
+  {
+    "id": "compose-mixed-records",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "!adapter_records.is_empty() || !adapter_metadata[\"utxos\"].is_null()",
+    "replace": "!adapter_records.is_empty() && !adapter_metadata[\"utxos\"].is_null()",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "A refresh cannot mix dependency facts with any compatibility record or inventory snapshot."
+  },
+  {
+    "id": "compose-output-replace",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "insert(&mut outputs, point, output.clone(), true);",
+    "replace": "insert(&mut outputs, point, output.clone(), false);",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Duplicate output points use the final observer projection while keeping insertion order."
+  },
+  {
+    "id": "compose-highest-maximum",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "*v = (*v).max(value)",
+    "replace": "*v = (*v).min(value)",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Aggregate highest-used indices retain the maximum across observers."
+  },
+  {
+    "id": "compose-highest-new",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "value.max(-1)",
+    "replace": "(-1)",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "New branches retain their actual highest-used index."
+  },
+  {
+    "id": "compose-group-btc",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "record[\"asset\"] == \"BTC\"",
+    "replace": "true",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Only BTC BDK rows enter Bitcoin cross-family normalization."
+  },
+  {
+    "id": "compose-group-union",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "group.push(raw.unwrap());",
+    "replace": "let _ = raw.unwrap();",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "All family projections contribute to shared transaction normalization."
+  },
+  {
+    "id": "compose-first-nonbdk",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "insert(&mut records, key(record), record.clone(), false);",
+    "replace": "insert(&mut records, key(record), record.clone(), true);",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Duplicate opaque or non-BDK record keys keep the first observation."
+  },
+  {
+    "id": "compose-richest-tie",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "std::cmp::Reverse(*i)",
+    "replace": "std::cmp::Reverse(usize::MAX - *i)",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Equal-richness graph candidates preserve Python first-candidate precedence."
+  },
+  {
+    "id": "compose-richest-graph",
+    "file": "crates/wallets/src/composition.rs",
+    "find": ".max_by_key(|(i, raw)| {",
+    "replace": ".min_by_key(|(i, raw)| {",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "The best-supported observer graph supplies the shared transaction metadata."
+  },
+  {
+    "id": "compose-input-identity",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "&& input_key(v) == input_key(input)",
+    "replace": "&& true",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Observer prevouts must resolve to the same transaction input identity."
+  },
+  {
+    "id": "compose-merge-prevouts",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "target[\"prevout\"] = input[\"prevout\"].clone();",
+    "replace": "let _ = &input[\"prevout\"];",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Complementary previous outputs merge before shared-wallet accounting."
+  },
+  {
+    "id": "compose-prevout-conflict",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "if !target[\"prevout\"].is_null() && target[\"prevout\"] != input[\"prevout\"] {",
+    "replace": "if false {",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Contradictory valued prevouts fail closed before composing records."
+  },
+  {
+    "id": "compose-retraction-veto",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "!live.contains(&canonical_or_literal(&value))",
+    "replace": "true",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Any live normalized record vetoes another observer retraction."
+  },
+  {
+    "id": "compose-canonical-id",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "value.to_lowercase()",
+    "replace": "value.to_owned()",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Canonical txid retraction vetoes ignore hex case and surrounding Python whitespace."
+  },
+  {
+    "id": "compose-retraction-dedup",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "&& !absent.contains(&value)",
+    "replace": "&& true",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Retractions are deduplicated in observer order."
+  },
+  {
+    "id": "compose-reuse-count",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "metadata[\"observer_records_reused\"] = json!(reused);",
+    "replace": "metadata[\"observer_records_reused\"] = json!(0);",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "The coordinator receives the sum of unchanged observer records."
+  },
+  {
+    "id": "compose-output-snapshot",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "metadata[\"utxos\"] =",
+    "replace": "metadata[\"ignored_utxos\"] =",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Observer outputs remain an authoritative complete snapshot including empty inventory."
+  },
+  {
+    "id": "compose-checkpoint-preserve",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "metadata[\"freshness_checkpoint\"].clone()",
+    "replace": "json!({})",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Observer checkpoints preserve unrelated scheduling metadata."
+  },
+  {
+    "id": "compose-checkpoint-instances",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "checkpoint[\"observer_instances\"] = json!(checkpoints);",
+    "replace": "checkpoint[\"observer_instances\"] = json!({});",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Each observer checkpoint stays bound to its structural identity."
+  },
+  {
+    "id": "compose-checkpoint-highest",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "checkpoint[\"highest_used\"] = json!(highest);",
+    "replace": "checkpoint[\"highest_used\"] = json!({});",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "The merged freshness checkpoint exposes the aggregate highest-used indices."
+  },
+  {
+    "id": "compose-provenance-key-first",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "sources.get(&key).or_else(|| by_txid.get(&key.0))",
+    "replace": "by_txid.get(&key.0).or_else(|| sources.get(&key))",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Exact record-key provenance takes precedence over cross-direction txid fallback."
+  },
+  {
+    "id": "compose-provenance-fallback",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "sources.get(&key).or_else(|| by_txid.get(&key.0))",
+    "replace": "sources.get(&key)",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Recomposed directions retain source identities through txid provenance fallback."
+  },
+  {
+    "id": "compose-provenance-identities",
+    "file": "crates/wallets/src/composition.rs",
+    "find": "source.ids.insert(observer.observer_id.clone());",
+    "replace": "source.ids.insert(\"unbound\".into());",
+    "expect_failing": [
+      "observer_composition_matches_python_vectors"
+    ],
+    "rule": "Structural source identities remain attached to the exact record key."
+  },
+  {
+    "id": "projection-full-scan-reuse",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "self.full_scan,",
+    "replace": "false,",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Full scans refuse record reuse even when prior proofs and rows match."
+  },
+  {
+    "id": "projection-output-value",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"value\":output.value.to_sat()",
+    "replace": "\"value\":output.value.to_sat()+1",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native graph output values preserve exact sats."
+  },
+  {
+    "id": "projection-output-script",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"scriptpubkey\":output.script_pubkey.to_hex_string()",
+    "replace": "\"scriptpubkey\":\"51\"",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native graph output scripts preserve the actual observed script."
+  },
+  {
+    "id": "projection-first-seen",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "self.aggregate.tx_graph.first_seen.get(&id).copied()",
+    "replace": "Some(0)",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native occurrence evidence comes from aggregate first_seen rather than a new clock."
+  },
+  {
+    "id": "projection-fingerprint-backend",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"backend\":backend_name",
+    "replace": "\"backend\":\"unbound\"",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native record fingerprints include the configured backend label."
+  },
+  {
+    "id": "projection-reuse-count",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "projection.reused_records += 1;",
+    "replace": "projection.reused_records += 0;",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Reused native records increment the private unchanged counter."
+  },
+  {
+    "id": "projection-confirmed-reuse",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "position[\"status\"][\"confirmed\"] == true,",
+    "replace": "true,",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Only confirmed native records may be reused."
+  },
+  {
+    "id": "projection-owned-fee",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "if owns_input && fee.is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_owned_spend_requires_proven_fee_and_preserves_exact_witness_graph"
+    ],
+    "rule": "An owned spend with an unproved fee refuses instead of booking zero."
+  },
+  {
+    "id": "projection-row-fee",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "fee.map_or(0, |f| f.to_sat())",
+    "replace": "fee.map_or(0, |_| 0)",
+    "expect_failing": [
+      "bdk_owned_spend_requires_proven_fee_and_preserves_exact_witness_graph"
+    ],
+    "rule": "Native records retain the dependency-proved network fee."
+  },
+  {
+    "id": "projection-observer-type",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "json!(\"bdk\")",
+    "replace": "json!(\"compatibility\")",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native graph observations retain their BDK observer marker."
+  },
+  {
+    "id": "projection-tracked-scripts",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": ".is_some()",
+    "replace": ".is_none()",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Only scripts derivable from this native wallet enter its tracked set."
+  },
+  {
+    "id": "projection-confirmation-depth",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "tip.saturating_add(1).saturating_sub(anchor.block_id.height)",
+    "replace": "tip.saturating_sub(anchor.block_id.height)",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native confirmation depth includes the anchoring block."
+  },
+  {
+    "id": "projection-confirmation-time",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"block_hash\":anchor.block_id.hash.to_string(),\"block_time\":anchor.confirmation_time",
+    "replace": "\"block_hash\":anchor.block_id.hash.to_string(),\"block_time\":0",
+    "expect_failing": [
+      "bdk_record_projection_preserves_evidence_and_fences_reuse"
+    ],
+    "rule": "Native graph and record confirmation time retain the actual anchor time."
+  },
+  {
+    "id": "cache-record-no-synthetic-txid",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "normalize_graph(&mut tx, &transactions)?;\n            transactions.insert(id.clone(), tx);",
+    "replace": "normalize_graph(&mut tx, &transactions)?;\n            tx[\"txid\"] = json!(id);\n            transactions.insert(id.clone(), tx);",
+    "expect_failing": [
+      "cached_electrum_fresh_graph_preserves_decoder_shape"
+    ],
+    "rule": "Fresh cached-Electrum graphs preserve Python decoder shape; stored-cache identity is separate."
+  },
+  {
+    "id": "record-graph-object",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if !tx.is_object()",
+    "replace": "if false",
+    "expect_failing": [
+      "bitcoin_malformed_graphs_refuse_before_projecting_related_outputs"
+    ],
+    "rule": "A non-object graph is refused before normalization."
+  },
+  {
+    "id": "record-graph-leg-arrays",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "tx.get(*key).is_some_and(|v| !v.is_array())",
+    "replace": "tx.get(*key).is_some_and(|_| false)",
+    "expect_failing": [
+      "bitcoin_malformed_graphs_refuse_before_projecting_related_outputs"
+    ],
+    "rule": "Malformed graph leg collections cannot silently become an empty wallet side."
+  },
+  {
+    "id": "record-status-object",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if crate::descriptors::truthy(&tx[\"status\"]) && !tx[\"status\"].is_object() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitcoin_malformed_graphs_refuse_before_projecting_related_outputs"
+    ],
+    "rule": "Malformed truthy status is refused instead of becoming an unconfirmed deposit."
+  },
+  {
+    "id": "record-witness-field",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "let witness = &input[\"witness\"];",
+    "replace": "let witness = if input[\"witness\"].is_null() { &input[\"txinwitness\"] } else { &input[\"witness\"] };",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "Sync witness evidence uses only the reference Esplora/normalized Electrum witness field."
+  },
+  {
+    "id": "record-decoded-witness-count",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "if items.len() < 2 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitcoin_records_match_python_vectors"
+    ],
+    "rule": "After malformed hex items are skipped, HTLC evidence still requires at least two decoded witness items."
+  }
+]

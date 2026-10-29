@@ -2229,3 +2229,47 @@ zero for each of `wallets.sync`, `ui.wallets.sync`, `ui.freshness.run` and
 `ui.workspace.freshness.run`. See the
 [authority checkpoint](../reference/rust-shell.md#bitcoin-canonical-authority-preparation-r5-step-2)
 for the fixture matrix, exact mutation/test mapping, verification and limits.
+
+### R5 Bitcoin sync: normalized record composition
+
+The continuation at `0da3346b` completes step 1 of the next handoff: pure
+Bitcoin record normalization and cross-observer retraction vetoes. This splits
+the composition portion out of the preceding checkpoint's remaining step 3;
+atomic application and routing remain open.
+
+`kassiber-wallets::bitcoin_records` ports the reference's graph normalization
+into exact decimal record text, preserving collaborative wallet deltas, fee
+attribution, occurrence/confirmation times, graph-scoped scripts, privacy and
+unique-outpoint HTLC evidence. Native BDK canonical history now projects records
+and release-bound fingerprints, with reuse disabled on every full/reorg scan
+and missing owned-spend fees refused. `composition` merges family graphs and
+complete output snapshots, rejects inconsistent inputs/prevouts and mixed
+observer routes, combines checkpoints, vetoes retractions contradicted by live
+records and prepares private structural provenance mappings. These are local
+JSON-only preparation services with no product dispatch or persistence.
+
+Complete normalized record JSON compares with Python across all ten acquisition
+fixtures on Esplora and Electrum, cached compatibility rounds, native BDK's
+eight fixtures/restarts and eight three-round canonical sequences. Sixty-seven
+frozen vectors pin the pure normalizer/composer. This does **not** satisfy full
+normalized post-sync book-dump parity. Successful served-by counts remain zero
+for all four requested product paths; in-scope fallback acceptance is unmet.
+
+Two Rust serialization differences were corrected: cached Electrum fresh
+graphs no longer synthesize a `txid`, and raw decoder Decimal metadata retains
+Python's float JSON spelling while accounting math remains integral. Python
+product code is unchanged; no reference bug was found. The workspace's existing
+decimal crate becomes a direct internal dependency; no upstream dependency,
+schema or runtime requirement is added. The
+[record checkpoint](../reference/rust-shell.md#bitcoin-normalized-record-composition-r5-continuation)
+records mutations, verification and the remaining numbered steps.
+
+All 340 sync-domain mutations are killed (83 new record/composition rules and
+257 inherited rules). Offline/locked Rust formatting, workspace/harness clippy,
+workspace/net/scanner/harness tests and harness/example builds pass. The exact
+requested shell/hybrid/CLI-runner/rust-port command passes 63 tests and 178
+subtests; the expanded protocol/reference run passes 209 tests and 79 subtests.
+Inventory, source contracts, shard validation and vector drift checks pass.
+The handoff records retries for disposable storage, shared mutation artifacts
+and Python reference SQLCipher timeouts. This verifies the step-1 preparation
+boundary; atomic persistence and product-sync acceptance remain open.

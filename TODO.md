@@ -148,11 +148,13 @@ through the shared setup crate.
 - [x] Prepare canonical BDK reorg/retraction decisions and complete, source-bound
   Esplora absence candidates (step 2), including stale-anchor rebuild, forced
   refresh height fences and point-of-agreement recovery. No durable apply.
-- [ ] Compose observer transaction/output projections and shared-observer
-  retraction vetoes. Preserve the existing named observer routes and
-  source-overlap/book-network preflight.
+- [x] Port pure Bitcoin normalized records and cross-observer composition,
+  complete output-snapshot merging, structural provenance mappings and live-
+  record retraction vetoes. This is preparation only; no product route or write.
 - [ ] Apply transactions, provenance, graph cache, output/policy coverage and
   freshness/journal invalidation atomically, with full normalized book dumps.
+  Prepare complete native output/coverage facts, preserve named observer routes
+  and recheck source-overlap/book-network/scope/epoch before application.
 - [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
   hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
   Silent Payments sync remain `not_implemented` in the Rust binary.

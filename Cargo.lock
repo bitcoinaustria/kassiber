@@ -1915,6 +1915,7 @@ dependencies = [
  "kassiber-pydecimal",
  "kassiber-chain",
  "kassiber-net",
+ "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",

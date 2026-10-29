@@ -2085,6 +2085,10 @@
     "tests/test_rust_bip329_services.py": {
       "RustBip329ServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares Rust CLI/daemon envelopes, persisted label/audit state and exact BIP329 file bytes against Python on disposable books", "reviewed": true, "tests": 3}
     },
+    "tests/test_rust_bitcoin_records.py": {
+      "test_normalized_records_and_composition_match_live_python_without_consent": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares pure Bitcoin normalized records, shared-observer composition, retraction vetoes and private provenance mappings against Python with no consent or transport; no atomic apply or product sync is claimed", "reviewed": true, "tests": 1},
+      "test_bitcoin_record_vectors_still_match_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares pure Bitcoin normalized records, shared-observer composition, retraction vetoes and private provenance mappings against Python with no consent or transport; no atomic apply or product sync is claimed", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_chain_candidate.py": {
       "test_five_probe_kinds_match_python_on_loopback_and_have_no_fallback": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1},
       "test_detect_core_uses_one_explicit_local_candidate_without_leaking_cookie": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1},

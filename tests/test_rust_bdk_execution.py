@@ -13,7 +13,7 @@ import pytest
 from embit.script import Script
 from embit.transaction import Transaction, TransactionOutput
 
-from kassiber.core.chain_observer.bdk import BdkObserver, bdk_branches_for_identity
+from kassiber.core.chain_observer.bdk import BdkObserver, bdk_branches_for_identity, RECORD_FINGERPRINT_VERSION
 from kassiber.core.chain_observer.bdk_persistence import serialize_changeset
 from kassiber.core.chain_observer.contract import ObserverPrepareRequest
 from kassiber.core.chain_observer.identity import identities_for_wallet
@@ -24,6 +24,7 @@ from kassiber.wallet_descriptors import load_descriptor_plan, derive_descriptor_
 from tests.test_rust_chain_candidate import _env
 from tests.test_rust_wallet_acquisition import _rust as acquisition, _server, _transactions
 from tests.test_rust_wallet_discovery import _config
+from tests.test_rust_bitcoin_records import project
 
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 pytestmark = pytest.mark.skipif(not RUST_BIN, reason="requires native BDK fixture build")
@@ -121,7 +122,8 @@ def native(tmp_path, backend, branches, gap, *, prior=None, time=1_700_000_000, 
     assert binary.is_file(), "build kassiber-wallets --examples --features test-harness --offline --locked"
     payload = {"backend": backend, "descriptor": branches[0].descriptor,
                "change_descriptor": next((b.descriptor for b in branches if b.internal), None),
-               "gap": gap, "prior": prior, "time": time, "consent": True, **options}
+               "gap": gap, "prior": prior, "time": time, "consent": True,
+               "fingerprint_version": RECORD_FINGERPRINT_VERSION, **options}
     result = subprocess.run([str(binary)], input=json.dumps(payload).encode(), capture_output=True,
                             check=True, timeout=20, env=_env(tmp_path))
     assert result.stderr == b""
@@ -153,13 +155,20 @@ def test_native_bdk_aggregate_and_restart_match_python_wallet(tmp_path, fixture)
             actual = native(tmp_path, backend, branches, plan.gap_limit, time=clock)
             assert actual["result"]["bdk_changeset"] == expected
             assert sorted(actual["result"]["canonical_txids"]) == sorted(str(t.transaction.compute_txid()) for t in wallet.transactions())
+            facts = observer._facts(wallet, None)
+            assert actual["result"]["records"] == list(facts.transaction_records)
+            assert actual["result"]["record_fingerprints"] == observer._record_fingerprints
             state = StoredObserverState(identity=identity, payload={"schema_version": 1, "bdk_changeset": expected}, coverage=())
             wallet, persister = observer._wallet_from_state(state)
             observer._sync_revealed_horizon(observer._client(), wallet)
             wallet.persist(persister)
             restarted = serialize_changeset(observer._persistence.aggregate)
             clock = next(iter(restarted["tx_graph"]["last_seen"]), {}).get("timestamp", clock)
-            assert native(tmp_path, backend, branches, plan.gap_limit, prior=expected, time=clock)["result"]["bdk_changeset"] == restarted
+            actual = native(tmp_path, backend, branches, plan.gap_limit, prior=expected, time=clock)["result"]
+            assert actual["bdk_changeset"] == restarted
+            facts = observer._facts(wallet, state)
+            assert actual["records"] == list(facts.transaction_records)
+            assert actual["record_fingerprints"] == observer._record_fingerprints
 
 
 @pytest.mark.parametrize("protocol", ["esplora", "electrum"])
@@ -176,6 +185,10 @@ def test_compatibility_checkpoint_and_cache_reuse_match_python(tmp_path, protoco
                                     checkpoint=checkpoint, history_cache=history_cache)
             records, meta = getattr(reference, f"compatibility_{protocol}_sync_adapter")(backend, {}, state)
             actual = acquisition(tmp_path, backend, targets, cached=True, checkpoint=checkpoint, history_cache=history_cache)["result"]
+            cases = [{"operation":protocol,"input":{"tx":actual["transactions"][r["txid"]],
+                "scripts":[t["script_pubkey"] for t in targets],"txid":r["txid"],"occurred_at":r["occurred_at"]}}
+                for r in records]
+            assert project(tmp_path,cases) == json.loads(json.dumps([{"result":r} for r in records],default=str))
             assert actual["freshness_checkpoint"] == meta["freshness_checkpoint"]
             for key in ("scripts_changed", "scripts_unchanged", "transactions_fetched", "header_cache_hits"):
                 if key in meta:
@@ -264,6 +277,8 @@ def test_native_canonical_and_retraction_sequences_match_python_prepare(tmp_path
             assert result["bdk_changeset"] == expected["state"]["bdk_changeset"]
             assert result["canonical_txids"] == expected["state"]["canonical_txids"]
             assert result["retracted_external_ids"] == expected["facts"]["retracted_external_ids"]
+            assert result["records"] == expected["facts"]["transaction_records"]
+            assert result["record_fingerprints"] == expected["state"]["record_fingerprints"]
             assert result["rebuilt"] == (round_index == 1 and sequence in {"reanchor", "reorg-drop"})
             if round_index == 1 and sequence in {"reorg-drop", "mempool-drop-return", "replacement", "force-full", "force-without-state"}:
                 assert result["retracted_external_ids"]

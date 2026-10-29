@@ -27,6 +27,8 @@ use std::{
     },
     time::Instant,
 };
+mod projection;
+pub use projection::RecordProjection;
 
 type Result<T> = std::result::Result<T, AppError>;
 fn invalid() -> AppError {
@@ -85,6 +87,7 @@ pub struct Prepared {
     canonical_txids: BTreeSet<String>,
     retracted_external_ids: BTreeSet<String>,
     rebuilt: bool,
+    full_scan: bool,
 }
 impl Prepared {
     pub fn changeset(&self) -> Value {
@@ -366,6 +369,7 @@ impl Execution {
             canonical_txids,
             retracted_external_ids,
             rebuilt,
+            full_scan: self.prior.is_none() || rebuilt,
         })
     }
 }

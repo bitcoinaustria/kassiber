@@ -689,3 +689,27 @@ between preflight and suffix acquisition in the Python/native oracle. All
 network operations still pass through `Wire`, rechecking cancellation/deadlines,
 and the prepared result remains subject to the return-time offline/consent
 fence. Product sync paths, automatic freshness and AI exposure remain disabled.
+
+## Bitcoin normalized record composition (R5 continuation)
+
+The [record checkpoint](rust-shell.md#bitcoin-normalized-record-composition-r5-continuation)
+adds no egress path. `bitcoin_records`, `bdk::projection` and `composition` are
+pure preparation code; they have no client, connection, database handle, path
+or background worker. The bounded `records_fixture` stdin/stdout driver is
+test-harness-only, accepts no endpoint or filesystem dispatch, and has no
+product or AI registration.
+
+`test_normalized_records_and_composition_match_live_python_without_consent`
+compares the complete pure projection online without consent and with the
+product offline switch enabled, under the subprocess no-egress guard. The
+existing native BDK driver projects records only after the consent-bound scan
+returns successfully. `test_cached_acquisition_and_native_bdk_require_consent_and_online`
+and `test_native_rebuild_preflight_and_consent_fences_match_python` still prove
+zero requests for missing consent and offline, including saved state, forced
+refresh and loopback. The inherited proxy-failure, scope, cancellation and
+return-fence tests remain required and unchanged.
+
+Electrum decoder serialization fixes occur after acquisition. No fallback
+connection, DNS lookup or proxy shortcut is introduced. Complete record JSON
+parity grants no durable application authority: the future coordinator must
+still bind scope/epoch and apply every state group in one wallet savepoint.

@@ -65,12 +65,23 @@ fn main() {
             &Cancellation::default(),
             i["time"].as_u64().unwrap_or(1700000000),
         )
+    })
+    .and_then(|p| {
+        let projection = p.records(
+            i["backend"]["name"].as_str().unwrap_or("fixture"),
+            i["fingerprint_version"].as_str().unwrap_or("1:fixture"),
+            i.get("prior_state"),
+            i["current_txids"]
+                .as_array()
+                .map(|a| a.iter().map(|v| v.as_str().unwrap().to_owned()).collect()),
+        )?;
+        Ok((p, projection))
     });
     println!(
         "{}",
         match result {
-            Ok(p) =>
-                json!({"result":{"bdk_changeset":p.changeset(),"canonical_txids":p.canonical_txids(),"retracted_external_ids":p.retracted_external_ids(),"rebuilt":p.rebuilt()}}),
+            Ok((p, records)) =>
+                json!({"result":{"bdk_changeset":p.changeset(),"canonical_txids":p.canonical_txids(),"retracted_external_ids":p.retracted_external_ids(),"rebuilt":p.rebuilt(),"records":records.records,"record_fingerprints":records.fingerprints,"reused_records":records.reused_records}}),
             Err(e) => json!({"error":{"code":e.code,"message":e.message}}),
         }
     );

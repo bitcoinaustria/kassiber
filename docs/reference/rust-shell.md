@@ -4864,3 +4864,163 @@ Remaining work starts at step 3:
    routes. Prove complete normalized book dumps for all ten fixtures and
    restart/reorg/retraction sequences over both protocols, with actual per-
    command native counts and zero in-scope Python fallbacks.
+
+### Bitcoin normalized record composition (R5 continuation)
+
+This continuation starts at `0da3346b` on local branch `t3code/r5-sync-6`.
+It completes this run's numbered step 1, the record-composition part of the
+previous handoff's step 3. It stops before atomic persistence and registration.
+
+`crates/wallets/src/bitcoin_records.rs` ports Bitcoin graph record composition
+for Esplora-shaped observations (including BDK) and already decoded, normalized
+Electrum graphs. It preserves exact sats and Python decimal BTC text, principal
+versus fee, collaborative wallet deltas, graph-scoped owned scripts, explicit
+privacy boundaries, first-seen/confirmation timestamps and single-outpoint HTLC
+claims/refunds. Script/witness evidence remains an observation, with no custody
+or tax interpretation. The sync witness field and the minimum decoded-item
+count match Python even when malformed hex items are skipped; an alternate
+importer witness field grants no HTLC evidence. Malformed graph containers
+refuse before projecting related outputs. Raw graph JSON uses Python's sorted
+keys and separators.
+Electrum's legacy decoder Decimal metadata keeps Python's float JSON spelling;
+the accounting quantities still use integral values.
+
+`bdk::Prepared::records` projects only `Wallet::transactions()` canonical
+history, resolving aggregate transaction outputs and floating prevouts. An owned
+spend whose network fee cannot be proved fails `observer_accounting_ambiguous`.
+Fingerprints retain every reference input and omit depth; confirmed record reuse
+requires the same release and current stored proof, and fresh/forced/reorg scans
+disable it independently of the caller. The result is private JSON records,
+fingerprints and a reused-record count, with no durable write.
+
+`composition::compose` implements the reference coordinator's record merge:
+
+- BDK script-family records for one txid are normalized once against the union
+  of observed owned scripts. The richest graph supplies metadata; equal scores
+  retain the first candidate. Complementary prevouts merge by exact input
+  identity; inconsistent inputs and contradictory prevouts fail closed.
+- Non-BDK record keys retain their first observation. Dependency and
+  compatibility projections cannot be mixed, including an empty compatibility
+  inventory snapshot. An empty observer output list remains authoritative;
+  duplicate outpoints use the final projection in the original output order.
+- Every live normalized record vetoes a retraction from another observer.
+  Canonical txid comparison trims Python whitespace and ignores hex case;
+  literal non-txid identifiers retain their case. Remaining retractions retain
+  observer order and are deduplicated.
+- Checkpoints stay keyed by structural observer identity, highest-used indices
+  combine by maximum, reuse counts sum, and unrelated checkpoint metadata stays
+  intact. Private provenance mappings follow Python's exact-key precedence and
+  txid fallback when cross-family normalization changes a record direction.
+
+The pure `records_fixture` driver is test-harness-only. Its 67 checked-in vectors
+come from `generate_record_vectors.py`, which calls the unchanged Python record
+normalizer and actual `apply_fetch_observer_updates` composer. Only the observer
+application and policy-coverage write seams are replaced for that no-I/O oracle;
+the random application revision is omitted because the future atomic coordinator
+must create it. Complete graph strings, records, metadata, private provenance
+entries and typed conflict errors compare without field normalization.
+
+| Fixture / sequence | New record-composition evidence | Full normalized post-sync book dump |
+| --- | --- | --- |
+| Empty branches | Esplora/Electrum complete records; native BDK/restart | not implemented |
+| Receive/change usage | same | not implemented |
+| Cached highest-used prefix | same | not implemented |
+| Multiple script families | same, every native identity; cross-family graph vectors | not implemented |
+| Fixed descriptors | Esplora/Electrum complete records; native BDK/restart | not implemented |
+| Gap one | same | not implemented |
+| Changed block height | both-protocol records; native BDK canonical sequence | not implemented |
+| Disappeared history | both-protocol empty records; native BDK canonical sequence | not implemented |
+| Mempool | both-protocol records/cache rounds; native BDK eviction/return/replacement | not implemented |
+| Coinbase | both-protocol records; native BDK/restart, null prevout | not implemented |
+| Restart | native records/fingerprints and compatibility cached rounds | not implemented |
+| Reorg | all eight native canonical sequences also compare complete records/fingerprints | not implemented |
+| Retraction | live-record veto vectors; inherited BDK/Esplora authority sequences | not implemented |
+
+Native product served-by counts remain `wallets.sync: 0`, `ui.wallets.sync: 0`,
+`ui.freshness.run: 0`, `ui.workspace.freshness.run: 0`. No successful in-scope
+product-sync workload is registered, so Python fallback counts are unmeasured
+and the zero-fallback acceptance bar remains unmet. The hybrid keeps routing
+sync to Python, including out-of-scope wallets/backends. No Python product code
+changed and no Python reference bug was found.
+
+`crates/wallets/scripts/record_mutations.json` adds 83 entries to the inherited
+257. Every entry names its killing regression; build failures never count as
+kills. The new catalog groups its rules as follows:
+
+| Rule group / prefix | Entries | Named killing tests |
+| --- | ---: | --- |
+| Record quantities, graph JSON/shape, fee/ownership, timestamps, privacy and HTLC (`record-*`) | 46 | `bitcoin_records_match_python_vectors`; `bitcoin_projection_preserves_integral_values_and_refuses_overflow`; `electrum_raw_graph_preserves_python_decimal_json_bytes`; `bitcoin_malformed_graphs_refuse_before_projecting_related_outputs` |
+| Observer composition, conflict/veto, snapshot, checkpoints and provenance (`compose-*`) | 23 | `observer_composition_matches_python_vectors` |
+| Native canonical record graph, fees, fingerprints and reuse (`projection-*`) | 13 | `bdk_record_projection_preserves_evidence_and_fences_reuse`; `bdk_owned_spend_requires_proven_fee_and_preserves_exact_witness_graph` |
+| Fresh cached Electrum decoder identity (`cache-record-*`) | 1 | `cached_electrum_fresh_graph_preserves_decoder_shape` |
+
+Full domain reruns kill all 340 entries; every named baseline passes and build
+errors are excluded from kills:
+
+| Catalog | Killed / entries |
+| --- | ---: |
+| Record/composition | 83 / 83 |
+| Observer state/reuse | 82 / 82 |
+| Acquisition | 19 / 19 |
+| Discovery | 20 / 20 |
+| Chain protocols | 22 / 22 |
+| Native BDK/cache/canonical authority | 114 / 114 |
+
+Linux verification uses Rust 1.99.1, offline/locked Cargo and locked Python
+3.11. Formatting, workspace/all-target and harness/all-target clippy with
+`-D warnings` pass. Workspace tests pass (1,040 including doctests), followed
+by the final witness corrections' complete wallet harness suite (92). Net
+`test-observer` passes (63), the explicit chokepoint scanner passes (nine),
+and binary harness tests pass (14). The harness, all wallet examples and the
+chain client example build. An earlier workspace attempt hit the existing
+SOCKS fixture's `ConnectionReset` while expecting EOF; the retry passes.
+Initial build-storage exhaustion was resolved by rebuilding disposable
+artifacts without debug symbols or incremental compilation.
+
+The first requested shell/hybrid/CLI-runner/rust-port run passes 62 tests and
+177 subtests but times out twice in Python reference `secrets init`, before
+parity assertions, with books on the workspace filesystem. Both focused retries
+pass (two tests and two subtests, 15.52 seconds) using disposable `/tmp` tmpfs
+book roots at the original 120-second timeout. Keep those book roots separate
+from Cargo build artifacts; no timeout or product behavior was changed.
+The complete requested command then passes on those disposable roots: 63 tests
+and 178 subtests in 318.63 seconds.
+
+The combined records/BDK/cache/acquisition/discovery/state, hybrid chain/rates,
+Python observer/reuse/leg and CI-shard run passes 209 tests and 79 subtests.
+Inventory, source contracts and CI shards separately pass 28 tests and 50
+subtests. Shard validation, every mutation catalog's `--check` and frozen-vector
+drift checks pass. Protocol cases use owned disposable-loopback fixtures.
+The full frontend/Python quality gate and Docker regtest were not run.
+
+Reproduce the new mutation run independently of parity artifacts. Use a fresh
+Cargo target for each catalog: scratch copies preserve source mtimes, and a
+shared target can retain an earlier dependency mutant under a different feature
+configuration. The BDK rerun uses its own fresh target after that condition
+failed an unmutated baseline; the failed baseline counts as no kills.
+
+```sh
+CARGO_NET_OFFLINE=true MATURIN_NO_INSTALL_RUST=1 CARGO_TARGET_DIR="$(mktemp -d /tmp/kassiber-record-mutation-target.XXXXXX)" mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/wallets/scripts/record_mutation_check.py
+```
+
+`./scripts/integration-harness.sh bitcoin-electrum` still cannot exercise native
+Rust product sync. It calls `tests.integration.test_live_bitcoin_electrum_parity`
+through `tests.cli_runner`, currently with address wallets and Python sync. It
+needs the atomic coordinator, scoped native product registration, descriptor
+fixtures, hybrid route/served-by assertions and full normalized book dumps.
+The deferred Core RPC setup paths must continue to use Python. Docker regtest
+was not run at this preparation boundary.
+
+Remaining numbered work for the next run:
+
+2. Project complete native output/coverage facts and persist observer state,
+   retractions, transactions, private provenance, graph, inventory, policy
+   coverage, wallet sync metadata and freshness under one scope/epoch-fenced
+   wallet savepoint. Preserve journal/report invalidation, failure/cancellation
+   rollback and suppression of commit-capable progress during apply. All
+   preparation finishes before that savepoint.
+3. Register only Bitcoin descriptor wallets over Esplora/Electrum for
+   `wallets sync`, `ui.wallets.sync`, `ui.freshness.run` and
+   `ui.workspace.freshness.run`. Keep unsupported hybrid routes on Python and
+   prove complete normalized book dumps for every fixture and sequence with
+   per-command native counts and zero in-scope Python fallbacks.

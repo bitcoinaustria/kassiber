@@ -334,7 +334,6 @@ impl Acquisition {
         for id in &ordered {
             let mut tx = transactions[id].clone();
             normalize_graph(&mut tx, &transactions)?;
-            tx["txid"] = json!(id);
             transactions.insert(id.clone(), tx);
         }
         let mut headers = normalized_headers(&c.checkpoint["electrum_headers"]);
@@ -560,6 +559,48 @@ mod tests {
             json!(["a".repeat(64)])
         );
         assert_eq!(retained["scripts"]["omitted"]["complete"], false);
+    }
+    #[test]
+    fn cached_electrum_fresh_graph_preserves_decoder_shape() {
+        let tx = bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![bitcoin::TxIn::default()],
+            output: vec![bitcoin::TxOut {
+                value: bitcoin::Amount::from_sat(10),
+                script_pubkey: bitcoin::ScriptBuf::from_hex("51").unwrap(),
+            }],
+        };
+        let id = tx.compute_txid().to_string();
+        let reply = |id, v| format!("{}\n", json!({"id":id,"result":v}));
+        let server = FakeElectrum::script(vec![
+            (1, reply(1, json!(["fixture", "1.6"]))),
+            (1, reply(2, json!("status"))),
+            (1, reply(3, json!([{"tx_hash":id,"height":0}]))),
+            (
+                1,
+                reply(4, json!(bitcoin::consensus::encode::serialize_hex(&tx))),
+            ),
+            (1, reply(5, json!([]))),
+        ])
+        .unwrap();
+        let a = Acquisition::new_cached(
+            scope(),
+            &json!({"kind":"electrum","url":server.url()}),
+            &targets(),
+            "fixture",
+            &json!({}),
+            &json!({}),
+            "main",
+        )
+        .unwrap();
+        let result = run(&a).unwrap();
+        assert!(result["transactions"][&id].get("txid").is_none());
+        assert_eq!(
+            result["transactions"][&id]["_kassiber_electrum_graph"]["kind"],
+            "bitcoin_electrum"
+        );
+        assert_eq!(result["transactions_fetched"], 1);
     }
     #[test]
     fn compatibility_cached_electrum_skips_history_graph_headers_and_inventory() {

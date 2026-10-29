@@ -23,6 +23,8 @@ from kassiber.envelope import json_ready
 from kassiber.wallet_descriptors import load_descriptor_plan, derive_descriptor_targets
 from tests.test_rust_chain_candidate import _env
 from tests.test_rust_wallet_discovery import _config, _server as discovery_server
+from tests.test_rust_bitcoin_records import project
+from kassiber.time_utils import timestamp_to_iso
 
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 pytestmark = pytest.mark.skipif(not RUST_BIN, reason="requires Rust acquisition fixture build")
@@ -212,6 +214,21 @@ def test_acquisition_matches_python_protocol_facts(tmp_path, protocol, fixture):
         expected = _reference(backend, targets)
         actual = _rust(tmp_path, backend, targets)
         assert actual == {"result": expected}
+        cases = []
+        records = []
+        for position in expected["positions"]:
+            txid = position["txid"]
+            payload = {"tx": actual["result"]["transactions"][txid], "scripts": [t["script_pubkey"] for t in targets]}
+            if protocol == "electrum":
+                occurred = timestamp_to_iso(position["block_time"])
+                payload.update(txid=txid, occurred_at=occurred)
+                record = reference.record_from_electrum_tx(txid, expected["transactions"][txid], occurred,
+                    payload["scripts"], "fixture", expected["transactions"].__getitem__)
+            else:
+                record = reference.record_from_bitcoin_esplora_tx(expected["transactions"][txid], payload["scripts"], "fixture")
+            cases.append({"operation":protocol,"input":payload})
+            records.append({"result":record})
+        assert project(tmp_path,cases) == json.loads(json.dumps(records,default=str))
         # No acquisition result grants absence or observer persistence authority.
         assert "retracted_external_ids" not in actual["result"]
         assert "freshness_checkpoint" not in actual["result"]

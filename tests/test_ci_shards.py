@@ -271,6 +271,8 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIn(observer_build, steps[build_index]["run"])
         bdk_build = "cargo build -p kassiber-wallets --example bdk_fixture --features test-harness --offline --locked"
         self.assertIn(bdk_build, steps[build_index]["run"])
+        records_build = "cargo build -p kassiber-wallets --example records_fixture --features test-harness --offline --locked"
+        self.assertIn(records_build, steps[build_index]["run"])
         setup_index = next(index for index, step in enumerate(steps)
                            if step.get("uses") == "./.github/actions/setup-rust")
         run_index = next(index for index, step in enumerate(steps)
@@ -291,7 +293,9 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertLess(gate.index("run " + acquisition_build), gate.index(select))
         self.assertLess(gate.index("run " + observer_build), gate.index(select))
         self.assertLess(gate.index("run " + bdk_build), gate.index(select))
+        self.assertLess(gate.index("run " + records_build), gate.index(select))
         self.assertIn("run py crates/wallets/scripts/bdk_mutation_check.py --check", gate)
+        self.assertIn("run py crates/wallets/scripts/record_mutation_check.py --check", gate)
         self.assertIn("run py crates/wallets/scripts/observer_mutation_check.py --check", gate)
         self.assertLess(gate.index("run cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked"), gate.index(select))
         self.assertIn("run py crates/wallets/scripts/acquisition_mutation_check.py --check", gate)

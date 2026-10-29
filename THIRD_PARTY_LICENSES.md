@@ -218,3 +218,8 @@ Bitcoin compatibility discovery reuses those internal chain/net clients and
 the descriptor dependencies above. The shared clients preserve consent and
 proxy policy that raw standard-library sockets would bypass. Only workspace
 path dependencies change; no upstream package or license is added.
+
+Bitcoin record composition also reuses the workspace's `kassiber-pydecimal`
+for Python-compatible legacy BTC-valued graph fields and half-even satoshi
+rounding. The standard library has no exact decimal arithmetic. This adds a
+direct internal dependency only, with no new upstream package or license.
