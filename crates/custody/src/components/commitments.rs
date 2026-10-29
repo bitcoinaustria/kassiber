@@ -159,6 +159,42 @@ pub(super) fn evidence_status(
     v["current_count"] = json!(current.len());
     Ok(v)
 }
+/// Recovered native observations with the lookups each component makes.
+pub(super) struct Native {
+    observations: Vec<Value>,
+    /// First observation per `text(transaction_id)`, as a forward scan finds it.
+    by_transaction: HashMap<String, usize>,
+    /// Observation positions, in order, per encoded `event_key`; serde's
+    /// encoding is injective, so a group holds exactly the equal event keys.
+    by_event: HashMap<String, Vec<usize>>,
+}
+impl Native {
+    pub(super) fn new(observations: Vec<Value>) -> Self {
+        let mut by_transaction = HashMap::new();
+        let mut by_event: HashMap<String, Vec<usize>> = HashMap::new();
+        for (at, o) in observations.iter().enumerate() {
+            by_transaction
+                .entry(text(&o["transaction_id"]))
+                .or_insert(at);
+            by_event
+                .entry(o["event_key"].to_string())
+                .or_default()
+                .push(at);
+        }
+        Self {
+            observations,
+            by_transaction,
+            by_event,
+        }
+    }
+    fn event(&self, key: &Value) -> impl Iterator<Item = &Value> {
+        self.by_event
+            .get(&key.to_string())
+            .into_iter()
+            .flatten()
+            .map(|&at| &self.observations[at])
+    }
+}
 pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
     let profile = pystr(&snapshot.profile["id"]);
     let mut rows: Vec<_> = snapshot
@@ -170,16 +206,16 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
     rows.sort_by_key(order);
     let rows = evidence::enriched_rows(&rows)?;
     let mut observations: Vec<Value> = Vec::new();
+    // Position per encoded transaction id; encoding equality is Value equality.
+    let mut positions: HashMap<String, usize> = HashMap::new();
     for row in rows {
         let built = evidence::event_key(&row).and_then(|key| evidence::observation(&row, &key));
         match built {
             Ok(o) => {
-                if let Some(at) = observations
-                    .iter()
-                    .position(|v| v["transaction_id"] == o["transaction_id"])
-                {
+                if let Some(&at) = positions.get(&o["transaction_id"].to_string()) {
                     observations[at] = o;
                 } else {
+                    positions.insert(o["transaction_id"].to_string(), observations.len());
                     observations.push(o);
                 }
             }
@@ -192,7 +228,7 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
 pub(super) fn native_status(
     legs: &[Value],
     allocs: &[Value],
-    observations: &[Value],
+    native: &Native,
 ) -> Result<Value, Error> {
     let boundaries: Vec<_> = legs
         .iter()
@@ -205,9 +241,10 @@ pub(super) fn native_status(
     let mut exact = BTreeSet::new();
     let anchor = |l: &Value| text(or(&l["anchor_transaction_id"], &l["transaction_id"]));
     let observation = |id: String| {
-        observations
-            .iter()
-            .find(|o| text(&o["transaction_id"]) == id)
+        native
+            .by_transaction
+            .get(&id)
+            .map(|&at| &native.observations[at])
     };
     for a in allocs {
         let Some((s, t)) = by_id(legs, &a["source_leg_id"]).zip(by_id(legs, &a["sink_leg_id"]))
@@ -248,8 +285,9 @@ pub(super) fn native_status(
         } else {
             "outbound"
         };
-        let compatible: Vec<_> = observations
-            .iter()
+        // Only observations of this event key can satisfy the event equality.
+        let compatible: Vec<_> = native
+            .event(&o["event_key"])
             .filter(|v| {
                 text(&v["transaction_id"]) != id
                     && v["direction"] == opposite
@@ -265,8 +303,8 @@ pub(super) fn native_status(
             .map(|v| (text(&v["quantity_hash"]), v))
             .collect();
         let recovered:BigInt=unique.values().map(|v|anchors::principal(&json!({"amount":v["amount_msat"],"fee":v["fee_msat"],"direction":v["direction"],"amount_includes_fee":v["amount_includes_fee"]}))).collect::<Result<Vec<_>,_>>()?.into_iter().sum();
-        let same: BTreeMap<_, _> = observations
-            .iter()
+        let same: BTreeMap<_, _> = native
+            .event(&o["event_key"])
             .filter(|v| {
                 v["event_key"] == o["event_key"]
                     && v["direction"] == o["direction"]

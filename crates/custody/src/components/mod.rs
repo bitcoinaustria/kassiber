@@ -15,7 +15,7 @@ fn big(v: &Value) -> BigInt {
 }
 use crate::snapshot::{Component, Snapshot};
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug)]
 pub struct Error {
@@ -289,7 +289,7 @@ fn materialize(
     snapshot: &Snapshot,
     c: &Component,
     routes: &[Value],
-    native: &[Value],
+    native: &commitments::Native,
 ) -> Result<Value, Error> {
     let mut h = Value::Object(c.header.clone());
     let stored = legs(c)?;
@@ -512,6 +512,7 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
     } else {
         commitments::native_context(snapshot)?
     };
+    let native = commitments::Native::new(native);
     let components: Vec<_> = components
         .into_iter()
         .map(|c| materialize(snapshot, c, &routes, &native))
