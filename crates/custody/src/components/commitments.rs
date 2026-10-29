@@ -23,12 +23,18 @@ fn anchors(legs: &[Value]) -> BTreeSet<String> {
         .map(|l| pystr(or(&l["anchor_transaction_id"], &l["transaction_id"])))
         .collect()
 }
-fn current(snapshot: &Snapshot, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Error> {
+fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Error> {
     let ids = anchors(legs);
-    let mut rows: Vec<_> = snapshot
-        .anchors
-        .values()
-        .filter_map(Value::as_object)
+    // Anchor rows with these ids, in anchor order.
+    let mut candidates: Vec<_> = ids
+        .iter()
+        .filter_map(|id| shared.anchors.get(id))
+        .flatten()
+        .collect();
+    candidates.sort_unstable_by_key(|(at, _)| *at);
+    let mut rows: Vec<_> = candidates
+        .into_iter()
+        .map(|(_, r)| *r)
         .filter(|r| r.get("profile_id") == h.get("profile_id") && ids.contains(&pystr(&r["id"])))
         .map(without_provenance)
         .collect();
@@ -97,7 +103,7 @@ fn commitment_pairs(snapshots: &[Value]) -> Result<Vec<(String, String)>, Error>
     Ok(result)
 }
 pub(super) fn evidence_status(
-    snapshot: &Snapshot,
+    shared: &Shared,
     h: &Value,
     legs: &[Value],
     commitments: &[Value],
@@ -133,7 +139,7 @@ pub(super) fn evidence_status(
     if ids.is_empty() {
         return Ok(result("transaction_anchors_missing", false));
     }
-    let current = match current(snapshot, h, legs) {
+    let current = match current(shared, h, legs) {
         Ok(c) => c,
         Err(e) if e.is_evidence_unavailable() => {
             let mut v = result("current_evidence_unavailable", false);

@@ -197,20 +197,82 @@ fn allocations(c: &Component) -> Result<Vec<Value>, Error> {
         })
         .collect()
 }
-fn lineage(snapshot: &Snapshot, h: &Value) -> Result<Vec<Value>, Error> {
-    let mut headers: BTreeMap<String, Value> = snapshot
-        .components
-        .iter()
-        .map(|c| (text(&c.header["id"]), Value::Object(c.header.clone())))
-        .collect();
-    headers.extend(
-        snapshot
-            .revision_headers
+/// Lookups every materialization shares, built once per stage. Encoded JSON
+/// keys are exact: serde's encoding of a Value is injective.
+pub(super) struct Shared<'a> {
+    headers: BTreeMap<String, Value>,
+    /// Header keys per encoded lineage id, in `headers` order.
+    lineages: HashMap<String, Vec<String>>,
+    /// Active legs per (encoded leg profile, encoded non-null anchor), as
+    /// (owning header id, anchor text, owning header id text).
+    members: HashMap<(Option<String>, String), Vec<(&'a Value, String, String)>>,
+    /// Anchor rows per anchor id text, with their position in `anchors` order.
+    pub(super) anchors: HashMap<String, Vec<(usize, &'a Map<String, Value>)>>,
+}
+impl<'a> Shared<'a> {
+    fn new(snapshot: &'a Snapshot) -> Self {
+        let mut headers: BTreeMap<String, Value> = snapshot
+            .components
             .iter()
-            .map(|r| (text(&r["id"]), Value::Object(r.clone()))),
-    );
-    let mut competing: Vec<_> = headers
-        .values()
+            .map(|c| (text(&c.header["id"]), Value::Object(c.header.clone())))
+            .collect();
+        headers.extend(
+            snapshot
+                .revision_headers
+                .iter()
+                .map(|r| (text(&r["id"]), Value::Object(r.clone()))),
+        );
+        let mut lineages: HashMap<String, Vec<String>> = HashMap::new();
+        for (key, o) in &headers {
+            lineages
+                .entry(o["lineage_id"].to_string())
+                .or_default()
+                .push(key.clone());
+        }
+        let mut members: HashMap<_, Vec<_>> = HashMap::new();
+        for other in &snapshot.components {
+            if other.header["state"] != "active" {
+                continue;
+            }
+            for l in &other.legs {
+                let tx = membership_anchor(l);
+                if !tx.is_null() {
+                    members
+                        .entry((l.get("profile_id").map(Value::to_string), tx.to_string()))
+                        .or_default()
+                        .push((&other.header["id"], pystr(&tx), pystr(&other.header["id"])));
+                }
+            }
+        }
+        let mut anchors: HashMap<String, Vec<_>> = HashMap::new();
+        for (at, row) in snapshot
+            .anchors
+            .values()
+            .filter_map(Value::as_object)
+            .enumerate()
+        {
+            anchors
+                .entry(pystr(&row["id"]))
+                .or_default()
+                .push((at, row));
+        }
+        Self {
+            headers,
+            lineages,
+            members,
+            anchors,
+        }
+    }
+}
+fn lineage(shared: &Shared, h: &Value) -> Result<Vec<Value>, Error> {
+    let headers = &shared.headers;
+    // Only headers of this lineage can pass the lineage equality below.
+    let mut competing: Vec<_> = shared
+        .lineages
+        .get(&h["lineage_id"].to_string())
+        .into_iter()
+        .flatten()
+        .map(|key| &headers[key])
         .filter(|o| {
             o["profile_id"] == h["profile_id"]
                 && o["lineage_id"] == h["lineage_id"]
@@ -250,33 +312,33 @@ fn lineage(snapshot: &Snapshot, h: &Value) -> Result<Vec<Value>, Error> {
     }
     Ok(issues)
 }
-fn membership(snapshot: &Snapshot, c: &Component) -> Vec<Value> {
-    // COALESCE distinguishes a null anchor from an empty authored anchor.
-    let anchor = |l: &Map<String, Value>| {
-        if l["anchor_transaction_id"].is_null() {
-            l["transaction_id"].clone()
-        } else {
-            l["anchor_transaction_id"].clone()
-        }
-    };
+// COALESCE distinguishes a null anchor from an empty authored anchor.
+fn membership_anchor(l: &Map<String, Value>) -> Value {
+    if l["anchor_transaction_id"].is_null() {
+        l["transaction_id"].clone()
+    } else {
+        l["anchor_transaction_id"].clone()
+    }
+}
+fn membership(shared: &Shared, c: &Component) -> Vec<Value> {
     let ids: BTreeSet<_> = c
         .legs
         .iter()
         .filter(|l| l.get("profile_id") == c.header.get("profile_id"))
-        .map(|l| anchor(l).to_string())
+        .map(|l| membership_anchor(l).to_string())
         .collect();
+    let profile = c.header.get("profile_id").map(Value::to_string);
     let mut conflicts = BTreeSet::new();
-    for other in &snapshot.components {
-        if other.header["state"] != "active" || other.header["id"] == c.header["id"] {
-            continue;
-        }
-        for l in &other.legs {
-            let tx = anchor(l);
-            if l.get("profile_id") == c.header.get("profile_id")
-                && !tx.is_null()
-                && ids.contains(&tx.to_string())
-            {
-                conflicts.insert((pystr(&tx), pystr(&other.header["id"])));
+    // Active legs of this profile with one of these non-null anchors.
+    for id in &ids {
+        for (owner, tx, other) in shared
+            .members
+            .get(&(profile.clone(), id.clone()))
+            .into_iter()
+            .flatten()
+        {
+            if *owner != &c.header["id"] {
+                conflicts.insert((tx.clone(), other.clone()));
             }
         }
     }
@@ -287,6 +349,7 @@ fn membership(snapshot: &Snapshot, c: &Component) -> Vec<Value> {
 }
 fn materialize(
     snapshot: &Snapshot,
+    shared: &Shared,
     c: &Component,
     routes: &[Value],
     native: &commitments::Native,
@@ -381,7 +444,7 @@ fn materialize(
             Ok(v)
         })
         .collect::<Result<_, Error>>()?;
-    let evidence = commitments::evidence_status(snapshot, &h, &stored, &commitments)?;
+    let evidence = commitments::evidence_status(shared, &h, &stored, &commitments)?;
     if !truth(&evidence["valid"]) {
         issues.push(json!({"code":"component_evidence_commitment_invalid","message":"author-bound activation evidence is missing, incomplete, conflicted, or no longer matches local canonical anchors","status":evidence["status"],"expected":evidence["expected_count"],"actual":evidence["commitment_count"]}));
     }
@@ -402,8 +465,8 @@ fn materialize(
         validation["warnings"] = anchors["warnings"].clone();
     }
     validation["anchors"] = anchors;
-    issues.extend(lineage(snapshot, &h)?);
-    let conflicts = membership(snapshot, c);
+    issues.extend(lineage(shared, &h)?);
+    let conflicts = membership(shared, c);
     if !conflicts.is_empty() {
         issues.push(json!({"code":"active_transaction_membership_conflict","message":"a transaction belongs to another authored active component","conflicts":conflicts}));
     }
@@ -513,9 +576,10 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
         commitments::native_context(snapshot)?
     };
     let native = commitments::Native::new(native);
+    let shared = Shared::new(snapshot);
     let components: Vec<_> = components
         .into_iter()
-        .map(|c| materialize(snapshot, c, &routes, &native))
+        .map(|c| materialize(snapshot, &shared, c, &routes, &native))
         .collect::<Result<_, _>>()?;
     let blockers:Vec<_>=components.iter().filter(|c|c["effective_state"]!="active").map(|c| {
         let codes:BTreeSet<_>=array(&c["validation"]["issues"]).iter().map(|i|if truth(&i["code"]) {text(&i["code"])} else {"unknown".into()}).collect();
