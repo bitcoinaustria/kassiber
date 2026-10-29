@@ -381,31 +381,31 @@ pub fn authority(row: &Value) -> Result<Value, Error> {
 const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
 pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
     let mut result = Vec::new();
+    let fields: BTreeSet<&str> = FIELDS.split_whitespace().collect();
     for row in rows {
-        let original = Value::Object(row.clone());
-        let mut item: Record = row
-            .iter()
-            .filter(|(key, _)| FIELDS.split_whitespace().any(|field| field == key.as_str()))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        let auth = authority(&Value::Object(item.clone()))?;
+        // Indexing a JSON object yields null for an absent field.
+        let original = |key: &str| row.get(key).unwrap_or(&Value::Null);
+        let mut item = Value::Object(
+            row.iter()
+                .filter(|(key, _)| fields.contains(key.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+        let auth = authority(&item)?;
+        let Value::Object(mut item) = std::mem::take(&mut item) else {
+            unreachable!("row object")
+        };
         if truth(&auth["authoritative"]) {
             item.insert("_kassiber_verified_chain_observation".into(), auth);
         }
-        let config = object(&original["config_json"]);
-        let raw = object(&original["raw_json"]);
+        let config = object(original("config_json"));
+        let raw = object(original("raw_json"));
         let mut chain = if truth(&raw["chain"]) {
             raw["chain"].clone()
         } else {
             config["chain"].clone()
         };
-        if !truth(&chain)
-            && lightning(
-                text(&original["wallet_kind"])
-                    .py_strip()
-                    .py_lower()
-                    .as_str(),
-            )
+        if !truth(&chain) && lightning(text(original("wallet_kind")).py_strip().py_lower().as_str())
         {
             chain = json!("lightning");
         }
@@ -718,15 +718,10 @@ pub fn canonical_input(
 }
 
 pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
-    let rows: Vec<Value> = snapshot
-        .transactions
-        .iter()
-        .cloned()
-        .map(Value::Object)
-        .collect();
-    let non_events = crate::graph::native_zero_delta_ids(&rows, snapshot)?;
+    let rows = snapshot.rows();
+    let non_events = crate::graph::native_zero_delta_ids(rows, snapshot)?;
     let enriched = enriched_rows(&snapshot.transactions)?;
-    let reconciliations = crate::graph::reconcile_receipts(&rows, snapshot)?;
+    let reconciliations = crate::graph::reconcile_receipts(rows, snapshot)?;
     let canonical = canonical_input(&enriched, &reconciliations, &non_events)?;
     Ok(
         json!({"enriched_rows":enriched,"canonical_input":canonical,"receipt_reconciliations":reconciliations,"native_non_event_ids":non_events}),
