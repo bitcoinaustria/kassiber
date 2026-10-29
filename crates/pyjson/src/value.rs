@@ -68,6 +68,11 @@ impl PyStr {
         &self.0
     }
 
+    /// Whether this is exactly `text`, without allocating.
+    pub fn is(&self, text: &str) -> bool {
+        self.0 == text.as_bytes()
+    }
+
     /// The code points of whole generalized UTF-8 sequences.
     pub(crate) fn code_points_of(bytes: &[u8]) -> CodePoints<'_> {
         CodePoints { bytes }

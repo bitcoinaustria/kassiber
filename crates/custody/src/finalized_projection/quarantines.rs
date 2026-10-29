@@ -18,7 +18,7 @@ fn field(value: &Py, key: &str) -> Result<PyStr, String> {
     };
     entries
         .iter()
-        .find(|(k, _)| *k == kassiber_pyjson::Key::Str(key.into()))
+        .find(|(k, _)| matches!(k, kassiber_pyjson::Key::Str(s) if s.is(key)))
         .map(|(_, v)| py_string(v))
         .ok_or_else(|| "KeyError".into())
 }

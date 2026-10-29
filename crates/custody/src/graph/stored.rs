@@ -9,9 +9,13 @@ use std::{
     str::FromStr,
 };
 
+/// Whether a dict key is the string `key`.
+fn is_key(k: &Key, key: &str) -> bool {
+    matches!(k, Key::Str(s) if s.is(key))
+}
 pub(crate) fn get<'a>(value: &'a Py, key: &str) -> &'a Py {
     if let Py::Dict(entries) = value {
-        if let Some((_, value)) = entries.iter().find(|(k, _)| *k == Key::Str(key.into())) {
+        if let Some((_, value)) = entries.iter().find(|(k, _)| is_key(k, key)) {
             return value;
         }
     }
@@ -21,7 +25,7 @@ pub(crate) fn put(value: &mut Py, key: &str, item: Py) {
     let Py::Dict(entries) = value else {
         unreachable!("graph dictionary")
     };
-    if let Some((_, value)) = entries.iter_mut().find(|(k, _)| *k == Key::Str(key.into())) {
+    if let Some((_, value)) = entries.iter_mut().find(|(k, _)| is_key(k, key)) {
         *value = item;
     } else {
         entries.push((Key::Str(key.into()), item));
@@ -261,7 +265,7 @@ fn mapping(payload: &Py, chain: &str, network: &str) -> Result<Option<Py>, Strin
         .filter(|(_, v)| matches!(v, Py::Dict(_)))
     {
         let n = if let Py::Dict(entries) = entry {
-            if entries.iter().any(|(k, _)| *k == Key::Str("n".into())) {
+            if entries.iter().any(|(k, _)| is_key(k, "n")) {
                 index(get(entry, "n"), Some(position))?.unwrap()
             } else {
                 BigInt::from(position)
@@ -357,11 +361,7 @@ fn graph_get_mut<'a>(value: &'a mut Py, key: &str) -> &'a mut Py {
     let Py::Dict(entries) = value else {
         unreachable!()
     };
-    &mut entries
-        .iter_mut()
-        .find(|(k, _)| *k == Key::Str(key.into()))
-        .unwrap()
-        .1
+    &mut entries.iter_mut().find(|(k, _)| is_key(k, key)).unwrap().1
 }
 pub(crate) fn merge(items: &[Py]) -> Option<Py> {
     let mut merged = items.first()?.clone();

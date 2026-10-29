@@ -92,7 +92,7 @@ pub(super) fn text_or_empty(value: &Py) -> String {
 pub(super) fn field<'a>(value: &'a Py, name: &str) -> &'a Py {
     if let Py::Dict(values) = value {
         for (key, value) in values {
-            if matches!(key, Key::Str(key) if key.as_str() == Some(name)) {
+            if matches!(key, Key::Str(key) if key.is(name)) {
                 return value;
             }
         }
