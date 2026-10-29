@@ -2576,3 +2576,101 @@ The locked Python 3.11 environment uses Rust 1.99.1,
 Networking crate tests use disposable owned loopback servers and require a
 sandbox exception for their local binds. The retained replay corpus stays
 read-only. No push or PR is part of this checkpoint.
+
+## Reviewed conversion metadata checkpoint (R2f, partial)
+
+The local `t3code/r2f-projection-4` checkpoint starts at `1526b1dc` and adds
+`finalized_projection/conversions.rs`. Its private `conversions` operation
+accepts already-finalized rows, existing cross-asset metadata and reviewed
+conversion records. It does not read quarantine records or dependency origins.
+`finalized_projection` remains skipped, Rust results never reach stored state,
+and snapshot v1 remains raw-only.
+
+The audit indexes rows by their original journal anchor, applies optional exact
+BigInt amount filters before direction filters, and requires exactly one
+outbound and inbound candidate. Missing candidates do not parse reviewed
+amounts. Existing durable pair ids suppress later reviews before parsing their
+amounts; a successful newly emitted pair suppresses subsequent duplicates.
+Projected row ids, original transaction ids, reviewed asset overrides and the
+Python falsey policy/kind defaults are preserved independently. Malformed row
+amounts precede malformed reviewed amounts, outbound amount parsing precedes
+inbound parsing, and required projected ids retain `KeyError` refusals.
+
+### Comparison and activity accounting
+
+`tests/custody_projection_conversions.py` executes the unchanged original
+Python audit AST, starting after quarantine composition and ending before the
+projection constructor. It neither reproduces the selection algorithm nor
+executes the deferred origin propagation. The frozen Rust witness is
+`projection_reviewed_conversion_vectors`.
+
+| New family | Frozen scenarios | Distinct inputs per engine | Permutations | Active results per engine |
+| --- | ---: | ---: | ---: | ---: |
+| Reviewed conversion metadata | 24 | 480 | 480 | 320 |
+
+Only each seed's own distinct operands contribute activity. No companion calls
+are made. Eight explicitly listed empty-success controls remain zero; an
+unlisted vacuous scenario fails `test_projection_conversion_vacuous_is_rejected`.
+The 100 refusal results are included in the active count and separately compared:
+40 `ValueError`, 40 `TypeError`, and 20 `KeyError`. Exact amounts cross machine
+ranges; controls cover falsey values, numeric strings, Unicode integers, booleans,
+float truncation, duplicate ids, both ambiguous leg directions and admission order.
+
+### Remaining work and reference bugs
+
+Issue/quarantine composition remains deferred until the Python dependency-origin
+reference is fixed. Reviewed conversion metadata does not touch that boundary.
+Only after the complete projection parity gate may the finalized stage enter
+the inventories. Journal fusion remains separate. No new Python reference bug
+was identified; the preceding unstable-origin and nonfinite-payout reproductions
+remain applicable and Python production code is unchanged here.
+
+### Mutation witnesses and verification
+
+The new catalog has 19 recipes, all killed by
+`projection_reviewed_conversion_vectors`. Comparison witnesses include
+`projection4-amount-comparison` and the cardinality checks; minimum/maximum
+witnesses include `projection4-amount-min`, `projection4-amount-max` and both
+cardinality-minimum mutations. Field-choice witnesses independently exchange
+anchors, amounts and asset fallbacks. Deduplication, policy and kind are also
+mutated. Initial inbound-cardinality and duplicate-review survivors exposed
+missing fixture distinctions: the final fixtures add inbound ambiguity and
+matching anchors on the suppressed duplicate. The final 19-entry rerun passes;
+no survivor, interrupted run or nonbuilding attempt contributes a kill.
+
+| Verification | Result |
+| --- | --- |
+| Complete mutation catalog rerun | All 2,063 killed: 2,044 inherited and 19 new; zero survivors or build errors |
+| Inherited raw generators | 24,000 books, 1,030 permutations, all five implemented stages; zero differences |
+| Primary-input activity audit | 21,941 distinct inputs across 12 suites; no companion contributions |
+| Combined generator/primitive pytest lane | 49 tests passed |
+| New conversion comparison | 24 scenarios, 480 distinct inputs and 480 permutations per engine; zero differences |
+| Additional seeded amount differential | 4,000 inputs, including 875 TypeError and 1,430 ValueError refusals; zero differences |
+| Retained read-only replay | 159 requests and 159 permutations; zero differences or pre-request refusals |
+| Fresh worktree replay | 17 requests and 17 permutations; zero differences or pre-request refusals |
+| Focused census | 81 tests and 17 subtests; 17 comparisons per implemented stage; zero mismatches |
+| Focused custody-shadow | 81 tests and 17 subtests; 17 comparisons per implemented stage and 17 frozen Python comparisons; zero mismatches |
+| Finalized projection inventory | 0 compared; 17 skipped in each focused lane |
+| Snapshot/shadow/mutation/inventory contracts | 55 tests and 14 subtests passed |
+| Final fixture/inventory check | 11 tests passed |
+| Rust workspace | 796 tests passed: 778 outside net, 18 isolated net tests |
+| Formatting and Clippy | Workspace fmt and all-target Clippy with `-D warnings` passed |
+
+The locked Python 3.11 environment and binding were rebuilt with Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1` and offline Cargo. Network tests used disposable
+owned loopback servers after the sandbox refused their binds. Fresh recordings
+and verification artifacts stay under `target/r2f4-verify/`; the retained corpus
+was read only. `origin-repro.py` there reruns the preceding documented origin
+bug: hash seed 1 yields `['source', 'target']`, seed 2 yields `['target']`.
+This checkpoint does not claim complete finalized-projection parity.
+
+The complete inherited catalog was rerun in eight independent disposable
+source/target batches, alongside the final new-entry batch. A local adapter
+retains the shared scratch-tree checker's baseline, build, failure and restoration
+checks, restricting Cargo builds and test filters to the targets containing each
+named witness; debug information is disabled to reduce linking cost. All 359
+named filters have passing unmutated baselines. Earlier interrupted whole-target
+trials are excluded. The final per-entry audit is
+`target/r2f4-verify/mutation-summary.json`; batch logs, target mapping, runner
+adapter and audit script are retained beside it. Every final catalog id has
+exactly one audited kill, with no missing or duplicate entries.

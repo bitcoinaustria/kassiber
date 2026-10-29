@@ -1599,6 +1599,22 @@ metadata are the next slice; journal fusion follows its own parity gate.
 Python remains authoritative, snapshot v1 stays raw-only and Rust results never
 reach stored state.
 
+### Reviewed conversion metadata (R2f, partial)
+
+The local `t3code/r2f-projection-4` checkpoint starts at `1526b1dc` and ports
+reviewed conversion audit metadata after row selection. It matches finalized
+anchors, exact optional BigInt amounts, leg directions, singleton admission,
+durable pair-id deduplication and reviewed field defaults. Its independent
+oracle executes the unchanged Python audit AST. See the
+[checkpoint](../reference/custody-engine.md#reviewed-conversion-metadata-checkpoint-r2f-partial)
+for activity, refusal, mutation and comparison evidence.
+
+Finalized projection remains skipped; snapshot v1 stays raw-only, Python remains
+authoritative and Rust results never reach stored state. Issue/quarantine
+composition is deferred until the Python dependency-origin reference is fixed.
+Conversion metadata does not read quarantine origins. Journal fusion remains
+separate.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
