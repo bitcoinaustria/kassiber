@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
 pub use candidate::{authored_claim_fingerprint, candidate_fingerprint, snapshot_gap, Candidate};
+pub(crate) use normalize::iso as iso_datetime;
 pub use search::{search, Limits, SearchResult};
 
 #[derive(Clone, Debug)]

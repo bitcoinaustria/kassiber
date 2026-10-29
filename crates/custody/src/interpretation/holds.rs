@@ -124,6 +124,27 @@ fn explicit(payload: &Py) -> Option<bool> {
     }
 }
 
+pub(crate) fn capture_confirmation(row: &Value) -> Result<Value, String> {
+    let authoritative = evidence::current_observation(row).map_err(|e| e.code.to_owned())?;
+    if !authoritative {
+        return Ok(Value::Null);
+    }
+    let Some(confirmed) = explicit(&payload(row, true)) else {
+        return Ok(Value::Null);
+    };
+    let parsed = stored::parse(&row["raw_json"])?;
+    let Some(scope) = conflict_scope(row, parsed.as_ref()) else {
+        return Ok(Value::Null);
+    };
+    let observed_at = &row["observation_observed_at"];
+    let Some(timestamp) = time::instant(observed_at).map_err(|e| e.code.to_owned())? else {
+        return Ok(Value::Null);
+    };
+    Ok(
+        json!({"$type":"ChainConfirmationObservation", "physical_scope":[scope.0,scope.1,scope.2], "observed_at":{"$datetime":crate::gaps::iso_datetime(timestamp).replace('Z', "+00:00")}, "confirmed":confirmed}),
+    )
+}
+
 fn confirmation_states(rows: &[Value]) -> Result<BTreeMap<Physical, bool>, String> {
     let mut legacy = BTreeMap::new();
     let mut observed: BTreeMap<Physical, Vec<(i64, bool)>> = BTreeMap::new();

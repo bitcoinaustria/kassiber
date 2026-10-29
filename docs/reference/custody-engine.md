@@ -2995,3 +2995,33 @@ census/shadow recordings; only then enable admission and prove nonzero stage
 comparisons. The full inherited 2,209-entry mutation rerun is also outstanding;
 catalog applicability is not a kill claim. This checkpoint must not be used to
 claim completion of the adapter, the whole-stage gate or plan 21 R2f.
+
+## Raw finalized-stage adapter checkpoint (R2f, partial)
+
+Branch `t3code/r2f-projection-8`, based on `84b2181b`, adds the private raw-stage
+adapter in `finalized_projection/runtime.rs`. It assembles the compiler from
+snapshot rows and computed quantity/interpreter stages. Rows retain captured
+confirmation provenance; pool identities shed only their comparison dataclass
+tag. Reviewed payouts/conversions, eligibility, event order, barrier roots,
+issues, blocks and both non-event populations remain distinct. Interpreter
+quarantines pass directly to the lossless copier. Typed operands undergo an
+exact CPython-codec round-trip check before crossing serde; a narrowing fails
+closed. Projection AppError refusals map to the raw protocol's `validation`
+code, without changing the private primitive's error-family contract.
+
+The 16 raw-book Rust vectors and 55 adapter seam vectors compare against the
+original Python compiler. The seam vectors independently isolate channel and
+interpreter exclusions and duplicate-row last-write precedence. Their Python
+fixture regeneration check passes. All 20 new adapter recipes have building
+named-test kills (`projection_raw_adapter_vectors` and
+`projection_adapter_input_families`). Initial survivors for the row-id and
+non-event witnesses are excluded; strengthened witnesses kill the final
+recipes. Detailed logs are under `target/r2f8-verify/`.
+
+At this boundary the unpackaged `projection-stage` driver exercises the entire
+stage from raw v1 requests. The retained read-only replay matches 159 requests
+and 159 permutations with zero differences or refusals. The complete generator
+campaign and inherited mutation rerun are still running; this boundary does not
+claim their completion. PyO3, census, shadow and normal replay still skip the
+stage. Python remains authoritative, Rust results do not reach stored state,
+and snapshot v1 remains raw-only.

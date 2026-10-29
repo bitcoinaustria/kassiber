@@ -181,7 +181,7 @@ pub(super) fn leg(row: &Value, ignored: &BTreeSet<String>) -> Result<Option<Leg>
 }
 
 /// Format the UTC instant with datetime.isoformat's auto microseconds.
-pub(super) fn iso(when: i64) -> String {
+pub(crate) fn iso(when: i64) -> String {
     let day = when / 86_400_000_000;
     let mut lo = 1_i64;
     let mut hi = 10_000_i64;

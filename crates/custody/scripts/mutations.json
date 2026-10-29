@@ -22142,5 +22142,205 @@
       "projection_lossless_surrogate_keys_and_values"
     ],
     "rule": "Surrogate identity strings must remain Python code points."
+  },
+  {
+    "id": "projection8-row-order",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "for raw in &snapshot.transactions {",
+    "replace": "for raw in snapshot.transactions.iter().rev() {",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves row order."
+  },
+  {
+    "id": "projection8-row-id",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "codec::pystr(&row[\"id\"])",
+    "replace": "codec::pystr(&row[\"wallet_id\"])",
+    "expect_failing": [
+      "projection_raw_adapter_vectors"
+    ],
+    "rule": "The raw projection adapter preserves row id."
+  },
+  {
+    "id": "projection8-raw-rows",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"profile\":snapshot.profile, \"rows\":rows,",
+    "replace": "\"profile\":snapshot.profile, \"rows\":{},",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves raw rows."
+  },
+  {
+    "id": "projection8-confirmation",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "interpretation::capture_confirmation(&row)?",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "projection_raw_adapter_vectors"
+    ],
+    "rule": "The raw projection adapter preserves confirmation."
+  },
+  {
+    "id": "projection8-observations",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"observations\":exact(stored::get(projection,\"observations\"))?",
+    "replace": "\"observations\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves observations."
+  },
+  {
+    "id": "projection8-decisions",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"decisions\":exact(stored::get(projection,\"decisions\"))?",
+    "replace": "\"decisions\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves decisions."
+  },
+  {
+    "id": "projection8-events",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"events\":exact(stored::get(canonical,\"events\"))?",
+    "replace": "\"events\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves events."
+  },
+  {
+    "id": "projection8-barriers",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"pool_barriers\":pools(stored::get(eligibility,\"pool_barriers\"))?",
+    "replace": "\"pool_barriers\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves barriers."
+  },
+  {
+    "id": "projection8-roots",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"pool_barrier_roots\":pools(stored::get(eligibility,\"pool_barrier_roots\"))?",
+    "replace": "\"pool_barrier_roots\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves roots."
+  },
+  {
+    "id": "projection8-payouts",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"payouts\":exact(stored::get(quantity,\"reviewed_direct_payouts\"))?",
+    "replace": "\"payouts\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves payouts."
+  },
+  {
+    "id": "projection8-conversions",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"reviewed\":exact(stored::get(quantity,\"reviewed_conversion_pairs\"))?",
+    "replace": "\"reviewed\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves conversions."
+  },
+  {
+    "id": "projection8-blocks",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"blocked_transaction_ids\":exact(stored::get(interpreter,\"blocked_transaction_ids\"))?",
+    "replace": "\"blocked_transaction_ids\":[]",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves blocks."
+  },
+  {
+    "id": "projection8-eligibility",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"eligible\":eligible,",
+    "replace": "\"eligible\":[],",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves eligibility."
+  },
+  {
+    "id": "projection8-issues",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"issues\":issues,",
+    "replace": "\"issues\":[],",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves issues."
+  },
+  {
+    "id": "projection8-non-events",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"non_event_transaction_ids\":non_events,",
+    "replace": "\"non_event_transaction_ids\":[],",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves non events."
+  },
+  {
+    "id": "projection8-channel-non-events",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "interpretation::channel_non_event_ids(snapshot)?",
+    "replace": "Vec::<String>::new()",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves channel non events."
+  },
+  {
+    "id": "projection8-diagnostics",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "stored::list(stored::get(interpreter, \"quarantines\")),",
+    "replace": "&[],",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves diagnostics."
+  },
+  {
+    "id": "projection8-profile-field",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "\"profile\":snapshot.profile",
+    "replace": "\"profile\":{}",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves profile field."
+  },
+  {
+    "id": "projection8-pool-field",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "pair[0].as_object_mut().ok_or(\"TypeError\")?.remove(\"$type\");",
+    "replace": "pair[0].as_object_mut().ok_or(\"TypeError\")?.remove(\"profile_id\");",
+    "expect_failing": [
+      "projection_raw_adapter_vectors"
+    ],
+    "rule": "The raw projection adapter preserves pool field."
+  },
+  {
+    "id": "projection8-refusal-family",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "if error == \"AppError\"",
+    "replace": "if error == \"UnusedError\"",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The raw projection adapter preserves refusal family."
   }
 ]

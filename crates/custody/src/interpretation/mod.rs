@@ -29,6 +29,7 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) use holds::capture_confirmation;
 pub use migration::quarantines as migration_quarantines;
 
 pub(crate) fn canonical_event_repr(event: &Value) -> String {
@@ -38,6 +39,18 @@ pub(crate) fn canonical_event_repr(event: &Value) -> String {
 /// Python loads channel context before materializing components.
 pub fn admit_channels(snapshot: &Snapshot) -> Result<(), String> {
     channels::compute(snapshot).map(|_| ())
+}
+
+/// Channel lifecycle exclusions used by finalized projection.
+pub(crate) fn channel_non_event_ids(snapshot: &Snapshot) -> Result<Vec<String>, String> {
+    let channels = channels::compute(snapshot)?;
+    Ok(channels["roles"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, role)| matches!(role.as_str(), Some("channel_open" | "channel_close")))
+        .map(|(id, _)| id.clone())
+        .collect())
 }
 
 /// Gap discovery ignores authoritative target-bearing edges, component anchors,
