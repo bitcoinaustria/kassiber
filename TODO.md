@@ -56,6 +56,8 @@ mutation entries.
   remains raw-only.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
+  First resolve the [R2g hash-dependent reference admission order](docs/reference/custody-engine.md#r2g-reference-admission-blocker)
+  before claiming exact competing-refusal parity.
 
 ## Rust backend R3 storage
 

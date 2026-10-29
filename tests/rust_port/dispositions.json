@@ -633,6 +633,9 @@
     "tests/test_custody_finalization_scalability.py": {
       "test_finalization_target_lookup_is_linear_and_preserves_native_moves": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_authored_migration directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_custody_fusion_reference.py": {
+      "test_fusion_reference_competing_asset_refusals": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "characterizes the unchanged Python request builder's hash-dependent first refusal over identical finalized inputs; retains the R2g admission blocker repro", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_gap_acceptance.py": {
       "CustodyGapCliAcceptanceTests": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 2},
       "CustodyGapDaemonProtocolAcceptanceTests": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "spawns `python -m kassiber` (daemon) but also calls kassiber.db", "reviewed": false, "tests": 2}

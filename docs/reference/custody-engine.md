@@ -3121,6 +3121,58 @@ and must never supply persisted journal state. R4 must verify the complete CLI
 and daemon journal path, including these Python-owned joins and report-readiness
 barriers, before replacing that authority.
 
+### R2g reference admission blocker
+
+The unchanged Python request builder has a nondeterministic first refusal
+when several asset names are invalid. `check_configuration()` collects assets
+in a set and then evaluates `_config_token()` inside `sorted()`'s generator.
+Validation therefore happens in hash-table iteration order, before sorting.
+Neither the projection's row order nor the ordered wallet references determine
+which invalid asset is reported in the structured error details.
+
+`tests/test_custody_fusion_reference.py` reproduces this through
+`build_request()` with a real `FinalizedTaxProjection`, identical profile and
+wallet references, and rows whose assets are `BTC#` and `ETH:`. CPython 3.11
+with `PYTHONHASHSEED=1` refuses `ETH:`; seed `3` refuses `BTC#`. Both raise
+`AppError` with code `validation` and message
+`RP2 configuration asset contains unsupported characters`, but their
+`details.value` and `details.characters` differ. Run the repro with:
+
+```sh
+uv run --locked python -m pytest tests/test_custody_fusion_reference.py -q
+```
+
+This is a reference defect, not an accepted Rust difference. Exact
+first-failure parity for these competing inputs cannot be derived from the
+three specified fusion operands alone. A deterministic reference ordering
+needs a separately authorized Python change, or the design needs an explicit
+rule for comparing these ambiguous refusals. Python is unchanged here.
+The implementation attempt stops before step 1 is complete; no Rust builder
+is admitted or committed, no fusion stage is enabled, and none of the earlier
+six-stage inventories changes. The uncommitted prototype and its exploratory
+166-golden comparison are retained only under
+`target/r2g-fusion-verify/`; they are not fusion acceptance evidence.
+
+The 2,236-recipe mutation campaign, distinct-seed activity/vacuity checks,
+24,000-book/1,030-permutation rerun, retained replay and all fusion harness
+integration remain outstanding. Existing R2f results below are historical
+evidence and are not claimed as fresh R2g runs.
+
+| Reference-blocker checkpoint verification | Result |
+| --- | --- |
+| Competing-asset reference repro | 1 passed; two distinct structured refusals for identical operands |
+| Workspace formatting and all-target Clippy `-D warnings` | Passed |
+| Rust workspace tests | 827 passed; zero failed |
+| Test inventory | Refreshed; new repro reviewed as an oracle |
+| Required preflight shard | 57 passed, 56 subtests passed |
+| Fusion compared | No; implementation and acceptance gates remain outstanding |
+
+Checks used Python 3.11, Rust 1.99.1, locked dependencies and offline Cargo.
+The first workspace run hit four sandbox-denied loopback binds; the complete
+permitted rerun passed with disposable local test servers. Fresh verification
+artifacts are under `target/r2g-fusion-verify/`. No retained corpus was changed,
+and no push, PR or full quality-gate result is claimed.
+
 ## Complete finalized projection runtime (R2f)
 
 The whole-stage gate above precedes normal admission. The binding now compares
