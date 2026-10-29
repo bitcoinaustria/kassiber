@@ -672,6 +672,13 @@ def compile_finalized_tax_projection(
                 )
                 continue
             payout = payouts_by_source.get(source.anchor_transaction_id)
+            # Transaction identity alone also matches the unreviewed residual.
+            # Only the selected authored payout allocation grants these terms.
+            if payout is not None and (
+                decision.reason != "reviewed_direct_payout_source"
+                or decision.component_id != _field(payout, "component_id")
+            ):
+                payout = None
             payout_asset = (
                 str(_field(payout, "payout_asset") or "").upper()
                 if payout is not None

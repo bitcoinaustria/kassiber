@@ -71,6 +71,19 @@ are not rewritten.
 
 ## Intentionally not inferred during upgrade
 
+- Direct payout decimal precision lost through historical float conversion
+  cannot be recovered. Existing authored terms are read as stored, including
+  float-derived decimal tails; opening a book does not round or rewrite them.
+  Use an explicit replacement review to correct the asserted economics.
+- The partial direct payout projection correction changes rebuilt derived
+  journals and live reports: residuals no longer inherit payout pricing or a
+  carrying-value policy. No schema migration or automatic stale marker is
+  added for this correction. Run `journals process` on existing affected books
+  to replace their stored projection, even if previously marked current.
+  Missing residual prices can now block output rather than fabricate proceeds.
+  Saved exports and filed snapshots remain unchanged; review any resulting
+  report differences through the existing amendment workflow.
+
 - A registered wallet or descriptor does not prove that the user imported the
   complete beneficial-ownership universe. Kassiber may clear technical
   quarantine for observed data; it cannot declare the book globally complete.

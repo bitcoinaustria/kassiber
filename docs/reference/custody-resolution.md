@@ -416,6 +416,15 @@ invoice's contents. An exclusion is never a substitute for explaining an owned
 movement or missing acquisition basis. Native chain authority, component anchor
 coverage and conservation retain their existing checks.
 
+A partial direct swap payout applies its reviewed fiat value and carrying-value
+policy only to the selected reviewed source allocation. An unmatched external
+residual uses normal transaction pricing; without an admissible price it is
+quarantined. The existing basis-provenance barrier can also hold subsequent
+allocations of the same source. Payout terms never price that residual.
+New payout reviews retain the authored decimal text without conversion through
+a float. Historical float-derived terms retain their stored value; correcting
+one requires an explicit replacement review, not an inferred rounding repair.
+
 The chat's bounded review capability pack is selected by English/German review
 requests or the Review screen. It includes case pagination, transaction and
 transfer context, evidence reads and the shared plan/apply tools. A review turn
