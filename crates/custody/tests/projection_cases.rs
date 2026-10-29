@@ -37,3 +37,28 @@ fn projection_base_row_vectors() {
 fn projection_fee_row_vectors() {
     check("fee");
 }
+
+#[test]
+fn projection_slice_pricing_vectors() {
+    check("slice");
+}
+#[test]
+fn projection_payout_admission_vectors() {
+    check("payout_valid");
+}
+#[test]
+fn projection_payout_time_vectors() {
+    check("payout_time");
+}
+#[test]
+fn projection_payout_settlement_vectors() {
+    check("payout_settlement");
+}
+#[test]
+fn projection_payout_price_vectors() {
+    check("payout_price");
+}
+#[test]
+fn projection_fee_allocation_vectors() {
+    check("fees");
+}

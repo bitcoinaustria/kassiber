@@ -37,6 +37,7 @@ def test_projection_generated_counts_both_engines(projection_driver):
             counts['Python'][case]+=sum(map(activity,results))
     actual=projection_driver(inputs)
     assert actual==expected
+    assert json.dumps(actual,sort_keys=True)==json.dumps(expected,sort_keys=True)
     for i,case in enumerate(names):counts['Rust'][case]+=sum(map(activity,actual[i*2:i*2+2]))
     # Independent counts pin every scenario, including an active positive
     # companion for each refusal. No engine can silently drop a scenario.
@@ -48,7 +49,7 @@ def test_projection_generated_counts_both_engines(projection_driver):
     shuffled=deepcopy(inputs)
     for v in shuffled:
         if isinstance(v.get('rows'),dict):v['rows']=dict(reversed(list(v['rows'].items())))
-    assert projection_driver(shuffled)==expected
+    assert json.dumps(projection_driver(shuffled),sort_keys=True)==json.dumps(expected,sort_keys=True)
     print('projection primitive active counts: '+json.dumps(counts,sort_keys=True))
 
 

@@ -15,6 +15,9 @@ PATH = Path(__file__).parent / 'fixtures/custody_projection_primitives.json'
 def evaluate(v):
     try:
         op = v['op']
+        from tests import custody_projection_money as money
+        if op in money.OPS:
+            return {'expected': to_jsonable(money.evaluate(v), redact_config=False)}
         if op == 'validate':
             p.FinalizedTaxProjection(tuple(v['rows']), tuple(v['pairs']), (), (), ())
             result = True
@@ -83,6 +86,10 @@ def operands():
         yield dict(case='chain_'+case,op='fee',observation=obs,rows={'source':dict(chain,**changes)},amount=7,side='fee-only')
 
 
+    from tests.custody_projection_money import operands as money_operands
+    yield from money_operands()
+
+
 def vectors():
     return [dict(v,**evaluate(v)) for v in operands()]
 
@@ -99,6 +106,31 @@ def scenario(i,variant):
         v['observation']['occurred_at']+=f'#{variant}'
         for row in v['rows'].values():
             if row: row['projection_fixture_variant']=variant
+    if v['op']=='slice':
+        factor=(1,3,10**60+1,10**120+7)[variant%4]
+        v['quantity']['start_msat']*=factor;v['quantity']['end_msat']*=factor;v['fee']*=factor
+    if v['op'] in ('slice','payout_settlement','payout_price','payout_valid'):
+        factor=(1,3,10**60+1,10**120+7)[variant%4]
+        if v['op']=='slice':
+            for row in v['rows'].values():
+                if type(row.get('amount')) is int:row['amount']*=factor
+        elif v['op']=='payout_settlement':
+            amount=v['payout'].get('payout_amount')
+            if type(amount) is int:v['payout']['payout_amount']*=factor
+        elif v['op']=='payout_price':v['amount']*=factor
+        else:
+            for row in v['rows'].values():
+                for key in ('amount','fee'):
+                    if type(row.get(key)) is int:row[key]*=factor
+            for record in v['records']:
+                if type(record.get('out_amount')) is int:record['out_amount']*=factor
+    if v['op']=='payout_time' and isinstance(v['payout'].get('payout_occurred_at'),str) and v['payout']['payout_occurred_at']:
+        v['payout']['payout_occurred_at']='\u2003'+v['payout']['payout_occurred_at']+'\u2003'
+    if v['op']=='fees':
+        factor=(1,3,10**60+1,10**120+7)[variant%4]
+        for d in v['decisions']:
+            d['source']['start_msat']*=factor;d['source']['end_msat']*=factor
+        for o in v['observations'].values():o['fee_msat']*=factor
     # Every scenario carries an independently compared positive result, including
     # admission/refusal controls. Counts include primary successes separately.
     positive=dict(op='ids',hash=f'companion:{variant}',start=0,end=10**90+variant,amount=1,side='fee',payout_id='review')
@@ -108,6 +140,7 @@ def scenario(i,variant):
 def activity(result):
     if 'error' in result:return 0
     value=result['expected']
+    if value is None or value=={}:return 0
     return len(value) if isinstance(value,list) else 1
 
 

@@ -2264,3 +2264,151 @@ with Rust 1.99.1 and offline Cargo. Net tests ran separately after the sandbox
 refused their local fake-server binds. Recordings are fresh worktree artifacts;
 the retained corpus was read only. Full census/shadow shards remain with the
 orchestrator. This checkpoint does not claim finalization-stage parity.
+
+## Principal pricing, payouts and fee allocation checkpoint (R2f, partial)
+
+The local `t3code/r2f-projection-2` checkpoint starts at `a178a48f` and adds
+principal slice pricing, reviewed direct-payout admission/time/settlement and
+price overrides, and stateful fee allocation under
+`crates/custody/src/finalized_projection/`. These remain private comparison
+primitives in the unpackaged `projection-primitives` example.
+`finalized_projection` stays explicitly skipped. No Rust result supplies stored
+state or tax inputs, and snapshot v1 remains raw-only.
+
+Principal pricing preserves the original raw amount before replacing it with
+the selected slice. An existing unit rate is unchanged; otherwise exact absolute
+fiat value precedes the legacy float, and the original amount first divides by
+100,000,000,000 in Kassiber's 32-digit half-even decimal context. The value then
+divides by that rounded BTC denominator in the same context. Combining those
+divisions changes rounding and is forbidden. Exact output uses fixed decimal
+rendering, including trailing zeros and signed zero. There is no additional
+quantize step in these Python helpers. All quantities and fee sums use BigInt.
+
+Payout admission normalizes the raw amount and fee before parsing the reviewed
+allocation, accepts only positive source-bounded principal, and retains the last
+valid record per source. Settlement follows Python's amount/value/time/base-row
+admission order. Legacy timestamp parsing reuses the CPython ISO instant parser
+and separately reproduces the legacy and RFC2822 grammars, including their
+Unicode-digit distinction, whitespace, offsets, fractional truncation and UTC
+overflow errors. Missing times fall back to the observation without rewriting
+its text. The settlement emits the inbound leg before the outbound sale.
+
+Fee state indexes the complete supplied decision population, but does not
+select rows. An observation's raw fee is allocated once. Reviewed fee slices
+sum by atomic bundle or pair-claim prefix; the first move consumes a bundle's
+fee. An ordinary reviewed component replaces its raw sibling fee, while native
+losses and swap refunds remain additive. Subsequent standalone reviewed fee
+calls are suppressed only after that bundle has been consumed. Callers retain
+responsibility for selection, barriers and connected-path blocking.
+
+### Frozen and generated evidence
+
+The Python oracle calls the original projection helpers. For nested fee and
+price-override logic it executes the original reference AST with explicit
+already-selected operands; it does not reproduce the arithmetic in a second
+Python implementation. Frozen vectors, generated calls and dictionary-order
+permutations compare exact strings and serialized numeric representations,
+including signed float zero. Null/empty primary results are not counted as
+active; each scenario also has an independently compared positive companion.
+Both engines assert the checked-in per-scenario activity manifest.
+
+| New primitive family | Frozen scenarios | Generated batches per engine | Active results per engine |
+| --- | ---: | ---: | ---: |
+| Principal slice pricing | 27 | 540 | 2,120 |
+| Reviewed payout admission | 16 | 320 | 1,100 |
+| Payout timestamps | 24 | 480 | 1,700 |
+| Payout settlement rows | 18 | 360 | 1,400 |
+| Payout price overrides | 10 | 200 | 760 |
+| Fee allocation | 15 | 300 | 2,300 |
+| **New total** | **110** | **2,200** | **9,380** |
+| Inherited row primitives | 42 | 840 | 3,180 |
+| **Combined** | **152** | **3,040** | **12,560** |
+
+The combined generator makes **6,080 calls per engine**, plus **6,080 dictionary
+permutations**. Principal coordinates, source denominators, settlement amounts
+and fee bundles cross machine ranges. Controls include both sides of half-even
+ties, one-msat pricing, multiple fee slices/payouts, replacement versus additive
+fees, malformed decimals, nonfinite values and simultaneous admission failures.
+Additional local seeded differentials compare **10,180 timestamp cases** and
+**5,000 money cases**, without differences. Their scripts and logs are under
+`target/r2f2-verify/`.
+
+### Python reference issue: nonfinite payout values
+
+The reference settlement helper admits positive Infinity and emits nonfinite
+fiat values and rates. This is a helper-boundary bug, not a claim that every
+product admission path accepts such a review. Reproduce on this checkpoint:
+
+```python
+import math
+from kassiber.core.custody_tax_projection import _direct_payout_settlement_rows
+from tests.test_custody_quantity import _observation
+source = _observation("source", "wallet", "outbound", 100)
+inbound, outbound = _direct_payout_settlement_rows(
+    source, {"payout_amount": 1, "payout_fiat_value": "Infinity"}, {}
+)
+assert inbound["fiat_rate_exact"] == "Infinity"
+assert math.isinf(outbound["fiat_value"])
+```
+
+Python is unchanged. The frozen `payout_settlement_inf` vector preserves this
+behavior for parity. Nonfinite floats use the existing `$float` fixture tags
+only in the private primitive serializer, not in snapshot v1 or a product API.
+A separate fix must review the reference admission contract before any such
+change is ported.
+
+### Remaining work
+
+Selected MOVE/external/inbound composition, connected-path blocking, scoped
+basis barriers, issues/quarantines and reviewed conversion metadata remain
+unported. Their admission and ordering must agree before enabling finalized
+projection. Journal fusion with `ledger` remains a separate step.
+
+### Mutation catalog and verification
+
+The catalog has **2,015 entries: all 1,955 inherited entries and 60 new
+entries are killed**. The inherited recipes and frozen primitive entries remain
+unchanged. Each counted entry has a passing unmutated named witness, a building
+mutant and a failing named witness. The combined per-entry audit is
+`target/r2f2-verify/mutation-summary.json`.
+
+| New named witness | Killed mutations |
+| --- | ---: |
+| `projection_slice_pricing_vectors` | 22 |
+| `projection_payout_admission_vectors` | 6 |
+| `projection_payout_time_vectors` | 9 |
+| `projection_payout_settlement_vectors` | 9 |
+| `projection_payout_price_vectors` | 2 |
+| `projection_fee_allocation_vectors` | 12 |
+| **Total new** | **60** |
+
+The full inherited catalog was rerun in disposable source/target batches.
+A temporary-filesystem quota interruption left 430 valid kills; all interrupted
+or nonbuilding attempts were excluded and the remaining 1,525 entries reran
+under the worktree's `target/`. All 349 inherited named baseline filters and
+six new filters passed. A redundant Unicode-normalization omission is equivalent
+because the decimal library already normalizes digits; it is not counted.
+A denominator-rounding survivor led to a stronger significant-digit boundary
+fixture; the final recipe is killed. No survivor or failed build contributes a
+kill. The final 60 new entries were rerun against the final source and fixtures.
+
+| Verification | Result |
+| --- | --- |
+| Inherited raw generators | 24,000 books and 1,030 permutations; zero differences |
+| Combined primitive generator | 152 active scenarios; 6,080 calls plus 6,080 dictionary permutations per engine; zero differences |
+| Retained read-only replay | 159 requests and 159 permutations; zero differences or pre-request refusals |
+| Fresh worktree replay | 168 requests and 168 permutations; zero differences or pre-request refusals |
+| Focused census | 115 tests and 35 subtests; 112 comparisons per implemented stage; zero mismatches |
+| Focused custody-shadow | 113 tests and 35 subtests; 110 comparisons per implemented stage and 110 frozen Python comparisons; zero mismatches |
+| Finalized projection inventory | 0 compared; 112 skipped in census and 110 in shadow |
+| Snapshot/shadow/mutation/port contracts | 40 tests and 14 subtests passed |
+| Rust workspace | 792 tests passed: 774 outside net and 18 net tests with disposable owned loopback servers |
+| Formatting and Clippy | Workspace fmt and all-target Clippy with `-D warnings` passed |
+
+Shadow excludes the documented read-budget test whose second frozen build
+changes its SQL count; census enforces it. Harness tests that intentionally
+inject reference failures run separately without the comparison overlay. The
+locked Python 3.11 binding was rebuilt from this checkout with Rust 1.99.1,
+`MATURIN_NO_INSTALL_RUST=1` and offline Cargo. The retained corpus stayed read-only;
+fresh recordings and verification artifacts are local under `target/`.
+This checkpoint does not claim complete finalized-projection parity.

@@ -20662,5 +20662,605 @@
       "projection_fee_row_vectors"
     ],
     "rule": "Version and graph commitment checks precede parsing the original amount and fee."
+  },
+  {
+    "id": "projection2-original-fallback",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "if codec::truth(&base[\"amount\"])",
+    "replace": "if false",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "A falsey original amount falls back to the canonical observed amount."
+  },
+  {
+    "id": "projection2-positive-original",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "original > BigInt::from(0)",
+    "replace": "original < BigInt::from(0)",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Derive an absolute-value rate only from a positive original amount."
+  },
+  {
+    "id": "projection2-rate-presence",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "money::empty(&base[\"fiat_rate\"])",
+    "replace": "false",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Derive a rate only when the raw unit rate is absent or empty."
+  },
+  {
+    "id": "projection2-exact-precedence",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "if money::empty(&base[\"fiat_value_exact\"])",
+    "replace": "if true",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Exact absolute fiat values precede legacy float values."
+  },
+  {
+    "id": "projection2-rate-float",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "base[\"fiat_rate\"] = rate.float()?;",
+    "replace": "base[\"fiat_rate\"] = json!(0);",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "The derived legacy float retains CPython decimal-to-float semantics."
+  },
+  {
+    "id": "projection2-rate-exact",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "base[\"fiat_rate_exact\"] = json!(rate.fixed()?);",
+    "replace": "base[\"fiat_rate_exact\"] = json!(\"0\");",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Derived exact unit rates use fixed decimal rendering."
+  },
+  {
+    "id": "projection2-slice-identity",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "&string(&quantity[\"observation_hash\"]),",
+    "replace": "&string(&observation[\"quantity_hash\"]),",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Synthetic principal identities use the slice observation hash."
+  },
+  {
+    "id": "projection2-slice-quantity",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "number(&(&end - &start))",
+    "replace": "number(&end)",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal equals the exact difference of slice coordinates."
+  },
+  {
+    "id": "projection2-slice-fee",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "base[\"fee\"] = number(fee);",
+    "replace": "base[\"fee\"] = json!(0);",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "A principal row carries its explicitly allocated fee."
+  },
+  {
+    "id": "projection2-btc-denominator",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "Decimal::from_str(\"100000000000\")",
+    "replace": "Decimal::from_str(\"100000000\")",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "BTC pricing divides integer msat by exactly one hundred billion."
+  },
+  {
+    "id": "projection2-source-id",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "let id = text(&record[\"out_transaction_id\"]);",
+    "replace": "let id = text(&record[\"id\"]);",
+    "expect_failing": [
+      "projection_payout_admission_vectors"
+    ],
+    "rule": "Reviewed payouts are indexed by their outbound source id."
+  },
+  {
+    "id": "projection2-included-principal",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "amount - fee",
+    "replace": "amount + fee",
+    "expect_failing": [
+      "projection_payout_admission_vectors"
+    ],
+    "rule": "Reviewed payout bounds use fee-exclusive principal."
+  },
+  {
+    "id": "projection2-default-reviewed",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "if empty(&record[\"out_amount\"])",
+    "replace": "if false",
+    "expect_failing": [
+      "projection_payout_admission_vectors"
+    ],
+    "rule": "An empty reviewed amount means the complete source principal."
+  },
+  {
+    "id": "projection2-positive-reviewed",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "reviewed > BigInt::from(0)",
+    "replace": "reviewed >= BigInt::from(0)",
+    "expect_failing": [
+      "projection_payout_admission_vectors"
+    ],
+    "rule": "Only positive reviewed payout allocations are admitted."
+  },
+  {
+    "id": "projection2-source-bounded",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "reviewed <= principal",
+    "replace": "reviewed < principal",
+    "expect_failing": [
+      "projection_payout_admission_vectors"
+    ],
+    "rule": "A reviewed payout may equal the exact source principal."
+  },
+  {
+    "id": "projection2-last-valid",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "result[&id] = record.clone();",
+    "replace": "if result[&id].is_null() { result[&id] = record.clone(); }",
+    "expect_failing": [
+      "projection_payout_admission_vectors"
+    ],
+    "rule": "The last valid record for a source wins in database order."
+  },
+  {
+    "id": "projection2-time-missing",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "if empty(value) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Missing payout timestamps preserve the source-time fallback."
+  },
+  {
+    "id": "projection2-time-hour-offset",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "if c.done() {\n        \"00\".into()",
+    "replace": "if c.done() {\n        \"01\".into()",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Legacy hour-only timezone offsets default minutes to zero."
+  },
+  {
+    "id": "projection2-time-seconds",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "seconds % 60",
+    "replace": "0",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Payout timestamp canonicalization preserves whole seconds."
+  },
+  {
+    "id": "projection2-time-rfc-month",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "month + 1,",
+    "replace": "month + 2,",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "RFC2822 payout months retain their calendar meaning."
+  },
+  {
+    "id": "projection2-time-fraction",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "/ 1_000_000;",
+    "replace": "/ 1_000_000 + 1;",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Canonical payout times truncate fractional seconds without rounding."
+  },
+  {
+    "id": "projection2-settlement-positive",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "amount <= BigInt::from(0) || empty(value)",
+    "replace": "amount < BigInt::from(0) || empty(value)",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Zero-amount payouts return before parsing their fiat value."
+  },
+  {
+    "id": "projection2-settlement-value",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "if !value.positive()?",
+    "replace": "if false",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Settlement rows require a positive payout value."
+  },
+  {
+    "id": "projection2-settlement-asset",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "text(&payout[\"payout_asset\"]).py_upper()",
+    "replace": "text(&payout[\"payout_asset\"])",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Settlement asset names use CPython Unicode uppercase."
+  },
+  {
+    "id": "projection2-settlement-in-direction",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "inbound[\"direction\"] = json!(\"inbound\");",
+    "replace": "inbound[\"direction\"] = json!(\"outbound\");",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Payout settlement emits an acquisition leg before a disposal leg."
+  },
+  {
+    "id": "projection2-settlement-out-kind",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "base[\"kind\"] = json!(\"sell\");",
+    "replace": "base[\"kind\"] = json!(\"buy\");",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "The payout settlement disposal is a sale."
+  },
+  {
+    "id": "projection2-settlement-external",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "codec::truth(&payout[\"payout_external_id\"])",
+    "replace": "false",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "A provided payout external id survives settlement projection."
+  },
+  {
+    "id": "projection2-price-positive-amount",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "amount > &BigInt::from(0)",
+    "replace": "amount >= &BigInt::from(0)",
+    "expect_failing": [
+      "projection_payout_price_vectors"
+    ],
+    "rule": "Reviewed price overrides require a positive selected principal."
+  },
+  {
+    "id": "projection2-price-method",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "json!(\"direct_payout_review\")",
+    "replace": "json!(\"unknown\")",
+    "expect_failing": [
+      "projection_payout_price_vectors"
+    ],
+    "rule": "Reviewed payout pricing records its pricing method."
+  },
+  {
+    "id": "projection2-bundle-atomic",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "if codec::truth(&decision[\"atomic_bundle_id\"])",
+    "replace": "if false",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Explicit atomic bundles take precedence over pair-claim ids."
+  },
+  {
+    "id": "projection2-bundle-pair",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": ".strip_prefix(\"pair:\")",
+    "replace": ".strip_prefix(\"pairs:\")",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Pair claim bundles share only their first pair-id segment."
+  },
+  {
+    "id": "projection2-fee-only-scan",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "decision[\"destination_kind\"] != \"fee\"",
+    "replace": "decision[\"destination_kind\"] == \"fee\"",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Only fee-destination slices contribute reviewed bundle fees."
+  },
+  {
+    "id": "projection2-bundle-sum",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "+= amount;",
+    "replace": "= amount;",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "All exact fee slices in one bundle contribute to its fee."
+  },
+  {
+    "id": "projection2-raw-once",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "!self\n            .allocated_sources\n            .insert(string(&source[\"quantity_hash\"]))",
+    "replace": "false",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Each source observation allocates its raw network fee at most once."
+  },
+  {
+    "id": "projection2-bundle-consumed",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "!self.consumed_bundles.contains(*b)",
+    "replace": "true",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "A reviewed bundle fee is consumed by the first projected move only."
+  },
+  {
+    "id": "projection2-component-replacement",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "!decision[\"component_id\"].is_null()",
+    "replace": "decision[\"component_id\"].is_null()",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Ordinary reviewed component fees replace the observed miner fee."
+  },
+  {
+    "id": "projection2-refund-additive",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "decision[\"transfer_kind\"] != \"swap-refund\"",
+    "replace": "true",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Failed-swap refund losses remain additive to the observed miner fee."
+  },
+  {
+    "id": "projection2-raw-additive",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "raw + reviewed",
+    "replace": "reviewed",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Noncomponent reviewed losses remain additive to the raw network fee."
+  },
+  {
+    "id": "projection2-reviewed-dedup",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "bundle(decision).is_some_and(|b| self.consumed_bundles.contains(&b))",
+    "replace": "false",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Standalone reviewed fee rows are suppressed after bundle consumption."
+  },
+  {
+    "id": "projection2-slice-anchor",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"journal_transaction_id\"] = observation[\"anchor_transaction_id\"].clone();",
+    "replace": "    base[\"journal_transaction_id\"] = json!(\"bad\");",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact journal_transaction_id contract."
+  },
+  {
+    "id": "projection2-slice-clear-fiat",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"fiat_value\"] = Value::Null;",
+    "replace": "    base[\"fiat_value\"] = json!(99);",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact fiat_value contract."
+  },
+  {
+    "id": "projection2-slice-clear-exact",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"fiat_value_exact\"] = Value::Null;",
+    "replace": "    base[\"fiat_value_exact\"] = json!(\"99\");",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact fiat_value_exact contract."
+  },
+  {
+    "id": "projection2-slice-marker",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"custody_finalized_tax_projection\"] = json!(true);",
+    "replace": "    base[\"custody_finalized_tax_projection\"] = json!(false);",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact custody_finalized_tax_projection contract."
+  },
+  {
+    "id": "projection2-slice-quantity-hash",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"custody_quantity_hash\"] = observation[\"quantity_hash\"].clone();",
+    "replace": "    base[\"custody_quantity_hash\"] = json!(\"bad\");",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact custody_quantity_hash contract."
+  },
+  {
+    "id": "projection2-slice-start",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"custody_slice_start_msat\"] = number(&start);",
+    "replace": "    base[\"custody_slice_start_msat\"] = json!(0);",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact custody_slice_start_msat contract."
+  },
+  {
+    "id": "projection2-slice-end",
+    "file": "crates/custody/src/finalized_projection/principal.rs",
+    "find": "    base[\"custody_slice_end_msat\"] = number(&end);",
+    "replace": "    base[\"custody_slice_end_msat\"] = json!(0);",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal projection preserves the exact custody_slice_end_msat contract."
+  },
+  {
+    "id": "projection2-btc-context",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": ".div(&Decimal::from_str(\"100000000000\").unwrap(), &Context::RP2)",
+    "replace": ".div(&Decimal::from_str(\"100000000000\").unwrap(), &Context::new(28, kassiber_pydecimal::Rounding::HalfEven))",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "The BTC denominator rounds in the 32-digit Kassiber decimal context."
+  },
+  {
+    "id": "projection2-rate-context",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "d.div(&btc, &Context::RP2)",
+    "replace": "d.div(&btc, &Context::new(28, kassiber_pydecimal::Rounding::HalfEven))",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "The unit-rate division rounds in the 32-digit half-even context."
+  },
+  {
+    "id": "projection2-rate-rounding",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "d.div(&btc, &Context::RP2)",
+    "replace": "d.div(&btc, &Context::new(32, kassiber_pydecimal::Rounding::HalfUp))",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Principal slice rate rounding uses half-even on both sides of ties."
+  },
+  {
+    "id": "projection2-money-sign",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "if negative { \"-\" } else { \"\" }",
+    "replace": "if negative { \"\" } else { \"\" }",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Nonfinite exact values preserve their Python decimal sign."
+  },
+  {
+    "id": "projection2-money-underflow",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "Self::Finite(d) => d.to_fixed_string().map_err(error),",
+    "replace": "Self::Finite(d) => Ok(d.to_canonical()),",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Exact rates use fixed rendering including subnormal zeros."
+  },
+  {
+    "id": "projection2-time-day",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "rem + 1,",
+    "replace": "rem + 2,",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Payout canonicalization preserves the UTC day."
+  },
+  {
+    "id": "projection2-time-zone-default",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "[\"Z\", \"UTC\", \"GMT\"].contains(&rest.as_str())",
+    "replace": "[\"Z\", \"UTC\"].contains(&rest.as_str())",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Legacy GMT payout timestamps are accepted as UTC."
+  },
+  {
+    "id": "projection2-time-rfc-prefix",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "&upper[4..]",
+    "replace": "&upper[3..]",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "RFC2822 weekday commas do not require trailing whitespace."
+  },
+  {
+    "id": "projection2-time-zone-sign",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "let sign = if c.take('+') {\n        '+'",
+    "replace": "let sign = if c.take('+') {\n        '-'",
+    "expect_failing": [
+      "projection_payout_time_vectors"
+    ],
+    "rule": "Legacy positive offsets are subtracted from local payout time."
+  },
+  {
+    "id": "projection2-settlement-at",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "let at = time(payout)?;",
+    "replace": "let at = Value::Null;",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Reviewed payout timestamps override the source observation time."
+  },
+  {
+    "id": "projection2-settlement-rate",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "base[\"fiat_rate_exact\"] = json!(rate.fixed()?);",
+    "replace": "base[\"fiat_rate_exact\"] = json!(value.fixed()?);",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Settlement unit rates divide payout value by exact context-rounded BTC."
+  },
+  {
+    "id": "projection2-settlement-fiat",
+    "file": "crates/custody/src/finalized_projection/payouts.rs",
+    "find": "base[\"fiat_value_exact\"] = json!(value.fixed()?);",
+    "replace": "base[\"fiat_value_exact\"] = json!(rate.fixed()?);",
+    "expect_failing": [
+      "projection_payout_settlement_vectors"
+    ],
+    "rule": "Settlement absolute values preserve the reviewed decimal exponent."
+  },
+  {
+    "id": "projection2-bundle-reason",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "decision[\"reason\"] == \"reviewed_custody_component\"",
+    "replace": "true",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Only ordinary reviewed components replace raw sibling miner fees."
+  },
+  {
+    "id": "projection2-reviewed-amount",
+    "file": "crates/custody/src/finalized_projection/fees.rs",
+    "find": "integer_big(&decision[\"source\"][\"end_msat\"])?\n                - integer_big(&decision[\"source\"][\"start_msat\"])?",
+    "replace": "integer_big(&decision[\"source\"][\"end_msat\"])?",
+    "expect_failing": [
+      "projection_fee_allocation_vectors"
+    ],
+    "rule": "Standalone reviewed fees equal the exact source slice difference."
   }
 ]

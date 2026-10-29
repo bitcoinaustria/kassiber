@@ -1564,6 +1564,23 @@ composition, connected blocking, basis barriers and quarantine composition must
 match before enabling it. Journal fusion remains separate. Python stays
 authoritative, Rust never supplies persisted state, and snapshot v1 stays raw-only.
 
+### Principal pricing, payouts and fee allocation (R2f, partial)
+
+The local `t3code/r2f-projection-2` checkpoint starts at `a178a48f` and adds
+principal slice pricing, reviewed payout admission/time/settlement and price
+overrides, and exact fee allocation/deduplication. Decimal operations retain
+Kassiber's 32-digit half-even context and both independently rounded divisions;
+all msat coordinates and fee sums use BigInt. The private primitive comparison
+has independent Python/Rust activity assertions, money-boundary vectors and
+named mutation witnesses. See the
+[checkpoint](../reference/custody-engine.md#principal-pricing-payouts-and-fee-allocation-checkpoint-r2f-partial).
+
+Finalized projection remains skipped, snapshot v1 remains raw-only and Rust
+results never reach stored state. Selected-row composition, blocking/barriers,
+quarantines and conversion metadata remain for the next slice; journal fusion
+remains separate. A nonfinite-payout reference issue is documented with a repro;
+Python is unchanged in this parity checkpoint.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

@@ -5,6 +5,12 @@ use kassiber_pyjson::{BigInt, Value as Py};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::str::FromStr;
+mod fees;
+mod money;
+mod payouts;
+mod principal;
+pub use fees::FeeAllocation;
+pub use principal::slice_row;
 
 fn string(value: &Value) -> String {
     python_value_string(&codec::from_json(value).expect("JSON primitive input"))
@@ -169,6 +175,14 @@ pub fn fee_row(
     Ok(base)
 }
 
+fn integer_big(v: &Value) -> Result<BigInt, String> {
+    let value = crate::interpretation::integer_or_zero(v)?;
+    BigInt::from_str(&value.to_string()).map_err(|_| "ValueError".into())
+}
+fn number(n: &BigInt) -> Value {
+    serde_json::from_str(&n.to_string()).expect("exact integer")
+}
+
 /// Private fixture operation, not snapshot admission or a product interface.
 pub fn primitive(value: &Value) -> Value {
     let integer =
@@ -197,6 +211,22 @@ pub fn primitive(value: &Value) -> Value {
             ),
             payout_row_id(&string(&value["payout_id"]), &string(&value["side"]))
         ])),
+        "slice" => slice_row(
+            &value["observation"],
+            &value["quantity"],
+            &value["rows"],
+            &string(&value["side"]),
+            &integer("fee"),
+        ),
+        "payout_valid" => payouts::valid(&value["records"], &value["rows"]),
+        "payout_time" => payouts::time(&value["payout"]),
+        "payout_settlement" => {
+            payouts::settlement(&value["observation"], &value["payout"], &value["rows"])
+        }
+        "payout_price" => {
+            payouts::price(value["row"].clone(), &value["payout"], &integer("amount"))
+        }
+        "fees" => fees::evaluate(value),
         "base" => base_row(&value["observation"], &value["rows"]),
         "fee" => fee_row(
             &value["observation"],
