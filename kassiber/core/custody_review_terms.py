@@ -618,7 +618,8 @@ def create_payout_review(
         payout_amount_msat=payout_amount_msat,
         payout_occurred_at=payout_occurred_at,
         payout_fiat_value=(
-            float(payout_value) if payout_value is not None else None
+            # Authored economic terms persist decimal text, not numeric output.
+            format(payout_value, "f") if payout_value is not None else None
         ),
         payout_external_id=payout_external_id,
         counterparty=counterparty,
