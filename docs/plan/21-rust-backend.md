@@ -999,6 +999,13 @@ summary reuses ordered capital-gains rows without constructing unused public
 references. Python accounting and report output remain the reference. See
 [measurements and verification](../reference/rust-read-performance.md).
 
+Round 2 streams admission observations, summary gains and history projections
+through reusable row dictionaries, scales SQLite msat quantities exactly, and
+loads wide transaction fields only after selecting page rowids. Gates, error
+precedence and ordered arithmetic remain intact. The
+[round 2 report](../reference/rust-read-performance-round2.md) records phase
+spans, parity and measured index proposals; no proposed DDL is applied.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

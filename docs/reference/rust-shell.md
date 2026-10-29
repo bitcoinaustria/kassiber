@@ -2747,3 +2747,8 @@ and avoids unused capital-gains presentation in summary. No network, schema,
 dependency or accounting-policy changes are introduced. The
 [read-path report](rust-read-performance.md) records release measurements,
 startup spans, verification and remaining costs.
+
+The [second performance round](rust-read-performance-round2.md) adds streaming
+admission/history/summary projections, reusable row conversion, exact integer
+amount scaling and narrow transaction-page selection. It records phase spans
+and scratch index measurements; schema proposals remain unimplemented.

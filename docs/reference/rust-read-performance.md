@@ -1,5 +1,8 @@
 # Rust read-path performance
 
+[Round 2](rust-read-performance-round2.md) continues report and transaction-list
+optimization from this checkpoint, with per-phase spans and schema proposals.
+
 Local release measurements for `t3code/r5-read-perf`, based on `50f67616`.
 No dependencies, indexes, migration markers or schema versions were added.
 Python product code and accounting rules are unchanged.
