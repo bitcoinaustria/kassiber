@@ -5,8 +5,17 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::str::FromStr;
 
+/// Arrays at least this long convert their items concurrently, in order.
+const PARALLEL_ITEMS: usize = 1024;
+
 pub fn from_json(v: &Value) -> Result<Py, String> {
     Ok(match v {
+        Value::Array(v) if v.len() >= PARALLEL_ITEMS => Py::List(
+            crate::par::map(v, from_json)
+                .into_iter()
+                .map(crate::par::unwrap)
+                .collect::<Result<_, _>>()?,
+        ),
         Value::Null => Py::Null,
         Value::Bool(v) => Py::Bool(*v),
         Value::String(v) => Py::Str(v.as_str().into()),
@@ -73,11 +82,24 @@ pub(crate) fn dumps_json_into(
                 return None;
             }
             out.push('[');
-            for (index, item) in items.iter().enumerate() {
-                if index > 0 {
-                    out.push_str(", ");
+            if items.len() >= PARALLEL_ITEMS {
+                let texts = crate::par::map(items, |item| {
+                    let mut text = String::new();
+                    dumps_json_into(item, options, level + 1, &mut text).map(|()| text)
+                });
+                for (index, text) in texts.into_iter().enumerate() {
+                    if index > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&crate::par::unwrap(text)?);
                 }
-                dumps_json_into(item, options, level + 1, out)?;
+            } else {
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        out.push_str(", ");
+                    }
+                    dumps_json_into(item, options, level + 1, out)?;
+                }
             }
             out.push(']');
         }
@@ -120,6 +142,12 @@ pub(crate) fn lossless(v: &Py) -> bool {
             Py::Float(f) => f.is_finite(),
             Py::Str(s) => !s.has_surrogates(),
             Py::Decimal(_) => false,
+            Py::List(items) if items.len() >= PARALLEL_ITEMS => {
+                depth < 900
+                    && crate::par::map(items, |item| walk(item, depth + 1))
+                        .into_iter()
+                        .all(crate::par::unwrap)
+            }
             Py::List(items) => depth < 900 && items.iter().all(|item| walk(item, depth + 1)),
             Py::Dict(items) => {
                 if depth >= 900 {
@@ -157,6 +185,12 @@ pub fn to_json(v: &Py) -> Value {
                 .map(|c| char::from_u32(c).unwrap_or('\u{fffd}'))
                 .collect()
         })),
+        Py::List(v) if v.len() >= PARALLEL_ITEMS => Value::Array(
+            crate::par::map(v, to_json)
+                .into_iter()
+                .map(crate::par::unwrap)
+                .collect(),
+        ),
         Py::List(v) => Value::Array(v.iter().map(to_json).collect()),
         Py::Dict(v) => Value::Object(
             v.iter()
