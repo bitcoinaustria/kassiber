@@ -39,7 +39,7 @@ def test_normalized_records_and_composition_match_live_python_without_consent(tm
 
 
 def test_bitcoin_record_vectors_still_match_python(tmp_path):
-    for script in ("generate_record_vectors.py", "generate_persistence_vectors.py"):
+    for script in ("generate_record_vectors.py", "generate_persistence_vectors.py", "generate_publication_vectors.py"):
         result = subprocess.run([sys.executable, str(ROOT / "crates/wallets/scripts" / script), "--check"],
             capture_output=True, timeout=30, env=_env(tmp_path))
         assert result.returncode == 0, result.stderr.decode()

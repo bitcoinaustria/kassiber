@@ -21,6 +21,7 @@ pub mod descriptors;
 pub mod material;
 pub mod observer_apply;
 pub mod observer_state;
+pub mod publication;
 pub mod scan;
 pub use derive::{derive_wallet, Derive};
 mod preview;

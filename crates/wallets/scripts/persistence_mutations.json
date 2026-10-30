@@ -238,5 +238,245 @@
       "observer_persistence_matches_unchanged_python_vectors"
     ],
     "rule": "Absent coverage details are stored as an empty object."
+  },
+  {
+    "id": "publish-initial-cancel",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    check_cancelled()?;\n    let value",
+    "replace": "    let value",
+    "expect_failing": [
+      "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
+    ],
+    "rule": "Cancellation before writes refuses the entire apply."
+  },
+  {
+    "id": "publish-final-cancel",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    let value = apply(&savepoint)?;\n    check_cancelled()?;",
+    "replace": "    let value = apply(&savepoint)?;",
+    "expect_failing": [
+      "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
+    ],
+    "rule": "Cancellation after writes rolls the savepoint back."
+  },
+  {
+    "id": "publish-success-release",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    savepoint.commit().map_err(database_error)?;",
+    "replace": "    drop(savepoint);",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Successful application releases its savepoint."
+  },
+  {
+    "id": "retract-transaction",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    if conn.is_autocommit() {\n        return Err(AppError::new(\n            \"observer_apply_outside_transaction\",\n            \"Observation retraction requires",
+    "replace": "    if false {\n        return Err(AppError::new(\n            \"observer_apply_outside_transaction\",\n            \"Observation retraction requires",
+    "expect_failing": [
+      "publication_retractions_chunk_large_sets_and_refuse_unowned_transactions"
+    ],
+    "rule": "Retraction cannot write outside the wallet transaction."
+  },
+  {
+    "id": "retract-trim",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "kassiber_pytext::strip(id).to_lowercase()",
+    "replace": "id.to_lowercase()",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Python Unicode strip precedes retraction matching."
+  },
+  {
+    "id": "retract-case",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "kassiber_pytext::strip(id).to_lowercase()",
+    "replace": "kassiber_pytext::strip(id).to_owned()",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Retraction candidates are case insensitive."
+  },
+  {
+    "id": "retract-all-chunks",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "for chunk in candidates.chunks(500) {",
+    "replace": "for chunk in candidates.chunks(500).take(1) {",
+    "expect_failing": [
+      "publication_retractions_chunk_large_sets_and_refuse_unowned_transactions"
+    ],
+    "rule": "Every batch of retraction candidates is applied."
+  },
+  {
+    "id": "retract-wallet-scope",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "[profile_id, wallet_id]",
+    "replace": "[profile_id, \"b\"]",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Retractions select the requested wallet."
+  },
+  {
+    "id": "retract-profile-scope",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "[profile_id, wallet_id]",
+    "replace": "[\"q\", wallet_id]",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Retractions select the requested profile."
+  },
+  {
+    "id": "retract-db-case",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "LOWER(external_id) IN",
+    "replace": "external_id IN",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Stored external identities match case insensitively."
+  },
+  {
+    "id": "retract-delete",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "DELETE FROM transactions WHERE id IN",
+    "replace": "SELECT * FROM transactions WHERE id IN",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Authoritative absence physically retires matching rows."
+  },
+  {
+    "id": "retract-empty-journal",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "let invalidated = !retracted.is_empty();",
+    "replace": "let invalidated = true;",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Empty retractions leave journal input versions unchanged."
+  },
+  {
+    "id": "retract-journal",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "        invalidate_journals(conn, profile_id)?;",
+    "replace": "        let _ = profile_id;",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Nonempty retractions invalidate the journal once."
+  },
+  {
+    "id": "publish-ascii",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "Options::default().sort_keys(true)",
+    "replace": "Options::default().sort_keys(true).ensure_ascii(false)",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Wallet config and checkpoint JSON preserve Python ASCII escapes."
+  },
+  {
+    "id": "publish-json-spacing",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "python_json(&config, false)?",
+    "replace": "python_json(&config, true)?",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Wallet config preserves Python spaced sorted JSON."
+  },
+  {
+    "id": "publish-checkpoint-spacing",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "python_json(checkpoint, true)?",
+    "replace": "python_json(checkpoint, false)?",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Freshness checkpoints use compact sorted JSON."
+  },
+  {
+    "id": "publish-time",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "json!(synced.timestamp)",
+    "replace": "json!(\"wrong\")",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Successful sync metadata records the injected publication time."
+  },
+  {
+    "id": "publish-retry",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "SELECT paused,retry_count FROM freshness_source_states",
+    "replace": "SELECT paused,0 FROM freshness_source_states",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Existing retry counts survive successful refresh."
+  },
+  {
+    "id": "publish-paused",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "let status = if paused {",
+    "replace": "let status = if false {",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Paused status overrides ordinary and blocking success."
+  },
+  {
+    "id": "publish-blocking",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "} else if synced.blocking_reports {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Blocking reports override ordinary successful freshness."
+  },
+  {
+    "id": "publish-partial",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "} else if synced.partial_success {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Partial success remains partially stale."
+  },
+  {
+    "id": "publish-degraded",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "if synced.partial_success {\n                synced.degraded_reason",
+    "replace": "if false {\n                synced.degraded_reason",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Partial success preserves its degraded reason."
+  },
+  {
+    "id": "publish-state",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "synced.wallet_label,\n            status,\n            status,",
+    "replace": "synced.wallet_label,\n            status,\n            \"fresh\",",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "The freshness state follows the effective status."
+  },
+  {
+    "id": "publish-rollback-on-error",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "let savepoint = conn.savepoint().map_err(database_error)?;",
+    "replace": "let mut savepoint = conn.savepoint().map_err(database_error)?; savepoint.set_drop_behavior(kassiber_store::rusqlite::DropBehavior::Commit);",
+    "expect_failing": [
+      "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
+    ],
+    "rule": "Errors, cancellation and panic roll back instead of committing earlier writes."
   }
 ]
