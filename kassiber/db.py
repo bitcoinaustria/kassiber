@@ -1513,6 +1513,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     proceeds_exact TEXT,
     gain_loss_exact TEXT,
     calculation_json TEXT,
+    calculation_compact TEXT,
     pricing_source_kind TEXT,
     pricing_quality TEXT,
     description TEXT,
@@ -5523,6 +5524,9 @@ def ensure_schema_compat(conn):
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "transactions", "kind_override", "TEXT")
+    # Compact retained calculations (see core/journal_calculation.py). Existing
+    # rows keep calculation_json until the next journal build rewrites them.
+    ensure_column(conn, "journal_entries", "calculation_compact", "TEXT")
     from .core.acquisition_review import migrate_valuation_support
     if migrate_valuation_support(conn):
         conn.commit()

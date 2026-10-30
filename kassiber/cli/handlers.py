@@ -39,6 +39,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
+from ..core import journal_calculation as core_journal_calculation
 from ..core import quarantine_resolution as core_quarantine_resolution
 from ..core import quarantine_review as core_quarantine_review
 from ..core import transaction_verify as core_transaction_verify
@@ -4903,6 +4904,10 @@ def get_journal_event(conn, workspace_ref, profile_ref, event_id):
             hint="Run `kassiber journals events list` to find valid event ids.",
         )
     event = dict(row)
+    # Report a compact calculation as the legacy column's exact text.
+    compact = event.pop("calculation_compact", None)
+    if compact:
+        event["calculation_json"] = core_journal_calculation.legacy_text(compact)
     event["quantity_msat"] = int(event["quantity"])
     event["quantity"] = float(msat_to_btc(event["quantity"]))
     return event

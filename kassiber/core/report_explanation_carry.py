@@ -6,8 +6,9 @@ links; raw txids, equal amounts and same-asset pools confer no authority.
 """
 from __future__ import annotations
 
-import json
 from decimal import Decimal, InvalidOperation, localcontext
+
+from .journal_calculation import stored_calculation
 
 _FIELDS = ("cost_basis_exact", "proceeds_exact", "gain_loss_exact")
 _MAX_DEPTH = 8
@@ -16,10 +17,13 @@ _MAX_RECORDS = 100
 
 def retained_calculation(row):
     """Validate retained contributions without running or emulating the engine."""
-    if not row["calculation_json"] or any(row[field] is None for field in _FIELDS):
+    stored = row["calculation_json"] or (
+        row["calculation_compact"] if "calculation_compact" in row.keys() else None
+    )
+    if not stored or any(row[field] is None for field in _FIELDS):
         return "engine_detail_unavailable", None
     try:
-        calculation = json.loads(row["calculation_json"])
+        calculation = stored_calculation(row)
         fragments = calculation["fragments"]
         with localcontext() as context:
             context.prec = 32  # The tax engine's calculation precision.
