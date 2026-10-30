@@ -28,10 +28,29 @@ from kassiber.importers import (
     load_binance_supplemental_csv_records,
     load_ledgerlive_csv_records,
     load_river_csv_records,
+    normalize_bullbitcoin_record,
 )
 
 
 class ExchangeImporterTest(unittest.TestCase):
+    def test_bullbitcoin_parser_accepts_lbtc_amount_suffix(self):
+        for buy in (True, False):
+            with self.subTest(buy=buy):
+                record = normalize_bullbitcoin_record({
+                    "ORDER_STATUS": "completed",
+                    "PAYIN_AMOUNT": "100 EUR" if buy else "0.002 LBTC",
+                    "PAYIN_CURRENCY": "EUR" if buy else "LBTC",
+                    "PAYOUT_AMOUNT": "0.002 LBTC" if buy else "100 EUR",
+                    "PAYOUT_CURRENCY": "LBTC" if buy else "EUR",
+                    "COMPLETED_AT (UTC)": "2025-01-02T00:00:00Z",
+                    "TRANSACTION_ID": "liquid-order",
+                })
+                self.assertEqual(record["asset"], "LBTC")
+                self.assertEqual(str(record["amount"]), "0.002")
+                self.assertEqual(record["fiat_value"], 100)
+                self.assertEqual(record["fiat_rate"], 50000)
+                self.assertEqual(record["kind"], "buy" if buy else "sell")
+
     def test_kraken_api_fetcher_paginates_ledgers_and_trades(self):
         class Response:
             def __init__(self, payload):

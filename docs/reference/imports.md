@@ -1345,6 +1345,7 @@ Behavior:
 
 - Bitcoin/Liquid/Lightning -> fiat rows become outbound `sell` transactions
 - fiat -> Bitcoin/Liquid/Lightning rows become inbound `buy` transactions
+- formatted amounts may include an `LBTC` suffix without losing decimal precision
 - payout/payin fiat amounts are stored as exact `exchange_execution` pricing
   from provider `Bull Bitcoin`
 - relevant imports are match-existing-only and never create standalone
