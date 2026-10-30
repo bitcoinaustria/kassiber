@@ -650,8 +650,10 @@
       "received": "Die lokale Einrichtung oder der Import ist abgeschlossen; prüfe, welche Daten jetzt vorliegen.",
       "partial": "Einige lokale Änderungen wurden gespeichert, aber Einrichtung oder Synchronisierung sind nicht abgeschlossen. Prüfe die vorhandenen Daten und verbleibenden Hindernisse.",
       "attached": "Die ausgewählte Datei wurde als Nachweis zu dieser Transaktion gespeichert und steht zur Analyse bereit. Es wurde kein Transaktionsverlauf importiert; der Fall ist damit noch nicht zwingend geklärt.",
-      "unavailable": "Ich habe den angefragten Nachweis nicht. Halte die Lücke offen und prüfe alternative Nachweise."
+      "unavailable": "Ich habe den angefragten Nachweis nicht. Halte die Lücke offen und prüfe alternative Nachweise.",
+      "attachedNotInChat": "Die ausgewählte Datei wurde als Nachweis zu dieser Transaktion gespeichert, aber dieser Chat hat bereits die maximale Anzahl an Dateien, daher steht sie hier nicht zur Analyse bereit. Es wurde kein Transaktionsverlauf importiert; der Fall ist damit noch nicht zwingend geklärt."
     },
+    "attachedNotInChat": "Die Datei wurde als Nachweis zur Transaktion gespeichert, aber nicht zu diesem Chat hinzugefügt. Entferne eine Datei oder starte einen neuen Chat, um sie hier zu analysieren.",
     "continuePrompt": "Setze die Prüfung der Nachweise fort. {{outcome}} Prüfe die aktuellen Fälle erneut, bevor du eine Änderung vorschlägst. Fälle: {{cases}}",
     "sourceFundsContinuePrompt": "Setze die Mittelherkunftsprüfung für dasselbe Ziel, denselben Betrag und Zweck fort. {{outcome}} Lies den aktuellen Mittelherkunftsfall und die Nachweise erneut. Trenne dokumentierte Herkunft von Buchhaltung und hole vor Änderungen die Freigabe ein. Fälle: {{cases}}",
     "importTarget": "In Verbindung importieren",
