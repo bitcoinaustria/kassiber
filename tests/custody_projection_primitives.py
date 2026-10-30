@@ -72,7 +72,7 @@ def operands():
     yield dict(case='fee_anchor',op='fee',observation=dict(obs,anchor_transaction_id='anchor'),rows={'anchor':row},amount=7,side='non-event-fee')
     yield dict(case='base_raw_exact',op='base',observation=dict(obs,occurred_at='2025-W01-3X12:34:56.123456+00:00'),rows={'source':dict(row,amount=10**150+1,fee=10**100+3,kind='StraßeΣİ')})
     for field in ('fiat_value', 'fiat_value_exact', 'fiat_rate', 'fiat_rate_exact'):
-        for name, value in [('nonfinite', 'Infinity'), ('overflow', '1e999999999'), ('tiny', '1e-100000001')]:
+        for name, value in [('nonfinite', 'Infinity'), ('overflow', '1e999999999'), ('tiny', '1e-100000001'), ('below_precision', '9e-14'), ('precision_floor', '1e-13'), ('long_exponent', '1.' + '0' * 309), ('zero_long_exponent', '0e-999')]:
             yield dict(case=f'base_price_{field}_{name}', op='base', observation=obs,
                        rows={'source': dict(row, **{field: value})})
     for external, raw in [(None,None),('',[]),(False,''),('kept',{'x':1})]:

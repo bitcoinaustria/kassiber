@@ -207,18 +207,32 @@ fn stored_allocations_override_reviewed_amounts() {
 }
 
 #[test]
-fn malformed_stored_payout_value_fails_closed() {
+fn malformed_stored_payout_value_remains_recoverable() {
     let (_dir, book) = book();
-    book.connection().execute_batch("DROP TRIGGER trg_custody_component_terms_immutable; UPDATE custody_component_economic_terms SET payout_fiat_value_exact='invalid' WHERE term_kind='direct_swap_payout'").unwrap();
-    let e = execute(
-        book.connection(),
-        &scope(),
-        "transfers.payouts.list",
-        &dict::<&str>([]),
-    )
-    .unwrap_err();
-    assert_eq!(e.code, "internal_error");
-    assert_eq!(e.message, "could not convert string to float: 'invalid'");
+    book.connection()
+        .execute_batch("DROP TRIGGER trg_custody_component_terms_immutable")
+        .unwrap();
+    for price in ["invalid", "NaN", "Infinity", "1e999", "1e-20"] {
+        book.connection().execute("UPDATE custody_component_economic_terms SET payout_fiat_value_exact=? WHERE term_kind='direct_swap_payout'", [price]).unwrap();
+        let result = execute(
+            book.connection(),
+            &scope(),
+            "transfers.payouts.list",
+            &dict::<&str>([]),
+        )
+        .unwrap();
+        assert!(!array(&result).is_empty());
+        for row in array(&result) {
+            assert_eq!(get(row, "invalid"), Some(&Value::Bool(true)));
+            assert_eq!(
+                get(row, "validation_error"),
+                Some(&s(
+                    "Invalid payout_fiat_value; delete and recreate this payout"
+                ))
+            );
+            assert_eq!(get(row, "payout_fiat_value"), Some(&Value::Null));
+        }
+    }
 }
 
 #[test]

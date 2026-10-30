@@ -119,3 +119,13 @@ def test_native_daemon_failed_import_rolls_back_before_next_request(tmp_path, mo
     conn = open_db(root)
     assert conn.execute("SELECT COUNT(*) FROM rates_cache").fetchone()[0] == 1
     conn.close()
+
+
+@pytest.mark.parametrize("value", ["bad", "NaN", "Infinity", "1e400", "1e-20", "1e-300"])
+def test_bounded_price_errors_match_python(tmp_path, monkeypatch, value):
+    root, env = _setup(tmp_path, monkeypatch)
+    args = ["--data-root", root, "--machine", "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", value]
+    expected = cli_runner.run(args, reference=True, env=env, capture_output=True)
+    actual = cli_runner.run(args, env=env, capture_output=True)
+    assert expected.returncode != 0
+    assert (actual.returncode, actual.stdout, actual.stderr) == (expected.returncode, expected.stdout, expected.stderr)

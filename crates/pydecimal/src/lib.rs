@@ -26,6 +26,9 @@
 //! [`Decimal::from_canonical`] are the lossless form for the JSON boundary.
 //! The cost of an operation grows with the context precision.
 
+mod price;
+pub use price::{finite_price, PriceError};
+
 use core::cmp::Ordering;
 use core::fmt;
 use core::str::FromStr;

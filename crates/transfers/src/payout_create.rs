@@ -29,41 +29,10 @@ fn present<'a>(args: &'a Value, key: &str) -> Option<&'a Value> {
     get(args, key).filter(|v| !matches!(v, Value::Null))
 }
 fn amount(v: &Value, name: &str) -> Result<Value> {
-    let v = if matches!(v, Value::Null) { &s("0") } else { v };
     pair::amount(v).map_err(|mut e| {
         e.message = e.message.replace("--out-amount", name);
         e
     })
-}
-// Python format(float, '.17g'), including its exponent threshold and zero spelling.
-fn exact_float(n: f64) -> String {
-    if n.is_infinite() {
-        return "inf".into();
-    }
-    if n == 0.0 {
-        return if n.is_sign_negative() { "-0" } else { "0" }.into();
-    }
-    let scientific = format!("{n:.16e}");
-    let (digits, exponent) = scientific.split_once('e').unwrap();
-    let exponent: i32 = exponent.parse().unwrap();
-    if !(-4..17).contains(&exponent) {
-        format!(
-            "{}e{}{:02}",
-            digits.trim_end_matches('0').trim_end_matches('.'),
-            if exponent < 0 { "-" } else { "+" },
-            exponent.abs()
-        )
-    } else {
-        let fixed = format!(
-            "{n:.precision$}",
-            precision = (16 - exponent).max(0) as usize
-        );
-        if fixed.contains('.') {
-            fixed.trim_end_matches('0').trim_end_matches('.').into()
-        } else {
-            fixed
-        }
-    }
 }
 pub(super) fn execute(
     c: &Connection,
@@ -118,50 +87,56 @@ fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
             ));
         }
     }
-    let fiat = match present(args, "payout_fiat_value") {
-        None => Value::Null,
+    let (fiat, fiat_exact) = match present(args, "payout_fiat_value") {
+        None => (Value::Null, Value::Null),
         Some(v) => {
-            let raw = py_str(v);
-            let raw = if raw.is_empty() {
-                "0"
-            } else {
-                kassiber_pytext::strip(&raw)
-            };
-            match raw.parse::<Decimal>() {
-                Ok(d) => {
-                    if d.signum() == std::cmp::Ordering::Less {
-                        return Err(AppError::new(
-                            "validation",
-                            "--payout-fiat-value must not be negative",
-                        ));
-                    }
-                    Value::Float(d.to_string().parse::<f64>().map_err(|_| {
-                        AppError::new("internal_error", "decimal conversion failed")
-                    })?)
-                }
-                Err(kassiber_pydecimal::DecimalError::NonFinite) => {
-                    let lower = raw.to_ascii_lowercase();
-                    if lower.contains("nan") {
-                        return Err(AppError::new(
-                            "internal_error",
-                            "[<class 'decimal.InvalidOperation'>]",
-                        ));
-                    }
-                    if lower.starts_with('-') {
-                        return Err(AppError::new(
-                            "validation",
-                            "--payout-fiat-value must not be negative",
-                        ));
-                    }
-                    Value::Float(f64::INFINITY)
-                }
-                Err(_) => {
-                    return Err(AppError::new(
-                        "app_error",
-                        format!("Invalid decimal value: {}", py_str(v)),
-                    ))
+            let d = kassiber_pydecimal::finite_price(&py_str(v))
+                .map_err(|e| AppError::new("validation", e.message("--payout-fiat-value")))?;
+            for quantity in [&payout, &portion] {
+                let quantity = if matches!(quantity, Value::Null) {
+                    principal.to_string()
+                } else {
+                    py_str(quantity)
+                };
+                let quantity: Decimal = quantity
+                    .parse()
+                    .map_err(|_| AppError::new("internal_error", "decimal conversion failed"))?;
+                if quantity.is_positive() {
+                    let btc = quantity
+                        .div(
+                            &Decimal::from(100_000_000_000_i64),
+                            &kassiber_pydecimal::Context::RP2,
+                        )
+                        .map_err(|e| AppError::new("internal_error", e.to_string()))?;
+                    let rate = d
+                        .div(&btc, &kassiber_pydecimal::Context::RP2)
+                        .map_err(|e| AppError::new("internal_error", e.to_string()))?;
+                    kassiber_pydecimal::finite_price(&rate.to_string())
+                        .map_err(|e| AppError::new("validation", e.message("payout_fiat_rate")))?;
                 }
             }
+            if d.signum() == std::cmp::Ordering::Less {
+                return Err(AppError::new(
+                    "validation",
+                    "--payout-fiat-value must not be negative",
+                ));
+            }
+            // The authoring boundary supplies format(value, "f"), then the
+            // component canonicalizer uses str(Decimal(text)). Positive
+            // exponents therefore become zero; negative scale is retained.
+            let exact: Decimal = d
+                .to_fixed_string()
+                .map_err(|e| AppError::new("internal_error", e.to_string()))?
+                .parse()
+                .expect("bounded fixed decimal");
+            (
+                Value::Float(
+                    d.to_string().parse::<f64>().map_err(|_| {
+                        AppError::new("internal_error", "decimal conversion failed")
+                    })?,
+                ),
+                s(exact.to_string()),
+            )
         }
     };
     let when = match present(args, "payout_occurred_at") {
@@ -270,10 +245,6 @@ fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
     set(&mut base, "swap_fee_msat", spec::num(swap));
     let row = pair::boundary(c, &base)?;
     let mut canonical = project(&row, FIELDS);
-    let fiat_exact = match value(&base, "payout_fiat_value") {
-        Value::Float(n) => s(exact_float(n)),
-        _ => Value::Null,
-    };
     set(&mut canonical, "payout_fiat_value", fiat_exact.clone());
     let hash = store::hash(&canonical, false)?;
     let id = spec::stable(&[
@@ -393,12 +364,19 @@ fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
         .unwrap_or_else(|| "cli".into());
     store::activate(c, scope, &row, &mut plan, &source, None)?;
     store::invalidate(c, scope.profile_id)?;
-    let mut result = dict(FIELDS.iter().map(|key| (*key, value(&base, key))));
+    let mut result = dict(
+        [
+            ("invalid", Value::Bool(false)),
+            ("validation_error", Value::Null),
+        ]
+        .into_iter()
+        .chain(FIELDS.iter().map(|key| (*key, value(&base, key)))),
+    );
     let mut fields = match result {
         Value::Dict(v) => v,
         _ => unreachable!(),
     };
-    fields.insert(1, ("component_id".into(), value(&plan, "component_id")));
+    fields.insert(3, ("component_id".into(), value(&plan, "component_id")));
     result = Value::Dict(fields);
     let payout = value(&base, "payout_amount");
     set(&mut result, "payout_amount", super::records::btc(&payout));

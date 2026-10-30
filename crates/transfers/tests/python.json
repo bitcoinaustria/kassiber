@@ -158,6 +158,8 @@
       "args": {},
       "expected": [
         {
+          "invalid": false,
+          "validation_error": null,
           "id": "00000000-0000-0000-0000-000000000008",
           "component_id": "ccd40a2c-426b-583f-b577-cf850791930b",
           "workspace_id": "w",

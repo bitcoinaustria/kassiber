@@ -21756,8 +21756,8 @@
   {
     "id": "projection5-finite-legacy-float",
     "file": "crates/custody/src/finalized_projection/money.rs",
-    "find": "Self::Finite(d) if d.to_string().parse::<f64>().is_ok_and(f64::is_finite) => Ok(()),",
-    "replace": "Self::Finite(_) => Ok(()),",
+    "find": "            Self::Finite(d)\n                if d.to_string().parse::<f64>().is_ok_and(f64::is_finite)\n                    && (d.is_zero()\n                        || (d.exponent().unsigned_abs() <= 308\n                            && d.copy_abs() >= Decimal::from_str(\"1e-13\").unwrap())) =>\n            {\n                Ok(())\n            }",
+    "replace": "            Self::Finite(_) => Ok(()),",
     "expect_failing": [
       "projection_payout_settlement_vectors"
     ],
@@ -22406,8 +22406,8 @@
   {
     "id": "projection-review-M21",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "integer_big(&d[\"source\"][\"end_msat\"])? - integer_big(&d[\"source\"][\"start_msat\"])?;",
-    "replace": "integer_big(&d[\"source\"][\"end_msat\"])?;",
+    "find": "let amount =\n            integer_big(&d[\"source\"][\"end_msat\"])? - integer_big(&d[\"source\"][\"start_msat\"])?;",
+    "replace": "let amount =\n            integer_big(&d[\"source\"][\"end_msat\"])?;",
     "expect_failing": [
       "projection_nonzero_slice_pricing"
     ],
@@ -22862,5 +22862,65 @@
       "projection_payout_component_binding"
     ],
     "rule": "Authored payout terms require the reviewed slice and matching component."
+  },
+  {
+    "id": "R7-worklist-GAP-136",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "&leg.principal * 800_000_u32",
+    "replace": "&leg.principal * 900_000_u32",
+    "expect_failing": [
+      "gaps_worklist_ranges_vectors"
+    ],
+    "rule": "The SQL worklist per-slot floor uses 80 percent source coverage."
+  },
+  {
+    "id": "R7-worklist-GAP-137",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "(minimum_total + 255_u32) / 256_u32",
+    "replace": "minimum_total / 256_u32",
+    "expect_failing": [
+      "gaps_worklist_ranges_vectors"
+    ],
+    "rule": "The per-slot floor rounds up before selecting inbound observations."
+  },
+  {
+    "id": "R7-worklist-GAP-138",
+    "file": "crates/custody/src/gaps/mod.rs",
+    "find": "&leg.principal * 250_000_u32",
+    "replace": "&leg.principal * 200_000_u32",
+    "expect_failing": [
+      "gaps_worklist_ranges_vectors"
+    ],
+    "rule": "The SQL worklist permits at most 25 percent excess return."
+  },
+  {
+    "id": "R7-price-exponent",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "d.exponent().unsigned_abs() <= 308",
+    "replace": "true",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Nonzero prices retain the Python decimal exponent bound."
+  },
+  {
+    "id": "R7-price-floor",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "d.copy_abs() >= Decimal::from_str(\"1e-13\").unwrap()",
+    "replace": "true",
+    "expect_failing": [
+      "projection_base_row_vectors"
+    ],
+    "rule": "Nonzero prices cannot disappear below ledger precision."
+  },
+  {
+    "id": "R7-payout-split",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "if selected != integer_big(reviewed)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "projection_selected_composition_vectors"
+    ],
+    "rule": "A selected partial slice cannot reuse whole reviewed payout economics."
   }
 ]

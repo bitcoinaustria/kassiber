@@ -379,7 +379,7 @@ fn ingest(
                 let close = time::epoch(seconds.checked_add(interval * 60)?)?;
                 time::epoch(seconds)?;
                 for price in &row[1..5] {
-                    if decimal(price).ok()? <= Decimal::zero() {
+                    if kassiber_pydecimal::finite_price(price).ok()? <= Decimal::zero() {
                         return None;
                     }
                 }
@@ -387,7 +387,7 @@ fn ingest(
                 if row[5].is_empty() {
                     return None;
                 }
-                let vol = decimal(row[5]).ok()?;
+                let vol = kassiber_pydecimal::finite_price(row[5]).ok()?;
                 if vol < Decimal::zero() {
                     return None;
                 }

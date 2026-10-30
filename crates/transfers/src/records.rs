@@ -104,13 +104,32 @@ fn fallback(row: &Value, keys: &[&str]) -> Value {
         .unwrap_or(Value::Null)
 }
 fn common(row: &Value, payout: bool) -> Result<Value> {
-    let mut out = vec![
+    let price = match get(row, "payout_fiat_value_exact") {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => kassiber_pydecimal::finite_price(&py_str(v)).map(Some),
+    };
+    let invalid_price = price.is_err();
+    let mut out = Vec::new();
+    if payout {
+        out.extend([
+            ("invalid", Value::Bool(invalid_price)),
+            (
+                "validation_error",
+                if invalid_price {
+                    s("Invalid payout_fiat_value; delete and recreate this payout")
+                } else {
+                    Value::Null
+                },
+            ),
+        ]);
+    }
+    out.extend([
         ("id", value(row, "legacy_source_id")),
         ("component_id", value(row, "component_id")),
         ("workspace_id", value(row, "workspace_id")),
         ("profile_id", value(row, "profile_id")),
         ("out_transaction_id", value(row, "out_transaction_id")),
-    ];
+    ]);
     if !payout {
         out.push(("in_transaction_id", value(row, "in_transaction_id")));
     }
@@ -126,9 +145,11 @@ fn common(row: &Value, payout: bool) -> Result<Value> {
             ("payout_occurred_at", value(row, "payout_occurred_at")),
             (
                 "payout_fiat_value",
-                match get(row, "payout_fiat_value_exact") {
-                    None | Some(Value::Null) => Value::Null,
-                    Some(v) => fiat(v)?,
+                match price.ok().flatten() {
+                    None => Value::Null,
+                    Some(value) => {
+                        Value::Float(value.to_string().parse::<f64>().expect("finite price"))
+                    }
                 },
             ),
             ("payout_external_id", value(row, "payout_external_id")),
@@ -288,19 +309,4 @@ pub(super) fn payouts(conn: &Connection, scope: &Scope<'_>) -> Result<Value> {
         result.insert(text(&row, "legacy_source_id"), entry);
     }
     Ok(sorted(result))
-}
-
-fn fiat(value: &Value) -> Result<Value> {
-    let raw = py_str(value);
-    let parsed = kassiber_pytext::parse_float(&raw);
-    if parsed.is_err() {
-        return Err(AppError::new(
-            "internal_error",
-            format!(
-                "could not convert string to float: {}",
-                kassiber_pytext::repr_str(&raw)
-            ),
-        ));
-    }
-    Ok(Value::Float(parsed.expect("checked float")))
 }

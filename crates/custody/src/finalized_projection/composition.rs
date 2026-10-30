@@ -288,6 +288,18 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
         } else {
             &Value::Null
         };
+        if codec::truth(payout) {
+            let reviewed = if codec::truth(&payout["out_amount"]) {
+                &payout["out_amount"]
+            } else {
+                &source["amount_msat"]
+            };
+            let selected =
+                integer_big(&d["source"]["end_msat"])? - integer_big(&d["source"]["start_msat"])?;
+            if selected != integer_big(reviewed)? {
+                return Err("AppError".into());
+            }
+        }
         let asset = text(&payout["payout_asset"]).py_upper();
         let source_asset = string(&source["asset"]);
         let carry = codec::truth(payout)

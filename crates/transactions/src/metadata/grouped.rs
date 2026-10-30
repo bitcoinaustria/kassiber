@@ -161,15 +161,9 @@ fn decimal(raw: &Value, field: &str) -> Result<Option<Decimal>> {
     if matches!(raw, Value::Null) || *raw == s("") {
         return Ok(None);
     }
-    py_str(raw).parse().map(Some).map_err(|error| {
-        AppError::new(
-            "validation",
-            match error {
-                DecimalError::NonFinite => format!("{field} must be a finite decimal number"),
-                _ => format!("{field} must be a decimal number"),
-            },
-        )
-    })
+    kassiber_pydecimal::finite_price(&py_str(raw))
+        .map(Some)
+        .map_err(|error| AppError::new("validation", error.message(field)))
 }
 
 fn arithmetic(error: DecimalError) -> AppError {

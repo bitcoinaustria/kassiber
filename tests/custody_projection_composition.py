@@ -104,6 +104,7 @@ def operands():
         v['decisions'][0].update(target=None,state='external_confirmed',reason='reviewed_direct_payout_source')
         v['payouts']=[dict(id='paid',out_transaction_id='source',payout_amount=50,payout_asset='LBTC',payout_fiat_value='2.50',policy='carrying-value',**extra)]
     yield case('payout_carry',payout)
+    yield case('payout_split_refusal',lambda v:(payout(v),v['decisions'][0]['source'].update(end_msat=50),v['eligible'][0].update(end_msat=50)))
     yield case('payout_taxable',lambda v:(payout(v),v['payouts'][0].update(policy='taxable')))
     yield case('payout_missing_value',lambda v:(payout(v),v['payouts'][0].update(payout_fiat_value=None)))
     yield case('payout_bad_value',lambda v:(payout(v),v['payouts'][0].update(payout_fiat_value='bad')))

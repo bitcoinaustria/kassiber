@@ -140,7 +140,8 @@ fn exact(value: Option<&str>) -> Result<(Option<f64>, Option<String>)> {
     let Some(raw) = value.filter(|s| !s.is_empty()) else {
         return Ok((None, None));
     };
-    let d = decimal(raw)?;
+    let d = kassiber_pydecimal::finite_price(raw)
+        .map_err(|e| validation(e.message("rate cache value")))?;
     let fixed = d
         .to_fixed_string()
         .map_err(|_| validation(format!("Invalid rate '{raw}'")))?;
@@ -201,7 +202,7 @@ pub(crate) fn invalidate(conn: &Connection, pair: &str) -> Result<()> {
 pub fn set_manual(conn: &Connection, args: &Value) -> Result<Value> {
     let pair = normalize_pair(text(args, "pair").unwrap_or(""))?;
     let raw = text(args, "rate").unwrap_or("");
-    let d = decimal(raw)?;
+    let d = kassiber_pydecimal::finite_price(raw).map_err(|e| validation(e.message("rate")))?;
     if d <= Decimal::zero() {
         return Err(validation("Rate must be positive"));
     }

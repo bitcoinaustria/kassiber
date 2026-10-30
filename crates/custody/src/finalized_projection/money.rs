@@ -60,11 +60,21 @@ impl Money {
     pub(super) fn finite(v: &Value) -> Result<Self, String> {
         let value = Self::parse(v).map_err(|_| "AppError".to_owned())?;
         value.require_finite()?;
-        Ok(value)
+        Ok(match value {
+            Self::Finite(d) if d.is_zero() => Self::Finite(Decimal::zero()),
+            value => value,
+        })
     }
     pub(super) fn require_finite(&self) -> Result<(), String> {
         match self {
-            Self::Finite(d) if d.to_string().parse::<f64>().is_ok_and(f64::is_finite) => Ok(()),
+            Self::Finite(d)
+                if d.to_string().parse::<f64>().is_ok_and(f64::is_finite)
+                    && (d.is_zero()
+                        || (d.exponent().unsigned_abs() <= 308
+                            && d.copy_abs() >= Decimal::from_str("1e-13").unwrap())) =>
+            {
+                Ok(())
+            }
             _ => Err("AppError".into()),
         }
     }

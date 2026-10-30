@@ -678,6 +678,11 @@ pub(super) fn economic_terms(
                 vec![("ordinal", int(ordinal))],
             ));
         }
+        let price = field(raw, "payout_fiat_value_exact");
+        if !matches!(price, Value::Null) && price != &s("") {
+            kassiber_pydecimal::finite_price(&py_str(price))
+                .map_err(|e| AppError::new("validation", e.message("payout_fiat_value_exact")))?;
+        }
         let id = match optional_text(field(raw, "id"), "id", false)? {
             Value::Null => s(sources.uuid(c)?),
             id => id,

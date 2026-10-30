@@ -30875,8 +30875,8 @@
           "id": "f51e12e7-5d0d-541b-aa31-109ada604667",
           "now": "2025-06-01T10:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -30905,8 +30905,8 @@
           "id": "385d771d-b7e2-599e-abc5-54270e9c37ad",
           "now": "2025-06-01T11:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "cannot convert Infinity to integer",
+            "code": "validation",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -30935,8 +30935,8 @@
           "id": "b9c57e1c-bca3-500e-b28f-b12ac54720f1",
           "now": "2025-06-01T12:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: bad",
+            "code": "validation",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -31625,7 +31625,7 @@
           "now": "2025-06-02T00:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--out-amount must be positive",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -31655,7 +31655,7 @@
           "now": "2025-06-02T01:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--out-amount must be positive",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -31684,8 +31684,8 @@
           "id": "89869cd1-1623-5fe6-87b2-8cee445c5ba3",
           "now": "2025-06-02T02:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: True",
+            "code": "validation",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -31714,8 +31714,8 @@
           "id": "e9cf393d-48ec-5704-87b2-4da1cca6d00b",
           "now": "2025-06-02T03:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+            "code": "validation",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },

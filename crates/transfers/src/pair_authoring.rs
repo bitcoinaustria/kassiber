@@ -3,7 +3,7 @@ use super::*;
 use super::{component_store as store, pair_spec as spec};
 use kassiber_custody::{codec, components::review};
 use kassiber_envelope::{set, truthy};
-use kassiber_pydecimal::{Context, Decimal, Rounding};
+use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::params;
 use sql::{atomic, bind, error};
 use std::collections::BTreeSet;
@@ -222,29 +222,8 @@ fn fee(out: &Value, inbound: &Value, kind: &str, amount: &Value) -> (Value, Valu
     )
 }
 pub(super) fn amount(v: &Value) -> Result<Value> {
-    let raw = py_str(v);
-    let raw = if raw.is_empty() {
-        "0"
-    } else {
-        kassiber_pytext::strip(&raw)
-    };
-    if matches!(raw.to_ascii_lowercase().as_str(), "-inf" | "-infinity") {
-        return Err(AppError::new("validation", "--out-amount must be positive"));
-    }
-    let decimal = raw.parse::<Decimal>().map_err(|e| {
-        if matches!(e, kassiber_pydecimal::DecimalError::NonFinite) {
-            AppError::new(
-                "internal_error",
-                if raw.to_ascii_lowercase().contains("nan") {
-                    "[<class 'decimal.InvalidOperation'>]"
-                } else {
-                    "cannot convert Infinity to integer"
-                },
-            )
-        } else {
-            AppError::new("app_error", format!("Invalid decimal value: {}", py_str(v)))
-        }
-    })?;
+    let decimal = kassiber_pydecimal::finite_price(&py_str(v))
+        .map_err(|e| AppError::new("validation", e.message("--out-amount")))?;
     if decimal.signum() != std::cmp::Ordering::Greater {
         return Err(AppError::new("validation", "--out-amount must be positive"));
     }

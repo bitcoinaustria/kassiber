@@ -69,7 +69,7 @@ def evaluate(v):
         # already-selected operands. Selection remains outside this checkpoint.
         root=ast.parse(inspect.getsource(p.compile_finalized_tax_projection))
         branch=next(node for node in ast.walk(root) if isinstance(node,ast.If) and any(isinstance(child,ast.Name) and child.id=='payout_value' for child in ast.walk(node.test)))
-        env=dict(vars(p),projected=deepcopy(v['row']),payout_value=v['payout'].get('payout_fiat_value'),decision=SimpleNamespace(source=SimpleNamespace(amount_msat=v['amount'])))
+        env=dict(vars(p),projected=deepcopy(v['row']),payout_value=v['payout'].get('payout_fiat_value'),decision=SimpleNamespace(source=SimpleNamespace(amount_msat=v['amount'])),source=SimpleNamespace(anchor_transaction_id='source'))
         exec(compile(ast.fix_missing_locations(ast.Module(body=[branch],type_ignores=[])),'<Python payout price reference>','exec'),env)
         return env['projected']
     raise AssertionError(op)

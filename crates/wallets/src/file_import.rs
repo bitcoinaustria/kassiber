@@ -116,15 +116,13 @@ impl PriceNumber {
         }
     }
     fn finite(self, field: &str) -> Result<Self, AppError> {
-        if !matches!(self, Self::Finite(_))
-            || !matches!(self.float()?, Sql::Real(value) if value.is_finite())
-        {
-            return Err(AppError::new(
-                "validation",
-                format!("{field} must be a finite decimal number"),
-            ));
-        }
-        Ok(self)
+        let text = match self {
+            Self::Finite(value) => value.to_string(),
+            Self::Special(text) => text,
+        };
+        kassiber_pydecimal::finite_price(&text)
+            .map(Self::Finite)
+            .map_err(|e| AppError::new("validation", e.message(field)))
     }
     fn import_price(value: &str, field: &str) -> Result<Self, AppError> {
         Self::parse(value)
@@ -445,6 +443,23 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
                 r.multiply(&amount)?.finite("fiat_value")
             })
             .transpose()?,
+    };
+    let rate = match (rate, &value) {
+        (None, Some(_)) if amount_special.is_some() => {
+            let special = amount_special.as_ref().unwrap();
+            if special.contains("NaN") {
+                return Err(AppError::new(
+                    "validation",
+                    "fiat_rate must be a finite decimal number",
+                ));
+            }
+            Some(PriceNumber::Finite(Decimal::zero()))
+        }
+        (None, Some(PriceNumber::Finite(value))) if !amount.is_zero() => {
+            let rate = value.div(&amount, &CTX).map_err(decimal_error)?;
+            Some(PriceNumber::Finite(rate).finite("fiat_rate")?)
+        }
+        (rate, _) => rate,
     };
     let priced = rate.is_some() || value.is_some();
     if input.rest.is_some()

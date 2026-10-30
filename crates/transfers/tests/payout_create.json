@@ -203,9 +203,9 @@
         "swap_candidate_count": null
       }
     ],
-    "0cabe289e30008c6c2f83d1c8f33e1609f45ab21a28528f91370f3824ba664ef": [
+    "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901": [
       {
-        "id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "lineage_id": "d548fdf8-e2a7-5d9b-856e-7c5802119f6c",
         "workspace_id": "w",
         "profile_id": "p",
@@ -233,10 +233,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "ecf485e33222caf5052821bd473f529c7a5c8221a21785b8fd6a8d35e381e004": [
+    "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7": [
       {
-        "id": "1b368db6-c8f8-5cdc-b567-3ca56976b1c2",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -259,8 +259,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "6b88fe09-2068-535d-a682-de12eb1e07a9",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -283,32 +283,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "8bd8d691b9959e07cd4ad44a5df8fca7005680078d56d596ce9a5cc827be508a": [
+    "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe": [
       {
-        "id": "2b5e969f-ddb8-5402-bdf4-0326599034e3",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "88bee711-bd08-5ddd-adce-4562ecb0a26e",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "1b368db6-c8f8-5cdc-b567-3ca56976b1c2",
-        "sink_leg_id": "6b88fe09-2068-535d-a682-de12eb1e07a9",
+        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "sink_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "bfb9d806cbcbbb01940da9aa1751892e5d05185654cfc3d86fa6de3278c789e8": [
+    "b02df9eaa072c480e06f2f2b64bba82cb5985abc9fe5d3ad1f12b9a952769231": [
       {
-        "id": "b1fa9977-86df-5ae6-b33e-5f3d40bbf071",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "00aca6bf-2e04-55a6-9180-beee4aebdf91",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "1b368db6-c8f8-5cdc-b567-3ca56976b1c2",
-        "target_leg_id": "6b88fe09-2068-535d-a682-de12eb1e07a9",
+        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "target_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-        "source_row_hash": "cb348c727dc66cb5a2eeac625264249914fecd5801a3ad3581fa21dd731eb94b",
+        "source_row_hash": "8b4c57ce477ad960f7950e10bd1beb02226eadc6ee2da525cb04dc5a7f24fb03",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -320,36 +320,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "1.2344999999999999",
+        "payout_fiat_value_exact": "1.2345",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "0291666c8ca9d0a99aec36afaa23f130f4459dd9fa4925e1a1c3094705941c07": [
+    "6844c888fe5dff54c47e50ee9d0d860d38834acf3b2514df4f7b1d214d8e2c69": [
       {
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "3929e4c0afa920cac5c57b89893ca2d84c0b7f4681aeb5b2ce55d72cabe81893": [
+    "2462d0a57a702ca60ac0f5132bf96ca3e12eaa1b41039f1eb6bcdabf63b41db4": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "subject_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "5ae7d1c51f05597eff612d5570bf634424e32bf11f68c80fd891f026ab54e006": [
+    "841be6d5d187b5537991ba93c6ab7a11bcbabd58a0b2303ccc12d11b2835bc86": [
       {
-        "id": "46eb5ab9cef3ad98a8650e7c5269c911f1441c27f84ab4e7df9f21353e2c9b95",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "1e10b2693c1456f8cbb5ef59b60329981791f9b6910f33282225e9aa618ecd6d",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -561,9 +561,9 @@
         "swap_candidate_count": null
       }
     ],
-    "b495e178b23cfb50289cb591e04a171d3aeb26e9e424a0b52a93715320f5b129": [
+    "91930391f0151a69a384f93055b70bd1afa2c92d6befcf14117705f2387af29e": [
       {
-        "id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "lineage_id": "d548fdf8-e2a7-5d9b-856e-7c5802119f6c",
         "workspace_id": "w",
         "profile_id": "p",
@@ -795,9 +795,9 @@
         "swap_candidate_count": null
       }
     ],
-    "d164440ad1689bd018ef4cc1eb4e0f247a5938ba8ec2a91ec9a04eaef1648394": [
+    "4f057e3b177959e243ec71044c77720a2dccf6b6b172b0603ac9f053bff56602": [
       {
-        "id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "lineage_id": "d548fdf8-e2a7-5d9b-856e-7c5802119f6c",
         "workspace_id": "w",
         "profile_id": "p",
@@ -853,7 +853,31 @@
         "created_at": "2025-06-01T03:00:00Z"
       }
     ],
-    "779038c53527098824f36a3499beee4c7d8b535fdfafb20c6e5e914ff811bcde": [
+    "5439e810fb0657b7ade43e9e20902562161f651e48d5c6ececa24268f5cbbc7d": [
+      {
+        "id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "role": "source",
+        "rail": "bitcoin",
+        "chain": "bitcoin",
+        "network": "main",
+        "asset": "BTC",
+        "exposure": "bitcoin",
+        "conservation_unit": "msat",
+        "amount_msat": 1000,
+        "valuation_unit": "reviewed_source_msat",
+        "valuation_amount": 1000,
+        "occurred_at": "2025-02-01T00:00:00Z",
+        "transaction_id": "d",
+        "anchor_transaction_id": "d",
+        "wallet_id": "source",
+        "location_ref": null,
+        "notes": null,
+        "created_at": "2025-06-01T00:00:00Z"
+      },
       {
         "id": "d37e022b-2cf0-54e8-9b8e-1bfdc9f9353c",
         "component_id": "66ed3511-8b2d-54f5-96bf-485bba5a7719",
@@ -879,26 +903,26 @@
         "created_at": "2025-06-01T03:00:00Z"
       },
       {
-        "id": "1b368db6-c8f8-5cdc-b567-3ca56976b1c2",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
+        "ordinal": 1,
+        "role": "retained",
+        "rail": "untracked",
+        "chain": null,
+        "network": null,
+        "asset": "ETH",
+        "exposure": "asset:eth",
         "conservation_unit": "msat",
-        "amount_msat": 1000,
+        "amount_msat": 800,
         "valuation_unit": "reviewed_source_msat",
         "valuation_amount": 1000,
         "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
+        "transaction_id": null,
+        "anchor_transaction_id": null,
+        "wallet_id": null,
+        "location_ref": "legacy-payout:dd8032b3-1303-5939-9eb2-3cd67f381cb2",
         "notes": null,
         "created_at": "2025-06-01T00:00:00Z"
       },
@@ -925,33 +949,21 @@
         "location_ref": "legacy-payout:7fd771c8-2424-5776-9e26-88af78c385d8",
         "notes": null,
         "created_at": "2025-06-01T03:00:00Z"
-      },
-      {
-        "id": "6b88fe09-2068-535d-a682-de12eb1e07a9",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "66c3654b762024a34168fd5260a03d6a8d544953904f4be41b91e768628929ef": [
+    "4474e6ced23cb041e4ffbbbfe921c642e5d4945c0c231e41e433ee5f47a8d910": [
+      {
+        "id": "88bee711-bd08-5ddd-adce-4562ecb0a26e",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "sink_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "source_amount_msat": 1000,
+        "sink_amount_msat": 800,
+        "created_at": "2025-06-01T00:00:00Z"
+      },
       {
         "id": "5f2b6b4e-49b1-5807-82c5-82d794325c21",
         "component_id": "66ed3511-8b2d-54f5-96bf-485bba5a7719",
@@ -963,21 +975,36 @@
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T03:00:00Z"
-      },
+      }
+    ],
+    "96b2ab4eb0be4c3fbbb13a8fb473920adde4080003dc3c75df571da1bb2db26c": [
       {
-        "id": "2b5e969f-ddb8-5402-bdf4-0326599034e3",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "id": "00aca6bf-2e04-55a6-9180-beee4aebdf91",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "1b368db6-c8f8-5cdc-b567-3ca56976b1c2",
-        "sink_leg_id": "6b88fe09-2068-535d-a682-de12eb1e07a9",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
+        "source_leg_id": "e919f04b-bbc9-5d06-b84e-51991f666eba",
+        "target_leg_id": "13a74938-db59-5d4b-b1da-f2c49b8bb542",
+        "term_kind": "direct_swap_payout",
+        "legacy_source_id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
+        "source_row_hash": "8b4c57ce477ad960f7950e10bd1beb02226eadc6ee2da525cb04dc5a7f24fb03",
+        "review_kind": "direct-swap-payout",
+        "tax_policy": "carrying-value",
+        "reviewed_source_amount_msat": 1000,
+        "swap_fee_msat": 200,
+        "swap_fee_kind": "combined",
+        "confidence_at_review": null,
+        "review_source": null,
+        "review_notes": "\u20ac \ud83d\ude80",
+        "payout_asset": "ETH",
+        "payout_amount_msat": 800,
+        "payout_occurred_at": null,
+        "payout_fiat_value_exact": "1.2345",
+        "payout_external_id": null,
+        "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "23440fce156e25862a683ef2ac0bbcfb91a4e9c39be735777eb3ab424bf06aa3": [
+      },
       {
         "id": "74ae6a46-bf7a-5937-b684-0b25503d87ef",
         "component_id": "66ed3511-8b2d-54f5-96bf-485bba5a7719",
@@ -1004,33 +1031,6 @@
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T03:00:00Z"
-      },
-      {
-        "id": "b1fa9977-86df-5ae6-b33e-5f3d40bbf071",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "1b368db6-c8f8-5cdc-b567-3ca56976b1c2",
-        "target_leg_id": "6b88fe09-2068-535d-a682-de12eb1e07a9",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-        "source_row_hash": "cb348c727dc66cb5a2eeac625264249914fecd5801a3ad3581fa21dd731eb94b",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "carrying-value",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": "\u20ac \ud83d\ude80",
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": "1.2344999999999999",
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
       }
     ],
     "bebd6ecc1b0c5d4461eb1bf19c8b24ebbb41375117e54fd50380f1b0a94b6f26": [
@@ -1041,12 +1041,12 @@
         "created_at": "2025-06-01T03:00:00Z"
       }
     ],
-    "148ff0d13b8427eb5f2ee0971cdac8ff0e78b232bf17cc1dcb8190cb08b19e7c": [
+    "de4c16c684e2472c1332525a231a76f8539778a0ed22c4aee8074a227b6c0ddd": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+        "subject_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
@@ -1063,7 +1063,17 @@
         "created_at": "2025-06-01T03:00:00Z"
       }
     ],
-    "6dadadc9d0b569630f90224115ccccbc5ec8f91468ed143d12130cdcaf4d714c": [
+    "3c60dd131b69e8ca11578c3c1554f34ebe4eccdb597a1f12ccc81c52c4c96fe1": [
+      {
+        "id": "1e10b2693c1456f8cbb5ef59b60329981791f9b6910f33282225e9aa618ecd6d",
+        "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "ordinal": 0,
+        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
+        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
+        "created_at": "2025-06-01T00:00:00Z"
+      },
       {
         "id": "231732034a4cae0cc2bce5218bffeb9e80f1ebd479d6c2e322614b9ebc69cb00",
         "component_id": "66ed3511-8b2d-54f5-96bf-485bba5a7719",
@@ -1073,16 +1083,6 @@
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
         "created_at": "2025-06-01T03:00:00Z"
-      },
-      {
-        "id": "46eb5ab9cef3ad98a8650e7c5269c911f1441c27f84ab4e7df9f21353e2c9b95",
-        "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
       }
     ],
     "8156e9b7633af32817fae83119e206ab2b5f700f10fab7f5d08421c472f1aa33": [
@@ -4994,319 +4994,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "7a23fea4dff88c7dfc13182e4e216463c8e8665f9ca99d76d59fadacd2b13726": [
+    "627400a7f12273fd4b73b72bfc296cf7bcfef0fe63b3caa9e76215ec578701c7": [
       {
-        "id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "lineage_id": "76cbb09d-517c-506c-bade-7fad575f3970",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "revision": 1,
-        "component_type": "swap",
-        "conservation_mode": "conversion",
-        "state": "active",
-        "evidence_kind": "reviewed_custody",
-        "evidence_grade": "reviewed",
-        "evidence_json": "{\"review_id\":\"51247aed-08bc-5152-9069-be278920e2ad\",\"term_kind\":\"direct_swap_payout\"}",
-        "conversion_policy": "carrying-value",
-        "conversion_reviewed": 1,
-        "conversion_metadata_json": "{}",
-        "expected_leg_count": 2,
-        "expected_allocation_count": 1,
-        "expected_economic_term_count": 1,
-        "expected_evidence_count": 1,
-        "authored_source": "cli",
-        "notes": null,
-        "change_reason": null,
-        "supersedes_component_id": null,
-        "superseded_by_component_id": null,
-        "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "7a96f81d412601047216429a8c71ec980762c99b303e10550a1028dc1f056448": [
-      {
-        "id": "8f2f4de4-d7eb-5801-b603-0d14c6dfdf23",
-        "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
-        "conservation_unit": "msat",
-        "amount_msat": 1000,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      },
-      {
-        "id": "09dc6474-928d-5e4a-b581-710ba45e30a1",
-        "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:51247aed-08bc-5152-9069-be278920e2ad",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "29ce9e5a79d30d234adf607c6b433032af24f9033014885e830d71aa2e18cab3": [
-      {
-        "id": "9e302c58-0d79-5365-96c2-9f3c9b0eff89",
-        "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "8f2f4de4-d7eb-5801-b603-0d14c6dfdf23",
-        "sink_leg_id": "09dc6474-928d-5e4a-b581-710ba45e30a1",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "befa90e548b5fb2a971cef78ff0775cef0782b1d54cca55344fc905572576d27": [
-      {
-        "id": "f6ed0c7c-59ff-5321-b53c-781b578cbd4b",
-        "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "8f2f4de4-d7eb-5801-b603-0d14c6dfdf23",
-        "target_leg_id": "09dc6474-928d-5e4a-b581-710ba45e30a1",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "51247aed-08bc-5152-9069-be278920e2ad",
-        "source_row_hash": "78596cec56fba10e803d707c68668d97e1bd5f77d7b537bf3d89cead4529275f",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "carrying-value",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": null,
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": "inf",
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "ee540e6ce35069ba29eccad3fb318d788ccd910954deb43f72d3ac0fbbaf9817": [
-      {
-        "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "profile_id": "p",
-        "transaction_id": "d",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "ad38daf0d6b3060c0f22619b2b4049272fc8eb211474a2fe18ef4d56b9b613f9": [
-      {
-        "workspace_id": "w",
-        "profile_id": "p",
-        "subject_kind": "custody_component",
-        "subject_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "fc084efa384a6c7192827b87cbcebacbf7a66de8524e496fd15958327d423277": [
-      {
-        "id": "63ecad779ca7b44a9df8dd332293f83c8ab1d57c2ff03306fca8c14bd50249d4",
-        "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "26c2d793a5cac9ce57f350c3587dbf263c4e9af46edbff40d258d83b1d503b09": [
-      {
-        "id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "lineage_id": "386df33f-ba89-5ce9-9316-b1aac3b6d1ba",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "revision": 1,
-        "component_type": "swap",
-        "conservation_mode": "conversion",
-        "state": "active",
-        "evidence_kind": "reviewed_custody",
-        "evidence_grade": "reviewed",
-        "evidence_json": "{\"review_id\":\"b8c5f3a7-ef01-571d-a5b8-8a8efe0da745\",\"term_kind\":\"direct_swap_payout\"}",
-        "conversion_policy": "carrying-value",
-        "conversion_reviewed": 1,
-        "conversion_metadata_json": "{}",
-        "expected_leg_count": 2,
-        "expected_allocation_count": 1,
-        "expected_economic_term_count": 1,
-        "expected_evidence_count": 1,
-        "authored_source": "cli",
-        "notes": null,
-        "change_reason": null,
-        "supersedes_component_id": null,
-        "superseded_by_component_id": null,
-        "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "dd70809ec89060fc7534bc2bf570113a4d7de08dd8ca03bce0bdf60aa2827f4d": [
-      {
-        "id": "820a8794-b9ae-5602-8852-6f5f875600a6",
-        "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
-        "conservation_unit": "msat",
-        "amount_msat": 1000,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      },
-      {
-        "id": "e9162b1b-8da2-54d5-88f0-8a2611624cfa",
-        "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:b8c5f3a7-ef01-571d-a5b8-8a8efe0da745",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "a630201074b727bb25490562a932599535c7005a07f15866924237ca671a26cf": [
-      {
-        "id": "61c82d66-9dbd-50e8-8984-e7cf5ca0422c",
-        "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "820a8794-b9ae-5602-8852-6f5f875600a6",
-        "sink_leg_id": "e9162b1b-8da2-54d5-88f0-8a2611624cfa",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "85f405a617d027be57ce47644788bbadb1a69b99d596f2f76966610bca7be064": [
-      {
-        "id": "9e357f2d-bb67-5ece-ac43-7ef33603a992",
-        "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "820a8794-b9ae-5602-8852-6f5f875600a6",
-        "target_leg_id": "e9162b1b-8da2-54d5-88f0-8a2611624cfa",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "b8c5f3a7-ef01-571d-a5b8-8a8efe0da745",
-        "source_row_hash": "979eedf0945c993f0657f101a68e2b72a959538804e5507ed16097356c075d44",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "carrying-value",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": null,
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": "inf",
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "92e20639a51629326fdd670fcf2d15d35c6b8de1ec19c656af6354faf5823d22": [
-      {
-        "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "profile_id": "p",
-        "transaction_id": "d",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "0255a07e5a08f8789a8670f471ddaf69c00859ea53fa93e7156557357c03c27c": [
-      {
-        "workspace_id": "w",
-        "profile_id": "p",
-        "subject_kind": "custody_component",
-        "subject_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "fc0735ca6564946bffdea1756654f8daff657fa3ed01c1d519f56967bc323163": [
-      {
-        "id": "2af01041f4dce7bd2079c804177ab0a7868f42a8535cc3472d6e62fc80c12c94",
-        "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "91fbdab9d08d942fca3690860faa5854859cf75134f6d298a60aad5e0f415957": [
-      {
-        "id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "lineage_id": "3f64263c-f139-5bdc-8530-1e04c43074c1",
         "workspace_id": "w",
         "profile_id": "p",
@@ -5334,10 +5024,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "685cf733904fd00e5731e82c137514152df23d3013a7c71c176ff4999f66e544": [
+    "11ba295e241ec96d905cd95f52f2ddacd3e38f2a78a28f23da8a355ba983c14e": [
       {
-        "id": "94a1a9ed-5b70-5ac2-bce9-72f19edf3d8f",
-        "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "id": "7567223f-c0b5-5d16-bc4f-b41b1c522b65",
+        "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5360,8 +5050,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "8d929dc4-cf7d-5a72-9cc8-861dbbea1a13",
-        "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "id": "6946a798-53dd-5ffa-b341-0e76ddbacb18",
+        "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -5384,32 +5074,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "bdc55b2562051497bf82e12b8bebd99f96fc196e6c5d0fa8d2525d9d1c195904": [
+    "cc1f3cb7d006c7d8904567fb22a699af167fda7aa39c37a9219c82c005c5bfcc": [
       {
-        "id": "f783913b-8091-5144-831c-f6d604b6c42b",
-        "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "id": "c19470ca-8a97-56db-93eb-9b1da9f1faab",
+        "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "94a1a9ed-5b70-5ac2-bce9-72f19edf3d8f",
-        "sink_leg_id": "8d929dc4-cf7d-5a72-9cc8-861dbbea1a13",
+        "source_leg_id": "7567223f-c0b5-5d16-bc4f-b41b1c522b65",
+        "sink_leg_id": "6946a798-53dd-5ffa-b341-0e76ddbacb18",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "691b1f0dcda65d266fd1c0b62a95447c41dafa557a5cf791299e55551f5916d8": [
+    "cfcbbc8dc040f8af8e8920f46f8cfcb5d169d19531d1bc18269659817cfb4481": [
       {
-        "id": "63b1e4f2-5462-50a2-b4a9-88af59d3767b",
-        "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "id": "6b327b11-2016-5d9b-93f1-41c7be48f666",
+        "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "94a1a9ed-5b70-5ac2-bce9-72f19edf3d8f",
-        "target_leg_id": "8d929dc4-cf7d-5a72-9cc8-861dbbea1a13",
+        "source_leg_id": "7567223f-c0b5-5d16-bc4f-b41b1c522b65",
+        "target_leg_id": "6946a798-53dd-5ffa-b341-0e76ddbacb18",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "b5fffdbf-2475-54a4-ac3e-0dc0cf58b5fb",
-        "source_row_hash": "982048d64a5b7d0db907f290242b2b2f218a663350edc48793fb31a0ba28ebc9",
+        "source_row_hash": "12a3f834f29c8b69bb43878ae2761d04fa7db1efaf5a330daf2f2232118f17aa",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -5421,36 +5111,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "1e+20",
+        "payout_fiat_value_exact": "100000000000000000000",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "6a43b716f9493e571eb139665cd856b098e20d68d6a0600b85a4decf83bdf969": [
+    "37d7944cba29823f4a887778a6ccfd320d8823231e2f6c612b738c86e942af93": [
       {
-        "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "08a4eef33a42d43b8549af9b8b7459c5293cc06ebb1babece02cfc57b719db8c": [
+    "4787dbe1474e84af1d41f660d51287cbe99e0ec3ed8bc7aa2d2208c3ec0b5fb8": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "subject_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "654960cecc4820ce8acd3ff13471448bdeadac1587f0a1bea55d57a3aa89852a": [
+    "3c0ebe5317448116f02bdfc3fb784c17d68ac9f8c2ec428f40166ddd2e350e71": [
       {
-        "id": "b3dccf302cedfc2be8b2d522b64b17eec438ed156f2774daf608e4c07545c6c7",
-        "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+        "id": "9c912f13d03222ebde583895ef5b438587b6dfedf851670fd5cd863e5f6a5461",
+        "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5459,9 +5149,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "f934d15914fb801fa237be9f17dbf45ac91885fc9bee0ebb28d65b9aa65cb40a": [
+    "a9f40d5d22b7b45d797de83084de5e8410e1f3f8011a5953e8d3ddf4a11ba744": [
       {
-        "id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "lineage_id": "d267db74-41e5-5440-8d18-11eaf8af84a1",
         "workspace_id": "w",
         "profile_id": "p",
@@ -5489,10 +5179,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "4dcea3b5bac18b4f17e0feb123b3a5276b6e75a69f1904f1350618112cb9a977": [
+    "3e84e8f7eed99702e4ca2dadbef7633247ae2bb951b09c08f275b7a80fb73bc7": [
       {
-        "id": "866f122a-a545-5ca0-86a6-e9ddfadcd0e2",
-        "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "id": "85f49c71-398c-5c12-8a0c-c3790aec8b01",
+        "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5515,8 +5205,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "1ab192ca-0bcf-5a84-a8c1-eeb19a5520af",
-        "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "id": "4446f074-8c64-512e-a4e8-167f3bd2ed5a",
+        "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -5539,32 +5229,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "14d1cba1e524c694455ab08713df92d8f4b07a72e9df5f4dddd5a470026ba933": [
+    "599799f00e8bfd95fbbb7ac56325b0f2db1807a1a6f1f8d12c63ce027ef2f409": [
       {
-        "id": "1f0633c1-1ad0-5954-b554-faec7a832d5d",
-        "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "id": "1c7534bf-debf-500d-b3f3-d0f72cd54262",
+        "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "866f122a-a545-5ca0-86a6-e9ddfadcd0e2",
-        "sink_leg_id": "1ab192ca-0bcf-5a84-a8c1-eeb19a5520af",
+        "source_leg_id": "85f49c71-398c-5c12-8a0c-c3790aec8b01",
+        "sink_leg_id": "4446f074-8c64-512e-a4e8-167f3bd2ed5a",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "7c4c6a25d58c281237c684aedd4de796769b66dd4fbd2a3c9fd62fe9646faf74": [
+    "373e57562c75a690359e63690ae15e6e861bde5b9cd4fb76134f0888db3c0e9e": [
       {
-        "id": "1b27b433-e264-53cf-a017-f2b6a92d7453",
-        "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "id": "128c5ac7-ad2e-59ef-8d68-e69fe3be8853",
+        "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "866f122a-a545-5ca0-86a6-e9ddfadcd0e2",
-        "target_leg_id": "1ab192ca-0bcf-5a84-a8c1-eeb19a5520af",
+        "source_leg_id": "85f49c71-398c-5c12-8a0c-c3790aec8b01",
+        "target_leg_id": "4446f074-8c64-512e-a4e8-167f3bd2ed5a",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "88fb1461-089f-57cc-b0ba-4d3cb283e2fa",
-        "source_row_hash": "553ad1ece5a87bb4847d062c14bb27c8ae7092179a7bf03114d3ccdb968287df",
+        "source_row_hash": "0f99c582d0f5d2a63a62b929c2b56a2c27097d44cd3c517d92a5dc875724b307",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -5576,36 +5266,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "1.2e-10",
+        "payout_fiat_value_exact": "1.2E-10",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "255223d8033f017d693614b9d4d4974521f85ff236d516590fa0c67744bc28e6": [
+    "a810b69b61759afa04dde53c39491fe81b28fd778117c9ee9e0cb950144726f1": [
       {
-        "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "390fdac21071cff523ff4636963ab2eb8619a3355a3b27c0595835aea6fe2d15": [
+    "ba227050a3b51da68ec574cf26c961cc70754f64bda1b451b8a806fef8f7f084": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "subject_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "be636fee4c813ef00935f870baa6034e0258b3753063a1b167a48b9e6208b94b": [
+    "14099f55bd8aad0371249a735161fbe369dfbda6c3770a5881c8f5fde3c9f4f7": [
       {
-        "id": "763b5f022d8e8d5adc9be95af0e2cb800d82b6158c42466d09193f3719f6d961",
-        "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+        "id": "301a21a9c0dda3139594a1c79a382317e05d5a3b54fed0049e7807fcae385e3b",
+        "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5614,9 +5304,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "a5bcb3238201a355e7ee8d2009ea9e1fee51149fb11f3276bfb75555fc42bb3a": [
+    "8c7cfce1cea02a02bdcd5b46f48b12179869a49b57e8d96d18e4429aa55706c0": [
       {
-        "id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "lineage_id": "b9ecdc39-d1a4-5a04-944f-5ef0a284ccb3",
         "workspace_id": "w",
         "profile_id": "p",
@@ -5644,10 +5334,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "1e039f5b04e6a82f0a0010a5b193205f15f790bfa426151c15a63a17f53d6e47": [
+    "00474309a7b94802b9fd28974301ef42ad155dc647fe4b2f48228030b3c5691a": [
       {
-        "id": "b164da02-a0c1-5d6e-a443-b86153c3d62b",
-        "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "id": "57740c0f-a376-5ce5-95ca-104fd583ddc7",
+        "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5670,8 +5360,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "a5b87ff5-7024-5394-8eb9-163e24255516",
-        "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "id": "50796da6-5fc8-5948-9ea5-3582185779e7",
+        "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -5694,32 +5384,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "d6f3a235ae2bf7b94c0870c8e2b3e398c2d1c94a3149f31e70c54c6ed4d0fcd1": [
+    "6f6ec74852063142dbbd9d2d82685f231cdad3cf483d6f55ac19d7f7dba50e49": [
       {
-        "id": "3718f679-758c-5986-b64b-6d0e278066a6",
-        "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "id": "c40a40dc-ddab-5169-9e77-c923a8ae3e11",
+        "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "b164da02-a0c1-5d6e-a443-b86153c3d62b",
-        "sink_leg_id": "a5b87ff5-7024-5394-8eb9-163e24255516",
+        "source_leg_id": "57740c0f-a376-5ce5-95ca-104fd583ddc7",
+        "sink_leg_id": "50796da6-5fc8-5948-9ea5-3582185779e7",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "f60b4406ec4eddf41bd7f9ff5f83d750f2afd25aae3523624d62ddb7a4c8b513": [
+    "ce1fcfb5625e4163f6dbf677326fee768d091fe976ac0312aff9014ca2441112": [
       {
-        "id": "a131a78a-15a0-5097-8c64-8d02d62d5cfc",
-        "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "id": "3f624327-e0ab-5386-8b5c-b0841c5c4f80",
+        "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "b164da02-a0c1-5d6e-a443-b86153c3d62b",
-        "target_leg_id": "a5b87ff5-7024-5394-8eb9-163e24255516",
+        "source_leg_id": "57740c0f-a376-5ce5-95ca-104fd583ddc7",
+        "target_leg_id": "50796da6-5fc8-5948-9ea5-3582185779e7",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "b9b04764-a1d1-5010-9fbc-0f56dfd2d264",
-        "source_row_hash": "9e0888028a83bee91eadccfb5f20399dfd39d195eab020433f2eb4d2b8f76ab1",
+        "source_row_hash": "0c4354cdd335228374f5d0ea23d4ea82f40ad30033eba6e4d8a886af88617543",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -5731,36 +5421,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "0.10000000000000001",
+        "payout_fiat_value_exact": "0.1",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "c9603027f79dbae026cf028ca201bd00cb71b000d6e83050952e6843d26cf736": [
+    "cb579869bd9c44b8f55623cf04959816690d09aede1571a3efb23e5e3aa6f570": [
       {
-        "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "8e87653aaa60a0a7a970d907c15ed5a9512341805fb690215ed8e44dfcd84fc1": [
+    "1da4ae7c3d8814ce27a8bc10084e74d51dae02d1d61c82ea382077fd18c6bc07": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "subject_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "770cd4385d2553a3829954b7e2fc92d1d73921980c3d8746104983494edc3d0c": [
+    "c4f7d33d12a25b83caa364def966be84cec7b0138a5928136f9fe1ae18072136": [
       {
-        "id": "fbe0f3c9da66364592d42af4edb2b9be148a13e06a07b0f0ffea678936ef4139",
-        "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+        "id": "2041cf8ccc97bd96684a8313bd28340cdae805034b2fa767050fa8f1ff8606e6",
+        "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5769,9 +5459,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "8d3455d25bc266ae62a57a70cd9e089c9540573007d578b3b5f8f01a0e6d6ed2": [
+    "e63120c573971ef0276e57b92e552e49c9200aa8c2e36c2718d0019c2fececd2": [
       {
-        "id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "lineage_id": "df61bbfb-ca78-5fb6-9728-e7be73b05024",
         "workspace_id": "w",
         "profile_id": "p",
@@ -5799,10 +5489,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "fe1d2693ea51366507ce6c935e005693dbb63272704ce076ee4f9b2bf42d5ee9": [
+    "77586df1426f7601b0f288bc9c563ff1fe88d48b72fb126b7465becd4296f97d": [
       {
-        "id": "3691c1fe-89f8-53b6-9a6c-938e1debdc3e",
-        "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "id": "29f2882f-a313-5a76-af25-48d295b5e6ef",
+        "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5825,8 +5515,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "01aa2e9c-9d2f-592d-b200-d639391cf4d6",
-        "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "id": "caea8e17-b365-5184-8727-b3e12712f81c",
+        "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -5849,32 +5539,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "b21f3f84d6bff1f7061667b85abec4358462978223ce744f3b9192ff8aeb56ca": [
+    "1fc25d0ba8be7f983567dfdc8ab4bf1c53aae2e51af260055377a2fe8705a194": [
       {
-        "id": "390a1500-5774-5bb9-90b4-e9a407c91c27",
-        "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "id": "161e600e-e46e-5517-bd79-2332c8722240",
+        "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "3691c1fe-89f8-53b6-9a6c-938e1debdc3e",
-        "sink_leg_id": "01aa2e9c-9d2f-592d-b200-d639391cf4d6",
+        "source_leg_id": "29f2882f-a313-5a76-af25-48d295b5e6ef",
+        "sink_leg_id": "caea8e17-b365-5184-8727-b3e12712f81c",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "84bd90924d350773834bdb65722437d38c3e5c5e60bd2cb5a8e8a9a8ccd471f1": [
+    "e2e2cc794eb45b3a92a6133a4ae256eaccf17f485cff09c059d259b87ca0a6fd": [
       {
-        "id": "0e5f3621-5040-58ef-bae6-634a89117bde",
-        "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "id": "76d0c364-65b6-5d96-99e1-e240e6df0666",
+        "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "3691c1fe-89f8-53b6-9a6c-938e1debdc3e",
-        "target_leg_id": "01aa2e9c-9d2f-592d-b200-d639391cf4d6",
+        "source_leg_id": "29f2882f-a313-5a76-af25-48d295b5e6ef",
+        "target_leg_id": "caea8e17-b365-5184-8727-b3e12712f81c",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "c154f583-e3e5-5641-a447-44ef15532131",
-        "source_row_hash": "9484e36ec4b2b9a3c4c903ddc2bde11354926d2b8abfcf086d419b0d12dfe819",
+        "source_row_hash": "b5e8f0444b89566c0f39bf30ae9180aaebeacb6e59532d18b6b2613671e56b88",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -5886,36 +5576,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "-0",
+        "payout_fiat_value_exact": "0",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "91186b55dcd01664dece376a194c6b70a5da3044fdfef54e8fa343e74875ab20": [
+    "8f11cd1dbd8dabf9d63b834b7410ded555bd1186582dddf2503a485cf0dabcc8": [
       {
-        "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "a229a6f49142e2523e4ee7e2425b3be2244746c89c58e670f0314c05edeb1109": [
+    "0f5699b129f8afe592c91dd700e5c2faf4df60644d7c7e5353e1d425e1a726ce": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "subject_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "820c66a4491fbc7223338b4de73e1ac23df49888f43848e8afa98b74c646b284": [
+    "124ce8173d738445dd41ba2481b2edf2dfd19cad1de74435f5751c7ae7480835": [
       {
-        "id": "2b555602e1e7f330833874675d55fbc49d7aff9d7a7d8b131b215e1d8601dbd8",
-        "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+        "id": "5db14393bd04331f522d6566eb44657bc07948294f01081803b9364b31e4f56a",
+        "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -5924,319 +5614,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "8909411feae272120332dcfc47a9217ddd6ba827e970b2690c9d9ba4fd25dd0f": [
+    "651d958569c0fc6795634120163ae580474af25d0946e1780d557cd96b8e8fcc": [
       {
-        "id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "lineage_id": "a465dd2e-1cda-56a4-8b57-fe449b90daec",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "revision": 1,
-        "component_type": "swap",
-        "conservation_mode": "conversion",
-        "state": "active",
-        "evidence_kind": "reviewed_custody",
-        "evidence_grade": "reviewed",
-        "evidence_json": "{\"review_id\":\"7e99b1f9-30cd-5440-b571-5d75c2c3efcb\",\"term_kind\":\"direct_swap_payout\"}",
-        "conversion_policy": "carrying-value",
-        "conversion_reviewed": 1,
-        "conversion_metadata_json": "{}",
-        "expected_leg_count": 2,
-        "expected_allocation_count": 1,
-        "expected_economic_term_count": 1,
-        "expected_evidence_count": 1,
-        "authored_source": "cli",
-        "notes": null,
-        "change_reason": null,
-        "supersedes_component_id": null,
-        "superseded_by_component_id": null,
-        "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "339c59e2d173be5b88d2f618280722a773e489050296707724e6f6e369322f14": [
-      {
-        "id": "7dbdc48e-cd1c-5e9a-849a-892fa07d1659",
-        "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
-        "conservation_unit": "msat",
-        "amount_msat": 1000,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      },
-      {
-        "id": "579177a8-2d98-5bee-ad0c-f93002e28fb6",
-        "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:7e99b1f9-30cd-5440-b571-5d75c2c3efcb",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "f5f11978c6b902c4c5d0737d7792f079bd0d6746ecea415bf530a539d3998f89": [
-      {
-        "id": "5a0acaa1-55b0-5ff3-a31d-beab124cf851",
-        "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "7dbdc48e-cd1c-5e9a-849a-892fa07d1659",
-        "sink_leg_id": "579177a8-2d98-5bee-ad0c-f93002e28fb6",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "9d293f1f8b6edc0dfd15c850d164d2c40c8115a5ee63ce6a4177f955b6a6cfe8": [
-      {
-        "id": "b6e002b7-9f21-57e9-8a62-7925d8c6b0f3",
-        "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "7dbdc48e-cd1c-5e9a-849a-892fa07d1659",
-        "target_leg_id": "579177a8-2d98-5bee-ad0c-f93002e28fb6",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "7e99b1f9-30cd-5440-b571-5d75c2c3efcb",
-        "source_row_hash": "98ff720a31039ff2485484c6be4852c3c1f7b97d3b321c2996c74c33aea95146",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "carrying-value",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": null,
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": "9.9999999999999995e-21",
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "50427ec05f1e3d01449b1c360b8764240c535d625f2466636a1818832b98c7e6": [
-      {
-        "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "profile_id": "p",
-        "transaction_id": "d",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "ee3286965ce2464a70dcaf4e7765333b1edd180b39f4c68faa574e5d82d50c01": [
-      {
-        "workspace_id": "w",
-        "profile_id": "p",
-        "subject_kind": "custody_component",
-        "subject_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "6b78d4509a2c532852818b557c07df002336c8683b36a7c8c5b14644bf971224": [
-      {
-        "id": "34181ae5af0cfbc204247c76b77a39145a3900584d0317b5e7398b2f216c720a",
-        "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "9b96482278bec9f36d856c9d76337f49f5761a63685ae71c125a7271c66aae5c": [
-      {
-        "id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "lineage_id": "ceee911b-306a-5912-b8eb-4ca687f6319b",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "revision": 1,
-        "component_type": "swap",
-        "conservation_mode": "conversion",
-        "state": "active",
-        "evidence_kind": "reviewed_custody",
-        "evidence_grade": "reviewed",
-        "evidence_json": "{\"review_id\":\"63f4ed6f-973e-5150-a43f-c911019b74e0\",\"term_kind\":\"direct_swap_payout\"}",
-        "conversion_policy": "carrying-value",
-        "conversion_reviewed": 1,
-        "conversion_metadata_json": "{}",
-        "expected_leg_count": 2,
-        "expected_allocation_count": 1,
-        "expected_economic_term_count": 1,
-        "expected_evidence_count": 1,
-        "authored_source": "cli",
-        "notes": null,
-        "change_reason": null,
-        "supersedes_component_id": null,
-        "superseded_by_component_id": null,
-        "activated_at": "2025-06-01T00:00:00Z",
-        "superseded_at": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "2696ccea9ce8a90a5e70f2337ca27e09409b7069eb0d3e87fde0352654fee326": [
-      {
-        "id": "bdf5a956-d312-5165-af69-c7446727a3eb",
-        "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "role": "source",
-        "rail": "bitcoin",
-        "chain": "bitcoin",
-        "network": "main",
-        "asset": "BTC",
-        "exposure": "bitcoin",
-        "conservation_unit": "msat",
-        "amount_msat": 1000,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": "d",
-        "anchor_transaction_id": "d",
-        "wallet_id": "source",
-        "location_ref": null,
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      },
-      {
-        "id": "21af62c4-d766-59ee-b03d-ec856cd61383",
-        "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 1,
-        "role": "retained",
-        "rail": "untracked",
-        "chain": null,
-        "network": null,
-        "asset": "ETH",
-        "exposure": "asset:eth",
-        "conservation_unit": "msat",
-        "amount_msat": 800,
-        "valuation_unit": "reviewed_source_msat",
-        "valuation_amount": 1000,
-        "occurred_at": "2025-02-01T00:00:00Z",
-        "transaction_id": null,
-        "anchor_transaction_id": null,
-        "wallet_id": null,
-        "location_ref": "legacy-payout:63f4ed6f-973e-5150-a43f-c911019b74e0",
-        "notes": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "676609bcdb38d8856ae85ff99a7be5d9cd1516ac89683053a2d3ebedfcc92ca9": [
-      {
-        "id": "38fbd756-c493-5fc7-b064-62f6b69ce88b",
-        "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "bdf5a956-d312-5165-af69-c7446727a3eb",
-        "sink_leg_id": "21af62c4-d766-59ee-b03d-ec856cd61383",
-        "source_amount_msat": 1000,
-        "sink_amount_msat": 800,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "faaba1e37ba6c74bde7d375efa3a110035f9e3f11a3c94300e14b13c6110c368": [
-      {
-        "id": "8c526842-2f4b-5afd-8d0e-d481ffdc9871",
-        "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "source_leg_id": "bdf5a956-d312-5165-af69-c7446727a3eb",
-        "target_leg_id": "21af62c4-d766-59ee-b03d-ec856cd61383",
-        "term_kind": "direct_swap_payout",
-        "legacy_source_id": "63f4ed6f-973e-5150-a43f-c911019b74e0",
-        "source_row_hash": "4cad2326c00186d0945d72199258104e63a88a03bb3c4418e6caf5483c0be115",
-        "review_kind": "direct-swap-payout",
-        "tax_policy": "carrying-value",
-        "reviewed_source_amount_msat": 1000,
-        "swap_fee_msat": 200,
-        "swap_fee_kind": "combined",
-        "confidence_at_review": null,
-        "review_source": null,
-        "review_notes": null,
-        "payout_asset": "ETH",
-        "payout_amount_msat": 800,
-        "payout_occurred_at": null,
-        "payout_fiat_value_exact": "inf",
-        "payout_external_id": null,
-        "counterparty": null,
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "57145295d5f0df73c20d21f59cda77f5c556e013283fa7e2b6339b55399a8c3d": [
-      {
-        "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "profile_id": "p",
-        "transaction_id": "d",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "14616049b8b6fbef34bca17281ea7de121224657ec7eb777fdec79de49f3b336": [
-      {
-        "workspace_id": "w",
-        "profile_id": "p",
-        "subject_kind": "custody_component",
-        "subject_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "48f7ed9525632ff16ec321d955b1484b0cf909d2de20d22072dceb4a2bf6f73b": [
-      {
-        "id": "e3149b04f1e3d6325d4c3cd902dc6e24be33398342a5754fe3a44dddb4681288",
-        "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-        "workspace_id": "w",
-        "profile_id": "p",
-        "ordinal": 0,
-        "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
-        "detail_hash": "961e2d01e04c7c535eac237f311cafd9437796d86733a9eba4a25d6f77435fde",
-        "created_at": "2025-06-01T00:00:00Z"
-      }
-    ],
-    "25aebf832c67e61324a75844ffab7ad5ccb198a7758044ce052fef08874d98c9": [
-      {
-        "id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "lineage_id": "10123e3f-84d6-59eb-8f91-1d67d3836883",
         "workspace_id": "w",
         "profile_id": "p",
@@ -6264,10 +5644,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "3f624d0ec076e7b9796c21a5e0b98f31628d8f6ab26c15e458cea0a35e0cffd9": [
+    "4034c45f5a51dee1146ca4f5f03b604c43625b2110d6dd3b0d18326e86084c1c": [
       {
-        "id": "71b70cd7-7c92-56bb-9c59-bf1d73e47fe4",
-        "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "id": "040d6192-432d-53b7-9371-dbaf417b8fc5",
+        "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -6290,8 +5670,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "bb8717a3-ca41-5a08-9dd9-320d157b6dfc",
-        "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "id": "62995616-1924-5daf-be11-4f619d69ed25",
+        "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -6314,32 +5694,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "552ca06b3955bb630b9b1d9988cf4e9008fd44041bb098abe0a5b81ed85a9298": [
+    "8ace932a2c92674a7c67f03be5a4cdf0e950ad0904ab06a7ef24763ad44e56e1": [
       {
-        "id": "d5b92a48-3c38-51ab-84a1-d553bb306212",
-        "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "id": "4d838f96-ef5f-5e9a-9581-2084af52dcd2",
+        "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "71b70cd7-7c92-56bb-9c59-bf1d73e47fe4",
-        "sink_leg_id": "bb8717a3-ca41-5a08-9dd9-320d157b6dfc",
+        "source_leg_id": "040d6192-432d-53b7-9371-dbaf417b8fc5",
+        "sink_leg_id": "62995616-1924-5daf-be11-4f619d69ed25",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "531f0a64588f3f06cc7dce4731648feeb42ea1225aef3ef941e791c4be151529": [
+    "8ce2ef2e707f16aa39bb8776da8568c3a60d9dbb26445c729db4982aabb43611": [
       {
-        "id": "af3894bf-37fe-5a19-9050-079d023ccf34",
-        "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "id": "b7cc6d10-ac89-5ad4-9462-884156819ed7",
+        "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "71b70cd7-7c92-56bb-9c59-bf1d73e47fe4",
-        "target_leg_id": "bb8717a3-ca41-5a08-9dd9-320d157b6dfc",
+        "source_leg_id": "040d6192-432d-53b7-9371-dbaf417b8fc5",
+        "target_leg_id": "62995616-1924-5daf-be11-4f619d69ed25",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "d644b4fc-9440-591d-8b10-d2ac01002a28",
-        "source_row_hash": "5b7c2a5c8458a761b0eba8f7077c84cef496caba015e0dac9644e24617bf3463",
+        "source_row_hash": "5b263f0de209453811e462e32d536185fc69415d0626e42562c2c460b705c96c",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -6351,36 +5731,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "9.9999999999999991e-05",
+        "payout_fiat_value_exact": "0.00009999999999999999",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "f3407dc48807636fd4092074d1293b2c41fc0d325e2b42035f4e7ec56381174c": [
+    "098702bd04006d69668b19e2300f24e34d3af5964ed905f4f108859822762ce2": [
       {
-        "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "a3baecb63717a467ef92f91e57539f0a0aa1aadeaf724dbbf67243319541e40e": [
+    "6b54561f11059d6ee42ad08f9d209d4162a7a810d25d9cec0701579dc84666da": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "subject_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "96480dabb9ac2fbfeb03c776d2787c11c08af385d7eb6b8801c21797d39142be": [
+    "e09e24e819cd3d1bd226d958cb84220ca784c09257a3abc2eabf1c072b6ac1e7": [
       {
-        "id": "2155f232751af96e45e618380358f86a79d2cff93d7c77d33b1525f5b0d6e851",
-        "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+        "id": "19d852b3d97a27d351af39c592e96eeebf1bd78d737814be930e6c774297aa8b",
+        "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -6544,9 +5924,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "9205b6a312abc6edbb00d13f1efdfda98d790c4d0d4335f8006103f1383227f4": [
+    "16386ca096f1e311ef02c4b07d7b1dd9cb348b8fd245cc263fcf3521ce04dad3": [
       {
-        "id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "lineage_id": "a85f0ee2-6471-5e86-977a-5915a882e5a7",
         "workspace_id": "w",
         "profile_id": "p",
@@ -6574,10 +5954,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "f11699b3c289d797ee20c5464224e3906d3a6e06494bfc5277b7db2c85223a53": [
+    "8fdbbff4a012a3f368f012c92e682576de102980d6b5fff07ce275745d9effff": [
       {
-        "id": "2a7f3d35-2ccd-5b67-bd56-637c1052d884",
-        "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "id": "30b223e0-208a-53fe-8b87-b3bb6e53fefc",
+        "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -6600,8 +5980,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "fb1a6dc5-7d4e-5614-b171-e3705eafb743",
-        "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "id": "2ea9fb86-0da3-56b9-8bba-7b60143f3eda",
+        "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -6624,32 +6004,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "0bf791a36ceae930549f7401940177e7509aa8393d8fa4fc78c2422d4b49cd1e": [
+    "0a0e62c9a553bd65d44502f6493e6584becc25768ef934179835c451aa3755f1": [
       {
-        "id": "00a0efb3-80a9-54b8-90bd-acc44617c8d7",
-        "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "id": "b91be167-b3d5-5757-a124-9ca66d586bbd",
+        "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "2a7f3d35-2ccd-5b67-bd56-637c1052d884",
-        "sink_leg_id": "fb1a6dc5-7d4e-5614-b171-e3705eafb743",
+        "source_leg_id": "30b223e0-208a-53fe-8b87-b3bb6e53fefc",
+        "sink_leg_id": "2ea9fb86-0da3-56b9-8bba-7b60143f3eda",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "223d08338f665546a8d6bf14a1a34f064aba3bab8bbfa6c9bccc858132108a26": [
+    "382c1a7086f7fdea1e2f2dd16e65eb186db58c9d71eec5ffa64516b3b0322d75": [
       {
-        "id": "5a3b6abb-39af-5acc-9d2f-5719da3f3906",
-        "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "id": "3dd8682e-4890-5dda-baa5-b59f2477bfb0",
+        "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "2a7f3d35-2ccd-5b67-bd56-637c1052d884",
-        "target_leg_id": "fb1a6dc5-7d4e-5614-b171-e3705eafb743",
+        "source_leg_id": "30b223e0-208a-53fe-8b87-b3bb6e53fefc",
+        "target_leg_id": "2ea9fb86-0da3-56b9-8bba-7b60143f3eda",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "1467d2c1-7c22-5717-b2ec-1fcee50b169c",
-        "source_row_hash": "2ab1bf1d3dd18e84be40ed736d9d3c846b184a9bac6c138a779624d35419826c",
+        "source_row_hash": "f681734b524a79ed4c2ca4717ff1ff3b050540535e3747264939c13da5095e14",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -6661,36 +6041,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "10000000000000000",
+        "payout_fiat_value_exact": "9999999999999999",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "8001a48de93b2bbb77a8120c38572dc0c79cc0ff053d1574dfe4f4075c85586c": [
+    "a14e0b05766a482469e84f08d98ff16782a2a62b94f5011e5794f14ef9e29f25": [
       {
-        "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "8fdb61a6dc7c6626a9f4178382454cdb870b98a7be23df695e652ed1ebfedf65": [
+    "188a3e11d3308a9d6033af02330a433507ff23b4ef0dc151698113d3430fc0ce": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "subject_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "681d31dcc99789b5cfddd60f2a12b1c71d7d9153af1f0094d8d23f61281c0ce8": [
+    "ab98d48b8222ba0a9fc8eefcc83ffdf367c247a69bd4c077212420302dec5465": [
       {
-        "id": "d6144094e7e886307e85b1b6d3b7870c039a1d3009794540abacf0d33d56c863",
-        "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+        "id": "b2ba7569acef10de3e593b3a0fc7afc798ebaf971e055b8ca06b39500da4610d",
+        "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -6699,9 +6079,9 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "d4688dd1d5e3e137ae7b57987a97f11cc9932fa94925114313267a99d2bc7c40": [
+    "ceb0507a67cd4185bce108c97542aed07d000d2b7be4862a2dd6134343784db1": [
       {
-        "id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "lineage_id": "d8a916a1-0868-58ac-ba9e-e03f7595f8a5",
         "workspace_id": "w",
         "profile_id": "p",
@@ -6729,10 +6109,10 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "30d85bc69db628c596d4a518122c6882b5fa0cda262dd8c4f63f57ced5d2f8b4": [
+    "c912736f6b1ba8862832b63e3a824a17aee7cd1d654e6e76889a6ddc65406845": [
       {
-        "id": "57f809dc-c66f-5bb7-ad2b-82c836af3b5c",
-        "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "id": "783d26f0-cea0-5948-8f1c-d5fd3a6bbe86",
+        "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -6755,8 +6135,8 @@
         "created_at": "2025-06-01T00:00:00Z"
       },
       {
-        "id": "c9341ce1-b24c-5067-99ac-4b14d9e94097",
-        "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "id": "f7e2c7c9-25f9-571f-b5c1-34145ca42d24",
+        "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 1,
@@ -6779,32 +6159,32 @@
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "57d2daef0a3766cf4f429dc3ec14574b13b8b839487a15778c25f7eae3b24e2c": [
+    "6c41c37374b25614f9f613793187de031f29cc97442ef3dc870339fc13ea4b9c": [
       {
-        "id": "6f37c7fe-ac84-5865-beba-e490269a9d19",
-        "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "id": "ef434e18-d3fb-5cef-8119-c25d57216f17",
+        "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "57f809dc-c66f-5bb7-ad2b-82c836af3b5c",
-        "sink_leg_id": "c9341ce1-b24c-5067-99ac-4b14d9e94097",
+        "source_leg_id": "783d26f0-cea0-5948-8f1c-d5fd3a6bbe86",
+        "sink_leg_id": "f7e2c7c9-25f9-571f-b5c1-34145ca42d24",
         "source_amount_msat": 1000,
         "sink_amount_msat": 800,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "d8f4662708b081ca46996e3e58c9e6a266557ee71820703f9593b546b60730e0": [
+    "85adf2e98ab29179bed7e70c0428c6759aa3abfef05d397b8de92fb781e79312": [
       {
-        "id": "47db7b00-d340-5509-9736-f861128a014b",
-        "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "id": "0e1c3bb0-ea26-5182-bbc7-4bde7fb1fd3a",
+        "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
-        "source_leg_id": "57f809dc-c66f-5bb7-ad2b-82c836af3b5c",
-        "target_leg_id": "c9341ce1-b24c-5067-99ac-4b14d9e94097",
+        "source_leg_id": "783d26f0-cea0-5948-8f1c-d5fd3a6bbe86",
+        "target_leg_id": "f7e2c7c9-25f9-571f-b5c1-34145ca42d24",
         "term_kind": "direct_swap_payout",
         "legacy_source_id": "332b149f-0209-5240-893b-96a564cd1939",
-        "source_row_hash": "b4d311061db35927892592b6d56e8d43ae4430c402cdbb5b5da08bd846b6893f",
+        "source_row_hash": "71b0e2ed6c191e5a06c252f03b1e53a2ae114fbe711bfbd8434a35b5487292ee",
         "review_kind": "direct-swap-payout",
         "tax_policy": "carrying-value",
         "reviewed_source_amount_msat": 1000,
@@ -6816,36 +6196,36 @@
         "payout_asset": "ETH",
         "payout_amount_msat": 800,
         "payout_occurred_at": null,
-        "payout_fiat_value_exact": "-0",
+        "payout_fiat_value_exact": "0",
         "payout_external_id": null,
         "counterparty": null,
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "dd12b53a1d9b6b2f23416cc69685c6436d102c71abdebd195839b8f43b6d1342": [
+    "c3d5dbc7c17303b77442eb46acbed4fea849961c0cb9748e0800bc46f2ffec76": [
       {
-        "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "profile_id": "p",
         "transaction_id": "d",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "222176433c7d79b17e6be6e438c41d63a7aca390e6e7f000e8169c6a65470352": [
+    "8cb78012da9e6f482995091d07d5285b85e54f9abef95c4e1358184e232d6a46": [
       {
         "workspace_id": "w",
         "profile_id": "p",
         "subject_kind": "custody_component",
-        "subject_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "subject_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "detail_hash": "46fc8f328cd8b01525937578093a97dcde14f75a95ecaf68fd439a2919def67f",
         "quantity_hash": "bf1ffa1940246cb43df6e172be31685a84d5208188994bc7671aae501bc7f9f6",
         "payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fp-d\",\"kind\":\"deposit\",\"occurred_at\":\"2025-02-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":1000,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"d-ext\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
         "created_at": "2025-06-01T00:00:00Z"
       }
     ],
-    "ef02d445fd61bc482bbcd492cfed0bb169c25b38d0fdd7e9ce27f04c30f47d38": [
+    "b5260afd3ac3da9405fd3fc065deb62e910194c7286da18b1a3e745985360f99": [
       {
-        "id": "ae55aa58c055544c697fd61f756e1b5aa7f916247d1f1648b6c71b0cec89e3c1",
-        "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+        "id": "ba14a8e61a0a7515be97b8336a18203546674d747357b19bde50123170064b5f",
+        "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
         "workspace_id": "w",
         "profile_id": "p",
         "ordinal": 0,
@@ -6899,8 +6279,10 @@
           "id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-            "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+            "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -6924,13 +6306,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "0cabe289e30008c6c2f83d1c8f33e1609f45ab21a28528f91370f3824ba664ef",
-            "custody_component_legs": "ecf485e33222caf5052821bd473f529c7a5c8221a21785b8fd6a8d35e381e004",
-            "custody_component_allocations": "8bd8d691b9959e07cd4ad44a5df8fca7005680078d56d596ce9a5cc827be508a",
-            "custody_component_economic_terms": "bfb9d806cbcbbb01940da9aa1751892e5d05185654cfc3d86fa6de3278c789e8",
-            "custody_component_transaction_memberships": "0291666c8ca9d0a99aec36afaa23f130f4459dd9fa4925e1a1c3094705941c07",
-            "custody_authored_evidence_snapshots": "3929e4c0afa920cac5c57b89893ca2d84c0b7f4681aeb5b2ce55d72cabe81893",
-            "custody_component_evidence_commitments": "5ae7d1c51f05597eff612d5570bf634424e32bf11f68c80fd891f026ab54e006"
+            "custody_components": "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901",
+            "custody_component_legs": "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7",
+            "custody_component_allocations": "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe",
+            "custody_component_economic_terms": "b02df9eaa072c480e06f2f2b64bba82cb5985abc9fe5d3ad1f12b9a952769231",
+            "custody_component_transaction_memberships": "6844c888fe5dff54c47e50ee9d0d860d38834acf3b2514df4f7b1d214d8e2c69",
+            "custody_authored_evidence_snapshots": "2462d0a57a702ca60ac0f5132bf96ca3e12eaa1b41039f1eb6bcdabf63b41db4",
+            "custody_component_evidence_commitments": "841be6d5d187b5537991ba93c6ab7a11bcbabd58a0b2303ccc12d11b2835bc86"
           }
         },
         {
@@ -6954,13 +6336,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "0cabe289e30008c6c2f83d1c8f33e1609f45ab21a28528f91370f3824ba664ef",
-            "custody_component_legs": "ecf485e33222caf5052821bd473f529c7a5c8221a21785b8fd6a8d35e381e004",
-            "custody_component_allocations": "8bd8d691b9959e07cd4ad44a5df8fca7005680078d56d596ce9a5cc827be508a",
-            "custody_component_economic_terms": "bfb9d806cbcbbb01940da9aa1751892e5d05185654cfc3d86fa6de3278c789e8",
-            "custody_component_transaction_memberships": "0291666c8ca9d0a99aec36afaa23f130f4459dd9fa4925e1a1c3094705941c07",
-            "custody_authored_evidence_snapshots": "3929e4c0afa920cac5c57b89893ca2d84c0b7f4681aeb5b2ce55d72cabe81893",
-            "custody_component_evidence_commitments": "5ae7d1c51f05597eff612d5570bf634424e32bf11f68c80fd891f026ab54e006"
+            "custody_components": "3112aa55b5884dfa9c5d5cd27084b67db4d7bfff040fce4109b86ef9e00f5901",
+            "custody_component_legs": "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7",
+            "custody_component_allocations": "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe",
+            "custody_component_economic_terms": "b02df9eaa072c480e06f2f2b64bba82cb5985abc9fe5d3ad1f12b9a952769231",
+            "custody_component_transaction_memberships": "6844c888fe5dff54c47e50ee9d0d860d38834acf3b2514df4f7b1d214d8e2c69",
+            "custody_authored_evidence_snapshots": "2462d0a57a702ca60ac0f5132bf96ca3e12eaa1b41039f1eb6bcdabf63b41db4",
+            "custody_component_evidence_commitments": "841be6d5d187b5537991ba93c6ab7a11bcbabd58a0b2303ccc12d11b2835bc86"
           }
         },
         {
@@ -6973,8 +6355,10 @@
           "id": "5ee9dece-0550-5d59-80b6-3f622a5ce2f1",
           "now": "2025-06-01T02:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
-            "component_id": "be64911e-f1ac-5e83-a0cd-b6d451662f76",
+            "component_id": "08278910-19fb-5e34-9bd7-3801756e29cb",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -6998,13 +6382,13 @@
             "chain_index_clock": "ca0c53e3007f0e5dc6f310d69101561127623b517f3067cb123dd3802800851f",
             "chain_index_dirty": "36f016a94462645b0d18933d1c60ce2fc4e4e48ded8933cd65a545df3589726a",
             "profiles": "1efad4205b33618b8ebfbb5ee153bd9229aa5fe57d02a439fe319d0ad7b9170c",
-            "custody_components": "b495e178b23cfb50289cb591e04a171d3aeb26e9e424a0b52a93715320f5b129",
-            "custody_component_legs": "ecf485e33222caf5052821bd473f529c7a5c8221a21785b8fd6a8d35e381e004",
-            "custody_component_allocations": "8bd8d691b9959e07cd4ad44a5df8fca7005680078d56d596ce9a5cc827be508a",
-            "custody_component_economic_terms": "bfb9d806cbcbbb01940da9aa1751892e5d05185654cfc3d86fa6de3278c789e8",
+            "custody_components": "91930391f0151a69a384f93055b70bd1afa2c92d6befcf14117705f2387af29e",
+            "custody_component_legs": "3ffa760f47017291d4c4abb28a09f31a2ffa67bbe953e1bb47ec7fc67ccd6eb7",
+            "custody_component_allocations": "adb5f653b99d43e4de2af9af722c296edeff48163f615d94e997ed8199fac6fe",
+            "custody_component_economic_terms": "b02df9eaa072c480e06f2f2b64bba82cb5985abc9fe5d3ad1f12b9a952769231",
             "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-            "custody_authored_evidence_snapshots": "3929e4c0afa920cac5c57b89893ca2d84c0b7f4681aeb5b2ce55d72cabe81893",
-            "custody_component_evidence_commitments": "5ae7d1c51f05597eff612d5570bf634424e32bf11f68c80fd891f026ab54e006"
+            "custody_authored_evidence_snapshots": "2462d0a57a702ca60ac0f5132bf96ca3e12eaa1b41039f1eb6bcdabf63b41db4",
+            "custody_component_evidence_commitments": "841be6d5d187b5537991ba93c6ab7a11bcbabd58a0b2303ccc12d11b2835bc86"
           }
         },
         {
@@ -7020,6 +6404,8 @@
           "id": "7fd771c8-2424-5776-9e26-88af78c385d8",
           "now": "2025-06-01T03:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "7fd771c8-2424-5776-9e26-88af78c385d8",
             "component_id": "66ed3511-8b2d-54f5-96bf-485bba5a7719",
             "workspace_id": "w",
@@ -7045,13 +6431,13 @@
             "chain_index_clock": "3875ea87f5c9538f104a60c72e23207a7bac7560d3866f12606ad4dba4f8174e",
             "chain_index_dirty": "ce694aebad09f1a544898292d0be066430a51cb43cd6212527d18d39db632512",
             "profiles": "b611a900bce1b7fcb8c0be377fa811d26292b44f8aa51c243f5a5223fa60236b",
-            "custody_components": "d164440ad1689bd018ef4cc1eb4e0f247a5938ba8ec2a91ec9a04eaef1648394",
-            "custody_component_legs": "779038c53527098824f36a3499beee4c7d8b535fdfafb20c6e5e914ff811bcde",
-            "custody_component_allocations": "66c3654b762024a34168fd5260a03d6a8d544953904f4be41b91e768628929ef",
-            "custody_component_economic_terms": "23440fce156e25862a683ef2ac0bbcfb91a4e9c39be735777eb3ab424bf06aa3",
+            "custody_components": "4f057e3b177959e243ec71044c77720a2dccf6b6b172b0603ac9f053bff56602",
+            "custody_component_legs": "5439e810fb0657b7ade43e9e20902562161f651e48d5c6ececa24268f5cbbc7d",
+            "custody_component_allocations": "4474e6ced23cb041e4ffbbbfe921c642e5d4945c0c231e41e433ee5f47a8d910",
+            "custody_component_economic_terms": "96b2ab4eb0be4c3fbbb13a8fb473920adde4080003dc3c75df571da1bb2db26c",
             "custody_component_transaction_memberships": "bebd6ecc1b0c5d4461eb1bf19c8b24ebbb41375117e54fd50380f1b0a94b6f26",
-            "custody_authored_evidence_snapshots": "148ff0d13b8427eb5f2ee0971cdac8ff0e78b232bf17cc1dcb8190cb08b19e7c",
-            "custody_component_evidence_commitments": "6dadadc9d0b569630f90224115ccccbc5ec8f91468ed143d12130cdcaf4d714c"
+            "custody_authored_evidence_snapshots": "de4c16c684e2472c1332525a231a76f8539778a0ed22c4aee8074a227b6c0ddd",
+            "custody_component_evidence_commitments": "3c60dd131b69e8ca11578c3c1554f34ebe4eccdb597a1f12ccc81c52c4c96fe1"
           }
         }
       ]
@@ -7097,6 +6483,8 @@
           "id": "f12bda02-13f9-5d91-943d-8383552f75f6",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "f12bda02-13f9-5d91-943d-8383552f75f6",
             "component_id": "6ced84e3-2860-5693-902c-ae31249ef55e",
             "workspace_id": "w",
@@ -7141,6 +6529,8 @@
           "id": "f74cda47-fd21-5ea0-b39d-efedfbdb9084",
           "now": "2025-06-01T01:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "f12bda02-13f9-5d91-943d-8383552f75f6",
             "component_id": "6ced84e3-2860-5693-902c-ae31249ef55e",
             "workspace_id": "w",
@@ -7188,6 +6578,8 @@
           "id": "e8cbfbde-ced3-5fee-9532-dcf544b7aea9",
           "now": "2025-06-01T02:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "e8cbfbde-ced3-5fee-9532-dcf544b7aea9",
             "component_id": "f1485bd4-2c79-554b-b1e5-36ab46de1b6f",
             "workspace_id": "w",
@@ -7265,6 +6657,8 @@
           "id": "8f197692-92b4-5e94-acde-24bf8a69231b",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "8f197692-92b4-5e94-acde-24bf8a69231b",
             "component_id": "99d8d6f4-16d9-5d87-a96d-ae2f210de97a",
             "workspace_id": "w",
@@ -7309,6 +6703,8 @@
           "id": "95a2db39-2b6f-5c4d-a88e-6ab6eec41b51",
           "now": "2025-06-01T01:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "8f197692-92b4-5e94-acde-24bf8a69231b",
             "component_id": "99d8d6f4-16d9-5d87-a96d-ae2f210de97a",
             "workspace_id": "w",
@@ -7355,6 +6751,8 @@
           "id": "e01925ca-4e49-58bb-8f34-b400a645980b",
           "now": "2025-06-01T02:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "e01925ca-4e49-58bb-8f34-b400a645980b",
             "component_id": "d4fe8558-a054-5559-a903-06a9bfe41f07",
             "workspace_id": "w",
@@ -7433,6 +6831,8 @@
           "id": "65408a18-9a9e-5723-a451-ec74e75a80e1",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "65408a18-9a9e-5723-a451-ec74e75a80e1",
             "component_id": "7e3e40e3-30eb-5666-a387-4715beba1e31",
             "workspace_id": "w",
@@ -7477,6 +6877,8 @@
           "id": "61674ed4-f002-5a35-8661-5818727d5fdb",
           "now": "2025-06-01T01:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "65408a18-9a9e-5723-a451-ec74e75a80e1",
             "component_id": "7e3e40e3-30eb-5666-a387-4715beba1e31",
             "workspace_id": "w",
@@ -7555,6 +6957,8 @@
           "id": "8925d05e-6b6b-51af-93c3-ed34b7ac09d5",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "8925d05e-6b6b-51af-93c3-ed34b7ac09d5",
             "component_id": "61b13dee-34aa-52e0-96f6-aca94cc29423",
             "workspace_id": "w",
@@ -7599,6 +7003,8 @@
           "id": "0fd1966c-1fbd-5e2e-886d-d566f79527a7",
           "now": "2025-06-01T01:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "8925d05e-6b6b-51af-93c3-ed34b7ac09d5",
             "component_id": "61b13dee-34aa-52e0-96f6-aca94cc29423",
             "workspace_id": "w",
@@ -7706,6 +7112,8 @@
           "id": "7f955c07-1267-53bc-bb68-82cc92c6217c",
           "now": "2025-06-01T01:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "7f955c07-1267-53bc-bb68-82cc92c6217c",
             "component_id": "c04ebcdd-b838-54b1-8ab4-27e71fccb240",
             "workspace_id": "w",
@@ -7817,6 +7225,8 @@
           "id": "ede52a94-ae4a-5caa-97f7-e0dcbcd41201",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "ede52a94-ae4a-5caa-97f7-e0dcbcd41201",
             "component_id": "54d42401-5c88-5a57-8add-efa2ef0fb00c",
             "workspace_id": "w",
@@ -7896,6 +7306,8 @@
           "id": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
             "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
             "workspace_id": "w",
@@ -7940,6 +7352,8 @@
           "id": "ef3ec536-aaae-5e2b-8773-54b0297d07e2",
           "now": "2025-06-01T01:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
             "component_id": "453a1085-1cfb-576d-9475-8c5b9a8a6cc9",
             "workspace_id": "w",
@@ -8017,6 +7431,8 @@
           "id": "3f8f01c8-03c4-5b75-9801-403034964cfb",
           "now": "2025-06-01T03:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "3f8f01c8-03c4-5b75-9801-403034964cfb",
             "component_id": "0f0edc6d-1eff-562d-aab8-cb5acb3d87d8",
             "workspace_id": "w",
@@ -8246,8 +7662,8 @@
           "id": "684d57c7-db40-529a-b3e1-c7cff27e19ac",
           "now": "2025-06-01T05:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: bad",
+            "code": "validation",
+            "message": "--payout-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -8612,6 +8028,8 @@
           "id": "fe72bad4-3735-55f1-8090-8176da4563d3",
           "now": "2025-06-01T13:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "fe72bad4-3735-55f1-8090-8176da4563d3",
             "component_id": "60c91768-7d78-5012-b5b4-a4e0f69da1c1",
             "workspace_id": "w",
@@ -8753,7 +8171,7 @@
           "now": "2025-06-01T00:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--payout-amount must be positive",
+            "message": "--payout-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -8783,7 +8201,7 @@
           "now": "2025-06-01T01:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--payout-amount must be positive",
+            "message": "--payout-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -8812,8 +8230,8 @@
           "id": "9344a538-cc0c-5eb7-bc09-a8019e94fbea",
           "now": "2025-06-01T02:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value:  ",
+            "code": "validation",
+            "message": "--payout-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -8842,8 +8260,8 @@
           "id": "7c916d69-2e9c-58e6-b743-159e9125aaf7",
           "now": "2025-06-01T03:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: True",
+            "code": "validation",
+            "message": "--payout-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -8872,8 +8290,8 @@
           "id": "9c805516-4b1f-5100-8c27-5395b48603bd",
           "now": "2025-06-01T04:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--payout-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -8902,8 +8320,8 @@
           "id": "c7befac2-840b-501c-b52e-dff82cc95e07",
           "now": "2025-06-01T05:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "cannot convert Infinity to integer",
+            "code": "validation",
+            "message": "--payout-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -8933,7 +8351,7 @@
           "now": "2025-06-01T06:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--payout-amount must be positive",
+            "message": "--payout-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -8962,8 +8380,8 @@
           "id": "3502dc98-21f5-5753-a4f4-3143142e161f",
           "now": "2025-06-01T07:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: bad",
+            "code": "validation",
+            "message": "--payout-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -8992,6 +8410,8 @@
           "id": "cf9d4d2e-f8d6-5354-9fa3-ef56efc2ec51",
           "now": "2025-06-01T08:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "cf9d4d2e-f8d6-5354-9fa3-ef56efc2ec51",
             "component_id": "a6a6f94b-cc15-5d57-936b-9e48690a63cc",
             "workspace_id": "w",
@@ -9038,9 +8458,9 @@
           "id": "d9cc4ad8-beef-5d5e-8bd0-92d27bab77a3",
           "now": "2025-06-01T09:00:00Z",
           "error": {
-            "code": "conflict",
-            "message": "Transaction already has an active direct swap payout (id=cf9d4d2e-f8d6-5354-9fa3-ef56efc2ec51).",
-            "hint": "Delete the existing payout review before creating a replacement.",
+            "code": "validation",
+            "message": "--payout-amount must be a finite decimal number",
+            "hint": null,
             "details": null
           },
           "rows": {
@@ -9160,6 +8580,8 @@
           "id": "1166957d-f2db-54fb-9123-86200708ecda",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "1166957d-f2db-54fb-9123-86200708ecda",
             "component_id": "ce82b87e-6960-5e27-bbf4-0c5c7e609965",
             "workspace_id": "w",
@@ -9208,7 +8630,7 @@
           "now": "2025-06-01T01:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--out-amount must be positive",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9238,8 +8660,8 @@
           "id": "15c62ab5-d09d-5dab-802e-a1949d411951",
           "now": "2025-06-01T02:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value:  ",
+            "code": "validation",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9269,8 +8691,8 @@
           "id": "77ea0b3b-fff7-57f2-bbcc-8b398f723932",
           "now": "2025-06-01T03:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: True",
+            "code": "validation",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9300,8 +8722,8 @@
           "id": "5cc77664-16d4-57ff-a540-dc627cbfb699",
           "now": "2025-06-01T04:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -9331,8 +8753,8 @@
           "id": "8cec5a3c-ca23-58b5-b113-206150d96298",
           "now": "2025-06-01T05:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "cannot convert Infinity to integer",
+            "code": "validation",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -9363,7 +8785,7 @@
           "now": "2025-06-01T06:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--out-amount must be positive",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -9393,8 +8815,8 @@
           "id": "b9a31162-064f-51f7-ab01-80fbf016fc6a",
           "now": "2025-06-01T07:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: bad",
+            "code": "validation",
+            "message": "--out-amount must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9455,8 +8877,8 @@
           "id": "411b4644-635f-598b-a118-a8cb8f47c808",
           "now": "2025-06-01T09:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+            "code": "validation",
+            "message": "--out-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -9579,6 +9001,8 @@
           "id": "7d119ba6-024d-5356-a790-d9d05e7077f6",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "7d119ba6-024d-5356-a790-d9d05e7077f6",
             "component_id": "1969d282-4fc1-5132-be2a-bb8f1d9d5a15",
             "workspace_id": "w",
@@ -9626,9 +9050,9 @@
           "id": "7a0b0dac-ee16-5315-b3ce-ecfca6abfeed",
           "now": "2025-06-01T01:00:00Z",
           "error": {
-            "code": "conflict",
-            "message": "Transaction already has an active direct swap payout (id=7d119ba6-024d-5356-a790-d9d05e7077f6).",
-            "hint": "Delete the existing payout review before creating a replacement.",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a decimal number",
+            "hint": null,
             "details": null
           },
           "rows": {
@@ -9657,8 +9081,8 @@
           "id": "f4b261e3-4daf-5fcb-b7e4-b54711277358",
           "now": "2025-06-01T02:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value:  ",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9688,8 +9112,8 @@
           "id": "c538b844-4977-5a91-bb06-b4633cd4cd2b",
           "now": "2025-06-01T03:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: True",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9719,8 +9143,8 @@
           "id": "90e683f9-2e82-5d9e-af3f-2a33db552e0d",
           "now": "2025-06-01T04:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -9750,9 +9174,9 @@
           "id": "577bc82c-a7c6-5561-a1e3-011e0f42e41d",
           "now": "2025-06-01T05:00:00Z",
           "error": {
-            "code": "conflict",
-            "message": "Transaction already has an active direct swap payout (id=7d119ba6-024d-5356-a790-d9d05e7077f6).",
-            "hint": "Delete the existing payout review before creating a replacement.",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
+            "hint": null,
             "details": null
           },
           "rows": {
@@ -9782,7 +9206,7 @@
           "now": "2025-06-01T06:00:00Z",
           "error": {
             "code": "validation",
-            "message": "--payout-fiat-value must not be negative",
+            "message": "--payout-fiat-value must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -9812,8 +9236,8 @@
           "id": "4992e815-d364-5811-ab12-c8d08bb7bd0f",
           "now": "2025-06-01T07:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: bad",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -9874,9 +9298,9 @@
           "id": "39a04ab7-8e65-53d3-b64f-8fd91c64841c",
           "now": "2025-06-01T09:00:00Z",
           "error": {
-            "code": "conflict",
-            "message": "Transaction already has an active direct swap payout (id=7d119ba6-024d-5356-a790-d9d05e7077f6).",
-            "hint": "Delete the existing payout review before creating a replacement.",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
+            "hint": null,
             "details": null
           },
           "rows": {
@@ -9997,8 +9421,8 @@
           "id": "36684c63-17f5-5918-8208-4eb9a5ec64ea",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "cannot convert Infinity to integer",
+            "code": "validation",
+            "message": "--payout-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -10058,8 +9482,8 @@
           "id": "46a82e50-8b03-5ac6-b0dc-84c32a780420",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--payout-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -10119,8 +9543,8 @@
           "id": "e3adcd86-a204-5a74-8c70-493849e5ba28",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+            "code": "validation",
+            "message": "--payout-amount must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -10244,6 +9668,8 @@
           "id": "4c9a661e-636e-52cc-aefa-9b4471bfd1ac",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "4c9a661e-636e-52cc-aefa-9b4471bfd1ac",
             "component_id": "2462427f-912b-52b2-93e2-5fef8f474dd4",
             "workspace_id": "w",
@@ -10321,6 +9747,8 @@
           "id": "f0b33047-4d3a-51a7-91ef-7a1f0454caed",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "f0b33047-4d3a-51a7-91ef-7a1f0454caed",
             "component_id": "69ba6259-2527-5ff4-92cb-24ce39c9c378",
             "workspace_id": "w",
@@ -10459,124 +9887,10 @@
           "id": "cf0e2658-6a44-51b3-9ce9-7d027cedb99e",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "custody_component_incomplete",
-            "message": "custody component is incomplete or does not conserve",
+            "code": "validation",
+            "message": "--payout-amount is outside the supported decimal range",
             "hint": null,
-            "details": {
-              "component_id": "661b10b2-82ce-582f-b9c0-4d4e2893eb37",
-              "validation": {
-                "conservation_mode": "conversion",
-                "activatable": false,
-                "issues": [
-                  {
-                    "code": "missing_owned_destination",
-                    "message": "component has no positive destination or retained-custody leg"
-                  },
-                  {
-                    "code": "conversion_topology_unsupported",
-                    "message": "reviewed conversions currently require exactly one quantity source and one conversion output; exact same-asset retained continuations may be additional sinks",
-                    "source_leg_ids": [
-                      "f1d64f10-a9d8-5126-a0df-c6271e0cb57f"
-                    ],
-                    "destination_leg_ids": []
-                  }
-                ],
-                "suspense_msat": 0,
-                "source_msat": 1000,
-                "owned_destination_msat": 0,
-                "by_asset": [
-                  {
-                    "asset": "BTC",
-                    "source_msat": 1000,
-                    "destination_msat": 0,
-                    "fee_msat": 0,
-                    "external_msat": 0,
-                    "retained_msat": 0,
-                    "suspense_msat": 0,
-                    "sink_msat": 0,
-                    "residual_msat": 1000
-                  },
-                  {
-                    "asset": "ETH",
-                    "source_msat": 0,
-                    "destination_msat": 0,
-                    "fee_msat": 0,
-                    "external_msat": 0,
-                    "retained_msat": 0,
-                    "suspense_msat": 0,
-                    "sink_msat": 0,
-                    "residual_msat": 0
-                  }
-                ],
-                "by_conservation_unit": [
-                  {
-                    "exposure": "asset:eth",
-                    "conservation_unit": "msat",
-                    "source_msat": 0,
-                    "destination_msat": 0,
-                    "fee_msat": 0,
-                    "external_msat": 0,
-                    "retained_msat": 0,
-                    "suspense_msat": 0,
-                    "sink_msat": 0,
-                    "residual_msat": 0
-                  },
-                  {
-                    "exposure": "bitcoin",
-                    "conservation_unit": "msat",
-                    "source_msat": 1000,
-                    "destination_msat": 0,
-                    "fee_msat": 0,
-                    "external_msat": 0,
-                    "retained_msat": 0,
-                    "suspense_msat": 0,
-                    "sink_msat": 0,
-                    "residual_msat": 1000
-                  }
-                ],
-                "by_valuation_unit": [
-                  {
-                    "valuation_unit": "reviewed_source_msat",
-                    "source_amount": 1000,
-                    "destination_amount": 0,
-                    "fee_amount": 0,
-                    "external_amount": 0,
-                    "retained_amount": 1000,
-                    "suspense_amount": 0,
-                    "sink_amount": 1000,
-                    "residual_amount": 0
-                  }
-                ],
-                "allocations": {
-                  "valid": true,
-                  "issues": [],
-                  "edges": [
-                    {
-                      "id": "fc3bd801-56ba-59c6-97cb-4321ecfda895",
-                      "source_leg_id": "f1d64f10-a9d8-5126-a0df-c6271e0cb57f",
-                      "sink_leg_id": "f4317ff4-0a97-5582-b7d7-8acdfd41ee30",
-                      "source_amount_msat": 1000,
-                      "sink_amount_msat": 0
-                    }
-                  ]
-                },
-                "anchors": {
-                  "valid": true,
-                  "issues": [],
-                  "warnings": [],
-                  "transaction_coverage": [
-                    {
-                      "transaction_id": "d",
-                      "direction": "outbound",
-                      "partial_review": true,
-                      "raw_economic_msat": 1000,
-                      "reviewed_component_msat": 1000,
-                      "reviewed_minus_raw_msat": 0
-                    }
-                  ]
-                }
-              }
-            }
+            "details": null
           },
           "rows": {
             "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
@@ -10634,39 +9948,23 @@
           "profile": "p",
           "id": "51247aed-08bc-5152-9069-be278920e2ad",
           "now": "2025-06-01T00:00:00Z",
-          "result": {
-            "id": "51247aed-08bc-5152-9069-be278920e2ad",
-            "component_id": "cf35b59a-2f26-5226-8dc7-faab07fd7059",
-            "workspace_id": "w",
-            "profile_id": "p",
-            "out_transaction_id": "d",
-            "kind": "direct-swap-payout",
-            "policy": "carrying-value",
-            "payout_asset": "ETH",
-            "payout_amount": 8e-09,
-            "payout_amount_msat": 800,
-            "payout_occurred_at": null,
-            "payout_fiat_value": Infinity,
-            "payout_external_id": null,
-            "counterparty": null,
-            "notes": null,
-            "swap_fee_msat": 200,
-            "swap_fee_kind": "combined",
-            "out_amount": null,
-            "deleted_at": null,
-            "created_at": "2025-06-01T00:00:00Z"
+          "error": {
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
+            "hint": null,
+            "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "7a23fea4dff88c7dfc13182e4e216463c8e8665f9ca99d76d59fadacd2b13726",
-            "custody_component_legs": "7a96f81d412601047216429a8c71ec980762c99b303e10550a1028dc1f056448",
-            "custody_component_allocations": "29ce9e5a79d30d234adf607c6b433032af24f9033014885e830d71aa2e18cab3",
-            "custody_component_economic_terms": "befa90e548b5fb2a971cef78ff0775cef0782b1d54cca55344fc905572576d27",
-            "custody_component_transaction_memberships": "ee540e6ce35069ba29eccad3fb318d788ccd910954deb43f72d3ac0fbbaf9817",
-            "custody_authored_evidence_snapshots": "ad38daf0d6b3060c0f22619b2b4049272fc8eb211474a2fe18ef4d56b9b613f9",
-            "custody_component_evidence_commitments": "fc084efa384a6c7192827b87cbcebacbf7a66de8524e496fd15958327d423277"
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
           }
         }
       ]
@@ -10713,8 +10011,8 @@
           "id": "4a83eb76-a2ae-51c5-afef-0e4a9327ee26",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -10774,39 +10072,23 @@
           "profile": "p",
           "id": "b8c5f3a7-ef01-571d-a5b8-8a8efe0da745",
           "now": "2025-06-01T00:00:00Z",
-          "result": {
-            "id": "b8c5f3a7-ef01-571d-a5b8-8a8efe0da745",
-            "component_id": "1702fe39-20dd-52e9-a648-bd2bf63b32c7",
-            "workspace_id": "w",
-            "profile_id": "p",
-            "out_transaction_id": "d",
-            "kind": "direct-swap-payout",
-            "policy": "carrying-value",
-            "payout_asset": "ETH",
-            "payout_amount": 8e-09,
-            "payout_amount_msat": 800,
-            "payout_occurred_at": null,
-            "payout_fiat_value": Infinity,
-            "payout_external_id": null,
-            "counterparty": null,
-            "notes": null,
-            "swap_fee_msat": 200,
-            "swap_fee_kind": "combined",
-            "out_amount": null,
-            "deleted_at": null,
-            "created_at": "2025-06-01T00:00:00Z"
+          "error": {
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
+            "hint": null,
+            "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "26c2d793a5cac9ce57f350c3587dbf263c4e9af46edbff40d258d83b1d503b09",
-            "custody_component_legs": "dd70809ec89060fc7534bc2bf570113a4d7de08dd8ca03bce0bdf60aa2827f4d",
-            "custody_component_allocations": "a630201074b727bb25490562a932599535c7005a07f15866924237ca671a26cf",
-            "custody_component_economic_terms": "85f405a617d027be57ce47644788bbadb1a69b99d596f2f76966610bca7be064",
-            "custody_component_transaction_memberships": "92e20639a51629326fdd670fcf2d15d35c6b8de1ec19c656af6354faf5823d22",
-            "custody_authored_evidence_snapshots": "0255a07e5a08f8789a8670f471ddaf69c00859ea53fa93e7156557357c03c27c",
-            "custody_component_evidence_commitments": "fc0735ca6564946bffdea1756654f8daff657fa3ed01c1d519f56967bc323163"
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
           }
         }
       ]
@@ -10853,8 +10135,10 @@
           "id": "b5fffdbf-2475-54a4-ac3e-0dc0cf58b5fb",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "b5fffdbf-2475-54a4-ac3e-0dc0cf58b5fb",
-            "component_id": "5dc43c86-9fdb-580e-8f0f-cdc892f1ae17",
+            "component_id": "93246393-7cf6-5467-b0d5-0d939056504f",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -10878,13 +10162,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "91fbdab9d08d942fca3690860faa5854859cf75134f6d298a60aad5e0f415957",
-            "custody_component_legs": "685cf733904fd00e5731e82c137514152df23d3013a7c71c176ff4999f66e544",
-            "custody_component_allocations": "bdc55b2562051497bf82e12b8bebd99f96fc196e6c5d0fa8d2525d9d1c195904",
-            "custody_component_economic_terms": "691b1f0dcda65d266fd1c0b62a95447c41dafa557a5cf791299e55551f5916d8",
-            "custody_component_transaction_memberships": "6a43b716f9493e571eb139665cd856b098e20d68d6a0600b85a4decf83bdf969",
-            "custody_authored_evidence_snapshots": "08a4eef33a42d43b8549af9b8b7459c5293cc06ebb1babece02cfc57b719db8c",
-            "custody_component_evidence_commitments": "654960cecc4820ce8acd3ff13471448bdeadac1587f0a1bea55d57a3aa89852a"
+            "custody_components": "627400a7f12273fd4b73b72bfc296cf7bcfef0fe63b3caa9e76215ec578701c7",
+            "custody_component_legs": "11ba295e241ec96d905cd95f52f2ddacd3e38f2a78a28f23da8a355ba983c14e",
+            "custody_component_allocations": "cc1f3cb7d006c7d8904567fb22a699af167fda7aa39c37a9219c82c005c5bfcc",
+            "custody_component_economic_terms": "cfcbbc8dc040f8af8e8920f46f8cfcb5d169d19531d1bc18269659817cfb4481",
+            "custody_component_transaction_memberships": "37d7944cba29823f4a887778a6ccfd320d8823231e2f6c612b738c86e942af93",
+            "custody_authored_evidence_snapshots": "4787dbe1474e84af1d41f660d51287cbe99e0ec3ed8bc7aa2d2208c3ec0b5fb8",
+            "custody_component_evidence_commitments": "3c0ebe5317448116f02bdfc3fb784c17d68ac9f8c2ec428f40166ddd2e350e71"
           }
         }
       ]
@@ -10931,8 +10215,10 @@
           "id": "88fb1461-089f-57cc-b0ba-4d3cb283e2fa",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "88fb1461-089f-57cc-b0ba-4d3cb283e2fa",
-            "component_id": "8bf7b601-74d9-5615-9fbe-2c658cc9dda8",
+            "component_id": "4b2988cb-ceaf-5ca6-b32d-e390a9e8022a",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -10956,13 +10242,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "f934d15914fb801fa237be9f17dbf45ac91885fc9bee0ebb28d65b9aa65cb40a",
-            "custody_component_legs": "4dcea3b5bac18b4f17e0feb123b3a5276b6e75a69f1904f1350618112cb9a977",
-            "custody_component_allocations": "14d1cba1e524c694455ab08713df92d8f4b07a72e9df5f4dddd5a470026ba933",
-            "custody_component_economic_terms": "7c4c6a25d58c281237c684aedd4de796769b66dd4fbd2a3c9fd62fe9646faf74",
-            "custody_component_transaction_memberships": "255223d8033f017d693614b9d4d4974521f85ff236d516590fa0c67744bc28e6",
-            "custody_authored_evidence_snapshots": "390fdac21071cff523ff4636963ab2eb8619a3355a3b27c0595835aea6fe2d15",
-            "custody_component_evidence_commitments": "be636fee4c813ef00935f870baa6034e0258b3753063a1b167a48b9e6208b94b"
+            "custody_components": "a9f40d5d22b7b45d797de83084de5e8410e1f3f8011a5953e8d3ddf4a11ba744",
+            "custody_component_legs": "3e84e8f7eed99702e4ca2dadbef7633247ae2bb951b09c08f275b7a80fb73bc7",
+            "custody_component_allocations": "599799f00e8bfd95fbbb7ac56325b0f2db1807a1a6f1f8d12c63ce027ef2f409",
+            "custody_component_economic_terms": "373e57562c75a690359e63690ae15e6e861bde5b9cd4fb76134f0888db3c0e9e",
+            "custody_component_transaction_memberships": "a810b69b61759afa04dde53c39491fe81b28fd778117c9ee9e0cb950144726f1",
+            "custody_authored_evidence_snapshots": "ba227050a3b51da68ec574cf26c961cc70754f64bda1b451b8a806fef8f7f084",
+            "custody_component_evidence_commitments": "14099f55bd8aad0371249a735161fbe369dfbda6c3770a5881c8f5fde3c9f4f7"
           }
         }
       ]
@@ -11009,8 +10295,10 @@
           "id": "b9b04764-a1d1-5010-9fbc-0f56dfd2d264",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "b9b04764-a1d1-5010-9fbc-0f56dfd2d264",
-            "component_id": "ba5fcd64-0e8d-56fc-8924-abbcc06f08ac",
+            "component_id": "22ba63a3-722d-5c1f-bb5b-ded235207a16",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -11034,13 +10322,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "a5bcb3238201a355e7ee8d2009ea9e1fee51149fb11f3276bfb75555fc42bb3a",
-            "custody_component_legs": "1e039f5b04e6a82f0a0010a5b193205f15f790bfa426151c15a63a17f53d6e47",
-            "custody_component_allocations": "d6f3a235ae2bf7b94c0870c8e2b3e398c2d1c94a3149f31e70c54c6ed4d0fcd1",
-            "custody_component_economic_terms": "f60b4406ec4eddf41bd7f9ff5f83d750f2afd25aae3523624d62ddb7a4c8b513",
-            "custody_component_transaction_memberships": "c9603027f79dbae026cf028ca201bd00cb71b000d6e83050952e6843d26cf736",
-            "custody_authored_evidence_snapshots": "8e87653aaa60a0a7a970d907c15ed5a9512341805fb690215ed8e44dfcd84fc1",
-            "custody_component_evidence_commitments": "770cd4385d2553a3829954b7e2fc92d1d73921980c3d8746104983494edc3d0c"
+            "custody_components": "8c7cfce1cea02a02bdcd5b46f48b12179869a49b57e8d96d18e4429aa55706c0",
+            "custody_component_legs": "00474309a7b94802b9fd28974301ef42ad155dc647fe4b2f48228030b3c5691a",
+            "custody_component_allocations": "6f6ec74852063142dbbd9d2d82685f231cdad3cf483d6f55ac19d7f7dba50e49",
+            "custody_component_economic_terms": "ce1fcfb5625e4163f6dbf677326fee768d091fe976ac0312aff9014ca2441112",
+            "custody_component_transaction_memberships": "cb579869bd9c44b8f55623cf04959816690d09aede1571a3efb23e5e3aa6f570",
+            "custody_authored_evidence_snapshots": "1da4ae7c3d8814ce27a8bc10084e74d51dae02d1d61c82ea382077fd18c6bc07",
+            "custody_component_evidence_commitments": "c4f7d33d12a25b83caa364def966be84cec7b0138a5928136f9fe1ae18072136"
           }
         }
       ]
@@ -11087,8 +10375,10 @@
           "id": "c154f583-e3e5-5641-a447-44ef15532131",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "c154f583-e3e5-5641-a447-44ef15532131",
-            "component_id": "387f7a66-97cc-582e-8939-f1b7e375dd4a",
+            "component_id": "9fd80c82-5a6a-5e56-b7ed-5b14ebdfc9f7",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -11098,7 +10388,7 @@
             "payout_amount": 8e-09,
             "payout_amount_msat": 800,
             "payout_occurred_at": null,
-            "payout_fiat_value": -0.0,
+            "payout_fiat_value": 0.0,
             "payout_external_id": null,
             "counterparty": null,
             "notes": null,
@@ -11112,13 +10402,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "8d3455d25bc266ae62a57a70cd9e089c9540573007d578b3b5f8f01a0e6d6ed2",
-            "custody_component_legs": "fe1d2693ea51366507ce6c935e005693dbb63272704ce076ee4f9b2bf42d5ee9",
-            "custody_component_allocations": "b21f3f84d6bff1f7061667b85abec4358462978223ce744f3b9192ff8aeb56ca",
-            "custody_component_economic_terms": "84bd90924d350773834bdb65722437d38c3e5c5e60bd2cb5a8e8a9a8ccd471f1",
-            "custody_component_transaction_memberships": "91186b55dcd01664dece376a194c6b70a5da3044fdfef54e8fa343e74875ab20",
-            "custody_authored_evidence_snapshots": "a229a6f49142e2523e4ee7e2425b3be2244746c89c58e670f0314c05edeb1109",
-            "custody_component_evidence_commitments": "820c66a4491fbc7223338b4de73e1ac23df49888f43848e8afa98b74c646b284"
+            "custody_components": "e63120c573971ef0276e57b92e552e49c9200aa8c2e36c2718d0019c2fececd2",
+            "custody_component_legs": "77586df1426f7601b0f288bc9c563ff1fe88d48b72fb126b7465becd4296f97d",
+            "custody_component_allocations": "1fc25d0ba8be7f983567dfdc8ab4bf1c53aae2e51af260055377a2fe8705a194",
+            "custody_component_economic_terms": "e2e2cc794eb45b3a92a6133a4ae256eaccf17f485cff09c059d259b87ca0a6fd",
+            "custody_component_transaction_memberships": "8f11cd1dbd8dabf9d63b834b7410ded555bd1186582dddf2503a485cf0dabcc8",
+            "custody_authored_evidence_snapshots": "0f5699b129f8afe592c91dd700e5c2faf4df60644d7c7e5353e1d425e1a726ce",
+            "custody_component_evidence_commitments": "124ce8173d738445dd41ba2481b2edf2dfd19cad1de74435f5751c7ae7480835"
           }
         }
       ]
@@ -11164,39 +10454,23 @@
           "profile": "p",
           "id": "7e99b1f9-30cd-5440-b571-5d75c2c3efcb",
           "now": "2025-06-01T00:00:00Z",
-          "result": {
-            "id": "7e99b1f9-30cd-5440-b571-5d75c2c3efcb",
-            "component_id": "d04b9745-7be4-593b-b48b-bf310c8b62d4",
-            "workspace_id": "w",
-            "profile_id": "p",
-            "out_transaction_id": "d",
-            "kind": "direct-swap-payout",
-            "policy": "carrying-value",
-            "payout_asset": "ETH",
-            "payout_amount": 8e-09,
-            "payout_amount_msat": 800,
-            "payout_occurred_at": null,
-            "payout_fiat_value": 1e-20,
-            "payout_external_id": null,
-            "counterparty": null,
-            "notes": null,
-            "swap_fee_msat": 200,
-            "swap_fee_kind": "combined",
-            "out_amount": null,
-            "deleted_at": null,
-            "created_at": "2025-06-01T00:00:00Z"
+          "error": {
+            "code": "validation",
+            "message": "--payout-fiat-value is outside the supported decimal range",
+            "hint": null,
+            "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "8909411feae272120332dcfc47a9217ddd6ba827e970b2690c9d9ba4fd25dd0f",
-            "custody_component_legs": "339c59e2d173be5b88d2f618280722a773e489050296707724e6f6e369322f14",
-            "custody_component_allocations": "f5f11978c6b902c4c5d0737d7792f079bd0d6746ecea415bf530a539d3998f89",
-            "custody_component_economic_terms": "9d293f1f8b6edc0dfd15c850d164d2c40c8115a5ee63ce6a4177f955b6a6cfe8",
-            "custody_component_transaction_memberships": "50427ec05f1e3d01449b1c360b8764240c535d625f2466636a1818832b98c7e6",
-            "custody_authored_evidence_snapshots": "ee3286965ce2464a70dcaf4e7765333b1edd180b39f4c68faa574e5d82d50c01",
-            "custody_component_evidence_commitments": "6b78d4509a2c532852818b557c07df002336c8683b36a7c8c5b14644bf971224"
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
           }
         }
       ]
@@ -11627,8 +10901,8 @@
           "id": "3b097c02-6bb8-51b1-93d8-878bc06c220f",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "app_error",
-            "message": "Invalid decimal value: banana",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a decimal number",
             "hint": null,
             "details": null
           },
@@ -11689,8 +10963,8 @@
           "id": "14204589-1b5c-5696-b6d5-fdabe0e39334",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -11751,8 +11025,8 @@
           "id": "b2166709-f349-5b11-965f-f5d3feddc8e1",
           "now": "2025-06-01T00:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "[<class 'decimal.InvalidOperation'>]",
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
             "hint": null,
             "details": null
           },
@@ -11812,39 +11086,23 @@
           "profile": "p",
           "id": "63f4ed6f-973e-5150-a43f-c911019b74e0",
           "now": "2025-06-01T00:00:00Z",
-          "result": {
-            "id": "63f4ed6f-973e-5150-a43f-c911019b74e0",
-            "component_id": "3bba3f38-4e68-5a48-b6f5-39df62979708",
-            "workspace_id": "w",
-            "profile_id": "p",
-            "out_transaction_id": "d",
-            "kind": "direct-swap-payout",
-            "policy": "carrying-value",
-            "payout_asset": "ETH",
-            "payout_amount": 8e-09,
-            "payout_amount_msat": 800,
-            "payout_occurred_at": null,
-            "payout_fiat_value": Infinity,
-            "payout_external_id": null,
-            "counterparty": null,
-            "notes": null,
-            "swap_fee_msat": 200,
-            "swap_fee_kind": "combined",
-            "out_amount": null,
-            "deleted_at": null,
-            "created_at": "2025-06-01T00:00:00Z"
+          "error": {
+            "code": "validation",
+            "message": "--payout-fiat-value must be a finite decimal number",
+            "hint": null,
+            "details": null
           },
           "rows": {
-            "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
-            "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
-            "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "9b96482278bec9f36d856c9d76337f49f5761a63685ae71c125a7271c66aae5c",
-            "custody_component_legs": "2696ccea9ce8a90a5e70f2337ca27e09409b7069eb0d3e87fde0352654fee326",
-            "custody_component_allocations": "676609bcdb38d8856ae85ff99a7be5d9cd1516ac89683053a2d3ebedfcc92ca9",
-            "custody_component_economic_terms": "faaba1e37ba6c74bde7d375efa3a110035f9e3f11a3c94300e14b13c6110c368",
-            "custody_component_transaction_memberships": "57145295d5f0df73c20d21f59cda77f5c556e013283fa7e2b6339b55399a8c3d",
-            "custody_authored_evidence_snapshots": "14616049b8b6fbef34bca17281ea7de121224657ec7eb777fdec79de49f3b336",
-            "custody_component_evidence_commitments": "48f7ed9525632ff16ec321d955b1484b0cf909d2de20d22072dceb4a2bf6f73b"
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
           }
         }
       ]
@@ -11891,8 +11149,10 @@
           "id": "d644b4fc-9440-591d-8b10-d2ac01002a28",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "d644b4fc-9440-591d-8b10-d2ac01002a28",
-            "component_id": "09357a0a-a46e-5da6-9f52-48d08d11c1ce",
+            "component_id": "40f5dc8b-920b-5d44-92b3-82cef9f1b43a",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -11916,13 +11176,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "25aebf832c67e61324a75844ffab7ad5ccb198a7758044ce052fef08874d98c9",
-            "custody_component_legs": "3f624d0ec076e7b9796c21a5e0b98f31628d8f6ab26c15e458cea0a35e0cffd9",
-            "custody_component_allocations": "552ca06b3955bb630b9b1d9988cf4e9008fd44041bb098abe0a5b81ed85a9298",
-            "custody_component_economic_terms": "531f0a64588f3f06cc7dce4731648feeb42ea1225aef3ef941e791c4be151529",
-            "custody_component_transaction_memberships": "f3407dc48807636fd4092074d1293b2c41fc0d325e2b42035f4e7ec56381174c",
-            "custody_authored_evidence_snapshots": "a3baecb63717a467ef92f91e57539f0a0aa1aadeaf724dbbf67243319541e40e",
-            "custody_component_evidence_commitments": "96480dabb9ac2fbfeb03c776d2787c11c08af385d7eb6b8801c21797d39142be"
+            "custody_components": "651d958569c0fc6795634120163ae580474af25d0946e1780d557cd96b8e8fcc",
+            "custody_component_legs": "4034c45f5a51dee1146ca4f5f03b604c43625b2110d6dd3b0d18326e86084c1c",
+            "custody_component_allocations": "8ace932a2c92674a7c67f03be5a4cdf0e950ad0904ab06a7ef24763ad44e56e1",
+            "custody_component_economic_terms": "8ce2ef2e707f16aa39bb8776da8568c3a60d9dbb26445c729db4982aabb43611",
+            "custody_component_transaction_memberships": "098702bd04006d69668b19e2300f24e34d3af5964ed905f4f108859822762ce2",
+            "custody_authored_evidence_snapshots": "6b54561f11059d6ee42ad08f9d209d4162a7a810d25d9cec0701579dc84666da",
+            "custody_component_evidence_commitments": "e09e24e819cd3d1bd226d958cb84220ca784c09257a3abc2eabf1c072b6ac1e7"
           }
         }
       ]
@@ -11969,6 +11229,8 @@
           "id": "d8da2ba5-cb43-55c8-9118-bc6a553ce95f",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "d8da2ba5-cb43-55c8-9118-bc6a553ce95f",
             "component_id": "9807c969-80f1-56aa-a32a-090cc4f0ebaa",
             "workspace_id": "w",
@@ -12047,8 +11309,10 @@
           "id": "1467d2c1-7c22-5717-b2ec-1fcee50b169c",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "1467d2c1-7c22-5717-b2ec-1fcee50b169c",
-            "component_id": "69293ff5-c0c4-5bbf-b5bf-92dc408efa8b",
+            "component_id": "e7efdec4-dc01-51bb-a999-a93543cbeb96",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -12072,13 +11336,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "9205b6a312abc6edbb00d13f1efdfda98d790c4d0d4335f8006103f1383227f4",
-            "custody_component_legs": "f11699b3c289d797ee20c5464224e3906d3a6e06494bfc5277b7db2c85223a53",
-            "custody_component_allocations": "0bf791a36ceae930549f7401940177e7509aa8393d8fa4fc78c2422d4b49cd1e",
-            "custody_component_economic_terms": "223d08338f665546a8d6bf14a1a34f064aba3bab8bbfa6c9bccc858132108a26",
-            "custody_component_transaction_memberships": "8001a48de93b2bbb77a8120c38572dc0c79cc0ff053d1574dfe4f4075c85586c",
-            "custody_authored_evidence_snapshots": "8fdb61a6dc7c6626a9f4178382454cdb870b98a7be23df695e652ed1ebfedf65",
-            "custody_component_evidence_commitments": "681d31dcc99789b5cfddd60f2a12b1c71d7d9153af1f0094d8d23f61281c0ce8"
+            "custody_components": "16386ca096f1e311ef02c4b07d7b1dd9cb348b8fd245cc263fcf3521ce04dad3",
+            "custody_component_legs": "8fdbbff4a012a3f368f012c92e682576de102980d6b5fff07ce275745d9effff",
+            "custody_component_allocations": "0a0e62c9a553bd65d44502f6493e6584becc25768ef934179835c451aa3755f1",
+            "custody_component_economic_terms": "382c1a7086f7fdea1e2f2dd16e65eb186db58c9d71eec5ffa64516b3b0322d75",
+            "custody_component_transaction_memberships": "a14e0b05766a482469e84f08d98ff16782a2a62b94f5011e5794f14ef9e29f25",
+            "custody_authored_evidence_snapshots": "188a3e11d3308a9d6033af02330a433507ff23b4ef0dc151698113d3430fc0ce",
+            "custody_component_evidence_commitments": "ab98d48b8222ba0a9fc8eefcc83ffdf367c247a69bd4c077212420302dec5465"
           }
         }
       ]
@@ -12125,8 +11389,10 @@
           "id": "332b149f-0209-5240-893b-96a564cd1939",
           "now": "2025-06-01T00:00:00Z",
           "result": {
+            "invalid": false,
+            "validation_error": null,
             "id": "332b149f-0209-5240-893b-96a564cd1939",
-            "component_id": "4efdcd91-efdf-504a-b97e-e99a9c5e5c74",
+            "component_id": "46a49ece-ecb3-5140-9a49-b0afdcb26b6b",
             "workspace_id": "w",
             "profile_id": "p",
             "out_transaction_id": "d",
@@ -12136,7 +11402,7 @@
             "payout_amount": 8e-09,
             "payout_amount_msat": 800,
             "payout_occurred_at": null,
-            "payout_fiat_value": -0.0,
+            "payout_fiat_value": 0.0,
             "payout_external_id": null,
             "counterparty": null,
             "notes": null,
@@ -12150,13 +11416,13 @@
             "chain_index_clock": "7dcce0dbd9f14f8a3823db2b5d22103412278d41b812502c755ca259eef935cf",
             "chain_index_dirty": "a52905cd8bc1316550062703e93e9f670d6898fedd49cd4d48e82d770cb88e53",
             "profiles": "e0504b30e1172d36860160f01297083a6ae2c65907a979a27fa426adc8675906",
-            "custody_components": "d4688dd1d5e3e137ae7b57987a97f11cc9932fa94925114313267a99d2bc7c40",
-            "custody_component_legs": "30d85bc69db628c596d4a518122c6882b5fa0cda262dd8c4f63f57ced5d2f8b4",
-            "custody_component_allocations": "57d2daef0a3766cf4f429dc3ec14574b13b8b839487a15778c25f7eae3b24e2c",
-            "custody_component_economic_terms": "d8f4662708b081ca46996e3e58c9e6a266557ee71820703f9593b546b60730e0",
-            "custody_component_transaction_memberships": "dd12b53a1d9b6b2f23416cc69685c6436d102c71abdebd195839b8f43b6d1342",
-            "custody_authored_evidence_snapshots": "222176433c7d79b17e6be6e438c41d63a7aca390e6e7f000e8169c6a65470352",
-            "custody_component_evidence_commitments": "ef02d445fd61bc482bbcd492cfed0bb169c25b38d0fdd7e9ce27f04c30f47d38"
+            "custody_components": "ceb0507a67cd4185bce108c97542aed07d000d2b7be4862a2dd6134343784db1",
+            "custody_component_legs": "c912736f6b1ba8862832b63e3a824a17aee7cd1d654e6e76889a6ddc65406845",
+            "custody_component_allocations": "6c41c37374b25614f9f613793187de031f29cc97442ef3dc870339fc13ea4b9c",
+            "custody_component_economic_terms": "85adf2e98ab29179bed7e70c0428c6759aa3abfef05d397b8de92fb781e79312",
+            "custody_component_transaction_memberships": "c3d5dbc7c17303b77442eb46acbed4fea849961c0cb9748e0800bc46f2ffec76",
+            "custody_authored_evidence_snapshots": "8cb78012da9e6f482995091d07d5285b85e54f9abef95c4e1358184e232d6a46",
+            "custody_component_evidence_commitments": "b5260afd3ac3da9405fd3fc065deb62e910194c7286da18b1a3e745985360f99"
           }
         }
       ]

@@ -4,7 +4,9 @@
     "file": "crates/transfers/src/gap_review_store.rs",
     "find": "if years.iter().any(|year| !(1900..=9999).contains(year)) {",
     "replace": "if false {",
-    "expect_failing": ["gap_reviews_match_python_complete_database_rows_and_refusals"],
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
     "rule": "Filed-report previews validate candidate years even when no report snapshots exist."
   },
   {
@@ -130,12 +132,12 @@
   {
     "id": "payout-malformed-fiat",
     "file": "crates/transfers/src/records.rs",
-    "find": "if parsed.is_err() {",
-    "replace": "if false {",
+    "find": "let invalid_price = price.is_err();",
+    "replace": "let invalid_price = false;",
     "expect_failing": [
-      "malformed_stored_payout_value_fails_closed"
+      "malformed_stored_payout_value_remains_recoverable"
     ],
-    "rule": "Invalid stored payout fiat values fail instead of fabricating a value."
+    "rule": "Legacy malformed payout prices remain listed with explicit invalid status for deletion and recreation."
   },
   {
     "id": "authored-kind",
@@ -1550,13 +1552,13 @@
   },
   {
     "id": "payout-create-nan",
-    "file": "crates/transfers/src/payout_create.rs",
-    "find": "if lower.contains(\"nan\") {",
-    "replace": "if false {",
+    "file": "crates/pydecimal/src/price.rs",
+    "find": "DecimalError::NonFinite => PriceError::NonFinite,",
+    "replace": "DecimalError::NonFinite => PriceError::Invalid,",
     "expect_failing": [
       "payout_creations_match_python_complete_database_rows_and_refusals"
     ],
-    "rule": "NaN fiat inputs preserve Python InvalidOperation refusal."
+    "rule": "Nonfinite payout prices receive the same finite-decimal validation error as Python."
   },
   {
     "id": "payout-create-range",

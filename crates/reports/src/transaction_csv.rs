@@ -38,7 +38,11 @@ fn optional(row: &Value, exact: &str, legacy: &str) -> Result<Option<Decimal>> {
     if matches!(raw, Value::Null) || raw == &s("") {
         Ok(None)
     } else {
-        decimal(raw).map(Some)
+        match kassiber_pydecimal::finite_price(&py_str(raw)) {
+            Ok(value) => Ok(Some(value)),
+            Err(kassiber_pydecimal::PriceError::Invalid) => decimal(raw).map(Some),
+            Err(_) => Ok(None),
+        }
     }
 }
 fn optional_float(v: Option<&Decimal>) -> Result<Value> {

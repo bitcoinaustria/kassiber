@@ -1111,9 +1111,9 @@
   },
   {
     "id": "W-json-finite-kind",
-    "file": "crates/wallets/src/file_import.rs",
-    "find": "!matches!(self, Self::Finite(_))",
-    "replace": "false",
+    "file": "crates/pydecimal/src/price.rs",
+    "find": "DecimalError::NonFinite => PriceError::NonFinite,",
+    "replace": "DecimalError::NonFinite => PriceError::Invalid,",
     "expect_failing": [
       "python_file_import_vectors"
     ],
@@ -1121,9 +1121,9 @@
   },
   {
     "id": "W-json-finite-float",
-    "file": "crates/wallets/src/file_import.rs",
-    "find": "value.is_finite()",
-    "replace": "!value.is_nan()",
+    "file": "crates/pydecimal/src/price.rs",
+    "find": "f64::is_finite",
+    "replace": "|f| !f.is_nan()",
     "expect_failing": [
       "python_file_import_vectors"
     ],

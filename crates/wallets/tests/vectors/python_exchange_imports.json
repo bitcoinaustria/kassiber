@@ -4794,8 +4794,8 @@
     "format": "river_csv",
     "text": "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Bitcoin Price Amount,Bitcoin Price Currency,Transaction ID,Reference Code,Transaction Type,Tag,Method,Source,Destination,Payment Hash,payment_hash\r\n2025-01-02T01:02:03+01:00,100.00,EUR,1e309,BTC,1.00,EUR,50000,EUR,,river-buy,Buy,Buy,wire,bank,balance,,\r\n",
     "error": {
-      "code": "internal_error",
-      "message": "Python int too large to convert to SQLite INTEGER",
+      "code": "validation",
+      "message": "fiat_rate is outside the supported decimal range",
       "hint": null
     }
   },

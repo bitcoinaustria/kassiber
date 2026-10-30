@@ -145,6 +145,10 @@ for amount in ("NaN", "Infinity", "-Infinity"):
     for rate in ("0", "1"):
         CASES[f"json:nonfinite-principal-{amount}-{rate}"] = json.dumps([{"date":"2025-01-02", "direction":"in", "amount":amount, "fiat_rate":rate}])
 
+for amount in ("NaN", "Infinity", "-Infinity"):
+    CASES[f"json:value-only-special-principal-{amount}"] = json.dumps([{
+        "date":"2025-01-02", "direction":"in", "amount":amount, "fiat_value":"1"}])
+
 def clean(value):
     if isinstance(value,float) and math.isnan(value): return None
     if isinstance(value,float) and not math.isfinite(value): return {"$float":str(value)}
