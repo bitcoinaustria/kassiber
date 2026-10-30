@@ -16,6 +16,12 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PeriodYearMenu } from "@/components/kb/PeriodYearMenu";
+import {
+  isYearPeriod,
+  type PeriodYear,
+  type RangePeriodKey,
+} from "@/lib/period";
 import { cn } from "@/lib/utils";
 
 import {
@@ -78,6 +84,7 @@ export function ChartRangeToolbar({
   period,
   periodOptions = periodKeys,
   resolvedPeriod = null,
+  years = [],
   onPeriodChange,
   yScaleLog,
   onYScaleLogChange,
@@ -99,9 +106,11 @@ export function ChartRangeToolbar({
   onOpenMoreSettings,
 }: {
   period: TimePeriod;
-  periodOptions?: TimePeriod[];
-  /** Window "auto" resolved to, named in the Auto chip's tooltip. */
+  periodOptions?: RangePeriodKey[];
+  /** Window "auto" resolved to; its chip shows as chosen. */
   resolvedPeriod?: ResolvedTimePeriod | null;
+  /** Calendar years holding activity, newest first. */
+  years?: readonly PeriodYear[];
   onPeriodChange: (period: TimePeriod) => void;
   yScaleLog: boolean;
   onYScaleLogChange: (value: boolean) => void;
@@ -123,6 +132,8 @@ export function ChartRangeToolbar({
   onOpenMoreSettings: () => void;
 }) {
   const { t } = useTranslation(["overview", "common"]);
+  // "Auto" has no chip of its own: the range it settled on shows as chosen.
+  const shown = period === "auto" ? (resolvedPeriod ?? period) : period;
   const markerMinimumsAtDefault =
     incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC &&
     outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;
@@ -141,20 +152,15 @@ export function ChartRangeToolbar({
         className="flex flex-wrap items-center gap-0.5"
       >
         {periodOptions.map((key) => {
-          const label =
-            key === "auto" && resolvedPeriod
-              ? t("period.autoResolved", {
-                  period: t(periodLabelKeys[resolvedPeriod]),
-                })
-              : t(periodLabelKeys[key]);
+          const label = t(periodLabelKeys[key]);
           return (
           <button
             key={key}
             type="button"
-            aria-pressed={period === key}
+            aria-pressed={shown === key}
             aria-label={label}
             title={label}
-            className={chipClass(period === key)}
+            className={chipClass(shown === key)}
             onClick={() => onPeriodChange(key)}
             onMouseDown={preventClickFocus}
           >
@@ -162,6 +168,12 @@ export function ChartRangeToolbar({
           </button>
           );
         })}
+        <PeriodYearMenu
+          years={years}
+          value={isYearPeriod(shown) ? shown : null}
+          onSelect={onPeriodChange}
+          className={chipClass(isYearPeriod(shown))}
+        />
         {/* The time axis' own scale, next to the ranges it applies to. With the
             value axis' `log` chip on the right, that is the power-law view. */}
         <button

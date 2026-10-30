@@ -45,13 +45,6 @@
     "open": "Explorer öffnen",
     "openError": "Explorer konnte nicht im Standardbrowser geöffnet werden."
   },
-  "flowOption": {
-    "incoming": "Empfangen",
-    "outgoing": "Senden",
-    "transfer": "Interne Übertragung",
-    "swap": "Swap",
-    "layerTransition": "Bitcoin-Swap"
-  },
   "classification": {
     "unlabeled": "Ohne Label",
     "income": "Einnahme",
@@ -108,14 +101,6 @@
       "label": "Fehlt / Prüfung",
       "description": "In der Prüfwarteschlange belassen"
     }
-  },
-  "newPricingOption": {
-    "manualEntry": "Manuelle Eingabe",
-    "fmvProviderSample": "FMV-Provider-Sample",
-    "exchangeExecution": "Exchange-Ausführung",
-    "btcpayInvoice": "BTCPay-Rechnung Fiat",
-    "walletExport": "Wallet-Import exakter Fiat",
-    "needsPricing": "Bewertung nötig"
   },
   "pricingQuality": {
     "coarseFallback": "Grober Rückfallwert",
@@ -177,20 +162,6 @@
     "manualReview": "manuelle Prüfung",
     "accountant": "Steuerberatung"
   },
-  "movementCandidate": {
-    "channelOpen": {
-      "label": "Mit Channel-Öffnung verbinden · Home Node",
-      "detail": "tx8 · gleiche Wallet · 96 % Konfidenz"
-    },
-    "liquidPeg": {
-      "label": "Mit Liquid-Peg-Übergang verbinden",
-      "detail": "L-BTC-Leg 8 Min. auseinander · 89 % Konfidenz"
-    },
-    "boltzSwap": {
-      "label": "Mit Boltz-Swap-Paar verbinden",
-      "detail": "Payment-Hash-Überschneidung · 82 % Konfidenz"
-    }
-  },
   "fallback": {
     "unassigned": "Nicht zugeordnet",
     "unassignedWallet": "Nicht zugeordnete Wallet"
@@ -202,16 +173,12 @@
   },
   "period": {
     "auto": "Auto",
-    "autoResolved": "Auto: {{period}}",
-    "ytd": "Lfd. Jahr",
-    "1year": "1 Jahr",
-    "3months": "3 Monate",
-    "6months": "6 Monate",
     "30days": "30 Tage",
-    "5years": "5 Jahre",
+    "1year": "1 Jahr",
+    "4years": "4 Jahre",
     "10years": "10 Jahre",
-    "15years": "15 Jahre",
-    "all": "Gesamt"
+    "all": "Gesamt",
+    "emptyRange": "Keine Transaktionen in diesem Zeitraum"
   },
   "chartMetric": {
     "amount": "Betrag",
@@ -353,59 +320,6 @@
       }
     }
   },
-  "documentImport": {
-    "trigger": "OCR",
-    "triggerAria": "Aus Foto oder PDF importieren",
-    "title": "Foto/PDF-Import",
-    "description": "Entwurf mit einem lokalen Loopback-Vision-Modell; vor dem Import prüfen.",
-    "source": "Quelle",
-    "sourcePlaceholder": "Lokales Bild oder PDF auswählen",
-    "pick": "Wählen",
-    "pickTitle": "Foto oder PDF wählen",
-    "fileFilter": "Bilder und PDFs",
-    "pickFailed": "Dateiauswahl fehlgeschlagen",
-    "wallet": "Wallet",
-    "walletPlaceholder": "Wallet wählen",
-    "provider": "Lokaler Provider",
-    "providerPlaceholder": "Lokalen Provider wählen",
-    "noLocalProvider": "Zuerst einen lokalen Loopback-AI-Provider in den Einstellungen konfigurieren.",
-    "model": "Modell",
-    "modelPlaceholder": "Auto, glm-ocr, qwen3-vl:8b",
-    "pages": "PDF-Seiten (optional)",
-    "pagesPlaceholder": "Alle oder 2-6",
-    "recommendations": "Empfohlene lokale Modelle: glm-ocr · qwen3-vl:8b · llama3.2-vision:11b",
-    "preview": "Vorschau",
-    "previewFailed": "OCR-Vorschau fehlgeschlagen",
-    "ready": "{{count}} bereit",
-    "quarantined": "{{count}} Quarantäne",
-    "pdfComplete": "Alle {{count}} PDF-Seiten geprüft",
-    "pdfPartial": "PDF-Seiten {{selection}} von {{total}} geprüft",
-    "row": "Zeile",
-    "date": "Datum",
-    "direction": "Richtung",
-    "asset": "Asset",
-    "amount": "Betrag",
-    "fee": "Gebühr (BTC)",
-    "feeNotProvided": "nicht angegeben; 0 wird erfasst",
-    "fiatValue": "Fiatwert",
-    "fiatRate": "Fiatkurs",
-    "counterparty": "Gegenpartei",
-    "confidence": "Sicherheit",
-    "status": "Status",
-    "statusReady": "Bereit",
-    "statusQuarantined": "Quarantäne",
-    "selectAll": "Alle bereiten Zeilen auswählen",
-    "selectRow": "{{row}} auswählen",
-    "descriptionField": "Beschreibung",
-    "sourcePage": "Quellseite",
-    "evidence": "Belegtext",
-    "cellConfidences": "Feldsicherheit",
-    "flags": "Prüfhinweise",
-    "importSelected": "{{count}} importieren",
-    "importDone": "Dokumentzeilen importiert",
-    "importSummary": "{{count}} Zeilen · {{attachments}} Belege",
-    "importFailed": "Dokumentimport fehlgeschlagen"
-  },
   "workbench": {
     "metric": {
       "incoming": "Eingehend",
@@ -437,17 +351,17 @@
     },
     "chart": {
       "titleDay": "Fluss je aktivem Tag",
-      "titleWeek": "Fluss je aktiver Woche",
       "titleMonth": "Fluss je aktivem Monat",
       "titleQuarter": "Fluss je aktivem Quartal",
       "subtitleDay_one": "{{count}} Tx über {{buckets}} aktiven Tag",
       "subtitleDay_other": "{{count}} Tx über {{buckets}} aktive Tage",
-      "subtitleWeek_one": "{{count}} Tx über {{buckets}} aktive Woche",
-      "subtitleWeek_other": "{{count}} Tx über {{buckets}} aktive Wochen",
       "subtitleMonth_one": "{{count}} Tx über {{buckets}} aktiven Monat",
       "subtitleMonth_other": "{{count}} Tx über {{buckets}} aktive Monate",
       "subtitleQuarter_one": "{{count}} Tx über {{buckets}} aktives Quartal",
-      "subtitleQuarter_other": "{{count}} Tx über {{buckets}} aktive Quartale"
+      "subtitleQuarter_other": "{{count}} Tx über {{buckets}} aktive Quartale",
+      "titleYear": "Fluss je aktivem Jahr",
+      "subtitleYear_one": "{{count}} Tx über {{buckets}} aktives Jahr",
+      "subtitleYear_other": "{{count}} Tx über {{buckets}} aktive Jahre"
     },
     "tooltip": {
       "txCount": "{{count}} Tx",
@@ -667,88 +581,6 @@
     "process": "Verarbeiten",
     "revertReasonField": "{{label}} aus der Bearbeitungshistorie zurückgesetzt",
     "revertReasonEvent": "Eintrag der Bearbeitungshistorie zurückgesetzt"
-  },
-  "newDialog": {
-    "triggerAria": "Neue Transaktion",
-    "trigger": "Neue Transaktion",
-    "title": "Neue Transaktion",
-    "description": "Manueller Entwurf",
-    "section": {
-      "networkTiming": "Netzwerk und Zeitpunkt",
-      "partiesRoute": "Beteiligte und Route",
-      "amountPricing": "Betrag und Bewertung",
-      "partOfMovement": "Teil einer Bewegung",
-      "classification": "Klassifizierung",
-      "evidence": "Beleg"
-    },
-    "field": {
-      "network": "Netzwerk",
-      "flow": "Fluss",
-      "occurredAt": "Erfolgt am",
-      "confirmedAt": "Bestätigt am",
-      "from": "Von",
-      "to": "An",
-      "swapService": "Swap-Dienst",
-      "swapServicePlaceholder": "Boltz, Exchange, Channel-Peer",
-      "fromExternalPlaceholder": "Externe Partei, Zahler oder Quelle",
-      "toExternalPlaceholder": "Externe Partei oder Ziel",
-      "leg1Out": "Leg 1 raus",
-      "leg2In": "Leg 2 rein",
-      "sendSats": "Sats senden",
-      "sendAsset": "Asset senden",
-      "receiveSats": "Sats empfangen",
-      "receiveAsset": "Asset empfangen",
-      "amountSats": "Betrag Sats",
-      "asset": "Asset",
-      "feeSats": "Gebühr Sats",
-      "pricePerBtc": "Preis / BTC ({{currency}})",
-      "totalValue": "Gesamtwert ({{currency}})",
-      "pricingMethod": "Bewertungsmethode",
-      "label": "Label",
-      "taxTreatment": "Steuerliche Behandlung",
-      "tags": "Tags",
-      "tagsPlaceholder": "Umsatz, BTCPay, Kunde ACME",
-      "note": "Notiz",
-      "notePlaceholder": "Freie Anmerkung zur Prüfung",
-      "movementPlaceholder": "Bewegung, Swap, Channel oder Peg suchen",
-      "evidenceTxid": "Txid oder Permalink",
-      "evidenceTxidPlaceholder": "txid, Payment-Hash oder URL",
-      "evidenceBtcpay": "BTCPay-Rechnungs-ID",
-      "evidenceBtcpayPlaceholder": "Rechnungs-ID",
-      "evidenceExchange": "Exchange-CSV-Zeile",
-      "evidenceExchangePlaceholder": "file.csv:42",
-      "evidenceSwap": "Boltz-Swap-ID",
-      "evidenceSwapPlaceholder": "Swap-ID",
-      "evidencePreimage": "Preimage",
-      "evidencePreimagePlaceholder": "Payment-Preimage"
-    },
-    "newMovement": "Neue Bewegung",
-    "standalone": "Eigenständig",
-    "preview": {
-      "live": "Live-Vorschau",
-      "out": "Raus",
-      "in": "Rein",
-      "net": "Netto {{value}}",
-      "noFiatValue": "Kein {{currency}}-Wert",
-      "network": "Netzwerk",
-      "from": "Von",
-      "to": "An",
-      "service": "Dienst",
-      "movement": "Bewegung",
-      "asset": "Asset",
-      "fee": "Gebühr",
-      "value": "Wert ({{currency}})",
-      "price": "Preis ({{currency}}/BTC)",
-      "pricePerBtc": "{{value}} / BTC",
-      "pricing": "Bewertung",
-      "tax": "Steuer",
-      "evidence": "Beleg"
-    },
-    "status": "Status",
-    "footer": {
-      "demoNote": "Nur Demo: bleibt in dieser UI-Sitzung, wird nicht in die Datenbank geschrieben.",
-      "save": "Lokalen Demo-Entwurf speichern"
-    }
   },
   "details": {
     "explorer": "Explorer",
@@ -1041,6 +873,7 @@
     "spotNowUnknown": "Unbekannt",
     "perBtc": "{{value}} / BTC",
     "rateCacheSource": "Quelle des Kurs-Caches",
+    "priceSource": "Preisquelle",
     "provider": "Provider",
     "providerUnknown": "Unbekannt",
     "pairGranularity": "Paar / Granularität",
@@ -1260,7 +1093,7 @@
     "checklist": {
       "title": "Prüf-Checkliste",
       "setPricingSource": "Eine Preisquelle festlegen",
-      "pricedVia": "Bewertet über {{label}}",
+      "pricedVia": "Bewertet mit {{label}}",
       "pickLabel": "Ein Label wählen",
       "labeled": "Gelabelt {{label}}",
       "excludedFromReports": "Aus Steuerberichten ausgenommen",
@@ -1340,5 +1173,47 @@
     "chainRecord": "Blockchain-Transaktion unten",
     "fee": "Gebühr laut Börsenbuchung",
     "reference": "Börsenreferenz"
+  },
+  "pricingSourceKind": {
+    "generic_import": {
+      "label": "Preis der Quelle",
+      "phrase": "dem Preis der Quelle"
+    },
+    "wallet_export": {
+      "label": "Wallet-Export",
+      "phrase": "dem Wallet-Export"
+    },
+    "exchange_execution": {
+      "label": "Handelspreis der Börse",
+      "phrase": "dem Handelspreis der Börse"
+    },
+    "btcpay_wallet_export": {
+      "label": "BTCPay-Wallet-Export",
+      "phrase": "dem BTCPay-Wallet-Export"
+    },
+    "btcpay_invoice": {
+      "label": "BTCPay-Rechnung",
+      "phrase": "der BTCPay-Rechnung"
+    },
+    "btcpay_payment": {
+      "label": "BTCPay-Zahlung",
+      "phrase": "der BTCPay-Zahlung"
+    },
+    "btcpay_payout": {
+      "label": "BTCPay-Auszahlung",
+      "phrase": "der BTCPay-Auszahlung"
+    },
+    "manual_override": {
+      "label": "Manueller Preis",
+      "phrase": "einem manuellen Preis"
+    },
+    "manual_rate_cache": {
+      "label": "Manueller Kurs",
+      "phrase": "einem manuellen Kurs"
+    },
+    "fmv_provider": {
+      "label": "Marktkurs",
+      "phrase": "einem Marktkurs"
+    }
   }
 }
