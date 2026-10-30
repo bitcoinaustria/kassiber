@@ -3153,3 +3153,124 @@ Pre-component admission errors identify `components`; raw protocol admission
 identifies `snapshot`. Census, shadow, PyO3 replay and the raw projection driver
 compare this stage together with the error code. No successful outputs are
 fabricated for an atomic refusal.
+## Performance checkpoint (R2 perf)
+
+Local branch `t3code/r2-custody-perf` starts at `1b62f405`. It makes the Rust
+custody engine faster without changing a response byte, and it changes no
+Python code. Snapshot v1, the response schema and every stage's semantics are
+unchanged.
+
+### Measurement tools
+
+- The opt-in `timing` cargo feature records `Instant` spans per stage and
+  sub-step. Without the feature, every span is a zero-sized no-op. The PyO3
+  binding never enables it.
+- The unpackaged `custody-bench` example (`--features timing`) times one raw
+  snapshot file per stage. `--corpus <requests.jsonl>` prints the SHA-256 of
+  the full and the decision-only response for every request. Every
+  optimization was checked against baseline hashes over 25,348 requests: all
+  twelve generator suites with their permutations, plus the 159 retained
+  replay requests and their permutations. It was also checked against
+  generic, multi-wallet, barrier and merged-generator books of 2,000 and
+  20,000 transactions.
+
+### What changed
+
+- **Quadratic scans became indexed lookups.** This covers quantity
+  eligibility, observation aliases, reviewed component observations, native
+  support context and status, component lineage, membership and anchors,
+  hold grouping, and every first-seen scope grouping. Each index preserves
+  the original iteration order and duplicate handling. Membership through
+  JSON equality uses serde's injective encoding.
+- **Fewer copies.** One shared JSON view of the snapshot rows replaces the
+  per-interpreter copies. The interpreter context and pipeline borrow the
+  canonical evidence and the rows. `json!` constructions that serialized
+  large operands now move them. Exactness round trips are skipped for values
+  that provably convert losslessly.
+- **Memoization per operation.** Embedded raw/configuration JSON and on-chain
+  scopes are memoized per operation and cleared when the operation ends. A
+  row-address hint for scopes still compares all eight scope fields.
+- **Gap search.** States are keyed by dense id ranks, which order exactly
+  like the sorted ids. Amounts use `i128` when every principal fits `i64`
+  and there are fewer than 2^20 legs, and `BigInt` otherwise.
+- **Faster JSON paths.** The CPython loader copies plain strings and parses
+  short integers directly. pyjson copies printable ASCII runs whole. The
+  response is written directly rather than composed as a Python dict.
+- **Concurrency.** An order-preserving scoped-thread map (`par.rs`, at most
+  eight workers, only for at least 128 items) handles pure per-row work:
+  event keys and groups, enriched rows, confirmation capture, gap admission,
+  scopes, native observations and hold facts. Results are consumed in order,
+  so the first refusal is unchanged, and a worker panic is resumed in order.
+  Arrays of at least 1,024 items convert, check and encode in chunks. A
+  book's stage texts are encoded concurrently from 256 transactions. A large
+  book's values are freed on a detached thread after its response is built.
+  The engine falls back to the calling thread whenever no thread can be
+  spawned.
+
+Only one commit touches `finalized_projection/composition.rs`, so it can be
+restacked independently. The following mutation recipes were re-anchored to
+equivalent mutants of the rewritten code, each in the commit that changed
+its anchor:
+
+- QRT-056 and R2-review-audit-runtime-258/349/667
+- QR-018, QR-027 and QR-050, with the reviewed-393/424 audits
+- native11-native-guard-11 and REC-OPERATION-01/02
+- QN-133 to QN-137 and E-aggregate-leg-tie
+- the fourteen projection8 input recipes and projection8-row-order
+- GAP-120, R2c-pipeline-samourai-reservation, and R2c-safety-legacy-confirmed
+  and -pending-explicit
+
+### Results
+
+These were measured through the binding on a quiet 48-core machine, best of
+three runs at 2,000 transactions and one run at 20,000. Responses are
+byte-identical.
+
+| Book | Python full / decisions | Rust before | Rust after |
+| --- | --- | --- | --- |
+| Generic 2,000 | 0.76 / 0.74 s | 2.44 / 2.10 s | 0.59 / 0.46 s |
+| Multi-wallet with Liquid and pegs, 2,000 | 1.09 / 1.04 s | 4.28 / 3.91 s | 0.85 / 0.78 s |
+| Liquid barrier, 2,000 | 2.18 / 2.15 s | 4.53 / 4.24 s | 0.84 / 0.86 s |
+| Merged generators, 2,111 | 2.57 / 2.53 s | 5.56 / 5.18 s | 1.54 / 1.54 s |
+| Generic 20,000 | 5.2 / 5.0 s | 23.9 / 19.0 s | 4.7–5.1 / 4.1 s |
+| Multi-wallet, 20,000 | 12.6 / 11.9 s | 138.9 / 134.3 s | 7.2 / 6.1 s |
+| Merged generators, 21,132 (full) | 93 s | 322 s | 48 s |
+
+The engine is now four to twenty times faster than before and ahead of
+Python on every book. It is not ten times faster than Python. At 20,000
+transactions the floor alone is about one second: parsing the 68 MB request
+takes about 0.45 s, and the 270 MB response must still be written. After
+that, the remaining cost is spread across serde values: map lookups, string
+allocation and conversions between serde and Python values. The largest
+remaining items at 20,000 generic transactions are:
+
+- finalized composition, 0.75 s;
+- quantity arbitration, 0.5 s;
+- interpretation, 0.46 s;
+- parse, 0.45 s;
+- evidence, 0.4 s;
+- gap search, 0.36 s.
+
+The merged-generator stress book also keeps quadratic interpretation and
+component materialization for thousands of rows that share one fixed
+transaction id. Real books do not share a txid that way.
+
+### Verification
+
+- Every commit kept all 25,348 corpus hashes and all bench-book hashes
+  identical, including decision-only responses.
+- The full mutation catalog was run on the final commit: all 2,236 recipes
+  are killed, and the kill set equals the catalog.
+- Workspace fmt, clippy `-D warnings` and the workspace tests (829) pass.
+  `classify_tests update` leaves the inventory unchanged, and preflight
+  passes 57 tests.
+- Retained replay matches 159 requests and 159 permutations with zero
+  differences. Focused census passes 604 tests, and shadow passes 602.
+- The custody stage/port modules pass, with three exceptions. The same three
+  tests also fail at `1b62f405`, which is not changed here:
+  - the gap and interpretation fanout generator tests;
+  - `test_full_stage_vectors_wrappers_and_refusals`.
+
+  They call the binding with `finalized=True` against interpretation- and
+  gap-only references, so the finalized stage's `validation` refusal
+  surfaces.
