@@ -114,6 +114,51 @@ def _normalize(wire, identities):
     return wire
 
 
+@pytest.mark.parametrize("scenario", ["reviewed", "stale", "large-signed-values", "unbounded", "empty"])
+def test_commercial_subledger_read_csv_bytes_database_and_routing(tmp_path, monkeypatch, scenario):
+    root, _, env, call = _book(tmp_path, monkeypatch, "generic", "FIFO")
+    cases = json.loads((ROOT / "crates/reports/tests/data/commercial.json").read_text())
+    case = next(c for c in cases if c["name"] == scenario)
+    conn = open_db(root)
+    conn.executescript(case["sql"])
+    conn.close()
+    before = _dump(root, {})
+    for format_ in ("json", "table", "plain", "csv"):
+        args = ("--format", format_, "reports", "commercial-subledger")
+        reference = call(*args, reference=True)
+        native = call(*args)
+        assert (native.returncode, native.stdout, native.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+        assert native.returncode == (1 if scenario == "empty" and format_ == "csv" else 0), native.stdout
+        assert _dump(root, {}) == before
+    output = tmp_path / "nested" / "commercial.csv"
+    args = ("--machine", "reports", "export-commercial-subledger-csv", "--file", str(output))
+    reference = call(*args, reference=True)
+    expected = output.read_bytes()
+    output.write_bytes(b"previous artifact\r\n")
+    native = call(*args)
+    assert (native.returncode, native.stdout, native.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+    assert native.returncode == 0, native.stdout
+    assert output.read_bytes() == expected
+    assert _dump(root, {}) == before
+    relative = f"./{os.path.relpath(output.parent, ROOT)}//relative.csv"
+    args = ("--machine", "reports", "export-commercial-subledger-csv", "--file", relative)
+    reference = call(*args, reference=True)
+    native = call(*args)
+    assert (native.returncode, native.stdout, native.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+    assert native.returncode == 0, native.stdout
+    assert (ROOT / relative).read_bytes() == expected
+    for target in (tmp_path, output / "child.csv", ""):
+        args = ("--machine", "reports", "export-commercial-subledger-csv", "--file", str(target))
+        reference = call(*args, reference=True)
+        native = call(*args)
+        assert (native.returncode, native.stdout, native.stderr) == (reference.returncode, reference.stdout, reference.stderr)
+        assert native.returncode == 1
+        assert _dump(root, {}) == before
+    calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
+    assert calls and all(c["served_by"] == "rust" for c in calls)
+    assert {c["command"] for c in calls} == {"reports.commercial-subledger", "reports.export-commercial-subledger-csv"}
+
+
 @pytest.mark.parametrize("country,algorithm", [("generic", "FIFO"), ("generic", "HIFO"), ("at", "MOVING_AVERAGE_AT")])
 @pytest.mark.parametrize("variant", ["ready", "raw-hex"])
 def test_cli_csv_export_sequences_and_rust_routing(tmp_path, monkeypatch, country, algorithm, variant):

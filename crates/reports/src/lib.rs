@@ -6,6 +6,7 @@ mod austrian_csv;
 mod austrian_text;
 mod calendar;
 mod capital_csv;
+mod commercial;
 mod components;
 mod desktop;
 pub mod export;
@@ -113,6 +114,9 @@ pub fn execute_with_sources(
             history::validate_interval(args)?;
         }
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+        if command == "reports.commercial-subledger" {
+            return commercial::report(conn, &profile);
+        }
         if command == "reports.filed-snapshots.list" {
             return Ok(dict([(
                 "snapshots",

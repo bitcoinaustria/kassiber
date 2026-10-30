@@ -134,6 +134,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.update",
     "wallets.delete",
     "reports.summary",
+    "reports.commercial-subledger",
+    "reports.export-commercial-subledger-csv",
     "reports.balance-sheet",
     "reports.portfolio-summary",
     "reports.capital-gains",

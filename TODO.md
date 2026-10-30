@@ -320,6 +320,8 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
   callers exist and the stack includes phase 5; preserve append-only history.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
   explanation, privacy, Lightning and cross-check reads.
+  The reviewed commercial subledger CLI read and its CSV export now run
+  natively, with reference vectors, killed mutations and hybrid routing proof.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

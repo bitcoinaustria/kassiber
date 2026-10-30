@@ -5,6 +5,8 @@ use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 pub const COMMANDS: &[&str] = &[
     "reports.summary",
+    "reports.commercial-subledger",
+    "reports.export-commercial-subledger-csv",
     "reports.balance-sheet",
     "reports.portfolio-summary",
     "reports.capital-gains",
@@ -29,7 +31,10 @@ pub fn kind(command: &str) -> Option<&'static str> {
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
     if matches!(
         command,
-        "reports.export-csv" | "reports.export-austrian-e1kv-csv" | "transactions.export"
+        "reports.export-csv"
+            | "reports.export-austrian-e1kv-csv"
+            | "reports.export-commercial-subledger-csv"
+            | "transactions.export"
     ) {
         return book.reports(
             command,

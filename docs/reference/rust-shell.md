@@ -4099,7 +4099,7 @@ new/replacement mutations are killed by
 `liquid_confirmation_scope_python_vectors`; the obsolete raw-hex refusal
 mutation is replaced with decode admission. The catalog has 545 entries.
 
-Saved completion now has 48 Python vectors. Twelve complete
+Saved completion now has 51 Python vectors. Twelve complete
 FIFO/HIFO/Austrian export sequences compare 52 actions, 75 resulting CSV
 files and all 112 SQLite tables after every action, including graphless
 Liquid capture and repeated explicit filing. All 48 native report tests pass.
@@ -4115,6 +4115,91 @@ The separate Python directory-target error fix remains a parity dependency:
 the current reference error. This boundary does not claim byte parity for it.
 The remaining report reads/kinds and platform transaction exports still need
 their own native implementations and routing proof; XLSX/PDF await approval.
+
+## Reviewed commercial subledger (R5 eleventh continuation, partial)
+
+`reports commercial-subledger` and `reports export-commercial-subledger-csv`
+now register through the shared reports service and the hybrid probe. They
+read reviewed links and stored document/BTCPay references without promoting
+suggestions to commercial, custody or tax authority. This evidence projection
+has no journal freshness requirement in Python; stale journals, quarantines,
+excluded source transactions and partial link allocations retain the reference
+behavior. Observed transaction amounts are not replaced by allocation amounts.
+There is no corresponding `ui.reports.*` kind in the reference, so none is
+invented. AI projections are unchanged.
+
+Fourteen frozen Python cases pin scope, optional joins, null fields, source
+references, exact fiat strings, signed msat, date/creation order and the
+unbounded row count. Preparation/export changes no database rows and requests
+neither clock nor entropy. Nine new selection/quantity mutations are killed
+by `reviewed_commercial_subledger_python_vectors`; the catalog has 554 entries.
+CSV retains Python's twenty columns, quoting and ordinary file publication,
+including literal relative paths and stable directory-target errors. It creates
+no saved/filed marker.
+
+| Parity layer | Cases | Compared evidence |
+| --- | ---: | --- |
+| Commercial service | 14 | Payloads/errors, CSV bytes, no database changes or clock/entropy requests |
+| Liquid physical scope | 5,634 | Python parse-success admission and scoped identities |
+| Saved completion | 51 | Saved markers, confirmation captures/dependencies and error rollback |
+| Complete CSV export sequences | 12 / 52 actions | 75 final files and all 112 tables after every action |
+| Whole-process exports | 21 | Exit status, stdout/stderr, artifact bytes and normalized database dumps |
+
+The final whole-process routing log records:
+
+| Hybrid command | Rust calls | Python fallbacks |
+| --- | ---: | ---: |
+| `reports.commercial-subledger` | 20 | 0 |
+| `reports.export-commercial-subledger-csv` | 25 | 0 |
+| `reports.export-csv` | 26 | 0 |
+| `reports.export-austrian-e1kv-csv` | 7 | 0 |
+| `transactions.export` (CSV) | 20 | 0 |
+| `reports.filed-snapshots.create` | 12 | 0 |
+| `daemon` | 3 | 0 |
+
+The daemon sessions compare 57 exact responses/artifacts/database states:
+twelve full CSV, twenty-four capital-gains CSV, three Austrian CSV bundles and
+eighteen transaction CSV exports. The five commercial scenarios compare JSON,
+table, plain and generic CSV reads, explicit CSV overwrite, normalized relative
+paths, directory targets, non-directory ancestors and empty paths. An empty
+generic CSV read retains Python's error; the explicit exporter writes headers.
+
+Formatting, workspace and test-harness clippy with `-D warnings`, all 995
+workspace tests (including 49 report tests) and all 14 harness tests pass.
+After refreshing three proof-length completion fixtures, all 49 report tests
+pass again. All five Liquid/commercial/completion/sequence/request generators
+check cleanly. The 22 inherited process scenarios pass, recording 309 report
+calls and nine daemon sessions served by Rust with zero report/daemon fallback.
+The 554-entry mutation catalog validates; the 24 new/replacement mutations
+are killed by the two named tests above, and the 530 retained entries keep
+their preceding checkpoint evidence. `classify_tests update` refreshes the
+reviewed oracle inventory; the required CI preflight passes all 57 tests.
+Verification uses Rust 1.99.1, locked Python 3.11 and offline/locked Cargo on
+Linux. `HOME` is inherited unchanged and all books/scratch are disposable.
+No Python product code, dependencies or lockfiles change. Verification and
+routing summaries remain under
+`target/r5-reports11/{verification-summary,routing-summary,inherited-routing-summary}.json`;
+owned mutation and verification build trees are removed after recording them.
+
+### Unfinished report inventory
+
+This is a partial checkpoint. Apart from XLSX/PDF rendering and its approval
+dependency, the remaining native work is:
+
+| Surface | Still served by Python |
+| --- | --- |
+| Report CLI reads | `exit-tax`, `explain-capital-gain`, `privacy-hygiene`, `privacy-mirror`, `psbt-privacy`, `cross-check`, `lightning-profitability`, `source-funds` |
+| Other report CLI artifacts | `export-year-handoff`, `export-lightning-profitability-csv`, `export-source-funds-bundle` |
+| Desktop report reads (`ui.reports.*`) | `capital_gains`, `explain_capital_gain`, `exit_tax_preview`, `privacy_hygiene`, `privacy_mirror`, `psbt_privacy`, `lightning_profitability`, `cross_check` |
+| Other desktop report artifacts (`ui.reports.*`) | `export_year_handoff`, `export_cross_check`, `export_audit_package` |
+| Platform transactions | CLI `transactions export --export-format cointracking-csv\|blockpit-csv`, daemon `ui.transactions.export_platform_csv` |
+
+Those services still need their own computation/selection mutation entries,
+complete output/database oracles and hybrid registration proof. Individual
+snapshot lookup and amendment-review state remain core-only without direct
+process callers in this checkout; they do not justify new wire kinds. The
+separate directory-target Python fix remains necessary before claiming exact
+error bytes for the already registered full-report/Austrian CSV publication.
 
 ## Not yet ported
 

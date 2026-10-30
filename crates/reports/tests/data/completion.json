@@ -3723,6 +3723,277 @@
     }
   },
   {
+    "name": "liquid-raw-hex-proof-max-length",
+    "sql": "\nINSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,account_id,created_at) VALUES\n('chain','ws','p','Chain','descriptor','{\"chain\":\"bitcoin\",\"network\":\"main\"}','acct','fixed'),\n('plain','ws','p','Plain','custom','{}','acct','fixed'),\n('liq','ws','p','Liquid','descriptor','{\"chain\":\"liquid\",\"network\":\"liquidv1\",\"chain_instance_id\":{\"z\":1,\"a\":\"\u00e9\"}}','acct','fixed');\nINSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,excluded,raw_json,kind,created_at) VALUES('raw-hex','ws','p','plain','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','fp-raw-hex','2024-03-01T00:00:00Z','inbound','LBTC',1000,0,0,'{\"chain\": \"liquid\", \"network\": \"liquidv1\", \"raw_hex\": \"020000000100010122222222222222222222222222222222222222222222222222222222222222220100000000000000640001510000000000ffffffffffffffff7f\", \"status\": {\"confirmed\": true, \"block_hash\": \"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\", \"block_height\": 123}}','deposit','fixed');\nINSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES('raw-hex','ws','p','plain',1,'[]','[]','bitcoin','main','r','2fa560604b2ed9a0e6e1a09d74ea95f356217aef96dcc67538d57db9dcbd3613','28c757bb69113c773e93ffe84e233f5526a9003be742ca78fa0f464c3fd3116c','unknown','2024-03-02T00:00:00Z','fixed');\nINSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,fiat_value,cost_basis,proceeds,gain_loss,created_at) VALUES('je-raw-hex','ws','p','raw-hex','plain','acct','2024-03-01T00:00:00Z','acquisition','LBTC',1000,0,0,0,0,'fixed');\n",
+    "kind": "full-report.csv",
+    "year": null,
+    "scope": null,
+    "files": {
+      "report.csv": "complete\r\n"
+    },
+    "paths": [
+      "report.csv"
+    ],
+    "expected": {
+      "ok": {
+        "id": "new",
+        "workspace_id": "ws",
+        "profile_id": "p",
+        "report_kind": "full-report.csv",
+        "report_state": "saved",
+        "period_start_year": 2024,
+        "period_end_year": 2025,
+        "content_sha256": "5963977da4c2cb333a978aa0daa86f36234831cd8bc416443ca9087268bc8645",
+        "classification_summary": {
+          "acquisition": {
+            "amount_msat": 1000,
+            "count": 1
+          },
+          "disposal": {
+            "amount_msat": 123656794,
+            "count": 5
+          },
+          "fee": {
+            "amount_msat": 456,
+            "count": 1
+          },
+          "income": {
+            "amount_msat": 789001,
+            "count": 1
+          }
+        },
+        "gain_summary": {
+          "cost_basis_exact": "11.35300001",
+          "fiat_currency": "EUR",
+          "gain_loss_exact": "3.56299999",
+          "proceeds_exact": "14.793",
+          "status": "final"
+        },
+        "report_scope": {},
+        "authored_source": "user",
+        "notes": "Automatically registered after a completed Kassiber export.",
+        "created_at": "2026-01-02T03:04:05Z"
+      }
+    },
+    "tables": {
+      "filed_report_snapshots": [
+        {
+          "id": "new",
+          "workspace_id": "ws",
+          "profile_id": "p",
+          "report_kind": "full-report.csv",
+          "report_state": "saved",
+          "period_start_year": 2024,
+          "period_end_year": 2025,
+          "content_sha256": "5963977da4c2cb333a978aa0daa86f36234831cd8bc416443ca9087268bc8645",
+          "classification_summary_json": "{\"acquisition\":{\"amount_msat\":1000,\"count\":1},\"disposal\":{\"amount_msat\":123656794,\"count\":5},\"fee\":{\"amount_msat\":456,\"count\":1},\"income\":{\"amount_msat\":789001,\"count\":1}}",
+          "gain_summary_json": "{\"cost_basis_exact\":\"11.35300001\",\"fiat_currency\":\"EUR\",\"gain_loss_exact\":\"3.56299999\",\"proceeds_exact\":\"14.793\",\"status\":\"final\"}",
+          "report_scope_json": "{}",
+          "authored_source": "user",
+          "notes": "Automatically registered after a completed Kassiber export.",
+          "created_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "filed_report_chain_captures": [
+        {
+          "snapshot_id": "new",
+          "profile_id": "p",
+          "source_snapshot_id": null,
+          "captured_at": "captured"
+        }
+      ],
+      "filed_report_chain_dependencies": [
+        {
+          "snapshot_id": "new",
+          "profile_id": "p",
+          "transaction_id": "raw-hex",
+          "wallet_id": "plain",
+          "chain": "liquid",
+          "network": "main",
+          "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "observation_json": "{\"block_hash\":\"abababababababababababababababababababababababababababababababab\",\"block_height\":123,\"confirmed\":true,\"domain_id\":\"e4d66757ce9900ab9eaf662e39d1d6cb617c984c633a2ea6fccd39b302eca9c1\",\"quantity_hash\":\"28c757bb69113c773e93ffe84e233f5526a9003be742ca78fa0f464c3fd3116c\",\"status\":\"observed\"}"
+        }
+      ]
+    }
+  },
+  {
+    "name": "liquid-raw-hex-proof-overflow-length",
+    "sql": "\nINSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,account_id,created_at) VALUES\n('chain','ws','p','Chain','descriptor','{\"chain\":\"bitcoin\",\"network\":\"main\"}','acct','fixed'),\n('plain','ws','p','Plain','custom','{}','acct','fixed'),\n('liq','ws','p','Liquid','descriptor','{\"chain\":\"liquid\",\"network\":\"liquidv1\",\"chain_instance_id\":{\"z\":1,\"a\":\"\u00e9\"}}','acct','fixed');\nINSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,excluded,raw_json,kind,created_at) VALUES('raw-hex','ws','p','plain','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','fp-raw-hex','2024-03-01T00:00:00Z','inbound','LBTC',1000,0,0,'{\"chain\": \"liquid\", \"network\": \"liquidv1\", \"raw_hex\": \"020000000100010122222222222222222222222222222222222222222222222222222222222222220100000000000000640001510000000000ffffffffffffffffff\", \"status\": {\"confirmed\": true, \"block_hash\": \"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\", \"block_height\": 123}}','deposit','fixed');\nINSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES('raw-hex','ws','p','plain',1,'[]','[]','bitcoin','main','r','598f371c2e5e50de08a256b694e12c321c681ec706675b787fc63211d82f6f9b','28c757bb69113c773e93ffe84e233f5526a9003be742ca78fa0f464c3fd3116c','unknown','2024-03-02T00:00:00Z','fixed');\nINSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,fiat_value,cost_basis,proceeds,gain_loss,created_at) VALUES('je-raw-hex','ws','p','raw-hex','plain','acct','2024-03-01T00:00:00Z','acquisition','LBTC',1000,0,0,0,0,'fixed');\n",
+    "kind": "full-report.csv",
+    "year": null,
+    "scope": null,
+    "files": {
+      "report.csv": "complete\r\n"
+    },
+    "paths": [
+      "report.csv"
+    ],
+    "expected": {
+      "ok": {
+        "id": "new",
+        "workspace_id": "ws",
+        "profile_id": "p",
+        "report_kind": "full-report.csv",
+        "report_state": "saved",
+        "period_start_year": 2024,
+        "period_end_year": 2025,
+        "content_sha256": "5963977da4c2cb333a978aa0daa86f36234831cd8bc416443ca9087268bc8645",
+        "classification_summary": {
+          "acquisition": {
+            "amount_msat": 1000,
+            "count": 1
+          },
+          "disposal": {
+            "amount_msat": 123656794,
+            "count": 5
+          },
+          "fee": {
+            "amount_msat": 456,
+            "count": 1
+          },
+          "income": {
+            "amount_msat": 789001,
+            "count": 1
+          }
+        },
+        "gain_summary": {
+          "cost_basis_exact": "11.35300001",
+          "fiat_currency": "EUR",
+          "gain_loss_exact": "3.56299999",
+          "proceeds_exact": "14.793",
+          "status": "final"
+        },
+        "report_scope": {},
+        "authored_source": "user",
+        "notes": "Automatically registered after a completed Kassiber export.",
+        "created_at": "2026-01-02T03:04:05Z"
+      }
+    },
+    "tables": {
+      "filed_report_snapshots": [
+        {
+          "id": "new",
+          "workspace_id": "ws",
+          "profile_id": "p",
+          "report_kind": "full-report.csv",
+          "report_state": "saved",
+          "period_start_year": 2024,
+          "period_end_year": 2025,
+          "content_sha256": "5963977da4c2cb333a978aa0daa86f36234831cd8bc416443ca9087268bc8645",
+          "classification_summary_json": "{\"acquisition\":{\"amount_msat\":1000,\"count\":1},\"disposal\":{\"amount_msat\":123656794,\"count\":5},\"fee\":{\"amount_msat\":456,\"count\":1},\"income\":{\"amount_msat\":789001,\"count\":1}}",
+          "gain_summary_json": "{\"cost_basis_exact\":\"11.35300001\",\"fiat_currency\":\"EUR\",\"gain_loss_exact\":\"3.56299999\",\"proceeds_exact\":\"14.793\",\"status\":\"final\"}",
+          "report_scope_json": "{}",
+          "authored_source": "user",
+          "notes": "Automatically registered after a completed Kassiber export.",
+          "created_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "filed_report_chain_captures": [
+        {
+          "snapshot_id": "new",
+          "profile_id": "p",
+          "source_snapshot_id": null,
+          "captured_at": "captured"
+        }
+      ],
+      "filed_report_chain_dependencies": []
+    }
+  },
+  {
+    "name": "liquid-raw-hex-proof-truncated-compact",
+    "sql": "\nINSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,account_id,created_at) VALUES\n('chain','ws','p','Chain','descriptor','{\"chain\":\"bitcoin\",\"network\":\"main\"}','acct','fixed'),\n('plain','ws','p','Plain','custom','{}','acct','fixed'),\n('liq','ws','p','Liquid','descriptor','{\"chain\":\"liquid\",\"network\":\"liquidv1\",\"chain_instance_id\":{\"z\":1,\"a\":\"\u00e9\"}}','acct','fixed');\nINSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,excluded,raw_json,kind,created_at) VALUES('raw-hex','ws','p','plain','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','fp-raw-hex','2024-03-01T00:00:00Z','inbound','LBTC',1000,0,0,'{\"chain\": \"liquid\", \"network\": \"liquidv1\", \"raw_hex\": \"020000000100010122222222222222222222222222222222222222222222222222222222222222220100000000000000640001510000000000ff\", \"status\": {\"confirmed\": true, \"block_hash\": \"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\", \"block_height\": 123}}','deposit','fixed');\nINSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES('raw-hex','ws','p','plain',1,'[]','[]','bitcoin','main','r','9d3268831569947fd1846c973b4f8352d88d9177ab70714b1ad240323449a4c6','28c757bb69113c773e93ffe84e233f5526a9003be742ca78fa0f464c3fd3116c','unknown','2024-03-02T00:00:00Z','fixed');\nINSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,fiat_value,cost_basis,proceeds,gain_loss,created_at) VALUES('je-raw-hex','ws','p','raw-hex','plain','acct','2024-03-01T00:00:00Z','acquisition','LBTC',1000,0,0,0,0,'fixed');\n",
+    "kind": "full-report.csv",
+    "year": null,
+    "scope": null,
+    "files": {
+      "report.csv": "complete\r\n"
+    },
+    "paths": [
+      "report.csv"
+    ],
+    "expected": {
+      "ok": {
+        "id": "new",
+        "workspace_id": "ws",
+        "profile_id": "p",
+        "report_kind": "full-report.csv",
+        "report_state": "saved",
+        "period_start_year": 2024,
+        "period_end_year": 2025,
+        "content_sha256": "5963977da4c2cb333a978aa0daa86f36234831cd8bc416443ca9087268bc8645",
+        "classification_summary": {
+          "acquisition": {
+            "amount_msat": 1000,
+            "count": 1
+          },
+          "disposal": {
+            "amount_msat": 123656794,
+            "count": 5
+          },
+          "fee": {
+            "amount_msat": 456,
+            "count": 1
+          },
+          "income": {
+            "amount_msat": 789001,
+            "count": 1
+          }
+        },
+        "gain_summary": {
+          "cost_basis_exact": "11.35300001",
+          "fiat_currency": "EUR",
+          "gain_loss_exact": "3.56299999",
+          "proceeds_exact": "14.793",
+          "status": "final"
+        },
+        "report_scope": {},
+        "authored_source": "user",
+        "notes": "Automatically registered after a completed Kassiber export.",
+        "created_at": "2026-01-02T03:04:05Z"
+      }
+    },
+    "tables": {
+      "filed_report_snapshots": [
+        {
+          "id": "new",
+          "workspace_id": "ws",
+          "profile_id": "p",
+          "report_kind": "full-report.csv",
+          "report_state": "saved",
+          "period_start_year": 2024,
+          "period_end_year": 2025,
+          "content_sha256": "5963977da4c2cb333a978aa0daa86f36234831cd8bc416443ca9087268bc8645",
+          "classification_summary_json": "{\"acquisition\":{\"amount_msat\":1000,\"count\":1},\"disposal\":{\"amount_msat\":123656794,\"count\":5},\"fee\":{\"amount_msat\":456,\"count\":1},\"income\":{\"amount_msat\":789001,\"count\":1}}",
+          "gain_summary_json": "{\"cost_basis_exact\":\"11.35300001\",\"fiat_currency\":\"EUR\",\"gain_loss_exact\":\"3.56299999\",\"proceeds_exact\":\"14.793\",\"status\":\"final\"}",
+          "report_scope_json": "{}",
+          "authored_source": "user",
+          "notes": "Automatically registered after a completed Kassiber export.",
+          "created_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "filed_report_chain_captures": [
+        {
+          "snapshot_id": "new",
+          "profile_id": "p",
+          "source_snapshot_id": null,
+          "captured_at": "captured"
+        }
+      ],
+      "filed_report_chain_dependencies": [
+        {
+          "snapshot_id": "new",
+          "profile_id": "p",
+          "transaction_id": "raw-hex",
+          "wallet_id": "plain",
+          "chain": "liquid",
+          "network": "main",
+          "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "observation_json": "{\"block_hash\":\"abababababababababababababababababababababababababababababababab\",\"block_height\":123,\"confirmed\":true,\"domain_id\":\"e4d66757ce9900ab9eaf662e39d1d6cb617c984c633a2ea6fccd39b302eca9c1\",\"quantity_hash\":\"28c757bb69113c773e93ffe84e233f5526a9003be742ca78fa0f464c3fd3116c\",\"status\":\"observed\"}"
+        }
+      ]
+    }
+  },
+  {
     "name": "liquid-raw-hex-noncanonical-counts",
     "sql": "\nINSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,account_id,created_at) VALUES\n('chain','ws','p','Chain','descriptor','{\"chain\":\"bitcoin\",\"network\":\"main\"}','acct','fixed'),\n('plain','ws','p','Plain','custom','{}','acct','fixed'),\n('liq','ws','p','Liquid','descriptor','{\"chain\":\"liquid\",\"network\":\"liquidv1\",\"chain_instance_id\":{\"z\":1,\"a\":\"\u00e9\"}}','acct','fixed');\nINSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,excluded,raw_json,kind,created_at) VALUES('raw-hex','ws','p','plain','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','fp-raw-hex','2024-03-01T00:00:00Z','inbound','LBTC',1000,0,0,'{\"chain\": \"liquid\", \"network\": \"liquidv1\", \"raw_hex\": \"0200000000fd0000fe00000000\", \"status\": {\"confirmed\": true, \"block_hash\": \"ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\", \"block_height\": 123}}','deposit','fixed');\nINSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES('raw-hex','ws','p','plain',1,'[]','[]','bitcoin','main','r','cc6648c28645852540bb965c67edadd4ba291354d9ad4059fcf7099249caa4cd','28c757bb69113c773e93ffe84e233f5526a9003be742ca78fa0f464c3fd3116c','unknown','2024-03-02T00:00:00Z','fixed');\nINSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,fiat_value,cost_basis,proceeds,gain_loss,created_at) VALUES('je-raw-hex','ws','p','raw-hex','plain','acct','2024-03-01T00:00:00Z','acquisition','LBTC',1000,0,0,0,0,'fixed');\n",
     "kind": "full-report.csv",

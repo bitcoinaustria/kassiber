@@ -7,6 +7,7 @@ pub fn handles(command: &str) -> bool {
     matches!(
         command,
         "reports.export-csv"
+            | "reports.export-commercial-subledger-csv"
             | "reports.export-austrian-e1kv-csv"
             | "transactions.export"
             | "ui.transactions.export_csv"
@@ -110,6 +111,9 @@ pub fn execute(
     exports_root: &Path,
     sources: &dyn Sources,
 ) -> Result<Value> {
+    if command == "reports.export-commercial-subledger-csv" {
+        return commercial::export(conn, args);
+    }
     export::admitted(conn, || {
         execute_admitted(conn, command, args, exports_root, sources)
     })

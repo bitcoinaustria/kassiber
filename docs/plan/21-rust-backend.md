@@ -2034,6 +2034,11 @@ checks still decide dependencies. Twelve whole export sequences compare
 52 actions, 75 CSV files and all 112 tables. No dependency or Python product
 change is needed. See the
 [Liquid checkpoint](../reference/rust-shell.md#graphless-liquid-report-dependencies-r5-eleventh-continuation-partial).
+The same continuation ports the reviewed commercial subledger read and CSV
+export through two CLI leaves, with fourteen Python vectors and nine killed
+mutations. Their evidence-only projection preserves Python's behavior with
+stale journals and excluded sources; no daemon kind or saved marker is added.
+See the [commercial checkpoint](../reference/rust-shell.md#reviewed-commercial-subledger-r5-eleventh-continuation-partial).
 
 ## Risks
 

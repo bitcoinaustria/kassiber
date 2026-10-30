@@ -5469,5 +5469,95 @@
       "liquid_confirmation_scope_python_vectors"
     ],
     "rule": "Explicit output values consume eight bytes, other prefixes thirty-two."
+  },
+  {
+    "id": "commercial-reviewed",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "cl.state='reviewed'",
+    "replace": "cl.state!='rejected'",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Suggestions never enter the reviewed commercial subledger."
+  },
+  {
+    "id": "commercial-scope",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "cl.profile_id=?",
+    "replace": "? IS NOT NULL",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Only links belonging to the resolved profile are selected."
+  },
+  {
+    "id": "commercial-created-order",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "cl.created_at ASC",
+    "replace": "cl.created_at DESC",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Equal-date links retain creation order."
+  },
+  {
+    "id": "commercial-date-order",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "t.occurred_at ASC",
+    "replace": "t.occurred_at DESC",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Commercial rows retain occurrence order."
+  },
+  {
+    "id": "commercial-observed-amount",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "t.asset,t.amount,t.fee",
+    "replace": "t.asset,cl.allocation_amount AS amount,t.fee",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "The reference projection reports observed transaction quantities, not link allocations."
+  },
+  {
+    "id": "commercial-excluded",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "cl.state='reviewed'",
+    "replace": "cl.state='reviewed' AND t.excluded=0",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Reviewed evidence includes excluded source transactions as in Python."
+  },
+  {
+    "id": "commercial-limit",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "cl.created_at ASC\",",
+    "replace": "cl.created_at ASC LIMIT 200\",",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "The reviewed subledger has no implicit row limit."
+  },
+  {
+    "id": "commercial-stable-ref",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "(\"btcpay_ref\", value(&entry, \"stable_key\").clone())",
+    "replace": "(\"btcpay_ref\", value(&entry, \"payment_id\").clone())",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Provenance references retain their stable identities."
+  },
+  {
+    "id": "commercial-msat",
+    "file": "crates/reports/src/commercial.rs",
+    "find": "btc(int(&entry, \"amount\"))",
+    "replace": "btc(int(&entry, \"fee\"))",
+    "expect_failing": [
+      "reviewed_commercial_subledger_python_vectors"
+    ],
+    "rule": "Whole-unit amounts convert the exact observed msat amount."
   }
 ]

@@ -80,7 +80,7 @@ fn file_entry(file: &PublishedFile) -> Value {
 
 /// Path.mkdir(parents=True, exist_ok=True), retaining the actual failing
 /// ancestor in the error rather than substituting the final artifact path.
-fn create_directory(path: &Path) -> Result<()> {
+pub(crate) fn create_directory(path: &Path) -> Result<()> {
     match std::fs::create_dir(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
