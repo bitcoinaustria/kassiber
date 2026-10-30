@@ -195,13 +195,13 @@ pub(super) fn compute(
     // suggest_swap_candidates parses its explicit clock before row admission,
     // even though its own dismissal sequence is empty in this producer.
     instant(&json!(snapshot.as_of))?;
-    let candidates = matcher::suggest(&rows)?;
+    let candidates = matcher::suggest(rows)?;
     let dismissed = dismissed(snapshot)?;
     for row in rows {
         row.get("id").ok_or_else(|| "KeyError".to_owned())?;
     }
     let by_id: BTreeMap<_, _> = rows.iter().map(|r| (codec::pystr(&r["id"]), r)).collect();
-    let mut quarantines = ambiguous(&rows, context, &candidates, occupied, &dismissed)?;
+    let mut quarantines = ambiguous(rows, context, &candidates, occupied, &dismissed)?;
     let mut pairs = Vec::new();
     let mut proofs = BTreeMap::new();
     let mut proof_values = Vec::new();

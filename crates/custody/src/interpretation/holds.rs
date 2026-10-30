@@ -244,7 +244,7 @@ pub(super) fn conflicts(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> 
         };
         row_txid.insert(codec::pystr(&row["id"]), scope.clone());
         if let Some(parsed) = parsed {
-            for entry in stored::list(stored::get(&parsed, "inputs")) {
+            for entry in stored::list(stored::get(parsed, "inputs")) {
                 if let Some(outpoint) = canonical_outpoint(stored::get(entry, "outpoint")) {
                     outpoints
                         .entry((scope.0.clone(), scope.1.clone(), outpoint))

@@ -431,11 +431,9 @@ pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
         (row["direction"] == "outbound").then(|| event_key(row))
     });
     for (i, key) in keys.into_iter().enumerate() {
-        if let Some(key) = crate::par::unwrap(key) {
-            if let Ok(key) = key {
-                if key.native_namespace == "chain" {
-                    groups.entry(key).or_default().push(i);
-                }
+        if let Some(Ok(key)) = crate::par::unwrap(key) {
+            if key.native_namespace == "chain" {
+                groups.entry(key).or_default().push(i);
             }
         }
     }
@@ -625,7 +623,7 @@ fn canonical_event(
             .is_some_and(Value::is_null)
     }) {
         return Ok(Err(issue(
-            &key,
+            key,
             "source_overlap_quantity_unresolved",
             "overlapping wallet receipts lack complete disjoint output coverage",
             group,
@@ -636,7 +634,7 @@ fn canonical_event(
     let mut errors = BTreeSet::new();
     for row in group {
         let built = (|| {
-            let mut observation = observation(row, &key)?;
+            let mut observation = observation(row, key)?;
             if let Some(proof) = reconciliations
                 .get(text(&row["id"]))
                 .filter(|v| !v.is_null())
@@ -668,7 +666,7 @@ fn canonical_event(
     }
     if !errors.is_empty() {
         return Ok(Err(issue(
-            &key,
+            key,
             "canonical_event_leg_invalid",
             "one or more wallet-event aggregate legs are invalid",
             group,
@@ -704,7 +702,7 @@ fn canonical_event(
     }
     if !contradictions.is_empty() {
         return Ok(Err(issue(
-            &key,
+            key,
             "canonical_event_leg_contradiction",
             "wallet-event aggregate observations disagree",
             group,

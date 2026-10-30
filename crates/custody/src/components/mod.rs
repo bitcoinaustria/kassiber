@@ -197,17 +197,20 @@ fn allocations(c: &Component) -> Result<Vec<Value>, Error> {
         })
         .collect()
 }
+/// Active legs per (encoded leg profile, encoded anchor), as (owning header
+/// id, anchor text, owning header id text).
+type Members<'a> = HashMap<(Option<String>, String), Vec<(&'a Value, String, String)>>;
+/// Anchor rows per anchor id text, with their position in `anchors` order.
+type AnchorRows<'a> = HashMap<String, Vec<(usize, &'a Map<String, Value>)>>;
 /// Lookups every materialization shares, built once per stage. Encoded JSON
 /// keys are exact: serde's encoding of a Value is injective.
 pub(super) struct Shared<'a> {
     headers: BTreeMap<String, Value>,
     /// Header keys per encoded lineage id, in `headers` order.
     lineages: HashMap<String, Vec<String>>,
-    /// Active legs per (encoded leg profile, encoded non-null anchor), as
-    /// (owning header id, anchor text, owning header id text).
-    members: HashMap<(Option<String>, String), Vec<(&'a Value, String, String)>>,
-    /// Anchor rows per anchor id text, with their position in `anchors` order.
-    pub(super) anchors: HashMap<String, Vec<(usize, &'a Map<String, Value>)>>,
+    /// Active legs with a non-null anchor.
+    members: Members<'a>,
+    pub(super) anchors: AnchorRows<'a>,
 }
 impl<'a> Shared<'a> {
     fn new(snapshot: &'a Snapshot) -> Self {
