@@ -7,6 +7,8 @@ mod austrian_text;
 mod calendar;
 mod components;
 mod desktop;
+pub mod export;
+pub mod export_completion;
 mod full_csv;
 mod history;
 mod holdings;

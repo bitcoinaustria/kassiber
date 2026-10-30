@@ -13,6 +13,8 @@ pub struct File {
 pub struct Prepared {
     pub files: Vec<File>,
     pub metadata: Value,
+    /// The saved marker publication must register, if any.
+    pub completion: Option<crate::export_completion::Completion>,
 }
 
 fn history_limit(raw: &Value) -> Result<Value> {

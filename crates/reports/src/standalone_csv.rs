@@ -173,5 +173,7 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
             ("warnings", Value::List(warnings)),
             ("range", range),
         ]),
+        // Observed transaction lists never register a saved report.
+        completion: None,
     })
 }

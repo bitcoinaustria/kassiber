@@ -110,7 +110,7 @@ fn transfer_value(value: &Value) -> Value {
         None => value.clone(),
     }
 }
-pub(crate) fn transfer_object(value: &Value) -> Value {
+pub fn transfer_object(value: &Value) -> Value {
     let value = transfer_value(value);
     if value.is_object() {
         value
@@ -148,7 +148,7 @@ pub(crate) fn clear_scopes() {
 
 /// Physical Bitcoin-family grouping; contradictory graph/configuration facts refuse it.
 /// The scope reads only these row fields, so it is memoized by their exact JSON.
-pub(crate) fn onchain_scope(row: &Value) -> Scope {
+pub fn onchain_scope(row: &Value) -> Scope {
     // The same row is probed many times; its address finds its fields without
     // encoding them, and a hit requires every field to be equal.
     let address = row as *const Value as usize;

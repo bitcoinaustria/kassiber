@@ -243,5 +243,10 @@ pub(super) fn prepare(
                 Value::Int(list(value(&report, "summary_rows")).len().into()),
             ),
         ]),
+        completion: Some(crate::export_completion::Completion {
+            kind: "austrian-e1kv.csv-bundle".into(),
+            year: Some(value(&report, "tax_year").clone()),
+            scope: Value::Null,
+        }),
     })
 }

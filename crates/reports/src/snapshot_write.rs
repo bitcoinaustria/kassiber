@@ -26,7 +26,7 @@ fn stripped(value: &Value) -> String {
         .map(|c| char::from_u32(c).unwrap_or('�'))
         .collect()
 }
-fn token(value: &Value, field: &str) -> Result<String> {
+pub(super) fn token(value: &Value, field: &str) -> Result<String> {
     let text = stripped(value).to_lowercase();
     if text.is_empty()
         || text.len() > 64
@@ -42,7 +42,7 @@ fn token(value: &Value, field: &str) -> Result<String> {
     }
     Ok(text)
 }
-fn year(value: &Value, field: &str) -> Result<i64> {
+pub(super) fn year(value: &Value, field: &str) -> Result<i64> {
     let parsed = match value {
         Value::Int(n) => Some(n.clone()),
         Value::Float(n) if n.is_finite() => {
@@ -80,7 +80,7 @@ fn fields<'a>(
     }
     Err(invalid(message, Some(field)))
 }
-fn classifications(v: &Value) -> Result<Value> {
+pub(super) fn classifications(v: &Value) -> Result<Value> {
     if matches!(v, Value::Null) {
         return Ok(dict::<&str>([]));
     }
@@ -139,7 +139,7 @@ fn key_string(k: &kassiber_pyjson::Key) -> String {
         _ => unreachable!("JSON keys are strings"),
     }
 }
-fn gains(v: &Value) -> Result<Value> {
+pub(super) fn gains(v: &Value) -> Result<Value> {
     if matches!(v, Value::Null) {
         return Ok(dict::<&str>([]));
     }
@@ -208,7 +208,7 @@ fn gains(v: &Value) -> Result<Value> {
     }
     Ok(result)
 }
-fn scope(v: &Value) -> Result<Value> {
+pub(super) fn scope(v: &Value) -> Result<Value> {
     if matches!(v, Value::Null) {
         return Ok(dict::<&str>([]));
     }
@@ -288,7 +288,7 @@ fn scope(v: &Value) -> Result<Value> {
     }
     Ok(result)
 }
-fn json(v: &Value) -> Result<String> {
+pub(super) fn json(v: &Value) -> Result<String> {
     kassiber_pyjson::dumps(
         v,
         &kassiber_pyjson::Options {
@@ -352,6 +352,37 @@ pub(super) fn create(
     workspace_id: &str,
     profile_id: &str,
     args: &Value,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    create_inner(conn, workspace_id, profile_id, args, None, sources)
+}
+
+/// `create_filed_report_snapshot(..., snapshot_id=id, created_at=timestamp)`.
+pub(super) fn create_with(
+    conn: &Connection,
+    workspace_id: &str,
+    profile_id: &str,
+    args: &Value,
+    id: &str,
+    timestamp: &str,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    create_inner(
+        conn,
+        workspace_id,
+        profile_id,
+        args,
+        Some((id, timestamp)),
+        sources,
+    )
+}
+
+fn create_inner(
+    conn: &Connection,
+    workspace_id: &str,
+    profile_id: &str,
+    args: &Value,
+    identity: Option<(&str, &str)>,
     sources: &dyn Sources,
 ) -> Result<Value> {
     let mut args = args.clone();
@@ -463,8 +494,10 @@ pub(super) fn create(
             "filed report snapshot targets another book",
         ));
     }
-    let id = sources.uuid(conn)?;
-    let timestamp = sources.now(conn)?;
+    let (id, timestamp) = match identity {
+        Some((id, timestamp)) => (id.to_owned(), timestamp.to_owned()),
+        None => (sources.uuid(conn)?, sources.now(conn)?),
+    };
     let classifications = classifications(value(&args, "classification_summary"))?;
     let gains = gains(value(&args, "gain_summary"))?;
     let scope = scope(value(&args, "report_scope"))?;

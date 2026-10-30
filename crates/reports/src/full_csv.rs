@@ -525,5 +525,13 @@ pub(super) fn prepare(
             ),
             ("rows", Value::Int(count.into())),
         ]),
+        completion: Some(crate::export_completion::Completion {
+            kind: "full-report.csv".into(),
+            year: None,
+            scope: match &wallet {
+                Some(wallet) => dict([("wallet_ids", Value::List(vec![s(wallet.id.as_str())]))]),
+                None => Value::Null,
+            },
+        }),
     })
 }

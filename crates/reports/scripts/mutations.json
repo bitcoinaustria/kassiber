@@ -4579,5 +4579,425 @@
       "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "More than three wallet names use the bounded label."
+  },
+  {
+    "id": "completion-period-explicit",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "if let Some(year) = year.filter(|v| !matches!(v, Value::Null)) {",
+    "replace": "if let Some(year) = year.filter(|_| false) {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "An explicit report year is the saved period, not the journal range."
+  },
+  {
+    "id": "completion-period-min",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "years.iter().min(), years.iter().max()",
+    "replace": "years.iter().max(), years.iter().max()",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Without a year the period spans the earliest to the latest journal year."
+  },
+  {
+    "id": "completion-period-fallback",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "    Ok((year, year))\n}",
+    "replace": "    Ok((year, year + 1))\n}",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "An empty journal falls back to the completion clock year only."
+  },
+  {
+    "id": "completion-entry-year-vienna",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "return calendar::vienna(&text).ok().map(|(year, _)| year);",
+    "replace": "return decimal_digits(&text.chars().take(4).collect::<String>());",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Austrian journal years follow the Europe/Vienna calendar."
+  },
+  {
+    "id": "summary-wallet-scope",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "if !wallets.is_empty() && !wallets.contains(&py_str(value(row, \"wallet_id\"))) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Wallet-scoped exports summarize only their wallets."
+  },
+  {
+    "id": "summary-window-start",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "if !first.is_empty() && occurred < first {",
+    "replace": "if false {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Scoped summaries exclude entries before the window start."
+  },
+  {
+    "id": "summary-window-end",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "if !last.is_empty() && occurred > last {",
+    "replace": "if !last.is_empty() && occurred >= last {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "The window end is inclusive."
+  },
+  {
+    "id": "summary-year-range",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "Some(year) if (start..=end).contains(&year) => (),",
+    "replace": "Some(_) => (),",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Summaries cover only the saved period years."
+  },
+  {
+    "id": "summary-abs-quantity",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "let quantity = if quantity < 0.into() {",
+    "replace": "let quantity = if false {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Classification amounts are absolute msat."
+  },
+  {
+    "id": "summary-taxable-kinds",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "if ![\"disposal\", \"income\"].contains(&kind.as_str())",
+    "replace": "if ![\"disposal\"].contains(&kind.as_str())",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Income contributes to the exact gain summary."
+  },
+  {
+    "id": "summary-taxability",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "            || integer(value(row, \"taxability\"))? == 0.into()\n",
+    "replace": "",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Non-taxable overrides stay out of the gain summary."
+  },
+  {
+    "id": "summary-neu-swap",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "            || or_text(value(row, \"at_category\")) == \"neu_swap\"\n",
+    "replace": "",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Austrian Neu swaps stay out of the gain summary."
+  },
+  {
+    "id": "summary-exact-preferred",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "    let mut raw = value(row, exact);",
+    "replace": "    let mut raw = value(row, fallback);",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Exact decimal columns take precedence over float fallbacks."
+  },
+  {
+    "id": "summary-decimal-context",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": ".add(&exact(row, &format!(\"{field}_exact\"), field)?, &DECIMAL)",
+    "replace": ".add(&exact(row, &format!(\"{field}_exact\"), field)?, &kassiber_pydecimal::Context::new(28, Rounding::HalfEven))",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Gain sums use the process Decimal context of 32 digits."
+  },
+  {
+    "id": "hash-single",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "    if let [path] = paths {",
+    "replace": "    if let ([path], false) = (paths, true) {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "A single artifact hashes its bytes, not a manifest."
+  },
+  {
+    "id": "hash-manifest-order",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "&Value::List(manifest.into_values().collect()),",
+    "replace": "&Value::List(manifest.into_values().rev().collect()),",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Bundle manifests are sorted by basename."
+  },
+  {
+    "id": "hash-manifest-unicode",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "            ensure_ascii: false,\n            sort_keys: true,",
+    "replace": "            ensure_ascii: true,\n            sort_keys: true,",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Bundle manifests encode basenames as UTF-8."
+  },
+  {
+    "id": "hash-regular-file",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "if paths.iter().any(|path| !path.is_file()) {",
+    "replace": "if paths.iter().any(|path| !path.exists()) {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Only regular files are artifacts."
+  },
+  {
+    "id": "hash-unique-basenames",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "        if manifest.contains_key(&name) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Bundle basenames must be unique."
+  },
+  {
+    "id": "capture-literal-policy",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": ".is_some_and(|row| *value(row, \"tax_country\") == s(\"at\"));",
+    "replace": ".is_some_and(|row| country(row) == \"at\");",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Dependency capture compares the stored tax policy literally, as Python does."
+  },
+  {
+    "id": "capture-holdings-kinds",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "    let holdings = HOLDINGS.contains(&text(snapshot, \"report_kind\").as_str());",
+    "replace": "    let holdings = false;",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Holdings reports include every earlier booked input of their assets."
+  },
+  {
+    "id": "capture-window-start",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "&& (holdings || first.is_empty() || occurred(row) >= first)",
+    "replace": "&& (holdings || first.is_empty())",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Period reports select assets only from entries inside their window."
+  },
+  {
+    "id": "capture-relation-assets",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "AND in_transaction_id IS NOT NULL AND out_asset != in_asset",
+    "replace": "AND in_transaction_id IS NOT NULL AND out_asset = in_asset",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Only cross-asset carrying relations extend the dependency pool."
+  },
+  {
+    "id": "capture-relation-cutoff",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "&& occurred(entry) <= cutoff",
+    "replace": "&& occurred(entry) < cutoff",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Carried source pools include entries at the relation instant."
+  },
+  {
+    "id": "capture-excluded",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "         WHERE t.profile_id=? AND t.excluded=0\",",
+    "replace": "         WHERE t.profile_id=?\",",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Excluded observations never become dependencies."
+  },
+  {
+    "id": "capture-domain-instance",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "            value(&raw, \"chain_instance_id\"),\n",
+    "replace": "",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "A raw chain instance names its own occurrence domain."
+  },
+  {
+    "id": "capture-domain-bound",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "            None => bound,",
+    "replace": "            None => Value::Null,",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Bound book domains identify unassigned observations."
+  },
+  {
+    "id": "capture-block-hash",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": ".map(|h| s(h.to_ascii_lowercase()))",
+    "replace": ".map(s)",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Block hashes are frozen lowercase."
+  },
+  {
+    "id": "capture-block-height",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "Value::Int(n) if closed.confirmed => Value::Int(n.clone()),",
+    "replace": "Value::Int(n) => Value::Int(n.clone()),",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Unconfirmed observations freeze no block height."
+  },
+  {
+    "id": "capture-observed-instant",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "!text.is_empty() && kassiber_rates::time::parse(text).is_some()",
+    "replace": "true",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "An observation without a parseable instant is not closed evidence."
+  },
+  {
+    "id": "capture-raw-hex-refusal",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "    if scope.is_some() && graphs.is_empty() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "graphless_liquid_raw_hex_dependency_refuses"
+    ],
+    "rule": "A graphless Liquid raw transaction is refused, never guessed."
+  },
+  {
+    "id": "confirmation-status-bool",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "        .and_then(|s| s.get(\"confirmed\")?.as_bool())",
+    "replace": "        .map(|s| s.get(\"confirmed\").and_then(|v| v.as_bool()).unwrap_or(true))",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Only an explicit boolean confirmation is closed evidence."
+  },
+  {
+    "id": "confirmation-authority",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "    if !crate::evidence::current_observation(row)",
+    "replace": "    if false && !crate::evidence::current_observation(row)",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Only current authoritative observations are frozen."
+  },
+  {
+    "id": "confirmation-liquid-domain",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "            None if chain == \"bitcoin\" => \"main\",",
+    "replace": "            None => \"main\",",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Liquid never defaults a missing network."
+  },
+  {
+    "id": "confirmation-txid-mismatch",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "        if parsed_txid.is_some() && external.is_some() && parsed_txid != external {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Contradictory graph and external txids have no physical identity."
+  },
+  {
+    "id": "confirmation-nested-status",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "    if nested && parsed[\"tx\"].is_object() {",
+    "replace": "    if false && nested {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Confirmation status may live in the nested transaction."
+  },
+  {
+    "id": "confirmation-domain-conflict",
+    "file": "crates/custody/src/confirmation.rs",
+    "find": "    if domains.len() > 1 {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Contradictory network evidence has no physical identity."
+  },
+  {
+    "id": "completion-saved-state",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "        (\"report_state\", s(\"saved\")),",
+    "replace": "        (\"report_state\", s(\"filed\")),",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Export completion establishes a saved marker; only explicit filing files."
+  },
+  {
+    "id": "completion-user-source",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "        (\"authored_source\", s(\"user\")),",
+    "replace": "        (\"authored_source\", s(\"cli\")),",
+    "expect_failing": [
+      "export_completion_python_vectors"
+    ],
+    "rule": "Completion markers are authored by the user action."
+  },
+  {
+    "id": "admission-immediate",
+    "file": "crates/reports/src/export.rs",
+    "find": "        \"BEGIN IMMEDIATE\"",
+    "replace": "        \"BEGIN DEFERRED\"",
+    "expect_failing": [
+      "saved_export_retains_admitted_book_through_completion"
+    ],
+    "rule": "Admission holds the write lock through publication and completion."
+  },
+  {
+    "id": "admission-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "        Err(error) => {\n            rollback();\n            Err(error)\n        }",
+    "replace": "        Err(error) => Err(error),",
+    "expect_failing": [
+      "failed_completion_keeps_artifact_and_writes_no_marker"
+    ],
+    "rule": "A failed completion rolls back its marker."
+  },
+  {
+    "id": "standalone-no-marker",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "        completion: None,",
+    "replace": "        completion: Some(crate::export_completion::Completion { kind: \"transactions.csv\".into(), year: None, scope: Value::Null }),",
+    "expect_failing": [
+      "transaction_csv_export_registers_nothing"
+    ],
+    "rule": "Observed transaction lists never register a saved report."
   }
 ]

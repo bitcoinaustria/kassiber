@@ -1,6 +1,7 @@
 //! Pure custody computation. No storage, network, clock, logging or Python calls.
 pub mod codec;
 pub mod components;
+pub mod confirmation;
 pub mod evidence;
 pub mod finalized_projection;
 pub mod gaps;

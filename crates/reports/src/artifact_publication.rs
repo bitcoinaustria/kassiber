@@ -74,6 +74,7 @@ mod tests {
                 })
                 .into(),
             metadata: kassiber_pyjson::Value::Null,
+            completion: None,
         }
     }
     #[test]
