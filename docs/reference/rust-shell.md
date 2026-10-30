@@ -3028,6 +3028,32 @@ inventory check passes eight. The artifact generator checks cleanly. Owned
 mutation and verification build trees were removed after writing summaries in
 `/tmp/kassiber-r5-reports8-*`. Verification is Linux-only.
 
+The fresh hybrid suite passes all 22 process scenarios, including the existing
+explicit saved/filed sequence dumps and native daemon response-byte comparisons.
+It records 309 report CLI calls served by Rust and zero report fallbacks:
+
+| Existing report command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.austrian-e1kv` | 23 | 0 |
+| `reports.austrian-tax-summary` | 23 | 0 |
+| `reports.balance-history` | 60 | 0 |
+| `reports.balance-sheet` | 25 | 0 |
+| `reports.capital-gains` | 25 | 0 |
+| `reports.filed-snapshots.create` | 26 | 0 |
+| `reports.filed-snapshots.list` | 16 | 0 |
+| `reports.journal-entries` | 25 | 0 |
+| `reports.portfolio-summary` | 25 | 0 |
+| `reports.summary` | 36 | 0 |
+| `reports.tax-summary` | 25 | 0 |
+
+This run preserves inherited `HOME`; its temporary test wrapper changes only
+the report test environment helper's home override, retaining disposable XDG,
+book, output and owner-lock roots. It uses a fixed harness binary so builds
+cannot replace the executable during the run. The verification and routing
+summaries are `/tmp/kassiber-r5-reports8-verification-summary.json` and
+`/tmp/kassiber-r5-reports8-routing-summary.json`. These existing-command results
+do not establish automatic export-completion or new export-routing parity.
+
 No export transport is newly registered. Automatic completion, authoritative
 dependency capture, retained admission through publication/completion, normalized
 export-sequence DB oracles and hybrid registration proof remain required.
