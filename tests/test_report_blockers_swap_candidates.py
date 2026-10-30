@@ -15,6 +15,7 @@ from kassiber.core.ui_snapshot import (
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 NOW = "2026-07-03T10:00:00Z"
@@ -115,6 +116,7 @@ def _mark_processed(conn: sqlite3.Connection) -> None:
         """,
         (NOW, int(count or 0)),
     )
+    stamp_journal_semantics(conn, 'pf')
     conn.commit()
 
 

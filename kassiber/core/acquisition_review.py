@@ -72,5 +72,6 @@ def migrate_valuation_support(conn):
     if not inserted.rowcount:
         return False
     conn.execute(f"UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0, "
-                 f"journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE {affected}")
+                 f"journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL, "
+                 f"required_journal_semantics_version=MAX(required_journal_semantics_version,1) WHERE {affected}")
     return True

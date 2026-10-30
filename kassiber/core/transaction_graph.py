@@ -383,6 +383,10 @@ def _profile_semantics_signature(
                 AS processed_version,
             (SELECT last_processed_tx_count FROM profiles WHERE id = :pid)
                 AS processed_tx_count,
+            (SELECT required_journal_semantics_version FROM profiles WHERE id = :pid)
+                AS required_semantics,
+            (SELECT journal_semantics_version FROM profiles WHERE id = :pid)
+                AS built_semantics,
             (SELECT COUNT(*) FROM transactions WHERE profile_id = :pid)
                 AS transaction_count,
             (SELECT COUNT(*) FROM wallets WHERE profile_id = :pid) AS wallets,
@@ -399,6 +403,8 @@ def _profile_semantics_signature(
         int(_row_get(row, "version") or 0),
         int(_row_get(row, "processed_version") or 0),
         int(_row_get(row, "processed_tx_count") or 0),
+        int(_row_get(row, "required_semantics") or 0),
+        int(_row_get(row, "built_semantics") or 0),
         int(_row_get(row, "transaction_count") or 0),
         int(_row_get(row, "wallets") or 0),
         int(_row_get(row, "utxos") or 0),

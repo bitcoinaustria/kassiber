@@ -60,6 +60,35 @@ or replay authoring; see [recovery](custody-components.md#authoring-transactions
 
 ## Intentionally not inferred during upgrade
 
+### Journal calculation semantics and older writers
+
+Journal builds now stamp `profiles.journal_semantics_version` separately after
+publishing their input markers. A trigger clears that stamp whenever a writer
+updates the processing markers, including an older binary that cannot stamp
+its semantics. The update also requires a stamp for an older binary's first
+build in a new book. Required semantics survive that update. Current readers
+refuse unstamped or incompatible journals even when input versions and counts match;
+rebuilding with current Kassiber restores freshness. The first upgrade also
+requires a stamped rebuild of previously processed books, because the earlier
+custody-hold correction applied to every such book. Raw observations, authored
+reviews, retained journals and filed snapshots are not rewritten by this guard.
+
+This protects reopen after an older binary rebuilds; it cannot make an older
+binary's own reports correct. Use the current binary for accounting. The exact
+`ca9a672f` partial-payout fixture covers older publication both before and after
+a current rebuild, including repeated publication at an identical timestamp.
+
+The existing `wages-acquisition-semantics-v1`, `rp2-pool-basis-semantics-v1`,
+`custody-fail-closed-holds-v1`, `at-acquisition-valuation-support-v1`, and
+`custody-partial-payout-pricing-v1` migrations all require this stamped semantics
+version for their affected books. Their
+one-shot audits still record the upgrade, but are no longer the only protection
+against accepting an older calculation. Future calculation changes must bump
+the build semantics version and set the required version for affected books;
+an audit sentinel alone cannot establish what generated retained journals.
+
+### Retained authored facts
+
 - Direct payout decimal precision lost through historical float conversion
   cannot be recovered. Existing authored terms are read as stored, including
   float-derived decimal tails; opening a book does not round or rewrite them.
@@ -69,7 +98,9 @@ or replay authoring; see [recovery](custody-components.md#authoring-transactions
   carrying-value policy. The one-time `custody-partial-payout-pricing-v1`
   migration marks journals stale for exactly profiles with an active payout
   covering less than its whole source. Reports require `journals process`
-  before using those journals again. Other profiles remain current. The
+  before using those journals again. This migration bumps input versions only
+  for those profiles; initial semantics-stamp adoption above also requires
+  previously processed books to rebuild. The
   `pre_partial_payout_ca9a672f` fixture was processed with pre-fix code and
   verifies refusal before rebuilding and corrected proceeds afterward.
   Missing residual prices can now block output rather than fabricate proceeds.
