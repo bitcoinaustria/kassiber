@@ -2959,37 +2959,22 @@ The inherited 435 entries retain the sixth checkpoint's audit; they were not
 rerun in this batch. No Python product code, schema, dependency or AI projection
 changes. No new CLI command or daemon kind is enabled.
 
-### Python reference bug: interrupted CSV overwrites truncate prior artifacts
+### CSV reference failure-path parity (eighth continuation)
 
-`core.reports._write_csv_rows` opens the destination with `"w"`; CLI and daemon
-artifact callers pass the final path directly. A later row/write failure leaves
-partial bytes instead of the previous complete report. Reproduce entirely on
-disposable data using the locked Python environment:
+The Python reference fix `133cde70` is retained locally as `8d7f1332`.
+It stages complete CSV rows before replacing the real target, retains existing
+modes and follows final symlinks. Interrupted writes now retain prior complete
+artifacts on both sides; the former truncation difference is closed.
 
-```python
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from kassiber.core.reports import _write_csv_rows
-
-with TemporaryDirectory() as root:
-    path = Path(root) / "report.csv"
-    path.write_bytes(b"previous complete report\r\n")
-    def rows():
-        yield ["partial"]
-        raise OSError("injected write failure")
-    try:
-        _write_csv_rows(path, rows())
-    except OSError:
-        pass
-    assert path.read_bytes() == b"partial\r\n"
-```
-
-Python is unchanged. Atomic failure behavior follows the requested port
-requirement; this is a recorded reference difference, not failure-path byte
-parity. Successful ordinary file contents/modes and final-symlink paths match.
-Atomic replacement also changes inode identity: hard-link aliases and foreign
-file ownership are not accepted parity boundaries in this batch and need a
-policy before enabling artifact commands.
+Rust now reads target metadata rather than requiring write access to the old
+inode: replacement of a read-only artifact is permitted by directory authority
+and retains that artifact's mode, matching the fixed Python writer. Staging
+names include the target basename. Native publication checks pass (four), as do
+the four Python atomic-write regressions. The new
+`publication-read-only-mode` mutation is killed by
+`report_csv_replaces_read_only_target_preserving_mode` after its unmutated
+baseline passes. Summaries are in `/tmp/kassiber-r5-reports8-publication-mutation.log`;
+the owned mutation build tree was removed after recording this result.
 
 Still required before registration: standalone transaction CSV draft/multiple
 wallet/range semantics; automatic saved rows with app-computed hashes and exact

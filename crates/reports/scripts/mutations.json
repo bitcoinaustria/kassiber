@@ -4479,5 +4479,15 @@
       "csv_bundle_failure_retains_only_complete_preceding_files"
     ],
     "rule": "Bundle failures leave only preceding complete artifacts."
+  },
+  {
+    "id": "publication-read-only-mode",
+    "file": "crates/store/src/layout.rs",
+    "find": "    let permissions = match std::fs::metadata(&destination) {\n        Ok(metadata) => Some(metadata.permissions()),",
+    "replace": "    let permissions = match OpenOptions::new().write(true).open(&destination) {\n        Ok(file) => Some(file.metadata()?.permissions()),",
+    "expect_failing": [
+      "report_csv_replaces_read_only_target_preserving_mode"
+    ],
+    "rule": "Atomic replacement follows Python directory authority and preserves read-only file modes."
   }
 ]

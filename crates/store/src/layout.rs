@@ -22,15 +22,23 @@ fn write_report_csv_with(
     // Python creates the requested parent before opening/following the file.
     std::fs::create_dir_all(parent_directory(path))?;
     let destination = report_csv_destination(path)?;
-    // Check write permission without truncation before replacing an old file.
-    let permissions = match OpenOptions::new().write(true).open(&destination) {
-        Ok(file) => Some(file.metadata()?.permissions()),
+    // Replacement needs directory authority, not write access to the old inode.
+    // The Python reference stats the target and carries its mode to the sibling.
+    let permissions = match std::fs::metadata(&destination) {
+        Ok(metadata) => Some(metadata.permissions()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
     };
     let parent = parent_directory(&destination);
     let mut builder = tempfile::Builder::new();
-    builder.prefix(".kassiber-report-").suffix(".tmp");
+    let prefix = format!(
+        ".{}.",
+        destination
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+    builder.prefix(&prefix).suffix(".tmp");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -306,6 +314,23 @@ pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn report_csv_replaces_read_only_target_preserving_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("report.csv");
+        std::fs::write(&path, b"old\r\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o440)).unwrap();
+        super::write_report_csv(&path, b"new\r\n").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new\r\n");
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+            0o440
+        );
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
     #[test]
     fn report_csv_publication_failure_keeps_old_bytes_and_mode() {
         let root = tempfile::tempdir().unwrap();
