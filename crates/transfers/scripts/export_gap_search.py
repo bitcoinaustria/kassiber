@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from kassiber.core import custody_gaps as gaps, custody_gap_reviews as reviews
 from tests.custody_snapshot import to_jsonable
+from tests.custody_gap_vectors import worklist_range_vectors
 
 PATH = ROOT / 'tests/fixtures/custody_gap_cases.json'
 
@@ -54,22 +55,7 @@ def main():
         legs = [leg for row in case['rows']
                 if (leg := gaps._normalize_leg(row, set())) is not None]
         case['expected'] = gaps._snapshot_gap(candidate(case['candidate']), legs)
-    def ranges(rows):
-        found = {}
-        for row in rows:
-            leg = gaps._normalize_leg(row, set())
-            if leg is None:
-                continue
-            low = max(1, (leg.principal_msat * 800_000 // 1_000_000 + 255) // 256)
-            high = leg.principal_msat + leg.principal_msat * 250_000 // 1_000_000
-            if leg.asset in found:
-                low, high = min(low, found[leg.asset][0]), max(high, found[leg.asset][1])
-            found[leg.asset] = (low, high)
-        return [[asset, *bounds] for asset, bounds in sorted(found.items())]
-    data['worklist_ranges'] = [
-        {'rows': case['rows'], **outcome(lambda: ranges(case['rows']))}
-        for case in data['search']
-    ]
+    data['worklist_ranges'] = worklist_range_vectors(data['search'])
     text = json.dumps(data, ensure_ascii=True, separators=(',', ':')) + '\n'
     if '--check' in sys.argv:
         assert PATH.read_text() == text, PATH

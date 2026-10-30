@@ -137,6 +137,22 @@ def search_cases():
     return cases
 
 
+def worklist_range_vectors(cases):
+    def ranges(rows):
+        found = {}
+        for row in rows:
+            leg = gaps._normalize_leg(row, set())
+            if leg is None:
+                continue
+            low = max(1, (leg.principal_msat * 800_000 // 1_000_000 + 255) // 256)
+            high = leg.principal_msat + leg.principal_msat * 250_000 // 1_000_000
+            if leg.asset in found:
+                low, high = min(low, found[leg.asset][0]), max(high, found[leg.asset][1])
+            found[leg.asset] = (low, high)
+        return [[asset, *bounds] for asset, bounds in sorted(found.items())]
+    return [dict(rows=case['rows'], **outcome(lambda: ranges(case['rows']))) for case in cases]
+
+
 def vectors():
     cases=search_cases()
     fingerprints=[]
@@ -209,7 +225,8 @@ def vectors():
         for candidate in result.candidates:
             display.append(dict(candidate=to_jsonable(candidate,redact_config=False),rows=raw,expected=gaps._snapshot_gap(candidate,legs)))
     finally:seeded.tearDown()
-    return dict(search=cases,compute=computed,fingerprints=fingerprints,reviews=raw_reviews,display=display,cursors=cursors,pages=pages)
+    return dict(search=cases,compute=computed,fingerprints=fingerprints,reviews=raw_reviews,display=display,cursors=cursors,pages=pages,
+                worklist_ranges=worklist_range_vectors(cases))
 
 
 STAGES_PATH=PATH.with_name("custody_gap_stages.json")
