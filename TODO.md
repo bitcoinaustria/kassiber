@@ -252,11 +252,12 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.
   Full-report and Austrian CSV preparation/publication now has frozen byte
-  oracles and atomic per-file writes; finish standalone transaction draft/range
-  semantics, completion saves with authoritative dependency capture, and
+  oracles and atomic per-file writes. Standalone preparation now covers draft
+  withholding, multiple wallets and resolved ranges. Finish calendar preset/zone
+  admission, completion saves with authoritative dependency capture, and
   process/state parity before
   enabling the commands. See the
-  [publication checkpoint](docs/reference/rust-shell.md#reports-csv-publication-checkpoint-r5-seventh-continuation-partial).
+  [standalone checkpoint](docs/reference/rust-shell.md#standalone-transaction-csv-preparation-r5-eighth-continuation-partial).
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
 - [ ] Port PDF/XLSX artifacts in a later slice. Keep unsupported commands

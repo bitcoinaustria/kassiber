@@ -1054,6 +1054,15 @@ precedence and ordered arithmetic remain intact. The
 [round 2 report](../reference/rust-read-performance-round2.md) records phase
 spans, parity and measured index proposals; no proposed DDL is applied.
 
+The eighth reports continuation cherry-picks the fixed Python atomic CSV writer
+and matches replacement of existing read-only artifacts while retaining their
+modes. Standalone transaction CSV preparation adds draft withholding, ordered
+multiple-wallet selection and resolved-range filtering, with frozen byte/error
+oracles and named mutations. It remains unregistered: completion saves,
+authoritative dependencies, admission retained through publication/completion,
+complete DB export sequences and transport/hybrid proof still gate registration.
+See the [standalone CSV checkpoint](../reference/rust-shell.md#standalone-transaction-csv-preparation-r5-eighth-continuation-partial).
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

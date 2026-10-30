@@ -27,7 +27,7 @@ fn check(command: &str) {
         let actual = match result {
             Ok(p) => {
                 let directory = root.path().join("artifacts");
-                let published = if command == "reports.export-csv" {
+                let published = if command != "reports.export-austrian-e1kv-csv" {
                     vec![kassiber_reports::artifact_publication::file(
                         &p,
                         &directory.join("report.csv"),
@@ -140,4 +140,9 @@ fn full_report_csv_artifact_vectors() {
 #[test]
 fn austrian_bundle_csv_artifact_vectors() {
     check("reports.export-austrian-e1kv-csv");
+}
+
+#[test]
+fn standalone_transactions_csv_artifact_vectors() {
+    check("reports.export-transactions-csv");
 }

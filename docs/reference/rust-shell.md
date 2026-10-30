@@ -2984,6 +2984,56 @@ export-sequence oracles; CLI and daemon export registration (including capital
 gains CSV). Only explicit filing may create a filed marker. XLSX and PDF remain
 a later batch. This is **not full reports slice acceptance**.
 
+## Standalone transaction CSV preparation (R5 eighth continuation, partial)
+
+`artifact_csv::prepare` now accepts `reports.export-transactions-csv` without
+registering a transport. It uses one SQLite read snapshot for the selected book,
+report gates, freshness, observations and rendering. Incomplete custody and
+unresolved quantity permit an explicitly labelled draft; other admission errors
+still refuse export. Drafts withhold basis and gains; stale journals also
+withhold transfer links and are never queried for tax amounts. Observed rows
+remain visible with their exact quantities and evidence labels.
+
+Wallet selections resolve within the admitted profile, deduplicate identities
+in selection order and reject an empty selection. Multiple wallets filter the
+observed list and retain Python's bounded wallet-scope title. The service accepts
+a resolved ExportRange payload, applies inclusive-start/exclusive-end instants
+and retains undated-transaction warnings and the original range metadata.
+Calendar preset/zone resolution is still required at the future shared export
+entry point; accepting a resolved payload does not enable a CLI/daemon command.
+
+| Parity boundary | Frozen evidence |
+| --- | --- |
+| Standalone CSV | 67 successful preparations, seven exact refusals; artifact bytes and metadata |
+| Drafts | Stale count/version/timestamp, incomplete custody, unresolved quantity and combined blockers |
+| Wallets | All/single/multiple, empty, duplicate, missing, three/four-name titles and selected subset |
+| Ranges | UTC/Vienna resolved bounds, exact endpoints, stale rows and undated warnings |
+| Existing artifacts | 48 full reports and 33 Austrian bundles (543 files) remain byte-identical |
+| Database | All preparations assert zero SQLite changes; automatic completion remains unported |
+
+The nine new transaction mutations are killed by
+`standalone_transactions_csv_artifact_vectors`. The first wallet-filter run
+survived because its selected wallets covered every observed row. A new subset
+fixture moves an observation to an unselected wallet; its unmutated baseline
+passes and kills that mutation. This correction is retained in the frozen oracle.
+The publication mutation is separately killed by the read-only-mode regression.
+
+Verification uses Rust 1.99.1, locked Python 3.11 and offline/locked Cargo.
+Formatting, workspace and test-harness clippy with `-D warnings`, all 976
+workspace tests and 14 harness tests pass. The sandboxed workspace attempt's
+owned-loopback refusals are excluded; the complete permitted rerun passes.
+`classify_tests update` and the reviewed source-contract refresh include the
+cherry-picked Python regressions. Preflight passes 57 tests; the separate final
+inventory check passes eight. The artifact generator checks cleanly. Owned
+mutation and verification build trees were removed after writing summaries in
+`/tmp/kassiber-r5-reports8-*`. Verification is Linux-only.
+
+No export transport is newly registered. Automatic completion, authoritative
+dependency capture, retained admission through publication/completion, normalized
+export-sequence DB oracles and hybrid registration proof remain required.
+Capital-gains CSV, XLSX and PDF are not newly enabled. Only explicit filing can
+create a filed marker. No further Python bug was found in this boundary.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

@@ -106,6 +106,26 @@ def build():
     specs += [('algorithm-' + algorithm, 'reports.export-csv',
                f"UPDATE profiles SET gains_algorithm='{algorithm}' WHERE id='p';", {})
               for algorithm in ('FIFO', 'HIFO', 'MOVING_AVERAGE_AT')]
+    specs += [("transactions-" + name, "reports.export-transactions-csv", sql, args)
+              for name, command, sql, args in list(specs) if command == "reports.export-csv" and not name.startswith("history-limit-")]
+    specs += [("transactions-wallets-" + str(i), "reports.export-transactions-csv", "", {"wallets": refs})
+              for i, refs in enumerate([[], ["cold"], ["hot", "cold"], ["cold", "cold"], ["missing"]])]
+    from kassiber.core.export_range import resolve_export_range
+    specs += [("transactions-range-" + str(i), "reports.export-transactions-csv", sql,
+               {"range_input": {"first_day": "2025-01-01", "last_day": "2025-12-31", "timezone_name": zone}})
+              for i, (zone, sql) in enumerate([("UTC", ""), ("Europe/Vienna", ""),
+                  ("UTC", "UPDATE transactions SET occurred_at='1970-01-01T00:00:00Z' WHERE id='out';"),
+                  ("UTC", "UPDATE profiles SET last_processed_input_version=-1 WHERE id='p';")])]
+    extra_wallets = "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('third','ws','p','Third','manual','{}','fixed'),('fourth','ws','p','Fourth','manual','{}','fixed');"
+    specs += [('transactions-wallet-subset', 'reports.export-transactions-csv', extra_wallets +
+               "UPDATE transactions SET wallet_id='third' WHERE id='no-tax';", {'wallets':['hot','cold']})]
+    specs += [('transactions-three-wallet-label', 'reports.export-transactions-csv', extra_wallets,
+               {'wallets':['hot','cold','third']})]
+    specs += [('transactions-four-wallet-label', 'reports.export-transactions-csv', extra_wallets,
+               {'wallets':['hot','cold','third','fourth']})]
+    specs += [('transactions-range-boundaries', 'reports.export-transactions-csv',
+               "UPDATE transactions SET occurred_at=CASE id WHEN 'in' THEN '2025-01-01T00:00:00Z' WHEN 'out' THEN '2026-01-01T00:00:00Z' ELSE occurred_at END;",
+               {'range_input':{'first_day':'2025-01-01','last_day':'2025-12-31','timezone_name':'UTC'}})]
     result = []
     for name, command, sql, args in specs:
         with tempfile.TemporaryDirectory(prefix='kassiber-csv-oracle-') as root:
@@ -113,7 +133,19 @@ def build():
             conn.executescript((OUT.parent / 'book.sql').read_text() + sql)
             hooks = replace(_report_hooks(), now_iso=lambda: STAMP)
             try:
-                if command == 'reports.export-csv':
+                if command == 'reports.export-transactions-csv':
+                    export_range = None
+                    if 'range_input' in args:
+                        export_range = resolve_export_range(dict(conn.execute("SELECT * FROM profiles WHERE id='p'").fetchone()), **args['range_input'])
+                        args = {"export_range": export_range.payload()}
+                    context = reports._transactions_export_context(conn, None, None, hooks,
+                        wallet_ref=args.get('wallet'), wallet_refs=args.get('wallets'), export_range=export_range)
+                    spec = context['spec']
+                    files = [dict(name='report.csv', sheet='', rows=len(spec['rows']),
+                        content=encode(reports._generic_report_csv_rows({'title':context['title']}, [spec])))]
+                    metadata = dict(title=context['title'], wallet=reports.export_wallet_scope_label(context['wallets']),
+                        rows=len(spec['rows']), warnings=context['warnings'], range=context['range'])
+                elif command == 'reports.export-csv':
                     context = reports._build_full_report_context(conn, None, None, hooks,
                         wallet_ref=args.get('wallet'), history_limit=args.get('history_limit'))
                     sections = reports._generic_report_section_specs(context)

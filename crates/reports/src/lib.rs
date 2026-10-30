@@ -14,6 +14,7 @@ mod journal;
 mod snapshot_write;
 mod snapshots;
 mod sql;
+mod standalone_csv;
 mod summary;
 mod summary_text;
 mod tax_summary;
@@ -208,10 +209,7 @@ fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result
             .with_hint("Repair or supersede every authored active component in `kassiber transfers components list` before relying on reports.")
             .with_details(dict([("components", Value::List(blockers))])));
     }
-    let issues = rows(conn,"SELECT issue_id,issue_type,state,asset,amount_msat,occurred_at,reason,blocks_from FROM journal_quantity_issues WHERE profile_id=? ORDER BY COALESCE(occurred_at,''),issue_id",[&id])
-        .map_err(|_| AppError::new("custody_quantity_state_unavailable", "Custody quantity blocker state is unavailable.")
-            .with_hint("Repair or migrate the local book, then rebuild journals before relying on reports.")
-            .with_details(dict([("profile_id",s(id.as_str())),("operation",s("read_journal_quantity_issues")),("error_type",s("OperationalError"))])))?;
+    let issues = quantity_issues(conn, &id)?;
     if !issues.is_empty() {
         let blocked_from = issues
             .iter()
@@ -240,6 +238,13 @@ fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result
         ));
     }
     Ok(())
+}
+
+fn quantity_issues(conn: &Connection, id: &str) -> Result<Vec<Value>> {
+    rows(conn,"SELECT issue_id,issue_type,state,asset,amount_msat,occurred_at,reason,blocks_from FROM journal_quantity_issues WHERE profile_id=? ORDER BY COALESCE(occurred_at,''),issue_id",[id])
+        .map_err(|_| AppError::new("custody_quantity_state_unavailable", "Custody quantity blocker state is unavailable.")
+            .with_hint("Repair or migrate the local book, then rebuild journals before relying on reports.")
+            .with_details(dict([("profile_id",s(id)),("operation",s("read_journal_quantity_issues")),("error_type",s("OperationalError"))])))
 }
 
 const CAPITAL_GAINS_SQL: &str = "SELECT je.id AS journal_entry_id,je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,je.capital_gains_type FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC";

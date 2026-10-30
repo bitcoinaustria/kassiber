@@ -4489,5 +4489,95 @@
       "report_csv_replaces_read_only_target_preserving_mode"
     ],
     "rule": "Atomic replacement follows Python directory authority and preserves read-only file modes."
+  },
+  {
+    "id": "transaction-draft-basis",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "replace(row, \"cost_basis\", Value::Null);",
+    "replace": "replace(row, \"cost_basis\", Value::Int(0.into()));",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Draft basis is withheld, never zero."
+  },
+  {
+    "id": "transaction-draft-gain",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "replace(row, \"gain_loss\", Value::Null);",
+    "replace": "replace(row, \"gain_loss\", Value::Int(0.into()));",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Draft gains are withheld, never zero."
+  },
+  {
+    "id": "transaction-empty-wallets",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "if refs.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Empty selection cannot mean all wallets."
+  },
+  {
+    "id": "transaction-wallet-filter",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "if wallets.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Multiple wallets retain the exact selected observations."
+  },
+  {
+    "id": "transaction-wallet-deduplicate",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "if !wallets\n                .iter()",
+    "replace": "if wallets\n                .iter()",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Wallet identities are deduplicated in authored order."
+  },
+  {
+    "id": "transaction-range-start",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "start <= at && at < end",
+    "replace": "start < at && at < end",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Range starts are inclusive."
+  },
+  {
+    "id": "transaction-range-end",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "start <= at && at < end",
+    "replace": "start <= at && at <= end",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Range ends are exclusive."
+  },
+  {
+    "id": "transaction-undated-warning",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "if undated > 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "Out-of-range undated observations retain a warning."
+  },
+  {
+    "id": "transaction-scope-label",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "if wallets.len() > 3 {",
+    "replace": "if wallets.len() > 2 {",
+    "expect_failing": [
+      "standalone_transactions_csv_artifact_vectors"
+    ],
+    "rule": "More than three wallet names use the bounded label."
   }
 ]

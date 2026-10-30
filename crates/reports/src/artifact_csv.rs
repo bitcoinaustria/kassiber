@@ -55,6 +55,9 @@ pub fn prepare(
             replace(&mut args, "history_limit", limit);
         }
         let (workspace, profile) = kassiber_setup::references::scope(conn, &args)?;
+        if command == "reports.export-transactions-csv" {
+            return standalone_csv::prepare(conn, &profile, &args);
+        }
         require_context(conn, &profile, false)?;
         match command {
             "reports.export-csv" => full_csv::prepare(conn, &workspace, &profile, &args, sources),

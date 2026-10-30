@@ -1788,6 +1788,12 @@
       "CrossCheckUnprocessedBookTests": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "reports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 3},
       "MatchingRuleTests": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.cross_check directly", "reviewed": false, "tests": 5}
     },
+    "tests/test_report_csv_atomic.py": {
+      "test_an_interrupted_write_keeps_the_previous_report": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_a_new_report_gets_the_umask_default_mode": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_an_existing_report_keeps_its_mode": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_a_final_symlink_is_written_through": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1}
+    },
     "tests/test_report_explanation.py": {
       "test_actual_engine_fragments_reconcile_without_read_writes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},
       "test_wrong_book_version_rebuild_and_legacy_fail_explicitly": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},

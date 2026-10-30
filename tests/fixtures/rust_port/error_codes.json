@@ -398,28 +398,28 @@
       }
     },
     {
-      "at": "kassiber/core/reports.py:82",
+      "at": "kassiber/core/reports.py:85",
       "name": "AUSTRIAN_KENNZAHL_FORM_BY_CODE",
       "value": {
         "expression": "{172: 'E 1kv', 174: 'E 1kv', 176: 'E 1kv', 801: 'E 1'}"
       }
     },
     {
-      "at": "kassiber/core/reports.py:88",
+      "at": "kassiber/core/reports.py:91",
       "name": "AUSTRIAN_KENNZAHL_FORM_SECTION_BY_CODE",
       "value": {
         "expression": "{172: AUSTRIAN_E1KV_FORM_SECTION, 174: AUSTRIAN_E1KV_FORM_SECTION, 176: AUSTRIAN_E1KV_FORM_SECTION, 801: 'E 1 Spekulationsgeschaefte'}"
       }
     },
     {
-      "at": "kassiber/core/reports.py:6713",
+      "at": "kassiber/core/reports.py:6734",
       "name": "_LIST_DRAFT_CODES",
       "value": {
         "expression": "frozenset({'custody_component_incomplete', 'custody_quantity_unresolved'})"
       }
     },
     {
-      "at": "kassiber/core/reports.py:4316",
+      "at": "kassiber/core/reports.py:4319",
       "name": "codes",
       "value": {
         "expression": "[*AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER, *AUSTRIAN_OUTSIDE_E1KV_KENNZAHL_ORDER]"
@@ -664,7 +664,7 @@
       "function": "add"
     },
     {
-      "at": "kassiber/core/reports.py:328",
+      "at": "kassiber/core/reports.py:331",
       "code": null,
       "function": "_safe_count"
     },
@@ -11707,7 +11707,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:341",
+      "at": "kassiber/core/reports.py:344",
       "code": {
         "expression": "code or 'count_unavailable'"
       },
@@ -11715,269 +11715,269 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:670",
+      "at": "kassiber/core/reports.py:673",
       "code": "local_only_no_probe",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:675",
+      "at": "kassiber/core/reports.py:678",
       "code": "redacted_payload",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:790",
+      "at": "kassiber/core/reports.py:793",
       "callee": "_safe_count",
       "code": "transactions_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:797",
+      "at": "kassiber/core/reports.py:800",
       "callee": "_safe_count",
       "code": "excluded_transactions_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:804",
+      "at": "kassiber/core/reports.py:807",
       "callee": "_safe_count",
       "code": "transaction_raw_json_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:817",
+      "at": "kassiber/core/reports.py:820",
       "callee": "_safe_count",
       "code": "privacy_boundary_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:860",
+      "at": "kassiber/core/reports.py:863",
       "callee": "_safe_count",
       "code": "utxo_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:867",
+      "at": "kassiber/core/reports.py:870",
       "callee": "_safe_count",
       "code": "active_utxo_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:874",
+      "at": "kassiber/core/reports.py:877",
       "callee": "_safe_count",
       "code": "utxo_address_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:887",
+      "at": "kassiber/core/reports.py:890",
       "callee": "_safe_count",
       "code": "utxo_script_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:900",
+      "at": "kassiber/core/reports.py:903",
       "callee": "_safe_count",
       "code": "utxo_derivation_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:931",
+      "at": "kassiber/core/reports.py:934",
       "callee": "_safe_count",
       "code": "journal_entry_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:938",
+      "at": "kassiber/core/reports.py:941",
       "callee": "_safe_count",
       "code": "quarantine_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:945",
+      "at": "kassiber/core/reports.py:948",
       "callee": "_safe_count",
       "code": "privacy_quarantine_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:328",
+      "policy_at": "kassiber/core/reports.py:331",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:1100",
+      "at": "kassiber/core/reports.py:1103",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1638",
+      "at": "kassiber/core/reports.py:1641",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1652",
+      "at": "kassiber/core/reports.py:1655",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1669",
+      "at": "kassiber/core/reports.py:1672",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1681",
+      "at": "kassiber/core/reports.py:1684",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1961",
+      "at": "kassiber/core/reports.py:1964",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1981",
+      "at": "kassiber/core/reports.py:1984",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:2672",
+      "at": "kassiber/core/reports.py:2675",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:2870",
+      "at": "kassiber/core/reports.py:2873",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4037",
+      "at": "kassiber/core/reports.py:4040",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4045",
+      "at": "kassiber/core/reports.py:4048",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4055",
+      "at": "kassiber/core/reports.py:4058",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4059",
+      "at": "kassiber/core/reports.py:4062",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4061",
+      "at": "kassiber/core/reports.py:4064",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4120",
+      "at": "kassiber/core/reports.py:4123",
       "callee": "AppError",
       "code": "internal",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4503",
+      "at": "kassiber/core/reports.py:4506",
       "code": "AT-E1KV-FOREIGN-SELF-CUSTODY",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4508",
+      "at": "kassiber/core/reports.py:4511",
       "code": "AT-E1KV-DETAIL-LIMITATION",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4513",
+      "at": "kassiber/core/reports.py:4516",
       "code": "AT-E1KV-KENNZAHL-REPROCESS",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4518",
+      "at": "kassiber/core/reports.py:4521",
       "code": "AT-COST-BASIS-POOL-SCOPE",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4529",
+      "at": "kassiber/core/reports.py:4532",
       "code": "AT-002",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4537",
+      "at": "kassiber/core/reports.py:4540",
       "code": "AT-001",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4544",
+      "at": "kassiber/core/reports.py:4547",
       "code": "AT-REVIEW-GATE",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:6693",
+      "at": "kassiber/core/reports.py:6714",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:7250",
+      "at": "kassiber/core/reports.py:7271",
       "callee": "AppError",
       "code": "validation",
       "form": "call",

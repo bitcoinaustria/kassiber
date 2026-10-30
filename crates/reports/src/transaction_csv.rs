@@ -125,12 +125,25 @@ pub(super) fn report_rows(
     profile: &Value,
     wallet: Option<&str>,
 ) -> Result<Vec<Value>> {
+    report_rows_current(conn, profile, wallet, true)
+}
+
+pub(super) fn report_rows_current(
+    conn: &Connection,
+    profile: &Value,
+    wallet: Option<&str>,
+    current: bool,
+) -> Result<Vec<Value>> {
     let id = text(profile, "id");
     let mut transactions = rows(conn,"SELECT t.*,w.label AS wallet,COALESCE(t.external_id,'') AS transaction_id FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",[&id])?;
     if let Some(wallet) = wallet {
         transactions.retain(|r| text(r, "wallet_id") == wallet);
     }
-    let basis = rows(conn,"SELECT je.transaction_id AS tx_id,SUM(COALESCE(je.cost_basis,0)) AS cost_basis,SUM(COALESCE(je.gain_loss,0)) AS gain_loss,SUM(CASE WHEN je.cost_basis IS NOT NULL THEN 1 ELSE 0 END) AS basis_entries,SUM(CASE WHEN je.gain_loss IS NOT NULL THEN 1 ELSE 0 END) AS gain_entries FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND (?2 IS NULL OR je.wallet_id=?2) AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' GROUP BY je.transaction_id",kassiber_store::rusqlite::params![id,wallet])?;
+    let basis = if current {
+        rows(conn,"SELECT je.transaction_id AS tx_id,SUM(COALESCE(je.cost_basis,0)) AS cost_basis,SUM(COALESCE(je.gain_loss,0)) AS gain_loss,SUM(CASE WHEN je.cost_basis IS NOT NULL THEN 1 ELSE 0 END) AS basis_entries,SUM(CASE WHEN je.gain_loss IS NOT NULL THEN 1 ELSE 0 END) AS gain_entries FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND (?2 IS NULL OR je.wallet_id=?2) AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' GROUP BY je.transaction_id",kassiber_store::rusqlite::params![id,wallet])?
+    } else {
+        Vec::new()
+    };
     let basis: BTreeMap<_, _> = basis.into_iter().map(|r| (text(&r, "tx_id"), r)).collect();
     let tags = rows(conn,"SELECT tt.transaction_id AS tx_id,tg.code FROM transaction_tags tt JOIN tags tg ON tg.id=tt.tag_id JOIN transactions t ON t.id=tt.transaction_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY tg.code",[&id])?;
     let mut tag_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -173,7 +186,11 @@ pub(super) fn report_rows(
                 if is_url { url.into() } else { String::new() },
             ));
     }
-    let transfers = transfer_labels(conn, &id)?;
+    let transfers = if current {
+        transfer_labels(conn, &id)?
+    } else {
+        BTreeMap::new()
+    };
     transactions
         .into_iter()
         .map(|row| {

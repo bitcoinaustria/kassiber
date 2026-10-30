@@ -55,6 +55,8 @@ REVIEWS = {
 
     "tests/test_rust_transfer_services.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution"}},
     "tests/test_rust_gap_services.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "Compares gap CLI and daemon bytes and complete normalized rows against Python; native fixed-source sequences pin exact identities and hybrid logs require Rust execution"}},
+
+    "tests/test_report_csv_atomic.py": {"*": {"disposition": "rust-test", "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior"}},
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
     "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
     "tests/test_rust_store_interop.py": {"*": {"group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary"}},
