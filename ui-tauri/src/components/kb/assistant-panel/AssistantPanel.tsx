@@ -5,9 +5,8 @@
  */
 
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Maximize2, MoreHorizontal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
 import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
@@ -67,15 +66,6 @@ export function AssistantPanelActions() {
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
-      <Button asChild variant="ghost" size="icon-xs">
-        <Link
-          to="/assistant"
-          aria-label={t("dock.openAssistantPage")}
-          title={t("dock.openAssistantPage")}
-        >
-          <Maximize2 className="size-3.5" aria-hidden="true" />
-        </Link>
-      </Button>
     </>
   );
 }

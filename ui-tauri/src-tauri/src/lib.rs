@@ -3706,7 +3706,7 @@ fn build_app_menu(
     let display_settings = menu_item(app, MENU_SETTINGS_DISPLAY, "Display", None)?;
     let security_settings = menu_item(app, MENU_SETTINGS_SECURITY, "Security", None)?;
     let backends_settings = menu_item(app, MENU_SETTINGS_BACKENDS, "Sync Backends", None)?;
-    let ai_settings = menu_item(app, MENU_SETTINGS_AI, "AI Providers", None)?;
+    let ai_settings = menu_item(app, MENU_SETTINGS_AI, "Assistant", None)?;
     let data_settings = menu_item(app, MENU_SETTINGS_DATA, "Local Data", None)?;
     let lock_item = menu_item(app, MENU_LOCK_APP, "Lock Kassiber", Some("CmdOrCtrl+L"))?;
     let close_item = menu_item(app, MENU_WINDOW_CLOSE, "Close Window", Some("CmdOrCtrl+W"))?;

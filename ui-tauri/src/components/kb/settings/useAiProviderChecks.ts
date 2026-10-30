@@ -1,5 +1,5 @@
 /**
- * Explicit provider checks for Settings → AI providers.
+ * Explicit provider checks for Settings → Assistant.
  *
  * Privacy contract (docs/reference/ai.md, docs/reference/privacy-and-security.md):
  * - Opening Settings contacts no provider. The page reads the daemon's last

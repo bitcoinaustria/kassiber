@@ -25,7 +25,6 @@
   "dock": {
     "label": "Kassiber-Assistent",
     "conversation": "Unterhaltung",
-    "openAssistantPage": "Assistenten-Seite öffnen",
     "working": "Arbeitet",
     "workingQueued": "Arbeitet · {{count}} in Warteschlange"
   },
@@ -149,8 +148,7 @@
   },
   "thread": {
     "scrollToLatest": "Zur neuesten Nachricht scrollen",
-    "scrollToLatestShort": "Zum Neuesten",
-    "scrollToTop": "Nach oben scrollen"
+    "scrollToLatestShort": "Zum Neuesten"
   },
   "message": {
     "imageReference": "Bildverweis",
