@@ -374,6 +374,10 @@ def _savepoint(conn: sqlite3.Connection):
     """Provide nested atomicity without committing the caller's transaction."""
 
     name = f"custody_{uuid.uuid4().hex}"
+    # RELEASE of an outermost savepoint commits in SQLite. Keep transaction
+    # ownership with the authoring caller, including its later invalidation.
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
     conn.execute(f"SAVEPOINT {name}")
     try:
         yield

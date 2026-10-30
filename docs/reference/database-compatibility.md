@@ -223,6 +223,22 @@ journal invalidation is needed. Existing stored explanations remain until
 then name a previously omitted blocker. Saved exports and filed snapshots
 are not rewritten.
 
+## Custody authoring transaction compatibility
+
+The savepoint atomicity fix changes transaction ownership, not the schema or
+existing authored revisions. Low-level component and legacy consolidation
+helpers leave persistence to their caller; database initialization explicitly
+commits consolidation changes, journal processing owns its writer transaction,
+and review/component/gap authoring boundaries commit their completed operation.
+No caller in these paths requires an outermost savepoint release to persist it.
+
+`tests/test_custody_authoring_atomicity.py` injects late failures and compares
+all persisted tables after rollback, including input versions, memberships and
+audit records. It also pins rollback of successful `commit=False` applies.
+There is no reliable historical failed-request marker from which to reconstruct
+an owner's intended review. Opening an existing book does not silently repair
+or replay authoring; see [recovery](custody-components.md#authoring-transactions-and-recovery).
+
 ## Intentionally not inferred during upgrade
 
 ### Journal calculation semantics and older writers

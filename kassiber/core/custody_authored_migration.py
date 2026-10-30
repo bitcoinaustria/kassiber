@@ -180,6 +180,10 @@ def _resolve_migration_issues(
 
 @contextmanager
 def _savepoint(conn: sqlite3.Connection, name: str) -> Iterator[None]:
+    # RELEASE of an outermost savepoint commits in SQLite. Keep transaction
+    # ownership with the authoring caller, including its later invalidation.
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
     conn.execute(f"SAVEPOINT {name}")
     try:
         yield
