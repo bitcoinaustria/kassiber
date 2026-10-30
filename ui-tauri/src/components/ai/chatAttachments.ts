@@ -95,3 +95,13 @@ export async function chatImageThumbnail(file: File, size = 96): Promise<string 
     return null;
   }
 }
+
+/**
+ * The daemon's preview of a picked or dropped chat image, if it is the inline
+ * PNG it should be; anything else (a URL, another type) is not shown.
+ */
+export function chatThumbnail(value: unknown): string | undefined {
+  return typeof value === "string" && value.startsWith("data:image/png;base64,")
+    ? value
+    : undefined;
+}

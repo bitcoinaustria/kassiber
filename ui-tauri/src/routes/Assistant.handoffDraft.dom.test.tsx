@@ -30,7 +30,8 @@ vi.mock("@/components/ai/assistantSession", () => ({
     error: null,
     pendingConsents: [],
     queuedPrompts: [],
-    selection: null,
+    // Starter questions show only once a model is chosen.
+    selection: { provider: "claude", model: "default" },
     thinkingEffort: "auto",
     fastMode: false,
     returnPath: "/overview",

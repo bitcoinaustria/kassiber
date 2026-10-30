@@ -125,6 +125,12 @@
         "label": "Minimal",
         "description": "Nur die Kernwerkzeuge, für die kleinsten Kontextfenster."
       }
+    },
+    "attachmentExpired": {
+      "title_one": "Eine angehängte Datei ist abgelaufen",
+      "title_other": "{{count}} angehängte Dateien sind abgelaufen",
+      "body_one": "{{filenames}} wurde vor zu langer Zeit angehängt und war für den Assistenten nicht mehr lesbar, deshalb ist sie nicht mehr in diesem Chat. Hänge sie erneut an, falls sie noch gebraucht wird.",
+      "body_other": "{{filenames}} wurden vor zu langer Zeit angehängt und waren für den Assistenten nicht mehr lesbar, deshalb sind sie nicht mehr in diesem Chat. Hänge sie erneut an, falls sie noch gebraucht werden."
     }
   },
   "prompts": {

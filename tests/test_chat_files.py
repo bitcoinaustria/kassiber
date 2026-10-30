@@ -18,6 +18,8 @@ import struct
 import tempfile
 import unittest
 import zlib
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from kassiber import daemon
 from kassiber.ai.broker_client import _broker_messages_for_chat, _broker_messages_for_context
@@ -250,6 +252,77 @@ class TurnTests(unittest.TestCase):
         self.assertNotIn("base64", last["content"])
         self.assertEqual(base64.b64decode(last["images"][0]["data"]), png())
         self.assertEqual(broker[0], {"role": "system", "content": "sys"})
+
+
+
+class ExpiredFileTests(unittest.TestCase):
+    """A file whose staging grant ended is dropped, not fatal to the turn."""
+
+    def test_an_expired_grant_is_left_out_and_reported(self):
+        clock = [0.0]
+        sessions = daemon.DocumentImportSessions(ttl_seconds=60, clock=lambda: clock[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.path.join(tmp, "old.png")
+            new = os.path.join(tmp, "new.csv")
+            for path in (old, new):
+                with open(path, "wb") as handle:
+                    handle.write(png() if path.endswith(".png") else b"Date,Amount\n")
+            scope = {"workspace_id": "w", "profile_id": "p", "data_root": tmp}
+            stale = sessions.stage(source_file=old, **scope)
+            clock[0] = 120.0
+            fresh = sessions.stage(source_file=new, **scope)
+            ctx = SimpleNamespace(conn=None, document_import_sessions=sessions, data_root=tmp)
+            with patch.object(daemon, "resolve_scope", return_value=({"id": "w"}, {"id": "p"})):
+                state = daemon._resolve_chat_attachments(
+                    ctx, [{"token": stale, "new": False}, {"token": fresh, "new": True}]
+                )
+        self.assertEqual([entry["id"] for entry in state["chat_files"]], ["file-2"])
+        self.assertEqual(state["expired_chat_files"], ["file-1"])
+        self.assertEqual(state["expired_attachment_tokens"], [stale])
+
+    def test_the_model_is_told_an_id_is_gone(self):
+        state = {
+            "chat_files": [],
+            "expired_chat_files": ["file-1"],
+            "provider_full_access": True,
+            "provider_on_device": False,
+        }
+        messages = [{"role": "user", "content": "And the receipt?"}]
+        daemon._attach_chat_files_to_turn(
+            messages, daemon.AiToolRuntime("/nonexistent", {}, queue.Queue(), state), resumed=False
+        )
+        self.assertIn("file-1: no longer available, its access expired", messages[0]["content"])
+        self.assertEqual(messages[-1]["content"], "And the receipt?")
+
+
+
+class ThumbnailTests(unittest.TestCase):
+    def test_a_chat_image_gets_a_small_png_preview(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("Pillow is not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            image = os.path.join(tmp, "receipt.png")
+            with open(image, "wb") as handle:
+                handle.write(png(400, 200))
+            other = os.path.join(tmp, "notes.png")
+            with open(other, "wb") as handle:
+                handle.write(b"not an image")
+            url = chat_files.thumbnail_data_url(image)
+            self.assertTrue(url.startswith("data:image/png;base64,"))
+            from PIL import Image
+            import io
+
+            with Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))) as thumb:
+                self.assertLessEqual(max(thumb.size), chat_files.THUMBNAIL_EDGE)
+            self.assertIsNone(chat_files.thumbnail_data_url(other))
+            # Only chat images get one; a document import's staging does not.
+            from pathlib import Path
+
+            self.assertIn("thumbnail", daemon._chat_thumbnail_field("chat_attachment", "image", Path(image)))
+            self.assertEqual(daemon._chat_thumbnail_field("document_import", "image", Path(image)), {})
+            self.assertEqual(daemon._chat_thumbnail_field("chat_attachment", "delimited", Path(image)), {})
 
 
 if __name__ == "__main__":

@@ -1714,16 +1714,22 @@ daemon as bytes in chunks of at most 512 KiB through
 `ui.chat.attachments.upload`, up to 25 MB. All three return the same opaque
 token and are staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
 JPEG, WebP and GIF. The composer shows each file as a card with its type and
-size, and a pasted image as a small thumbnail the renderer draws from the bytes
-it already holds. The message that first carries a file shows the same card;
-the files stay with the chat for later turns until removed. Sending waits
+size, and an image as a small thumbnail: for a pasted one the renderer draws
+it from the bytes it already holds, for a picked or dropped one the daemon
+returns a 96 px PNG made on this device (`source.thumbnail`) with the staging
+grant. The message that first carries a file shows the same card, and a
+saved chat keeps it (name, type and size in the user row's provenance, never
+a path or token); the files stay with the chat for later turns until removed. Sending waits
 while a pasted file is still on its way.
 
 `ai.chat` takes the chat's files as `attachments: [{token, label?, new?}]`, in
 order; the daemon names them `file-1` … `file-8` and adds a note to the turn
 listing each one and how the model can read it. `new` marks the files the
-message first sends. What the model sees depends on its
-[agent access](#agent-access):
+message first sends. A file whose staging grant ended (30 minutes unused)
+or belongs to another book is left out instead of failing the turn: the note
+says that id is no longer available, the result's `expired_attachments`
+returns its token, and the chat drops the file with a notice. What the model
+sees depends on its [agent access](#agent-access):
 
 - **Spreadsheets** (CSV, TSV, XLSX) are read through `ui_wallets_analyze_file`
   and imported through the plan and apply below, naming the file by id

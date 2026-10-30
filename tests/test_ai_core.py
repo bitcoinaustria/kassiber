@@ -2913,5 +2913,35 @@ class ChatHistorySeedTest(unittest.TestCase):
                 conn.close()
 
 
+    def test_a_user_message_keeps_the_files_it_sent(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-files-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                workspace = core_accounts.create_workspace(conn, "Demo", commit=False)
+                profile = core_accounts.create_profile(
+                    conn, workspace["id"], "Main", "EUR", None, "generic", 365, commit=False
+                )
+                session = core_chat_history.create_session(
+                    conn, workspace["id"], profile["id"], title="files", commit=False
+                )
+                shown = [{"filename": "receipt.png", "kind": "image", "size_bytes": 812}]
+                core_chat_history.append_exchange(
+                    conn,
+                    profile["id"],
+                    session["id"],
+                    user_content="What is on it?",
+                    assistant_content="A receipt.",
+                    user_attachments=shown,
+                    commit=True,
+                )
+                user, assistant = core_chat_history.get_session(
+                    conn, profile["id"], session["id"]
+                )["messages"]
+                self.assertEqual(user["provenance"], {"attachments": shown})
+                self.assertIsNone(assistant["provenance"])
+            finally:
+                conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()

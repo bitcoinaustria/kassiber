@@ -133,7 +133,9 @@ export function Assistant() {
       onNativeFileDrop={attachDroppedFiles}
       dropTargetRef={pageRef}
       historyMessages={messages}
-      {...(hasMessages ? { prompts: [] } : {})}
+      // Starter questions need a model to go to; until one is chosen the
+      // setup card above stands in for them.
+      {...(hasMessages || !selection?.model ? { prompts: [] } : {})}
     />
   );
 

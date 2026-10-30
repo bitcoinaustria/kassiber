@@ -125,6 +125,12 @@
         "label": "Minimal",
         "description": "Only the core tools, for the smallest context windows."
       }
+    },
+    "attachmentExpired": {
+      "title_one": "An attached file expired",
+      "title_other": "{{count}} attached files expired",
+      "body_one": "{{filenames}} was attached too long ago and the assistant could no longer read it, so it left this chat. Attach it again if it is still needed.",
+      "body_other": "{{filenames}} were attached too long ago and the assistant could no longer read them, so they left this chat. Attach them again if they are still needed."
     }
   },
   "prompts": {
