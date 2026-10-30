@@ -648,6 +648,70 @@ mod tests {
         }
     }
 
+    #[test]
+    fn long_lists_are_written_as_serde_writes_them() {
+        // Enough buys, sales, unpriced sales and moves that every long list
+        // is written in chunks.
+        let day = |offset: i64| {
+            let date =
+                CivilDate::from_days(CivilDate::parse("2020-01-01").unwrap().to_days() + offset);
+            format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+        };
+        let mut rows = Vec::new();
+        let mut pairs = Vec::new();
+        for i in 0..1_200 {
+            let date = day(i);
+            rows.push(row(
+                &format!("buy{i}"),
+                "A",
+                "inbound",
+                &date,
+                300_000_000,
+                json!({}),
+            ));
+            rows.push(row(
+                &format!("sell{i}"),
+                "A",
+                "outbound",
+                &date,
+                100_000_000,
+                json!({}),
+            ));
+            rows.push(row(
+                &format!("unpriced{i}"),
+                "A",
+                "outbound",
+                &date,
+                1_000,
+                json!({"rate": null}),
+            ));
+            let id = format!("m{i}");
+            let [out, inbound] = legs(&id, "A", "B", &date, 50_000_000, json!({}));
+            rows.extend([out, inbound]);
+            pairs.push(pair(&id));
+        }
+        let response = ledger(&request(json!("fifo"), "FIFO", rows, pairs)).expect("a ledger");
+        assert!(
+            response.entries.len() >= 2_048,
+            "{}",
+            response.entries.len()
+        );
+        assert!(
+            response.quarantines.len() >= 1_024,
+            "{}",
+            response.quarantines.len()
+        );
+        assert!(
+            response.intra_audit.len() >= 1_024,
+            "{}",
+            response.intra_audit.len()
+        );
+        assert_eq!(
+            response.to_json().expect("serializes"),
+            serde_json::to_string(&response).expect("serializes")
+        );
+    }
+
     /// A FIFO book over two years: a long-held lot, a purchase at a value,
     /// staking income, a sale across both holding periods, and a fee-only
     /// spend.

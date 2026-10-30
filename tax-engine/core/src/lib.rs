@@ -36,6 +36,7 @@ mod methods;
 pub mod model;
 mod num;
 mod outputs;
+mod par;
 mod pool;
 mod swaps;
 pub mod time;

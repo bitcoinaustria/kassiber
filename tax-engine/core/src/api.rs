@@ -214,18 +214,20 @@ fn run_parsed(request: LedgerRequest) -> Result<String, StagedError> {
         _ => {
             let response = run::ledger(&request)?;
             let _serialize = crate::timing::span("serialize");
-            v2_json(&response)
+            response.to_json().map_err(serialization_failed)
         }
     }
 }
 
 fn v2_json<T: Serialize>(value: &T) -> Result<String, StagedError> {
-    serde_json::to_string(value).map_err(|error| {
-        StagedError::contract(EngineError::new(
-            ErrorClass::RuntimeError,
-            format!("Internal error: response serialization failed: {error}"),
-        ))
-    })
+    serde_json::to_string(value).map_err(serialization_failed)
+}
+
+fn serialization_failed(error: serde_json::Error) -> StagedError {
+    StagedError::contract(EngineError::new(
+        ErrorClass::RuntimeError,
+        format!("Internal error: response serialization failed: {error}"),
+    ))
 }
 
 fn v2_error_json(error: StagedError) -> String {

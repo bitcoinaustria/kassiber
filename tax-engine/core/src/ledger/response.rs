@@ -31,6 +31,7 @@ use crate::decimal::Decimal;
 use crate::error::{EngineError, ErrorClass};
 use crate::manifest::{DetailKind, EntryType, Manifest, QuarantineReason};
 use crate::model::{Dec, EntryInput, EntryKind};
+use crate::par;
 
 use super::request::{Regime, Ts, SCHEMA_VERSION};
 
@@ -145,7 +146,8 @@ pub struct ManifestResponse {
     pub manifest: Manifest,
 }
 
-/// The response to a successful `ledger` request.
+/// The response to a successful `ledger` request. [`LedgerResponse::to_json`]
+/// writes its fields in this order.
 #[derive(Clone, Debug, Serialize)]
 pub struct LedgerResponse {
     pub schema_version: u32,
@@ -162,6 +164,61 @@ pub struct LedgerResponse {
     pub tax_summary: Vec<SummaryOut>,
     pub holdings: Vec<HoldingOut>,
     pub carried_rows: Vec<CarriedRow>,
+}
+
+/// Lists at least this long are written in concurrent chunks.
+const PARALLEL_ITEMS: usize = 1_024;
+
+impl LedgerResponse {
+    /// `serde_json::to_string(self)`: the same text, with each long list
+    /// written in contiguous chunks on scoped threads and joined in order.
+    /// The first chunk that fails holds the first item that fails.
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        let mut out = String::with_capacity(1_024);
+        out.push_str("{\"schema_version\":");
+        out.push_str(&serde_json::to_string(&self.schema_version)?);
+        out.push_str(",\"ok\":");
+        out.push_str(&serde_json::to_string(&self.ok)?);
+        out.push_str(",\"engine_version\":");
+        out.push_str(&serde_json::to_string(&self.engine_version)?);
+        out.push_str(",\"entries\":");
+        list_json(&mut out, &self.entries)?;
+        out.push_str(",\"quarantines\":");
+        list_json(&mut out, &self.quarantines)?;
+        out.push_str(",\"intra_audit\":");
+        list_json(&mut out, &self.intra_audit)?;
+        out.push_str(",\"tax_summary\":");
+        list_json(&mut out, &self.tax_summary)?;
+        out.push_str(",\"holdings\":");
+        list_json(&mut out, &self.holdings)?;
+        out.push_str(",\"carried_rows\":");
+        list_json(&mut out, &self.carried_rows)?;
+        out.push('}');
+        Ok(out)
+    }
+}
+
+/// Appends `serde_json::to_string(items)`: a compact list is its items,
+/// each as written alone, joined by commas.
+fn list_json<T: Serialize + Sync>(out: &mut String, items: &[T]) -> serde_json::Result<()> {
+    let parts = par::chunks(items, PARALLEL_ITEMS / 8, |chunk| {
+        serde_json::to_string(chunk)
+    });
+    if let [Ok(Ok(text))] = parts.as_slice() {
+        out.push_str(text);
+        return Ok(());
+    }
+    out.push('[');
+    for (index, part) in parts.into_iter().enumerate() {
+        let text = par::unwrap(part)?;
+        if index > 0 {
+            out.push(',');
+        }
+        // A chunk is never empty: strip its own brackets.
+        out.push_str(&text[1..text.len() - 1]);
+    }
+    out.push(']');
+    Ok(())
 }
 
 /// One journal entry.
