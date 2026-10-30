@@ -135,3 +135,47 @@ fn gaps_adversarial_timing_smoke() {
     assert_eq!(actual.candidates.len(), 250);
     assert_eq!(actual.candidate_count, 251);
 }
+
+#[test]
+fn gaps_worklist_ranges_vectors() {
+    for case in vectors()["worklist_ranges"].as_array().unwrap() {
+        let actual = gaps::worklist_amount_ranges(case["rows"].as_array().unwrap());
+        if let Some(error) = case["error"].as_str() {
+            assert_eq!(actual.unwrap_err(), error);
+        } else {
+            assert_eq!(
+                serde_json::to_value(
+                    actual
+                        .unwrap()
+                        .into_iter()
+                        .map(|(asset, low, high)| serde_json::json!([
+                            asset,
+                            low.to_string().parse::<serde_json::Value>().unwrap(),
+                            high.to_string().parse::<serde_json::Value>().unwrap()
+                        ]))
+                        .collect::<Vec<_>>()
+                )
+                .unwrap(),
+                case["expected"]
+            );
+        }
+    }
+}
+
+#[test]
+fn gaps_compute_admission_precedes_ignored_ids() {
+    use serde_json::json;
+    for (amount, when, error) in [
+        (json!("²"), "2020-01-01T00:00:00Z", "ValueError"),
+        (json!(1000), "0001-01-01T00:00:00+01:00", "OverflowError"),
+    ] {
+        let rows = vec![
+            json!({"id":"out","profile_id":"p","wallet_id":"old","direction":"outbound","asset":"BTC","amount":amount,"fee":0,"occurred_at":when}),
+        ];
+        let ignored = BTreeSet::from(["out".to_owned()]);
+        assert_eq!(
+            gaps::compute(&rows, false, &ignored, &ignored, 250).unwrap_err(),
+            error
+        );
+    }
+}

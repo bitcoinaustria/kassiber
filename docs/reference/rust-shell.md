@@ -3521,3 +3521,20 @@ CLI-runner and `tests/rust_port` gate passed **74 tests and 178 subtests**; the
 regenerated inventory and the preflight shard passed **57 tests**. Mutation
 scratch trees were removed after their summaries. No push or PR was performed.
 
+### Gap search dependency checkpoint
+
+The continuation on `t3code/r5-transfers-7` imports only the pure gap-search
+module from R2 checkpoint `23c059dc` (`t3code/r2d-gaps`), alongside its
+synthetic CPython vectors. Journal composition, automatic pairing and product
+routing are unchanged by this prerequisite. The public `gaps::compute` facade
+accepts a raw worklist and explicit ignored populations; the SQL-worklist bounds
+facade uses the same admission normalizer as search.
+
+Eight named Rust tests cover 173 searches, 30 computations, 396 fingerprint
+pairs, seven review-revision cases, 31 display cases and 173 worklist-bound
+cases, plus admission-before-ignore and the adversarial timing witness.
+`crates/transfers/scripts/export_gap_search.py --check` replays the fixed inputs
+against this checkout's Python. All 109 applicable R2 search mutations and four
+new admission/worklist mutations were killed in disposable scratch trees;
+the build trees were removed after their summaries. This prerequisite alone
+adds no served CLI commands or daemon kinds.

@@ -20,7 +20,7 @@ mod recorded;
 mod reviewed;
 mod safety;
 mod samourai;
-mod text;
+pub(crate) mod text;
 use crate::{
     codec::{text, truth},
     components, evidence,

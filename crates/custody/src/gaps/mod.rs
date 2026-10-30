@@ -321,3 +321,29 @@ mod tests {
         }
     }
 }
+
+/// Bounds used by Python's SQL worklist loader above the 50,000-row threshold.
+/// Admission uses the same normalizer as search, before any claimed-id filter.
+pub fn worklist_amount_ranges(rows: &[Value]) -> Result<Vec<(String, BigInt, BigInt)>, String> {
+    let mut ranges = std::collections::BTreeMap::<String, (BigInt, BigInt)>::new();
+    for row in rows {
+        let Some(leg) = normalize::leg(row, &BTreeSet::new())? else {
+            continue;
+        };
+        let minimum_total: BigInt = &leg.principal * 800_000_u32 / 1_000_000_u32;
+        let minimum = ((minimum_total + 255_u32) / 256_u32).max(BigInt::from(1));
+        let maximum: BigInt = &leg.principal + &leg.principal * 250_000_u32 / 1_000_000_u32;
+        ranges
+            .entry(leg.asset)
+            .and_modify(|(low, high)| {
+                *low = low.clone().min(minimum.clone());
+                *high = high.clone().max(maximum.clone());
+            })
+            .or_insert((minimum, maximum));
+    }
+    Ok(ranges
+        .into_iter()
+        .map(|(asset, (low, high))| (asset, low, high))
+        .collect())
+}
+
