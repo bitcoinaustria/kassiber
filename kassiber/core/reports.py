@@ -5604,7 +5604,12 @@ def _write_csv_rows(path, rows):
                 os.chmod(staged, mode)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(staged, target)
+        try:
+            os.replace(staged, target)
+        except OSError as exc:
+            # Report the requested output, including when it became a directory
+            # during writing. A random staging path is not useful to callers.
+            raise OSError(exc.errno, exc.strerror, os.fspath(path)) from None
         _fsync_csv_directory(target.parent)
     finally:
         if descriptor is not None:
