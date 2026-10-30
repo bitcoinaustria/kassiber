@@ -113,7 +113,15 @@ impl Money {
             .div(&Decimal::from_str("100000000000").unwrap(), &Context::RP2)
             .map_err(error)?;
         match self {
-            Self::Finite(d) => Ok(Self::Finite(d.div(&btc, &Context::RP2).map_err(error)?)),
+            Self::Finite(d) => {
+                let rate = d.div(&btc, &Context::RP2).map_err(error)?;
+                // Python finite_decimal canonicalizes the derived rate too.
+                Ok(Self::Finite(if rate.is_zero() {
+                    Decimal::zero()
+                } else {
+                    rate
+                }))
+            }
             Self::Special(s) if s.contains("sNaN") => Err("InvalidOperation".into()),
             Self::Special(s) => Ok(Self::Special(s.clone())),
         }

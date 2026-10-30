@@ -12,7 +12,8 @@ CASES = (
     ('carry', 'LBTC', '12.5', 'carrying-value', 'generic', None),
     ('at_eth', 'ETH', '3.333', 'carrying-value', 'at', None),
     ('no_value', 'LBTC', None, 'carrying-value', 'generic', None),
-    ('tiny', 'EUR', '0.00000000000000000000000000000001', 'taxable', 'generic', None),
+    # Both the value and the rate for the 50-unit payout must meet the floor.
+    ('tiny', 'EUR', '0.000000000005', 'taxable', 'generic', None),
     ('huge', 'EUR', '123456789012345678901234567890123456789', 'taxable', 'generic', None),
     ('partial_taxable', 'EUR', '10', 'taxable', 'generic', '0.0000004'),
     ('partial_carry', 'LBTC', '10', 'carrying-value', 'generic', '0.0000004'),

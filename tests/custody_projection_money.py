@@ -91,6 +91,7 @@ def operands():
         ('unit_rate',dict(fiat_rate=0,fiat_rate_exact='kept',fiat_value_exact='junk')),
         ('empty_exact',dict(fiat_value_exact='',fiat_value='3.50')),('invalid_exact',dict(fiat_value_exact='junk',fiat_value=3)),
         ('negative',dict(fiat_value_exact='-1.00')),('signed_zero',dict(fiat_value_exact='-0.00')),
+        ('signed_zero_wide',dict(amount=10**60+1,fiat_value_exact='-0.00')),
         ('nan',dict(fiat_value_exact='NaN0012')),('snan',dict(fiat_value_exact='sNaN')),('inf',dict(fiat_value_exact='Infinity')),('negative_inf',dict(fiat_value_exact='-Infinity')),('negative_nan',dict(fiat_value_exact='-NaN0012')),
         ('derived_overflow',dict(amount=1,fiat_value_exact='1e308')),
         ('price_before_amount',dict(amount='bad',fiat_value_exact='Infinity')),

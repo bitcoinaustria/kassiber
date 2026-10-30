@@ -22922,5 +22922,15 @@
       "projection_selected_composition_vectors"
     ],
     "rule": "A selected partial slice cannot reuse whole reviewed payout economics."
+  },
+  {
+    "id": "R7-derived-zero-scale",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "Ok(Self::Finite(if rate.is_zero() {",
+    "replace": "Ok(Self::Finite(if false {",
+    "expect_failing": [
+      "projection_slice_pricing_vectors"
+    ],
+    "rule": "Derived zero rates use Python finite_decimal canonical zero even for wide quantities."
   }
 ]
