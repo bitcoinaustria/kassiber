@@ -60,18 +60,19 @@
     "refresh": "Aktualisieren",
     "refreshing": "Wird aktualisiert",
     "refreshAction": "{{action}} {{label}}",
-    "balanceToggle": {
-      "showFiat": "Guthaben in Euro anzeigen",
-      "showBitcoin": "Guthaben in Bitcoin anzeigen"
-    },
     "metric": {
       "balance": "Guthaben",
       "transactions": "Transaktionen",
-      "transactionsDetail": "In diese Wallet importiert",
       "lastSync": "Letzter Sync",
       "gapLimit": "Gap Limit",
-      "gapLimitDetail": "Fenster ungenutzter Adressen",
-      "source": "Quelle"
+      "utxos": "UTXOs",
+      "utxosConfirmed": "Alle bestätigt",
+      "utxosNone": "Keine unverbrauchten Coins",
+      "utxosPending_one": "{{count}} unbestätigt",
+      "utxosPending_other": "{{count}} unbestätigt",
+      "utxosUnsupported": "Für diese Quelle nicht erfasst",
+      "activitySpan": "{{from}} – {{to}}",
+      "noActivity": "Noch keine Aktivität"
     },
     "source": {
       "live": "Live-Sync-Quelle",
@@ -136,20 +137,71 @@
     },
     "recentTransactions": {
       "title": "Letzte Transaktionen",
-      "showAll": "Alle anzeigen",
       "empty": "Für diese Wallet wurden noch keine Transaktionen importiert.",
       "refreshNow": "Jetzt aktualisieren",
-      "importFile": "Datei importieren",
-      "pending": "Ausstehend"
+      "importFile": "Datei importieren"
     },
     "balanceHistory": {
       "title": "Guthabenverlauf",
-      "description": "Importiertes Guthaben der letzten {{count}} Monate.",
-      "change": "Änderung über {{count}} Mon."
+      "asOf": "Stand {{month}}",
+      "since": "seit {{month}}",
+      "rangeLabel": "Zeitraum des Guthabenverlaufs",
+      "range": {
+        "1y": "1J",
+        "3y": "3J",
+        "all": "Alle"
+      }
+    },
+    "tabs": {
+      "transactions": "Transaktionen",
+      "coins": "Coins",
+      "details": "Details"
+    },
+    "attention": {
+      "review_one": "{{count}} Transaktion muss geprüft werden",
+      "review_other": "{{count}} Transaktionen müssen geprüft werden",
+      "prices_one": "{{count}} ohne Preis",
+      "prices_other": "{{count}} ohne Preis",
+      "openReview": "Prüfung öffnen",
+      "openPrices": "Ohne Preis anzeigen"
+    },
+    "transactionsTable": {
+      "date": "Datum",
+      "type": "Typ",
+      "description": "Beschreibung",
+      "amount": "Betrag",
+      "value": "Wert",
+      "status": "Status",
+      "showing": "{{shown}} von {{total}}",
+      "showMore_one": "{{count}} weitere anzeigen",
+      "showMore_other": "{{count}} weitere anzeigen",
+      "openAll": "In Transaktionen öffnen"
+    },
+    "coins": {
+      "title": "Coin-Verteilung",
+      "partial": "Umfasst die ältesten {{loaded}} von {{total}} Coins",
+      "extremes": "Größter {{largest}} · Median {{median}} · kleinster {{smallest}}",
+      "bySize": "Nach Größe",
+      "byAge": "Nach Alter seit Bestätigung",
+      "count_one": "{{count}} Coin",
+      "count_other": "{{count}} Coins",
+      "bandTitle_one": "{{count}} Coin · {{amount}} · {{share}} % der Coins",
+      "bandTitle_other": "{{count}} Coins · {{amount}} · {{share}} % der Coins",
+      "size": {
+        "below": "Unter {{max}}",
+        "between": "{{min}} – {{max}}",
+        "atLeast": "Ab {{min}}"
+      },
+      "age": {
+        "unconfirmed": "Unbestätigt",
+        "month": "Unter einem Monat",
+        "year": "1–12 Monate",
+        "threeYears": "1–3 Jahre",
+        "older": "Über 3 Jahre"
+      }
     },
     "connectionDetails": {
       "title": "Verbindungsdetails",
-      "description": "Lokale Sync-Konfiguration.",
       "syncMode": "Sync-Modus",
       "backend": "Backend",
       "account": "Konto",
@@ -182,18 +234,6 @@
       "errorMissingDescriptor": "Diese Wallet hat kein Wallet-Export-Material gespeichert.",
       "errorPlaintextAck": "Tippe {{ack}}, um dieses lokale Secret zu kopieren.",
       "couldNotCopy": "Wallet-Export-Material konnte nicht kopiert werden."
-    },
-    "relatedViews": {
-      "title": "Verwandte Ansichten",
-      "description": "Springe zu den Datensätzen dieser Wallet in Kassiber.",
-      "allTransactions": "Alle Transaktionen",
-      "allTransactionsDetail": "{{value}} in dieser Wallet",
-      "needsReview": "Prüfung erforderlich",
-      "needsReviewDetail": "Zeilen, die noch nicht als geprüft markiert sind",
-      "missingPrice": "Fehlender Kurs",
-      "missingPriceDetail": "Zeilen ohne Kurs blockieren Steuerberichte",
-      "sourceOfFunds": "Source of Funds",
-      "sourceOfFundsDetail": "Nachweis- & Herkunftsbereitschaft"
     },
     "backendDetail": {
       "notConfigured": "Nicht konfiguriert"
@@ -569,10 +609,6 @@
     }
   },
   "utxos": {
-    "blocks3dAria": "{{count}} unverbrauchte Coins als Glasblöcke, höher bei größeren Beträgen. Zum Drehen ziehen.",
-    "blocks3dLoading": "Coin-Ansicht wird vorbereitet…",
-    "blocks3dLegend": "Jeder Block ist eine unverbrauchte Coin, so hoch wie ihr Betrag im Verhältnis zur größten Coin dieser Wallet. Milchig: noch nicht bestätigt.",
-    "blocks3dLegendHidden": "Jeder Block ist eine unverbrauchte Coin. Die Werte sind ausgeblendet, deshalb sind alle Blöcke gleich hoch. Milchig: noch nicht bestätigt.",
     "title": "UTXOs",
     "countOf": "{{returned}} von {{total}}",
     "loading": "Coin-Bestand wird geladen…",
@@ -607,6 +643,8 @@
     "openExplorer": "UTXO-Transaktion auf {{explorer}} öffnen",
     "transportedRows": "{{returned}} übertragene Zeilen von insgesamt {{total}} aktiven UTXOs werden angezeigt.",
     "loadedRows": "{{loaded}} von {{total}} aktiven UTXOs geladen.",
+    "showMore_one": "{{count}} weitere anzeigen",
+    "showMore_other": "{{count}} weitere anzeigen",
     "refresh": "Aktualisieren",
     "refreshing": "Wird aktualisiert",
     "dialog": {
