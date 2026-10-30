@@ -206,6 +206,28 @@ impl<'c, 'a> Composer<'c, 'a> {
         })
     }
 
+    /// An entry's `crypto_fee` and `fiat_fee`, as `check_entry` derives
+    /// them: every kind stores both.
+    fn fees(entry: &Entry) -> (&Decimal, &Decimal) {
+        match &entry.detail {
+            Detail::In {
+                crypto_fee,
+                fiat_fee,
+                ..
+            }
+            | Detail::Out {
+                crypto_fee,
+                fiat_fee,
+                ..
+            }
+            | Detail::Intra {
+                crypto_fee,
+                fiat_fee,
+                ..
+            } => (crypto_fee, fiat_fee),
+        }
+    }
+
     fn crypto_in(lot: &Entry) -> EngineResult<&Decimal> {
         lot.crypto_in()
             .ok_or_else(|| internal("a lot is not an acquisition"))
@@ -244,22 +266,22 @@ impl<'c, 'a> Composer<'c, 'a> {
         gain_loss: &GainLossOut,
         event: &'c BuiltEntry,
     ) -> EngineResult<FragmentOut> {
-        let derived = event.entry.derived();
         let lot = match gain_loss.lot {
             None => None,
             Some(number) => {
                 let built = self.entry(number, EntryKind::In)?;
-                let lot = built.entry.derived();
+                let (crypto_fee, fiat_fee) = Self::fees(&built.entry);
                 Some(FragmentLot {
                     row: self.row_id(built),
-                    spot_price: lot.spot_price,
-                    fiat_fee: lot.fiat_fee,
-                    crypto_fee: lot.crypto_fee,
+                    spot_price: Dec(built.entry.spot_price.clone()),
+                    fiat_fee: Dec(fiat_fee.clone()),
+                    crypto_fee: Dec(crypto_fee.clone()),
                     basis: Dec(self.lot_basis(&built.entry)?.clone()),
                     crypto_in: Dec(Self::crypto_in(&built.entry)?.clone()),
                 })
             }
         };
+        let (crypto_fee, fiat_fee) = Self::fees(&event.entry);
         Ok(FragmentOut {
             crypto_amount: gain_loss.crypto_amount.clone(),
             cost_basis: gain_loss.fiat_cost_basis.clone(),
@@ -268,9 +290,9 @@ impl<'c, 'a> Composer<'c, 'a> {
             unit_basis_override: gain_loss.unit_cost_basis_override.clone(),
             event: FragmentEvent {
                 row: self.row_id(event),
-                spot_price: derived.spot_price,
-                fiat_fee: derived.fiat_fee,
-                crypto_fee: derived.crypto_fee,
+                spot_price: Dec(event.entry.spot_price.clone()),
+                fiat_fee: Dec(fiat_fee.clone()),
+                crypto_fee: Dec(crypto_fee.clone()),
             },
             lot,
         })
