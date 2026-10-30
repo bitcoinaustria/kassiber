@@ -180,16 +180,13 @@ impl Decision {
     }
 }
 
-type Validated = (BTreeMap<String, Value>, Vec<Claim>, Vec<Value>);
-fn validate(observations: &[Value], claims: &[Value]) -> Result<Validated, String> {
+type Validated<'a> = (BTreeMap<String, &'a Value>, Vec<Claim>, Vec<Value>);
+fn validate<'a>(observations: &[&'a Value], claims: &[Value]) -> Result<Validated<'a>, String> {
     let mut by_hash = BTreeMap::new();
-    for observation in observations {
+    for &observation in observations {
         validate_observation(observation)?;
         if by_hash
-            .insert(
-                codec::text(&observation["quantity_hash"]),
-                observation.clone(),
-            )
+            .insert(codec::text(&observation["quantity_hash"]), observation)
             .is_some()
         {
             return Err("ValueError".into());
@@ -292,7 +289,7 @@ fn validate(observations: &[Value], claims: &[Value]) -> Result<Validated, Strin
         let source = Slice {
             hash: hash.clone(),
             start: BigInt::from(0),
-            end: principal(&by_hash[&hash])?,
+            end: principal(by_hash[&hash])?,
         };
         let value = json!({"claim_id":format!("malformed-claim-bundle:{hash}"),"source":source.value(),"state":"custody_suspense","priority":{"value":priority},"reason":"malformed_claim_bundle"});
         valid.push(Claim::parse(&value)?);
@@ -302,7 +299,7 @@ fn validate(observations: &[Value], claims: &[Value]) -> Result<Validated, Strin
 }
 
 fn source_decisions(
-    by_hash: &BTreeMap<String, Value>,
+    by_hash: &BTreeMap<String, &Value>,
     claims: &[Claim],
 ) -> Result<Vec<Decision>, String> {
     let mut by_source: BTreeMap<&str, Vec<&Claim>> = BTreeMap::new();
@@ -519,8 +516,8 @@ fn atomic_bundles(decisions: &mut [Decision], claims: &[Claim]) {
 }
 
 fn postings(
-    by_hash: &BTreeMap<String, Value>,
-    input: &[Value],
+    by_hash: &BTreeMap<String, &Value>,
+    input: &[&Value],
     decisions: &[Decision],
 ) -> Result<Vec<Value>, String> {
     let mut result = Vec::new();
@@ -577,7 +574,7 @@ fn postings(
         };
         result.push(posting(
             format!("decision:{}:{}:{}", source.hash, source.start, source.end),
-            &by_hash[&source.hash],
+            by_hash[&source.hash],
             &kind,
             location,
             source.amount(),
@@ -619,6 +616,12 @@ fn postings(
 /// Arbitrate Python canonical observations and compiled claims without bounded
 /// integer conversions or any side effects. Malformed bundles become suspense.
 pub fn project(observations: &[Value], claims: &[Value]) -> Result<Value, String> {
+    project_refs(&observations.iter().collect::<Vec<_>>(), claims)
+}
+
+/// `project` over borrowed observations; only the projection's own list
+/// copies them.
+pub(crate) fn project_refs(observations: &[&Value], claims: &[Value]) -> Result<Value, String> {
     let (by_hash, claims, errors) = validate(observations, claims)?;
     let mut decisions = source_decisions(&by_hash, &claims)?;
     destination_overlaps(&mut decisions);
@@ -644,7 +647,7 @@ pub fn project(observations: &[Value], claims: &[Value]) -> Result<Value, String
     projection.insert("$type".into(), json!("QuantityProjection"));
     projection.insert(
         "observations".into(),
-        Value::Array(by_hash.into_values().collect()),
+        Value::Array(by_hash.into_values().cloned().collect()),
     );
     projection.insert(
         "decisions".into(),

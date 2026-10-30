@@ -753,14 +753,13 @@ fn compose(v: &Operands) -> Result<State, String> {
     claims.extend_from_slice(array(&gaps[0]));
     claims.extend_from_slice(array(&native["claims"]));
     claims.extend_from_slice(array(&v["claims"]));
-    let observations: Vec<_> = array(&canonical["events"])
+    let observations: Vec<&Value> = array(&canonical["events"])
         .iter()
         .flat_map(|e| array(&e["legs"]))
-        .cloned()
         .collect();
     drop(span);
     let span = crate::timing::span("quantity.project");
-    let projection = super::project(&observations, &claims)?;
+    let projection = super::arbitration::project_refs(&observations, &claims)?;
     drop(span);
     let _span = crate::timing::span("quantity.issues");
     // Rows by id, as the JSON object of copies would hold them.
