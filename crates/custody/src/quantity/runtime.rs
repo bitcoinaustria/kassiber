@@ -47,13 +47,28 @@ fn row_pool(row: &Value) -> Option<Pool> {
         "msat".into(),
     ])
 }
+/// Rows by transaction id: a JSON object, or borrowed rows keyed the same way.
+pub trait Rows {
+    fn get(&self, id: String) -> Option<&Value>;
+}
+impl Rows for Value {
+    fn get(&self, id: String) -> Option<&Value> {
+        Value::get(self, id)
+    }
+}
+impl Rows for BTreeMap<String, &Value> {
+    fn get(&self, id: String) -> Option<&Value> {
+        BTreeMap::get(self, &id).copied()
+    }
+}
+
 /// Deterministic barriers preserve finalized siblings, while equal-time distinct
 /// events fail closed. Pool identity deliberately omits the rail.
 pub fn tax_eligibility(
     canonical: &Value,
     projection: &Value,
     issues: &[Value],
-    rows: &Value,
+    rows: &impl Rows,
 ) -> Result<Value, String> {
     let mut orders = BTreeMap::new();
     let mut pools = BTreeMap::new();
@@ -442,7 +457,7 @@ fn diagnostic_json(v: &kassiber_pyjson::Value) -> Result<Value, String> {
 pub fn whole_issues(
     canonical: &Value,
     projection: &Value,
-    rows: &Value,
+    rows: &impl Rows,
     component: &[Value],
     gaps: &[Value],
     native: &[Value],
@@ -493,7 +508,7 @@ pub fn whole_issues(
     }
     for (ordinal, b) in blockers.iter().enumerate() {
         let id = text(&b["transaction_id"]);
-        let row = &rows[&id];
+        let row = rows.get(id.clone()).unwrap_or(&Value::Null);
         let reason = if codec::truth(&b["reason"]) {
             text(&b["reason"])
         } else {
@@ -748,12 +763,12 @@ fn compose(v: &Operands) -> Result<State, String> {
     let projection = super::project(&observations, &claims)?;
     drop(span);
     let _span = crate::timing::span("quantity.issues");
-    let rows: serde_json::Map<_, _> = array(&v["rows"])
+    // Rows by id, as the JSON object of copies would hold them.
+    let rows: BTreeMap<String, &Value> = array(&v["rows"])
         .iter()
         .filter(|r| !r["id"].is_null() && r["id"] != "")
-        .map(|r| (text(&r["id"]), r.clone()))
+        .map(|r| (text(&r["id"]), r))
         .collect();
-    let rows = Value::Object(rows);
     let issues = whole_issues(
         canonical,
         &projection,
