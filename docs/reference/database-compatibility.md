@@ -58,3 +58,38 @@ Primary automated coverage:
 - They do not prove that an unknown wallet was the user’s wallet. That fact is
   unknowable from a database alone and remains a user-reviewed boundary.
 
+
+## Transaction page index
+
+`idx_transactions_profile_page` is a nonunique covering index on
+`transactions(profile_id, occurred_at, created_at, id, wallet_id)`. It changes
+no row values, accounting authority, migration audit, or input version. Existing
+indexes remain. Python fresh creation and the Rust creation transcript include
+it; existing books defer creation from the base installer to the final ordered
+compatibility step, after table rebuilds. The msat rebuild restores it too.
+Python uses a savepoint and Rust a transaction. Both check the same stored
+index definition and reject a conflicting definition without replacing it.
+Unchanged creation is a no-op: no index rebuild, root-page change, or schema
+cookie increment from this step. No `ANALYZE` or planner hints are used.
+
+**Upgrade Rust before opening a book with the new Python build.** Rust at
+`f261b9b2` rejects an additional index through its structural admission gate.
+The gate remains strict. Older Python can ignore the additive index. Do not
+remove the index to bypass admission; deploy the matching Rust build instead.
+
+The page-index migration tests cover current books missing the index with
+Python-first and Rust-first upgrades, plaintext and SQLCipher, complete typed
+logical row dumps, subsequent opens, injected rollback and process termination.
+The existing ordered matrix covers both historical fixtures and SQLCipher
+copies: pair-free variants migrate in Rust; original authored-pair fixtures
+retain their explicit R2 refusal and must first migrate in Python. This index
+does not extend Rust's authored-consolidation support.
+
+Python's existing compatibility pass recreates unrelated indexes, views and
+triggers on every open (a fresh control book advances `schema_version` by 36).
+This change does not address that existing behavior. Whole-open schema-object
+and row equality and isolated page-index cookie/root-page stability are checked
+separately; whole-open Python cookie stability is not claimed.
+
+See the [page-index implementation evidence](transaction-page-index.md) for
+measurements and verification results.

@@ -1372,6 +1372,8 @@ CREATE INDEX IF NOT EXISTS idx_import_batches_profile_time
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON transactions(profile_id, occurred_at, created_at, id, wallet_id);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_active_time
     ON transactions(profile_id, excluded, occurred_at, created_at, id);
 
@@ -3543,7 +3545,10 @@ def _install_base_schema(conn):
     # connection: encrypted onboarding already creates a nonempty, empty-schema
     # file. Existing schemas keep their current migration transaction boundaries.
     empty_schema = conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None
-    schema = "BEGIN;\n" + SCHEMA + "\nCOMMIT;" if empty_schema else SCHEMA
+    schema = "BEGIN;\n" + SCHEMA + "\nCOMMIT;" if empty_schema else SCHEMA.replace(
+        "CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON "
+        "transactions(profile_id, occurred_at, created_at, id, wallet_id);", ""
+    )
     conn.executescript(schema)
 
 
@@ -5713,6 +5718,33 @@ def ensure_schema_compat(conn):
     if legacy_ledger.retire_if_empty(conn):
         conn.commit()
 
+    _ensure_transaction_page_index(conn)
+
+
+def _ensure_transaction_page_index(conn):
+    """Add the covering page index atomically, without touching unchanged DDL."""
+    conn.execute("SAVEPOINT transaction_page_index")
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_transactions_profile_page "
+            "ON transactions(profile_id, occurred_at, created_at, id, wallet_id)"
+        )
+        definition = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' "
+            "AND name='idx_transactions_profile_page'"
+        ).fetchone()[0]
+        if " ".join(definition.lower().split()).replace(" if not exists", "") != (
+            "create index idx_transactions_profile_page on "
+            "transactions(profile_id, occurred_at, created_at, id, wallet_id)"
+        ):
+            raise sqlite3.DatabaseError("unexpected transaction page index definition")
+        conn.execute("RELEASE transaction_page_index")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK TO transaction_page_index")
+            conn.execute("RELEASE transaction_page_index")
+        raise
+
 
 def _ensure_custody_economic_term_review_notes(conn):
     """Add immutable per-review notes and backfill them before reader cutover."""
@@ -7325,6 +7357,10 @@ def _recreate_msat_migration_indexes(conn):
     """Restore indexes dropped by SQLite table rebuild migrations."""
     conn.executescript(
         """
+        SAVEPOINT transaction_page_index;
+        CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON transactions(profile_id, occurred_at, created_at, id, wallet_id);
+        RELEASE transaction_page_index;
+
         CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
             ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 
