@@ -395,7 +395,18 @@
       "full_access": "Automatisch freigegeben (Vollzugriff)",
       "session": "Automatisch freigegeben (für diesen Chat erlaubt)"
     },
-    "undoHint": "Lässt sich rückgängig machen – frag den Assistenten"
+    "undoHint": "Lässt sich rückgängig machen – frag den Assistenten",
+    "readDocument": {
+      "summary_one": "{{count}} Zeile aus dem Dokument gelesen: {{ready}} bereit, {{held}} zur Prüfung",
+      "summary_other": "{{count}} Zeilen aus dem Dokument gelesen: {{ready}} bereit, {{held}} zur Prüfung"
+    },
+    "importDocument": {
+      "ready_one": "Bereit: {{count}} neue Transaktion aus dem Dokument in {{wallet}}",
+      "ready_other": "Bereit: {{count}} neue Transaktionen aus dem Dokument in {{wallet}}",
+      "blocked": "Das Dokument kann noch nicht in {{wallet}} importiert werden",
+      "applied_one": "{{count}} Transaktion aus dem Dokument in {{wallet}} importiert",
+      "applied_other": "{{count}} Transaktionen aus dem Dokument in {{wallet}} importiert"
+    }
   },
   "history": {
     "trigger": "Verlauf",
@@ -571,7 +582,8 @@
         "updates_existing_rows_not_rolled_back": "Bestehende Transaktionen erhalten die Preise aus der Datei. Ein Zurücknehmen macht das nicht rückgängig.",
         "overlaps_existing_history": "Diese Verbindung hat im selben Zeitraum bereits Transaktionen.",
         "external_ids_in_other_wallets": "Einige Transaktions-IDs gibt es auch in anderen Verbindungen. Prüfe, ob die Verbindung stimmt.",
-        "history_starts_after_first_funding": "Danach gibt die Verbindung mehr aus, als sie erhalten hat: Frühere Historie fehlt."
+        "history_starts_after_first_funding": "Danach gibt die Verbindung mehr aus, als sie erhalten hat: Frühere Historie fehlt.",
+        "rows_held_for_review": "Zeilen, bei denen sich die Erkennung unsicher war, werden ausgelassen. Prüfe sie mit OCR (Aus Foto oder PDF importieren) auf der Transaktionsseite."
       },
       "blockers": "Kann nicht freigegeben werden",
       "blocker": {
@@ -585,7 +597,8 @@
         "header_is_preamble": "Die erste Zeile ist nicht die Kopfzeile. Entferne die Zeilen darüber.",
         "attachment_not_tabular": "Fotos und PDFs laufen über den Dokumentimport auf diesem Gerät.",
         "rollback_removes_reviewed_work": "Das Zurücknehmen würde auch geprüfte Arbeit an diesen Transaktionen löschen.",
-        "nothing_to_roll_back": "Dieser Import hat keine Transaktionen mehr."
+        "nothing_to_roll_back": "Dieser Import hat keine Transaktionen mehr.",
+        "nothing_ready": "Die Erkennung war sich bei keiner Zeile sicher. Prüfe das Dokument mit OCR (Aus Foto oder PDF importieren) auf der Transaktionsseite."
       },
       "desktopOnly": "Erledige das selbst in der Desktop-App oder der CLI.",
       "rowsToDelete": "Gelöschte Transaktionen",

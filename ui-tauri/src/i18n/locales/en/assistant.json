@@ -395,7 +395,18 @@
       "full_access": "Approved automatically (Full access)",
       "session": "Approved automatically (allowed for this chat)"
     },
-    "undoHint": "Can be undone — ask the assistant"
+    "undoHint": "Can be undone — ask the assistant",
+    "readDocument": {
+      "summary_one": "Read {{count}} row from the document: {{ready}} ready, {{held}} for review",
+      "summary_other": "Read {{count}} rows from the document: {{ready}} ready, {{held}} for review"
+    },
+    "importDocument": {
+      "ready_one": "Ready: {{count}} new transaction from the document into {{wallet}}",
+      "ready_other": "Ready: {{count}} new transactions from the document into {{wallet}}",
+      "blocked": "Not ready to import the document into {{wallet}}",
+      "applied_one": "Imported {{count}} transaction from the document into {{wallet}}",
+      "applied_other": "Imported {{count}} transactions from the document into {{wallet}}"
+    }
   },
   "history": {
     "trigger": "History",
@@ -571,7 +582,8 @@
         "updates_existing_rows_not_rolled_back": "Existing transactions get the file's prices. A rollback does not undo that.",
         "overlaps_existing_history": "This connection already has transactions in the same period.",
         "external_ids_in_other_wallets": "Some transaction ids are also in other connections. Check this is the right connection.",
-        "history_starts_after_first_funding": "Afterwards the connection spends more than it received: earlier history is missing."
+        "history_starts_after_first_funding": "Afterwards the connection spends more than it received: earlier history is missing.",
+        "rows_held_for_review": "Rows the reader was unsure of are left out. Review them with OCR (Import from photo or PDF) on the Transactions page."
       },
       "blockers": "Cannot be approved",
       "blocker": {
@@ -585,7 +597,8 @@
         "header_is_preamble": "The first row is not the header. Remove the lines above it.",
         "attachment_not_tabular": "Photos and PDFs use the on-device document import.",
         "rollback_removes_reviewed_work": "Rolling back would also delete reviewed work on these transactions.",
-        "nothing_to_roll_back": "This import has no transactions left."
+        "nothing_to_roll_back": "This import has no transactions left.",
+        "nothing_ready": "The reader was not sure of any row. Review the document with OCR (Import from photo or PDF) on the Transactions page."
       },
       "desktopOnly": "Do this yourself in the desktop or CLI.",
       "rowsToDelete": "Transactions deleted",
