@@ -37,6 +37,9 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+from tests import cli_runner
+
 SCOPE = ["--workspace", "Main", "--profile", "Default"]
 HEADER = "date,txid,direction,asset,amount,fee,fiat_rate,description,kind"
 SEEDS = {"generic": 1, "multi-wallet": 7}
@@ -144,9 +147,9 @@ def main() -> int:
     env = {**os.environ, "KASSIBER_DISABLE_UPDATE_CHECK": "1", "KASSIBER_NO_EGRESS": "1"}
 
     def run(*cli_args: str, check: bool = True) -> subprocess.CompletedProcess:
-        result = subprocess.run(
-            [sys.executable, "-m", "kassiber", "--machine", "--data-root", str(root), *cli_args],
-            cwd=REPO_ROOT, env=env, capture_output=True, text=True,
+        result = cli_runner.run(
+            ["--machine", "--data-root", str(root), *cli_args],
+            reference=True, cwd=REPO_ROOT, env=env, capture_output=True, text=True,
         )
         if check and result.returncode != 0:
             raise SystemExit(f"FAILED {' '.join(cli_args)}: {result.stdout[:600]} {result.stderr[-600:]}")
