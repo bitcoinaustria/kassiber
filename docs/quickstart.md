@@ -197,6 +197,10 @@ python3 -m kassiber transfers payouts create --tx-out <out-id> \
   --counterparty "recipient or exchange" --policy carrying-value
 ```
 
+Add `--payout-occurred-at` with an RFC3339 time such as
+`2025-09-01T12:00:30Z` when the payout settled later than the outbound;
+Kassiber stores it in UTC. Other formats are not supported.
+
 When one on-chain spend both returns funds to an owned wallet and pays a
 provider/recipient, add `--out-amount <btc>` to record only the payout portion
 of the source transaction. The remaining source amount can still resolve as the
@@ -209,7 +213,8 @@ Cross-asset BTC ↔ LBTC peg-ins/peg-outs and submarine swaps:
   disable it with `profiles set --no-bitcoin-rail-carrying-value`, or pass
   `--policy taxable` on a specific pair.
 - **Austrian profiles** — reviewed `--policy carrying-value` pairs get
-  Austrian swap markers and run through RP2's native multi-asset hook;
+  Austrian swap markers and run through the tax engine's Austrian multi-asset
+  hook;
   `--policy taxable` stays on the SELL + BUY path.
 
 ## 4. Process journals and run reports

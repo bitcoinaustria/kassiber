@@ -15,6 +15,7 @@ from kassiber.core.engines.rp2 import (
     _append_rp2_journal_entries,
     _build_rp2_accounting_engine,
     _rp2_configuration,
+    _use_tax_engine_backend,
 )
 from kassiber.errors import AppError
 
@@ -131,6 +132,13 @@ class ComposeEventNotesTest(unittest.TestCase):
 
 
 def _pool_result(country, buys, sales, from_date=date.min, to_date=date.max):
+    # Drives RP2 objects directly, so the adapter must use the RP2 backend
+    # throughout, including Austrian classification of the result.
+    with _use_tax_engine_backend("rp2"):
+        return _rp2_pool_result(country, buys, sales, from_date, to_date)
+
+
+def _rp2_pool_result(country, buys, sales, from_date, to_date):
     from rp2.configuration import Configuration
     from rp2.in_transaction import InTransaction
     from rp2.input_data import InputData

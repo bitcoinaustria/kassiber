@@ -1,13 +1,14 @@
 # Capital-gains explanations
 
-The capital-gains report's **Explain** action shows the exact RP2 gain fragments
-that contributed to one persisted result. Each fragment includes proceeds,
-consumed basis, gain, quantity, source pricing provenance and whole-source fees.
-Amounts are decimal strings, never recalculated from rounded display values.
-Source fees describe the complete source event; they must not be summed once per
-fragment. The contribution proceeds are RP2's fee-inclusive fragment result.
+The capital-gains report's **Explain** action shows the exact
+[tax engine](tax-engine.md) gain fragments that contributed to one persisted
+result. Each fragment includes proceeds, consumed basis, gain, quantity, source
+pricing provenance and whole-source fees. Amounts are decimal strings, never
+recalculated from rounded display values. Source fees describe the complete
+source event; they must not be summed once per fragment. The contribution
+proceeds are the engine's fee-inclusive fragment result.
 
-RP2 selects lots and computes any pool unit-basis override. The explanation
+The engine selects lots and computes any pool unit-basis override. The explanation
 retains that output in `journal_entries.calculation_json` while the canonical
 journal is built. It does not replay the engine on read. In pooled methods the
 selected acquisition is a matching anchor, not a claim that its original price
@@ -45,8 +46,8 @@ aggregate report cell or produce financial AI narration.
 For synthetic carrying-value acquisitions, the explanation follows eligible
 reviewed relations from `journal_custody_projection_relations`, including
 cross-rail economic conversions. Each acquisition's `inherited_basis` includes
-those relations and the outgoing disposal's reconciled, retained RP2 calculation,
-recursively following further synthetic acquisitions. This exposes the original
+those relations and the outgoing disposal's reconciled, retained engine
+calculation, recursively following further synthetic acquisitions. This exposes the original
 acquisition price and whole-source fees even when the later sale names only a
 synthetic rail-entry lot. These are complete historical source calculations;
 Kassiber does not allocate their individual lots or fees to the later sale.

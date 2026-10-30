@@ -23,11 +23,18 @@ if ! command -v uv >/dev/null 2>&1; then
   echo "quality gate requires uv; run ./scripts/bootstrap-dev-env.sh" >&2
   exit 2
 fi
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "quality gate requires a Rust toolchain for the tax engine; run ./scripts/bootstrap-dev-env.sh" >&2
+  exit 2
+fi
+export MATURIN_NO_INSTALL_RUST=1
 
 py() {
   uv run --locked python "$@"
 }
 
+run cargo fmt --manifest-path tax-engine/Cargo.toml --all --check
+run cargo test --manifest-path tax-engine/Cargo.toml --locked
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate
 

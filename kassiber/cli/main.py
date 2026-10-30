@@ -2801,7 +2801,11 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_payouts_create.add_argument("--tx-out", required=True, dest="tx_out", help="Outbound transaction id or external_id")
     transfers_payouts_create.add_argument("--payout-asset", required=True, dest="payout_asset")
     transfers_payouts_create.add_argument("--payout-amount", required=True, dest="payout_amount", help="Target asset amount paid externally, in BTC units")
-    transfers_payouts_create.add_argument("--payout-occurred-at", dest="payout_occurred_at")
+    transfers_payouts_create.add_argument(
+        "--payout-occurred-at",
+        dest="payout_occurred_at",
+        help="RFC3339 payout time, e.g. 2025-01-01T00:00:00Z or 2025-01-01T01:00:00+01:00; other formats are not supported; stored as UTC (default: the outbound's time)",
+    )
     transfers_payouts_create.add_argument("--payout-fiat-value", dest="payout_fiat_value")
     transfers_payouts_create.add_argument("--payout-external-id", dest="payout_external_id")
     transfers_payouts_create.add_argument("--counterparty")

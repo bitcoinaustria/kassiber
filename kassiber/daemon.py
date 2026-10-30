@@ -10972,7 +10972,7 @@ def _run_ai_chat_stream(
 ) -> None:
     """Thread target — streams AI records and a terminal `ai.chat`."""
     cancel_event = active_chat.cancel_event
-    current_request_id.set(_request_id_registry_key(request_id))
+    rid_token = current_request_id.set(_request_id_registry_key(request_id))
     try:
         finish_reason = None
         content_parts: list[str] = []
@@ -11144,6 +11144,8 @@ def _run_ai_chat_stream(
     finally:
         active_ai_chats.set_cancel_handler(active_chat, None)
         active_ai_chats.unregister(registry_key, active_chat)
+        # A direct call (not a fresh thread) must not leave its id behind.
+        current_request_id.reset(rid_token)
 
 
 def _remember_detected_api_format(

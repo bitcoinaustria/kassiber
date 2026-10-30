@@ -20,7 +20,7 @@ from ..tax_policy import (
     cross_asset_carrying_value_supported,
     recommended_pair_policy,
 )
-from ..time_utils import now_iso
+from ..time_utils import now_iso, parse_timestamp
 from ..transfers import bitcoin_network_domain_evidence
 from ..wallet_descriptors import normalize_asset_code
 
@@ -471,6 +471,25 @@ def create_pair_review(
     return pair_to_dict(pair_row)
 
 
+def _payout_occurred_at(value) -> str | None:
+    """Store the payout time as canonical RFC3339 UTC, like every row time.
+
+    Only RFC3339 input is supported. Python 3.11+ `fromisoformat` also takes
+    a few other ISO forms; those are canonicalized too, never stored raw.
+    """
+
+    if value is None or not str(value).strip():
+        return None
+    try:
+        return parse_timestamp(str(value).strip())
+    except AppError as exc:
+        raise AppError(
+            f"Invalid --payout-occurred-at value '{value}'",
+            code="validation",
+            hint="Use an RFC3339 timestamp like 2025-01-01T00:00:00Z.",
+        ) from exc
+
+
 def create_payout_review(
     conn,
     *,
@@ -521,6 +540,7 @@ def create_payout_review(
     payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
+    payout_occurred_at = _payout_occurred_at(payout_occurred_at)
     if policy is None:
         policy = (
             "carrying-value"

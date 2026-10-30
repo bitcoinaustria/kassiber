@@ -158,7 +158,9 @@ Use `transfers payouts create` when there is no owned inbound leg because
 the swap provider paid a recipient or exchange directly. This records the
 reviewed source outbound, target asset amount, external payout id,
 counterparty, fiat payout value, policy, and swap-fee delta without
-creating a fake recipient wallet.
+creating a fake recipient wallet. `--payout-occurred-at` takes only an
+RFC3339 time such as `2025-09-01T12:00:30Z` and is stored in UTC; without
+it the payout books at the outbound's time.
 
 The direct payout review model is not Austrian-only: when
 `payout_fiat_value` is present, it becomes the reviewed proceeds for the
@@ -250,10 +252,10 @@ header chips so heavy users can switch between "Boltz pegouts" and
 - Kassiber owns the country-neutral evidence graph: ownership detection,
   confidence scoring, conflict clusters, fee evidence, dismissal lifecycle,
   and rule application.
-- rp2 owns same-asset MOVE (`IntraTransaction`) and disposal-category
-  bucketing. Kassiber's generic policy can carry reviewed BTC ↔ LBTC Bitcoin
-  exposure while enabled; the AT plugin additionally handles eligible other
-  reviewed multi-asset carry treatment.
+- The tax engine owns same-asset MOVE (`IntraTransaction`) and
+  disposal-category bucketing. Kassiber's generic policy can carry reviewed
+  BTC ↔ LBTC Bitcoin exposure while enabled; the engine's Austrian rules
+  additionally handle eligible other reviewed multi-asset carry treatment.
 
 ## HTLC payment-hash extraction
 
