@@ -1418,6 +1418,9 @@ Behavior:
   chain data alone is not identifying. Route-only exports remain `strong`;
   `exact` additionally requires canonical route txids and explicit integer-msat
   principal amounts that cover both complete imported rows
+  (JSON integers or ASCII decimal digit strings; non-ASCII digits and
+  superscripts are ignored as amount evidence, as described in
+  [transfer matching](tax.md))
 - `preimage` is not stored in raw metadata; the importer records that it was
   redacted
 - `direction=self` rows and `status=failed` / `status=expired` /
