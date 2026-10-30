@@ -140,6 +140,8 @@ describe("TransactionsExportDialog", () => {
     };
     mount();
     openPeriod();
+    // Presets and the timezone they resolve in share one popover.
+    expect(screen.getByRole("combobox", { name: "dashboard.export.period.timezone" })).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: "dashboard.export.period.presets.last_month" }));
     settle();
     expect(lastPreviewArgs()).toEqual({ export: "transactions", format: "xlsx", range: "last_month" });
@@ -203,6 +205,19 @@ describe("TransactionsExportDialog", () => {
       { wallets: ["w-hot"] },
       expect.any(Object),
     );
+  });
+
+  it("tags wallet kinds only when they differ", () => {
+    mount();
+    expect(screen.queryByText("descriptor")).toBeNull();
+    cleanup();
+    daemon.wallets = [
+      { id: "w-hot", label: "Hot", kind: "descriptor", transaction_count: 120 },
+      { id: "w-x", label: "Exchange", kind: "custom", transaction_count: 5 },
+    ];
+    mount();
+    expect(screen.getByText("descriptor")).toBeTruthy();
+    expect(screen.getByText("custom")).toBeTruthy();
   });
 
   it("asks for a wallet when none is checked", () => {

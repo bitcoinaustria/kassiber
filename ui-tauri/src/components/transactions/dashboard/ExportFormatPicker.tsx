@@ -94,10 +94,7 @@ export function ExportFormatPicker({
             className="flex w-full min-w-0 items-center gap-2.5 rounded-md border bg-background/70 px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ExportFormatMark option={selected} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{name(selected)}</span>
-              <span className="block truncate text-xs text-muted-foreground">{hint(selected)}</span>
-            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">{name(selected)}</span>
             <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </button>
         </PopoverTrigger>

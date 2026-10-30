@@ -275,13 +275,6 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
           formatted: formatCount(rowCount),
         })
       : t("dashboard.export.submit");
-  const walletLabel = allWalletsSelected
-    ? t("dashboard.export.allWallets")
-    : t("dashboard.export.someWallets", { selected: selectedWallets.length, total: wallets.length });
-  const periodLabel =
-    period.preset === "custom" && previewData?.range
-      ? `${previewData.range.first_day} – ${previewData.range.last_day}`
-      : t(`dashboard.export.period.presets.${period.preset}`);
   const importHint = isToolFormat(formatSpec) ? t(`dashboard.export.importHint.${formatSpec.id}`) : null;
 
   return (
@@ -369,18 +362,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
             ) : (
               <>
                 <PreviewTable sheet={sheet} emptyLabel={t("dashboard.export.preview.empty")} />
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>
-                    {sheet.total > sheet.rows.length
-                      ? t("dashboard.export.preview.showing", {
-                          shown: sheet.rows.length,
-                          count: sheet.total,
-                          formatted: formatCount(sheet.total),
-                        })
-                      : t("dashboard.export.preview.complete")}
-                  </span>
-                  {importHint ? <span>{importHint}</span> : null}
-                </div>
+                {importHint ? <p className="text-xs text-muted-foreground">{importHint}</p> : null}
                 {previewData.warnings.length ? (
                   <ul className="grid gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-5">
                     {previewData.warnings.map((warning) => (
@@ -396,16 +378,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
           </div>
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-5 py-3">
-          <p className="min-w-0 truncate text-sm text-muted-foreground">
-            {isLabels
-              ? t("dashboard.export.summary.labels", { wallet: walletLabel })
-              : t("dashboard.export.summary.transactions", {
-                  wallet: walletLabel,
-                  format: t(`dashboard.export.formats.${format}`),
-                })}
-            {formatSpec.dated ? ` · ${periodLabel}` : null}
-          </p>
+        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t px-5 py-3">
           <div className="flex gap-2">
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isExporting}>

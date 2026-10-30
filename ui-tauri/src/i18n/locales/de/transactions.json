@@ -212,7 +212,6 @@
       "label": "Exportieren",
       "title": "Exportieren",
       "description": "Wähle einen Export und prüfe die Datei, bevor sie geschrieben wird.",
-      "allWallets": "Alle Wallets",
       "format": "Format",
       "formats": {
         "xlsx": "Excel-Arbeitsmappe",
@@ -224,9 +223,6 @@
       "fileRows_one": "{{formatted}} Zeile",
       "fileRows_other": "{{formatted}} Zeilen",
       "preview": {
-        "showing_one": "Erste {{shown}} von {{formatted}} Zeile",
-        "showing_other": "Erste {{shown}} von {{formatted}} Zeilen",
-        "complete": "Alle Zeilen sichtbar",
         "empty": "Keine Zeilen",
         "failed": "Keine Vorschau für diesen Export",
         "updating": "Wird aktualisiert…"
@@ -259,13 +255,8 @@
         "more_other": "und {{count}} weitere",
         "review": "In Quarantäne prüfen"
       },
-      "summary": {
-        "transactions": "{{wallet}} · {{format}}",
-        "labels": "{{wallet}} · BIP 329"
-      },
       "wallets": "Wallets",
       "walletsCount": "{{selected}} von {{total}}",
-      "someWallets": "{{selected}} von {{total}} Wallets",
       "filterWallets": "Wallets filtern",
       "selectAll": "Alle",
       "selectNone": "Keine",

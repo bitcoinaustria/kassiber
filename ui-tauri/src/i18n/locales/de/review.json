@@ -737,7 +737,6 @@
       "export": "Abgleich exportieren",
       "saveTitle": "Abgleich speichern",
       "saved": "Abgleich gespeichert",
-      "toolsDescription": "Einen CoinTracking- oder Blockpit-Export Wallet für Wallet mit dem Buch abgleichen. Es wird nichts importiert oder geändert.",
       "savedTo": "Gespeichert als {{name}}",
       "failedExport": "Export fehlgeschlagen",
       "exporting": "Wird exportiert…",

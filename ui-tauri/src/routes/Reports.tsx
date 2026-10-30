@@ -173,8 +173,6 @@ type ReportExportFormatId =
   | "xlsx"
   | "summary_pdf"
   | "audit_package"
-  | "transactions_csv"
-  | "transactions_xlsx"
   | "year_handoff";
 type AuditPackageScope = "active_profile" | "source_funds_case";
 type ReportTone = "good" | "warning" | "alert" | "neutral";
@@ -417,10 +415,6 @@ function ReportsView({
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_xlsx");
   const exportAustrianCsv =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
-  const exportTransactionsXlsx =
-    useDaemonMutation<ReportExportResult>("ui.transactions.export_xlsx");
-  const exportTransactionsCsv =
-    useDaemonMutation<ReportExportResult>("ui.transactions.export_csv");
   const exportYearHandoff =
     useDaemonMutation<ReportExportResult>("ui.reports.export_year_handoff");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
@@ -508,10 +502,6 @@ function ReportsView({
         ? exportSummaryPdf
         : format === "audit_package"
           ? exportAuditPackage
-        : format === "transactions_xlsx"
-          ? exportTransactionsXlsx
-        : format === "transactions_csv"
-          ? exportTransactionsCsv
         : format === "year_handoff"
           ? exportYearHandoff
         : format === "csv"
@@ -544,9 +534,6 @@ function ReportsView({
                 ? { source_funds_case: auditCaseId }
                 : {}),
             }
-        : format === "transactions_xlsx" || format === "transactions_csv"
-          ? // The selected year in the book's calendar, like every other file here.
-            { from: `${exportYear}-01-01`, to: `${exportYear}-12-31` }
         : format === "year_handoff"
           ? { year: exportYear }
         : format === "pdf"
@@ -565,13 +552,9 @@ function ReportsView({
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename = (payload?.filename ?? basename(exportPath)) || "report";
-        const isTransactionExport =
-          format === "transactions_xlsx" || format === "transactions_csv";
         const detail =
           payload?.scope === "audit_package"
             ? `${payload.transaction_count ?? 0} transaction${payload.transaction_count === 1 ? "" : "s"} · ${payload.evidence_file_count ?? 0} file${payload.evidence_file_count === 1 ? "" : "s"} · ${payload.url_reference_count ?? 0} link${payload.url_reference_count === 1 ? "" : "s"}`
-          : isTransactionExport && payload?.rows !== undefined
-            ? `${payload.rows} transaction${payload.rows === 1 ? "" : "s"}`
           : payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
             : payload?.format === "xlsx" && payload.sheets?.length
@@ -623,11 +606,7 @@ function ReportsView({
         }
         setSuccessfulExport({ format, year: exportYear });
         addNotification({
-          title: isTransactionExport
-            ? "Transactions exported"
-            : flagged
-              ? "Report exported with notes"
-              : "Report export finished",
+          title: flagged ? "Report exported with notes" : "Report export finished",
           body: [
             savedPath === exportPath
               ? detail
@@ -1289,8 +1268,6 @@ function ReportFilesPanel({
   onOpenExport: (path: string) => void;
 }) {
   const navigate = useNavigate();
-  const [transactionLedgerExpanded, setTransactionLedgerExpanded] =
-    useState(false);
 
   return (
     <div className="kb-surface min-w-0 overflow-hidden">
@@ -1334,7 +1311,7 @@ function ReportFilesPanel({
             title="PDF filing report"
             detail={
               activeProfileIsAustrian
-                ? `${year} · Austrian E 1kv`
+                ? "Austrian E 1kv"
                 : "Complete report"
             }
             loading={activeExport === "pdf"}
@@ -1351,7 +1328,7 @@ function ReportFilesPanel({
             title="XLSX report workbook"
             detail={
               activeProfileIsAustrian
-                ? `${year} · Multi-sheet Austrian workbook`
+                ? "Multi-sheet Austrian workbook"
                 : "Multi-sheet complete workbook"
             }
             loading={activeExport === "xlsx"}
@@ -1368,7 +1345,7 @@ function ReportFilesPanel({
             title="CSV report bundle"
             detail={
               activeProfileIsAustrian
-                ? `${year} · Austrian E 1kv CSV bundle`
+                ? "Austrian E 1kv CSV bundle"
                 : "Complete report sections for spreadsheet review"
             }
             loading={activeExport === "csv"}
@@ -1383,7 +1360,7 @@ function ReportFilesPanel({
             id="year_handoff"
             icon={BookOpenCheck}
             title="Bookkeeping handoff (EA / Jahresabschluss)"
-            detail={`${year} · Every transaction, balances, roll-forward and reconciliation`}
+            detail="Every transaction, balances, roll-forward and reconciliation"
             loading={activeExport === "year_handoff"}
             disabled={Boolean(activeExport)}
             success={
@@ -1392,69 +1369,6 @@ function ReportFilesPanel({
             }
             onExport={onExport}
           />
-        </div>
-        <div className="overflow-hidden rounded-md border bg-background/50">
-          <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-            <div className="min-w-0">
-              <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Transaction ledger
-              </h3>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                Raw transactions with notes and references
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="size-8 shrink-0"
-              aria-label={
-                transactionLedgerExpanded
-                  ? "Collapse transaction ledger exports"
-                  : "Expand transaction ledger exports"
-              }
-              aria-expanded={transactionLedgerExpanded}
-              onClick={() => setTransactionLedgerExpanded((value) => !value)}
-            >
-              <ChevronDown
-                className={cn(
-                  "size-4 text-muted-foreground transition-transform",
-                  transactionLedgerExpanded && "rotate-180",
-                )}
-                aria-hidden="true"
-              />
-            </Button>
-          </div>
-          {transactionLedgerExpanded ? (
-            <div className="divide-y border-t">
-              <ReportFileRow
-                id="transactions_xlsx"
-                icon={FileSpreadsheet}
-                title="Transactions XLSX"
-                detail={`${year} · Ledger rows for spreadsheet review`}
-                loading={activeExport === "transactions_xlsx"}
-                disabled={Boolean(activeExport)}
-                success={
-                  successfulExport?.format === "transactions_xlsx" &&
-                  successfulExport.year === year
-                }
-                onExport={onExport}
-              />
-              <ReportFileRow
-                id="transactions_csv"
-                icon={FileArchive}
-                title="Transactions CSV"
-                detail={`${year} · Plain ledger export for external tools`}
-                loading={activeExport === "transactions_csv"}
-                disabled={Boolean(activeExport)}
-                success={
-                  successfulExport?.format === "transactions_csv" &&
-                  successfulExport.year === year
-                }
-                onExport={onExport}
-              />
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

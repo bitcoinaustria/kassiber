@@ -6133,20 +6133,82 @@ def _generic_report_csv_rows(context, sections):
     return rows
 
 
+# One look for every Kassiber workbook: a dark header row, hairline row rules,
+# muted msat columns and a banding that survives sorting and filtering.
+XLSX_BODY = {
+    "font_name": "Calibri",
+    "font_size": 10,
+    "valign": "top",
+    "bottom": 1,
+    "bottom_color": "#E5E7EB",
+}
+XLSX_BAND_FILL = "#F8FAFC"
+XLSX_QUANTITY_FORMAT = "#,##0.00000000"
+XLSX_MONEY_FORMAT = "#,##0.00;[Red]-#,##0.00"
+
+
 def _generic_report_xlsx_formats(workbook):
+    def body(**extra):
+        return workbook.add_format({**XLSX_BODY, **extra})
+
     return {
-        "title": workbook.add_format({"bold": True, "font_size": 14, "valign": "vcenter"}),
+        "title": workbook.add_format(
+            {"font_name": "Calibri", "bold": True, "font_size": 14, "font_color": "#111827",
+             "valign": "vcenter", "text_wrap": True}
+        ),
+        "subtitle": workbook.add_format({"font_name": "Calibri", "font_size": 10, "font_color": "#6B7280"}),
+        "note": workbook.add_format({"font_name": "Calibri", "font_size": 10, "bold": True, "font_color": "#B45309"}),
         "header": workbook.add_format(
-            {"bold": True, "font_size": 11, "valign": "top", "text_wrap": True, "bg_color": "#EFEFEF", "bottom": 1}
+            {"font_name": "Calibri", "bold": True, "font_size": 10, "font_color": "#FFFFFF",
+             "bg_color": "#1F2937", "valign": "vcenter", "text_wrap": True}
         ),
-        "text": workbook.add_format({"font_size": 11, "valign": "top", "text_wrap": True}),
-        "int": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0"}),
-        "quantity": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0.00000000"}),
-        "money": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.00"}),
-        "link": workbook.add_format(
-            {"font_size": 11, "valign": "top", "text_wrap": True, "font_color": "#185FA5", "underline": 1}
-        ),
+        "label": body(bold=True, bg_color="#F3F4F6"),
+        "text": body(text_wrap=True),
+        "code": body(),
+        "int": body(num_format="#,##0", font_color="#6B7280"),
+        "quantity": body(num_format=XLSX_QUANTITY_FORMAT),
+        "money": body(num_format=XLSX_MONEY_FORMAT),
+        "date": body(num_format='yyyy-mm-dd hh:mm "UTC"'),
+        "inbound": body(font_color="#047857"),
+        "outbound": body(font_color="#B91C1C"),
+        "link": body(text_wrap=True, font_color="#185FA5", underline=1),
+        "band": workbook.add_format({"bg_color": XLSX_BAND_FILL}),
     }
+
+
+def _xlsx_write_title(worksheet, last_column, formats, title, subtitle=None, note=None):
+    """Row 1: the title, then an optional draft note and a grey scope line."""
+    worksheet.merge_range(0, 0, 0, last_column, "", formats["title"])
+    parts = [formats["title"], title]
+    if note:
+        parts += [formats["note"], f"   {note}"]
+    if subtitle:
+        parts += [formats["subtitle"], f"\n{subtitle}"]
+    if len(parts) > 2:
+        worksheet.write_rich_string(0, 0, *parts, formats["title"])
+    else:
+        worksheet.write_string(0, 0, title, formats["title"])
+    worksheet.set_row(0, 40 if subtitle else 26)
+
+
+def _xlsx_finish_sheet(worksheet, formats, last_row, last_column, *, freeze_columns=0):
+    """Freeze, filter, band and set up printing for a header-on-row-2 sheet."""
+    worksheet.freeze_panes(2, freeze_columns)
+    worksheet.autofilter(1, 0, max(last_row, 1), last_column)
+    if last_row >= 2:
+        worksheet.conditional_format(
+            2, 0, last_row, last_column,
+            {"type": "formula", "criteria": "=MOD(ROW(),2)=0", "format": formats["band"]},
+        )
+    _xlsx_print_setup(worksheet, header_row=1)
+
+
+def _xlsx_print_setup(worksheet, *, header_row=None):
+    """Repeat the header row on every printed page, number the pages, hide gridlines."""
+    if header_row is not None:
+        worksheet.repeat_rows(header_row)
+    worksheet.set_footer("&L&8Kassiber&C&8&A&R&8Page &P of &N")
+    worksheet.hide_gridlines(2)
 
 
 GENERIC_REPORT_QUANTITY_FIELDS = {
@@ -6194,6 +6256,11 @@ GENERIC_REPORT_MONEY_FIELDS = {
 }
 
 
+GENERIC_REPORT_DATE_FIELDS = {"occurred_at"}
+# Identifiers stay on one line; a long Liquid asset id is clipped, not wrapped.
+GENERIC_REPORT_CODE_FIELDS = {"transaction_id", "asset", "wallet"}
+
+
 def _generic_report_xlsx_format_name(header, value):
     if value in (None, ""):
         return "text"
@@ -6203,16 +6270,54 @@ def _generic_report_xlsx_format_name(header, value):
         return "money"
     if header in GENERIC_REPORT_QUANTITY_FIELDS or header.endswith("_sat"):
         return "quantity"
+    if header in GENERIC_REPORT_DATE_FIELDS and _xlsx_utc_datetime(value) is not None:
+        return "date"
+    if header == "direction" and value in ("inbound", "outbound"):
+        return value
+    if header in GENERIC_REPORT_CODE_FIELDS:
+        return "code"
     return "text"
+
+
+_XLSX_FIRST_EXACT_DATE = datetime(1900, 3, 1)
+
+
+def _xlsx_utc_datetime(value):
+    """A stored UTC timestamp as the naive datetime Excel expects, or None."""
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
+    # Excel's calendar counts a 29 February 1900 that never was, so it cannot
+    # show an earlier moment as a date: those stay text.
+    return moment if moment >= _XLSX_FIRST_EXACT_DATE else None
+
+
+def _generic_report_display_text(header, value):
+    """The value as the cell will show it, for sizing the column."""
+    if value in (None, ""):
+        return ""
+    format_name = _generic_report_xlsx_format_name(header, value)
+    if format_name == "int":
+        return f"{int(value):,}"
+    if format_name == "money":
+        return f"{float(value):,.2f}"
+    if format_name == "quantity":
+        return f"{float(value):,.8f}"
+    if format_name == "date":
+        return "2025-01-01 00:00 UTC"
+    return str(value)
 
 
 def _generic_report_column_width(header, rows):
     label_width = len(_report_column_label(header)) + 2
+    cap = 22 if header in GENERIC_REPORT_CODE_FIELDS else 38
     sample_width = label_width
-    for row in rows[:50]:
-        value = row.get(header, "")
-        sample_width = max(sample_width, min(len(str(value)), 36))
-    return max(10, min(sample_width + 2, 38))
+    for row in rows[:200]:
+        sample_width = max(sample_width, min(len(_generic_report_display_text(header, row.get(header, ""))), 36))
+    return max(8, min(sample_width + 2, cap))
 
 
 def _estimate_wrapped_lines(text, width_chars):
@@ -6230,22 +6335,23 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     worksheet = workbook.add_worksheet(spec["sheet_name"])
     worksheet.set_landscape()
     worksheet.fit_to_pages(1, 0)
-    worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
+    worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.6)
     headers = list(spec["headers"])
     rows = spec["rows"]
     last_column = max(len(headers) - 1, 0)
     widths = [_generic_report_column_width(header, rows) for header in headers]
-    worksheet.set_row(0, 28)
-    worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
+    _xlsx_write_title(
+        worksheet, last_column, formats, spec.get("heading", spec["title"]),
+        subtitle=spec.get("subtitle"), note=spec.get("note"),
+    )
     header_lines = max(
         (_estimate_wrapped_lines(_report_column_label(header), widths[index]) for index, header in enumerate(headers)),
         default=1,
     )
-    worksheet.set_row(1, max(24, header_lines * 15 + 4))
+    worksheet.set_row(1, max(22, header_lines * 13 + 6))
     for column_index, header in enumerate(headers):
         worksheet.set_column(column_index, column_index, widths[column_index])
         worksheet.write_string(1, column_index, _report_column_label(header), formats["header"])
-    worksheet.freeze_panes(2, 0)
 
     row_index = 2
     if rows:
@@ -6260,13 +6366,17 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
                 format_name = _generic_report_xlsx_format_name(header, value)
                 if format_name == "text":
                     lines = max(lines, _estimate_wrapped_lines(value, widths[column_index]))
+                if format_name == "date":
+                    worksheet.write_datetime(row_index, column_index, _xlsx_utc_datetime(value), formats["date"])
+                    continue
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
-            worksheet.set_row(row_index, max(16, lines * 15 + 4))
+            worksheet.set_row(row_index, max(15, lines * 13 + 3))
             row_index += 1
     else:
         worksheet.write_string(row_index, 0, "No rows in scope.", formats["text"])
         row_index += 1
-    worksheet.autofilter(1, 0, max(row_index - 1, 1), last_column)
+    freeze = 2 if headers[:2] == ["occurred_at", "wallet"] else 0
+    _xlsx_finish_sheet(worksheet, formats, row_index - 1, last_column, freeze_columns=freeze)
     return worksheet
 
 
@@ -6809,10 +6919,19 @@ def _transactions_export_context(
     if undated:
         warnings.append(export_range.undated_warning(undated))
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
+    if export_range is not None:
+        period = f"{export_range.first_day.isoformat()} to {export_range.last_day.isoformat()} ({export_range.timezone})"
+    else:
+        period = "All time"
     spec = {
         "sheet_name": "Transactions",
         # The file travels without the warning, so it says it is a draft itself.
         "title": f"Transactions (draft: {withheld} withheld)" if draft else "Transactions",
+        "heading": "Transactions",
+        "note": f"Draft: {withheld} withheld" if draft else None,
+        "subtitle": " · ".join(
+            (str(profile["label"]), export_wallet_scope_label(wallets) or "All wallets", period, f"{len(rows)} rows")
+        ),
         "headers": TRANSACTIONS_EXPORT_HEADERS,
         "rows": rows,
     }

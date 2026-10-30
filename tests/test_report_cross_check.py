@@ -13,6 +13,7 @@ import csv
 import json
 import tempfile
 import unittest
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -213,6 +214,13 @@ class CrossCheckRoundTripTests(unittest.TestCase):
             ["Summary", "Differences", "Only in tool", "Only in Kassiber", "Excluded in Kassiber", "Matched"],
         )
         self.assertEqual(len(sheets["Differences"]), 3)  # header + 2 rows
+        # Printed like the other workbooks: headers on every page, page numbers, no gridlines.
+        with zipfile.ZipFile(workbook_path) as archive:
+            book_xml = archive.read("xl/workbook.xml").decode()
+            differences_xml = archive.read("xl/worksheets/sheet2.xml").decode()
+        self.assertIn('localSheetId="1">Differences!$1:$1<', book_xml)
+        self.assertIn('showGridLines="0"', differences_xml)
+        self.assertIn("<oddFooter>", differences_xml)
 
     def test_an_unreadable_row_is_named_not_dropped(self):
         headers, rows = _read_csv(self.files["blockpit"])
