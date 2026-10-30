@@ -83,6 +83,11 @@ _RECOVERY_ASSIGNMENT_RE = re.compile(
 # trailing hex — still has a word boundary and gets pseudonymized as one token
 # instead of slipping through the {64}\b gap.
 _TXID_RE = re.compile(r"\b[0-9a-f]{64,}\b", re.IGNORECASE)
+# Complete ID shapes only: do not exempt partial UUIDs or standalone cad1.
+_AMOUNT_ID_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})"
+    r"(?![A-Za-z0-9_-])", re.IGNORECASE,
+)
 _AMOUNT_UNITS = (
     "BTC|XBT|LBTC|sats?|msats?|EUR|USD|CHF|GBP|JPY|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF"
 )
@@ -143,7 +148,14 @@ def redact_operational_text(value: str) -> str:
         key = f"{_AMOUNT_PSEUDONYM_SALT}|{re.sub(r'[,_ ]', '', num)}|{unit.lower()}"
         return f"amount#{_stable_hash(key)}"
 
+    id_spans = [match.span() for match in _AMOUNT_ID_RE.finditer(text)]
+
+    def _overlaps_id(match: re.Match[str]) -> bool:
+        return any(match.start() < end and match.end() > start for start, end in id_spans)
+
     def _keyed_amount(match: "re.Match[str]") -> str:
+        if _overlaps_id(match):
+            return match.group(0)
         key, sep, num = match.group(1), match.group(2), match.group(3)
         unit = "msat" if "msat" in key.lower() else "sat"
         return f"{key}{sep}{_amount_pseudonym(num, unit)}"
@@ -151,13 +163,14 @@ def redact_operational_text(value: str) -> str:
     # Keyed amounts first (amount_sat=50000); their numbers are then gone before
     # the standalone-unit pass runs, so neither double-masks the other.
     text = _KEYED_AMOUNT_RE.sub(_keyed_amount, text)
+    id_spans = [match.span() for match in _AMOUNT_ID_RE.finditer(text)]
 
     def _amount(match: "re.Match[str]") -> str:
         token = match.group(0)
         start = match.start()
         # A market-rate tail ("BTC/EUR 64000.12") is public data, not the
         # user's amount; its number is preceded by the pair separator.
-        if _is_market_rate_tail(text, start):
+        if _overlaps_id(match) or _is_market_rate_tail(text, start):
             return token
         num_match = _AMOUNT_NUM_RE.search(token)
         num = num_match.group(0) if num_match else token

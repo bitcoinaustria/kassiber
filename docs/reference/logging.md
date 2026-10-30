@@ -124,6 +124,12 @@ secret-*key* scrub), and on the freshness disk write / UI snapshot — the
 egresses that do not pass through the webview renderer (a backend exception's
 `details` can carry a node `stderr` blob or `response_preview` with txids).
 
+Complete UUID-shaped tokens (8-4-4-4-12 hex digits) and 32-hex IDs are
+excluded from both free-text amount passes, including keyed sat values and
+currency-symbol matches. Matching is case-insensitive and requires token
+boundaries (no adjacent ASCII letters, digits, underscores or hyphens). Partial
+UUID lookalikes are not exempt. The txid pass still runs first and is unchanged.
+
 Prefer typed fields over free text when adding log producers: a field
 typed `address`/`txid`/`path` is masked by type at render time, while free
 text relies on the regex backstop, which is best-effort. Keyed/glued sat

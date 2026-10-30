@@ -210,14 +210,26 @@ function isMarketRateTail(full: string, offset: number): boolean {
   return MARKET_RATE_PAIR_PREFIX_RE.test(full.slice(0, offset - 1).trimEnd());
 }
 
+// Complete ID shapes only; partial UUIDs and standalone cad1 remain amounts.
+const AMOUNT_ID_RE =
+  /(?<![A-Za-z0-9_-])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![A-Za-z0-9_-])/gi;
+
+function amountIdGuard(text: string): (offset: number, length: number) => boolean {
+  const spans = Array.from(text.matchAll(AMOUNT_ID_RE), (match) =>
+    [match.index, match.index + match[0].length] as const,
+  );
+  return (offset, length) => spans.some(([start, end]) => offset < end && offset + length > start);
+}
+
 function replaceAmounts(text: string, showScale: boolean): string {
+  const overlapsId = amountIdGuard(text);
   return text.replace(
     AMOUNT_TOKEN_RE,
     (match: string, offset: number, full: string) => {
       // A market rate ("BTC/EUR 64000.12") is public data, not the user's
       // amount — its trailing "EUR 64000.12" is preceded by the pair separator,
       // so leave it readable (public_safe masks the whole rate separately).
-      if (isMarketRateTail(full, offset)) return match;
+      if (overlapsId(offset, match.length) || isMarketRateTail(full, offset)) return match;
       const numMatch = match.match(/[+-]?\d[\d.,_ ]*\d|[+-]?\d/);
       const num = numMatch ? numMatch[0] : match;
       const unit = match.replace(num, "").replace(/\s+/g, "").trim();
@@ -234,9 +246,11 @@ const KEYED_AMOUNT_RE =
   /\b([A-Za-z][A-Za-z0-9_]*(?:msats?|sats?))\b(['"]?\s*[:=]\s*['"]?)([+-]?\d[\d.,_]*\d|[+-]?\d)/gi;
 
 function replaceKeyedAmounts(text: string, showScale: boolean): string {
+  const overlapsId = amountIdGuard(text);
   return text.replace(
     KEYED_AMOUNT_RE,
-    (_m: string, key: string, sep: string, num: string) => {
+    (match: string, key: string, sep: string, num: string, offset: number) => {
+      if (overlapsId(offset, match.length)) return match;
       const unit = /msat/i.test(key) ? "msat" : "sat";
       return `${key}${sep}${pseudoAmount(num, unit, showScale)}`;
     },
