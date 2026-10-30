@@ -100,9 +100,9 @@ External agents are off by default. Until the user turns them on, the server
 still lists the tools of the recorded grant but every call returns
 `mcp_disabled`. Two ways turn them on:
 
-- the desktop app: **Settings → AI → External agents (MCP)**, which shows the
-  grant (**Read**, **Read and operate**, **Accounting decisions**), a
-  **Restrict what agents can use** checkbox, what the selected grant allows,
+- the desktop app: **Settings → Assistant → External agents**, which shows
+  **Allow agents**, the grant (**Read**, **Read and operate**, **Accounting
+  decisions**), a **Restrict results** switch, what the selected grant allows,
   and then the command for the current book. A first enable preselects
   **Accounting decisions** with full access; a recorded choice is kept.
   Changing the grant while agents are on applies to the next call;

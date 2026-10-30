@@ -4,6 +4,13 @@ import { Check, ChevronRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
@@ -45,21 +52,33 @@ export function CopyButton({
 /**
  * A settings list in the manner of the ChatGPT desktop app's settings: one
  * hairline box, rows divided inside it, each row the setting's name and a line
- * of explanation on the left and its control on the right.
+ * of explanation on the left and its control on the right. Actions for the
+ * whole list sit beside the title; a note about all of it goes under the box.
  */
 export function SettingsGroup({
   title,
+  actions,
+  footer,
   className,
   children,
+  ...rest
 }: {
   title?: React.ReactNode;
+  actions?: React.ReactNode;
+  footer?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
-}) {
+} & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children">) {
   return (
-    <section className={cn("space-y-2", className)}>
-      {title ? <h3 className="text-sm font-semibold">{title}</h3> : null}
-      <div className="divide-y rounded-lg border bg-background">{children}</div>
+    <section className={cn("space-y-2", className)} {...rest}>
+      {title || actions ? (
+        <div className="flex items-end justify-between gap-3">
+          {title ? <h3 className="text-sm font-semibold">{title}</h3> : <span />}
+          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        </div>
+      ) : null}
+      <div className="divide-y overflow-hidden rounded-lg border bg-background">{children}</div>
+      {footer ? <p className="px-1 text-xs text-muted-foreground">{footer}</p> : null}
     </section>
   );
 }
@@ -160,6 +179,60 @@ export function SegmentedControl<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+export interface SettingsSelectOption<T extends string> {
+  value: T;
+  label: React.ReactNode;
+  /** Shown on hover over the option. */
+  title?: string;
+}
+
+/**
+ * A choice among values, as a dropdown of one width and height wherever it
+ * sits, so a column of choices lines up. Only listed values are passed on.
+ */
+export function SettingsSelect<T extends string>({
+  value,
+  onValueChange,
+  options,
+  disabled = false,
+  triggerProps,
+}: {
+  value: T;
+  onValueChange: (value: T) => void;
+  options: readonly SettingsSelectOption<T>[];
+  disabled?: boolean;
+  /** id, aria-* and data-* for the trigger. */
+  triggerProps?: Omit<React.ComponentProps<typeof SelectTrigger>, "size" | "children"> & {
+    [data: `data-${string}`]: string | undefined;
+  };
+}) {
+  return (
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        const option = options.find((candidate) => candidate.value === next);
+        if (option) onValueChange(option.value);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        {...triggerProps}
+        className={cn("w-48", triggerProps?.className)}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value} title={option.title}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

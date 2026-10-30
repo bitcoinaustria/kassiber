@@ -88,8 +88,8 @@
         "description": "App lock, biometric unlock, and the database passphrase."
       },
       "ai": {
-        "label": "AI providers",
-        "description": "Local and remote assistant endpoints and their data posture."
+        "label": "Assistant",
+        "description": "Models, chats and external agents."
       },
       "storage": {
         "label": "Data & storage",
@@ -457,11 +457,11 @@
     "resetRegtestErrorBody": "The regtest environment could not be rebuilt. Check that Docker is running."
   },
   "ai": {
-    "featuresLabel": "AI features",
-    "featuresDescription": "Show the Assistant screen and floating chat. Turning this off keeps provider settings saved.",
-    "featuresAria": "Enable AI features",
-    "agentsLabel": "External agents (MCP)",
-    "agentsDescription": "Let agents you connect, such as Claude Code or Codex, use this book within the access you choose. What they read goes to their AI provider.",
+    "featuresLabel": "Use the assistant",
+    "featuresDescription": "Chat about your books in the side panel and on the Assistant page. Off hides it and keeps these settings.",
+    "featuresAria": "Turn the assistant on",
+    "agentsLabel": "External agents",
+    "agentsDescription": "Claude Code, Codex and other MCP agents can use this book. What they read goes to their AI provider.",
     "agentsAria": "Allow external agents",
     "agentsCopyJson": "Copy config for other agents",
     "agentsError": "Could not change external agent access.",
@@ -470,10 +470,10 @@
     "agentsGrantOperator": "Read and operate",
     "agentsGrantDecisions": "Accounting decisions",
     "agentsGrantReadHint": "Agents can read this book. They change nothing and contact no service.",
-    "agentsGrantOperatorHint": "Agents can also process journals, export, record source-of-funds evidence, documents and analysis cases, and sync wallets and rates, which contacts your configured backends and rate sources.",
-    "agentsGrantDecisionsHint": "Agents can do everything Read and operate allows and make accounting decisions: resolve quarantine, pair or dismiss transfers, record custody, loan and source-of-funds decisions, and edit transaction notes, tags, exclusions and classification.",
-    "agentsRestrictLabel": "Restrict what agents can use",
-    "agentsRestrictHint": "Off: agents get full results, including transaction IDs, outpoints and labels, and the custody-gap, lineage and chain-analysis source tools. On: projected results only. Descriptors, xpubs, secrets and file paths are never sent either way.",
+    "agentsGrantOperatorHint": "Agents can also process journals, export, record source-of-funds evidence and documents, and sync wallets and rates, which contacts your configured backends and rate sources.",
+    "agentsGrantDecisionsHint": "Agents can also make accounting decisions: resolve quarantine, pair or dismiss transfers, record custody, loan and source-of-funds decisions, and edit notes, tags, exclusions and classifications.",
+    "agentsRestrictLabel": "Restrict results",
+    "agentsRestrictHint": "Projected results only: no transaction IDs, outpoints or labels, and no custody-gap, lineage or chain-analysis source tools. Descriptors, xpubs, secrets and file paths are never sent either way.",
     "agentsAdminNever": "Admin work (secrets, backups, deletions, passphrases) is never available to agents.",
     "agentsHostApproval": "Your agent's own tool approval is the only prompt before a change. Admin work (secrets, backups, deletions, passphrases) is never available to agents. A running agent may need a restart to show changed tools.",
     "agentsSessionLocked": "This book is encrypted. Agents can use it only while you unlock it for them.",
@@ -489,9 +489,7 @@
     "agentsPairingAllow": "Allow",
     "agentsPairingDeny": "Deny",
     "agentsPairingRemove": "Remove",
-    "providerConfigHeading": "Provider configuration",
-    "providerConfigDescription": "Configure OpenAI-compatible endpoints (Responses API or Chat Completions) or CLI agents (Codex, Claude, OpenCode, GitHub Copilot) for the in-app assistant. Local providers such as Ollama and oMLX usually run without a key; remote providers and CLI agents may see prompt content.",
-    "checkPrivacy": "Opening this page contacts no provider. Check asks one provider now, and off-device providers ask for your confirmation first.",
+    "checkPrivacy": "Nothing is contacted until you press Check, and off-device providers ask first.",
     "check": "Check",
     "checkProvider": "Check {{name}}",
     "checkHint": "Ask {{name}} now whether it is installed, signed in and reachable.",
@@ -503,17 +501,15 @@
     "loadingProviders": "Loading providers…",
     "loadError": "Could not load AI providers.",
     "notSetUp": {
-      "title": "Not set up",
-      "hint": "Built-in providers you haven't used yet. Set up checks one now; nothing is contacted before that.",
       "setUp": "Set up",
       "setUpAria": "Set up {{name}}",
-      "remove": "Remove {{name}}"
+      "remove": "Remove {{name}}",
+      "title_one": "{{count}} more provider",
+      "title_other": "{{count}} more providers"
     },
     "noProviders": "No providers configured yet.",
     "loadingModels": "Loading…",
     "default": "Default",
-    "kindCli": "CLI agent",
-    "kindHttp": "HTTP",
     "apiFormatTitle": "API format the next chat speaks",
     "apiFormat": {
       "set": "{{format}}",
@@ -522,7 +518,6 @@
     },
     "restrictedAccessNote": "Restricted agent access: the assistant gets projected results and no custody-gap, lineage or source-acquisition tools.",
     "omitStoreNote": "Sends requests without Kassiber's no-retention flag (store: false); the provider's own retention applies.",
-    "disabledBadge": "Disabled",
     "enableProvider": "Offer {{name}} in chat",
     "defaultCannotDisable": "The default provider stays on. Set another default first.",
     "editProvider": "Edit {{name}}",
@@ -559,11 +554,22 @@
       "switchedOff": "Disabled. Turn it on to check it."
     },
     "permissionMode": {
-      "heading": "Assistant permissions",
-      "label": "Default permission mode",
-      "description": "New chats start in this mode. Each chat can switch it in the composer."
+      "label": "New chats start in"
     },
-    "toolProfile": "Tools"
+    "toolProfile": "Tools",
+    "modelsHeading": "Models",
+    "where": {
+      "local": "On this computer",
+      "remote": "Remote server",
+      "tee": "Confidential server (TEE)",
+      "cli": "Subscription app"
+    },
+    "showDetails": "{{name}} details",
+    "address": "Address",
+    "edit": "Edit",
+    "remove": "Remove",
+    "agentsAllowLabel": "Allow agents",
+    "agentsSessionLabel": "Access to this book"
   },
   "chatHistory": {
     "mode": {
@@ -572,22 +578,21 @@
       "off": "Never store chats."
     },
     "modeLabel": {
-      "auto": "Auto",
-      "on": "On",
-      "off": "Off"
+      "auto": "While encrypted",
+      "on": "Always",
+      "off": "Never"
     },
-    "heading": "Chat history",
-    "description": "Stored chats live inside the database, never as plaintext files. Diagnostics and audit exports do not include them. Resuming a chat replays that conversation as model context; otherwise past chats are not exposed as an assistant tool.",
-    "storeLabel": "Store conversations",
+    "description": "Kept inside the database, never as files, and left out of diagnostics and audit exports.",
+    "storeLabel": "Keep chats",
     "effectiveEncrypted": "Chats are currently stored inside the encrypted database.",
     "effectiveOnUnencrypted": "Chats are currently stored inside the unencrypted database because history is set to on.",
     "effectiveNotStoredEncrypted": "Chats are not stored.",
     "effectiveNotStoredAuto": "Chats are not stored: the database is not encrypted yet. Encrypting it (secrets init) turns history on.",
     "effectiveNotStored": "Chats are not stored.",
-    "storedCount": "{{count}} stored chats",
-    "storedCount_one": "{{count}} stored chat",
+    "storedCount": "{{count}} saved chats",
+    "storedCount_one": "{{count}} saved chat",
     "deleteAll": "Delete all stored chats",
-    "clearStored": "Clear stored chats"
+    "clearStored": "Delete all"
   },
   "developer": {
     "intro": "Kassiber ships with features that are still being built. They stay out of the way until you ask for them, and your choice is remembered across updates. Logs are local-only, kept in RAM, and written to disk only when you export them.",
@@ -694,7 +699,7 @@
     "errorUrlScheme": "Use http(s):// or a built-in CLI locator: codex-cli://default, claude-cli://default, opencode-cli://default, or copilot-cli://default",
     "errorSaveBeforeTest": "Save the provider before testing a new API key.",
     "errorTestFailed": "Connection test failed",
-    "errorTestDisabled": "This provider is disabled. Turn it on in Settings → AI providers to test it.",
+    "errorTestDisabled": "This provider is disabled. Turn it on in Settings → Assistant to test it.",
     "errorCliLocalPosture": "CLI agents (Codex, Claude, OpenCode, GitHub Copilot) may send prompts off-device. Choose remote or TEE.",
     "errorAckRequired": "Acknowledge that prompts may leave this device before saving.",
     "errorAckRequiredTest": "Testing sends a short prompt to this provider. Acknowledge that prompts may leave this device first.",
