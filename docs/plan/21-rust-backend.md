@@ -2026,6 +2026,15 @@ CSV, evidence and active-ledger coordinators without merging provenance,
 commercial matching, reviewed custody or tax authority. No batch-2 command is
 enabled by batch-1 completion.
 
+The eleventh reports continuation ports the graphless Liquid parse-success
+boundary used by saved dependency capture, with 5,634 Python physical-scope
+vectors and fifteen killed mutations. Decoding supplies only the existence
+of a partial public graph; stored identity and authoritative observation
+checks still decide dependencies. Twelve whole export sequences compare
+52 actions, 75 CSV files and all 112 tables. No dependency or Python product
+change is needed. See the
+[Liquid checkpoint](../reference/rust-shell.md#graphless-liquid-report-dependencies-r5-eleventh-continuation-partial).
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

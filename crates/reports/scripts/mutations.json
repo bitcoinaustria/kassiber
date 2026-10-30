@@ -4881,14 +4881,14 @@
     "rule": "An observation without a parseable instant is not closed evidence."
   },
   {
-    "id": "capture-raw-hex-refusal",
+    "id": "capture-raw-hex-decode",
     "file": "crates/custody/src/confirmation.rs",
-    "find": "    if scope.is_some() && graphs.is_empty() {",
-    "replace": "    if false {",
+    "find": ".is_some_and(liquid::decodable)",
+    "replace": ".is_some_and(|_| true)",
     "expect_failing": [
-      "graphless_liquid_raw_hex_dependency_refuses"
+      "liquid_confirmation_scope_python_vectors"
     ],
-    "rule": "A graphless Liquid raw transaction is refused, never guessed."
+    "rule": "Only a successful reference-compatible local parse supplies a graphless physical dependency."
   },
   {
     "id": "confirmation-status-bool",
@@ -5329,5 +5329,145 @@
       "transaction_export_admission_only_registers_native_csv"
     ],
     "rule": "Unported transaction formats remain refused before bootstrap and are not falsely served by the Rust hybrid probe."
+  },
+  {
+    "id": "liquid-hex-strip",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "crate::python_text::strip(hex).as_bytes()",
+    "replace": "hex.as_bytes()",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Outer Python whitespace is stripped before hex decoding."
+  },
+  {
+    "id": "liquid-extra-bytes",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "self.rest.is_empty().then_some(())",
+    "replace": "Some(())",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Trailing bytes refuse the parse."
+  },
+  {
+    "id": "liquid-locktime",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "self.read(4)?;\n        if witness",
+    "replace": "self.exact(4)?;\n        if witness",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Short locktimes preserve current embit parse acceptance."
+  },
+  {
+    "id": "liquid-witness-flag",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "let witness = self.byte()? == 1",
+    "replace": "let witness = self.byte()? != 0",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Only flag one introduces witnesses."
+  },
+  {
+    "id": "liquid-script-length",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "self.exact(count)\n    }",
+    "replace": "self.read(count)?; Some(())\n    }",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Scripts require their declared bytes."
+  },
+  {
+    "id": "liquid-proof-short",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "self.read(count)?;\n        Some(())",
+    "replace": "self.exact(count)?;\n        Some(())",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Proof blobs retain reference short-read acceptance."
+  },
+  {
+    "id": "liquid-issuance-flag",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "vout & (1 << 31) != 0",
+    "replace": "false",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Issuance bytes must be consumed when the issuance flag is set."
+  },
+  {
+    "id": "liquid-coinbase-issuance",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "vout != 0xffff_ffff &&",
+    "replace": "true &&",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Coinbase vout does not introduce issuance."
+  },
+  {
+    "id": "liquid-commitment-prefix",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "_ => self.exact(32)",
+    "replace": "_ => None",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Nonzero non-explicit issuance prefixes retain reference commitment acceptance."
+  },
+  {
+    "id": "liquid-commitment-explicit",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "1 => self.exact(8)",
+    "replace": "1 => self.exact(32)",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Explicit issuance commitments consume eight bytes."
+  },
+  {
+    "id": "liquid-commitment-null",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "0 => Some(())",
+    "replace": "0 => self.exact(8)",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Null issuance commitments consume only their prefix."
+  },
+  {
+    "id": "liquid-compact-width",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "1 << (marker - 0xfc)",
+    "replace": "1 << (marker - 0xfd)",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Compact integer widths follow the reference decoder."
+  },
+  {
+    "id": "liquid-output-nonce",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "if self.byte()? != 0",
+    "replace": "if self.byte()? == 0",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Only nonzero output nonce prefixes consume the remaining commitment."
+  },
+  {
+    "id": "liquid-output-value",
+    "file": "crates/custody/src/confirmation/liquid.rs",
+    "find": "if self.byte()? == 1 {",
+    "replace": "if self.byte()? != 1 {",
+    "expect_failing": [
+      "liquid_confirmation_scope_python_vectors"
+    ],
+    "rule": "Explicit output values consume eight bytes, other prefixes thirty-two."
   }
 ]

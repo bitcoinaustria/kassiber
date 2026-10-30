@@ -115,8 +115,9 @@ def _normalize(wire, identities):
 
 
 @pytest.mark.parametrize("country,algorithm", [("generic", "FIFO"), ("generic", "HIFO"), ("at", "MOVING_AVERAGE_AT")])
-def test_cli_csv_export_sequences_and_rust_routing(tmp_path, monkeypatch, country, algorithm):
-    root, database, env, call = _book(tmp_path, monkeypatch, country, algorithm)
+@pytest.mark.parametrize("variant", ["ready", "raw-hex"])
+def test_cli_csv_export_sequences_and_rust_routing(tmp_path, monkeypatch, country, algorithm, variant):
+    root, database, env, call = _book(tmp_path, monkeypatch, country, algorithm, variant)
     original = database.read_bytes()
     artifacts = tmp_path / "artifacts"
     def sequence(reference):

@@ -184,6 +184,20 @@ def build():
     add('no-artifacts', files={}, paths=[])
     add('duplicate-basenames', files={'a.csv': 'x', 'sub/a.csv': 'y'})
     add('wrong-scope', scope={'wallet_ids': 'cold'})
+    from gen_liquid_confirmation_vectors import raw_transactions
+    for name, raw in raw_transactions().items():
+        payload = dict(chain='liquid', network='liquidv1', raw_hex=raw.hex(),
+                       status=dict(confirmed=True, block_hash=BLOCK, block_height=123))
+        sql = WALLETS + tx('raw-hex', 'plain', 'LBTC', 'inbound', 1000, payload, external='b' * 64)
+        add('liquid-raw-hex-' + name, sql=sql)
+    for name, payload in (
+        ('invalid', dict(raw_hex='0200')),
+        ('graph-precedence', dict(raw_hex='0200', vin=[], vout=[])),
+        ('txid-conflict', dict(raw_hex=raw_transactions()['explicit'].hex(), txid='a' * 64)),
+    ):
+        payload.update(chain='liquid', network='liquidv1', status=dict(confirmed=False))
+        add('liquid-raw-hex-' + name, sql=WALLETS + tx('raw-hex', 'plain', 'LBTC', 'inbound', 1000,
+            payload, external='b' * 64))
     result = []
     for spec in specs:
         with tempfile.TemporaryDirectory(prefix='kassiber-completion-oracle-') as root:

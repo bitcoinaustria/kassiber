@@ -326,8 +326,9 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
   Completion computes hashes, exact summaries and authoritative dependencies
   under retained admission. Complete normalized DB sequences and native
   CLI/daemon process oracles prove byte parity and zero CSV fallbacks, including
-  desktop capital-gains CSV. Keep graphless Liquid raw-hex dependency identity
-  fail-closed until its decoder is ported. XLSX/PDF and platform transaction
+  desktop capital-gains CSV. Graphless Liquid dependency capture now matches
+  Python's local parse-success boundary, with stored identity and ambiguity
+  guards intact. XLSX/PDF and platform transaction
   formats remain separate work; see the
   [CSV transport checkpoint](docs/reference/rust-shell.md#csv-export-transport-checkpoint-r5-tenth-continuation).
 - [x] Port explicit saved/filed markers and filing a captured local export,

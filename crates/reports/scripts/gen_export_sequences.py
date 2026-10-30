@@ -31,7 +31,7 @@ CHAIN = WALLETS + tx("c1", "chain", "BTC", "inbound", 1000, status(TX[1])) + tx(
 def build():
     cases = []
     for country, algorithm in (("generic", "FIFO"), ("generic", "HIFO"), ("at", "MOVING_AVERAGE_AT")):
-        for variant in ("ready", "capture-failure", "stale"):
+        for variant in ("ready", "capture-failure", "stale", "raw-hex"):
             # Inject a common initial migration clock before any export action.
             sql = ("DROP TRIGGER trg_schema_migration_audits_immutable;"
                    "UPDATE schema_migration_audits SET created_at='seeded';"
@@ -42,6 +42,13 @@ def build():
                 sql += "CREATE TRIGGER reject_capture BEFORE INSERT ON filed_report_chain_captures BEGIN SELECT RAISE(ABORT,'capture_rejected'); END;"
             if variant == "stale":
                 sql += "UPDATE profiles SET journal_input_version=8 WHERE id='p';"
+            if variant == "raw-hex":
+                from gen_liquid_confirmation_vectors import raw_transactions
+                from kassiber.core.chain_observer.provenance import canonical_graph_hash
+                payload = json.dumps(dict(chain='liquid', network='liquidv1',
+                    raw_hex=raw_transactions()['explicit'].hex(), status=dict(confirmed=True)))
+                sql += f"UPDATE transactions SET raw_json='{payload}' WHERE id='c9';"
+                sql += f"UPDATE chain_observation_provenance SET graph_hash='{canonical_graph_hash(payload)}' WHERE transaction_id='c9';"
             actions = [
                 dict(command="reports.export-csv", args={"history_limit": 0}, target="full.csv"),
                 dict(command="reports.export-csv", args={"wallet": "Cold", "history_limit": 2}, target="wallet.csv"),
@@ -49,7 +56,7 @@ def build():
             ]
             if country == "at":
                 actions.append(dict(command="reports.export-austrian-e1kv-csv", args={"year": 2024}, target="bundle"))
-            if variant == "ready":
+            if variant in ("ready", "raw-hex"):
                 actions += [dict(command="reports.filed-snapshots.create", args={"state": "filed", "saved_snapshot_id": str(UUID(int=1))}) for _ in range(2)]
             with tempfile.TemporaryDirectory(prefix="export-sequence-") as root_text:
                 root = Path(root_text)

@@ -4080,6 +4080,42 @@ above, XLSX/PDF and their rendering/font/parity requirements, platform-specific
 transaction exports, and the remaining report reads/kinds listed in the earlier
 checkpoints. No Python product code or dependency/lockfile changes are included.
 
+## Graphless Liquid report dependencies (R5 eleventh continuation, partial)
+
+The confirmation-capture seam now matches Python's local embit 0.8
+parse-success boundary for graphless Liquid `raw_hex`. It retains stored
+transaction/network identity and current authoritative observation admission;
+the decoded bytes supply no txid, amount, asset, ownership or basis authority.
+Malformed bytes contribute no dependency, as in Python. Stored graph
+precedence, conflicting identities and ambiguous networks retain their
+existing refusals. No new dependency or Python product change is included.
+
+The frozen oracle adds 5,634 physical-scope cases (3,922 scoped, 1,712
+unscoped), including explicit/confidential outputs, issuance, coinbase,
+peg-ins, witnesses, truncations, noncanonical compact integers, overflow
+lengths and trailing bytes. The reader preserves embit's accepted short
+locktimes and short proof blobs; it is not consensus validation. All fifteen
+new/replacement mutations are killed by
+`liquid_confirmation_scope_python_vectors`; the obsolete raw-hex refusal
+mutation is replaced with decode admission. The catalog has 545 entries.
+
+Saved completion now has 48 Python vectors. Twelve complete
+FIFO/HIFO/Austrian export sequences compare 52 actions, 75 resulting CSV
+files and all 112 SQLite tables after every action, including graphless
+Liquid capture and repeated explicit filing. All 48 native report tests pass.
+The 16 process scenarios pass, with 26 full CSV exports, seven Austrian CSV
+exports, twenty transaction CSV exports, twelve explicit markers and three
+daemon sessions served by Rust, with zero fallback. The three sessions retain
+57 exact export response/artifact/database comparisons. Final workspace gates
+are recorded with the next boundary below. Summaries and logs live under
+`target/r5-reports11/`; the owned mutation build tree is removed.
+
+The separate Python directory-target error fix remains a parity dependency:
+`repro_python_directory_error.py` still demonstrates random staging paths in
+the current reference error. This boundary does not claim byte parity for it.
+The remaining report reads/kinds and platform transaction exports still need
+their own native implementations and routing proof; XLSX/PDF await approval.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

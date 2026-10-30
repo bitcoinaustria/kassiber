@@ -4,6 +4,7 @@ use crate::codec::{self, text, truth};
 use crate::graph;
 use crate::python_text::PythonText;
 use serde_json::{json, Value};
+mod liquid;
 
 /// `(chain, network, txid)` of one current authoritative observation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,8 +18,6 @@ pub struct Closed {
 /// Why a row cannot be decided natively. Each refuses rather than guessing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// Only an embit decode of Liquid `raw_hex` could still decide the scope.
-    LiquidRawHex,
     Evidence(String),
 }
 
@@ -182,10 +181,7 @@ pub fn physical_scope(row: &Value) -> Result<Option<(String, String, String)>, R
         .into_iter()
         .filter(|g| g.is_object() && g["vin"].is_array() && g["vout"].is_array())
         .collect();
-    let decodable = looks_liquid
-        && outer["raw_hex"]
-            .as_str()
-            .is_some_and(|hex| !crate::python_text::strip(hex).is_empty());
+    let decodable = looks_liquid && outer["raw_hex"].as_str().is_some_and(liquid::decodable);
     if graphs.is_empty() && !decodable {
         return Ok(None);
     }
@@ -231,10 +227,6 @@ pub fn physical_scope(row: &Value) -> Result<Option<(String, String, String)>, R
         };
         Some((chain.to_owned(), domain.to_owned(), txid))
     })();
-    // Without a stored graph, Python's answer depends on an embit decode.
-    if scope.is_some() && graphs.is_empty() {
-        return Err(Refusal::LiquidRawHex);
-    }
     Ok(scope)
 }
 
@@ -284,7 +276,7 @@ mod tests {
         let contradictory = json!({"id":"r","asset":"LBTC","external_id":txid,"raw_json":"{\"chain\":\"bitcoin\",\"vin\":[],\"vout\":[]}"});
         assert_eq!(physical_scope(&contradictory).unwrap(), None);
         let hex_only = json!({"id":"r","asset":"LBTC","external_id":txid,"raw_json":"{\"chain\":\"liquid\",\"network\":\"liquidv1\",\"raw_hex\":\"00\"}"});
-        assert_eq!(physical_scope(&hex_only), Err(Refusal::LiquidRawHex));
+        assert_eq!(physical_scope(&hex_only).unwrap(), None);
         let undecidable_anyway = json!({"id":"r","asset":"USD","external_id":txid,"raw_json":"{\"chain\":\"liquid\",\"raw_hex\":\"00\"}"});
         assert_eq!(physical_scope(&undecidable_anyway).unwrap(), None);
     }

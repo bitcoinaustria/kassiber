@@ -515,10 +515,6 @@ pub(crate) fn capture_dependencies(
         }
         let observed = observed_instant(&row["observation_observed_at"]);
         let closed = confirmation::closed(row, observed).map_err(|refusal| match refusal {
-            confirmation::Refusal::LiquidRawHex => AppError::new(
-                "not_implemented",
-                "Saved-report dependency capture cannot decide a graphless Liquid raw transaction natively",
-            ),
             confirmation::Refusal::Evidence(message) => AppError::new("internal_error", message),
         })?;
         let Some(closed) = closed else { continue };
@@ -674,10 +670,9 @@ mod tests {
         )])
     }
 
-    /// Python decides a graphless Liquid raw transaction with embit; the
-    /// native capture refuses rather than guessing its physical identity.
+    /// Malformed bytes produce no physical dependency, matching Python.
     #[test]
-    fn graphless_liquid_raw_hex_dependency_refuses() {
+    fn graphless_liquid_raw_hex_invalid_has_no_dependency() {
         let root = tempfile::tempdir().unwrap();
         let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
         let conn = book.connection();
@@ -699,10 +694,16 @@ mod tests {
             scope: Value::Null,
         };
         conn.execute_batch("BEGIN IMMEDIATE").unwrap();
-        let error =
-            register(conn, "ws", "p", &completion, &[file], &Fixed(Cell::new(0))).unwrap_err();
+        register(conn, "ws", "p", &completion, &[file], &Fixed(Cell::new(0))).unwrap();
+        let dependencies: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM filed_report_chain_dependencies",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         conn.execute_batch("ROLLBACK").unwrap();
-        assert_eq!(error.code, "not_implemented");
+        assert_eq!(dependencies, 0);
     }
 
     /// Python-generated registrations, including authoritative dependencies.
