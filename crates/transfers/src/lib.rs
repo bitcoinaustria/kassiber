@@ -1,4 +1,5 @@
 //! Stored review facts are distinct from observation, matching and journal authority.
+mod component_reads;
 mod component_review;
 mod component_rows;
 mod component_store;
@@ -53,6 +54,9 @@ pub fn execute_with_sources(
     sources: &dyn Sources,
 ) -> Result<Value> {
     match operation {
+        "transfers.components.list" | "transfers.components.show" => {
+            component_reads::execute(conn, scope, operation, args)
+        }
         "transfers.suggest" | "transfers.bulk-pair" | "transfers.rules.apply" => {
             pairing_commands::execute(conn, scope, operation, args, sources)
         }

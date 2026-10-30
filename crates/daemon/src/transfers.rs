@@ -23,6 +23,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.suggest",
     "ui.transfers.bulk_pair",
     "ui.transfers.rules.apply",
+    "ui.transfers.components.list",
+    "ui.transfers.components.get",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
@@ -32,6 +34,12 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if matches!(
+        kind,
+        "ui.transfers.components.list" | "ui.transfers.components.get"
+    ) {
+        return component_reads(book, kind, args);
+    }
     if matches!(
         kind,
         "ui.transfers.suggest" | "ui.transfers.bulk_pair" | "ui.transfers.rules.apply"
@@ -260,6 +268,85 @@ fn pairing_args(kind: &str, args: &Value) -> Result<Value, AppError> {
         Value::Int(expiry_days(&floor)?),
     );
     Ok(payload)
+}
+
+fn component_read_limit(kind: &str, args: &Value) -> Result<usize, AppError> {
+    if kind == "ui.transfers.components.get" {
+        return Ok(0);
+    }
+    let limit = get(args, "limit").cloned().unwrap_or(200.into());
+    if !matches!(&limit,Value::Int(n)if n>=&1.into()&&n<=&1000.into()) {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} limit must be an integer between 1 and 1000"),
+        ));
+    }
+    let Value::Int(n) = limit else { unreachable!() };
+    Ok(usize::try_from(n).unwrap())
+}
+
+fn component_read_payload(
+    kind: &str,
+    args: &Value,
+    limit: usize,
+) -> Result<(&'static str, Value), AppError> {
+    use kassiber_envelope::set;
+    let mut payload = dict([("include_local_evidence", Value::Bool(false))]);
+    for name in ["workspace", "profile"] {
+        if let Some(v) = get(args, name) {
+            set(&mut payload, name, v.clone());
+        }
+    }
+    if kind == "ui.transfers.components.get" {
+        let id = get(args, "component_id")
+            .and_then(|v| {
+                if let Value::Str(t) = v {
+                    t.as_str()
+                } else {
+                    None
+                }
+            })
+            .map(kassiber_pytext::strip)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| AppError::new("validation", format!("{kind} requires component_id")))?;
+        set(&mut payload, "component_id", s(id));
+        Ok(("transfers.components.show", payload))
+    } else {
+        for name in ["state", "component_type", "transaction", "effective_only"] {
+            if let Some(v) = get(args, name) {
+                set(&mut payload, name, v.clone());
+            }
+        }
+        set(&mut payload, "limit", (limit + 1).into());
+        // The service checks this boolean after resolving the transaction,
+        // matching the desktop's refusal order without duplicating resolution.
+        set(&mut payload, "desktop_kind", s(kind));
+        Ok(("transfers.components.list", payload))
+    }
+}
+
+fn component_reads(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
+    let limit = component_read_limit(kind, args)?;
+    book.resolve_scope(get(args, "workspace"), get(args, "profile"))?;
+    let (operation, payload) = component_read_payload(kind, args, limit)?;
+    let result = book.transfers(operation, &payload)?;
+    if kind == "ui.transfers.components.get" {
+        return Ok(exact_integers(result));
+    }
+    component_read_page(result, limit)
+}
+
+fn component_read_page(result: Value, limit: usize) -> Result<Value, AppError> {
+    let Value::List(mut components) = result else {
+        unreachable!("component list service returns a list")
+    };
+    let has_more = components.len() > limit;
+    components.truncate(limit);
+    Ok(exact_integers(dict([
+        ("components", Value::List(components)),
+        ("has_more", Value::Bool(has_more)),
+        ("limit", limit.into()),
+    ])))
 }
 
 fn normalize_payout_create_args(kind: &str, args: &mut Value) {
@@ -494,6 +581,73 @@ fn exact_integers(value: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_component_reads_bound_pages_and_keep_local_evidence_private() {
+        let page = component_read_page(Value::List(vec![s("a"), s("b"), s("c")]), 2).unwrap();
+        assert_eq!(
+            page,
+            dict([
+                ("components", Value::List(vec![s("a"), s("b")])),
+                ("has_more", Value::Bool(true)),
+                ("limit", 2.into())
+            ])
+        );
+        assert_eq!(
+            get(
+                &component_read_page(Value::List(vec![s("a")]), 1).unwrap(),
+                "has_more"
+            ),
+            Some(&Value::Bool(false))
+        );
+        let kind = "ui.transfers.components.list";
+        for n in [0, 1001] {
+            assert_eq!(
+                component_read_limit(kind, &dict([("limit", n.into())]))
+                    .unwrap_err()
+                    .code,
+                "validation"
+            );
+        }
+        assert!(component_read_limit(kind, &dict([("limit", Value::Bool(true))])).is_err());
+        let args = dict([
+            ("limit", 1.into()),
+            ("effective_only", Value::Bool(true)),
+            ("transaction", s("external")),
+            ("include_local_evidence", Value::Bool(true)),
+            ("desktop_kind", s("forged")),
+        ]);
+        let limit = component_read_limit(kind, &args).unwrap();
+        let (operation, payload) = component_read_payload(kind, &args, limit).unwrap();
+        assert_eq!(operation, "transfers.components.list");
+        assert_eq!(get(&payload, "limit"), Some(&2.into()));
+        assert_eq!(
+            get(&payload, "include_local_evidence"),
+            Some(&Value::Bool(false))
+        );
+        assert_eq!(get(&payload, "desktop_kind"), Some(&s(kind)));
+        assert_eq!(get(&payload, "transaction"), Some(&s("external")));
+        assert_eq!(get(&payload, "effective_only"), Some(&Value::Bool(true)));
+        let kind = "ui.transfers.components.get";
+        assert!(
+            component_read_payload(kind, &dict([("component_id", Value::Bool(true))]), 0).is_err()
+        );
+        let (operation, payload) = component_read_payload(
+            kind,
+            &dict([
+                ("component_id", s("  id  ")),
+                ("include_local_evidence", Value::Bool(true)),
+            ]),
+            0,
+        )
+        .unwrap();
+        assert_eq!(operation, "transfers.components.show");
+        assert_eq!(get(&payload, "component_id"), Some(&s("id")));
+        assert_eq!(
+            get(&payload, "include_local_evidence"),
+            Some(&Value::Bool(false))
+        );
+    }
 
     #[test]
     fn desktop_pairing_defaults_coercion_and_authority_match_python() {

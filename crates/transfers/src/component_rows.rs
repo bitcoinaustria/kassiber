@@ -1151,8 +1151,16 @@ pub(super) fn get_component(
         ));
     }
     let snapshot = store::snapshot(c, scope)?;
-    let value = materialize(c, &snapshot, &header)?;
-    projection(c, &value)
+    materialize_read(c, &snapshot, &header)
+}
+
+/// Share a profile snapshot across stored list views, as Python's list does.
+pub(super) fn materialize_read(
+    c: &Connection,
+    snapshot: &Snapshot,
+    header: &Value,
+) -> Result<Value> {
+    projection(c, &materialize(c, snapshot, header)?)
 }
 
 /// Persisted child rows in Python's insertion order.

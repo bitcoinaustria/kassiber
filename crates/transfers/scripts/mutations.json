@@ -2341,5 +2341,175 @@
       "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
     ],
     "rule": "The matcher cache cannot hide a changed numeric option refusal."
+  },
+  {
+    "id": "component-read-profile",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "vec![\"c.profile_id=?\"]",
+    "replace": "vec![\"c.profile_id!=?\"]",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component lists stay in the selected profile."
+  },
+  {
+    "id": "component-read-show-scope",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "cr::get_component(c, scope, id, true)?",
+    "replace": "cr::get_component(c, scope, id, false)?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component show refuses another profile."
+  },
+  {
+    "id": "component-read-local",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "let local = get(args, \"include_local_evidence\").is_some_and(truthy);",
+    "replace": "let local = true;",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Local evidence requires the explicit CLI opt-in."
+  },
+  {
+    "id": "component-read-location",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "(\"location_ref\".into(), value(&location, \"location_ref\"))",
+    "replace": "(\"location_ref\".into(), Value::Null)",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Explicit local views preserve the stored location reference."
+  },
+  {
+    "id": "component-read-limit",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "n > &1001.into()",
+    "replace": "n > &1002.into()",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Core list limits retain the Python upper bound."
+  },
+  {
+    "id": "component-read-state",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "conditions.push(\"c.state=?\")",
+    "replace": "conditions.push(\"c.component_type=?\")",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "The state filter selects stored state."
+  },
+  {
+    "id": "component-read-type",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "conditions.push(\"c.component_type=?\")",
+    "replace": "conditions.push(\"c.state=?\")",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "The component type filter selects the normalized type."
+  },
+  {
+    "id": "component-read-transaction",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "COALESCE(l.anchor_transaction_id,l.transaction_id)=?",
+    "replace": "COALESCE(l.anchor_transaction_id,l.transaction_id)!=?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Transaction filters use the anchored transaction."
+  },
+  {
+    "id": "component-read-effective",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "if effective && text(&item, \"effective_state\") != \"active\" {",
+    "replace": "if false && effective && text(&item, \"effective_state\") != \"active\" {",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Effective-only reads materialize and exclude ineffective components."
+  },
+  {
+    "id": "component-read-order",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "ORDER BY c.created_at DESC,c.revision DESC,c.id DESC",
+    "replace": "ORDER BY c.created_at ASC,c.revision DESC,c.id DESC",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component pagination preserves descending Python order."
+  },
+  {
+    "id": "component-read-pre-limit",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "let limit_sql = if effective {",
+    "replace": "let limit_sql = if false && effective {",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Effective filtering precedes page truncation."
+  },
+  {
+    "id": "component-read-boolean-order",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "get(args, \"desktop_kind\") == Some(&s(\"ui.transfers.components.list\"))",
+    "replace": "false && get(args, \"desktop_kind\") == Some(&s(\"ui.transfers.components.list\"))",
+    "expect_failing": [
+      "component_desktop_boolean_validation_follows_transaction_resolution"
+    ],
+    "rule": "Desktop boolean validation follows transaction resolution and precedes core list validation."
+  },
+  {
+    "id": "desktop-component-read-private",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "dict([(\"include_local_evidence\", Value::Bool(false))])",
+    "replace": "dict([(\"include_local_evidence\", Value::Bool(true))])",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "Desktop reads always exclude local evidence."
+  },
+  {
+    "id": "desktop-component-read-cap",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "n>=&1.into()&&n<=&1000.into()",
+    "replace": "n>=&1.into()&&n<=&1001.into()",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "Desktop component pages cap the requested limit at 1000."
+  },
+  {
+    "id": "desktop-component-read-extra",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "(limit + 1).into()",
+    "replace": "limit.into()",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "Desktop reads request an extra row to determine has_more."
+  },
+  {
+    "id": "desktop-component-read-more",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "components.len() > limit",
+    "replace": "components.len() >= limit",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "A full final page does not claim more rows."
+  },
+  {
+    "id": "desktop-component-read-truncate",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "components.truncate(limit);",
+    "replace": "components.truncate(limit + 1);",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "The probe row never leaks into the page."
   }
 ]

@@ -396,7 +396,8 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
 serves all five stored reads, fourteen authoring commands (rule CRUD/toggles,
 dismissals, pair/unpair/update, payout create/delete, component and gap plan/apply),
-and suggestions/bulk pairing/rule application: 22/29 CLI leaves and 21 desktop kinds. Full
+suggestions/bulk pairing/rule application, and component list/show:
+24/29 CLI leaves and 23 desktop kinds. Full
 normalized authoring row parity is pinned for that subset; AI projections remain
 Python.
 
@@ -416,7 +417,9 @@ Python.
 - [x] Register suggestions, bulk pairing and rule application through the shared
   R4 pairing library, with command-level full-row parity, atomic dry runs,
   daemon coercion/authorship, hybrid process witnesses and named mutations.
-- [ ] Port gaps list/review and components list/show with their desktop kinds.
+- [x] Port component list/show with the shared materializer, private CLI opt-in,
+  safe desktop projection, exact filters/pagination and read-only DB parity.
+- [ ] Port gaps list/review with their desktop kinds.
 - [ ] Port review cases/plan/apply after complete current-state ledger composition
   is available; retain readiness barriers rather than reading stale journals.
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the

@@ -2384,6 +2384,9 @@
     "tests/test_rust_transaction_services.py": {
       "RustTransactionServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 4}
     },
+    "tests/test_rust_transfer_reads.py": {
+      "RustTransferReadsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "Compares CLI and daemon component/gap read bytes, complete unchanged database rows, private evidence projections and hybrid Rust routing", "reviewed": true, "tests": 2}
+    },
     "tests/test_rust_transfer_services.py": {
       "RustTransferServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution", "reviewed": true, "tests": 11}
     },

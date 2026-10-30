@@ -158,6 +158,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.dismiss",
     "transfers.components.plan",
     "transfers.components.apply",
+    "transfers.components.list",
+    "transfers.components.show",
     "review.receipt",
     "reports.export-csv",
     "reports.export-austrian-e1kv-csv",

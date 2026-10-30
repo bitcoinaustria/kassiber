@@ -5673,3 +5673,40 @@ this base still explicitly skips interpretation, quantity and finalized
 projection in the Rust custody product API. Stored journal rows cannot replace
 that current-state recomputation. AI projections remain Python, and journal
 pairing integration remains R4's responsibility.
+
+### Component read checkpoint (R5 transfers-8)
+
+The same continuation enables `transfers components list|show` and
+`ui.transfers.components.list|get`: **24/29 CLI leaves (23 transfers, one
+review) and 23 desktop kinds**. Reads use the component materializer already
+used by authoring, including effective-state, route, native-support and evidence
+validation. Effective filtering precedes truncation. Transaction references
+retain ID-first resolution and ambiguity refusals. Explicit CLI local-evidence
+views restore evidence, conversion metadata and leg locations in Python order;
+the desktop always receives the safe projection, regardless of caller flags.
+Desktop limit validation precedes scope; transaction resolution precedes exact
+boolean validation. The limit-plus-one probe supplies `has_more`.
+
+| Parity boundary | Named evidence | Comparison |
+| --- | --- | --- |
+| Stored drafts, active/conflicting components, revisions, local evidence, filters and refusals | `component_reads_match_python_ordered_views_filters_and_complete_unchanged_database_rows` | 51 independently hydrated books, 1,190 operations (633 successes, 557 refusals), ordered outputs and every unchanged application-table row |
+| Focused selection/privacy and validation order | `component_read_filters_privacy_and_paging_match_python`, `component_desktop_boolean_validation_follows_transaction_resolution` | Shared materialization, profile scope, filters, effective paging, local views, and deferred desktop validation |
+| Desktop authority and page shape | `desktop_component_reads_bound_pages_and_keep_local_evidence_private` | Forced safe views, bounded limits, probe rows and final-page `has_more` |
+| CLI/daemon wire bytes and zero fallback | `tests/test_rust_transfer_reads.py` | 86 CLI calls across six states, 102 component requests in six daemon sessions; complete pre/post DB equality |
+
+The component read oracle regenerates byte-identically with a clock fixed
+before schema initialization. No identities, timestamps, hashes or serialized
+fields are normalized in these read comparisons. Python AI projections remain
+unchanged and use the same stored rows.
+
+All **17 new read mutations** were built and killed by the focused native
+witnesses above; the transfer catalog now has **251 applicable entries**.
+The final list implementation shares one profile snapshot across selected
+components instead of reloading the book for each row. The serial mutation
+scratch tree was removed after its summary.
+The refreshed component/daemon native run passes **18 tests**. Workspace fmt
+and all-target clippy with `-D warnings` pass for this boundary.
+
+Five CLI leaves remain disabled here: gaps list/review and review cases/plan/apply.
+The current-state ledger composition dependency for the latter remains as
+recorded above.

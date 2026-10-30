@@ -2420,3 +2420,16 @@ The [shell checkpoint](../reference/rust-shell.md#pairing-command-checkpoint-r5-
 records the evidence and remaining work. Review cases/plan/apply still require
 current ledger composition, whose interpretation/quantity/finalized stages
 are absent on this base; they must not be approximated from stored journals.
+
+### R5 component read checkpoint
+
+The transfers-8 continuation registers component list/show and the safe desktop
+list/get kinds, bringing the subset to **24/29 CLI leaves and 23 desktop kinds**.
+The shared authoring materializer supplies all validation and effective-state
+rules. An explicit CLI flag can include local evidence; desktop reads always
+redact it. Python oracles pin ordered views, profile/reference/filter refusals,
+effective filtering before pagination and complete unchanged database rows
+across 51 books and 1,190 reads. Real CLI/daemon comparisons require zero hybrid
+fallbacks. The [shell checkpoint](../reference/rust-shell.md#component-read-checkpoint-r5-transfers-8)
+records counts and mutation witnesses. Gap snapshots and the three current-ledger
+review operations remain disabled at this boundary; AI projections stay Python.
