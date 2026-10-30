@@ -81,6 +81,22 @@ def test_import_validates_value_derived_rate(amount, value):
     assert error.value.code == 'validation'
 
 
+def test_value_only_import_stores_no_inferred_rate_or_rescaled_total(book):
+    from kassiber.core.imports import insert_wallet_records, ImportCoordinatorHooks, _transaction_merge_updates
+    profile = book.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+    wallet = book.execute("SELECT * FROM wallets WHERE id='btc'").fetchone()
+    hooks = ImportCoordinatorHooks(lambda *_: None, lambda *_: None)
+    insert_wallet_records(book, profile, wallet,
+        [dict(txid='value-only', direction='inbound', asset='BTC', amount='3', fiat_value='100', occurred_at=NOW)],
+        'custom', hooks)
+    row = book.execute("SELECT * FROM transactions WHERE external_id='value-only'").fetchone()
+    assert row['fiat_rate'] is None and row['fiat_rate_exact'] is None
+    assert row['fiat_value_exact'] == '100'
+    refreshed = normalize_import_record(dict(txid='value-only', direction='inbound', asset='BTC', amount='6', occurred_at=NOW))
+    updates = _transaction_merge_updates(row, refreshed, 'refreshed', authoritative_chain_observer=True)
+    assert updates['fiat_value'] is None and updates['fiat_value_exact'] is None
+
+
 @pytest.mark.parametrize('value,stored', [('-0', '0'), ('0.0000001', '1E-7')])
 def test_decimal_text_normalizes_exactly(book, value, stored):
     create_direct_swap_payout(book, 'Books', 'Book', 'out', payout_asset='EUR', payout_amount='1', payout_fiat_value=value)

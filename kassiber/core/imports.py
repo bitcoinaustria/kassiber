@@ -1672,7 +1672,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     if value is None and rate is not None:
         value = finite_decimal(amount * rate, "fiat_value")
     if rate is None and value is not None and amount:
-        rate = finite_decimal(value / amount, "fiat_rate")
+        finite_decimal(value / amount, "fiat_rate")
     source_kind = None
     quality = None
     if has_import_price:
