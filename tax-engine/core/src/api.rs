@@ -185,8 +185,12 @@ fn ledger_inner(request: &str) -> Result<String, StagedError> {
             }
         }
         v2::Operation::Ledger => {
+            let parse = crate::timing::span("parse");
             let request: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
-            v2_json(&run::ledger(&request)?)
+            drop(parse);
+            let response = run::ledger(&request)?;
+            let _serialize = crate::timing::span("serialize");
+            v2_json(&response)
         }
     }
 }

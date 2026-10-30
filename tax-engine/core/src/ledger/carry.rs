@@ -222,8 +222,10 @@ pub(crate) fn carry(book: &Book, config: &ConfigSpec) -> Result<Carry, CarryFail
 /// the event's unique id (its row's id; a move's out leg's)
 /// (`_computed_cost_basis_by_transaction_id`).
 fn computed_basis(book: &Book, stages: &[Stages]) -> Result<HashMap<String, Decimal>, StagedError> {
+    let span = crate::timing::span("carry_compute");
     let inputs = lot_inputs(book, stages);
     let outputs = compute(book, &inputs)?;
+    drop(span);
     let bare = |error| StagedError::new(Stage::Prepare, error);
     let mut basis: HashMap<String, Decimal> = HashMap::new();
     let computed = stages

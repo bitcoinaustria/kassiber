@@ -226,10 +226,13 @@ pub(crate) fn prepare_assets(
             .copied()
             .filter(|row| !pass.excluded.contains(row))
             .collect();
+        let span = crate::timing::span("normalize");
         let normalized = match normalize(book, part, &active, &pass.links) {
             Ok(normalized) => normalized,
             Err(error) => return (stages, Some(error)),
         };
+        drop(span);
+        let _walk = crate::timing::span("walk");
         match walk(book, part, &normalized, config) {
             Ok(walked) => stages.push(Stages {
                 normalized,
@@ -401,11 +404,18 @@ pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, Box<Pr
 /// composed ledger. A failure names the stage it happened at (design
 /// §3.9).
 pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedError> {
+    let span = crate::timing::span("book");
     let config = request.config.spec();
     let book = Book::new(request).map_err(StagedError::contract)?;
+    drop(span);
+    let span = crate::timing::span("carry");
     let carry = carry(&book, &config).map_err(|failure| failure.error)?;
+    drop(span);
+    let span = crate::timing::span("carried_request");
     let carried = carry.request(request)?;
     let book = Book::new(&carried).map_err(StagedError::contract)?;
+    drop(span);
+    let span = crate::timing::span("final_pass");
     let FinalPass {
         stages,
         selection,
@@ -414,13 +424,21 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
     if let Some(error) = error {
         return Err(StagedError::new(Stage::Prepare, error));
     }
+    drop(span);
     // A final pass that did not fail always has its selection.
     let selection = selection.unwrap_or_default();
     // The assets the lot engine computes, in order.
+    let span = crate::timing::span("lot_inputs");
     let inputs = lot_inputs(&book, &stages);
+    drop(span);
+    let span = crate::timing::span("validate");
     swaps::validate(&inputs, engine_country(&request.policy.country))
         .map_err(|error| StagedError::new(Stage::Validate, error))?;
+    drop(span);
+    let span = crate::timing::span("compute");
     let mut outputs = compute(&book, &inputs)?.into_iter();
+    drop(span);
+    let _compose = crate::timing::span("compose");
     let mut response = LedgerResponse {
         schema_version: SCHEMA_VERSION,
         ok: true,

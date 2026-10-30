@@ -39,6 +39,8 @@ mod outputs;
 mod pool;
 mod swaps;
 pub mod time;
+#[doc(hidden)]
+pub mod timing;
 
 pub use api::{check_entry, compute, ledger};
 pub use engine::Country;
