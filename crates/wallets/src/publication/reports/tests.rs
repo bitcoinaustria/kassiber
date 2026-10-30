@@ -19,9 +19,11 @@ fn report_impacts_match_python_oracle_cases() {
     for case in cases {
         let name = py_str(get(case, "name").unwrap());
         let clock = RefCell::new(Clock::new("id"));
-        let mut conn: Option<Connection> = None;
         for (index, step) in list(get(case, "steps").unwrap()).iter().enumerate() {
-            let conn = conn.get_or_insert_with(|| load(get(step, "before").unwrap()));
+            // Reopen each round: the oracle may have observed new chain
+            // evidence between impact publications. Preserve the report id
+            // sequence and replay the persisted inbox from the full book.
+            let conn = load(get(step, "before").unwrap());
             let retracted: Vec<String> = list(get(step, "retracted").unwrap())
                 .iter()
                 .map(py_str)
@@ -47,7 +49,7 @@ fn report_impacts_match_python_oracle_cases() {
             }
             assert_eq!(text(&actual), text(expected), "{name} step {index} outcome");
             assert_eq!(
-                text(&snapshot(conn)),
+                text(&snapshot(&conn)),
                 text(get(step, "after").unwrap()),
                 "{name} step {index} rows"
             );

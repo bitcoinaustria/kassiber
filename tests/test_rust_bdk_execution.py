@@ -21,7 +21,7 @@ from kassiber.core.chain_observer.store import StoredObserverState
 from kassiber.core.sync import WalletSyncState
 from kassiber.core import sync_backends as reference
 from kassiber.wallet_descriptors import load_descriptor_plan, derive_descriptor_targets
-from tests.test_rust_chain_candidate import _env
+from tests.rust_sync_env import child_env as _env
 from tests.test_rust_wallet_acquisition import _rust as acquisition, _server, _transactions
 from tests.test_rust_wallet_discovery import _config
 from tests.test_rust_bitcoin_records import project

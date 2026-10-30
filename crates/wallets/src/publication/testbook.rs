@@ -119,6 +119,51 @@ pub(crate) fn text(value: &Value) -> String {
     kassiber_pyjson::dumps(value, &kassiber_pyjson::Options::new().sort_keys(true)).unwrap()
 }
 
+/// Trace every row write, including repeated writes and foreign-key/graph
+/// trigger effects. TEMP instrumentation never enters the logical book dump.
+pub(crate) fn watch_writes(conn: &Connection, fail_at: usize) {
+    conn.execute_batch(
+        "CREATE TEMP TABLE publication_write_trace(name TEXT, operation TEXT);
+         CREATE TEMP TABLE publication_write_failure(position INTEGER);",
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO publication_write_failure VALUES(?)",
+        [fail_at as i64],
+    )
+    .unwrap();
+    let tables: Vec<String> = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    for table in tables {
+        for operation in ["INSERT", "UPDATE", "DELETE"] {
+            conn.execute_batch(&format!(
+                "CREATE TEMP TRIGGER probe_{table}_{operation} BEFORE {operation} ON main.\"{table}\"
+                 BEGIN
+                   INSERT INTO publication_write_trace VALUES('{table}', '{operation}');
+                   SELECT RAISE(ABORT, 'injected publication write')
+                     WHERE (SELECT COUNT(*) FROM publication_write_trace) =
+                           (SELECT position FROM publication_write_failure);
+                 END;"
+            ))
+            .unwrap();
+        }
+    }
+}
+
+pub(crate) fn write_trace(conn: &Connection) -> Vec<(String, String)> {
+    conn.prepare("SELECT name,operation FROM publication_write_trace ORDER BY rowid")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
 /// Deterministic `uuid4()` / `now_iso()` sequences matching `publication_books.py`.
 pub(crate) struct Clock {
     ids: u32,

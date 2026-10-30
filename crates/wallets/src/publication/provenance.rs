@@ -195,6 +195,7 @@ pub fn persist(
     resolved: &[Value],
     now: &mut dyn FnMut() -> String,
 ) -> Result<usize> {
+    super::row::require_transaction(conn)?;
     let mut resolved_by_key: Vec<(RecordKey, String)> = Vec::new();
     for record in resolved {
         let key = record_key(record);

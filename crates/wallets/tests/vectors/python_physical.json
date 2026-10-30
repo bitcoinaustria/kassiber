@@ -40066,6 +40066,33 @@
      "BTC"
     ]
    }
+  },
+  {
+   "conflict": {
+    "result": null
+   },
+   "domain": {
+    "result": [
+     null,
+     false
+    ]
+   },
+   "observation": {
+    "result": null
+   },
+   "row": {
+    "asset": "BTC",
+    "external_id": "abababababababababababababababababababababababababababababababab",
+    "external_id_kind": "txid",
+    "id": "explicit-chain-conflict",
+    "raw_json": "{\"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 1, \"prevout\": {\"scriptpubkey\": \"0014aa\", \"value\": 5}}], \"vout\": [{\"scriptpubkey\": \"0014bb\", \"value\": 4}], \"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\"}",
+    "wallet_config_json": "{\"chain\": \"liquid\"}",
+    "wallet_id": "w1",
+    "wallet_kind": "descriptor"
+   },
+   "transfer_scope": {
+    "result": null
+   }
   }
  ],
  "generator": "crates/wallets/scripts/generate_physical_vectors.py",

@@ -127,7 +127,7 @@ through the shared setup crate.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
-## Rust backend R5 Bitcoin wallet sync (preparation only)
+## Rust backend R5 Bitcoin wallet sync (publication; product routes pending)
 
 - [x] Port the compatibility descriptor gap walker for Esplora and Electrum,
   with exact-action consent, cancellation, progress, loopback differential
@@ -151,16 +151,23 @@ through the shared setup crate.
 - [x] Port pure Bitcoin normalized records and cross-observer composition,
   complete output-snapshot merging, structural provenance mappings and live-
   record retraction vetoes. This is preparation only; no product route or write.
-- [ ] Apply transactions, provenance, graph cache, output/policy coverage and
-  freshness/journal invalidation atomically, with full normalized book dumps.
-  Prepare complete native output/coverage facts, preserve named observer routes
-  and recheck source-overlap/book-network/scope/epoch before application.
-  The private observer JSON/coverage writer now has captured-epoch fencing and
-  Python row/error oracles. Rollback-on-drop savepoints, canonical retractions
-  and final wallet/freshness metadata primitives now have Python full-table
-  oracles and cancellation/SQLCipher restart rollback tests. The complete apply
-  coordinator and post-sync book parity remain missing; encrypted file byte
-  identity on rollback is not established (Python reproduces the distinction).
+- [x] Publish prepared Bitcoin descriptor-wallet fetches atomically: observer
+  state, transaction insertion/merge/retraction, closed provenance, graph index,
+  saved-report impacts, output inventory, policy coverage, wallet/freshness and
+  journal staleness. Full normalized books match Python for ten fixtures and
+  eight restart sequences on both protocols. The supported profile has one
+  wallet; captured config, book scope and observer epochs are fenced. Additional
+  wallets and unported repairs refuse. Failure injection compares logical rows;
+  SQLCipher ciphertext can change after rollback in Python and Rust.
+- [ ] Assemble complete native prepared fetches, including output/coverage facts
+  and named observer routes, through the shared CLI/daemon service. Existing
+  full-book publication proofs consume Python-prepared fetches; they do not
+  prove end-to-end native sync or authorize product route registration.
+- [ ] Resolve the Python reference's Esplora compatibility-cache reorg miss when
+  script statistics are unchanged, in separate work. The disposable repro is
+  `tests/rust_port/repro_esplora_reorg_cache.py`; incremental sync leaves saved
+  confirmation evidence stale until force-full refresh. See the publication
+  handoff in `docs/reference/rust-shell.md`.
 - [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
   hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
   Silent Payments sync remain `not_implemented` in the Rust binary.

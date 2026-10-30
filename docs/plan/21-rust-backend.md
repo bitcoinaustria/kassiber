@@ -2290,3 +2290,38 @@ still need a scope-fenced wallet coordinator and full post-sync book parity.
 No product route or `IMPLEMENTED` entry changes. See the
 [storage checkpoint](../reference/rust-shell.md#bitcoin-observer-persistence-prerequisite-r5)
 for verification and the remaining acceptance work.
+
+### R5 Bitcoin sync: atomic publication checkpoint
+
+The unregistered `wallets::publication::wallet::apply` publishes a prepared
+Bitcoin descriptor-wallet fetch under one rollback-on-drop savepoint. It fences
+captured wallet configuration, book network, the supported single-wallet
+profile shape and each observer's captured epoch. It writes observer/checkpoint
+state and policy coverage, composes facts, retracts and inserts/merges records,
+persists closed provenance, appends saved-report impacts, refreshes inventory,
+and updates wallet/freshness and journal staleness together. All publication
+writers require an existing transaction. Other profile wallets, enrichment,
+alternate source routes and unported negative-balance repairs refuse.
+
+Full normalized books match unchanged Python for ten fixtures and eight
+three-round sequences on Electrum and Esplora, including subprocess restarts.
+Reviewed-book witnesses add saved-report and current-journal cases. These are
+**publication proofs using Python-prepared fetches**; the Rust replay also runs
+offline from frozen full-book vectors. The original 78 rounds regenerate
+unchanged; the expanded corpus has 102 successful rounds. Every row-write
+position in that corpus is injected, including repeated writes, foreign-key
+cascades and graph triggers: 2,447 failures restore all logical rows. Separate
+tests cover cancellation, panic, stale epochs, outer transactions and the
+SQLCipher logical/physical rollback distinction.
+
+The reviewed Esplora reorg case also reproduces a Python reference cache bug:
+unchanged script statistics can hide changed confirmation evidence until a
+force-full refresh. A checked-in disposable repro and TODO record the bug;
+Python remains unchanged and publication parity preserves its current outcome.
+
+No sync route or `IMPLEMENTED` entry changes. Native prepared-fetch assembly,
+complete native output/coverage facts, shared CLI/daemon freshness routing,
+consent/scope and unsupported-route checks, a native end-to-end book proof and
+zero-fallback hybrid workloads remain before registration. See the
+[publication handoff](../reference/rust-shell.md#bitcoin-atomic-publication-verification-r5)
+for exact verification and mutation results.

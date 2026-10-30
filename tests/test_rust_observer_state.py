@@ -18,7 +18,7 @@ from kassiber.core.sync_backends import _current_observed_txids
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from tests.test_bdk_observer import _descriptor_wallet
-from tests.test_rust_chain_candidate import _env
+from tests.rust_sync_env import child_env as _env
 
 ROOT = Path(__file__).resolve().parents[1]
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")

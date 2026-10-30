@@ -155,7 +155,11 @@ def vectors():
     rng = random.Random(21)
     rows = [row(rng, index) for index in range(900)]
     cases = []
-    for value in rows:
+    chain_conflict = {"id": "explicit-chain-conflict", "wallet_id": "w1", "wallet_kind": "descriptor",
+                      "external_id": TXID, "external_id_kind": "txid", "asset": "BTC",
+                      "raw_json": json.dumps(graph(TXID, chain="bitcoin")),
+                      "wallet_config_json": json.dumps({"chain": "liquid"})}
+    for value in [*rows, chain_conflict]:
         scope = call(transfers.onchain_transfer_scope, value)
         cases.append({
             "row": value,

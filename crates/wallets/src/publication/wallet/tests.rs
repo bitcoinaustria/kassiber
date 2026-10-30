@@ -70,7 +70,45 @@ fn replay(case: &Json, fail: Option<&str>) -> (Value, Connection, Value) {
 fn publication_books_match_python_fixture_and_sequence_rounds() {
     let vectors = vectors();
     let cases = vectors["cases"].as_array().unwrap();
-    assert!(cases.len() >= 60, "{}", cases.len());
+    for protocol in ["electrum", "esplora"] {
+        for (name, rounds) in [
+            ("empty", 1),
+            ("receive-change", 1),
+            ("checkpoint", 3),
+            ("multi-script", 1),
+            ("fixed", 1),
+            ("gap-one", 1),
+            ("reorg", 2),
+            ("retraction", 2),
+            ("mempool", 2),
+            ("coinbase", 1),
+            ("reanchor", 3),
+            ("reorg-drop", 3),
+            ("preflight-race", 3),
+            ("mempool-drop-return", 3),
+            ("replacement", 3),
+            ("height-change", 3),
+            ("force-full", 3),
+            ("force-without-state", 3),
+            ("reviewed-checkpoint", 3),
+            ("reviewed-reorg", 2),
+            ("reviewed-retraction", 2),
+            ("reviewed-mempool", 2),
+            ("reviewed-authority", 3),
+        ] {
+            for round in 0..rounds {
+                let key = format!("{name}/{protocol}/{round}");
+                assert_eq!(
+                    cases
+                        .iter()
+                        .filter(|c| c["name"] == key && c["outcome"].get("result").is_some())
+                        .count(),
+                    1,
+                    "missing or duplicated successful round {key}"
+                );
+            }
+        }
+    }
     let mut published = 0;
     for case in cases.iter().filter(|c| c.get("before").is_some()) {
         let name = case["name"].as_str().unwrap();
@@ -92,7 +130,80 @@ fn publication_books_match_python_fixture_and_sequence_rounds() {
             "{name} rows"
         );
     }
-    assert!(published >= 60, "{published}");
+    assert_eq!(published, 102);
+}
+
+#[test]
+fn persistence_writers_require_the_wallet_transaction() {
+    let vectors = vectors();
+    let case = vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "receive-change/esplora/0")
+        .unwrap();
+    let mut sources = Fixed {
+        prefix: "guard".into(),
+        ids: 0,
+        now: 0,
+    };
+    let clock = Clock(RefCell::new(&mut sources));
+    let conn = load(&py(&case["before"]).unwrap());
+    let before = text(&snapshot(&conn));
+    let config = s(case["captured_config"].as_str().unwrap());
+    let results = [
+        inventory::update(
+            &conn,
+            &inventory::Source {
+                workspace_id: "w",
+                profile_id: "p",
+                wallet_id: "a",
+                wallet_config_json: &config,
+                backend_name: "fixture",
+                backend_kind: "esplora",
+                chain: "bitcoin",
+                network: "main",
+            },
+            &[],
+            "now",
+        )
+        .map(|_| ()),
+        provenance::persist(
+            &conn,
+            &provenance::Target {
+                workspace_id: "w",
+                profile_id: "p",
+                wallet_id: "a",
+                application_revision: "revision",
+                chain: "bitcoin",
+                network: "main",
+            },
+            &[],
+            &[],
+            &mut || clock.now(),
+        )
+        .map(|_| ()),
+        policy::ensure_active_epoch(
+            &conn,
+            "a",
+            "bitcoin",
+            "main",
+            &mut || clock.id(),
+            &mut || clock.now(),
+        )
+        .map(|_| ()),
+        reports::record_wallet_changes(&conn, "p", "a", &[], &mut || clock.id(), &mut || {
+            clock.now()
+        })
+        .map(|_| ()),
+    ];
+    for result in results {
+        assert_eq!(
+            result.unwrap_err().code,
+            "observer_apply_outside_transaction"
+        );
+    }
+    assert_eq!(text(&snapshot(&conn)), before);
 }
 
 #[test]
@@ -243,4 +354,159 @@ fn nested_publication_releases_only_its_savepoint() {
         text(&snapshot(&conn)),
         text(&snapshot(&load(&py(&case["before"]).unwrap())))
     );
+}
+
+#[test]
+fn publication_fences_observer_epochs_and_rolls_back_on_unwind() {
+    let vectors = vectors();
+    let case = vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "multi-script/electrum/0")
+        .unwrap();
+    let mut fetch = case["fetch"].clone();
+    assert!(fetch["observer_updates"].as_array().unwrap().len() > 1);
+    // Fail the second observer, after the first state and policy writes.
+    fetch["observer_updates"][1]["expected_epoch"] = Json::from(999);
+    let mut conn = load(&py(&case["before"]).unwrap());
+    conn.execute_batch("BEGIN; UPDATE profiles SET label='caller-pending' WHERE id='p'")
+        .unwrap();
+    let before = text(&snapshot(&conn));
+    for panic in [false, true] {
+        let mut sources = Fixed {
+            prefix: "fence".into(),
+            ids: 0,
+            now: 0,
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            apply(
+                &mut conn,
+                &Request {
+                    profile_id: "p",
+                    wallet_id: "a",
+                    captured_config: case["captured_config"].as_str().unwrap(),
+                    fetch: if panic { &case["fetch"] } else { &fetch },
+                },
+                &mut sources,
+                |stage| {
+                    if panic && stage == "transaction_insertion" {
+                        panic!("injected coordinator unwind");
+                    }
+                    Ok(())
+                },
+            )
+        }));
+        if panic {
+            assert!(result.is_err());
+        } else {
+            assert_eq!(result.unwrap().unwrap_err().code, "observer_state_stale");
+        }
+        assert!(!conn.is_autocommit(), "the caller transaction stays open");
+        assert_eq!(text(&snapshot(&conn)), before);
+    }
+    conn.execute_batch("ROLLBACK").unwrap();
+}
+
+#[test]
+fn publication_rolls_back_at_every_row_write_including_cascades_and_reports() {
+    use crate::publication::testbook::{watch_writes, write_trace};
+    let vectors = vectors();
+    let mut positions = 0;
+    let mut operations = std::collections::BTreeSet::new();
+    for case in vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case.get("before").is_some() && case["outcome"].get("result").is_some())
+    {
+        let initial = py(&case["before"]).unwrap();
+        let run = |conn: &mut Connection| {
+            let mut sources = Fixed {
+                prefix: case["prefix"].as_str().unwrap().into(),
+                ids: 0,
+                now: case["now"].as_i64().unwrap(),
+            };
+            apply(
+                conn,
+                &Request {
+                    profile_id: "p",
+                    wallet_id: "a",
+                    captured_config: case["captured_config"].as_str().unwrap(),
+                    fetch: &case["fetch"],
+                },
+                &mut sources,
+                |_| Ok(()),
+            )
+        };
+        let mut success = load(&initial);
+        watch_writes(&success, 0);
+        run(&mut success).unwrap();
+        assert_eq!(
+            text(&snapshot(&success)),
+            text(&py(&case["after"]).unwrap())
+        );
+        let trace = write_trace(&success);
+        let mut conn = load(&initial);
+        let before = text(&snapshot(&conn));
+        watch_writes(&conn, 0);
+        for (index, operation) in trace.iter().enumerate() {
+            operations.insert(operation.clone());
+            conn.execute(
+                "UPDATE publication_write_failure SET position=?",
+                [(index + 1) as i64],
+            )
+            .unwrap();
+            let error = run(&mut conn).expect_err("every injected write must refuse");
+            assert_eq!(error.code, "internal_error", "{error:?}");
+            assert_eq!(
+                error
+                    .details
+                    .as_ref()
+                    .and_then(|d| get(d, "sqlite_error_code")),
+                Some(&Value::Int(1811.into())),
+                "the injected SQLITE_CONSTRAINT_TRIGGER must reach the caller"
+            );
+            assert_eq!(
+                text(&snapshot(&conn)),
+                before,
+                "{} write {} {operation:?}",
+                case["name"],
+                index + 1
+            );
+            assert!(conn.is_autocommit());
+            assert!(
+                write_trace(&conn).is_empty(),
+                "the trace must roll back too"
+            );
+            positions += 1;
+        }
+    }
+    for (table, operation) in [
+        ("transactions", "INSERT"),
+        ("transactions", "UPDATE"),
+        ("transactions", "DELETE"),
+        ("chain_observation_provenance", "INSERT"),
+        ("chain_observation_provenance", "UPDATE"),
+        ("chain_observation_provenance", "DELETE"),
+        ("profiles", "UPDATE"),
+        ("wallet_policy_coverage_witnesses", "INSERT"),
+        ("wallet_policy_coverage_witnesses", "UPDATE"),
+        ("chain_analysis_watch_inbox", "INSERT"),
+        ("filed_report_chain_impacts", "INSERT"),
+        ("wallet_utxos", "INSERT"),
+        ("wallet_utxos", "UPDATE"),
+        ("freshness_source_states", "INSERT"),
+        ("freshness_source_states", "UPDATE"),
+    ] {
+        assert!(
+            operations.contains(&(table.into(), operation.into())),
+            "missing {table} {operation}"
+        );
+    }
+    eprintln!(
+        "publication rollback: {positions} write positions, {} table/operation pairs",
+        operations.len()
+    );
+    assert!(positions > 500, "{positions}");
 }

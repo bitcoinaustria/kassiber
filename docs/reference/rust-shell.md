@@ -5230,3 +5230,161 @@ network consent, offline and cancellation behavior; unsupported hybrid routes
 remaining on Python; subprocess/restart full-book parity and per-command native
 served-by counts with zero in-scope Python fallback. `IMPLEMENTED` remains
 unchanged until the preceding persistence acceptance passes.
+
+### Bitcoin atomic publication verification (R5)
+
+Local branch `t3code/r5-sync-10` starts at `004f3963`. The two preceding
+commits, `25f67c77` and `004f3963`, added the publication writers and the fenced
+coordinator; their code and evidence were checked before reuse. Their original
+78 Python oracle rounds regenerate without a difference. This continuation
+finishes publication verification and makes the transaction requirement
+explicit for inventory, provenance, policy epochs and saved-report writers.
+It leaves all four product-sync routes unregistered.
+
+`publication::wallet::apply` consumes a fully prepared fetch. Under one
+savepoint it fences captured config, book scope, the supported single-wallet
+profile shape and observer epochs; writes observer state and policy coverage;
+composes facts; applies retractions and transaction insertion/merge; closes
+provenance; appends report impacts; refreshes output inventory; and publishes
+wallet/freshness metadata and journal staleness. Cancellation, errors and panic
+roll back all groups. Nested use preserves the caller's pending transaction.
+Additional wallets, enrichment, alternate source routes and unported repairs
+refuse rather than guessing source ownership or reopening transport in apply.
+
+The loopback parity harness uses unchanged Python preparation on synthetic
+books, then publishes the identical serialized fetch in Python and Rust using
+the same deterministic ids and clocks. It compares canonical **bytes of every
+table's logical rows**, preserving numeric types. Every round reopens the Rust
+subprocess/book; each of the eight sequences requires all three successful
+rounds. Frozen vectors also replay offline in Rust. These are full-book
+**publication** proofs, not end-to-end native fetch or product-routing proofs.
+
+| Fixture | Electrum publication | Esplora publication |
+| --- | --- | --- |
+| Empty | Equal | Equal |
+| Receive/change | Equal | Equal |
+| Checkpoint (three rounds) | Equal | Equal |
+| Multi-script | Equal | Equal |
+| Fixed | Equal | Equal |
+| Gap-one | Equal | Equal |
+| Reorg | Equal | Equal |
+| Retraction | Equal | Equal |
+| Mempool | Equal | Equal |
+| Coinbase | Equal | Equal |
+
+| Sequence, including restarts | Electrum | Esplora |
+| --- | --- | --- |
+| `reanchor` | 3 equal rounds | 3 equal rounds |
+| `reorg-drop` | 3 equal rounds | 3 equal rounds |
+| `preflight-race` | 3 equal rounds | 3 equal rounds |
+| `mempool-drop-return` | 3 equal rounds | 3 equal rounds |
+| `replacement` | 3 equal rounds | 3 equal rounds |
+| `height-change` | 3 equal rounds | 3 equal rounds |
+| `force-full` | 3 equal rounds | 3 equal rounds |
+| `force-without-state` | 3 equal rounds | 3 equal rounds |
+
+Five additional reviewed-book fixtures per protocol cover current journals,
+saved report dependencies, confirmation reversals, retractions and missing
+closed authority. The complete corpus has 102 successful rounds. An unchanged
+Electrum transaction receiving restored provenance invalidates a current
+journal; an Esplora cache hit supplying no records restores no authority and
+preserves Python's outcome. A separate three-step report oracle pins comparison
+against the latest appended inbox observation after evidence changes back.
+No Python product code changed.
+
+The reviewed reorg fixture exposed an unchanged-Python reference bug: Esplora's
+compatibility route reuses its cache when script statistics are unchanged even
+after a confirmed transaction moves to another block. Incremental sync reports
+success with zero fetched records, leaves confirmation evidence stale and
+appends no saved-report impact. A force-full refresh fetches the changed record
+and appends one impact. Rust publication preserves that prepared-fetch outcome;
+it does not manufacture evidence the fetch never supplied. The checked-in
+reproducer uses only synthetic books and an owned loopback server:
+
+```sh
+uv run --locked python -m tests.rust_port.repro_esplora_reorg_cache
+```
+
+Its scratch root is `target/esplora-reorg-repro/`; the successful result is kept
+in `target/r5-sync-10-artifacts/esplora-reorg-repro.json`. Python is not fixed in
+this continuation. The reviewed-book test explicitly pins the reference's
+zero-impact incremental outcome on Esplora, while requiring impacts for
+Electrum's reorg and both protocols' retraction/mempool cases.
+
+TEMP triggers trace every row-write position, including repeated writes,
+foreign-key cascades and graph-index triggers. All 2,447 positions across 28
+table/operation pairs are injected; every refusal restores the entire logical
+book and its trace. Thirty-two stage/cancellation checks, a stale second
+observer after the first observer's writes, and panic under an outer caller
+transaction add explicit boundary tests. Existing SQLCipher restart tests
+compare logical rows: ciphertext changes after rollback in Python too.
+
+`persistence_mutations.json` grows from 49 to 112 entries. The new entries pin
+transaction identity/merge/supersession, closed authority and hashes, physical
+scope and confirmation precedence, report changes, output inventory, durable
+policy coverage and the coordinator's fences/publication. The unified
+`sync_mutation_check.py` runs these plus all 340 inherited sync recipes in one
+scratch tree using the shared named-test checker. Build errors and missing
+selections are errors, never kills. Scratch and build artifacts stay under
+`target/`; the six sync suites use `tests/rust_sync_env.py`, preserving the
+account `HOME` while redirecting disposable state/config/preference paths.
+
+| Mutation catalog | Killed / recipes |
+| --- | ---: |
+| Discovery | 20 / 20 |
+| Acquisition | 19 / 19 |
+| Observer state/reuse | 82 / 82 |
+| Native BDK/cache/canonical authority | 114 / 114 |
+| Record/composition | 83 / 83 |
+| Chain protocols | 22 / 22 |
+| Observer/publication persistence | 112 / 112 |
+| Total | 452 / 452 |
+
+All 107 named baselines pass. An interruption stopped the first run after
+160 recorded kills; the remaining 292 recipes were then run after their 61
+named baselines passed. Four new recipes survived that continuation. Added
+unchanged-Python witnesses isolate an uppercase txid containing hex letters,
+absence under a different backend name with the same kind, private policy scan
+depth, and conflicting chain evidence. All four baselines pass and all four
+recipes are killed on rerun. The combined unique-kill summary covers every
+recipe; build errors and absent selections contribute no kills.
+
+Mutation logs and the combined machine-readable summary are retained locally
+under `target/r5-sync-10-artifacts/`; mutation source/build trees were removed
+immediately after writing that summary. The twelve separate descriptor
+mutations were not rerun.
+
+Final Rust formatting and both production/harness workspace clippy runs pass
+with `-D warnings`. The standard production workspace run passes 1,063 tests;
+the guarded binary run passes 14; the separate network observer run passes 63;
+all six sync parity suites pass 158, with no skipped cases. This includes the
+expensive SQLCipher rollback/restart test and
+fresh regeneration of every changed oracle file. The production workspace
+uses its standard feature set with `KASSIBER_TEST_NO_EGRESS` unset; guarded
+downstream tests use the explicit harness features. Arming an uninstrumented
+dependency fails closed rather than running without the observer.
+
+The required classifier update and check pass (5,410 inventoried test
+definitions), followed by `python_test_shards.py run preflight --ci`: 57 tests
+and 60 subtests pass. Publication comparisons now have an explicit retained
+oracle disposition. A combined `verification-summary.json` records these gates
+alongside the mutation summary and Python reference-bug repro.
+
+The final parity run includes discovery, acquisition, observer state, native
+BDK, record/composition and wallet publication. The separate Core/probe addon
+`tests/test_rust_chain_candidate.py` is not rerun after restoring its original
+helper: its `test_detect_core_uses_one_explicit_local_candidate_without_leaking_cookie`
+fixture requires redirecting `HOME`, excluded by this task. The initial addon
+run passed four tests and failed that fixture after the shared helper was
+changed; the unrelated helper is now unchanged. Sync suites have their own
+HOME-preserving helper. The full Python/frontend quality gate, tax/custody
+shadow overlays, Docker regtest and packaged/platform gates were not run.
+
+Remaining work before step 3 registration: assemble complete native prepared
+fetches and output/coverage facts from the existing discovery/acquisition/BDK
+primitives; retain the supported source routes and refuse other shapes before
+egress; implement shared CLI/daemon wallet and freshness services; and prove
+exact action-local consent, scope/offline/cancellation handling, unsupported
+hybrid fallback, native end-to-end full-book parity and zero in-scope Python
+fallbacks. Successful native served-by counts remain zero for `wallets.sync`,
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.

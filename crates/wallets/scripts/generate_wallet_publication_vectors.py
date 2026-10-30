@@ -25,6 +25,7 @@ import bdkpython as bdk  # noqa: E402
 from tests.rust_sync_chain import serve  # noqa: E402
 from tests.rust_sync_parity import (  # noqa: E402
     connect, copy_book, create_book, deserialize_fetch, dump, python_apply, python_prefetch, runtime, serialize_fetch,
+    seed_reviewed_state,
 )
 from tests.test_rust_wallet_publication import _fixture, _sequence  # noqa: E402
 from publication_books import snapshot  # noqa: E402
@@ -45,7 +46,7 @@ def frozen_bdk(clock):
     return stack
 
 
-def run(name, protocol, config, chain, rounds, state=None):
+def run(name, protocol, config, chain, rounds, state=None, *, reviewed=False, clear_authority=False):
     cases = []
     with tempfile.TemporaryDirectory() as tmp:
         book = Path(tmp) / "book.sqlite"
@@ -61,6 +62,8 @@ def run(name, protocol, config, chain, rounds, state=None):
                 if sql:
                     conn.executescript(sql)
                     conn.commit()
+                if reviewed and index:
+                    seed_reviewed_state(conn, clear_authority=clear_authority and index == 1)
                 before = {table: {"columns": [d[0] for d in conn.execute(f'SELECT * FROM "{table}"').description],
                                   "rows": [list(row) for row in conn.execute(f'SELECT * FROM "{table}"')]}
                           for table, rows in snapshot(conn).items() if rows}
@@ -92,6 +95,9 @@ def vectors():
         for sequence in SEQUENCES:
             config, chain, rounds, state = _sequence(sequence)
             cases += run(sequence, protocol, config, chain, rounds, state)
+        for fixture in ("checkpoint", "reorg", "retraction", "mempool"):
+            cases += run(f"reviewed-{fixture}", protocol, *_fixture(fixture), reviewed=True)
+        cases += run("reviewed-authority", protocol, *_fixture("checkpoint"), reviewed=True, clear_authority=True)
     return {"generator": "crates/wallets/scripts/generate_wallet_publication_vectors.py", "cases": cases}
 
 

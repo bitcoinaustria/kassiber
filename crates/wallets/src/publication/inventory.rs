@@ -472,6 +472,7 @@ pub fn update(
     outputs: &[Value],
     seen_at: &str,
 ) -> Result<Value> {
+    super::row::require_transaction(conn)?;
     let samourai = samourai_from_config(source.wallet_config_json);
     let mut rows = outputs
         .iter()

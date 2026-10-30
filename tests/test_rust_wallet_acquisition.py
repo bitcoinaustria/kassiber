@@ -21,7 +21,7 @@ from kassiber import __version__
 from kassiber.core import sync_backends as reference
 from kassiber.envelope import json_ready
 from kassiber.wallet_descriptors import load_descriptor_plan, derive_descriptor_targets
-from tests.test_rust_chain_candidate import _env
+from tests.rust_sync_env import child_env as _env
 from tests.test_rust_wallet_discovery import _config, _server as discovery_server
 from tests.test_rust_bitcoin_records import project
 from kassiber.time_utils import timestamp_to_iso

@@ -147,6 +147,31 @@ def stored_checkpoints(conn, wallet_id="a"):
     return handlers._stored_wallet_freshness_checkpoints(conn, "p", [wallet])
 
 
+def seed_reviewed_state(conn, *, clear_authority=False):
+    """A current journal and saved-report dependencies must share sync's rollback.
+
+    Use actual closed observations from the preceding round. Reusing this seed
+    on a later round preserves the original saved dependency and its inbox.
+    """
+    conn.execute("UPDATE profiles SET last_processed_at='reviewed', "
+                 "last_processed_input_version=journal_input_version WHERE id='p'")
+    conn.execute("INSERT OR IGNORE INTO filed_report_snapshots(id,workspace_id,profile_id,report_kind,report_state,"
+                 "period_start_year,period_end_year,content_sha256,created_at) "
+                 "VALUES('saved','w','p','summary.pdf','filed',2023,2023,?,'fixed')", ("0" * 64,))
+    for row in conn.execute("SELECT id,external_id FROM transactions WHERE wallet_id='a' AND excluded=0").fetchall():
+        dependency = {"snapshot_id": "saved", "profile_id": "p", "transaction_id": row[0], "wallet_id": "a",
+                      "chain": "bitcoin", "network": "main", "txid": row[1]}
+        observed = filed_report_chain._current(conn, dependency)
+        conn.execute("INSERT OR IGNORE INTO filed_report_chain_dependencies(snapshot_id,profile_id,transaction_id,"
+                     "wallet_id,chain,network,txid,observation_json) VALUES(?,?,?,?,?,?,?,?)",
+                     (*dependency.values(), filed_report_chain._json(observed)))
+    if clear_authority:
+        # A legacy row has no closed provenance yet. Restoring authority on an
+        # otherwise unchanged row must still invalidate a current journal.
+        conn.execute("DELETE FROM chain_observation_provenance")
+    conn.commit()
+
+
 def python_prefetch(conn, runtime_config, *, force_full=False, wallet_id="a"):
     """Exactly the preparation `handlers.sync_wallet` performs for one wallet."""
     profile = conn.execute("SELECT * FROM profiles WHERE id='p'").fetchone()
@@ -220,6 +245,12 @@ def dump(path: Path) -> dict:
         return json.loads(json.dumps(snapshot(conn), sort_keys=True))
     finally:
         conn.close()
+
+
+def dump_bytes(path: Path) -> bytes:
+    """Canonical logical rows; preserve numeric types when comparing parity."""
+    return (json.dumps(dump(path), sort_keys=True, ensure_ascii=False, allow_nan=False,
+                       separators=(",", ":")) + "\n").encode("utf-8")
 
 
 def copy_book(source: Path, target: Path) -> Path:

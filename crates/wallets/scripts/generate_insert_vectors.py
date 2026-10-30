@@ -104,6 +104,9 @@ def scenarios():
                   swap_refund_funding_txid=" " + txid(9).upper(), swap_refund_funding_vout="3",
                   counterparty="Shop", description=None)
     return [
+        scenario("canonical-upper-hex", [[record(11, receive=90_000)]],
+                 [("observe", [record(11, receive=90_000)]),
+                  ("sql", "UPDATE transactions SET external_id=UPPER(external_id)")]),
         scenario("fresh-mixed", [[receive, send, mempool, record(5, receive=1, extra={"islikelycoinjoin": True}),
                                   dict(record(6, receive=2), kind=None, description="custom")]]),
         scenario("reobserve-unchanged", [[receive, send]], [("observe", [receive, send])]),

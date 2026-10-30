@@ -61,6 +61,8 @@ REVIEWS = {
 
     "tests/test_rust_bdk_execution.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native in-memory BDK execution/restart aggregates and compatibility protocol cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity"}},
 
+
+    "tests/test_rust_wallet_publication.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares atomic Rust publication of Python-prepared Bitcoin fetches against unchanged Python full books across fixtures, restarts, reviewed journals and saved reports; retains rollback and refusal witnesses without claiming end-to-end native sync or product-route acceptance"}},
     "tests/test_rust_bdk_execution.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity"}},
     "tests/test_rust_wallet_acquisition.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed"}},
     "tests/test_rust_bitcoin_records.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares pure Bitcoin normalized records, shared-observer composition, retraction vetoes and private provenance mappings against Python with no consent or transport; no atomic apply or product sync is claimed"}},

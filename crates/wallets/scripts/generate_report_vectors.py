@@ -53,6 +53,9 @@ def scenarios():
          "sql": BOUND.format(env="main", domains=json.dumps([{"chain": "bitcoin", "network": "main", "domain_id": "bound-domain"}]))},
         {"name": "instance-domain", "observe": [[record(1, receive=90_000, extra={**NETWORK, "chain_instance_id": "lab"})]], "depend": [(1, {"domain_id": "x"})]},
         {"name": "no-dependencies", "observe": [[receive]], "depend": []},
+        {"name": "latest-inbox", "observe": [[receive]], "depend": [(1, None)],
+         "after": [[record(1, receive=90_000, block_hash=txid(77), extra=NETWORK)]],
+         "restore": [receive]},
     ]
 
 
@@ -76,7 +79,12 @@ def run(case):
     conn.commit()
     steps = []
     with deterministic(chain):
-        for retracted in [case.get("retracted", []), *([case["second"]] if "second" in case else [])]:
+        for index, retracted in enumerate([case.get("retracted", []), *([case["second"]] if "second" in case else []),
+                                          *([[], []] if "restore" in case else [])]):
+            if index == 1 and "restore" in case:
+                with deterministic(imports, provenance, prefix="restore"):
+                    observe(conn, case["restore"])
+                conn.commit()
             before = dump(conn)
             conn.execute("SAVEPOINT step")
             try:

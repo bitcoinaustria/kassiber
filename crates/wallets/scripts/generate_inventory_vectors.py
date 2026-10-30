@@ -36,6 +36,8 @@ def scenarios():
         {"name": "spend-and-keep", "rounds": [first, [output(1), output(4)]]},
         {"name": "all-spent", "rounds": [first, []]},
         {"name": "other-backend-untouched", "rounds": [first, [output(5)]], "backends": [("one", "electrum"), ("two", "esplora")]},
+        {"name": "same-kind-other-name-untouched", "rounds": [first, []],
+         "backends": [("one", "electrum"), ("two", "electrum")]},
         {"name": "flags-and-aliases", "rounds": [[output(6, spent=True), output(7, spentBy=txid(8), anonymityScore="4", excludedFromCoinjoin="yes",
             anonHistory=[{"a": 1}], keyState="used", asset="l-btc", chain=None, network="", script_pubkey="ABCD", block_height=0),
             output(8, spent_at="2020", spent="maybe", excluded_from_coinjoin="no", anon_history="bad", asset=None, address="  ",

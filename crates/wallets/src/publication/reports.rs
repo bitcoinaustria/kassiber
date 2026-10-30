@@ -263,6 +263,7 @@ pub fn record_wallet_changes(
     new_id: &mut dyn FnMut() -> String,
     now: &mut dyn FnMut() -> String,
 ) -> Result<i64> {
+    super::row::require_transaction(conn)?;
     let retracted: Vec<String> = retracted
         .iter()
         .map(|v| kassiber_pytext::lower(v))

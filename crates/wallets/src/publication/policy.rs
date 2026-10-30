@@ -120,6 +120,7 @@ pub fn ensure_active_epoch(
     new_id: &mut dyn FnMut() -> String,
     now: &mut dyn FnMut() -> String,
 ) -> Result<String> {
+    super::row::require_transaction(conn)?;
     let wallet =
         first(conn, "SELECT * FROM wallets WHERE id = ?", [wallet_id])?.ok_or_else(|| {
             AppError::new(

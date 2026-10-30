@@ -34,6 +34,8 @@ def scenarios():
     first = [point("receive", 5, 2), point("change", 3, None)]
     return [
         {"name": "fresh", "rounds": [(identity(), first)]},
+        {"name": "private-scan-depth", "rounds": [(identity(), first)],
+         "config": json.dumps({**json.loads(CONFIG), "ownership_scan_to_index": 37})},
         {"name": "refresh", "rounds": [(identity(), first), (identity(observer_kind="bdk-2", branch_keys=("change",)), [point("receive", 9, 7)])]},
         {"name": "second-source", "rounds": [(identity(), first), (identity(source_key="xpub:p2tr"), [point("receive", 1, None)])]},
         {"name": "config-scope", "rounds": [(identity(chain="", network=""), [])]},
@@ -48,7 +50,7 @@ def scenarios():
 def run(case):
     conn = new_book()
     conn.executescript(SEED)
-    conn.execute("UPDATE wallets SET config_json=? WHERE id='a'", (CONFIG,))
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='a'", (case.get("config", CONFIG),))
     if case.get("setup"):
         conn.executescript(case["setup"])
     conn.commit()

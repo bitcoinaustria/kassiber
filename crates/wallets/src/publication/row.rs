@@ -7,6 +7,17 @@ use kassiber_store::rusqlite::{types::ValueRef, Connection, Params, Row};
 
 pub(crate) type Result<T> = std::result::Result<T, AppError>;
 
+/// Every publication writer belongs to the coordinator's wallet transaction.
+pub(crate) fn require_transaction(conn: &Connection) -> Result<()> {
+    if conn.is_autocommit() {
+        return Err(AppError::new(
+            "observer_apply_outside_transaction",
+            "Publication requires the caller's wallet transaction",
+        ));
+    }
+    Ok(())
+}
+
 fn column(value: ValueRef<'_>) -> Result<Value> {
     Ok(match value {
         ValueRef::Null => Value::Null,

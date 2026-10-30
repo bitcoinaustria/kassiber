@@ -23,7 +23,7 @@ from kassiber.core.sync_backends import (
     scriptpubkey_scripthash,
 )
 from kassiber.wallet_descriptors import derive_descriptor_targets, load_descriptor_plan
-from tests.test_rust_chain_candidate import _env
+from tests.rust_sync_env import child_env as _env
 
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 pytestmark = pytest.mark.skipif(not RUST_BIN, reason="requires Rust discovery fixture build")

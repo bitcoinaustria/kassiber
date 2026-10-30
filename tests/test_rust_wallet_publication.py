@@ -14,10 +14,10 @@ import pytest
 
 from tests.rust_sync_chain import FOREIGN, Chain, serve
 from tests.rust_sync_parity import (
-    connect, copy_book, create_book, deserialize_fetch, dump, python_apply, python_prefetch, runtime, rust_apply,
-    serialize_fetch,
+    connect, copy_book, create_book, deserialize_fetch, dump, dump_bytes, python_apply, python_prefetch, runtime, rust_apply,
+    serialize_fetch, seed_reviewed_state,
 )
-from tests.test_rust_chain_candidate import _env
+from tests.rust_sync_env import child_env as _env
 from tests.test_rust_wallet_discovery import _config
 from kassiber.wallet_descriptors import derive_descriptor_targets, load_descriptor_plan
 
@@ -137,8 +137,14 @@ def _sequence(name):
     return config, chain, [None, second, third], state
 
 
-def _round(tmp_path, protocol, url, python_book, rust_book, *, force_full=False, sql=None, index=0):
+def _round(tmp_path, protocol, url, python_book, rust_book, *, force_full=False, sql=None, index=0, reviewed=False,
+           clear_authority=False):
     rt = runtime(protocol, url)
+    if reviewed and index:
+        for book in (python_book, rust_book):
+            conn = connect(book)
+            seed_reviewed_state(conn, clear_authority=clear_authority and index == 1)
+            conn.close()
     for book in (python_book, rust_book):
         if sql:
             conn = connect(book)
@@ -163,7 +169,7 @@ def _round(tmp_path, protocol, url, python_book, rust_book, *, force_full=False,
         assert actual["error"]["code"] == expected["error"]["code"], (expected, actual)
     else:
         assert actual["result"] == json.loads(json.dumps(_comparable(expected["result"], actual["result"]), sort_keys=True))
-    assert dump(rust_book) == dump(python_book)
+    assert dump_bytes(rust_book) == dump_bytes(python_book)
     return data, expected
 
 
@@ -216,7 +222,42 @@ def test_publication_sequence_books_match_python_across_restarts(tmp_path, proto
             _, expected = _round(tmp_path, protocol, url, python_book, rust_book,
                                  force_full=bool(state["force"]), sql=state["sql"], index=index)
             outcomes.append(expected)
-    assert outcomes[0] is not None and "result" in outcomes[0]
+    assert len(outcomes) == 3
+    assert all(outcome is not None and "result" in outcome for outcome in outcomes), outcomes
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+@pytest.mark.parametrize("fixture", ["checkpoint", "reorg", "retraction", "mempool", "authority"])
+def test_publication_preserves_saved_reports_and_current_journals(tmp_path, protocol, fixture):
+    config, chain, rounds = _fixture("checkpoint" if fixture == "authority" else fixture)
+    python_book, rust_book = tmp_path / "python.sqlite", tmp_path / "rust.sqlite"
+    create_book(python_book, config)
+    copy_book(python_book, rust_book)
+    with serve(chain, protocol) as url:
+        for index, mutate in enumerate(rounds):
+            if mutate is not None:
+                mutate()
+            _, expected = _round(tmp_path, protocol, url, python_book, rust_book, index=index, reviewed=True,
+                                 clear_authority=fixture == "authority")
+            assert expected is not None and "result" in expected
+            if fixture == "authority" and index == 1:
+                result = expected["result"][0]
+                assert result["imported"] == 0 and not result["updated_records"]
+                # Electrum republishes the unchanged record; an Esplora cache
+                # hit supplies no records and therefore restores no authority.
+                assert result["journal_invalidated"] == bool(result["records_fetched"])
+    final = dump(rust_book)
+    assert final["filed_report_chain_dependencies"]
+    # The unchanged Python Esplora compatibility cache misses this same-stats
+    # reorg. Pin its current outcome; the separate repro shows force-full repair.
+    if fixture in {"retraction", "mempool"} or (fixture == "reorg" and protocol == "electrum"):
+        assert final["filed_report_chain_impacts"], "changed saved evidence must append a report impact"
+    elif fixture == "reorg":
+        assert not final["filed_report_chain_impacts"], "preserve the Python Esplora cache miss"
+    elif fixture == "authority" and protocol == "esplora":
+        # Its cache hit leaves the removed closed authority absent. Reports
+        # must expose that change even though no transaction was fetched.
+        assert final["filed_report_chain_impacts"]
 
 
 def _written_tables(before, after):
