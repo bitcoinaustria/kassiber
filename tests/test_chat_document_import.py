@@ -166,6 +166,21 @@ class ChatDocumentImportTests(unittest.TestCase):
         self.assertFalse(applied["ok"])
         self.assertEqual(self.tx_count(), 0)
 
+    def test_a_reread_with_other_values_needs_a_new_plan(self):
+        runtime = self.runtime()
+        first = self.read_receipt(runtime)
+        plan = self.read("ui.wallets.import_document.plan",
+                         {"draft": first["draft"], "wallet": "Receipts"}, runtime)["envelope"]["data"]
+        # Same BTC amounts, another fiat value: the effect looks the same.
+        self.client._content = self.client._content.replace('"500.00"', '"999.00"')
+        second = self.read_receipt(runtime)
+        self.assertEqual(second["rows"][0]["record"]["fiat_value"], "999")
+        applied = self.write("ui.wallets.import_document.apply",
+                             {"draft": second["draft"], "wallet": "Receipts", **plan["apply_with"]}, runtime)
+        self.assertFalse(applied["ok"], applied)
+        self.assertEqual(applied["reason"], "import_plan_stale")
+        self.assertEqual(self.tx_count(), 0)
+
     def test_a_restricted_provider_gets_counts_not_values(self):
         runtime = self.runtime(full_access=False)
         draft = self.read_receipt(runtime)

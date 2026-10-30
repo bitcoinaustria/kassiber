@@ -8,9 +8,11 @@ user's consent:
 
 - Only `ready` rows are imported. Rows the reader was unsure of stay for the
   desktop's document import, where the user reviews them against the page.
-- The plan is bound to the draft, the document's SHA-256 (the import refuses
-  a file that changed since it was read), the book's input version and a
-  digest of the effect; applying refuses if any of them moved.
+- The plan is bound to the draft's rows (a second read of the same page
+  may differ in values the effect does not show, such as a fiat value), the
+  document's SHA-256 (the import refuses a file that changed since it was
+  read), the book's input version and a digest of the effect; applying
+  refuses if any of them moved.
 - Targets follow the spreadsheet import: a file-backed wallet, or a new
   `custom` wallet. The document is attached to each imported row as
   evidence, and the import is recorded as an import run. Because a rollback
@@ -46,6 +48,13 @@ def ready_row_ids(draft: Mapping[str, Any]) -> list[str]:
         for row in draft.get("rows") or ()
         if isinstance(row, Mapping) and row.get("status") == "ready" and row.get("id")
     ]
+
+
+def _draft_digest(draft: Mapping[str, Any]) -> str:
+    """Everything the import reads from the draft, so a re-read is a new plan."""
+    return core_attachment_import._digest(
+        {"rows": draft.get("rows") or [], "confidence_threshold": draft.get("confidence_threshold")}
+    )
 
 
 def project_draft(draft: Mapping[str, Any], *, full_access: bool) -> dict[str, Any]:
@@ -266,7 +275,8 @@ def plan_or_apply(
             "blockers": blockers,
             "ready": not blockers,
         }
-        plan_digest = core_attachment_import._digest(plan)
+        # The draft's digest binds the plan without crossing to the model.
+        plan_digest = core_attachment_import._digest({**plan, "draft": _draft_digest(draft)})
     finally:
         # The simulation never stays, even when applying: the real import
         # below runs once more with the document attached as evidence.
