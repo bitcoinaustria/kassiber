@@ -1687,8 +1687,10 @@ name = "kassiber-journals"
 version = "0.1.0"
 dependencies = [
  "kassiber-custody",
+ "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-tax-core",
+ "serde",
  "serde_json",
 ]
 

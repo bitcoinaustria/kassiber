@@ -105,6 +105,9 @@ def _record_custody_snapshots() -> None:
     results there (`tests/custody_snapshot.py`). Product code reads no such
     variable.
     """
+    if os.environ.get("KASSIBER_TEST_JOURNAL_RENDER_DIR"):
+        from tests.rust_port import journal_render_oracle
+        journal_render_oracle.install_from_environment()
     if not os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR", "").strip():
         return
     from tests import custody_snapshot

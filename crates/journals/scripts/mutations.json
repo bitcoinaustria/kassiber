@@ -1,0 +1,392 @@
+[
+  {
+    "id": "JR-round-half-up",
+    "file": "crates/journals/src/render.rs",
+    "find": ">= b'5'",
+    "replace": ">= b'6'",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "BTC to msat rounds ties away from zero."
+  },
+  {
+    "id": "JR-sub-msat",
+    "file": "crates/journals/src/render.rs",
+    "find": "if keep < 0 {",
+    "replace": "if keep <= 0 {",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "A first discarded half msat rounds to one msat."
+  },
+  {
+    "id": "JR-decimal-context",
+    "file": "crates/journals/src/render.rs",
+    "find": "digits.len() <= 32",
+    "replace": "digits.len() <= 100",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "Wide amounts use the 32-digit multiplication context before integral conversion."
+  },
+  {
+    "id": "JR-signed-msat",
+    "file": "crates/journals/src/render.rs",
+    "find": "if d.is_sign_negative() && magnitude != \"0\"",
+    "replace": "if false && d.is_sign_negative() && magnitude != \"0\"",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "Negative quantities retain their sign."
+  },
+  {
+    "id": "JR-source-id",
+    "file": "crates/journals/src/render.rs",
+    "find": "engine_event_id: id.into(),",
+    "replace": "engine_event_id: String::new(),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Fragment provenance retains the engine event id."
+  },
+  {
+    "id": "JR-source-spot",
+    "file": "crates/journals/src/render.rs",
+    "find": "spot_price_exact: fixed(spot)?,",
+    "replace": "spot_price_exact: fixed(fee)?,",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Source spot price is distinct from its fiat fee."
+  },
+  {
+    "id": "JR-source-fee",
+    "file": "crates/journals/src/render.rs",
+    "find": "fiat_fee_exact: fixed(fee)?,",
+    "replace": "fiat_fee_exact: fixed(spot)?,",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Source fiat fee is not its spot price."
+  },
+  {
+    "id": "JR-fragment-proceeds",
+    "file": "crates/journals/src/render.rs",
+    "find": "proceeds_exact: fixed(&f.proceeds.0)?,",
+    "replace": "proceeds_exact: fixed(&f.cost_basis.0)?,",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "A gain fragment retains proceeds separately from basis."
+  },
+  {
+    "id": "JR-basis-override",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"engine_unit_override\"",
+    "replace": "\"acquired_lot\"",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "An explicit unit override remains the declared basis authority."
+  },
+  {
+    "id": "JR-basis-lot",
+    "file": "crates/journals/src/render.rs",
+    "find": "} else if f.lot.is_some() {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "A lot-backed fragment declares acquired-lot authority."
+  },
+  {
+    "id": "JR-basis-income",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"income\"\n            },",
+    "replace": "\"acquired_lot\"\n            },",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "An income fragment has income basis authority."
+  },
+  {
+    "id": "JR-anchor",
+    "file": "crates/journals/src/render.rs",
+    "find": ".get(\"journal_transaction_id\")",
+    "replace": ".get(\"id\")",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Entries refer to the real journal anchor, not the synthetic engine row."
+  },
+  {
+    "id": "JR-unit-cost",
+    "file": "crates/journals/src/render.rs",
+    "find": "e.unit_cost = jd(&a.unit_cost);",
+    "replace": "e.unit_cost = jd(&a.quantity);",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Acquisitions preserve their unit cost."
+  },
+  {
+    "id": "JR-disposal-fiat",
+    "file": "crates/journals/src/render.rs",
+    "find": "e.fiat_value = jd(&a.proceeds);",
+    "replace": "e.fiat_value = jd(&a.cost_basis);",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Realized fiat value equals proceeds."
+  },
+  {
+    "id": "JR-kennzahl-gain",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"neu_gain\" => Some(174),",
+    "replace": "\"neu_gain\" => Some(176),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Austrian gains map to Kennzahl 174."
+  },
+  {
+    "id": "JR-kennzahl-loss",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"neu_loss\" => Some(176),",
+    "replace": "\"neu_loss\" => Some(174),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Austrian losses map to Kennzahl 176."
+  },
+  {
+    "id": "JR-kennzahl-old",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"alt_spekulation\" => Some(801),",
+    "replace": "\"alt_spekulation\" => Some(172),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Alt speculation maps to Kennzahl 801."
+  },
+  {
+    "id": "JR-method",
+    "file": "crates/journals/src/render.rs",
+    "find": "[\"gains_algorithm\"]",
+    "replace": "[\"tax_country\"]",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Calculation method retains the profile method."
+  },
+  {
+    "id": "JR-transfer-sign",
+    "file": "crates/journals/src/render.rs",
+    "find": "if outbound { qty.neg(&CTX)? } else { qty }",
+    "replace": "if outbound { qty } else { qty.neg(&CTX)? }",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Transfer-out quantities are negative and transfer-in quantities positive."
+  },
+  {
+    "id": "JR-carry-quality",
+    "file": "crates/journals/src/render.rs",
+    "find": "(\"pricing_quality\", json!(\"exact\")),",
+    "replace": "(\"pricing_quality\", json!(\"coarse\")),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Carried pricing facts preserve exact quality."
+  },
+  {
+    "id": "JR-carry-method",
+    "file": "crates/journals/src/render.rs",
+    "find": "(\"pricing_method\", json!(\"carrying_value\")),",
+    "replace": "(\"pricing_method\", json!(\"import\")),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Carried sources retain carrying-value pricing provenance."
+  },
+  {
+    "id": "JR-holdings-add",
+    "file": "crates/journals/src/render.rs",
+    "find": "value.quantity.0.add(&item.quantity.0, &CTX)?",
+    "replace": "value.quantity.0.sub(&item.quantity.0, &CTX)?",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Holdings add quantities in asset order."
+  },
+  {
+    "id": "JR-summary-term",
+    "file": "crates/journals/src/render.rs",
+    "find": "if s.long_term { \"long\" } else { \"short\" }",
+    "replace": "if s.long_term { \"short\" } else { \"long\" }",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Tax summaries preserve long/short classification."
+  },
+  {
+    "id": "JR-summary-basis",
+    "file": "crates/journals/src/render.rs",
+    "find": "cost_basis: float(&s.cost_basis.0),",
+    "replace": "cost_basis: float(&s.proceeds.0),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Tax summary cost basis is distinct from proceeds."
+  },
+  {
+    "id": "JR-quarantine-reason",
+    "file": "crates/journals/src/render.rs",
+    "find": "reason: q.reason.as_str().into(),",
+    "replace": "reason: \"missing_spot_price\".into(),",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Quarantines preserve the exact emitted reason."
+  },
+  {
+    "id": "JR-quarantine-sort",
+    "file": "crates/journals/src/render.rs",
+    "find": "detail_json: pyjson(&detail, false)?,",
+    "replace": "detail_json: pyjson(&detail, true)?,",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Stored quarantine details use Python default separators."
+  },
+  {
+    "id": "JR-enrichment-key",
+    "file": "crates/journals/src/render.rs",
+    "find": "detail[\"ownership_review_candidates\"] = json!(candidates);",
+    "replace": "detail[\"candidates\"] = json!(candidates);",
+    "expect_failing": [
+      "quarantine_candidate_enrichment_is_compact_sorted_and_ascii"
+    ],
+    "rule": "Ownership candidates use the established detail key."
+  },
+  {
+    "id": "JR-enrichment-layout",
+    "file": "crates/journals/src/render.rs",
+    "find": "pyjson(&detail, true)\n}",
+    "replace": "pyjson(&detail, false)\n}",
+    "expect_failing": [
+      "quarantine_candidate_enrichment_is_compact_sorted_and_ascii"
+    ],
+    "rule": "Candidate-enriched details use compact sorted JSON."
+  },
+  {
+    "id": "JR-native-asdict",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "k.as_str() != \"$type\"",
+    "replace": "k.as_str() != \"unused\"",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Native reconciliation asdict removes nested dataclass tags."
+  },
+  {
+    "id": "JR-loan-reason",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "loan_{}_non_event",
+    "replace": "loan_{}_event",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Loan quantity differences retain their non-event explanation."
+  },
+  {
+    "id": "JR-lightning-reason",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "lightning_{}_non_event",
+    "replace": "lightning_{}_event",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Lightning quantity differences retain their non-event explanation."
+  },
+  {
+    "id": "JR-legacy-identity",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if text.len() == 64 && text.bytes().all(|c| c.is_ascii_hexdigit())",
+    "replace": "if true",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Opaque legacy identifiers retain case and whitespace."
+  },
+  {
+    "id": "JR-owned-amount",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "int(&output[\"value_sats\"]) * 1000",
+    "replace": "int(&output[\"value_sats\"]) * 1001",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Owned output sats convert to integer msat exactly."
+  },
+  {
+    "id": "JR-review-kind",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"default_kind\":\"manual\"",
+    "replace": "\"default_kind\":\"coinjoin\"",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Ownership suggestions retain the manual review kind."
+  },
+  {
+    "id": "JR-review-fee",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "amount-int(&inbound[\"amount\"])",
+    "replace": "amount+int(&inbound[\"amount\"])",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Review fee is the owned-minus-received delta."
+  },
+  {
+    "id": "JR-review-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "(compatible, \"strong\")",
+    "replace": "(compatible, \"exact\")",
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
+    "rule": "Compatible receipts remain strong suggestions rather than exact whole-row proofs."
+  },
+  {
+    "id": "JR-refusal-code",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"rp2_input_validation\"",
+    "replace": "\"app_error\"",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "Validation failures preserve their AppError code."
+  },
+  {
+    "id": "JR-refusal-cause",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "error.cause = Some(Box::new(cause));",
+    "replace": "drop(cause);",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "Wrapped ledger errors preserve their explicit cause."
+  },
+  {
+    "id": "JR-refusal-wrapper",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "format!(\"{prefix}{cause_message}\")",
+    "replace": "format!(\"{cause_message}{prefix}\")",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "Wrapped failures keep the Python prefix and cause message order."
+  }
+]

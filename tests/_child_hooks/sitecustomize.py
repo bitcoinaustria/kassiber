@@ -144,6 +144,9 @@ def _install_custody_mode(module=None):
     try:
         from tests import custody_snapshot
         custody_snapshot.install_from_environment()
+        if os.environ.get("KASSIBER_TEST_JOURNAL_RENDER_DIR"):
+            from tests.rust_port import journal_render_oracle
+            journal_render_oracle.install_from_environment()
         if _CUSTODY_MODE in {"shadow", "census"}:
             from tests import custody_engine_compare
             custody_engine_compare.install_custody_mode(_CUSTODY_MODE)
@@ -158,7 +161,7 @@ def _custody_loaded(module):
     _install_custody_mode()
 
 
-if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR"):
+if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR") or os.environ.get("KASSIBER_TEST_JOURNAL_RENDER_DIR"):
     class _InstallCustodyModeAfterImport(_InstallTaxModeAfterImport):
         _AFTER = {
             "kassiber.core.custody_journal": _custody_loaded,

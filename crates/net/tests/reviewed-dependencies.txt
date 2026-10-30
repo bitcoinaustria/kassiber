@@ -10,7 +10,7 @@ fancy-regex
 flate2 rust_backend
 kassiber-cli test-probe
 kassiber-chain
-kassiber-custody
+kassiber-custody timing
 kassiber-daemon test-kinds
 kassiber-envelope
 kassiber-net test-observer test-support

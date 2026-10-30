@@ -328,7 +328,7 @@ misses it stops for re-planning before the next step starts.
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python | Python load 1.57 / 1.89 (floor 0.11) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity | Python 0.03 | ≤ 0.03 s |
-| R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review | Python 1.38 / 1.71 | ≤ 0.15 s |
+| R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
 | R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path (decision 3: ported in R4) | Python 3.44 / 4.74 | 10× Python |

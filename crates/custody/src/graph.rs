@@ -73,7 +73,7 @@ fn merge(items: &[Value]) -> Option<Value> {
         .expect("JSON graphs");
     stored::merge(&items).as_ref().map(stored::project)
 }
-fn parse(raw: &Value) -> Result<Option<Value>, String> {
+pub(crate) fn parse(raw: &Value) -> Result<Option<Value>, String> {
     Ok(stored::parse(raw)?.as_ref().map(stored::project))
 }
 // Transfer identity predicates stringify nonfinite Python scalars. Preserve

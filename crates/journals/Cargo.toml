@@ -1,7 +1,7 @@
 [package]
 name = "kassiber-journals"
+description = "Pure journal rendering and joins over finalized custody and ledger results"
 version = "0.1.0"
-description = "The journal pipeline: custody, fusion and the tax engine in one process"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,13 +10,16 @@ publish.workspace = true
 
 [dependencies]
 kassiber-custody = { path = "../custody" }
+kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-tax-core = { path = "../../tax-engine/core" }
-# The custody stage model; the same features as kassiber-custody.
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
 
+[lints.rust]
+unsafe_code = "forbid"
+
 [features]
-# Opt-in `Instant` spans (custody's recorder); never enabled by a product build.
 timing = ["kassiber-custody/timing"]
 
 [[example]]

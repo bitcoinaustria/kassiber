@@ -8,6 +8,7 @@ pub mod gaps;
 mod gates;
 mod graph;
 pub mod interpretation;
+pub mod journal_support;
 pub mod ledger_request;
 mod liquid;
 mod par;

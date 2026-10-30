@@ -863,6 +863,12 @@ known wallet key material before writing. Owner-book comparisons remain local
 and ephemeral; repository recordings use synthetic data only. No verification
 path grants network consent or changes observation, ownership or tax authority.
 
+The R4-11 test-only `KASSIBER_TEST_JOURNAL_RENDER_DIR` hook similarly captures
+complete rendering operands, entry UUID mappings and canonical build states.
+These local parity fixtures can contain private book facts and must stay in a
+disposable worktree data root. Nothing is redacted for parity; they are not
+diagnostic exports or AI projections. The checked-in corpus is synthetic.
+
 The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
 BTCPay and local Core-detection tests through the reviewed network gate.
 Its action grant binds the exact daemon kind, form arguments and book; backend

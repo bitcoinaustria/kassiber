@@ -2037,8 +2037,8 @@ See the [slice acceptance](../reference/rust-diagnostics-r5-status.md) and
 
 ### R4 journal pipeline design
 
-The [R4 design](../reference/r4-journal-pipeline.md) (2026-10-30; R4-1 onward
-remains design) profiles Python's `journals process` by phase and plans the Rust binary's
+The [R4 design](../reference/r4-journal-pipeline.md) (2026-10-30; acceptance
+gates remain open, with the R4-11 checkpoint below) profiles Python's `journals process` by phase and plans the Rust binary's
 in-process pipeline: typed SQLite loading, typed custody stages, typed fusion
 into the tax engine's own request and response types, rendering and atomic
 persistence, with the JSON snapshot and stage interface kept as the
@@ -2386,3 +2386,18 @@ consent/scope and unsupported-route checks, a native end-to-end book proof and
 zero-fallback hybrid workloads remain before registration. See the
 [publication handoff](../reference/rust-shell.md#bitcoin-atomic-publication-verification-r5)
 for exact verification and mutation results.
+
+### R4-11 rendering checkpoint (partial)
+
+`crates/journals` renders the typed tax-engine `LedgerResponse` and joins the
+finalized custody facts into the eighteen fields of Python's pre-persistence
+`build()` state. A replaceable JSON boundary accepts today's custody stages;
+the caller supplies entry UUIDs. A test-only Python hook captures complete
+canonical states and explicit UUID mappings. Production remains Python, with
+no command or daemon registration and no persistence changes.
+
+The [checkpoint evidence and R4-12 handoff](../reference/r4-journal-render-checkpoint.md)
+record sampled byte parity, mutation coverage and back-to-back timings.
+R4-11 remains incomplete: the 0.15 s generic-20k budget, lossless legacy edge
+values, exhaustive rendering/join mutations and full inherited campaign gates
+still need completion.

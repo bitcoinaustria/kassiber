@@ -331,6 +331,10 @@ and the owner decisions it needs.
   each with the full mutation catalog rerun and before/after timings.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
+- [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
+  reach 0.15 s at generic 20k, close legacy-value/refusal gaps, and complete
+  exhaustive branch mutations and the inherited campaign gates. The crate
+  and sampled oracle exist; Python retains production authority.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 

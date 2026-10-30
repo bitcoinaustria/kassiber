@@ -8,6 +8,11 @@ use std::str::FromStr;
 mod config;
 mod time;
 
+/// The shared Python timestamp rendering used by journal fragment provenance.
+pub fn timestamp_fields(value: &Value) -> Value {
+    time::timestamp(value)
+}
+
 /// A refusal retains the Python exception family and its structured attributes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Refusal {
