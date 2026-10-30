@@ -15,6 +15,218 @@ Private indexes and `--find-links` sources can still host local versions.
 The package version and the engine crates' Cargo version (`engine_version()`)
 share the `0.2.0` release; bump them together.
 
+## Ledger performance checkpoint (R4, 2026-10-30)
+
+The R4 speed pass preserves schema-2 response bytes, decimal exponents,
+list order and the first failing operation. The complete text-in/text-out
+`ledger` operation is 2.03–3.96× faster on the four synthetic bench books.
+This measures the tax engine; Python request building, response rendering,
+custody and database persistence remain outside these timings.
+
+The baseline is `de18d9af` (the pre-optimization engine with timing spans),
+copied from the first run's `target/ledger-perf/base-src`. For the timing
+build its only local change is the benchmark's main-thread CPU counter. The
+optimized engine is `de836bd2`. Both examples were rebuilt offline with
+Rust 1.99.1 in release mode with `--features timing`, then run back to back
+against the same captured Python request and expected response. The machine
+is Linux x86_64, with 48 logical CPUs. Each invocation runs one request and
+requires byte equality with the captured response. Five rounds alternate
+`before, after` and `after, before`; each table uses the fastest complete run of its version,
+with all phase values taken from that run. The 1-minute load was 9.02–9.59,
+so the owner's above-8 rule (alternating, best of five) applies.
+
+| Complete `ledger`, seconds | Before | After | Speedup |
+| --- | ---: | ---: | ---: |
+| Generic 2,000 | 0.067 | 0.033 | 2.03× |
+| Multi-wallet 2,000 | 0.170 | 0.054 | 3.15× |
+| Generic 20,000 | 0.721 | 0.299 | 2.41× |
+| Multi-wallet 20,000 | 1.737 | 0.439 | 3.96× |
+
+Phases below are **before → after**, seconds. `0.000` means less than
+0.5 ms. A reused settled carry pass needs no separate final prepare,
+validation or computation; `reused` marks those spans. Rail carry includes
+its own prepare and compute passes. Uninstrumented request-head scanning,
+allocation and destruction explain the difference from the total.
+
+| Phase | Generic 2k | Multi-wallet 2k | Generic 20k | Multi-wallet 20k |
+| --- | ---: | ---: | ---: | ---: |
+| Typed request parse | 0.005 → 0.005 | 0.005 → 0.005 | 0.046 → 0.044 | 0.046 → 0.044 |
+| Book references | 0.001 → 0.001 | 0.001 → 0.001 | 0.007 → 0.007 | 0.007 → 0.005 |
+| Rail carry | 0.000 → 0.000 | 0.099 → 0.032 | 0.000 → 0.000 | 0.984 → 0.267 |
+| Carried request and references | 0.000 → 0.000 | 0.001 → 0.002 | 0.006 → 0.000 | 0.010 → 0.011 |
+| Final prepare pass | 0.017 → 0.011 | 0.017 → 0.000 | 0.175 → 0.099 | 0.175 → 0.000 |
+| Lot inputs | 0.002 → 0.000 | 0.001 → reused | 0.030 → 0.000 | 0.022 → reused |
+| Validation | 0.006 → 0.000 | 0.006 → reused | 0.059 → 0.001 | 0.058 → reused |
+| Final computation | 0.020 → 0.004 | 0.024 → reused | 0.222 → 0.045 | 0.239 → reused |
+| Composition | 0.007 → 0.007 | 0.007 → 0.009 | 0.081 → 0.066 | 0.090 → 0.068 |
+| Response serialization | 0.005 → 0.003 | 0.006 → 0.003 | 0.057 → 0.017 | 0.063 → 0.019 |
+
+The recorded run time / 1-minute load at invocation start, in round order:
+
+| Book / version | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generic 2k before | .073 / 9.59 | .076 / 9.59 | .073 / 9.59 | .068 / 9.59 | .067 / 9.59 |
+| Generic 2k after | .035 / 9.59 | .034 / 9.59 | .033 / 9.59 | .034 / 9.59 | .033 / 9.59 |
+| Multi-wallet 2k before | .170 / 9.59 | .174 / 9.59 | .181 / 9.59 | .177 / 9.59 | .179 / 9.59 |
+| Multi-wallet 2k after | .054 / 9.59 | .062 / 9.59 | .054 / 9.59 | .056 / 9.59 | .056 / 9.59 |
+| Generic 20k before | .721 / 9.59 | .741 / 9.59 | .722 / 9.59 | .739 / 9.30 | .738 / 9.30 |
+| Generic 20k after | .307 / 9.59 | .310 / 9.59 | .299 / 9.30 | .303 / 9.30 | .302 / 9.30 |
+| Multi-wallet 20k before | 1.758 / 9.30 | 1.737 / 9.20 | 1.755 / 9.20 | 1.779 / 9.02 | 1.764 / 9.02 |
+| Multi-wallet 20k after | .451 / 9.30 | .441 / 9.20 | .449 / 9.20 | .439 / 9.20 | .466 / 9.02 |
+
+All 40 responses match the captured Python responses byte for byte. The
+2× multi-wallet 20k acceptance target is met, so no further profiling pass
+is required by that criterion. Main-thread CPU values from `ledger-bench`
+exclude worker threads and must not be interpreted as total CPU savings.
+
+### What changed
+
+- `41ec8223`, `31ac8516`, `0537479d`, `de836bd2`: coefficients that fit
+  `u128` use fixed-width arithmetic, with 256-bit intermediates and the
+  existing `BigUint` fallback. Rounding, exponent limits, signed zero and
+  exceptional results retain their exact rules. Differential tests compare
+  the fast and fallback paths. `Decimal` remains 40 bytes.
+- `06edc4cb`: reuse a generic rail carry's settled prepare and computation
+  when its pricing and excluded rows equal the final pass's inputs.
+- `2ac6c521`, `c93a6b19`, `3a39f611`, `2d92bb27`, `7ef06f2e`, `03c343a0`:
+  keep constructed entries, borrow them across the lot engine, avoid
+  redundant books and derived copies, render text into one buffer, and
+  parse a valid request once. Malformed requests retain their earlier
+  diagnostic path.
+- `6dee1a9f`, `16c79421`, `0c664267`, `0d1deebb`, `5bfbcaa2`: prepare and
+  compute independent assets, construct entries, derive fragment values,
+  compose independent rows and serialize contiguous response chunks
+  concurrently. Results, errors and deferred panics are consumed in the
+  original order. Each map uses at most eight scoped workers and joins
+  them before returning; Austrian linked-asset computation retains its
+  ordered runner.
+
+The remaining largest spans at multi-wallet 20k are rail carry (267 ms),
+composition (68 ms), parsing (44 ms) and serialization (19 ms). Within the
+carry, preparation totals 138 ms and lot computation 57 ms; these are nested
+spans, not additional time. Fixed-point carry still may run several passes.
+On generic 20k, final preparation (99 ms), composition (66 ms), computation
+(45 ms) and parsing (44 ms) dominate. The separately planned typed R4 fusion
+can remove request parsing; settling carry in one pass remains a distinct
+accounting change.
+
+### Mutation equivalence record
+
+The speed pass retains every original tax recipe and adds
+`walk-last-constructor-failure-wins`, which reverses the consumed constructor
+outcomes to prove that the earliest constructor failure wins across chunks.
+Nine existing recipes move to equivalent mutations:
+
+| Recipe | Equivalent mutation after the refactor |
+| --- | --- |
+| `walk-entries-in-insertion-order` | Chain moves before outs instead of outs before moves. |
+| `walk-infinite-values-checked-first` | Raise for an infinite argument before the deferred constructor validates its other arguments. |
+| `compose-unit-cost-multiplies` | Multiply basis by quantity instead of dividing in the extracted acquisition helper. |
+| `run-method-gate-without-computation` | Remove the empty parsed-assets guard, formerly the empty input-list guard. |
+| `run-compute-failure-names-no-asset` | Drop the failing parsed asset's name, formerly the input asset's name. |
+| `carry-stops-after-a-pass` | Stop when pricing or blocks changed, at the new continue branch. |
+| `run-carry-pricing-unread` | Ignore carried pricing and disable settled-output reuse so it cannot mask the ignored pricing. |
+| `run-carry-blocks-unread` | Give the final pass an empty exclusion set at its new borrowed-book/settled-pass call. |
+| `run-carried-rows-unreported` | Omit carried rows from the response at its borrowed-book call. |
+
+The complete catalog kills all **187/187** mutations (150 Rust, 37 Python),
+after all 121 distinct unmutated test selections pass. No recipe is removed,
+no mutant survives and no mutated build fails. The nine re-anchored recipes
+above and the new constructor-order recipe are all in that kill set.
+
+### Python boundary verification
+
+The binding was rebuilt with `MATURIN_NO_INSTALL_RUST=1`, offline Cargo and
+`mise exec rust@1.99.1 uv@latest -- uv sync --locked --python 3.11`.
+`tests/test_tax_*` passes: **1,028 passed, 160 subtests passed, one expected
+skip** (the release binding has no panic-injection hook). This includes
+golden regeneration/certification, the live frozen-oracle comparison and
+the seeded prepare-stage comparisons. The rebuilt `kassiber_tax.ledger`
+also matches all four captured response texts.
+
+The full nine-lane shadow overlay observes **968 production calls compared
+with the frozen RP2 oracle**, with no unlisted differences and zero LD-5
+refusals. The test results include three custody comparison failures in
+`reports-contracts`; the complete overlay is therefore not green.
+
+| Shadow lane | Tests passed | Subtests passed | Skipped | Failed | Calls compared |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| core-accounting | 545 | 231 | 0 | 0 | 343 |
+| wallets-sync | 134 | 25 | 0 | 0 | 21 |
+| daemon-cli | 307 | 66 | 0 | 0 | 184 |
+| security-replication | 16 | 0 | 0 | 0 | 0 |
+| reports-contracts | 1,801 | 146 | 1 | 3 | 332 |
+| serial-network | 157 | 41 | 0 | 0 | 1 |
+| serial-daemon | 205 | 42 | 0 | 0 | 19 |
+| serial-regressions | 192 | 16 | 0 | 0 | 55 |
+| serial-integration | 27 | 4 | 10 | 0 | 13 |
+
+The requested `KASSIBER_TEST_TAX_ENGINE=census` runs also find no missing
+shadow-overlay modules or calls outside tests. Census records production
+routes; the shadow runs above perform the oracle comparisons.
+
+| Census lane | Tests passed | Subtests passed | Skipped | Failed | Calls / modules |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| core-accounting | 1,875 | 426 | 24 | 0 | 343 / 14 |
+| reports-contracts | 2,368 | 2,820 | 1 | 3 | 332 / 32 |
+
+The three failures are identical in shadow and census:
+
+- `tests/test_custody_gap_port.py::test_every_gap_generator_matches_and_counts_both_engines`, fanout parameter.
+- `tests/test_custody_interpretation_stage.py::test_every_generator_matches_and_counts_both_engines`, fanout parameter.
+- `tests/test_custody_interpretation_stage.py::test_full_stage_vectors_wrappers_and_refusals`.
+
+The fanout comparisons stop Python at interpretation or gaps but request
+Rust's full finalization. Seed 24 (`nan_value`) therefore gets Rust's
+`validation` refusal. Python's full projection also refuses that price.
+The four non-finite fanout cases return exactly the same Rust responses
+before and after the speed pass. The wrapper test additionally reaches an
+existing Rust finalization discrepancy: `migration_1_0` through
+`migration_1_6`, whose stored transaction-id array includes null, boolean,
+numeric, structured and surrogate values, return `ValueError` on both
+baseline and tip while Python's full projection succeeds. This discrepancy
+is retained and needs separate custody work; it is not a tax parity result.
+
+The local reproduction, `target/ledger-perf/repro-custody-stage.py --full`,
+checks those 11 refusals against a rebuilt baseline custody probe. With
+`finalized=False`, **2,094 fanout histories/permutations and all 106 wrapper
+vectors match** at their declared stage boundaries. No Python reference,
+harness or product code is changed. These three failures still prevent a
+fully green reports gate.
+
+There is an existing harness path assumption: four `SessionEndTest` tests
+expect a diagnostic containing `in /...`, but `tests/conftest.py` deliberately
+reports a test module inside the repository as a relative path. Reproduce
+without changing Python by setting `TMPDIR` to an existing absolute
+directory under this checkout's `target/`, then running:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest \
+  tests/test_tax_shadow_harness.py::SessionEndTest -q
+```
+
+The initial direct run therefore has four path-text assertion failures and
+1,024 passes; the ledger comparisons themselves agree. The clean runs above
+used an unchanged disposable source copy under `target/ledger-perf/verify-src`
+and `TMPDIR` under `target/ledger-perf/tmp`, outside the tested source root.
+They imported the rebuilt binding from this checkout's Python 3.11 environment;
+all 1,034 relevant copied source, test, script and dependency files were
+checked byte for byte against the checkout. The mutation and verification
+build trees were removed after their summaries were saved.
+
+Local evidence remains under `target/ledger-perf/`: `measurements.json` and
+`measurements.jsonl` contain every timing, phase and load; `gates/` contains
+the test logs and summaries; `custody-repro-summary.json` and its input files
+record the baseline refusals. `repro-shadow-temp.sh` preserves the separate
+temporary-path harness reproduction.
+
+The final classification update leaves `tests/rust_port/dispositions.json`
+unchanged, and `scripts/python_test_shards.py run preflight --ci` passes
+**57/57** tests. The earlier checkpoint at `de836bd2` already passed fmt,
+both clippy runs, 871 workspace tests and the custody corpus/bench hash
+comparisons. This completion commit changes the report and backlog docs;
+the optimized engine remains at that verified source revision.
+
 ## Where the engine sits
 
 Journals run on `KassiberTaxEngine` (`kassiber/core/engines/ledger.py`). It
@@ -175,7 +387,8 @@ through branches no finalized row reaches.
 
 `ledger` (`tax-engine/core/src/ledger/run.rs`) runs the phase-3 adapter's
 pipeline in its order, with the rows grouped by asset in first-appearance
-order:
+order. Independent pure work may run concurrently, but its results and
+failures are consumed in that order:
 
 1. **Generic rail carry** (generic books, `ledger/carry.rs`). A
    carrying-value pair between BTC and LBTC whose legs are rows prices both
@@ -190,8 +403,10 @@ order:
    `source_basis_unavailable`, and its rows (a direct payout's target-asset
    disposal too) leave every later pass. A priced row's value and rate are
    `format(x.normalize(), "f")` of the basis and of the basis per unit of its
-   amount, read back as exact pricing.
-2. **First prepare pass**, one asset after another: normalize
+   amount, read back as exact pricing. When a pass settles and its pricing
+   and excluded rows match the final pass's inputs, that pass's stages and
+   computed outputs are reused for the final run.
+2. **First prepare pass**, with results consumed in asset order: normalize
    (`ledger/normalize.rs`, with the Austrian regime tracker in
    `ledger/regimes.rs`), then the walk (`ledger/order.rs`, `walk.rs`,
    `describe.rs`). The walk orders the asset's events and moves (acquisitions,

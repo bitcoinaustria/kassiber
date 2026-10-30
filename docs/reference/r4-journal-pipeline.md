@@ -6,7 +6,10 @@ committed and its accepted baseline remains open. The R4-11 renderer has a
 remains open. [Storage-format speedups](#storage-format-speedups) run Python
 first; compact calculations are implemented with the Rust schema mirror.
 The [R7 integration audit](rust-backend-r7-integration.md) records the linear
-restack and its verification. This document plans stage R4 of
+restack and its verification. The separate [tax-engine speed pass](tax-engine.md#ledger-performance-checkpoint-r4-2026-10-30)
+measures 2.03–3.96× faster `ledger` calls with byte-identical responses; its
+timings supersede the engine line in this design's original measurements.
+This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
 [custody engine](custody-engine.md) (R2, including the R2g fusion boundary and
@@ -370,10 +373,10 @@ above. The other lines are targets.
 - SQLCipher books add the encrypted write floor (2.74–3.08 s for entries and
   postings at 20k, against 1.25–1.61 s plaintext) to both runtimes. Their
   budget is the plaintext budget plus that difference.
-- With custody at 10×, the tax engine is the largest compute line at 20,000.
-  Halving it would bring multi-wallet 20k to about 4.4 s (4.9×), but only an
-  engine performance slice can tell whether that is achievable. Decision 2
-  makes that slice part of R4.
+- With custody at 10×, the original budget makes the tax engine the largest
+  compute line at 20,000. The separate speed pass now measures 0.299 s for
+  generic and 0.439 s for multi-wallet `ledger` at that size. Integrating
+  those savings into the complete journal pipeline still needs measurement.
 - End-to-end 10× is out of reach under parity. Even with zero compute, the
   floors for generic 20k (open 0.14 + reads 0.11 + writes 1.25) give at most
   about 8.5×.
@@ -567,8 +570,10 @@ Within the owner's scope (R4 and R5 now, R6 and R7 untouched):
 - **Write floor.** I/O-bound writes dominate at 20,000. Checkpoint deferral
   must not let the WAL grow without bound when processes are killed between
   commit and checkpoint; the next open's automatic checkpoint covers that.
-- **Engine cost.** At 28–75 µs per entry, the engine is the largest compute
-  line once custody is typed, and it is outside custody's typed rewrite.
+- **Engine cost.** The engine is outside custody's typed rewrite. The
+  separate speed pass reduces its text-in/text-out cost to 15–22 µs per
+  transaction on the 20,000 books; the fused pipeline still needs its own
+  measurements.
 
 ## Storage-format speedups
 
@@ -911,6 +916,10 @@ open.
    **Decided: both targets are accepted** as R4's performance acceptance:
    custody at least 10× Python, end to end at least 4×. A tax-engine speed
    pass is part of R4. It runs separately, on `t3code/ledger-perf`.
+
+   The separately authorized speed pass meets its ≥ 2× multi-wallet 20k
+   target: 1.737 → 0.439 s for text-in/text-out `ledger`, with byte-identical
+   output. The original engine budget is not a complete-pipeline measurement.
 3. **Automatic pairing.** The desktop button and the freshness journal job
    run the transfer matcher four times (3.4–4.7 s at 20,000). Port it in R4
    (R4-14), or route only plain `journals process` to Rust in R4 and switch

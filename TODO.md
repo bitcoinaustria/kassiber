@@ -320,6 +320,9 @@ The [R4 journal pipeline design](docs/reference/r4-journal-pipeline.md) holds
 the measured phase profile, the typed architecture, the performance budget
 and the owner decisions it needs.
 
+The separate [tax-engine speed pass](docs/reference/tax-engine.md#ledger-performance-checkpoint-r4-2026-10-30)
+records the byte-parity checkpoint, phase timings and mutation equivalences.
+
 - [ ] Get the owner's remaining decisions on book-open cost and the allocator;
   decisions 1–4 are recorded in the design.
 - [x] R4-0: integrate custody, projection fixes, performance, fusion and the
