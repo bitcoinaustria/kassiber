@@ -239,9 +239,13 @@
     "importRootOpening": "Kassiber öffnet noch den ausgewählten Ordner mit lokalen Büchern.",
     "passphraseRequiredError": "Die Datenbank-Passphrase ist erforderlich.",
     "touchIdNotFound": "Für diese Bücher wurde keine Touch-ID-Passphrase gefunden. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
-    "passphraseRequiredTitle": "Datenbank-Passphrase erforderlich",
-    "booksLocked": "Bücher gesperrt",
-    "defaultReason": "Gib die Datenbank-Passphrase ein, um zu entsperren.",
+    "title": "Bücher entsperren",
+    "sessionTitle": "Deine Bücher sind gesperrt",
+    "lead": {
+      "encrypted": "Gib die Passphrase ein, um deine Bücher auf diesem Gerät zu entschlüsseln.",
+      "daemon-auth": "Kassiber braucht die Passphrase erneut, bevor es deine Bücher anzeigen kann.",
+      "session": "Solange Kassiber gesperrt ist, wird nichts aus deinen Büchern angezeigt."
+    },
     "passphrase": "Passphrase",
     "touchIdUnavailableReason": "Touch-ID-Entsperrung ist nicht verfügbar: {{reason}}",
     "touchIdUnavailable": "Touch-ID-Entsperrung ist für diese Desktop-Sitzung nicht verfügbar.",
@@ -255,8 +259,11 @@
     "unlock": "Entsperren",
     "openBooks": "Bücher öffnen",
     "backToSetup": "Zurück zum Setup",
-    "passphraseFailed": "Die Passphrase hat diese Sitzung nicht entsperrt.",
-    "touchIdFailed": "Touch ID hat diese Sitzung nicht entsperrt."
+    "passphraseEmpty": "Gib zuerst die Passphrase ein.",
+    "passphraseFailed": "Diese Passphrase hat die Bücher nicht entsperrt.",
+    "unlockFailed": "Kassiber konnte die Bücher nicht entsperren. Versuch es noch einmal.",
+    "touchIdFailed": "Touch ID hat die Bücher nicht entsperrt.",
+    "touchIdStale": "Die für Touch ID gespeicherte Passphrase öffnet diese Bücher nicht mehr. Entsperre einmal mit der Passphrase, um sie erneut zu speichern."
   },
   "importRoot": {
     "title": "Lokale Bücher werden geöffnet",

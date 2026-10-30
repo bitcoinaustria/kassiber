@@ -145,6 +145,9 @@ Windows and Linux keep their native decorated frame; the same row is an
 in-app toolbar there with no inset and no drag region. Screens outside the shell
 (setup, loading, the error boundary) and the lock and import-restore screens use
 the same outline: the title bar row on the chrome and an inset page panel.
+Inside it the lock screen centres the wordmark over the welcome screen's type
+(title and lead, no eyebrow) and a passphrase field exactly the wordmark's width,
+with Back to setup set apart at the foot of the panel.
 
 Setup opens on one primary action, creating books, beside its chain artwork:
 three-dimensional blocks rasterized onto a coarse pixel grid, in the wordmark's
@@ -156,8 +159,9 @@ accessibility tree and tab order. Reduced motion holds it still, and hidden
 windows pause both the animation and its timer.
 
 The pixel wordmark appears throughout setup, the lock screen, and the sidebar.
-It arrives as falling cells on the welcome screen, decrypts on locking or
-unlocking, and assembles once after creating books. Folding the sidebar clips
+It arrives as falling cells on the welcome screen, decrypts when the lock
+screen appears and again on each unlock attempt, and assembles once after
+creating books. Folding the sidebar clips
 the word down to its K. During the first sync a looping K indicates work;
 the adjacent text and progress remain the source of real sync status. These
 effects stop in hidden windows and show a static mark with reduced motion.
