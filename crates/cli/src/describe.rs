@@ -143,6 +143,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.payouts.delete",
     "transfers.payouts.create",
     "transfers.gaps.history",
+    "transfers.gaps.plan",
+    "transfers.gaps.apply",
     "transfers.rules.list",
     "transfers.rules.create",
     "transfers.rules.delete",

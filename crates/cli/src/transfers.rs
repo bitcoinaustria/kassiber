@@ -4,6 +4,12 @@ use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 
 pub fn execute(book: &mut dyn Book, operation: &str, args: &Namespace) -> Result<Value, AppError> {
+    if matches!(operation, "transfers.gaps.plan" | "transfers.gaps.apply") {
+        book.resolve_scope(args.get("workspace"), args.get("profile"))?;
+        let mut payload = dict(args.items().iter().map(|(k, v)| (k.as_str(), v.clone())));
+        kassiber_envelope::set(&mut payload, "authored_source", kassiber_envelope::s("cli"));
+        return book.transfers(operation, &payload);
+    }
     if matches!(
         operation,
         "transfers.components.plan" | "transfers.components.apply"

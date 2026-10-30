@@ -14,6 +14,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
     "ui.custody.gaps.history",
+    "ui.custody.review.plan",
+    "ui.custody.review.apply",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
@@ -27,6 +29,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if matches!(kind, "ui.custody.review.plan" | "ui.custody.review.apply") {
+        return gaps(book, kind, args);
+    }
     if matches!(
         kind,
         "ui.transfers.components.plan" | "ui.transfers.components.apply"
@@ -574,5 +579,184 @@ mod payout_create_tests {
         assert_eq!(get(&args, "kind"), Some(&s("direct-swap-payout")));
         assert_eq!(get(&args, "policy"), Some(&s("123")));
         assert_eq!(get(&args, "authored_source"), Some(&s("gui")));
+    }
+}
+
+/// Gap transport checks retain Python's order: shape, scope, action, candidate,
+/// then apply's version. The service owns the candidate read inside its action.
+fn gaps(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
+    use kassiber_envelope::set;
+    let applying = kind == "ui.custody.review.apply";
+    let Value::Dict(fields) = args else {
+        unreachable!()
+    };
+    let allowed = [
+        "workspace",
+        "profile",
+        "action",
+        "gap_id",
+        "classification",
+        "reason",
+    ];
+    let mut unknown: Vec<_> = fields
+        .iter()
+        .map(|(k, _)| key_text(k))
+        .filter(|k| !allowed.contains(&k.as_str()) && !(applying && k == "expected_input_version"))
+        .collect();
+    unknown.sort();
+    if !unknown.is_empty() {
+        return Err(
+            AppError::new("validation", format!("{kind} received unsupported fields"))
+                .with_details(dict([(
+                    "unknown",
+                    Value::List(unknown.into_iter().map(s).collect()),
+                )])),
+        );
+    }
+    let gap = get(args, "gap_id");
+    let Some(Value::Str(gap)) = gap else {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} requires gap_id"),
+        ));
+    };
+    let gap = kassiber_pytext::strip(gap.as_str().unwrap_or_default());
+    if gap.is_empty() {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} requires gap_id"),
+        ));
+    }
+    if !matches!(get(args, "reason"), None | Some(Value::Null))
+        && !matches!(get(args,"reason"),Some(Value::Str(t)) if t.code_points().count()<=500)
+    {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} reason must be text up to 500 characters"),
+        ));
+    }
+    book.resolve_scope(get(args, "workspace"), get(args, "profile"))?;
+    let actions = ["classify_residual", "create", "dismiss", "reopen", "revise"];
+    if !matches!(get(args,"action"),Some(Value::Str(t)) if t.as_str().is_some_and(|s|actions.contains(&s)))
+    {
+        return Err(
+            AppError::new("validation", format!("{kind} action is invalid")).with_details(dict([
+                (
+                    "supported_actions",
+                    Value::List(actions.into_iter().map(s).collect()),
+                ),
+            ])),
+        );
+    }
+    if get(args, "action") == Some(&s("classify_residual"))
+        && !matches!(get(args, "classification"), Some(Value::Str(_)))
+    {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} requires classification"),
+        ));
+    }
+    let mut payload = args.clone();
+    set(&mut payload, "gap_id", s(gap));
+    set(&mut payload, "authored_source", s("gui"));
+    set(&mut payload, "desktop_kind", s(kind));
+    Ok(exact_integers(book.transfers(
+        if applying {
+            "transfers.gaps.apply"
+        } else {
+            "transfers.gaps.plan"
+        },
+        &payload,
+    )?))
+}
+
+#[cfg(test)]
+mod gap_tests {
+    use super::*;
+    use kassiber_envelope::set;
+    use kassiber_runtime::store::{BookContext, StatusFacts};
+
+    struct Capture;
+    impl Book for Capture {
+        fn transfers(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+            Ok(dict([("operation", s(operation)), ("args", args.clone())]))
+        }
+        fn resolve_scope(
+            &self,
+            _: Option<&Value>,
+            _: Option<&Value>,
+        ) -> Result<(String, String), AppError> {
+            Ok(("w".into(), "p".into()))
+        }
+        fn is_initialized(&self) -> Result<bool, AppError> {
+            unreachable!()
+        }
+        fn context(&self) -> Result<BookContext, AppError> {
+            unreachable!()
+        }
+        fn status_facts(&self) -> Result<StatusFacts, AppError> {
+            unreachable!()
+        }
+        fn rollback(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+        fn close(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn desktop_gap_checks_shape_authority_and_dispatch() {
+        for kind in ["ui.custody.review.plan", "ui.custody.review.apply"] {
+            assert!(KINDS.contains(&kind));
+            let args = dict([
+                ("action", s("create")),
+                ("gap_id", s(" \u{2003}gap \n")),
+                ("reason", s("🦀".repeat(500))),
+            ]);
+            let out = execute(&mut Capture, kind, Some(&args)).unwrap();
+            assert_eq!(
+                get(&out, "operation"),
+                Some(&s(if kind.ends_with("apply") {
+                    "transfers.gaps.apply"
+                } else {
+                    "transfers.gaps.plan"
+                }))
+            );
+            let payload = get(&out, "args").unwrap();
+            assert_eq!(get(payload, "gap_id"), Some(&s("gap")));
+            assert_eq!(get(payload, "authored_source"), Some(&s("gui")));
+            assert_eq!(get(payload, "desktop_kind"), Some(&s(kind)));
+            // The domain checks apply's version after candidate resolution.
+            assert!(get(payload, "expected_input_version").is_none());
+            for (key, value, message) in [
+                (
+                    "authored_source",
+                    s("ai_tool"),
+                    "received unsupported fields",
+                ),
+                ("gap_id", s(" \u{2003}"), "requires gap_id"),
+                (
+                    "reason",
+                    s("x".repeat(501)),
+                    "reason must be text up to 500 characters",
+                ),
+                ("action", s("unknown"), "action is invalid"),
+            ] {
+                let mut invalid = args.clone();
+                set(&mut invalid, key, value);
+                let error = execute(&mut Capture, kind, Some(&invalid)).unwrap_err();
+                assert_eq!(error.code, "validation");
+                assert_eq!(error.message, format!("{kind} {message}"));
+            }
+            let mut invalid = args.clone();
+            set(&mut invalid, "action", s("classify_residual"));
+            assert_eq!(
+                execute(&mut Capture, kind, Some(&invalid))
+                    .unwrap_err()
+                    .message,
+                format!("{kind} requires classification")
+            );
+        }
     }
 }

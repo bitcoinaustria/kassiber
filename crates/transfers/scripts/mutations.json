@@ -1,5 +1,13 @@
 [
   {
+    "id": "gap-report-year-range",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if years.iter().any(|year| !(1900..=9999).contains(year)) {",
+    "replace": "if false {",
+    "expect_failing": ["gap_reviews_match_python_complete_database_rows_and_refusals"],
+    "rule": "Filed-report previews validate candidate years even when no report snapshots exist."
+  },
+  {
     "id": "stored-membership",
     "file": "crates/transfers/src/records.rs",
     "find": "SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?",
@@ -1841,5 +1849,305 @@
       "desktop_component_review_caps_aliases_versions_and_authority"
     ],
     "rule": "Desktop apply requires a non-negative integer input version."
+  },
+  {
+    "id": "gap-input-version",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "cr::require_input_version(c, scope, field(args, \"expected_input_version\"))?;",
+    "replace": "// Omit stale-plan guard.",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Apply binds authoring to the planned journal input version."
+  },
+  {
+    "id": "gap-apply-atomic",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "sql::atomic(c, || {\n        cr::require_input_version(c, scope, field(args, \"expected_input_version\"))?;\n        let p = plan(c, scope, args, candidate, sources)?;\n        apply(c, scope, &p, sources)\n    })",
+    "replace": "{\n        cr::require_input_version(c, scope, field(args, \"expected_input_version\"))?;\n        let p = plan(c, scope, args, candidate, sources)?;\n        apply(c, scope, &p, sources)\n    }",
+    "expect_failing": [
+      "gap_apply_rolls_back_late_failure_and_preserves_outer_transaction"
+    ],
+    "rule": "Late review failure rolls back component creation and preserves caller transactions."
+  },
+  {
+    "id": "gap-candidate-recheck",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "if fingerprint(&current, false)? != fingerprint(&candidate, false)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_plan_rechecks_loaded_candidate_before_authoring"
+    ],
+    "rule": "Planning re-derives and fingerprints the loaded candidate."
+  },
+  {
+    "id": "gap-component-id",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-gap-bridge:{}:{}:{fp}",
+    "replace": "kassiber:custody-gap-bridge-wrong:{}:{}:{fp}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Bridge identity binds profile, gap and authored claim."
+  },
+  {
+    "id": "gap-child-id",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-plan:{id}:allocation:{i}",
+    "replace": "kassiber:custody-plan-wrong:{id}:allocation:{i}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Allocation identity is deterministic within its component plan."
+  },
+  {
+    "id": "gap-source-movement",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "amount(&boundary, \"wallet_movement_msat\")?",
+    "replace": "amount(&boundary, \"principal_msat\")?",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "The source includes network fees in its wallet movement."
+  },
+  {
+    "id": "gap-fifo",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "for (dest, mut remaining) in destinations {",
+    "replace": "for (dest, mut remaining) in destinations.into_iter().rev() {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "N:M allocation follows canonical destination FIFO order."
+  },
+  {
+    "id": "gap-residual-role",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "(\"role\", s(\"suspense\")),",
+    "replace": "(\"role\", s(\"external\")),",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Unresolved residuals remain suspense until explicit classification."
+  },
+  {
+    "id": "gap-residual-custody",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "if classification.starts_with(\"external_\") {\n        \"external_confirmed\"",
+    "replace": "if classification.starts_with(\"external_\") {\n        \"internal_reviewed\"",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Explicit external classifications project external reviewed custody."
+  },
+  {
+    "id": "gap-revision-fingerprint",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-gap-revision:{base}",
+    "replace": "kassiber:custody-gap-revision-wrong:{base}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revision identity binds the immutable correction commitment."
+  },
+  {
+    "id": "gap-residual-fingerprint",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-gap-residual:{base}",
+    "replace": "kassiber:custody-gap-residual-wrong:{base}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Residual correction identity binds the immutable correction commitment."
+  },
+  {
+    "id": "gap-dismiss-invalidation",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "cs::invalidate(c, scope.profile_id)?;",
+    "replace": "// Omit dismissal invalidation.",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Dismissal invalidates journal freshness exactly once."
+  },
+  {
+    "id": "gap-post-version",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "(\"input_version\", version.into()),",
+    "replace": "(\"input_version\", (version+1).into()),",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Plans report the current input version without advancing it."
+  },
+  {
+    "id": "desktop-gap-version",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "if !matches!(get(args,\"expected_input_version\"),Some(Value::Int(v)) if v>=&0.into()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_desktop_version_validation_follows_candidate_resolution"
+    ],
+    "rule": "Desktop apply requires an exact nonnegative integer after resolving its candidate."
+  },
+  {
+    "id": "gap-evidence-check",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if evidence[\"valid\"] != true {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Corrections refuse stale reviewed observation evidence."
+  },
+  {
+    "id": "gap-correction-state",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if !valid {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Corrections require the matching active or reopened component state."
+  },
+  {
+    "id": "gap-correction-commitments",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "(\"evidence_commitments\", Value::List(commitments)),",
+    "replace": "(\"evidence_commitments\", Value::List(commitments.into_iter().take(0).collect())),",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Correction fingerprints commit immutable evidence hashes."
+  },
+  {
+    "id": "gap-review-history",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "cs::insert(c, \"custody_gap_reviews\", &row)?;",
+    "replace": "// Omit immutable review record.",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Successful authoring appends the immutable review event."
+  },
+  {
+    "id": "gap-review-relations",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "s(\"custody-gap-review-transaction-v2\")",
+    "replace": "s(\"custody-gap-review-transaction-v1\")",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Review relations use deterministic role-bound v2 identities."
+  },
+  {
+    "id": "gap-report-summary",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if action == \"classify_residual\" && classification != \"suspense_continuation\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Filed-report previews distinguish explicit residual classifications."
+  },
+  {
+    "id": "gap-report-overlap",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if overlap.is_empty() {",
+    "replace": "if !overlap.is_empty() {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Filed-report impact previews include only affected period overlap."
+  },
+  {
+    "id": "gap-report-persistence",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "cs::insert(c, \"custody_filed_report_impacts\", &row)?;",
+    "replace": "let _ = &row;",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Apply persists every filed-report impact and rolls back on late impact failure."
+  },
+  {
+    "id": "gap-current-journal",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "let current = count > 0",
+    "replace": "let current = false && count > 0",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Current journals use their version-bound ignored population."
+  },
+  {
+    "id": "gap-stored-ignored",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "ignored.extend(a.iter().filter(|v| truthy(v)).map(py_str));",
+    "replace": "ignored.extend(a.iter().take(0).map(py_str));",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Stored ignored transaction identities suppress already claimed candidates."
+  },
+  {
+    "id": "gap-large-worklist",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "let large = count > 50_000;",
+    "replace": "let large = count > 500_000;",
+    "expect_failing": [
+      "gap_worklists_match_python_without_changing_database_rows"
+    ],
+    "rule": "Large books retain bounded and explicitly incomplete advisory search."
+  },
+  {
+    "id": "gap-error-detail",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "return internal(\"date value out of range\");",
+    "replace": "return internal(\"OverflowError\");",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Service refusals preserve the reference exception message."
+  },
+  {
+    "id": "desktop-gap-unknown",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "if !unknown.is_empty() {\n        return Err(\n            AppError::new(\"validation\", format!(\"{kind} received unsupported fields\"))",
+    "replace": "if false {\n        return Err(\n            AppError::new(\"validation\", format!(\"{kind} received unsupported fields\"))",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Gap desktop requests reject unrecognized authority fields."
+  },
+  {
+    "id": "desktop-gap-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(&mut payload, \"authored_source\", s(\"gui\"));",
+    "replace": "set(&mut payload, \"authored_source\", s(\"user\"));",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Desktop gap authoring always records GUI authorship."
+  },
+  {
+    "id": "desktop-gap-reason",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "t.code_points().count()<=500",
+    "replace": "t.code_points().count()<=501",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Desktop reasons are bounded by Unicode code point count."
+  },
+  {
+    "id": "desktop-gap-classification",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "if get(args, \"action\") == Some(&s(\"classify_residual\"))",
+    "replace": "if false && get(args, \"action\") == Some(&s(\"classify_residual\"))",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Residual authoring requires a textual classification."
   }
 ]

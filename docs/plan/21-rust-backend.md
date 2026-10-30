@@ -1732,9 +1732,9 @@ the separate Python atomicity fix remains pending. The shell reference records
 the native rollback test, repro, mutation table and process routing evidence.
 
 Component plan/apply is ported in the [component checkpoint](../reference/rust-shell.md#component-planapply-checkpoint)
-below; gap plan/apply remains unported. Version-bound candidate fingerprints,
-filed-report impacts, complete normalized row parity and mutations remain
-acceptance requirements for those two commands. All ten
+below; gap plan/apply is ported in the gap checkpoint below with version-bound
+candidate fingerprints, filed-report impacts, complete normalized row parity
+and mutation evidence. All ten
 computation-dependent commands remain `not_implemented`, including component
 materialization, suggestions/bulk/rules matching and review cases/plan/apply.
 AI projections stay Python. This verified numbered-step boundary does not claim
@@ -1952,7 +1952,8 @@ compares payout create/delete late-failure errors and complete rollback state
 against the repaired reference. The old bug repros are replaced by shared
 failure-path oracle cases. See the [transfer checkpoint](../reference/rust-shell.md#savepoint-reference-fix-parity-checkpoint)
 for parity counts and verification. Component/gap plan/apply and their daemon
-kinds are still outstanding; automatic pairing remains R4.
+kinds were outstanding at that boundary; the following checkpoints port them.
+Automatic pairing remains R4.
 
 ### R5 component plan/apply checkpoint
 
@@ -1968,7 +1969,27 @@ rollback. 27 named mutations are killed. Two reference behaviors (a case-folding
 plan/apply disagreement and `location_ref` echo in create plans) are recorded
 with repros and matched, not changed.
 
-Gap plan/apply and `ui.custody.review.plan|apply` are still `not_implemented`.
-Their create, revise and dismiss actions re-derive the current gap candidate, so
-they need the gap search engine, which exists only in the R2 custody stack and is
-not part of this R5 base. See the [shell reference](../reference/rust-shell.md#component-planapply-checkpoint).
+Gap plan/apply was still `not_implemented` at this checkpoint because its
+create, revise and dismiss actions require the R2 gap-search dependency.
+The next checkpoint imports that dependency and ports authoring. See the
+[shell reference](../reference/rust-shell.md#component-planapply-checkpoint).
+
+### R5 gap plan/apply checkpoint
+
+The continuation on `t3code/r5-transfers-7` starts at `c3d18194`, imports only
+the pure R2 gap search, and serves `transfers gaps plan|apply` and
+`ui.custody.review.plan|apply`: **19/29 CLI leaves (18 transfers, one review)
+and 18 desktop kinds**. The shared transfer service handles create, dismiss,
+reopen, revise and residual classification. Candidate and correction
+fingerprints bind exact evidence, versions, history and deterministic component
+identities; apply rechecks inside a savepoint and preserves caller transactions.
+Review events, relations and saved/filed-report impacts remain append-only.
+
+Fixed-source Python oracles compare complete normalized database rows,
+ordered outputs, refusal messages, invalidation and late-failure rollback.
+Large-book SQL worklists retain the Python bounds and incompleteness barriers.
+CLI and daemon hybrid transcripts require Rust execution without fallback.
+The [shell reference](../reference/rust-shell.md#gap-planapply-checkpoint)
+records parity counts, named mutation witnesses and verification results.
+The ten computation-dependent commands and their kinds remain unported;
+AI projections remain Python and automatic pairing belongs to R4.

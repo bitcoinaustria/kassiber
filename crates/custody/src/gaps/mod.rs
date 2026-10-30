@@ -13,6 +13,22 @@ pub use candidate::{authored_claim_fingerprint, candidate_fingerprint, snapshot_
 pub(crate) use normalize::iso as iso_datetime;
 pub use search::{search, Limits, SearchResult};
 
+/// Locate an admission failure so service adapters can preserve Python's
+/// exception message as well as the pure search oracle's exception class.
+pub fn normalization_failure(rows: &[Value]) -> Option<(&Value, String)> {
+    rows.iter().find_map(|row| {
+        normalize::leg(row, &BTreeSet::new())
+            .err()
+            .map(|code| (row, code))
+    })
+}
+
+/// Raw timestamp prefixes used by Python's saved review snapshots.
+pub fn year_prefix(text: &str) -> Option<String> {
+    let prefix: String = text.chars().take(4).collect();
+    (!prefix.is_empty() && prefix.chars().all(crate::python_text::isdigit)).then_some(prefix)
+}
+
 #[derive(Clone, Debug)]
 struct Leg {
     id: String,

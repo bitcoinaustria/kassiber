@@ -65,6 +65,35 @@ pub fn activation_evidence(
     })
 }
 
+/// Evidence recheck also applies to superseded revisions used for corrections.
+pub fn component_evidence_status(
+    snapshot: &Snapshot,
+    component: &Component,
+) -> Result<Value, Error> {
+    commitments::evidence_status(
+        snapshot,
+        &Value::Object(component.header.clone()),
+        &legs(component)?,
+        &component
+            .commitments
+            .iter()
+            .map(|r| Value::Object(r.clone()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Shared imported-boundary arithmetic for guided review plans.
+pub fn boundary_amounts(row: &Value) -> Result<Value, Error> {
+    let principal = anchors::principal(row)?;
+    let fee = wide(&codec::integer_or_zero(&row["fee"])?);
+    let outbound = text(&row["direction"]).py_strip().py_lower() == "outbound";
+    Ok(json!({
+        "principal_msat": principal,
+        "fee_msat": fee,
+        "wallet_movement_msat": if outbound { principal + fee } else { principal },
+    }))
+}
+
 /// Python's protocol scope includes Lightning as a rail above Bitcoin.
 pub fn protocol_scope(row: &Value) -> (String, Option<String>, Option<String>) {
     match crate::evidence::scope(row) {

@@ -276,9 +276,9 @@ and the owner decisions it needs.
 ## Rust backend R5 transfers and review
 
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
-serves all five stored reads and twelve authoring commands (rule CRUD/toggles,
-dismissals, pair/unpair/update, payout create/delete, component plan/apply):
-17/29 CLI leaves and 16 desktop kinds. Full
+serves all five stored reads and fourteen authoring commands (rule CRUD/toggles,
+dismissals, pair/unpair/update, payout create/delete, component and gap plan/apply):
+19/29 CLI leaves and 18 desktop kinds. Full
 normalized authoring row parity is pinned for that subset; AI projections remain
 Python.
 
@@ -292,9 +292,9 @@ Python.
 - [x] Port component plan/apply (create, revise, undo, activate, supersede) with
   version-bound apply, conservation/route barriers, complete normalized row
   parity after mixed authoring/revision sequences and named mutations.
-- [ ] Port gap plan/apply with version-bound candidate fingerprints and
-  filed-report impacts. Create/revise/dismiss re-derive the current candidate,
-  so this needs the gap search engine from the R2 custody stack.
+- [x] Port gap plan/apply and desktop kinds with version-bound candidate
+  fingerprints, append-only corrections and filed-report impacts. Reuse the
+  pure R2 gap search; pin complete rows, late-failure rollback and mutations.
 - [ ] Port the ten computation-dependent commands and related desktop kinds
   after custody/journal services are available. Matching needs its own mutation
   catalog and Python/naive-all-pairs oracle before native suggestions or auto-pair

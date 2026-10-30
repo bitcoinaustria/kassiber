@@ -77,6 +77,56 @@ fn payout_deletions_match_python_complete_database_rows_and_refusals() {
 fn component_reviews_match_python_complete_database_rows_and_refusals() {
     run_sequences(include_str!("components.json"));
 }
+#[test]
+fn gap_reviews_match_python_complete_database_rows_and_refusals() {
+    run_sequences(include_str!("gaps.json"));
+}
+#[test]
+fn gap_worklists_match_python_without_changing_database_rows() {
+    run_sequences(include_str!("gap_worklists.json"));
+}
+#[test]
+fn gap_apply_rolls_back_late_failure_and_preserves_outer_transaction() {
+    let fixture = kassiber_pytext::loads(include_str!("gaps.json")).unwrap();
+    let scenario = &list(field(&fixture, "scenarios"))[0];
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(dir.path(), None).unwrap();
+    let c = book.connection();
+    for sql in list(field(scenario, "sql")) {
+        c.execute_batch(&py_str(sql)).unwrap();
+    }
+    let case = &list(field(scenario, "cases"))[1];
+    let tables: Vec<String> = c
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    c.execute_batch("BEGIN; INSERT INTO settings(key,value) VALUES('caller-gap','pending'); CREATE TEMP TRIGGER refuse_gap_review BEFORE INSERT ON custody_gap_reviews BEGIN SELECT RAISE(ABORT,'late review failure'); END;").unwrap();
+    let before: Vec<_> = tables.iter().map(|t| (t, bytes(&dump(c, t)))).collect();
+    let error = call(c, "transfers.gaps.apply", field(case, "args").clone()).unwrap_err();
+    assert_eq!(error.message, "late review failure");
+    assert!(!c.is_autocommit());
+    for (t, rows) in before {
+        assert_eq!(bytes(&dump(c, t)), rows, "rollback {t}");
+    }
+    c.execute_batch("DROP TRIGGER refuse_gap_review").unwrap();
+    call(c, "transfers.gaps.apply", field(case, "args").clone()).unwrap();
+    assert!(!c.is_autocommit());
+    c.execute_batch("ROLLBACK").unwrap();
+    assert!(list(&dump(c, "custody_components")).is_empty());
+    assert!(list(&dump(c, "custody_gap_reviews")).is_empty());
+    assert_eq!(
+        c.query_row(
+            "SELECT COUNT(*) FROM settings WHERE key='caller-gap'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+}
 fn run_sequences(input: &str) {
     let fixture = kassiber_pytext::loads(input).unwrap();
     let dir = tempfile::tempdir().unwrap();

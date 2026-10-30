@@ -3538,3 +3538,78 @@ against this checkout's Python. All 109 applicable R2 search mutations and four
 new admission/worklist mutations were killed in disposable scratch trees;
 the build trees were removed after their summaries. This prerequisite alone
 adds no served CLI commands or daemon kinds.
+
+### Gap plan/apply checkpoint
+
+The local `t3code/r5-transfers-7` continuation starts at `c3d18194` and adds
+`transfers gaps plan`, `transfers gaps apply`, `ui.custody.review.plan` and
+`ui.custody.review.apply`. The supported subset is **19/29 CLI leaves
+(18/25 transfers, 1/4 review) and 18 desktop kinds**. Component plan/apply
+was already complete at the preceding boundary; its existing oracle and
+process checks remain part of this continuation's regression gate.
+
+`gap_candidates.rs` mirrors Python's ordered small-book worklist and bounded
+large-book SQL selection, current journal freshness and stored ignored
+populations, plus active authored and journal claims when stored inputs are
+unavailable. It reuses the pure R2 search from the prerequisite above.
+`gap_review.rs` owns create, dismiss, reopen, revise and residual classification,
+with exact fingerprints, deterministic component/child UUIDs, canonical FIFO
+allocations, separate fees and unresolved suspense, version checks and a
+candidate recheck inside apply's savepoint. `gap_review_store.rs` owns evidence
+and correction-state checks, correction commitments, append-only review and
+relation records, and saved/filed-report impacts. Shared component validation,
+evidence, activation and supersession remain in the existing custody and
+transfer services. Exact aggregate arithmetic uses `BigInt` throughout.
+
+| Parity boundary | Named evidence | Result |
+| --- | --- | --- |
+| Ordered outputs and complete normalized database rows | `gap_reviews_match_python_complete_database_rows_and_refusals`, `gap_worklists_match_python_without_changing_database_rows` | 29 scenarios, 116 operations: 87 successes, 29 refusals |
+| Late failure and caller transaction | `gap_apply_rolls_back_late_failure_and_preserves_outer_transaction` | Complete rollback without committing the caller's transaction |
+| Loaded candidate and desktop version ordering | `gap_plan_rechecks_loaded_candidate_before_authoring`, `gap_desktop_version_validation_follows_candidate_resolution` | Stale evidence and malformed versions refused in Python order |
+| CLI bytes, normalized rows, hybrid dispatch | `test_gap_cli_bytes_rows_and_hybrid` | 12 calls: 6 plan, 6 apply; all Rust, zero Python fallbacks |
+| Daemon bytes, normalized rows, hybrid dispatch | `test_gap_daemon_bytes_rows_and_validation` | 12 Rust sessions; 108 gap requests plus 12 shutdowns; zero Python fallbacks |
+| Desktop authority, Unicode bounds and dispatch | `desktop_gap_checks_shape_authority_and_dispatch` | Both kinds enforce GUI authorship and Python validation rules |
+
+`crates/transfers/scripts/export_gaps.py --check` regenerates the fixed-source
+oracle without writing. It asserts every unrelated application table is
+unchanged and every refusal rolls back completely. The vectors cover the
+full correction lifecycle, all residual classifications, fee-included sources,
+N:M FIFO allocation, aggregate quantities above `i64`, excess returns,
+saved/filed impacts and downstream years, late review/impact failure,
+current/malformed/stale journal inputs, stale evidence and conflicting history.
+Two 50,003-row books pin structured and ordinary SQL worklists; separate cases
+pin timestamp overflow, malformed digit quantities and Unicode year prefixes.
+Candidate years retain the saved-report calendar-year validation even when
+the book has no saved or filed snapshots.
+The native oracle normalizes no identities, timestamps, hashes or serialized
+values. Process comparisons map only each new random review identity and its
+derived relation identities, plus timestamps in the current test clock window;
+historical timestamps remain exact.
+
+| New mutation entries | Named killing test |
+| --- | --- |
+| `gap-input-version`, `gap-component-id`, `gap-child-id`, `gap-source-movement`, `gap-fifo`, `gap-residual-role`, `gap-residual-custody`, `gap-revision-fingerprint`, `gap-residual-fingerprint`, `gap-dismiss-invalidation`, `gap-post-version`, `gap-evidence-check`, `gap-correction-state`, `gap-correction-commitments`, `gap-review-history`, `gap-review-relations`, `gap-report-summary`, `gap-report-overlap`, `gap-report-persistence`, `gap-current-journal`, `gap-stored-ignored`, `gap-error-detail` | `gap_reviews_match_python_complete_database_rows_and_refusals` |
+| `gap-large-worklist` | `gap_worklists_match_python_without_changing_database_rows` |
+| `gap-report-year-range` | `gap_reviews_match_python_complete_database_rows_and_refusals` |
+| `gap-apply-atomic` | `gap_apply_rolls_back_late_failure_and_preserves_outer_transaction` |
+| `gap-candidate-recheck` | `gap_plan_rechecks_loaded_candidate_before_authoring` |
+| `desktop-gap-version` | `gap_desktop_version_validation_follows_candidate_resolution` |
+| `desktop-gap-unknown`, `desktop-gap-source`, `desktop-gap-reason`, `desktop-gap-classification` | `desktop_gap_checks_shape_authority_and_dispatch` |
+
+Verification used Rust 1.99.1, locked Python 3.11, offline Cargo and disposable
+books. Workspace fmt, workspace and harness-feature clippy with `-D warnings`,
+and all **972 workspace tests** passed. Both oracle replay checks pass;
+authoring fixture regeneration is byte-identical.
+The transfer catalog has **215 applicable entries**; all 31 new authoring and
+desktop entries were built and killed (30 in the first serial scratch run,
+then the final calendar-year guard). Together with the prerequisite, this run
+adds **144 killed mutations**. Both catalogs validate, including 431 custody
+entries. The process/contract gate passed **76 tests and 178 subtests**;
+the required inventory update and preflight shard passed **57 tests**.
+Mutation and verification build trees were removed after their summaries.
+
+Ten CLI leaves remain `not_implemented`: gaps list/review, components list/show,
+suggest, bulk-pair, rules apply, and review cases/plan/apply. Their associated
+desktop computation/projection kinds and AI projections remain Python.
+Automatic journal pairing belongs to R4 and is unchanged by this continuation.
+The UUID-redaction fix is reserved for integration.

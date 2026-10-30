@@ -63,7 +63,7 @@ fn field<'a>(v: &'a Value, key: &str) -> &'a Value {
 fn present(v: &Value, key: &str) -> bool {
     kassiber_envelope::contains_key(v, key)
 }
-fn uuid5(name: &str) -> String {
+pub(super) fn uuid5(name: &str) -> String {
     let mut bytes = vec![
         0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30,
         0xc8,
