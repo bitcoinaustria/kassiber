@@ -32,6 +32,55 @@ struct Leg {
     /// Dense rank of `id` among the searched legs: sorted ranks order and
     /// compare exactly as the sorted id strings do.
     rank: u32,
+    /// `principal` when the search runs on `i128` amounts.
+    small: i128,
+}
+
+/// An exact search amount. The search uses `i128` only when every principal
+/// fits `i64` and there are fewer than 2^20 legs, so every sum and scaled
+/// bound stays below 2^103; otherwise it uses `BigInt`. Both truncate
+/// division toward zero, and principals are positive.
+trait Amount: Clone + Ord {
+    fn of(leg: &Leg) -> Self;
+    fn zero() -> Self;
+    fn plus(&self, other: &Self) -> Self;
+    fn minus(&self, other: &Self) -> Self;
+    /// `self * ppm / 1_000_000`
+    fn scaled(&self, ppm: u32) -> Self;
+}
+impl Amount for BigInt {
+    fn of(leg: &Leg) -> Self {
+        leg.principal.clone()
+    }
+    fn zero() -> Self {
+        zero()
+    }
+    fn plus(&self, other: &Self) -> Self {
+        self + other
+    }
+    fn minus(&self, other: &Self) -> Self {
+        self - other
+    }
+    fn scaled(&self, ppm: u32) -> Self {
+        self * ppm / 1_000_000
+    }
+}
+impl Amount for i128 {
+    fn of(leg: &Leg) -> Self {
+        leg.small
+    }
+    fn zero() -> Self {
+        0
+    }
+    fn plus(&self, other: &Self) -> Self {
+        self + other
+    }
+    fn minus(&self, other: &Self) -> Self {
+        self - other
+    }
+    fn scaled(&self, ppm: u32) -> Self {
+        self * i128::from(ppm) / 1_000_000
+    }
 }
 type Group = Vec<usize>;
 
@@ -58,11 +107,16 @@ fn key(group: &[usize], legs: &[Leg]) -> Vec<u32> {
 fn total(group: &[usize], legs: &[Leg]) -> BigInt {
     group.iter().map(|&i| &legs[i].principal).sum()
 }
-fn distance(a: &BigInt, b: &BigInt) -> BigInt {
+fn sum<N: Amount>(group: &[usize], legs: &[Leg]) -> N {
+    group
+        .iter()
+        .fold(N::zero(), |total, &i| total.plus(&N::of(&legs[i])))
+}
+fn distance<N: Amount>(a: &N, b: &N) -> N {
     if a >= b {
-        a - b
+        a.minus(b)
     } else {
-        b - a
+        b.minus(a)
     }
 }
 fn seconds(delta: i64) -> i64 {
@@ -93,8 +147,10 @@ pub fn stage(
     evidence: &Value,
     interpretation: &Py,
 ) -> Result<Value, String> {
+    let span = crate::timing::span("gaps.ignored");
     let (ignored, accounting) =
         crate::interpretation::gap_ignored_ids(snapshot, components, evidence, interpretation)?;
+    drop(span);
     let rows: Vec<_> = snapshot
         .gap_worklist
         .rows
@@ -119,9 +175,12 @@ pub fn compute(
     accounting_ignored: &BTreeSet<String>,
     limit: usize,
 ) -> Result<Value, String> {
+    let span = crate::timing::span("gaps.admission");
     for row in rows {
         normalize::leg(row, &BTreeSet::new())?;
     }
+    drop(span);
+    let _span = crate::timing::span("gaps.search");
     let limits = Limits {
         max_input_rows: if large_book { 1 } else { 50_000 },
         max_candidates: limit,

@@ -1,6 +1,6 @@
 use super::{
     candidate::{self, Candidate},
-    distance, key, normalize, seconds, total, zero, Group, Leg,
+    distance, key, normalize, seconds, sum, Amount, Group, Leg,
 };
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
@@ -65,10 +65,10 @@ impl SearchResult {
 fn chronological(group: &mut [usize], legs: &[Leg]) {
     group.sort_by(|&a, &b| (legs[a].when, &legs[a].id).cmp(&(legs[b].when, &legs[b].id)));
 }
-fn bounds(target: &BigInt, limits: &Limits) -> (BigInt, BigInt) {
+fn bounds<N: Amount>(target: &N, limits: &Limits) -> (N, N) {
     (
-        target * limits.min_coverage_ppm / 1_000_000,
-        target + target * limits.max_excess_ppm / 1_000_000,
+        target.scaled(limits.min_coverage_ppm),
+        target.plus(&target.scaled(limits.max_excess_ppm)),
     )
 }
 fn block(group: &[usize], legs: &[Leg], blocked: &mut BTreeSet<String>) {
@@ -78,6 +78,31 @@ fn block(group: &[usize], legs: &[Leg], blocked: &mut BTreeSet<String>) {
             .filter(|&&i| !legs[i].signals.is_empty() && legs[i].disqualifiers.is_empty())
             .map(|&i| legs[i].id.clone()),
     );
+}
+
+/// Admitted legs with dense id ranks, in row order.
+fn ranked(rows: &[Value], ignored: &BTreeSet<String>) -> Result<Vec<Leg>, String> {
+    let mut legs = Vec::new();
+    for row in rows {
+        if let Some(leg) = normalize::leg(row, ignored)? {
+            legs.push(leg);
+        }
+    }
+    let mut sorted_ids: Vec<&str> = legs.iter().map(|leg: &Leg| leg.id.as_str()).collect();
+    sorted_ids.sort_unstable();
+    sorted_ids.dedup();
+    let ranks: Vec<u32> = legs
+        .iter()
+        .map(|leg| {
+            sorted_ids
+                .binary_search(&leg.id.as_str())
+                .expect("ranked id") as u32
+        })
+        .collect();
+    for (leg, rank) in legs.iter_mut().zip(ranks) {
+        leg.rank = rank;
+    }
+    Ok(legs)
 }
 
 pub fn search(
@@ -103,26 +128,20 @@ pub fn search(
     {
         return Err("ValueError".into());
     }
-    let mut legs = Vec::new();
-    for row in rows {
-        if let Some(leg) = normalize::leg(row, ignored)? {
-            legs.push(leg);
+    let mut legs = ranked(rows, ignored)?;
+    let bound = BigInt::from(i64::MAX);
+    if legs.len() < 1 << 20 && legs.iter().all(|leg| leg.principal <= bound) {
+        for leg in &mut legs {
+            leg.small = i128::try_from(&leg.principal).expect("principal within i64");
         }
+        search_legs::<i128>(legs, limits)
+    } else {
+        search_legs::<BigInt>(legs, limits)
     }
-    let mut sorted_ids: Vec<&str> = legs.iter().map(|leg: &Leg| leg.id.as_str()).collect();
-    sorted_ids.sort_unstable();
-    sorted_ids.dedup();
-    let ranks: Vec<u32> = legs
-        .iter()
-        .map(|leg| {
-            sorted_ids
-                .binary_search(&leg.id.as_str())
-                .expect("ranked id") as u32
-        })
-        .collect();
-    for (leg, rank) in legs.iter_mut().zip(ranks) {
-        leg.rank = rank;
-    }
+}
+
+/// The search over normalized, ranked legs, on exact amounts of type `N`.
+fn search_legs<N: Amount>(legs: Vec<Leg>, limits: &Limits) -> Result<SearchResult, String> {
     let worklist_limited = legs.len() > limits.max_input_rows;
     let mut limited_ids = BTreeSet::new();
     let mut capacity = worklist_limited;
@@ -204,7 +223,7 @@ pub fn search(
             for size in 1..=max_source_legs.min(end + 1) {
                 let source_group = sources[end + 1 - size..=end].to_vec();
                 let boundary = source_group.iter().map(|&i| legs[i].when).max().unwrap();
-                let target = total(&source_group, &legs);
+                let target: N = sum(&source_group, &legs);
                 // CPython uses bisect_right((boundary, "\uffff")), including
                 // a same-time astral id even though ordinary same-time ids skip.
                 let first = returns.partition_point(|&i| {
@@ -281,7 +300,7 @@ pub fn search(
     })
 }
 
-fn bounded_pool(rows: &[usize], legs: &[Leg], target: &BigInt, maximum: usize) -> Group {
+fn bounded_pool<N: Amount>(rows: &[usize], legs: &[Leg], target: &N, maximum: usize) -> Group {
     let mut ordered = rows.to_vec();
     chronological(&mut ordered, legs);
     if ordered.len() <= maximum {
@@ -289,7 +308,7 @@ fn bounded_pool(rows: &[usize], legs: &[Leg], target: &BigInt, maximum: usize) -
     }
     ordered.sort_by_cached_key(|&i| {
         (
-            distance(target, &legs[i].principal),
+            distance(target, &N::of(&legs[i])),
             legs[i].when,
             legs[i].rank,
         )
@@ -298,14 +317,14 @@ fn bounded_pool(rows: &[usize], legs: &[Leg], target: &BigInt, maximum: usize) -
     chronological(&mut ordered, legs);
     ordered
 }
-fn indexed_pool(
+fn indexed_pool<N: Amount>(
     rows: &[usize],
     legs: &[Leg],
     boundary: i64,
-    target: &BigInt,
+    target: &N,
     maximum: usize,
 ) -> Group {
-    let pivot = rows.partition_point(|&i| legs[i].principal < *target);
+    let pivot = rows.partition_point(|&i| N::of(&legs[i]) < *target);
     let mut left = pivot;
     let mut right = pivot;
     let mut result = Vec::new();
@@ -316,8 +335,8 @@ fn indexed_pool(
         }
         let take_right = right < rows.len()
             && (left == 0
-                || distance(target, &legs[rows[right]].principal)
-                    < distance(target, &legs[rows[left - 1]].principal));
+                || distance(target, &N::of(&legs[rows[right]]))
+                    < distance(target, &N::of(&legs[rows[left - 1]])));
         let leg = if take_right {
             let i = rows[right];
             right += 1;
@@ -335,9 +354,9 @@ fn indexed_pool(
     result
 }
 
-struct Era {
+struct Era<N> {
     group: Group,
-    total: BigInt,
+    total: N,
 }
 fn eras_by_wallet(rows: &[usize], legs: &[Leg], gap: i64) -> Vec<Group> {
     let mut wallets = BTreeMap::new();
@@ -366,11 +385,11 @@ fn eras_by_wallet(rows: &[usize], legs: &[Leg], gap: i64) -> Vec<Group> {
     }
     result
 }
-fn return_eras(rows: &[usize], legs: &[Leg], gap: i64) -> Vec<Era> {
+fn return_eras<N: Amount>(rows: &[usize], legs: &[Leg], gap: i64) -> Vec<Era<N>> {
     let mut eras: Vec<_> = eras_by_wallet(rows, legs, gap)
         .into_iter()
         .map(|group| Era {
-            total: total(&group, legs),
+            total: sum::<N>(&group, legs),
             group,
         })
         .collect();
@@ -383,11 +402,11 @@ fn return_eras(rows: &[usize], legs: &[Leg], gap: i64) -> Vec<Era> {
     });
     eras
 }
-fn matching_eras(
-    eras: &[Era],
+fn matching_eras<N: Amount>(
+    eras: &[Era<N>],
     legs: &[Leg],
     boundary: i64,
-    target: &BigInt,
+    target: &N,
     limits: &Limits,
 ) -> (Vec<Group>, bool) {
     let (minimum, maximum) = bounds(target, limits);
@@ -413,16 +432,16 @@ fn matching_eras(
     );
     (groups, false)
 }
-fn wallet_eras(
+fn wallet_eras<N: Amount>(
     rows: &[usize],
     legs: &[Leg],
-    target: &BigInt,
+    target: &N,
     limits: &Limits,
 ) -> (Vec<Group>, bool) {
     let (minimum, maximum) = bounds(target, limits);
     let mut groups = Vec::new();
     for group in eras_by_wallet(rows, legs, limits.return_era_gap_seconds) {
-        let amount = total(&group, legs);
+        let amount: N = sum(&group, legs);
         if amount < minimum || amount > maximum {
             continue;
         }
@@ -439,16 +458,21 @@ fn wallet_eras(
     );
     (groups, false)
 }
-fn rank_groups(groups: &mut Vec<Group>, legs: &[Leg], target: &BigInt, maximum: usize) {
+fn rank_groups<N: Amount>(groups: &mut Vec<Group>, legs: &[Leg], target: &N, maximum: usize) {
     groups.sort_by_cached_key(|g| candidate::group_key(g, legs, target));
     groups.truncate(maximum);
 }
-fn return_groups(rows: &[usize], legs: &[Leg], target: &BigInt, limits: &Limits) -> Vec<Group> {
+fn return_groups<N: Amount>(
+    rows: &[usize],
+    legs: &[Leg],
+    target: &N,
+    limits: &Limits,
+) -> Vec<Group> {
     let (minimum, maximum) = bounds(target, limits);
     let mut ordered = rows.to_vec();
     chronological(&mut ordered, legs);
     // Each state carries its identity key, so keys are computed once.
-    let mut states: Vec<(Group, BigInt, Vec<u32>)> = vec![(Vec::new(), zero(), Vec::new())];
+    let mut states: Vec<(Group, N, Vec<u32>)> = vec![(Vec::new(), N::zero(), Vec::new())];
     let mut qualifying = BTreeMap::new();
     for row in ordered {
         let mut additions = Vec::new();
@@ -456,7 +480,7 @@ fn return_groups(rows: &[usize], legs: &[Leg], target: &BigInt, limits: &Limits)
             if group.len() >= limits.max_return_legs {
                 continue;
             }
-            let next_total = total + &legs[row].principal;
+            let next_total = total.plus(&N::of(&legs[row]));
             if next_total > maximum {
                 continue;
             }
@@ -495,4 +519,92 @@ fn return_groups(rows: &[usize], legs: &[Leg], target: &BigInt, limits: &Limits)
         limits.max_return_groups_per_source,
     );
     groups
+}
+
+#[cfg(test)]
+mod amount_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn cases() -> Vec<Value> {
+        let vectors: Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/custody_gap_cases.json"
+        ))
+        .unwrap();
+        vectors["search"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|case| case.get("error").is_none())
+            .cloned()
+            .collect()
+    }
+    fn operands(case: &Value) -> (Vec<Value>, BTreeSet<String>, Limits) {
+        (
+            case["rows"].as_array().unwrap().clone(),
+            serde_json::from_value(case["ignored"].clone()).unwrap(),
+            serde_json::from_value(case["limits"].clone()).unwrap(),
+        )
+    }
+    /// Both amount types over the same legs; `None` when a principal exceeds i64.
+    fn both(rows: &[Value], ignored: &BTreeSet<String>, limits: &Limits) -> Option<(Value, Value)> {
+        let legs = ranked(rows, ignored).unwrap();
+        let wide = search_legs::<BigInt>(legs.clone(), limits).unwrap().value();
+        let mut narrow = legs;
+        for leg in &mut narrow {
+            leg.small = i64::try_from(&leg.principal).ok()?.into();
+        }
+        Some((wide, search_legs::<i128>(narrow, limits).unwrap().value()))
+    }
+
+    #[test]
+    fn gap_amount_paths_agree_on_fixture_books() {
+        let mut compared = 0;
+        for case in cases() {
+            let (rows, ignored, limits) = operands(&case);
+            if let Some((wide, narrow)) = both(&rows, &ignored, &limits) {
+                assert_eq!(wide, narrow, "{}", case["case"]);
+                compared += 1;
+            }
+        }
+        assert!(compared > 100, "{compared}");
+    }
+
+    #[test]
+    fn gap_amount_paths_agree_at_the_i64_boundary() {
+        let mut active = 0;
+        for case in cases().iter().filter(|case| {
+            !case["expected"]["candidates"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        }) {
+            let (rows, ignored, limits) = operands(case);
+            // Principals at and just below i64::MAX: sums and scaled bounds
+            // exceed i64, and only i128 holds them exactly.
+            let mut top = rows.clone();
+            for (i, row) in top.iter_mut().enumerate() {
+                row["amount"] = json!(i64::MAX - i as i64);
+                row["fee"] = json!(0);
+            }
+            let (wide, narrow) = both(&top, &ignored, &limits).expect("i64 principals");
+            assert_eq!(wide, narrow, "{}", case["case"]);
+            active += usize::from(!wide["candidates"].as_array().unwrap().is_empty());
+            // One principal past i64::MAX keeps the whole search on BigInt.
+            let mut past = top;
+            past[0]["amount"] = json!(u64::MAX);
+            let legs = ranked(&past, &ignored).unwrap();
+            assert!(
+                both(&past, &ignored, &limits).is_none()
+                    || legs.iter().all(|l| l.principal <= BigInt::from(i64::MAX))
+            );
+            assert_eq!(
+                search(&past, &ignored, &limits).unwrap().value(),
+                search_legs::<BigInt>(legs, &limits).unwrap().value(),
+                "{}",
+                case["case"]
+            );
+        }
+        assert!(active > 20, "{active}");
+    }
 }

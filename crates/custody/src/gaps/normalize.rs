@@ -178,6 +178,7 @@ pub(super) fn leg(row: &Value, ignored: &BTreeSet<String>) -> Result<Option<Leg>
         signals,
         disqualifiers,
         rank: 0,
+        small: 0,
     }))
 }
 

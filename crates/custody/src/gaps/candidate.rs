@@ -1,4 +1,7 @@
-use super::{array, distance, ids, key, normalize::iso, number, seconds, total, zero, Group, Leg};
+use super::{
+    array, distance, ids, key, normalize::iso, number, seconds, sum, total, zero, Amount, Group,
+    Leg,
+};
 use crate::codec;
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
@@ -347,9 +350,13 @@ pub fn snapshot_gap(candidate: &Value, rows: &[Value]) -> Result<Value, String> 
     Ok(result)
 }
 
-pub(super) fn group_key(group: &Group, legs: &[Leg], target: &BigInt) -> (BigInt, usize, Vec<u32>) {
+pub(super) fn group_key<N: Amount>(
+    group: &Group,
+    legs: &[Leg],
+    target: &N,
+) -> (N, usize, Vec<u32>) {
     (
-        distance(target, &total(group, legs)),
+        distance(target, &sum(group, legs)),
         group.len(),
         key(group, legs),
     )
