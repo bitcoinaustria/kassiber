@@ -6736,7 +6736,7 @@
   {
     "id": "R2c-pipeline-samourai-reservation",
     "file": "crates/custody/src/interpretation/pipeline.rs",
-    "find": "array(&samourai::compile(snapshot, context)?[\"touched_ids\"])",
+    "find": "array(&samourai[\"touched_ids\"])",
     "replace": "array(&json!([]))",
     "expect_failing": [
       "interpretation_pipeline_projection"

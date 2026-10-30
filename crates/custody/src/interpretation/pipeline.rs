@@ -8,6 +8,7 @@ use crate::{
 };
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default, Serialize, serde::Deserialize)]
@@ -154,52 +155,67 @@ fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<V
     Ok(result.into_values().collect())
 }
 
-pub(super) struct Prepared {
-    pub rows: Vec<Value>,
+/// Rows are borrowed from the snapshot unless a caller or the fee
+/// normalization owns a changed copy.
+pub(super) struct Prepared<'a> {
+    pub rows: Cow<'a, [Value]>,
     pub recorded: Vec<Value>,
     pub handled: BTreeSet<String>,
-    pub normalized: Vec<Value>,
+    pub normalized: Cow<'a, [Value]>,
     pub candidates: Vec<Value>,
     pub derivation_quarantines: Vec<Value>,
     profile: Profile,
 }
 
-pub(super) fn prepare(snapshot: &Snapshot, context: &Context) -> Result<Prepared, String> {
-    let rows: Vec<_> = snapshot.transactions.iter().map(|r| json!(r)).collect();
-    let recorded = recorded::detect(&rows)?.0;
-    prepare_with_pairs(snapshot, context, rows, recorded)
+pub(super) fn prepare<'a>(
+    snapshot: &'a Snapshot,
+    context: &Context,
+) -> Result<Prepared<'a>, String> {
+    let rows = snapshot.rows();
+    let recorded = recorded::detect(rows)?.0;
+    prepare_with_pairs(snapshot, context, Cow::Borrowed(rows), recorded)
 }
 
-pub(super) fn prepare_with_pairs(
+pub(super) fn prepare_with_pairs<'a>(
     snapshot: &Snapshot,
     context: &Context,
-    rows: Vec<Value>,
+    rows: Cow<'a, [Value]>,
     recorded: Vec<Value>,
-) -> Result<Prepared, String> {
+) -> Result<Prepared<'a>, String> {
     prepare_with_reserved(snapshot, context, rows, recorded, &BTreeSet::new())
 }
 
-pub(super) fn prepare_with_reserved(
+pub(super) fn prepare_with_reserved<'a>(
     snapshot: &Snapshot,
     context: &Context,
-    rows: Vec<Value>,
+    rows: Cow<'a, [Value]>,
     recorded: Vec<Value>,
     reserved: &BTreeSet<String>,
-) -> Result<Prepared, String> {
+) -> Result<Prepared<'a>, String> {
+    let samourai = samourai::compile(snapshot, context)?;
+    prepare_with_samourai(snapshot, context, rows, recorded, reserved, &samourai)
+}
+
+/// `prepare_with_reserved` with the Samourai compilation the caller already
+/// made from the same snapshot and context.
+pub(super) fn prepare_with_samourai<'a>(
+    snapshot: &Snapshot,
+    context: &Context,
+    rows: Cow<'a, [Value]>,
+    recorded: Vec<Value>,
+    reserved: &BTreeSet<String>,
+    samourai: &Value,
+) -> Result<Prepared<'a>, String> {
     let mut handled = recorded::resolved_ids(&recorded, context, true);
     handled.extend(reserved.iter().cloned());
-    handled.extend(
-        array(&samourai::compile(snapshot, context)?["touched_ids"])
-            .iter()
-            .map(codec::text),
-    );
+    handled.extend(array(&samourai["touched_ids"]).iter().map(codec::text));
     let eligible = snapshot.owned_index.is_some()
         || array(&context.canonical["events"])
             .iter()
             .any(|event| event["event_key"]["native_namespace"] == "chain");
     let mut normalized = rows.clone();
     if eligible {
-        for row in &mut normalized {
+        for row in normalized.to_mut().iter_mut() {
             if let Some(observation) = context.observations.get(&anchor(row)) {
                 if row["observation_fee_attribution"] == "implicit_wallet_delta"
                     && observation["fee_attribution"] == "exact"

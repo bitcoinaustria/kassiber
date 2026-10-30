@@ -46,7 +46,7 @@ pub(super) fn compose(
         }
         let channel_blocked = blocked(&channel_quarantines);
         let samourai = samourai::compile(snapshot, context)?;
-        let rows = snapshot.rows().to_vec();
+        let rows = std::borrow::Cow::Borrowed(snapshot.rows());
         let has_chain = array(&context.canonical["events"])
             .iter()
             .any(|event| event["event_key"]["native_namespace"] == "chain");
@@ -82,7 +82,7 @@ pub(super) fn compose(
         let mut reserved = native_ids.clone();
         reserved.extend(native_blocked.iter().cloned());
         let mut prepared =
-            pipeline::prepare_with_reserved(snapshot, context, rows, auto, &reserved)?;
+            pipeline::prepare_with_samourai(snapshot, context, rows, auto, &reserved, &samourai)?;
         prepared
             .candidates
             .extend(array(&channel["pairs"]).iter().cloned());
