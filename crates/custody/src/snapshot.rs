@@ -60,9 +60,9 @@ impl Snapshot {
     /// Each transaction row as a JSON object, in order; shared by every reader.
     pub fn rows(&self) -> &[Value] {
         self.rows.get_or_init(|| {
-            self.transactions
-                .iter()
-                .map(|row| Value::Object(row.clone()))
+            crate::par::map(&self.transactions, |row| Value::Object(row.clone()))
+                .into_iter()
+                .map(crate::par::unwrap)
                 .collect()
         })
     }

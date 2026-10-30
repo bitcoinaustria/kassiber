@@ -124,6 +124,13 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
                 &quantity,
                 projection.as_ref(),
             ) {
+                // Freeing a large book's values takes a noticeable share of the
+                // operation and changes no output; release them off the
+                // caller's path when a thread is available.
+                if snapshot.transactions.len() >= 256 {
+                    let values = (snapshot, components, evidence, interpretation, gaps, quantity, projection);
+                    let _ = std::thread::Builder::new().spawn(move || drop(values));
+                }
                 return text;
             }
             let response = serde_json::json!({
