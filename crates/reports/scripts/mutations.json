@@ -4999,5 +4999,235 @@
       "transaction_csv_export_registers_nothing"
     ],
     "rule": "Observed transaction lists never register a saved report."
+  },
+  {
+    "id": "zone-fold-larger-offset",
+    "file": "crates/reports/src/zone.rs",
+    "find": "            trans_local[i] += utcoff[trans_idx[i - 1]].max(utcoff[trans_idx[i]]);",
+    "replace": "            trans_local[i] += utcoff[trans_idx[i - 1]].min(utcoff[trans_idx[i]]);",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "Fold-0 wall times place each transition at the larger adjacent offset."
+  },
+  {
+    "id": "zone-before-standard",
+    "file": "crates/reports/src/zone.rs",
+    "find": "        .position(|dst| !dst)",
+    "replace": "        .position(|dst| *dst)",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "Before the first transition the first standard-time type applies."
+  },
+  {
+    "id": "zone-local-bisect",
+    "file": "crates/reports/src/zone.rs",
+    "find": "let idx = lt.partition_point(|t| *t <= local) - 1;",
+    "replace": "let idx = lt.partition_point(|t| *t < local).max(1) - 1;",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "A wall time equal to a transition already uses the new offset."
+  },
+  {
+    "id": "zone-rule-gap-side",
+    "file": "crates/reports/src/zone.rs",
+    "find": "        if self.diff() < 0 {",
+    "replace": "        if self.diff() >= 0 {",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "Rule gaps resolve fold 0 on the side CPython chooses."
+  },
+  {
+    "id": "zone-rule-utc-start",
+    "file": "crates/reports/src/zone.rs",
+    "find": "        let start = self.start.year_to_epoch(year) - self.std;",
+    "replace": "        let start = self.start.year_to_epoch(year) - self.dst;",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "Rule starts are standard local time when converted from UTC."
+  },
+  {
+    "id": "zone-rule-last-week",
+    "file": "crates/reports/src/zone.rs",
+    "find": "                    month_day -= 7;",
+    "replace": "                    month_day -= 0;",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "Week 5 means the last such weekday of the month."
+  },
+  {
+    "id": "zone-delta-sign",
+    "file": "crates/reports/src/zone.rs",
+    "find": "    Some(if negative { total } else { -total })",
+    "replace": "    Some(if negative { -total } else { total })",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "POSIX TZ offsets are west-positive."
+  },
+  {
+    "id": "zone-default-dst",
+    "file": "crates/reports/src/zone.rs",
+    "find": "        std + 3600\n",
+    "replace": "        std + 1800\n",
+    "expect_failing": [
+      "zone_offsets_match_cpython"
+    ],
+    "rule": "A DST abbreviation without an offset is one hour ahead."
+  },
+  {
+    "id": "zone-key-normalized",
+    "file": "crates/reports/src/zone.rs",
+    "find": "    if normalized.chars().count() != key.chars().count() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Zone keys must already be normalized relative paths."
+  },
+  {
+    "id": "zone-key-escape",
+    "file": "crates/reports/src/zone.rs",
+    "find": "    normpath(&format!(\"_/{normalized}\")).starts_with(\"_/\")",
+    "replace": "    true",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Zone keys cannot leave the zoneinfo search path."
+  },
+  {
+    "id": "zone-tzpath-absolute",
+    "file": "crates/reports/src/zone.rs",
+    "find": "            .filter(|p| p.is_absolute())",
+    "replace": "            .filter(|_| true)",
+    "expect_failing": [
+      "tzpath_keeps_only_absolute_entries"
+    ],
+    "rule": "PYTHONTZPATH ignores relative entries."
+  },
+  {
+    "id": "range-all-time",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "    if (preset.is_empty() || preset == \"all\") && !days {",
+    "replace": "    if preset.is_empty() && !days {",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "The all preset means every transaction."
+  },
+  {
+    "id": "range-preset-with-days",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "    if !preset.is_empty() && preset != \"custom\" && days {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "A preset never silently wins over named days."
+  },
+  {
+    "id": "range-ends-before-start",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "        if last < first {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "A range cannot end before it starts."
+  },
+  {
+    "id": "range-week-monday",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "let weekday = (days_from_civil(today.0, today.1, today.2) + 3).rem_euclid(7);",
+    "replace": "let weekday = (days_from_civil(today.0, today.1, today.2) + 4).rem_euclid(7);",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Weeks start on Monday."
+  },
+  {
+    "id": "range-last-week",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "                monday = add_days(monday, -7)?;",
+    "replace": "                monday = add_days(monday, -14)?;",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Last week is the previous Monday-to-Sunday week."
+  },
+  {
+    "id": "range-last-year",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "            let year = today.0 - i64::from(preset == \"last_year\");",
+    "replace": "            let year = today.0;",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Last year is the previous calendar year."
+  },
+  {
+    "id": "range-quarter-start",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "            let first = (today.0, (today.1 - 1) / 3 * 3 + 1, 1);",
+    "replace": "            let first = (today.0, today.1, 1);",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Quarters start in January, April, July and October."
+  },
+  {
+    "id": "range-quarter-label",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "        if first.2 == 1 && first.1 % 3 == 1 && month_end(3)? == last {",
+    "replace": "        if first.2 == 1 && first.1 % 3 == 0 && month_end(3)? == last {",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Calendar quarters are labelled YYYY-Qn."
+  },
+  {
+    "id": "range-instant-bounds",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "    if !(MIN..=MAX).contains(&utc) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Bounds outside the datetime range fail as CPython does."
+  },
+  {
+    "id": "range-end-exclusive",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "    let end = midnight(&zone, add_days(last, 1)?)?;",
+    "replace": "    let end = midnight(&zone, add_days(last, 0)?)?;",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "The end is the exclusive midnight after the last day."
+  },
+  {
+    "id": "range-day-year",
+    "file": "crates/reports/src/export_range.rs",
+    "find": ".filter(|&(y, m, d)| y >= 1 && (1..=12).contains(&m)",
+    "replace": ".filter(|&(y, m, d)| y >= 0 && (1..=12).contains(&m)",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "Year zero is not a calendar date."
+  },
+  {
+    "id": "range-book-zone",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "        return book_zone(kassiber_pytext::lower(&country) == \"at\", tzpath);",
+    "replace": "        return book_zone(kassiber_pytext::lower(kassiber_pytext::strip(&country)) == \"at\", tzpath);",
+    "expect_failing": [
+      "export_range_vectors"
+    ],
+    "rule": "The book calendar compares the stored policy without stripping it."
   }
 ]

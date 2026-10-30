@@ -9,6 +9,7 @@ mod components;
 mod desktop;
 pub mod export;
 pub mod export_completion;
+pub mod export_range;
 mod full_csv;
 mod history;
 mod holdings;
@@ -21,6 +22,7 @@ mod summary;
 mod summary_text;
 mod tax_summary;
 mod transaction_csv;
+pub mod zone;
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pydecimal::{Context, Decimal, Rounding};
