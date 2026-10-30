@@ -54,7 +54,12 @@ fn validate_choice(v: &Value, field: &str, choices: &[&str]) -> Result<()> {
     }
     Ok(())
 }
-fn resolve(c: &Connection, scope: &Scope<'_>, reference: &Value, direction: &str) -> Result<Value> {
+pub(super) fn resolve(
+    c: &Connection,
+    scope: &Scope<'_>,
+    reference: &Value,
+    direction: &str,
+) -> Result<Value> {
     let id=rows(c,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.id=? AND t.direction=?",params![scope.profile_id,bind(reference,2)?,direction])?;
     if let Some(r) = id.into_iter().next() {
         return Ok(r);
@@ -81,9 +86,12 @@ fn resolve(c: &Connection, scope: &Scope<'_>, reference: &Value, direction: &str
 fn tx(c: &Connection, id: &str) -> Result<Value> {
     rows(c,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.id=?",[id])?.into_iter().next().ok_or_else(||AppError::new("not_found","Custody review boundary was not found"))
 }
-fn boundary(c: &Connection, base: &Value) -> Result<Value> {
+pub(super) fn boundary(c: &Connection, base: &Value) -> Result<Value> {
     let mut row = base.clone();
     for side in ["out", "in"] {
+        if matches!(value(base, &format!("{side}_transaction_id")), Value::Null) {
+            continue;
+        }
         let t = tx(c, &text(base, &format!("{side}_transaction_id")))?;
         for (dest, src) in [
             ("asset", "asset"),
@@ -138,7 +146,7 @@ fn policy(c: &Connection, scope: &Scope<'_>, out: &str, inbound: &str, policy: &
     }
     Ok(())
 }
-fn active_refs(c: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
+pub(super) fn active_refs(c: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
     let mut refs=rows(c,"SELECT term.legacy_source_id AS id,term.component_id,term.term_kind,COALESCE(source.anchor_transaction_id,source.transaction_id) AS out_transaction_id,CASE WHEN term.term_kind='transaction_pair' THEN COALESCE(target.anchor_transaction_id,target.transaction_id) ELSE NULL END AS in_transaction_id,term.review_kind AS kind,term.tax_policy AS policy FROM custody_component_economic_terms term JOIN custody_component_legs source ON source.id=term.source_leg_id JOIN custody_component_legs target ON target.id=term.target_leg_id WHERE term.profile_id=? AND term.component_id IN (SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?) ORDER BY term.created_at,term.component_id,term.ordinal",[scope.profile_id,scope.profile_id])?;
     let claimed: BTreeSet<_> = refs
         .iter()
@@ -213,7 +221,7 @@ fn fee(out: &Value, inbound: &Value, kind: &str, amount: &Value) -> (Value, Valu
         s("combined"),
     )
 }
-fn amount(v: &Value) -> Result<Value> {
+pub(super) fn amount(v: &Value) -> Result<Value> {
     let raw = py_str(v);
     let raw = if raw.is_empty() {
         "0"
@@ -253,7 +261,7 @@ fn amount(v: &Value) -> Result<Value> {
         AppError::new("internal_error", "decimal conversion failed")
     })?))
 }
-fn finish_residual(c: &Connection, row: &Value, plan: &mut Value) -> Result<()> {
+pub(super) fn finish_residual(c: &Connection, row: &Value, plan: &mut Value) -> Result<()> {
     let reviewed = spec::n(&value(&store::list(plan, "legs")[0], "amount_msat"));
     if !spec::native_residual(c, plan, row, reviewed)? {
         spec::append_residual(plan, row, reviewed, None)?;

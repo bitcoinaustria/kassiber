@@ -5,6 +5,7 @@ use kassiber_runtime::store::Book;
 pub const KINDS: &[&str] = &[
     "ui.transfers.list",
     "ui.transfers.payouts.list",
+    "ui.transfers.payouts.create",
     "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
@@ -69,6 +70,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     };
     let mut args = args.clone();
     normalize_pair_args(kind, &mut args)?;
+    normalize_payout_create_args(kind, &mut args);
     normalize_payout_delete_args(kind, &mut args)?;
     if kind == "ui.custody.gaps.history" {
         if let Value::Dict(fields) = &mut args {
@@ -149,6 +151,33 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         "ui.transfers.rules.list" => Ok(dict([("rules", result)])),
         _ => Ok(result),
     }
+}
+
+fn normalize_payout_create_args(kind: &str, args: &mut Value) {
+    if kind != "ui.transfers.payouts.create" {
+        return;
+    }
+    use kassiber_envelope::{py_str, set, truthy};
+    for (name, alias) in [("tx_out", "out_id"), ("notes", "note")] {
+        let v = get(args, name)
+            .filter(|v| truthy(v))
+            .or_else(|| get(args, alias))
+            .cloned()
+            .unwrap_or(Value::Null);
+        set(args, name, v);
+    }
+    let kind = get(args, "kind")
+        .filter(|v| truthy(v))
+        .map(py_str)
+        .unwrap_or_else(|| "direct-swap-payout".into());
+    set(args, "kind", s(kind));
+    if let Some(v) = get(args, "policy")
+        .filter(|v| !matches!(v, Value::Null))
+        .map(py_str)
+    {
+        set(args, "policy", s(v));
+    }
+    set(args, "authored_source", s("gui"));
 }
 
 fn normalize_payout_delete_args(kind: &str, args: &mut Value) -> Result<(), AppError> {
@@ -318,10 +347,11 @@ mod tests {
     #[test]
     fn desktop_pair_aliases_defaults_and_absent_notes_match_python() {
         assert_eq!(
-            &KINDS[..6],
+            &KINDS[..7],
             &[
                 "ui.transfers.list",
                 "ui.transfers.payouts.list",
+                "ui.transfers.payouts.create",
                 "ui.transfers.payouts.delete",
                 "ui.transfers.pair",
                 "ui.transfers.unpair",
@@ -398,5 +428,28 @@ mod tests {
             assert_eq!(error.code, "internal_error");
             assert_eq!(error.message, message);
         }
+    }
+}
+
+#[cfg(test)]
+mod payout_create_tests {
+    use super::*;
+    #[test]
+    fn desktop_payout_creation_normalizes_aliases_and_authority() {
+        let mut args = dict([
+            ("tx_out", s("")),
+            ("out_id", s("out")),
+            ("notes", s("")),
+            ("note", s("note")),
+            ("kind", Value::Bool(false)),
+            ("policy", 123.into()),
+            ("authored_source", s("untrusted")),
+        ]);
+        normalize_payout_create_args("ui.transfers.payouts.create", &mut args);
+        assert_eq!(get(&args, "tx_out"), Some(&s("out")));
+        assert_eq!(get(&args, "notes"), Some(&s("note")));
+        assert_eq!(get(&args, "kind"), Some(&s("direct-swap-payout")));
+        assert_eq!(get(&args, "policy"), Some(&s("123")));
+        assert_eq!(get(&args, "authored_source"), Some(&s("gui")));
     }
 }

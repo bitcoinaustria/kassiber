@@ -1293,8 +1293,8 @@
   {
     "id": "desktop-pair-capability-order",
     "file": "crates/daemon/src/transfers.rs",
-    "find": "\"ui.transfers.list\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.pair\",",
-    "replace": "\"ui.transfers.pair\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.list\",",
+    "find": "\"ui.transfers.list\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.create\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.pair\",",
+    "replace": "\"ui.transfers.pair\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.create\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.list\",",
     "expect_failing": [
       "desktop_pair_aliases_defaults_and_absent_notes_match_python"
     ],
@@ -1429,5 +1429,135 @@
       "desktop_payout_delete_requires_id_and_overrides_source"
     ],
     "rule": "Desktop converts truthy payout identifiers using Python str."
+  },
+  {
+    "id": "payout-create-kind",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "if kind != s(\"direct-swap-payout\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Refuse unsupported payout kinds."
+  },
+  {
+    "id": "payout-create-policy",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "policy != s(\"taxable\") && policy != s(\"carrying-value\")",
+    "replace": "policy != s(\"taxable\")",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Accept the carrying-value payout policy."
+  },
+  {
+    "id": "payout-create-asset",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "let asset = spec::asset(&value(args, \"payout_asset\"));",
+    "replace": "let asset = \"BTC\".to_string();",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Normalize and retain the explicit payout asset."
+  },
+  {
+    "id": "payout-create-fee",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "let swap = reviewed - spec::n(&value(&base, \"payout_amount\")) + fee;",
+    "replace": "let swap = reviewed - spec::n(&value(&base, \"payout_amount\"));",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Include authoritative separate outbound fees."
+  },
+  {
+    "id": "payout-create-hash",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "store::hash(&canonical, false)?",
+    "replace": "store::hash(&canonical, true)?",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Hash exact Python UTF-8 payout payload bytes."
+  },
+  {
+    "id": "payout-create-residual",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "pair::finish_residual(c, &row, &mut plan)?;",
+    "replace": "// omit native residual",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Retain exact native split returns."
+  },
+  {
+    "id": "payout-create-invalidation",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "store::invalidate(c, scope.profile_id)?;",
+    "replace": "// omit final invalidation",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Invalidate journals after activation."
+  },
+  {
+    "id": "payout-create-raw-return",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "    Ok(result)\n}",
+    "replace": "    set(&mut result, \"out_amount\", spec::num(reviewed));\n    Ok(result)\n}",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Return original authored fields before normalization."
+  },
+  {
+    "id": "payout-create-atomic",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "sql::atomic(c, || create(c, scope, args, sources))",
+    "replace": "create(c, scope, args, sources)",
+    "expect_failing": [
+      "payout_creation_rolls_back_late_failure_and_preserves_outer_transaction"
+    ],
+    "rule": "Late invalidation failure rolls back every payout write."
+  },
+  {
+    "id": "desktop-payout-create-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(args, \"authored_source\", s(\"gui\"));\n}\n\nfn normalize_payout_delete_args",
+    "replace": "set(args, \"authored_source\", s(\"cli\"));\n}\n\nfn normalize_payout_delete_args",
+    "expect_failing": [
+      "desktop_payout_creation_normalizes_aliases_and_authority"
+    ],
+    "rule": "Desktop authoring uses trusted GUI provenance."
+  },
+  {
+    "id": "payout-create-physical",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "let physical = reviewed.max(0);",
+    "replace": "let physical = reviewed;",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Negative observed principal cannot become a negative physical custody leg."
+  },
+  {
+    "id": "payout-create-nan",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "if lower.contains(\"nan\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "NaN fiat inputs preserve Python InvalidOperation refusal."
+  },
+  {
+    "id": "payout-create-range",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "if n > &i64::MAX.into() {",
+    "replace": "if n > &i128::MAX.into() {",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Oversized payout quantities fail before SQLite with exact validation details."
   }
 ]

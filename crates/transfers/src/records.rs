@@ -76,7 +76,7 @@ fn integer(v: &Value) -> f64 {
         _ => 0.0,
     }
 }
-fn btc(v: &Value) -> Value {
+pub(super) fn btc(v: &Value) -> Value {
     // Decimal integer / 1e11 -> correctly-rounded float, without first rounding
     // the integer to f64 (SQLite permits values above 2**53).
     let negative = integer(v) < 0.0;

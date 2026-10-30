@@ -1723,9 +1723,17 @@ The next checkpoint adds payout deletion through CLI and desktop with exact
 fixed-source rows, idempotence, membership reconciliation and atomic rollback.
 Automatic pairing during journal processing belongs to R4 and is unchanged.
 
-Steps 2–4 remain: payout creation, component plan/apply and gap plan/apply.
+The continuation on `t3code/r5-transfers-4` starts at `3bd2370e` and adds
+payout creation through CLI and desktop. The supported total is **15/29 CLI
+leaves and 14 desktop kinds**. Its 38-scenario fixed-source oracle compares
+98 operations (36 successes, 62 refusals), including full database rows and
+journal invalidation. Rust rolls back late invalidation failures completely;
+the separate Python atomicity fix remains pending. The shell reference records
+the native rollback test, repro, mutation table and process routing evidence.
+
+Component plan/apply and gap plan/apply remain unported.
 Version-bound fingerprints, filed-report impacts, complete normalized row parity
-and mutations remain acceptance requirements for those five commands. All ten
+and mutations remain acceptance requirements for those four commands. All ten
 computation-dependent commands remain `not_implemented`, including component
 materialization, suggestions/bulk/rules matching and review cases/plan/apply.
 AI projections stay Python. This verified numbered-step boundary does not claim

@@ -5,7 +5,10 @@ use kassiber_runtime::store::Book;
 
 pub fn execute(book: &mut dyn Book, operation: &str, args: &Namespace) -> Result<Value, AppError> {
     let mut payload = dict(args.items().iter().map(|(k, v)| (k.as_str(), v.clone())));
-    if matches!(operation, "transfers.pair" | "transfers.update") {
+    if matches!(
+        operation,
+        "transfers.pair" | "transfers.update" | "transfers.payouts.create"
+    ) {
         if let Some(note) = args
             .items()
             .iter()

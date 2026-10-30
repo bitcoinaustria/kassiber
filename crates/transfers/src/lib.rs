@@ -4,6 +4,7 @@ mod dismissals;
 mod history;
 mod pair_authoring;
 mod pair_spec;
+mod payout_create;
 mod payout_delete;
 mod records;
 mod rules;
@@ -48,6 +49,7 @@ pub fn execute_with_sources(
         "transfers.pair" | "transfers.unpair" | "transfers.update" => {
             pair_authoring::execute(conn, scope, operation, args, sources)
         }
+        "transfers.payouts.create" => payout_create::execute(conn, scope, args, sources),
         "transfers.payouts.delete" => payout_delete::execute(conn, scope, args, sources),
         "transfers.dismiss" => dismissals::dismiss(conn, scope, args, sources),
         "transfers.rules.create"

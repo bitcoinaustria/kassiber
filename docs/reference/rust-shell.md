@@ -3312,3 +3312,78 @@ the harness rebuild completed and hit the non-harness no-egress refusal; it was
 discarded, and the complete successful gate ran after the build finished.
 Mutation and verification build trees were removed after recording these results.
 No push or PR was performed.
+
+
+### Payout creation checkpoint
+
+The local `t3code/r5-transfers-4` continuation starts at `3bd2370e` and adds
+`transfers payouts create` and `ui.transfers.payouts.create`. The supported
+subset is now **15/29 CLI leaves and 14 desktop kinds**. The domain service
+reuses pair boundary resolution, protocol scope, exact quantity conversion,
+native residual handling and the shared custody activation stage. Component
+persistence takes the evidence term kind from the plan so payout evidence
+commits to `direct_swap_payout`. Automatic pairing stays with R4; AI projections
+remain Python.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Ordered service output and complete normalized database rows | `payout_creations_match_python_complete_database_rows_and_refusals`: 38 scenarios, 98 operations (36 successes, 62 refusals) |
+| CLI error bytes, desktop outputs and hybrid routing | `test_payout_create_cli_daemon_and_hybrid`: four Rust calls, zero Python fallbacks; three CLI byte comparisons and four daemon requests |
+| Atomic failure and caller transaction ownership | `payout_creation_rolls_back_late_failure_and_preserves_outer_transaction` |
+| Desktop aliases, coercion and trusted provenance | `desktop_payout_creation_normalizes_aliases_and_authority` |
+
+`crates/transfers/scripts/export_payout_create.py` generates the synthetic
+fixed-source oracle. It compares every changed row after each operation and
+asserts all unrelated application tables stay unchanged. No service output
+UUID, timestamp, evidence hash or serialized value is normalized. Real daemon
+comparisons remove only generated UUIDs and timestamps; fixed-source vectors
+pin those values separately. Scenarios cover same-asset taxable payouts,
+profile policy defaults, fee-inclusive/separate-fee sources, split and exact
+native residuals, idempotent deletion/recreation, Unicode asset and decimal
+normalization, non-finite values, integer overflow, timestamp normalization,
+optional text validation and original-versus-normalized return fields.
+
+**Reference bug, Python fix pending:** late payout-create invalidation can
+commit an active component despite failure and caller rollback. Reproduce with
+`.venv/bin/python crates/transfers/scripts/repro_payout_create_rollback.py`.
+The disposable book refuses the second journal-input-version increment and
+prints `IntegrityError: late payout creation invalidation`, followed by
+`Active components after caller rollback: 1`. Rust compares every application
+table with its pre-operation state on that path, both standalone and inside
+an outer transaction. Python product code is unchanged.
+
+| New mutation | Named killing test |
+| --- | --- |
+| `payout-create-kind`, `payout-create-policy`, `payout-create-asset`, `payout-create-fee`, `payout-create-hash`, `payout-create-residual`, `payout-create-invalidation`, `payout-create-raw-return`, `payout-create-physical`, `payout-create-nan`, `payout-create-range` | `payout_creations_match_python_complete_database_rows_and_refusals` |
+| `payout-create-atomic` | `payout_creation_rolls_back_late_failure_and_preserves_outer_transaction` |
+| `desktop-payout-create-source` | `desktop_payout_creation_normalizes_aliases_and_authority` |
+
+Component plan/apply and gap plan/apply are still `not_implemented`. Their
+version-bound fingerprints, complete revision parity, report impacts and
+mutation gates remain outstanding; this checkpoint does not complete the
+requested authoring continuation.
+
+Verification used Rust 1.99.1, locked Python 3.11 and offline Cargo. Workspace
+fmt, workspace and harness-feature clippy with `-D warnings` passed; all **954
+workspace tests** passed. The regenerated inventory and preflight shard passed
+**57 tests**. Oracle regeneration was byte-identical. The catalog has **156
+applicable entries**; this continuation's **13 new mutations** and the adjusted
+desktop registration-order mutation were all built and killed by four named
+baseline selections on a fresh target. Earlier catalog kills remain recorded
+above. One initial run exposed a stale registration-order assertion, and one
+ineffective mutation changed an equivalent pre-normalization value; both were
+corrected before the successful final run. No survivor is counted as a kill.
+
+The process gate caught payout create/delete advertisement order in the daemon
+handshake. Registration now follows Python's create-before-delete order; all
+five handshake tests passed on recheck (including two subtests), and the
+adjusted registration mutation was rebuilt and killed on another fresh target.
+Final harness-feature clippy and native daemon tests passed after this fix.
+
+The final complete shell rerun passed **41 tests and 172 subtests**. Together
+with the other **31 passing process/inventory tests** from the wider gate,
+this covers all 72 selected tests; the wider gate's five pre-fix failures were
+exactly the corrected handshake tests. The nine transfer process tests all
+passed, including payout-create's **4 Rust / 0 Python** hybrid witness.
+Mutation targets and the verification build tree were removed after recording
+results. No push or PR was performed.

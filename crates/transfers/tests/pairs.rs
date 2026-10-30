@@ -66,6 +66,10 @@ fn pair_sequences_match_python_complete_database_rows_and_refusals() {
     run_sequences(include_str!("pairs.json"));
 }
 #[test]
+fn payout_creations_match_python_complete_database_rows_and_refusals() {
+    run_sequences(include_str!("payout_create.json"));
+}
+#[test]
 fn payout_deletions_match_python_complete_database_rows_and_refusals() {
     run_sequences(include_str!("payout_delete.json"));
 }
@@ -441,6 +445,90 @@ fn payout_deletion_rolls_back_late_failure_and_preserves_outer_transaction() {
         c,
         &scope,
         "transfers.payouts.delete",
+        field(case, "args"),
+        &fixed,
+    )
+    .unwrap();
+    assert!(!c.is_autocommit());
+    c.execute_batch("ROLLBACK").unwrap();
+    for (table, expected) in tables.iter().zip(&before) {
+        assert_eq!(&bytes(&dump(c, table)), expected, "{table}");
+    }
+}
+
+#[test]
+fn payout_creation_rolls_back_late_failure_and_preserves_outer_transaction() {
+    let fixture = kassiber_pytext::loads(include_str!("payout_create.json")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(dir.path(), None).unwrap();
+    let c = book.connection();
+    let scenario = &list(field(&fixture, "scenarios"))[0];
+    for sql in list(field(scenario, "sql")) {
+        c.execute_batch(&py_str(sql)).unwrap();
+    }
+    let tables: Vec<String> = c
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let before: Vec<_> = tables.iter().map(|t| bytes(&dump(c, t))).collect();
+    let version: i64 = c
+        .query_row(
+            "SELECT journal_input_version FROM profiles WHERE id='p'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    c.execute_batch(&format!("CREATE TEMP TRIGGER refuse_payout_creation BEFORE UPDATE OF journal_input_version ON profiles WHEN NEW.id='p' AND NEW.journal_input_version={} BEGIN SELECT RAISE(ABORT,'late payout creation invalidation'); END",version+2)).unwrap();
+    let case = &list(field(scenario, "cases"))[0];
+    let scope = Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    };
+    let fixed = Fixed {
+        id: py_str(field(case, "id")),
+        now: py_str(field(case, "now")),
+    };
+    // Reference bug, Python fix pending: compare every table with pre-operation state.
+    for outer in [false, true] {
+        if outer {
+            c.execute_batch("BEGIN; INSERT INTO settings(key,value) VALUES('outer-create','keep')")
+                .unwrap();
+        }
+        let error = execute_with_sources(
+            c,
+            &scope,
+            "transfers.payouts.create",
+            field(case, "args"),
+            &fixed,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "internal_error");
+        assert_eq!(c.is_autocommit(), !outer);
+        if outer {
+            assert_eq!(
+                c.query_row(
+                    "SELECT value FROM settings WHERE key='outer-create'",
+                    [],
+                    |r| r.get::<_, String>(0)
+                )
+                .unwrap(),
+                "keep"
+            );
+            c.execute_batch("ROLLBACK").unwrap();
+        }
+        for (table, expected) in tables.iter().zip(&before) {
+            assert_eq!(&bytes(&dump(c, table)), expected, "{table}");
+        }
+    }
+    c.execute_batch("DROP TRIGGER refuse_payout_creation; BEGIN")
+        .unwrap();
+    execute_with_sources(
+        c,
+        &scope,
+        "transfers.payouts.create",
         field(case, "args"),
         &fixed,
     )

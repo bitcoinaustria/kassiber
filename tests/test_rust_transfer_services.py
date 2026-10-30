@@ -22,6 +22,7 @@ class RustTransferServicesTest(unittest.TestCase):
         self.base = Path(temp.name)
         self.root = self.base / "data"
         self.env = _environment(self.base / "home")
+        self.env["HOME"] = os.environ["HOME"]
         self.env["KASSIBER_TEST_NO_EGRESS"] = "1"
         fixture = json.loads((ROOT / "crates/transfers/tests/python.json").read_text())
         c = open_db(self.root)
@@ -257,4 +258,42 @@ class RustTransferServicesTest(unittest.TestCase):
             result=subprocess.run([RUST_BIN,*argv],**opts) if rust else cli_runner.run(argv,reference=True,**opts)
             self.assertEqual(result.returncode,0,result.stderr)
             records.append(result.stdout.splitlines(keepends=True)[1:])
+        self.assertEqual(*records)
+
+    def test_payout_create_cli_daemon_and_hybrid(self):
+        root = self._pair_book('payout-create-hybrid')
+        log = self.base / 'payout-create-served.jsonl'
+        env = {**self.env, 'KASSIBER_HYBRID_RUST_BIN': RUST_BIN, 'KASSIBER_HYBRID_LOG': str(log)}
+        for tx, extra, ok in [('d', ['--note',' € 🚀 '], True), ('d', [], False), ('missing', [], False), ('f', ['--payout-fiat-value','-1'], False)]:
+            argv=['--machine','--data-root',str(root),'transfers','payouts','create','--tx-out',tx,'--payout-asset','ETH','--payout-amount','0.000000008',*extra]
+            actual=subprocess.run([sys.executable,str(ROOT/'tests/rust_port/hybrid_cli.py'),*argv],capture_output=True,env=env,cwd=ROOT)
+            self.assertEqual(actual.returncode,0 if ok else 1,(actual.stdout,actual.stderr))
+        self.assertEqual([json.loads(line) for line in log.read_text().splitlines()],[{'command':'transfers.payouts.create','served_by':'rust'}]*4)
+        for extra in (['--tx-out','absent'], ['--tx-out','f','--payout-fiat-value','-1'], ['--tx-out','f','--payout-occurred-at','bad']):
+            argv=['--machine','--data-root',str(root),'transfers','payouts','create','--payout-asset','ETH','--payout-amount','0.000000008',*extra]
+            opts=dict(capture_output=True,env=self.env,cwd=ROOT)
+            expected=cli_runner.run(argv,reference=True,**opts)
+            actual=subprocess.run([RUST_BIN,*argv],**opts)
+            self.assertEqual((actual.returncode,actual.stdout,actual.stderr),(expected.returncode,expected.stdout,expected.stderr))
+        records=[]
+        for rust in (False,True):
+            root=self._pair_book('payout-create-daemon-'+str(rust))
+            requests=[{'kind':'ui.transfers.payouts.create','args':args} for args in (
+                {'out_id':'d','payout_asset':'ETH','payout_amount':'0.000000008','note':' € 🚀 ','payout_fiat_value':'1.2345','authored_source':'untrusted'},
+                {'tx_out':'absent','payout_asset':'ETH','payout_amount':'1'},
+                {'tx_out':'f','payout_asset':'ETH','payout_amount':'0'},
+                {'tx_out':'f','payout_asset':'ETH','payout_amount':'1','policy':'bad'},
+            )]+[{'kind':'daemon.shutdown'}]
+            payload=''.join(json.dumps({**r,'request_id':str(i)})+'\n' for i,r in enumerate(requests)).encode()
+            opts=dict(input=payload,capture_output=True,env=self.env,cwd=ROOT,timeout=120)
+            result=subprocess.run([RUST_BIN,'--data-root',str(root),'daemon'],**opts) if rust else cli_runner.run(['--data-root',str(root),'daemon'],reference=True,**opts)
+            self.assertEqual(result.returncode,0,result.stderr)
+            rows=[json.loads(line) for line in result.stdout.splitlines()[1:]]
+            for row in rows:
+                for key in ('id','component_id','created_at'):row.get('data',{}).pop(key,None)
+            records.append(rows)
+            self.assertEqual(rows[0].get("kind"), "ui.transfers.payouts.create", rows)
+            c=open_db(root)
+            self.assertEqual(c.execute("SELECT authored_source FROM custody_components WHERE state='active'").fetchone()[0],'gui',rows)
+            c.close()
         self.assertEqual(*records)

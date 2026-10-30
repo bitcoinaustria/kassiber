@@ -88,7 +88,7 @@ fn boundary(row: &Value, prefix: &str) -> Value {
         ),
     ])
 }
-fn asset(v: &Value) -> String {
+pub(super) fn asset(v: &Value) -> String {
     let raw = if kassiber_envelope::truthy(v) {
         py_str(v)
     } else {
@@ -105,7 +105,7 @@ fn asset(v: &Value) -> String {
     }
 }
 
-fn leg(
+pub(super) fn leg(
     row: &Value,
     id: &str,
     role: &str,
@@ -155,7 +155,7 @@ fn leg(
         ("location_ref", Value::Null),
     ])
 }
-fn allocation(id: String, source: &str, sink: &str, a: i128, b: i128) -> Value {
+pub(super) fn allocation(id: String, source: &str, sink: &str, a: i128, b: i128) -> Value {
     dict([
         ("id", s(id)),
         ("source_leg_id", s(source)),

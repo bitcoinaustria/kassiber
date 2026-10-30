@@ -205,7 +205,7 @@ pub(super) fn activate(
     let revision=rows(c,"SELECT COALESCE(MAX(revision),0)+1 AS revision FROM custody_components WHERE profile_id=? AND lineage_id=?",[scope.profile_id,&lineage])?.remove(0);
     let evidence = dict([
         ("review_id", value(base, "id")),
-        ("term_kind", s("transaction_pair")),
+        ("term_kind", value(&list(spec, "terms")[0], "term_kind")),
     ]);
     let mut header = dict([
         ("id", s(&id)),
