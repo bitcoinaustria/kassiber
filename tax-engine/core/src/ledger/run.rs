@@ -43,6 +43,7 @@
 //! builder guarantee each of these, so a request that breaks one is refused
 //! as malformed rather than read by guesswork.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::engine::{self, compute_parsed, ParsedAsset};
@@ -437,7 +438,16 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
     drop(span);
     let span = crate::timing::span("carried_request");
     let carried = carry.request(request)?;
-    let book = Book::new(&carried).map_err(StagedError::contract)?;
+    // When the carry priced nothing, the final pass reads the request's own
+    // book.
+    let carried_book;
+    let book = match &carried {
+        Cow::Borrowed(_) => &book,
+        Cow::Owned(carried) => {
+            carried_book = Book::new(carried).map_err(StagedError::contract)?;
+            &carried_book
+        }
+    };
     let settled = carry.take_settled();
     drop(span);
     let span = crate::timing::span("final_pass");
@@ -446,7 +456,7 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
         selection,
         error,
         outputs,
-    } = final_pass(&book, &config, &book.rows_of(&carry.blocked), settled);
+    } = final_pass(book, &config, &book.rows_of(&carry.blocked), settled);
     if let Some(error) = error {
         return Err(StagedError::new(Stage::Prepare, error));
     }
@@ -461,14 +471,14 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
         None => {
             // The assets the lot engine computes, in order.
             let span = crate::timing::span("lot_inputs");
-            let assets = lot_assets(&book, &stages);
+            let assets = lot_assets(book, &stages);
             drop(span);
             let span = crate::timing::span("validate");
             swaps::validate_parsed(&assets, engine_country(&request.policy.country))
                 .map_err(|error| StagedError::new(Stage::Validate, error))?;
             drop(span);
             let _compute = crate::timing::span("compute");
-            compute(&book, assets)?
+            compute(book, assets)?
         }
     }
     .into_iter();
@@ -484,12 +494,12 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
             .quarantines
             .into_iter()
             .chain(selection.quarantines)
-            .map(|quarantine| quarantine_out(&book, quarantine))
+            .map(|quarantine| quarantine_out(book, quarantine))
             .collect(),
         intra_audit: Vec::new(),
         tax_summary: Vec::new(),
         holdings: Vec::new(),
-        carried_rows: carried_rows_out(&book, &carry.carried),
+        carried_rows: carried_rows_out(book, &carry.carried),
     };
     // Composition, asset by asset. Its own invariant failures (impossible
     // after a successful prepare pass and computation) are composition
@@ -512,7 +522,7 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
             // Composition raises what the adapter's composition raised,
             // unwrapped.
             let composed =
-                compose(&book, &asset).map_err(|error| StagedError::new(Stage::Classify, error))?;
+                compose(book, &asset).map_err(|error| StagedError::new(Stage::Classify, error))?;
             response.entries.extend(composed.entries);
             response.holdings.extend(composed.holdings);
             response.tax_summary.extend(composed.tax_summary);
@@ -524,7 +534,7 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
                 .quarantines
                 .into_iter()
                 .chain(walked.quarantines)
-                .map(|quarantine| quarantine_out(&book, quarantine)),
+                .map(|quarantine| quarantine_out(book, quarantine)),
         );
         response.intra_audit.extend(walked.audit);
     }
