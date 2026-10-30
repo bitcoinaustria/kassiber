@@ -77,7 +77,7 @@ def vectors():
         conn.execute("SAVEPOINT wallet_refresh")
         outcome = imports.retract_wallet_records(conn, profile, wallet, case["ids"], "backend:synthetic",
             imports.ImportCoordinatorHooks(lambda *args: None, repo.invalidate_journals), commit=False)
-        with patch("kassiber.cli.handlers.now_iso", return_value="now"), patch("kassiber.core.freshness.now_iso", return_value="now"):
+        with patch("kassiber.cli.handlers.now_iso", return_value="now"), patch("kassiber.core.freshness.now_iso", return_value="updated-now"):
             handlers._mark_wallet_synced_from_results(conn, wallet, [{"status": "synced", "freshness_checkpoint": case["checkpoint"],
                 "partial_success": case.get("partial_success", False), "silent_payment_degraded_reason": case.get("degraded_reason"),
                 "blocking_reports": case.get("blocking_reports", False)}])

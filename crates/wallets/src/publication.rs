@@ -115,6 +115,7 @@ pub struct Synced<'a> {
     pub degraded_reason: Option<&'a str>,
     pub blocking_reports: bool,
     pub timestamp: &'a str,
+    pub updated_at: &'a str,
 }
 
 fn python_json(value: &Value, compact: bool) -> Result<String> {
@@ -220,7 +221,7 @@ pub fn mark_synced(conn: &Connection, synced: &Synced<'_>) -> Result<()> {
             synced.timestamp,
             python_json(&json!({"phase":"done"}), true)?,
             python_json(checkpoint, true)?,
-            synced.timestamp,
+            synced.updated_at,
         ],
     )
     .map_err(database_error)?;

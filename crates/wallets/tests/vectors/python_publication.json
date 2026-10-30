@@ -142,7 +142,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],
@@ -1209,7 +1209,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{\"tip\":{\"height\":10},\"z\":\"\\u00e9\"}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],
@@ -1715,7 +1715,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{\"tip\":null}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],
@@ -2156,7 +2156,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],
@@ -2637,7 +2637,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],
@@ -3185,7 +3185,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],
@@ -3670,7 +3670,7 @@
             "done",
             "{\"phase\":\"done\"}",
             "{\"highest_used\":{\"receive\":0}}",
-            "now"
+            "updated-now"
           ]
         ],
         "import_batch_transactions": [],

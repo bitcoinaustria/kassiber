@@ -75,6 +75,7 @@ fn mark(conn: &Connection, case: &Value) -> Result<()> {
             degraded_reason: case["degraded_reason"].as_str(),
             blocking_reports: case["blocking_reports"].as_bool().unwrap_or(false),
             timestamp: "now",
+            updated_at: "updated-now",
         },
     )
 }

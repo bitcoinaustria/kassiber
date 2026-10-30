@@ -478,5 +478,15 @@
       "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
     ],
     "rule": "Errors, cancellation and panic roll back instead of committing earlier writes."
+  },
+  {
+    "id": "publish-updated-time",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "            synced.updated_at,",
+    "replace": "            synced.timestamp,",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Freshness updated_at uses its own clock read, separately from the wallet success timestamp."
   }
 ]
