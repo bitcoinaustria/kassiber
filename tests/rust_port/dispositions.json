@@ -2261,7 +2261,8 @@
       "SavedViewsTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.saved_views, kassiber.db directly", "reviewed": false, "tests": 9}
     },
     "tests/test_schema_swap_matching.py": {
-      "FreshSchemaTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 16},
+      "FreshSchemaTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 15},
+      "FreshSchemaTests::test_active_payout_component_freezes_and_retires_with_review": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "Deletion and idempotence are pinned by payout_deletions_match_python_complete_database_rows_and_refusals; native payout creation remains open and the Python setup is retained", "reviewed": true, "tests": 1},
       "LegacyUniqueMigrationTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/test_secrets_smoke.py": {

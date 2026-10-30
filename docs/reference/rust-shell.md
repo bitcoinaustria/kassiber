@@ -2969,8 +2969,8 @@ previously left creation, update or deletion committed. All five parameterized
 regression cases compare the complete reference database dump after rollback.
 The successful authoring row format and invalidation counts are unchanged.
 
-This remains a partial service slice. **Six group (b) commands** still answer
-`not_implemented`: payout create/delete, component plan/apply and gap plan/apply.
+This remains a partial service slice. **Five group (b) commands** still answer
+`not_implemented`: payout create, component plan/apply and gap plan/apply.
 They need the same complete-row parity, revision/hash commitments, refusal
 coverage, report impacts and mutation acceptance. All ten group (c) commands
 and the additional computation-dependent desktop kinds remain unported.
@@ -3224,3 +3224,91 @@ capability order, a direct Python CLI construction in a test and stale contract
 line locations; each was resolved before the final gates. Final Cargo builds
 were completed before process tests; mutation builds used a separate fresh
 target to avoid reusing mutated artifacts. No push or PR was performed.
+
+
+### Payout deletion checkpoint
+
+`transfers payouts delete` and `ui.transfers.payouts.delete` now supersede the
+stored payout component, preserve immutable terms/evidence, rebuild effective
+memberships and perform Python's two journal invalidations. Repeats return the
+original deletion time without changing rows. The service owns a savepoint and
+preserves an outer caller transaction, including on late invalidation failure.
+Desktop input preserves Python truthiness, identifier string conversion and GUI
+audit attribution. AI projections remain Python. This brings the supported
+subset to **14/29 CLI leaves and 13 desktop kinds**.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Service outputs and normalized database rows | `payout_deletions_match_python_complete_database_rows_and_refusals`: six scenarios, 24 operations; every unrelated application table unchanged |
+| CLI bytes and hybrid dispatch | `test_payout_delete_cli_daemon_and_hybrid_bytes`: three calls, all Rust, zero Python fallbacks |
+| Daemon bytes | Same test: six requests including repeats, missing/false/numeric IDs and untrusted source |
+| Rollback and caller transaction | `payout_deletion_rolls_back_late_failure_and_preserves_outer_transaction` |
+| Desktop validation and source | `desktop_payout_delete_requires_id_and_overrides_source` |
+
+The oracle generator is `crates/transfers/scripts/export_payout_delete.py`.
+Payout creation is Python-only setup. Its SQL replay pins the exact starting
+trigger counters and proves the replayed application rows equal Python before
+deletion. Every changed table is compared completely after each operation;
+all unrelated tables must stay unchanged in the native runner. No output
+UUIDs, timestamps, hashes or array orders are masked. Real-process byte checks
+use a stored deletion timestamp; first deletion timestamps and persisted bytes
+are checked by the fixed-source native oracle.
+
+**Python bug left unchanged:** a final journal invalidation failure can leave
+payout supersession committed even after caller rollback. Run
+`.venv/bin/python crates/transfers/scripts/repro_payout_delete_rollback.py`.
+It creates a disposable book, injects a trigger refusing the second input-version
+increment, catches `IntegrityError: late payout invalidation`, rolls back and
+prints `State after caller rollback: superseded`. Rust's named rollback test
+requires the complete database to remain unchanged. This durability difference
+is intentional to satisfy the service-slice atomicity requirement; it is not a
+change to Python in this checkpoint.
+
+Payout creation, component plan/apply and gap plan/apply remain unported.
+The ten computation-dependent commands and the additional desktop kinds listed
+above also remain unported. Automatic transfer pairing during journal processing
+belongs to R4; no matcher or journal behavior changes here.
+
+The payout deletion catalog adds these named kills:
+
+| Mutation | Named killing test |
+| --- | --- |
+| `payout-delete-atomic` | `payout_deletion_rolls_back_late_failure_and_preserves_outer_transaction` |
+| `payout-delete-id` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-idempotent` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-state` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-reason` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-invalidations` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-membership-clear` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-membership-effective` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-return-time` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `payout-delete-final-invalidation` | `payout_deletions_match_python_complete_database_rows_and_refusals` |
+| `desktop-payout-delete-source` | `desktop_payout_delete_requires_id_and_overrides_source` |
+| `desktop-payout-delete-id-string` | `desktop_payout_delete_requires_id_and_overrides_source` |
+
+Verification used Rust 1.99.1, locked Python 3.11, offline Cargo and disposable
+books. Workspace fmt, workspace clippy and harness-feature clippy with
+`-D warnings` passed. The workspace passed **951 tests**; the final native
+transfer/daemon selection passed **29 tests** against the expanded fixture.
+Oracle regeneration was byte-identical. The transfer mutation catalog now has
+**143 entries**: the full 141-entry run killed all entries after 21 named baseline
+selections passed; a fresh-target 14-entry follow-up rechecked payout deletion
+and the adjusted desktop mutations and killed both new desktop entries.
+The initial follow-up reused a target containing an old daemon test binary and
+selected no new test; it was discarded and rerun on a fresh target. All **143/143**
+entries are killed by named tests, and catalog applicability passes.
+
+The final real-process transfer/shell/hybrid-candidate/CLI-runner and
+`tests/rust_port` gate passed **71 tests and 178 subtests**. The regenerated
+inventory and final preflight shard passed **57 tests**. The new hybrid witness
+records `transfers.payouts.delete`: **3 Rust calls, 0 Python fallbacks**;
+native daemon sessions contain no Python dispatch. The remaining setup and
+computation commands retain the hybrid's existing fallback policy.
+
+Initial restricted runs could not acquire the product's ownership locks or bind
+workspace test loopback listeners. The successful runs used disposable books
+with the required sandbox permissions. One process-gate attempt began before
+the harness rebuild completed and hit the non-harness no-egress refusal; it was
+discarded, and the complete successful gate ran after the build finished.
+Mutation and verification build trees were removed after recording these results.
+No push or PR was performed.

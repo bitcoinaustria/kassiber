@@ -98,6 +98,9 @@ REVIEWS = {
     },
     "tests/test_custody_components.py": {"CustodySchemaTests": {"group": "store", "reason": "historical SQLite compatibility and immutable-trigger migrations port to store tests"}},
     "tests/test_custody_gaps.py": {"CustodyGapLegacySchemaMigrationTests": {"group": "store", "reason": "checks historical database migration rather than candidate matching"}},
+    "tests/test_schema_swap_matching.py": {
+        "FreshSchemaTests::test_active_payout_component_freezes_and_retires_with_review": {"disposition": "rust-test", "group": "transactions", "reason": "Deletion and idempotence are pinned by payout_deletions_match_python_complete_database_rows_and_refusals; native payout creation remains open and the Python setup is retained"},
+    },
     "tests/test_custody_authored_migration.py": {
         "*": {"group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests"},
         "test_native_review_activation_failure_leaves_no_committed_draft": {"disposition": "rust-test", "group": "transactions", "reason": "crates/transfers/tests/pairs.rs pins complete-row refusal parity without retaining a draft"},

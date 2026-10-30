@@ -55,6 +55,18 @@ pub(super) fn pair_records(
         unreachable!()
     }
 }
+pub(super) fn payout_records(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
+    let mut result = BTreeMap::new();
+    for row in terms_with_deleted(conn, scope, "direct_swap_payout", true)? {
+        let payout = common(&row, true)?;
+        result.insert(text(&payout, "id"), payout);
+    }
+    if let Value::List(rows) = sorted(result) {
+        Ok(rows)
+    } else {
+        unreachable!()
+    }
+}
 fn contexts(conn: &Connection, scope: &Scope<'_>) -> Result<BTreeMap<String, Value>> {
     Ok(rows(conn, "SELECT t.id,t.external_id,t.asset,t.amount,t.occurred_at,w.label AS wallet,w.kind AS wallet_kind FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=?", [scope.profile_id])?.into_iter().map(|r| (text(&r,"id"),r)).collect())
 }

@@ -277,14 +277,16 @@ and the owner decisions it needs.
 
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
 serves all five stored reads and eight authoring commands (rule CRUD/toggles,
-dismissals, pair/unpair/update): 13/29 CLI leaves and 12 desktop kinds. Full
+dismissals, pair/unpair/update, payout deletion): 14/29 CLI leaves and 13 desktop kinds. Full
 normalized authoring row parity is pinned for that subset; AI projections remain
 Python.
 
 - [x] Port pair/unpair/update using the shared custody stage, including native
   residual/conflict validation, append-only revisions, immutable rows, Python
   commitments and atomic journal invalidation. Pin 115 operations against Python.
-- [ ] Port payout create/delete with the same complete-row, refusal and mutation
+- [x] Port payout deletion with complete-row parity, atomic rollback, desktop
+  attribution and a named mutation catalog.
+- [ ] Port payout creation with the same complete-row, refusal and mutation
   acceptance as pair authoring.
 - [ ] Port component plan/apply and gap plan/apply with version-bound candidate
   fingerprints, conservation/hold barriers and filed-report impacts. Require
@@ -293,6 +295,7 @@ Python.
   after custody/journal services are available. Matching needs its own mutation
   catalog and Python/naive-all-pairs oracle before native suggestions or auto-pair
   can be enabled; review cases/plan/apply must retain readiness barriers.
+  Automatic pairing during journal processing belongs to R4.
 
 ## Accounting correctness and custody
 

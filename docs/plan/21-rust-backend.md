@@ -1719,9 +1719,13 @@ Two reference atomicity bugs have separate regression/fix commits: activation
 refusals committed drafts (`26e64be8`); final invalidation failures committed
 pair changes (`2091516c`). Both were demonstrated failing before their fixes.
 
-Steps 2–4 remain: payout create/delete, component plan/apply and gap plan/apply.
+The next checkpoint adds payout deletion through CLI and desktop with exact
+fixed-source rows, idempotence, membership reconciliation and atomic rollback.
+Automatic pairing during journal processing belongs to R4 and is unchanged.
+
+Steps 2–4 remain: payout creation, component plan/apply and gap plan/apply.
 Version-bound fingerprints, filed-report impacts, complete normalized row parity
-and mutations remain acceptance requirements for those six commands. All ten
+and mutations remain acceptance requirements for those five commands. All ten
 computation-dependent commands remain `not_implemented`, including component
 materialization, suggestions/bulk/rules matching and review cases/plan/apply.
 AI projections stay Python. This verified numbered-step boundary does not claim

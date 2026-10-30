@@ -140,6 +140,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.unpair",
     "transfers.update",
     "transfers.payouts.list",
+    "transfers.payouts.delete",
     "transfers.gaps.history",
     "transfers.rules.list",
     "transfers.rules.create",

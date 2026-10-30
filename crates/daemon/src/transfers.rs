@@ -5,6 +5,7 @@ use kassiber_runtime::store::Book;
 pub const KINDS: &[&str] = &[
     "ui.transfers.list",
     "ui.transfers.payouts.list",
+    "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
     "ui.transfers.update",
@@ -68,6 +69,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     };
     let mut args = args.clone();
     normalize_pair_args(kind, &mut args)?;
+    normalize_payout_delete_args(kind, &mut args)?;
     if kind == "ui.custody.gaps.history" {
         if let Value::Dict(fields) = &mut args {
             for (k, v) in fields {
@@ -147,6 +149,24 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         "ui.transfers.rules.list" => Ok(dict([("rules", result)])),
         _ => Ok(result),
     }
+}
+
+fn normalize_payout_delete_args(kind: &str, args: &mut Value) -> Result<(), AppError> {
+    if kind == "ui.transfers.payouts.delete" {
+        let id = get(args, "payout_id")
+            .filter(|v| kassiber_envelope::truthy(v))
+            .ok_or_else(|| {
+                AppError::new(
+                    "validation",
+                    "ui.transfers.payouts.delete requires payout_id",
+                )
+            })?;
+        let id = kassiber_envelope::py_str(id);
+        kassiber_envelope::set(args, "payout_id", s(id));
+        kassiber_envelope::set(args, "authored_source", s("gui"));
+    }
+
+    Ok(())
 }
 
 // The desktop calls int() before dispatching to the scoped domain service.
@@ -275,12 +295,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn desktop_payout_delete_requires_id_and_overrides_source() {
+        let mut args = dict([
+            ("payout_id", Value::Int(123.into())),
+            ("authored_source", s("untrusted")),
+        ]);
+        normalize_payout_delete_args("ui.transfers.payouts.delete", &mut args).unwrap();
+        assert_eq!(get(&args, "payout_id"), Some(&s("123")));
+        assert_eq!(get(&args, "authored_source"), Some(&s("gui")));
+        for id in [Value::Null, Value::Bool(false), s(""), Value::Int(0.into())] {
+            let mut args = dict([("payout_id", id)]);
+            let error =
+                normalize_payout_delete_args("ui.transfers.payouts.delete", &mut args).unwrap_err();
+            assert_eq!(error.code, "validation");
+            assert_eq!(
+                error.message,
+                "ui.transfers.payouts.delete requires payout_id"
+            );
+        }
+    }
+
+    #[test]
     fn desktop_pair_aliases_defaults_and_absent_notes_match_python() {
         assert_eq!(
-            &KINDS[..5],
+            &KINDS[..6],
             &[
                 "ui.transfers.list",
                 "ui.transfers.payouts.list",
+                "ui.transfers.payouts.delete",
                 "ui.transfers.pair",
                 "ui.transfers.unpair",
                 "ui.transfers.update"

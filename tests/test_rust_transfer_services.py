@@ -223,3 +223,38 @@ class RustTransferServicesTest(unittest.TestCase):
                 return value
             transcripts.append(normalize(results))
         self.assertEqual(transcripts[0],transcripts[1])
+
+    def test_payout_delete_cli_daemon_and_hybrid_bytes(self):
+        fixture = json.loads((ROOT / 'crates/transfers/tests/payout_delete.json').read_text())
+        roots=[]
+        for side in ('python','rust'):
+            root=self.base/side
+            c=open_db(root)
+            for statement in fixture['scenarios'][0]['sql']: c.execute(statement)
+            c.execute("INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p')")
+            # Pin the supersession time at the storage boundary, including the
+            # result of the first delete (then repeated deletes are idempotent).
+            c.execute("UPDATE custody_components SET state='superseded',superseded_at='2025-06-01T00:00:00Z'")
+            c.commit();c.close();roots.append(root)
+        payout_id=fixture['scenarios'][0]['cases'][0]['args']['payout_id']
+        log=self.base/'payout-hybrid.jsonl'
+        env={**self.env,'KASSIBER_HYBRID_RUST_BIN':RUST_BIN,'KASSIBER_HYBRID_LOG':str(log)}
+        for id in (payout_id,'missing',payout_id):
+            argv=['--machine','--data-root',str(roots[0]),'transfers','payouts','delete','--payout-id',id]
+            expected=cli_runner.run(argv,reference=True,capture_output=True,env=self.env,cwd=ROOT)
+            argv[2]=str(roots[1])
+            actual=subprocess.run([sys.executable,str(ROOT/'tests/rust_port/hybrid_cli.py'),*argv],capture_output=True,env=env,cwd=ROOT)
+            self.assertEqual((actual.returncode,actual.stdout,actual.stderr),(expected.returncode,expected.stdout,expected.stderr))
+        observed=[json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual(observed,[{'command':'transfers.payouts.delete','served_by':'rust'}]*3)
+        requests=[{'request_id':str(i),'kind':'ui.transfers.payouts.delete','args':args} for i,args in enumerate(({'payout_id':payout_id},{'payout_id':'missing'},{},{'payout_id':0},{'payout_id':123},{'payout_id':payout_id,'authored_source':'untrusted'}))]
+        requests.append({'request_id':'end','kind':'daemon.shutdown'})
+        payload=''.join(json.dumps(r)+'\n' for r in requests).encode()
+        records=[]
+        for root,rust in zip(roots,(False,True)):
+            argv=['--data-root',str(root),'daemon']
+            opts=dict(input=payload,capture_output=True,env=self.env,cwd=ROOT,timeout=120)
+            result=subprocess.run([RUST_BIN,*argv],**opts) if rust else cli_runner.run(argv,reference=True,**opts)
+            self.assertEqual(result.returncode,0,result.stderr)
+            records.append(result.stdout.splitlines(keepends=True)[1:])
+        self.assertEqual(*records)

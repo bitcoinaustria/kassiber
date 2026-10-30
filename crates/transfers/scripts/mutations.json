@@ -1193,8 +1193,8 @@
   {
     "id": "desktop-pair-source",
     "file": "crates/daemon/src/transfers.rs",
-    "find": "set(args, \"authored_source\", s(\"gui\"))",
-    "replace": "set(args, \"authored_source\", s(\"cli\"))",
+    "find": "kassiber_envelope::set(args, \"authored_source\", s(\"gui\"));\n        if kind == \"ui.transfers.pair\"",
+    "replace": "kassiber_envelope::set(args, \"authored_source\", s(\"cli\"));\n        if kind == \"ui.transfers.pair\"",
     "expect_failing": [
       "desktop_pair_aliases_defaults_and_absent_notes_match_python"
     ],
@@ -1293,8 +1293,8 @@
   {
     "id": "desktop-pair-capability-order",
     "file": "crates/daemon/src/transfers.rs",
-    "find": "    \"ui.transfers.payouts.list\",\n    \"ui.transfers.pair\",",
-    "replace": "    \"ui.transfers.pair\",\n    \"ui.transfers.payouts.list\",",
+    "find": "\"ui.transfers.list\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.pair\",",
+    "replace": "\"ui.transfers.pair\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.list\",",
     "expect_failing": [
       "desktop_pair_aliases_defaults_and_absent_notes_match_python"
     ],
@@ -1309,5 +1309,125 @@
       "pair_sequences_match_python_complete_database_rows_and_refusals"
     ],
     "rule": "Validation refusal objects retain Python field order."
+  },
+  {
+    "id": "payout-delete-atomic",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "Err(e) => {\n            let _ = conn.execute_batch(\n                \"ROLLBACK TO SAVEPOINT transfers_service; RELEASE SAVEPOINT transfers_service\",\n            );",
+    "replace": "Err(e) => {\n            let _ = conn.execute_batch(\n                \"RELEASE SAVEPOINT transfers_service\",\n            );",
+    "expect_failing": [
+      "payout_deletion_rolls_back_late_failure_and_preserves_outer_transaction"
+    ],
+    "rule": "Payout deletion rolls back every write after late invalidation failure."
+  },
+  {
+    "id": "payout-delete-id",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "text(r, \"id\") == id",
+    "replace": "text(r, \"id\") != id",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deletion selects exactly the requested review."
+  },
+  {
+    "id": "payout-delete-idempotent",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "if truthy(&value(&row, \"deleted_at\"))",
+    "replace": "if false && truthy(&value(&row, \"deleted_at\"))",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Repeated deletion preserves timestamp and input version."
+  },
+  {
+    "id": "payout-delete-state",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "SET state='superseded',superseded_at=?",
+    "replace": "SET state='active',superseded_at=?",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deletion supersedes the authored component."
+  },
+  {
+    "id": "payout-delete-reason",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "direct_swap_payout review deleted by {source}",
+    "replace": "transaction_pair review deleted by {source}",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Persist the exact payout audit reason."
+  },
+  {
+    "id": "payout-delete-invalidations",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "store::invalidate(c, scope.profile_id)?;\n        let snapshot",
+    "replace": "let snapshot",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Both Python invalidations and cache clearing are preserved."
+  },
+  {
+    "id": "payout-delete-membership-clear",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=?",
+    "replace": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Membership reconciliation removes deleted review anchors."
+  },
+  {
+    "id": "payout-delete-membership-effective",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "c[\"effective_state\"] == \"active\"",
+    "replace": "c[\"effective_state\"] != \"active\"",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Only effective active components regain memberships."
+  },
+  {
+    "id": "payout-delete-return-time",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "set(&mut row, \"deleted_at\", s(now));",
+    "replace": "set(&mut row, \"deleted_at\", Value::Null);",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Return the deletion time on the first successful delete."
+  },
+  {
+    "id": "payout-delete-final-invalidation",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "store::invalidate(c, scope.profile_id)?;\n        set(&mut row",
+    "replace": "set(&mut row",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Final journal invalidation increments the input version again."
+  },
+  {
+    "id": "desktop-payout-delete-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(args, \"authored_source\", s(\"gui\"));\n    }\n\n    Ok(())",
+    "replace": "set(args, \"authored_source\", s(\"cli\"));\n    }\n\n    Ok(())",
+    "expect_failing": [
+      "desktop_payout_delete_requires_id_and_overrides_source"
+    ],
+    "rule": "Desktop payout deletion always attributes the GUI source."
+  },
+  {
+    "id": "desktop-payout-delete-id-string",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "let id = kassiber_envelope::py_str(id);\n        kassiber_envelope::set(args, \"payout_id\", s(id));",
+    "replace": "let id = id.clone();\n        kassiber_envelope::set(args, \"payout_id\", id);",
+    "expect_failing": [
+      "desktop_payout_delete_requires_id_and_overrides_source"
+    ],
+    "rule": "Desktop converts truthy payout identifiers using Python str."
   }
 ]
