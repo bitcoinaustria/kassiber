@@ -139,15 +139,19 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)(["'])((?:\\[^\r\n]|(?!\3)[^\\\r\n])*)\3/gi,
+    "$1$2$3[redacted]$3",
+  ],
+  [
+    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
     "$1$2[redacted]",
   ],
   // JSON-shaped assignments, e.g. a logged object `{"api_key":"sk-..."}`. The
   // pattern above stops at the key's closing quote, so the quoted value
   // survives without this; keep the key and redact the value in place.
   [
-    /("(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)"\s*:\s*)"[^"]*"/gi,
-    '$1"[redacted]"',
+    /(["'](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)["']\s*:\s*)(["'])((?:\\[^\r\n]|(?!\2)[^\\\r\n])*)\2/gi,
+    '$1$2[redacted]$2',
   ],
 ];
 

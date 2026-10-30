@@ -78,12 +78,16 @@ itself, so it must not become a health checker or background probe.
 **Secret floor — applied at insert, in every buffer.** Seed phrases,
 extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
-bearer tokens, passphrase assignments. These are
-scrubbed by
+bearer tokens, and passphrase assignments. These are scrubbed by
 [`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
 `redact_sensitive_text` (Rust), and `redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
+
+The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
+`macaroon`, and `cookie` assignments, including quoted values with spaces or
+escaped quotes. The Rust redactors must adopt the shared credential corpus
+during Rust integration.
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by

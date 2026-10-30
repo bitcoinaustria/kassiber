@@ -18,6 +18,9 @@ SENSITIVE_KEY_PARTS = (
     "descriptor",
     "mnemonic",
     "password",
+    "rpcauth",
+    "rpc_auth",
+    "macaroon",
     "passphrase",
     "private",
     "recovery",
@@ -44,23 +47,23 @@ _SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstu
 _SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
+_QUOTED_SECRET_VALUE = r'''(?:"(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*')'''
 _ASSIGNED_SECRET_RE = re.compile(
     r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|"
-    r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
+    r"passphrase|password|rpc[_-]?(?:password|auth)|macaroon|recovery[_-]?phrase|scan[_-]?key|secret|"
     r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
     r"sp[_-]?descriptor|spscan|spspend|token)\b)"
     r"(?P<sep>\s*[:=]\s*)"
-    r"(?P<quote>['\"]?)"
-    r"(?P<value>[^'\"\s,;}{]+)",
+    rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
     re.IGNORECASE,
 )
 _JSON_SECRET_RE = re.compile(
     r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|"
-    r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
+    r"passphrase|password|rpc[_-]?(?:password|auth)|macaroon|recovery[_-]?phrase|scan[_-]?key|secret|"
     r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
     r"sp[_-]?descriptor|spscan|spspend|token)"
-    r"['\"]\s*:\s*['\"])"
-    r"(?P<value>[^'\"]+)",
+    r"['\"]\s*:\s*)"
+    rf"(?P<quoted>{_QUOTED_SECRET_VALUE})",
     re.IGNORECASE,
 )
 _RECOVERY_ASSIGNMENT_RE = re.compile(
@@ -213,8 +216,12 @@ def redact_secret_text(value: str) -> str:
     text = _SP_ADDRESS_RE.sub("[redacted-silent-payment-address]", text)
     text = _DESCRIPTOR_RE.sub("[redacted-descriptor]", text)
     text = _BEARER_RE.sub("Bearer [redacted]", text)
-    text = _JSON_SECRET_RE.sub(r"\g<prefix>[redacted]", text)
-    text = _ASSIGNED_SECRET_RE.sub(r"\g<key>\g<sep>\g<quote>[redacted]", text)
+    text = _JSON_SECRET_RE.sub(
+        lambda match: f"{match['prefix']}{match['quoted'][0]}[redacted]{match['quoted'][0]}", text
+    )
+    text = _ASSIGNED_SECRET_RE.sub(
+        lambda match: f"{match['key']}{match['sep']}{(match['quoted'] or '')[:1]}[redacted]{(match['quoted'] or '')[:1]}", text
+    )
     text = _SK_SECRET_RE.sub("[redacted-secret]", text)
     return text
 
