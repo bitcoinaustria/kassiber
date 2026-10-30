@@ -14,13 +14,15 @@
 //! every stored request), so a builder that drifts fails loudly instead of
 //! being half-understood.
 
+use std::fmt;
+
 use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::decimal::Decimal;
 use crate::error::{EngineError, EngineResult, ErrorClass};
-use crate::model::{ConfigSpec, MethodName, TsInput};
+use crate::model::{ConfigSpec, Dec, MethodName, TsInput};
 
 /// The only schema version the ledger operations read and write.
 pub const SCHEMA_VERSION: u32 = 2;
@@ -415,7 +417,7 @@ fn is_non_finite_text(text: &str) -> bool {
 impl Serialize for DecimalText {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            DecimalText::Finite(value) => serializer.serialize_str(&value.to_canonical()),
+            DecimalText::Finite(value) => Dec(value.clone()).serialize(serializer),
             DecimalText::NonFinite(text) => serializer.serialize_str(text),
         }
     }
@@ -423,16 +425,40 @@ impl Serialize for DecimalText {
 
 impl<'de> Deserialize<'de> for DecimalText {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        if let Ok(value) = Decimal::from_canonical(&text) {
+        deserializer.deserialize_string(DecimalTextVisitor)
+    }
+}
+
+/// Reads a [`DecimalText`] from a string as `String::deserialize` reads the
+/// string, keeping it only when it is non-finite text.
+struct DecimalTextVisitor;
+
+impl de::Visitor<'_> for DecimalTextVisitor {
+    type Value = DecimalText;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // `String`'s own expectation, so a value of another type fails
+        // with its message.
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<DecimalText, E> {
+        if let Ok(value) = Decimal::from_canonical(text) {
             return Ok(DecimalText::Finite(value));
         }
-        if is_non_finite_text(&text) {
-            return Ok(DecimalText::NonFinite(text));
+        if is_non_finite_text(text) {
+            return Ok(DecimalText::NonFinite(text.to_owned()));
         }
-        Err(de::Error::custom(format!(
+        Err(E::custom(format!(
             "not a canonical or non-finite decimal: {text:?}"
         )))
+    }
+
+    fn visit_bytes<E: de::Error>(self, bytes: &[u8]) -> Result<DecimalText, E> {
+        match std::str::from_utf8(bytes) {
+            Ok(text) => self.visit_str(text),
+            Err(_) => Err(E::invalid_value(de::Unexpected::Bytes(bytes), &self)),
+        }
     }
 }
 

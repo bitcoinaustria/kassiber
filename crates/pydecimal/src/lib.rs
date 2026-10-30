@@ -1253,8 +1253,22 @@ impl Decimal {
     /// The lossless canonical form `[-]<digits>E<exp>`, e.g. `-12345E-3` or
     /// `-0E0`, used at the JSON boundary.
     pub fn to_canonical(&self) -> String {
-        let sign = if self.negative { "-" } else { "" };
-        format!("{}{}E{}", sign, self.coeff.digits(), self.exp)
+        let mut out = String::with_capacity(48);
+        // Writing to a String cannot fail.
+        let _ = self.write_canonical(&mut out);
+        out
+    }
+
+    /// Writes [`Decimal::to_canonical`]'s text.
+    pub fn write_canonical<W: fmt::Write>(&self, out: &mut W) -> fmt::Result {
+        if self.negative {
+            out.write_char('-')?;
+        }
+        match &self.coeff {
+            Coeff::Small(value) => write!(out, "{value}")?,
+            Coeff::Big(value) => out.write_str(&value.to_str_radix(10))?,
+        }
+        write!(out, "E{}", self.exp)
     }
 
     /// CPython's `str(x)`: plain notation when the exponent is at most 0 and

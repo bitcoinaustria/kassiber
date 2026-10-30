@@ -5,6 +5,8 @@
 //! unknown fields so a drifting caller fails loudly instead of being
 //! half-understood. `docs/reference/tax-engine.md` documents the format.
 
+use std::fmt;
+
 use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
@@ -21,16 +23,51 @@ pub struct Dec(pub Decimal);
 
 impl Serialize for Dec {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0.to_canonical())
+        // The canonical text needs no escaping, so this writes what
+        // `serialize_str` of `to_canonical()` writes, without the string.
+        serializer.collect_str(&Canonical(&self.0))
+    }
+}
+
+/// [`Decimal::to_canonical`] as a `Display`.
+struct Canonical<'a>(&'a Decimal);
+
+impl fmt::Display for Canonical<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.write_canonical(f)
     }
 }
 
 impl<'de> Deserialize<'de> for Dec {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        Decimal::from_canonical(&text)
+        deserializer.deserialize_string(DecVisitor)
+    }
+}
+
+/// Reads a canonical decimal from a string as `String::deserialize` reads
+/// the string, without keeping it.
+struct DecVisitor;
+
+impl de::Visitor<'_> for DecVisitor {
+    type Value = Dec;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // `String`'s own expectation, so a value of another type fails
+        // with its message.
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<Dec, E> {
+        Decimal::from_canonical(text)
             .map(Dec)
-            .map_err(|_| de::Error::custom(format!("not a canonical decimal: {text:?}")))
+            .map_err(|_| E::custom(format!("not a canonical decimal: {text:?}")))
+    }
+
+    fn visit_bytes<E: de::Error>(self, bytes: &[u8]) -> Result<Dec, E> {
+        match std::str::from_utf8(bytes) {
+            Ok(text) => self.visit_str(text),
+            Err(_) => Err(E::invalid_value(de::Unexpected::Bytes(bytes), &self)),
+        }
     }
 }
 
