@@ -37,3 +37,6 @@ pub use unicode_tables::{REGEX_ASCII_CASES, REGEX_DIGIT, REGEX_SPACE, REGEX_WORD
 
 mod iso_datetime;
 pub use iso_datetime::{iso_datetime, IsoDateTime};
+#[rustfmt::skip]
+mod casefold;
+pub use casefold::casefold;
