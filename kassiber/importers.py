@@ -960,7 +960,7 @@ def _clean_decimal_text(value):
     if text.startswith("(") and text.endswith(")"):
         negative = True
         text = text[1:-1].strip()
-    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT", "LBTC"):
+    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "LBTC", "BTC", "XBT"):
         text = text.replace(symbol, "")
     text = text.replace(",", "").replace(" ", "").strip()
     if not text:
