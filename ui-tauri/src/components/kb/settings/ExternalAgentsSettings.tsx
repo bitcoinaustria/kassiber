@@ -2,11 +2,9 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DaemonRequestError, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { terminalCommandStatus, type TerminalCommandStatus } from "@/daemon/transport";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   AGENT_GRANTS,
   RECOMMENDED_AGENT_ACCESS,
@@ -21,7 +19,13 @@ import {
   type AgentPeer,
 } from "@/lib/agentAccess";
 import { cn } from "@/lib/utils";
-import { CommandLine, CopyButton } from "./SettingsControls";
+import {
+  CommandLine,
+  CopyButton,
+  SettingsGroup,
+  SettingsRow,
+  SettingsSelect,
+} from "./SettingsControls";
 import type { StatusData } from "./SettingsModel";
 
 const GRANT_LABEL_KEYS = {
@@ -131,17 +135,22 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
     unlock.data?.kind === "ui.agent_access.unlock" && unlock.data.data?.session?.existing_lease === true;
 
   return (
-    <div
-      className={cn(
-        "space-y-3 rounded-md border bg-background p-4",
-        !aiFeaturesEnabled && "opacity-60",
-      )}
+    <SettingsGroup
+      title={t("ai.agentsLabel")}
+      className={cn(!aiFeaturesEnabled && "opacity-60")}
+      footer={
+        aiFeaturesEnabled && access
+          ? grant === "read"
+            ? t("ai.agentsAdminNever")
+            : t("ai.agentsHostApproval")
+          : null
+      }
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="settings-external-agents">{t("ai.agentsLabel")}</Label>
-          <p className="text-sm text-muted-foreground">{t("ai.agentsDescription")}</p>
-        </div>
+      <SettingsRow
+        label={t("ai.agentsAllowLabel")}
+        description={t("ai.agentsDescription")}
+        htmlFor="settings-external-agents"
+      >
         <Switch
           id="settings-external-agents"
           checked={enabled}
@@ -159,67 +168,52 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
             );
           }}
           aria-label={t("ai.agentsAria")}
-          className="shrink-0"
         />
-      </div>
+      </SettingsRow>
       {configure.isError ? (
-        <p className="text-sm text-destructive">{t("ai.agentsError")}</p>
+        <p className="px-4 py-3 text-sm text-destructive">{t("ai.agentsError")}</p>
       ) : null}
       {aiFeaturesEnabled && access ? (
-        <div className="space-y-2" data-agent-grant={grant}>
-          <p id="settings-external-agents-grant" className="text-sm font-medium">
-            {t("ai.agentsGrantLabel")}
-          </p>
-          <div
-            role="radiogroup"
-            aria-labelledby="settings-external-agents-grant"
-            className="flex flex-wrap gap-2"
-          >
-            {AGENT_GRANTS.map((option) => (
-              <Button
-                key={option}
-                type="button"
-                size="sm"
-                role="radio"
-                aria-checked={option === grant}
-                variant={option === grant ? "default" : "outline"}
+        <>
+          <div data-agent-grant={grant}>
+            <SettingsRow
+              label={t("ai.agentsGrantLabel")}
+              description={t(GRANT_HINT_KEYS[grant])}
+              htmlFor="settings-external-agents-grant"
+            >
+              <SettingsSelect<AgentGrant>
+                value={grant}
                 disabled={choiceDisabled}
-                onClick={() => chooseGrant(option)}
-              >
-                {t(GRANT_LABEL_KEYS[option])}
-              </Button>
-            ))}
+                onValueChange={chooseGrant}
+                options={AGENT_GRANTS.map((option) => ({
+                  value: option,
+                  label: t(GRANT_LABEL_KEYS[option]),
+                }))}
+                triggerProps={{ id: "settings-external-agents-grant" }}
+              />
+            </SettingsRow>
           </div>
-          <p className="text-sm text-muted-foreground">{t(GRANT_HINT_KEYS[grant])}</p>
-          <label
+          <SettingsRow
+            label={t("ai.agentsRestrictLabel")}
+            description={
+              <span id="settings-external-agents-restrict-hint">
+                {t("ai.agentsRestrictHint")}
+              </span>
+            }
             htmlFor="settings-external-agents-restrict"
-            className="flex cursor-pointer items-start gap-2 text-sm"
           >
-            <Checkbox
+            <Switch
               id="settings-external-agents-restrict"
               checked={agentAccess === "restricted"}
               disabled={choiceDisabled}
-              onCheckedChange={(checked) => chooseAccess(checked === true ? "restricted" : "full")}
+              onCheckedChange={(checked) => chooseAccess(checked ? "restricted" : "full")}
               aria-describedby="settings-external-agents-restrict-hint"
-              className="mt-0.5"
             />
-            <span className="grid gap-0.5">
-              <span className="font-medium">{t("ai.agentsRestrictLabel")}</span>
-              <span
-                id="settings-external-agents-restrict-hint"
-                className="text-muted-foreground"
-              >
-                {t("ai.agentsRestrictHint")}
-              </span>
-            </span>
-          </label>
-          <p className="text-xs text-muted-foreground">
-            {grant === "read" ? t("ai.agentsAdminNever") : t("ai.agentsHostApproval")}
-          </p>
-        </div>
+          </SettingsRow>
+        </>
       ) : null}
       {enabled && args ? (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-4 py-3">
           <div className="min-w-0 flex-1">
             <CommandLine command={claudeCodeCommand(launcher, args)} />
           </div>
@@ -232,74 +226,70 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       {/* A lease the broker has not confirmed locking stays visible, with
           Lock, even after agents are turned off. */}
       {(enabled && session?.needed) || session?.active ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            {session.active
+        <SettingsRow
+          label={t("ai.agentsSessionLabel")}
+          description={
+            session.active
               ? t("ai.agentsSessionActive", { minutes: idleMinutes })
               : existingLease
                 ? t("ai.agentsSessionExisting")
-                : t("ai.agentsSessionLocked")}
-          </p>
+                : t("ai.agentsSessionLocked")
+          }
+        >
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="shrink-0"
             disabled={sessionBusy}
             onClick={() => (session.active ? lock.mutate(undefined) : unlock.mutate(undefined))}
           >
             {session.active ? t("ai.agentsSessionLock") : t("ai.agentsSessionUnlock")}
           </Button>
-        </div>
+        </SettingsRow>
       ) : null}
-      {session?.active ? (
-        <div className="space-y-2">
-          {agents.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
-          ) : null}
-          {agents.map((agent) => (
-            <div
+      {session?.active && agents.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
+      ) : null}
+      {session?.active
+        ? agents.map((agent) => (
+            <SettingsRow
               key={agent.id}
-              className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <p className="min-w-0 text-sm">
-                {agent.state === "pending"
+              label={
+                agent.state === "pending"
                   ? t("ai.agentsPairingRequest", { name: agentName(agent) })
-                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })}
-              </p>
-              <div className="flex shrink-0 gap-2">
-                {agent.state === "pending" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={sessionBusy}
-                    onClick={() => decide(agent, true)}
-                  >
-                    {t("ai.agentsPairingAllow")}
-                  </Button>
-                ) : null}
+                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })
+              }
+            >
+              {agent.state === "pending" ? (
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
                   disabled={sessionBusy}
-                  onClick={() => decide(agent, false)}
+                  onClick={() => decide(agent, true)}
                 >
-                  {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+                  {t("ai.agentsPairingAllow")}
                 </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={sessionBusy}
+                onClick={() => decide(agent, false)}
+              >
+                {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+              </Button>
+            </SettingsRow>
+          ))
+        : null}
       {(enabled || session?.active) && sessionError ? (
-        <p className="text-sm text-destructive">
+        <p className="px-4 py-3 text-sm text-destructive">
           {t("ai.agentsSessionError")}
           {sessionError instanceof DaemonRequestError && sessionError.envelope.error?.hint
             ? ` ${sessionError.envelope.error.hint}`
             : null}
         </p>
       ) : null}
-    </div>
+    </SettingsGroup>
   );
 }

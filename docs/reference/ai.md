@@ -163,7 +163,7 @@ The desktop's effort menu offers an HTTP model only the levels in its
 none when its listing does not say it takes one (as OpenAI's never does) or
 before **Check models** has listed it. Levels a listing names elsewhere, such
 as `capabilities.reasoning_efforts: ["xhigh"]`, are not offered, and an HTTP
-provider's default effort on its Settings card is bounded to low, medium and
+provider's default effort in its Settings row is bounded to low, medium and
 high the same way. A stored default the model does not offer moves to the
 nearest offered level, as for CLI agents.
 
@@ -426,7 +426,7 @@ Completions work through the detected or chosen format.
 
 ### Adding a provider in the desktop
 
-**Add provider** in Settings → AI providers opens a wizard, laid out after
+**Add provider** in Settings → Assistant opens a wizard, laid out after
 T3 Code's add-provider wizard, with a step track: **Provider**, **Connection**,
 **Privacy** (only for a provider whose prompts leave this device) and
 **Model**. Nothing contacts the provider until **Test connection** on the last
@@ -513,25 +513,35 @@ checkbox ("Testing sends a short prompt to this provider. Acknowledge that
 prompts may leave this device first.") unless the saved provider is already
 acknowledged as off-device, and sends `acknowledged: true` once it is ticked.
 
-### Settings → AI providers
+### Settings → Assistant
 
-Each provider is a card with its brand mark, privacy posture, kind (HTTP or
-CLI agent), and default badge. CLI agents sign in through their own CLI, so
-their cards show a runtime status instead of key storage: installed version
-and signed in, not installed, sign-in needed, or an error, with the broker's
-sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
-when it was checked. HTTP cards show the base URL with the API format the next
-chat speaks (the pinned format, the detected one, or that auto has detected
-nothing yet), key storage, and whether the last check reached the endpoint and
-how many models it listed. A provider set to `omit_store_field` says on its
-card that it sends requests without Kassiber's no-retention flag and that the
-provider's own retention applies.
+The page has three lists built from the same few controls (a switch for
+on/off, one dropdown for a choice, plain buttons for actions). The first holds
+the **Use the assistant** switch (AI features), the permission mode new chats start
+in, whether chats are kept, and deleting saved ones; then come **Models** and
+**External agents** (see [MCP](mcp.md)).
+
+Each provider in Models is one row: its brand mark, name, "Default" on the
+default, where it runs (on this computer, a subscription app, a remote or
+confidential server), its default model, the last check's status and its
+on/off switch. Opening the row shows the rest and the actions (**Check**,
+**Set as default**, **Edit**, moving the key, **Remove**).
+CLI agents sign in through their own CLI, so their rows show a runtime status
+instead of key storage: installed version and signed in, not installed,
+sign-in needed, or an error, with the broker's sanitized hint (for example
+``Run `copilot login` outside Kassiber.``) and when it was checked. HTTP rows
+show the base URL with the API format the next chat speaks (the pinned
+format, the detected one, or that auto has detected nothing yet), key
+storage, and whether the last check reached the endpoint and how many models
+it listed. A provider set to `omit_store_field` says in its details that it
+sends requests without Kassiber's no-retention flag and that the provider's
+own retention applies.
 
 Opening the page contacts no provider. Cards read the daemon's last result
 with `cached_only: true`, which never starts a probe, even on a cold cache:
 `ai.provider_runtime.status` for a CLI agent, `ai.list_models` for an HTTP
 provider. The daemon keeps each provider's last check in the book
-(`ai_provider_checks`), so after a restart a card still shows what it found
+(`ai_provider_checks`), so after a restart a row still shows what it found
 and when ("checked 3 days ago") instead of "Not checked yet". Only a check the
 user started writes it: **Check**, **Check all**, **Set up**, or the picker's
 **Check models**. It is read back only while the provider has the base URL it
@@ -541,20 +551,20 @@ with `refresh` is refused. `ai.providers.list` also reports each provider's
 `last_checked_at` and `set_up`.
 
 Built-in providers the user has not used yet are folded into a collapsed
-**Not set up** group: a built-in row still at its built-in address and name
+**N more providers** line at the end of the list: a built-in row still at its built-in address and name
 that is not the default, was never checked, and (off-device) was never
 acknowledged. Each row has **Set up**, which switches it on if needed and runs
 its check, asking for the acknowledgement first as any check does, and a
-remove button. The group is display only; it never decides whether a provider
+remove button that shows on hover or keyboard focus. The group is display only; it never decides whether a provider
 may be contacted, and the model picker still lists every enabled provider.
-Providers the user added are always shown as cards. CLI cards
+Providers the user added are always shown as rows. CLI rows
 also show a **Check models** result from the picker: when it is newer than
-the last runtime check, the card lists its models (and fast mode where one
+the last runtime check, the row lists its models (and fast mode where one
 offers it) as "Models listed", keeping a ready runtime's version line. A
 newer runtime check that is not ready shows no models. Results
 belong to the base URL that was checked (for a CLI agent, the runtime its
 locator names), in the desktop and in the daemon's discovery cache, so after
-the URL is edited the card reads "not checked", or shows the new runtime's
+the URL is edited the row reads "not checked", or shows the new runtime's
 last cached result, until the user checks it again; nothing probes the new
 endpoint on its own. A check is bound to the endpoint the user chose: the
 desktop sends that `base_url` with `ai.list_models` and the scoped
@@ -572,14 +582,14 @@ for it, so models and capabilities such as fast mode are no longer offered
 from an earlier check. **Check all** does the same
 for every enabled provider, one request per provider. Off-device providers
 need the acknowledgement first (one confirmation for all of them); if it
-cannot be recorded, each of those cards shows why and none of them is
+cannot be recorded, each of those rows shows why and none of them is
 checked, while the other providers still are. Offline
 mode refuses them before anything is asked, and the checks are unavailable
 while AI features are off. A failed check is reported once rather than
 retried, and its error belongs to that book and endpoint like the results
 do. A check sends no prompt.
 
-Each card also carries:
+Each row also carries:
 
 - **An enable switch.** A disabled provider is hidden from the model picker
   (a remembered selection on it falls back to the default provider) and is
@@ -1203,7 +1213,7 @@ call) opens a fresh reasoning segment, so Ollama/oMLX traces stay
 per-round instead of one continuous blob. Models that don't emit either
 channel pass through unchanged.
 
-Settings → AI providers exposes a **Test connection** action. It calls the
+Settings → Assistant exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
 and reports the model count. It also passes the form's privacy kind (`kind`),
@@ -1360,8 +1370,8 @@ Each desktop chat sends its permission mode as `permission_mode` with every
 `ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
 approve changes that can be undone and stay on this device, and asks before
 network access and anything permanent. **Full access** never asks, syncs and
-other network actions included. New chats start in Settings → AI → **Default
-permission mode** (Auto unless changed). A saved chat reopens in the mode it
+other network actions included. New chats start in the mode set at Settings →
+Assistant → **New chats start in** (Auto unless changed). A saved chat reopens in the mode it
 last used, which the UI preferences keep by session id. Switching the mode in
 the composer while an answer streams sends `ai.chat.permission_mode` for that
 turn, and the daemon releases waiting approvals the new mode covers.
@@ -1380,7 +1390,7 @@ it through the broker's 0600 manifest file or Codex's JSON-RPC, well under the
 The desktop sends `tool_profile` with every turn from the composer's **Tools**
 picker: **All tools** (`full`), **Focused** (`scoped`) or **Minimal**
 (`core`). Every provider starts with all tools; Kassiber does not judge a
-model's strength. Settings → AI providers sets a provider's own tool set, kept
+model's strength. Settings → Assistant sets a provider's own tool set, kept
 with the UI preferences by provider name, and the composer overrides it for
 the current chat.
 

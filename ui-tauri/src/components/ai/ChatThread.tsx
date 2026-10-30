@@ -18,7 +18,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import { ChatMessage } from "./ChatMessage";
 import {
@@ -86,7 +86,6 @@ export function ChatThread({
   const initializedRef = React.useRef(false);
 
   const [showJumpPill, setShowJumpPill] = React.useState(false);
-  const [showScrollTop, setShowScrollTop] = React.useState(false);
 
   const setSpacer = React.useCallback((px: number) => {
     const spacer = spacerRef.current;
@@ -168,20 +167,6 @@ export function ChatThread({
     [scrollable, setSpacer, scrollTo],
   );
 
-  const scrollToTop = React.useCallback(
-    (behavior: ScrollBehavior = "smooth") => {
-      const node = containerRef.current;
-      if (!node || !scrollable) return;
-      // Leaving the live edge on purpose: stop auto-follow so streaming deltas
-      // don't yank the view back down.
-      modeRef.current = "free";
-      anchorIdRef.current = null;
-      setSpacer(0);
-      scrollTo(node, 0, behavior);
-    },
-    [scrollable, setSpacer, scrollTo],
-  );
-
   const handleScroll = React.useCallback(() => {
     const node = containerRef.current;
     if (!node) return;
@@ -189,7 +174,6 @@ export function ChatThread({
     lastTopRef.current = node.scrollTop;
     const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
     const atBottom = distance <= EDGE_THRESHOLD_PX;
-    const atTop = node.scrollTop <= EDGE_THRESHOLD_PX;
     const nextMode = resolveScrollMode(modeRef.current, {
       atBottom,
       scrolledUp: node.scrollTop < previousTop - 1,
@@ -201,9 +185,8 @@ export function ChatThread({
         setSpacer(0);
       }
     }
-    const affordances = resolveScrollAffordances(nextMode, { atBottom, atTop });
+    const affordances = resolveScrollAffordances(nextMode, { atBottom });
     setShowJumpPill(affordances.jumpToLatest);
-    setShowScrollTop(affordances.jumpToTop);
   }, [setSpacer]);
 
   // A wheel/touch gesture drops out of auto-follow the moment it starts, before
@@ -322,17 +305,6 @@ export function ChatThread({
         {/* Reserved end-space that lets a fresh turn lift to the top. */}
         <div ref={spacerRef} aria-hidden="true" style={{ height: 0 }} />
       </ConversationContent>
-      {scrollable && showScrollTop ? (
-        <button
-          type="button"
-          className="absolute top-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-sm outline-none transition-colors hover:border-border hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200"
-          onClick={() => scrollToTop("smooth")}
-          aria-label={t("thread.scrollToTop")}
-          title={t("thread.scrollToTop")}
-        >
-          <ChevronUp className="h-4 w-4" aria-hidden="true" />
-        </button>
-      ) : null}
       {scrollable && showJumpPill ? (
         <button
           type="button"

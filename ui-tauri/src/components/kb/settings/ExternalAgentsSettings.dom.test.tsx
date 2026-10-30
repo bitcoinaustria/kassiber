@@ -51,8 +51,11 @@ const off: Access = {
   access_recorded: false,
 };
 
-const checked = (name: string) =>
-  screen.getByRole("radio", { name }).getAttribute("aria-checked");
+const grantSelect = () => screen.getByRole("combobox", { name: "What agents may do" });
+const chooseGrant = (label: string) => {
+  fireEvent.click(grantSelect());
+  fireEvent.click(screen.getByRole("option", { name: label }));
+};
 
 describe("ExternalAgentsSettings grant drafts", () => {
   afterEach(() => {
@@ -63,11 +66,11 @@ describe("ExternalAgentsSettings grant drafts", () => {
   it("sends the chosen draft once, then follows the recorded choice", () => {
     daemon.access = { ...off };
     const view = render(<ExternalAgentsSettings aiFeaturesEnabled />);
-    expect(checked("Accounting decisions")).toBe("true");
-    fireEvent.click(screen.getByRole("radio", { name: "Read and operate" }));
+    expect(grantSelect().textContent).toBe("Accounting decisions");
+    chooseGrant("Read and operate");
     // Off: choosing records nothing yet.
     expect(daemon.mutate).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("switch", { name: "Allow external agents" }));
     expect(daemon.mutate).toHaveBeenLastCalledWith({
       mcp_enabled: true,
       ai_features_enabled: true,
@@ -79,7 +82,7 @@ describe("ExternalAgentsSettings grant drafts", () => {
       daemon.access = { ...off, mcp_enabled: true, mcp_available: true, reason: null, grant: "operator", agent_access: "full", access_recorded: true };
       view.rerender(<ExternalAgentsSettings aiFeaturesEnabled />);
     });
-    fireEvent.click(screen.getByRole("radio", { name: "Read" }));
+    chooseGrant("Read");
     // On: a choice is recorded right away.
     expect(daemon.mutate).toHaveBeenLastCalledWith({ grant: "read" });
 
@@ -87,8 +90,8 @@ describe("ExternalAgentsSettings grant drafts", () => {
       daemon.access = { ...off, grant: "read", agent_access: "full", access_recorded: true };
       view.rerender(<ExternalAgentsSettings aiFeaturesEnabled />);
     });
-    expect(checked("Read")).toBe("true");
-    fireEvent.click(screen.getByRole("switch"));
+    expect(grantSelect().textContent).toBe("Read");
+    fireEvent.click(screen.getByRole("switch", { name: "Allow external agents" }));
     expect(daemon.mutate).toHaveBeenLastCalledWith({
       mcp_enabled: true,
       ai_features_enabled: true,

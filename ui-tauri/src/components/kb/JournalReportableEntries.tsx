@@ -10,6 +10,7 @@ import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
+import { humanizeEntryCode, localizedEntryType } from "@/lib/journalEntryType";
 import { formatSats } from "@/lib/localeFormat";
 import {
   reportableEntryMetricFilterIds,
@@ -182,26 +183,6 @@ function eventTitle(event: ReportableJournalEntry, t: TFunction<"journals">) {
     : typeLabel;
 }
 
-// Daemon entry-type CODES map to translated labels; unknown codes fall back to
-// a structural humanizer of the code itself (the code is the stable id).
-const ENTRY_TYPE_LABEL_KEYS: Record<string, string> = {
-  acquisition: "ledger.entryType.acquisition",
-  disposal: "ledger.entryType.disposal",
-  income: "ledger.entryType.income",
-  fee: "ledger.entryType.fee",
-  transfer_fee: "ledger.entryType.transferFee",
-  transfer: "ledger.entryType.transfer",
-  transfer_in: "ledger.entryType.transferIn",
-  transfer_out: "ledger.entryType.transferOut",
-  neutral_swap: "ledger.entryType.neutralSwap",
-};
-
-function localizedEntryType(type: string, t: TFunction<"journals">) {
-  const key = ENTRY_TYPE_LABEL_KEYS[type];
-  // dynamic key
-  return key ? t(key as never) : formatEntryType(type);
-}
-
 function basisText(event: ReportableJournalEntry, t: TFunction<"journals">) {
   if (event.costBasisEur !== null || event.proceedsEur !== null) {
     return [
@@ -239,11 +220,11 @@ function pricingSourceLabel(
       ? t("reportable.pricing.providerSample")
       : t("reportable.pricing.providerPrice");
   }
-  const sourceLabel = formatEntryType(source || "pricing");
+  const sourceLabel = humanizeEntryCode(source || "pricing");
   return quality
     ? t("reportable.pricing.qualified", {
         source: sourceLabel,
-        quality: formatEntryType(quality),
+        quality: humanizeEntryCode(quality),
       })
     : sourceLabel;
 }
@@ -278,12 +259,6 @@ function stripJournalMarkers(description: string) {
     .split(/\s+/)
     .filter((token) => !/^at_[a-z_]+=/.test(token))
     .join(" ");
-}
-
-function formatEntryType(type: string) {
-  return type
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatMsatAmount(msat: number, asset: string) {
