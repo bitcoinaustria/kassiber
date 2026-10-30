@@ -5,6 +5,86 @@ use kassiber_pyjson::{dumps, Indent, Key, Options, Value as PyValue};
 use serde_json::{json, Value};
 use std::{fs::OpenOptions, path::Path};
 
+/// Publish report-owned CSV bytes atomically, retaining Python's file modes.
+/// Unlike private exports, a new CSV uses 0666 subject to the process umask;
+/// overwriting a file retains its permissions. The caller expands `~` first.
+/// Final symlinks are followed, including dangling links with existing parents.
+pub fn write_report_csv(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    write_report_csv_with(path, bytes, &mut || Ok(()))
+}
+
+fn write_report_csv_with(
+    path: &Path,
+    bytes: &[u8],
+    before_replace: &mut impl FnMut() -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    // Python creates the requested parent before opening/following the file.
+    std::fs::create_dir_all(parent_directory(path))?;
+    let destination = report_csv_destination(path)?;
+    // Check write permission without truncation before replacing an old file.
+    let permissions = match OpenOptions::new().write(true).open(&destination) {
+        Ok(file) => Some(file.metadata()?.permissions()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let parent = parent_directory(&destination);
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".kassiber-report-").suffix(".tmp");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // tempfile applies these at creation, so the kernel applies the umask.
+        builder.permissions(std::fs::Permissions::from_mode(0o666));
+    }
+    let mut staged = builder.tempfile_in(parent)?;
+    staged.write_all(bytes)?;
+    if let Some(permissions) = permissions {
+        staged.as_file().set_permissions(permissions)?;
+    }
+    staged.as_file().sync_all()?;
+    before_replace()?;
+    staged.persist(&destination).map_err(|e| e.error)?;
+    #[cfg(not(windows))]
+    std::fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+fn parent_directory(path: &Path) -> &Path {
+    path.parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
+}
+
+fn report_csv_destination(path: &Path) -> std::io::Result<std::path::PathBuf> {
+    let mut destination = path.to_owned();
+    // Bound dangling-link traversal too: canonicalize catches existing cycles.
+    for _ in 0..40 {
+        match std::fs::symlink_metadata(&destination) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                match destination.canonicalize() {
+                    Ok(resolved) => return Ok(resolved),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        let link = std::fs::read_link(&destination)?;
+                        destination = if link.is_absolute() {
+                            link
+                        } else {
+                            parent_directory(&destination).join(link)
+                        };
+                        // Following a dangling link does not create its parents.
+                        parent_directory(&destination).canonicalize()?;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            Ok(_) => return Ok(destination),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(destination),
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::other("Too many levels of symbolic links"))
+}
+
 /// Publish a machine preference exactly as `private_files.atomic_write_private`.
 /// Unlike book metadata writes, this replaces a final symlink without following it.
 pub fn write_private_preference(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -226,6 +306,101 @@ pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn report_csv_publication_failure_keeps_old_bytes_and_mode() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("report.csv");
+        std::fs::write(&path, b"prior\r\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+            std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o750)).unwrap();
+        }
+        assert!(
+            super::write_report_csv_with(&path, b"replacement\r\n", &mut || {
+                assert_eq!(std::fs::read(&path).unwrap(), b"prior\r\n");
+                Err(std::io::Error::other("injected before publication"))
+            })
+            .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"prior\r\n");
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+        super::write_report_csv(&path, b"replacement\r\n").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"replacement\r\n");
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+            assert_eq!(
+                std::fs::metadata(root.path()).unwrap().permissions().mode() & 0o777,
+                0o750
+            );
+        }
+        let absent = root.path().join("absent.csv");
+        assert!(super::write_report_csv_with(&absent, b"new", &mut || {
+            assert!(!absent.exists());
+            Err(std::io::Error::other("injected new publication failure"))
+        })
+        .is_err());
+        assert!(!absent.exists());
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn report_csv_new_file_uses_python_creation_mode() {
+        let root = tempfile::tempdir().unwrap();
+        // Compare to an ordinary create under the same inherited umask. Never
+        // change the process umask in a multithreaded test binary.
+        let control = root.path().join("control");
+        std::fs::write(&control, b"control").unwrap();
+        let path = root.path().join("nested/report.csv");
+        super::write_report_csv(&path, b"new\r\n").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new\r\n");
+        assert_eq!(
+            std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
+            1
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                std::fs::metadata(control).unwrap().permissions().mode() & 0o777
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn report_csv_follows_symlinks_and_refuses_missing_link_parents() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("target.csv");
+        let link = root.path().join("report.csv");
+        symlink("target.csv", &link).unwrap();
+        super::write_report_csv(&link, b"new\r\n").unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"new\r\n");
+        super::write_report_csv(&link, b"updated\r\n").unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"updated\r\n");
+        assert_eq!(std::fs::read_link(&link).unwrap(), Path::new("target.csv"));
+        let missing = root.path().join("missing.csv");
+        symlink("not-created/target.csv", &missing).unwrap();
+        assert!(super::write_report_csv(&missing, b"no").is_err());
+        assert!(!root.path().join("not-created").exists());
+        let chained = root.path().join("chain.csv");
+        symlink("report.csv", &chained).unwrap();
+        super::write_report_csv(&chained, b"chained").unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"chained");
+        let cycle = root.path().join("cycle.csv");
+        symlink("cycle.csv", &cycle).unwrap();
+        assert!(super::write_report_csv(&cycle, b"no").is_err());
+        assert!(super::write_report_csv(root.path(), b"no").is_err());
+    }
     use super::*;
     #[test]
     fn export_publication_is_atomic_and_preserves_parent_permissions() {

@@ -1008,6 +1008,17 @@ after all 37 baseline selections pass. Formatting, both clippy configurations,
 969 workspace tests, 14 harness tests, the 22 report process scenarios and the
 required shell/hybrid/runner/port suite pass; inventory and contracts pass too.
 
+The seventh continuation adds internal atomic CSV publication, preserving
+Python's ordinary successful bytes, modes and final-symlink destinations. The
+same 543 frozen files now pass through disk publication. Eleven new mutation
+rules are killed by named native tests. Preparation/publication does not write
+snapshot or dependency rows, and export commands/kinds remain disabled until
+completion binds publication to the admitted book version. Python's direct CSV
+writer truncates old artifacts on failure; the
+[publication checkpoint](../reference/rust-shell.md#reports-csv-publication-checkpoint-r5-seventh-continuation-partial)
+records a disposable repro, the intentional atomic failure difference, the
+inode/ownership parity limit, and remaining completion/transport work.
+
 This is **not full reports slice acceptance**. Exit-tax outputs,
 capital-gain explanations and desktop capital gains remain unported.
 So do privacy, Lightning and cross-check reads, commercial/source-funds reads,

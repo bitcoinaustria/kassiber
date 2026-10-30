@@ -2875,6 +2875,130 @@ and network reads remain `not_implemented`. AI projections stay Python. No
 Python reference bug was found or fixed. This is **not complete reports slice
 acceptance**.
 
+## Reports CSV publication checkpoint (R5 seventh continuation, partial)
+
+The next batch adds `kassiber_reports::artifact_publication::{file,bundle}`
+and `kassiber_store::layout::write_report_csv`. It publishes the prepared full
+report or Austrian bundle without registering a saved/filed marker. Callers
+supply an already expanded path. Single-file metadata includes the canonical
+path, actual byte count, sheet and row count. Bundles retain renderer order;
+a later failure leaves earlier complete files, matching Python's bundle order.
+Basenames are checked before creating the bundle directory.
+
+The storage writer stages complete bytes in the destination directory, syncs
+before atomic replacement and syncs the directory on Unix. An overwrite first
+checks ordinary write access, preserves the existing file mode, and follows a
+final symlink without replacing it. A new file uses 0666 under the inherited
+umask. Requested parents are created without tightening their permissions;
+a dangling final symlink does not create its target's missing parents. A failed
+pre-publication hook leaves the previous file (or absence) intact and removes
+staging files. The existing owner-only `write_export` contract is unchanged.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Full report | 48 successful frozen preparations published; all twelve sections |
+| Austrian bundle | 33 successful frozen preparations published; all fifteen files |
+| Artifact bytes and metadata | 543 published files; disk bytes, canonical paths, sizes, sheet identities and row counts checked |
+| Refusals | 42 inherited preparation refusals; no transport enabled |
+| Modes and filesystem failures | Native overwrite/new-file, symlink, missing-target-parent, cycle, directory and injected-failure tests; default and 077 umasks |
+| Database | Preparation/publication has zero SQLite changes; automatic completion is still unported |
+
+The 446-entry report mutation catalog validates. All eleven new entries are
+killed after six unmutated named selections pass:
+
+| New entries | Named killers |
+| --- | --- |
+| bytes, before-replace, overwrite-mode | `report_csv_publication_failure_keeps_old_bytes_and_mode` |
+| create-mode, parents | `report_csv_new_file_uses_python_creation_mode` |
+| symlink | `report_csv_follows_symlinks_and_refuses_missing_link_parents` |
+| file-bytes, size, rows | `full_report_csv_artifact_vectors` |
+| sheet | `austrian_bundle_csv_artifact_vectors` |
+| order | `csv_bundle_failure_retains_only_complete_preceding_files` |
+
+Verification uses Rust 1.99.1, locked Python 3.11 and offline/locked Cargo.
+Formatting, workspace and test-harness clippy with `-D warnings`, all 974
+workspace tests and all 14 harness tests pass. The artifact oracle generator
+checks cleanly. `classify_tests update` produces no inventory diff; the preflight
+shard passes 57 tests and 57 subtests. Verification is Linux-only. Both owned
+mutation and verification build trees were removed after their summaries were
+written under `/tmp/kassiber-r5-reports7-*`.
+
+The 22 inherited report process scenarios pass. FIFO/HIFO/Austrian explicit
+saved/filed sequences retain byte-identical normalized responses and affected
+table dumps, normalizing only generated identities/times and retaining stored
+JSON literally. The nine native daemon sessions retain their raw response-byte
+comparisons. This does not establish automatic export-completion parity.
+The fresh hybrid log records 309 report CLI calls, all served by Rust:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.austrian-e1kv` | 23 | 0 |
+| `reports.austrian-tax-summary` | 23 | 0 |
+| `reports.balance-history` | 60 | 0 |
+| `reports.balance-sheet` | 25 | 0 |
+| `reports.capital-gains` | 25 | 0 |
+| `reports.filed-snapshots.create` | 26 | 0 |
+| `reports.filed-snapshots.list` | 16 | 0 |
+| `reports.journal-entries` | 25 | 0 |
+| `reports.portfolio-summary` | 25 | 0 |
+| `reports.summary` | 36 | 0 |
+| `reports.tax-summary` | 25 | 0 |
+
+The additional shell/hybrid/runner regression run passes 52 tests and 178
+subtests. Its remaining descriptor-inheritance test initially fails because
+Python's unported `secrets init` targets the account-home owner namespace, which
+the sandbox refuses. An isolated rerun passes with a temporary hybrid fallback
+fixture that redirects only `_owner_lock_root` to disposable storage, matching
+the report scenarios' fixture technique; Python product code is unchanged.
+Earlier workspace attempts blocked at owned sockets or the inherited SOCKS
+connection-reset race are excluded; the final complete workspace run passes.
+The initial hybrid run raced a non-harness build replacing its binary; the
+accepted 22-scenario run uses a fixed copy of the rebuilt harness.
+
+The inherited 435 entries retain the sixth checkpoint's audit; they were not
+rerun in this batch. No Python product code, schema, dependency or AI projection
+changes. No new CLI command or daemon kind is enabled.
+
+### Python reference bug: interrupted CSV overwrites truncate prior artifacts
+
+`core.reports._write_csv_rows` opens the destination with `"w"`; CLI and daemon
+artifact callers pass the final path directly. A later row/write failure leaves
+partial bytes instead of the previous complete report. Reproduce entirely on
+disposable data using the locked Python environment:
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from kassiber.core.reports import _write_csv_rows
+
+with TemporaryDirectory() as root:
+    path = Path(root) / "report.csv"
+    path.write_bytes(b"previous complete report\r\n")
+    def rows():
+        yield ["partial"]
+        raise OSError("injected write failure")
+    try:
+        _write_csv_rows(path, rows())
+    except OSError:
+        pass
+    assert path.read_bytes() == b"partial\r\n"
+```
+
+Python is unchanged. Atomic failure behavior follows the requested port
+requirement; this is a recorded reference difference, not failure-path byte
+parity. Successful ordinary file contents/modes and final-symlink paths match.
+Atomic replacement also changes inode identity: hard-link aliases and foreign
+file ownership are not accepted parity boundaries in this batch and need a
+policy before enabling artifact commands.
+
+Still required before registration: standalone transaction CSV draft/multiple
+wallet/range semantics; automatic saved rows with app-computed hashes and exact
+summaries; authoritative dependency capture; a retained admitted book/input
+version across preparation, publication and completion; complete normalized DB
+export-sequence oracles; CLI and daemon export registration (including capital
+gains CSV). Only explicit filing may create a filed marker. XLSX and PDF remain
+a later batch. This is **not full reports slice acceptance**.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

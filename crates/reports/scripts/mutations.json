@@ -4369,5 +4369,115 @@
       "full_report_csv_artifact_vectors"
     ],
     "rule": "Wallet inventory errors precede holdings/pricing errors, matching full-report context construction."
+  },
+  {
+    "id": "publication-bytes",
+    "file": "crates/store/src/layout.rs",
+    "find": "    staged.write_all(bytes)?;\n    if let Some(permissions)",
+    "replace": "    staged.write_all(b\"wrong\")?;\n    if let Some(permissions)",
+    "expect_failing": [
+      "report_csv_publication_failure_keeps_old_bytes_and_mode"
+    ],
+    "rule": "Publication preserves complete prepared bytes."
+  },
+  {
+    "id": "publication-before-replace",
+    "file": "crates/store/src/layout.rs",
+    "find": "    before_replace()?;\n    staged.persist(&destination)",
+    "replace": "    before_replace().ok();\n    staged.persist(&destination)",
+    "expect_failing": [
+      "report_csv_publication_failure_keeps_old_bytes_and_mode"
+    ],
+    "rule": "A failed publication keeps prior bytes and cleans staging files."
+  },
+  {
+    "id": "publication-overwrite-mode",
+    "file": "crates/store/src/layout.rs",
+    "find": "        staged.as_file().set_permissions(permissions)?;",
+    "replace": "        let _ = permissions;",
+    "expect_failing": [
+      "report_csv_publication_failure_keeps_old_bytes_and_mode"
+    ],
+    "rule": "Replacing an existing report preserves its file mode."
+  },
+  {
+    "id": "publication-create-mode",
+    "file": "crates/store/src/layout.rs",
+    "find": "builder.permissions(std::fs::Permissions::from_mode(0o666));",
+    "replace": "builder.permissions(std::fs::Permissions::from_mode(0o600));",
+    "expect_failing": [
+      "report_csv_new_file_uses_python_creation_mode"
+    ],
+    "rule": "New report modes follow Python creation under the inherited umask."
+  },
+  {
+    "id": "publication-parents",
+    "file": "crates/store/src/layout.rs",
+    "find": "    std::fs::create_dir_all(parent_directory(path))?;",
+    "replace": "    // omit requested parent creation",
+    "expect_failing": [
+      "report_csv_new_file_uses_python_creation_mode"
+    ],
+    "rule": "Requested report parents are created before opening the artifact."
+  },
+  {
+    "id": "publication-symlink",
+    "file": "crates/store/src/layout.rs",
+    "find": "    let destination = report_csv_destination(path)?;",
+    "replace": "    let _ = report_csv_destination(path)?;\n    let destination = path.to_owned();",
+    "expect_failing": [
+      "report_csv_follows_symlinks_and_refuses_missing_link_parents"
+    ],
+    "rule": "Publication follows the final symlink without replacing the link."
+  },
+  {
+    "id": "publication-file-bytes",
+    "file": "crates/reports/src/artifact_publication.rs",
+    "find": "kassiber_store::layout::write_report_csv(path, &file.bytes)?;",
+    "replace": "kassiber_store::layout::write_report_csv(path, b\"wrong\")?;",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Published files retain frozen Python CSV bytes."
+  },
+  {
+    "id": "publication-size",
+    "file": "crates/reports/src/artifact_publication.rs",
+    "find": "        bytes: path.metadata()?.len(),",
+    "replace": "        bytes: 0,",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Publication returns actual file sizes."
+  },
+  {
+    "id": "publication-rows",
+    "file": "crates/reports/src/artifact_publication.rs",
+    "find": "        rows: file.rows,",
+    "replace": "        rows: 0,",
+    "expect_failing": [
+      "full_report_csv_artifact_vectors"
+    ],
+    "rule": "Publication retains report row counts."
+  },
+  {
+    "id": "publication-sheet",
+    "file": "crates/reports/src/artifact_publication.rs",
+    "find": "        sheet: file.sheet.clone(),",
+    "replace": "        sheet: String::new(),",
+    "expect_failing": [
+      "austrian_bundle_csv_artifact_vectors"
+    ],
+    "rule": "Bundle publication retains sheet identities."
+  },
+  {
+    "id": "publication-order",
+    "file": "crates/reports/src/artifact_publication.rs",
+    "find": "        .iter()\n        .map(|file| publish(file, &directory.join(&file.name)))",
+    "replace": "        .iter().rev()\n        .map(|file| publish(file, &directory.join(&file.name)))",
+    "expect_failing": [
+      "csv_bundle_failure_retains_only_complete_preceding_files"
+    ],
+    "rule": "Bundle failures leave only preceding complete artifacts."
   }
 ]

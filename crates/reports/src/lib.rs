@@ -1,5 +1,6 @@
 //! Reports over Python-produced journals. No acquisition or rebuilding.
 pub mod artifact_csv;
+pub mod artifact_publication;
 mod austrian;
 mod austrian_csv;
 mod austrian_text;

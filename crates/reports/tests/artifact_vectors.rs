@@ -25,28 +25,51 @@ fn check(command: &str) {
         let args = kassiber_pytext::loads(case["args_json"].as_str().unwrap()).unwrap();
         let result = kassiber_reports::artifact_csv::prepare(conn, command, &args, &Fixed);
         let actual = match result {
-            Ok(p) => dict([(
-                "ok",
-                dict([
-                    ("metadata", p.metadata),
-                    (
-                        "files",
-                        Value::List(
-                            p.files
-                                .into_iter()
-                                .map(|f| {
-                                    dict([
-                                        ("name", s(f.name)),
-                                        ("sheet", s(f.sheet)),
-                                        ("rows", Value::Int(f.rows.into())),
-                                        ("content", s(String::from_utf8(f.bytes).unwrap())),
-                                    ])
-                                })
-                                .collect(),
+            Ok(p) => {
+                let directory = root.path().join("artifacts");
+                let published = if command == "reports.export-csv" {
+                    vec![kassiber_reports::artifact_publication::file(
+                        &p,
+                        &directory.join("report.csv"),
+                    )
+                    .unwrap()]
+                } else {
+                    kassiber_reports::artifact_publication::bundle(&p, &directory).unwrap()
+                };
+                assert_eq!(published.len(), p.files.len());
+                for (actual, file) in published.iter().zip(&p.files) {
+                    assert_eq!(
+                        actual.path,
+                        directory.join(&file.name).canonicalize().unwrap()
+                    );
+                    assert_eq!(actual.bytes, file.bytes.len() as u64);
+                    assert_eq!(actual.rows, file.rows);
+                    assert_eq!(actual.sheet, file.sheet);
+                    assert_eq!(std::fs::read(&actual.path).unwrap(), file.bytes);
+                }
+                dict([(
+                    "ok",
+                    dict([
+                        ("metadata", p.metadata),
+                        (
+                            "files",
+                            Value::List(
+                                p.files
+                                    .into_iter()
+                                    .map(|f| {
+                                        dict([
+                                            ("name", s(f.name)),
+                                            ("sheet", s(f.sheet)),
+                                            ("rows", Value::Int(f.rows.into())),
+                                            ("content", s(String::from_utf8(f.bytes).unwrap())),
+                                        ])
+                                    })
+                                    .collect(),
+                            ),
                         ),
-                    ),
-                ]),
-            )]),
+                    ]),
+                )])
+            }
             Err(e) => dict([(
                 "error",
                 dict([
