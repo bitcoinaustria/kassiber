@@ -29,3 +29,21 @@ def finite_decimal(value, field: str) -> Decimal:
             code="validation", retryable=False,
         )
     return number if number else Decimal(0)
+
+
+def validate_transaction_price(row) -> None:
+    """Validate stored fields and both valuations without persisting inference."""
+    transaction_id = row["id"]
+    def field_value(field):
+        return row[field] if field in row.keys() else None
+    for field in ("fiat_value", "fiat_value_exact", "fiat_rate", "fiat_rate_exact"):
+        if field_value(field) not in (None, ""):
+            finite_decimal(field_value(field), f"transaction {transaction_id}: {field}")
+    rate = field_value("fiat_rate_exact") or field_value("fiat_rate")
+    value = field_value("fiat_value_exact") or field_value("fiat_value")
+    from ..msat import msat_to_btc
+    amount = abs(msat_to_btc(field_value("amount") or 0))
+    if rate not in (None, "") and amount:
+        finite_decimal(finite_decimal(rate, "fiat_rate") * amount, f"transaction {transaction_id}: derived fiat_value")
+    if value not in (None, "") and amount:
+        finite_decimal(finite_decimal(value, "fiat_value") / amount, f"transaction {transaction_id}: derived fiat_rate")

@@ -1915,6 +1915,7 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         rate = _exact(dec(fiat_value) / msat_to_btc(amount))
     if fiat_value or rate:
         payload = pricing.pricing_payload(
+            amount_msat=tx["amount"],
             rate=rate,
             value=fiat_value,
             source_kind=source_kind,

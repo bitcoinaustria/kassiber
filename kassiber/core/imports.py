@@ -1069,7 +1069,7 @@ def _transaction_merge_updates(
                 updates["fingerprint"] = fingerprint
             rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
             if rate not in (None, ""):
-                exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+                exact_value = format(finite_decimal(finite_decimal(rate, "fiat_rate") * dec(normalized["amount"]), "fiat_value"), "f")
                 updates["fiat_value"] = float(exact_value)
                 updates["fiat_value_exact"] = exact_value
             elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
@@ -1158,7 +1158,7 @@ def _transaction_merge_updates(
         # rather than retaining the compatibility projection's stale value.
         rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
         if rate not in (None, ""):
-            exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+            exact_value = format(finite_decimal(finite_decimal(rate, "fiat_rate") * dec(normalized["amount"]), "fiat_value"), "f")
             updates["fiat_value"] = float(exact_value)
             updates["fiat_value_exact"] = exact_value
         elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
@@ -1709,6 +1709,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     else:
         pricing_timestamp = None
     payload = pricing.pricing_payload(
+        amount_msat=btc_to_msat(amount),
         rate=rate,
         value=value,
         source_kind=source_kind,
