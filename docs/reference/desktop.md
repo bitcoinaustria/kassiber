@@ -213,7 +213,7 @@ close button or the backdrop returns to the page, which stays mounted
 underneath. Each category keeps its `/settings/<slug>` route so links, the
 native menu, app search and `kassiber://` intents stay typed; the shell turns
 an in-app navigation to one into the modal without adding a history entry
-(`components/kb/settings/settingsModal.ts`), and a cold load of one opens the
+(`components/kb/settings/settingsModalNavigation.ts`), and a cold load of one opens the
 modal over Overview. Hovering or focusing a Settings link only preloads it;
 the modal opens on the navigation itself. Leaving the page from inside
 Settings (Open logs, Resume setup) closes it, as does locking the app, and a

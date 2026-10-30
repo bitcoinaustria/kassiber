@@ -147,7 +147,7 @@ import { SettingsModal } from "@/components/kb/settings/SettingsModal";
 import {
   closeSettings,
   useSettingsModalNavigation,
-} from "@/components/kb/settings/settingsModal";
+} from "@/components/kb/settings/settingsModalNavigation";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
