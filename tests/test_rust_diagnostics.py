@@ -114,6 +114,9 @@ def assert_report_bytes(reference, native):
 def test_collect_report_bytes_and_export_modes(cli, save):
     args = ["diagnostics", "collect", *(["--save"] if save else [])]
     reference = cli(*args, reference=True)
+    if save:
+        payload = json.loads(reference.stdout)
+        (cli.data.parent / payload["data"]["saved"]["relative_path"]).unlink()
     native = cli(*args)
     assert reference.returncode == native.returncode == 0, (reference.stderr, native.stderr)
     py = canonical_bytes(reference.stdout)
@@ -134,9 +137,10 @@ def test_error_reports_and_envelopes_match_bytes(cli, tmp_path, target):
     destination = "auto" if target == "auto" else str(tmp_path / "custom.json")
     args = ["--diagnostics-out", destination, "rates", "range", "BTC-USD", "--start", "not-a-date"]
     reference = cli(*args, reference=True)
-    path = (cli.data.parent / "exports" / "diagnostics" / "kassiber-diagnostics--timestamp-.json"
+    path = (cli.data.parent / "exports" / "diagnostics" / "kassiber-diagnostics-2026-10-29T12-34-56Z.json"
             if target == "auto" else Path(destination))
     expected = path.read_bytes()
+    path.unlink()
     native = cli(*args)
     assert native.returncode == reference.returncode == 1
     assert native.stdout == reference.stdout
@@ -264,3 +268,21 @@ def test_global_flag_success_and_usage_error_do_not_write_error_reports(cli, tmp
             assert native.stdout == reference.stdout
         assert native.stderr == reference.stderr
         assert not destination.exists()
+
+
+def test_automatic_reports_keep_timestamp_and_collisions(cli):
+    for reference in (True, False):
+        existing = set((cli.data.parent / "exports" / "diagnostics").glob("*.json"))
+        for _ in range(3):
+            assert cli("--diagnostics-out", "auto", "rates", "range", "BTC-USD",
+                       "--start", "not-a-date", reference=reference).returncode == 1
+        directory = cli.data.parent / "exports" / "diagnostics"
+        reports = set(directory.glob("*.json")) - existing
+        assert len(reports) == 3
+        assert {path.name for path in reports} == {
+            "kassiber-diagnostics-2026-10-29T12-34-56Z.json",
+            "kassiber-diagnostics-2026-10-29T12-34-56Z-2.json",
+            "kassiber-diagnostics-2026-10-29T12-34-56Z-3.json"}
+        for path in reports:
+            assert json.loads(path.read_text())["generated_at"] == STAMP
+            path.unlink()

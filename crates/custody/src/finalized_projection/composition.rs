@@ -280,7 +280,14 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
             }
             continue;
         }
-        let payout = &payouts[string(&source["anchor_transaction_id"])];
+        let candidate = &payouts[string(&source["anchor_transaction_id"])];
+        let payout = if d["reason"] == "reviewed_direct_payout_source"
+            && d["component_id"] == candidate["component_id"]
+        {
+            candidate
+        } else {
+            &Value::Null
+        };
         let asset = text(&payout["payout_asset"]).py_upper();
         let source_asset = string(&source["asset"]);
         let carry = codec::truth(payout)

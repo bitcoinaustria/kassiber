@@ -22486,7 +22486,7 @@
   {
     "id": "projection-review-sweep-M8",
     "file": "crates/custody/src/finalized_projection/composition.rs",
-    "find": "projected.sort_by_key(|r| (string(&r[\"occurred_at\"]), string(&r[\"id\"])));",
+    "find": "projected.sort_by_cached_key(|r| (string(&r[\"occurred_at\"]), string(&r[\"id\"])));",
     "replace": "",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -22842,5 +22842,25 @@
       "fusion_request_wire_order"
     ],
     "rule": "Only Austrian country objects use the country wire shape without long_term_days."
+  },
+  {
+    "id": "R6-payout-slice",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "d[\"reason\"] == \"reviewed_direct_payout_source\"",
+    "replace": "true",
+    "expect_failing": [
+      "projection_unreviewed_payout_slice"
+    ],
+    "rule": "Authored payout terms require the reviewed slice and matching component."
+  },
+  {
+    "id": "R6-payout-component",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "&& d[\"component_id\"] == candidate[\"component_id\"]",
+    "replace": "",
+    "expect_failing": [
+      "projection_payout_component_binding"
+    ],
+    "rule": "Authored payout terms require the reviewed slice and matching component."
   }
 ]

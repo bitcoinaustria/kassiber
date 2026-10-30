@@ -253,10 +253,13 @@ pub fn save(report: &Value, target: &str, args: &Value) -> std::io::Result<Optio
     if target.is_empty() {
         return Ok(None);
     }
-    let (path, relative_path, target) = if target == "auto" {
+    let (mut path, mut relative_path, target) = if target == "auto" {
         let p = paths(args)
             .ok_or_else(|| std::io::Error::other("Unable to resolve diagnostics paths"))?;
-        let stamp = sanitize_text(text(report, "generated_at").unwrap_or(""));
+        let fallback = now().map_err(std::io::Error::other)?;
+        let stamp = text(report, "generated_at")
+            .filter(|stamp| !stamp.is_empty())
+            .unwrap_or(&fallback);
         let stamp = stamp
             .replace([':', '/'], "-")
             .chars()
@@ -295,7 +298,34 @@ pub fn save(report: &Value, target: &str, args: &Value) -> std::io::Result<Optio
     )
     .map_err(std::io::Error::other)?
         + "\n";
-    std::fs::write(&path, bytes).map_err(|e| output_io_error(e, Some(&path)))?;
+    if target == "auto" {
+        use std::io::Write;
+        let original = path.clone();
+        let stem = original.file_stem().expect("report stem").to_string_lossy();
+        let mut attempt: u64 = 1;
+        loop {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(mut file) => {
+                    file.write_all(bytes.as_bytes())
+                        .map_err(|e| output_io_error(e, Some(&path)))?;
+                    break;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    attempt += 1;
+                    let filename = format!("{stem}-{attempt}.json");
+                    path = original.with_file_name(&filename);
+                    relative_path = Some(format!("exports/diagnostics/{filename}"));
+                }
+                Err(error) => return Err(output_io_error(error, Some(&path))),
+            }
+        }
+    } else {
+        std::fs::write(&path, bytes).map_err(|e| output_io_error(e, Some(&path)))?;
+    }
     Ok(Some(Saved {
         path,
         relative_path,

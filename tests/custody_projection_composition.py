@@ -101,7 +101,7 @@ def operands():
         v['eligible']=[]
     yield case('inbound_overlap_all_targets',overlap)
     def payout(v,**extra):
-        v['decisions'][0].update(target=None,state='external_confirmed')
+        v['decisions'][0].update(target=None,state='external_confirmed',reason='reviewed_direct_payout_source')
         v['payouts']=[dict(id='paid',out_transaction_id='source',payout_amount=50,payout_asset='LBTC',payout_fiat_value='2.50',policy='carrying-value',**extra)]
     yield case('payout_carry',payout)
     yield case('payout_taxable',lambda v:(payout(v),v['payouts'][0].update(policy='taxable')))

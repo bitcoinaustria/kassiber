@@ -132,15 +132,18 @@ pub fn blockers(conn: &Connection, profile: &Value) -> Result<Vec<Value>> {
             &id,
         )?);
     }
-    let snapshot = Snapshot {
-        schema_version:1,operation:"custody".into(),as_of:"report-read".into(),profile:json_value(profile)?.as_object().cloned().unwrap(),
-        book_network:None,wallets:Vec::new(),components,anchors,anchor_wallets,revision_headers,
-        transactions: records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",&id)?,
-        // Report admission uses current canonical anchor commitments. Python
-        // requests include_local_evidence=False, so saved evidence is not read.
-        evidence_snapshots: Vec::new(),
-        rate_rows:Vec::new(),owned_index:None,ownership_warnings:Vec::new(),receipt_sources:Vec::new(),channel_records:Vec::new(),loan_legs:Vec::new(),migration_issues:Vec::new(),gap_reviews:Vec::new(),pair_dismissals:Vec::new(),gap_worklist:kassiber_custody::snapshot::GapWorklist {large_book:false,rows:Vec::new()},
-    };
+    // Start with an empty cache; transaction views are initialized by custody.
+    let mut snapshot = Snapshot::default();
+    snapshot.schema_version = 1;
+    snapshot.operation = "custody".into();
+    snapshot.as_of = "report-read".into();
+    snapshot.profile = json_value(profile)?.as_object().cloned().unwrap();
+    snapshot.components = components;
+    snapshot.anchors = anchors;
+    snapshot.anchor_wallets = anchor_wallets;
+    snapshot.revision_headers = revision_headers;
+    snapshot.transactions = records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",&id)?;
+    // Python admission uses include_local_evidence=False.
     let computed = kassiber_custody::components::compute(&snapshot)
         .map_err(|e| AppError::new("internal_error", e.message))?;
     computed["blockers"]

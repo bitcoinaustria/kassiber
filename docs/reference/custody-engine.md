@@ -3601,3 +3601,7 @@ encountered in the generated raw campaign; partial-payout cases retain the
 label **reference bug, expected to change** and require revalidation after the
 pending Python fix is restacked. No partial-payout golden was introduced.
 The retained corpus was read only; no push or PR was created.
+
+### R6 integration reference alignment
+
+Partial direct payouts apply authored terms only to the reviewed decision and matching component. Residual slices retain ordinary pricing and carrying rows occur once. Real-writer payout parity now asserts the corrected Python reference, including exact persisted decimal terms.

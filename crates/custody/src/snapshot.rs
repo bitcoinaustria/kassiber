@@ -19,14 +19,14 @@ pub struct Component {
     pub commitments: Vec<Record>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GapWorklist {
     pub large_book: bool,
     pub rows: Vec<Record>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     pub schema_version: u32,

@@ -250,3 +250,12 @@ fn projection_review_operator_sweep() {
         check_review(name);
     }
 }
+
+#[test]
+fn projection_unreviewed_payout_slice() {
+    check_review("projection_unreviewed_payout_slice");
+}
+#[test]
+fn projection_payout_component_binding() {
+    check_review("projection_payout_component_binding");
+}

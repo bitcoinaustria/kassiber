@@ -1,8 +1,4 @@
-"""Real-writer payout books. Reference bugs R1/R2/R3 are expected to change.
-
-These books are compared live, never frozen as correct accounting. Partial
-payouts exercise R1/R2; every writer value exercises float-storage bug R3.
-"""
+"""Real-writer payout books, including fixed partial slices and decimal terms."""
 from copy import deepcopy
 
 from kassiber.cli.handlers import create_direct_swap_payout, create_transaction_pair
@@ -18,17 +14,11 @@ CASES = (
     ('no_value', 'LBTC', None, 'carrying-value', 'generic', None),
     ('tiny', 'EUR', '0.00000000000000000000000000000001', 'taxable', 'generic', None),
     ('huge', 'EUR', '123456789012345678901234567890123456789', 'taxable', 'generic', None),
-    ('partial_taxable_reference_bug_expected_to_change', 'EUR', '10', 'taxable', 'generic', '0.0000004'),
-    ('partial_carry_reference_bug_expected_to_change', 'LBTC', '10', 'carrying-value', 'generic', '0.0000004'),
+    ('partial_taxable', 'EUR', '10', 'taxable', 'generic', '0.0000004'),
+    ('partial_carry', 'LBTC', '10', 'carrying-value', 'generic', '0.0000004'),
 )
 
 
-# Reference bug, expected to change. Metadata stays outside raw snapshot v1.
-REFERENCE_BUGS = {
-    name: (('R1', 'R3') if name.startswith('partial_taxable_') else
-           ('R2', 'R3') if name.startswith('partial_carry_') else ('R3',))
-    for name, _, value, _, _, _ in CASES if value is not None
-}
 
 
 def books(root):

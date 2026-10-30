@@ -100,7 +100,7 @@ def operands():
     yield case('barrier_receipt_existing_issue',lambda v:(barrier(v),issue(v,tx=('other',))))
     yield case('barrier_receipt_existing_interpreter',lambda v:(barrier(v),v['interpreter_quarantines'].append(dict(transaction_id='other',reason='specific'))))
     def payout(v):
-        v['decisions'][0].update(target=None,state='external_confirmed')
+        v['decisions'][0].update(target=None,state='external_confirmed',reason='reviewed_direct_payout_source')
         v['payouts']=[dict(id='paid',out_transaction_id='source',payout_amount=50,payout_asset='LBTC',payout_fiat_value=None,policy='carrying-value')]
     yield case('payout_price_hold',payout)
     yield case('payout_specific_hold_preserved',lambda v:(payout(v),v['interpreter_quarantines'].append(dict(transaction_id='source',reason='at_swap_price_required',detail_json='specific'))))

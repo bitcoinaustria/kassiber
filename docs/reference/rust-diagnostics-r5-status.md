@@ -115,3 +115,7 @@ with TemporaryDirectory() as directory:
 ```
 
 No Python fix is included.
+
+### R6 integration reference alignment
+
+Automatic report filenames retain `generated_at`, replace unsafe filename characters, and use exclusive creation with `-2`, `-3` suffixes on collisions. Explicit custom targets retain overwrite behavior. Python/Rust parity covers repeated automatic exports.

@@ -65,9 +65,7 @@ def test_finalized_raw_stage(suite, scenarios, generate, projection_stage_driver
 
 
 def test_real_writer_payout_books(tmp_path, projection_stage_driver):
-    from tests.custody_projection_payout_books import books, REFERENCE_BUGS
-    assert REFERENCE_BUGS['partial_taxable_reference_bug_expected_to_change'] == ('R1', 'R3')
-    assert REFERENCE_BUGS['partial_carry_reference_bug_expected_to_change'] == ('R2', 'R3')
+    from tests.custody_projection_payout_books import books
     inputs = list(books(tmp_path))
     requests = [(name, candidate) for name, book in inputs
                 for candidate in (book, permuted_snapshot(book))]
@@ -94,8 +92,16 @@ def test_real_writer_payout_books(tmp_path, projection_stage_driver):
         assert_same(reference, actual, name)
         if name in {'carry', 'at_eth', 'legacy_１２.５'}:
             assert reference['cross_asset_pairs'], name
-        if name in {'taxable', 'tiny', 'huge', 'partial_taxable_reference_bug_expected_to_change'}:
+        if name in {'taxable', 'tiny', 'huge', 'partial_taxable'}:
             assert any(r.get('pricing_method') == 'direct_payout_review' for r in reference['rows']), name
+        if name.startswith('partial_'):
+            residual = [r for r in reference['rows'] if r.get('custody_slice_start_msat') == 0
+                        and r.get('custody_slice_end_msat') == 60000]
+            assert len(residual) == 1
+            assert residual[0].get('pricing_method') != 'direct_payout_review'
+            if name == 'partial_carry':
+                assert len(reference['cross_asset_pairs']) == 1
+                assert len([r for r in reference['rows'] if r['id'].startswith('direct-payout:')]) == 2
         if name == 'no_value':
             assert any(q['reason'] == 'at_swap_price_required' for q in reference['quarantines'])
         assert 'error' in reference or reference['rows'] or reference['quarantines'], name + ' is vacuous'
