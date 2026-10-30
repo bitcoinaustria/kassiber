@@ -21,23 +21,21 @@
  */
 @theme {
   /*
-   * Light-mode custom palette, anchored to the four Bitcoin Austria
-   * Markenfarben: Rot #e3000f, Dunkel #222222, Weiß #ffffff, Hellgrau
-   * #ececec (https://bitcoin-austria.at/marke/). `paper` = Weiß, `paper-2`
-   * = Hellgrau, `ink` = Dunkel, `accent` = Rot. The brand defines a single
-   * grey, so `ink-2/3` (muted text, AA-legible) and `line/line-2` (visible
-   * dividers) are the few derived neutrals functional UI needs. `paper-2` and
-   * `line` sit a step lighter than Hellgrau: at panel size the brand grey read
-   * as a heavy block beside white, not as a surface. `.dark` overrides all of
-   * these below — this is light-mode only.
+   * Light-mode custom palette. The accent is Bitcoin Austria Rot #e3000f
+   * (https://bitcoin-austria.at/marke/); the neutrals follow the light theme
+   * below onto Tailwind's zinc scale, so a hand-made screen and a shadcn
+   * component share one set of greys: `paper` white, `paper-2` zinc-50, `ink`
+   * zinc-900, `ink-2` zinc-700, `ink-3` zinc-500 (AA on white), `line`
+   * zinc-200, `line-2` zinc-300. `.dark` overrides all of these below — this
+   * is light-mode only.
    */
   --color-paper: #ffffff;
-  --color-paper-2: #f4f4f4;
-  --color-ink: #222222;
-  --color-ink-2: #454545;
-  --color-ink-3: #6b6b6b;
-  --color-line: #e2e2e2;
-  --color-line-2: #c4c4c4;
+  --color-paper-2: #fafafa;
+  --color-ink: #18181b;
+  --color-ink-2: #3f3f46;
+  --color-ink-3: #71717a;
+  --color-line: #e4e4e7;
+  --color-line-2: #d4d4d8;
   --color-accent: #e3000f;
   --color-accent-2: #ff4954;
 
@@ -141,13 +139,13 @@
    * track, everywhere, instead of the ~15px native bar.
    */
   --app-scrollbar-width: 6px;
-  --app-scrollbar-thumb: rgb(217 217 217);
-  --app-scrollbar-thumb-hover: rgb(191 191 191);
+  --app-scrollbar-thumb: #d4d4d8;
+  --app-scrollbar-thumb-hover: #a1a1aa;
   /*
-   * A sent assistant turn, after T3 Code's redesign: one step past the muted
-   * surface, so the user's own message stands off the near-white canvas.
+   * The user's own message, T3 Code's light message surface: one step past
+   * the muted surface, so it stands off the near-white canvas.
    */
-  --message-surface: color-mix(in srgb, oklch(0.92 0.004 286) 55%, oklch(0.967 0.001 286));
+  --message-surface: #ebebed;
   /*
    * Side-nav row surfaces, ported from T3Code's sidebar hierarchy. Rows sit on
    * their own scale rather than reusing `--sidebar-accent` for both hover and
@@ -155,10 +153,10 @@
    * `--sidebar-control-surface` backs inert chrome inside the nav (the ⌘K
    * hint, count pills).
    */
-  --sidebar-muted-foreground: oklch(0.47 0 0);
-  --sidebar-control-surface: oklch(0 0 0 / 5%);
-  --sidebar-row-hover: oklch(0 0 0 / 4%);
-  --sidebar-row-active: oklch(0 0 0 / 7%);
+  --sidebar-muted-foreground: oklch(0.552 0.016 285.938);
+  --sidebar-control-surface: oklch(0.21 0.006 285.885 / 5%);
+  --sidebar-row-hover: oklch(0.21 0.006 285.885 / 4%);
+  --sidebar-row-active: oklch(0.21 0.006 285.885 / 7%);
   /*
    * Bitcoin Austria brand red, theme-aware. The `@theme inline` block at
    * the bottom remaps --color-accent to shadcn's neutral --accent, which
@@ -176,50 +174,48 @@
    */
   --kb-accent-text: #d1000e;
   /*
-   * Light theme, built on the Bitcoin Austria Markenfarben (Rot #e3000f,
-   * Dunkel #222222, Weiß #ffffff, Hellgrau #ececec). It layers the way the
-   * dark theme does: a quiet grey frame (chrome/sidebar), a near-white content
-   * panel, white cards. Edges are translucent ink hairlines rather than solid
-   * greys, so a border reads the same on the chrome, the panel and a card, the
-   * way dark mode's white-at-10% does; the solid mid-grey borders and the
-   * Hellgrau frame made light mode three competing greys. Text is brand
-   * Dunkel, dark buttons (`primary`) are Dunkel, the focus `ring` is ink
-   * (brand Rot stays the brand's accent, not a focus colour), and muted text
-   * stays dark enough for WCAG AA.
+   * Light theme, after T3 Code's default light theme. One cool zinc scale for
+   * every neutral: a near-white canvas (zinc-25) with the chrome and side nav
+   * one step down (zinc-50), white cards and menus, solid zinc-200 hairlines,
+   * zinc-300 field edges, and secondary text at zinc-500. The earlier theme
+   * framed a white panel in a darker grey and mixed flat neutral greys with
+   * near-black text, which glared. Buttons (`primary`) and the focus `ring`
+   * stay zinc-900, since brand red is the accent and red is also the
+   * invalid-field ring.
    * Dark theme is untouched in `.dark` below — this block is light-mode only.
    */
-  --background: oklch(0.987 0 0);
-  --app-chrome: oklch(0.963 0 0);
-  --foreground: oklch(0.252 0 0);
+  --background: oklch(0.992 0 0);
+  --app-chrome: oklch(0.985 0 0);
+  --foreground: oklch(0.21 0.006 285.885);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.252 0 0);
+  --card-foreground: oklch(0.21 0.006 285.885);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.252 0 0);
-  --primary: oklch(0.252 0 0);
+  --popover-foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.21 0.006 285.885);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.955 0 0);
-  --secondary-foreground: oklch(0.252 0 0);
-  --muted: oklch(0.955 0 0);
-  --muted-foreground: oklch(0.47 0 0);
-  --accent: oklch(0.955 0 0);
-  --accent-foreground: oklch(0.252 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0 0 0 / 9%);
-  --input: oklch(0 0 0 / 15%);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.871 0.006 286.286);
   /*
    * Focus is ink, not the brand red. Red is also the invalid-field ring
    * (`aria-invalid` uses `--destructive`), so a red focus ring made every
    * focused input — and every dialog opening onto one — look like an error.
    */
-  --ring: oklch(0.252 0 0 / 55%);
+  --ring: oklch(0.21 0.006 285.885 / 45%);
   --sidebar: var(--app-chrome);
-  --sidebar-foreground: oklch(0.3 0 0);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: oklch(0 0 0 / 7%);
-  --sidebar-accent-foreground: oklch(0.252 0 0);
-  --sidebar-border: oklch(0 0 0 / 8%);
+  --sidebar-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: var(--ring);
 }
 
