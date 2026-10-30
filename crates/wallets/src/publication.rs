@@ -7,6 +7,16 @@ use kassiber_store::rusqlite::{params, params_from_iter, Connection, OptionalExt
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
+pub mod insert;
+pub mod inventory;
+mod physical;
+pub mod policy;
+pub mod provenance;
+pub mod reports;
+mod row;
+#[cfg(test)]
+mod testbook;
+
 type Result<T> = std::result::Result<T, AppError>;
 
 /// Own one rollback boundary, including cancellation and Rust unwinding.

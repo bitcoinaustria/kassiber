@@ -349,6 +349,11 @@ pub fn graph_hash(raw_json: &str) -> Result<String> {
     Ok(hash(compact(&parsed, false)?.as_bytes()))
 }
 
+/// `canonical_graph_hash` for an already decoded (non-text) stored value.
+pub fn graph_hash_value(value: &PyValue) -> Result<String> {
+    Ok(hash(compact(value, false)?.as_bytes()))
+}
+
 fn field<'a>(row: &'a PyValue, name: &str) -> &'a PyValue {
     get(row, name).unwrap_or(&PyValue::Null)
 }

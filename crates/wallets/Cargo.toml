@@ -43,6 +43,7 @@ kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-custody = { path = "../custody" }
 kassiber-paths = { path = "../paths" }
 kassiber-store = { path = "../store" }
+kassiber-setup = { path = "../setup" }
 # Audited descriptor grammars, BIP32, script construction and confidential
 # address cryptography cannot be safely replaced with standard-library code.
 bitcoin = "0.32"

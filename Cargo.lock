@@ -1918,6 +1918,7 @@ dependencies = [
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-setup",
  "kassiber-store",
  "miniscript",
  "regex",
