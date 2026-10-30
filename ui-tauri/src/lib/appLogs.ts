@@ -214,28 +214,31 @@ function isMarketRateTail(full: string, offset: number): boolean {
 const AMOUNT_ID_RE =
   /(?<![A-Za-z0-9_-])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![A-Za-z0-9_-])/gi;
 
-function amountIdGuard(text: string): (offset: number, length: number) => boolean {
-  const spans = Array.from(text.matchAll(AMOUNT_ID_RE), (match) =>
-    [match.index, match.index + match[0].length] as const,
-  );
-  return (offset, length) => spans.some(([start, end]) => offset < end && offset + length > start);
+function replaceOutsideAmountIds(text: string, replace: (segment: string) => string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const identity of text.matchAll(AMOUNT_ID_RE)) {
+    parts.push(replace(text.slice(cursor, identity.index)), identity[0]);
+    cursor = identity.index + identity[0].length;
+  }
+  parts.push(replace(text.slice(cursor)));
+  return parts.join("");
 }
 
 function replaceAmounts(text: string, showScale: boolean): string {
-  const overlapsId = amountIdGuard(text);
-  return text.replace(
+  return replaceOutsideAmountIds(text, (segment) => segment.replace(
     AMOUNT_TOKEN_RE,
     (match: string, offset: number, full: string) => {
       // A market rate ("BTC/EUR 64000.12") is public data, not the user's
       // amount — its trailing "EUR 64000.12" is preceded by the pair separator,
       // so leave it readable (public_safe masks the whole rate separately).
-      if (overlapsId(offset, match.length) || isMarketRateTail(full, offset)) return match;
+      if (isMarketRateTail(full, offset)) return match;
       const numMatch = match.match(/[+-]?\d[\d.,_ ]*\d|[+-]?\d/);
       const num = numMatch ? numMatch[0] : match;
       const unit = match.replace(num, "").replace(/\s+/g, "").trim();
       return pseudoAmount(num, unit, showScale);
     },
-  );
+  ));
 }
 
 // Glued/keyed sat amounts: amount_sat=50000, fee_msat: 100000, "value_sats":12345.
@@ -246,15 +249,13 @@ const KEYED_AMOUNT_RE =
   /\b([A-Za-z][A-Za-z0-9_]*(?:msats?|sats?))\b(['"]?\s*[:=]\s*['"]?)([+-]?\d[\d.,_]*\d|[+-]?\d)/gi;
 
 function replaceKeyedAmounts(text: string, showScale: boolean): string {
-  const overlapsId = amountIdGuard(text);
-  return text.replace(
+  return replaceOutsideAmountIds(text, (segment) => segment.replace(
     KEYED_AMOUNT_RE,
-    (match: string, key: string, sep: string, num: string, offset: number) => {
-      if (overlapsId(offset, match.length)) return match;
+    (_match: string, key: string, sep: string, num: string) => {
       const unit = /msat/i.test(key) ? "msat" : "sat";
       return `${key}${sep}${pseudoAmount(num, unit, showScale)}`;
     },
-  );
+  ));
 }
 
 export function subscribeAppLogRecords(listener: () => void): () => void {

@@ -148,36 +148,33 @@ def redact_operational_text(value: str) -> str:
         key = f"{_AMOUNT_PSEUDONYM_SALT}|{re.sub(r'[,_ ]', '', num)}|{unit.lower()}"
         return f"amount#{_stable_hash(key)}"
 
-    id_spans = [match.span() for match in _AMOUNT_ID_RE.finditer(text)]
+    def _redact_segment(segment: str) -> str:
+        def _amount(match: re.Match[str]) -> str:
+            token = match.group(0)
+            if _is_market_rate_tail(segment, match.start()):
+                return token
+            num_match = _AMOUNT_NUM_RE.search(token)
+            num = num_match.group(0) if num_match else token
+            unit = re.sub(r"\s+", "", token.replace(num, "", 1))
+            return _amount_pseudonym(num, unit)
 
-    def _overlaps_id(match: re.Match[str]) -> bool:
-        return any(match.start() < end and match.end() > start for start, end in id_spans)
+        def _keyed_amount(match: re.Match[str]) -> str:
+            key, sep, num = match.group(1), match.group(2), match.group(3)
+            unit = "msat" if "msat" in key.lower() else "sat"
+            return f"{key}{sep}{_amount_pseudonym(num, unit)}"
 
-    def _keyed_amount(match: "re.Match[str]") -> str:
-        if _overlaps_id(match):
-            return match.group(0)
-        key, sep, num = match.group(1), match.group(2), match.group(3)
-        unit = "msat" if "msat" in key.lower() else "sat"
-        return f"{key}{sep}{_amount_pseudonym(num, unit)}"
+        return _KEYED_AMOUNT_RE.sub(_keyed_amount, _AMOUNT_RE.sub(_amount, segment))
 
-    # Keyed amounts first (amount_sat=50000); their numbers are then gone before
-    # the standalone-unit pass runs, so neither double-masks the other.
-    text = _KEYED_AMOUNT_RE.sub(_keyed_amount, text)
-    id_spans = [match.span() for match in _AMOUNT_ID_RE.finditer(text)]
-
-    def _amount(match: "re.Match[str]") -> str:
-        token = match.group(0)
-        start = match.start()
-        # A market-rate tail ("BTC/EUR 64000.12") is public data, not the
-        # user's amount; its number is preceded by the pair separator.
-        if _overlaps_id(match) or _is_market_rate_tail(text, start):
-            return token
-        num_match = _AMOUNT_NUM_RE.search(token)
-        num = num_match.group(0) if num_match else token
-        unit = re.sub(r"\s+", "", token.replace(num, "", 1))
-        return _amount_pseudonym(num, unit)
-
-    return _AMOUNT_RE.sub(_amount, text)
+    # Shield only the ID itself. An amount regex can start in an all-digit ID
+    # tail and swallow a neighboring amount; exempting that whole match leaks
+    # the amount. Scan the surrounding segments independently instead.
+    parts = []
+    cursor = 0
+    for identity in _AMOUNT_ID_RE.finditer(text):
+        parts.extend((_redact_segment(text[cursor:identity.start()]), identity.group(0)))
+        cursor = identity.end()
+    parts.append(_redact_segment(text[cursor:]))
+    return "".join(parts)
 
 
 def redact_operational_value(value: Any, *, depth: int = 0) -> Any:
