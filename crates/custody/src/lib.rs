@@ -27,6 +27,47 @@ pub const STAGES: [&str; 7] = [
     "fusion",
 ];
 
+/// A refused custody operation: the refusing stage, a stable code and its
+/// message. No stage result accompanies it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    pub stage: &'static str,
+    pub code: String,
+    pub message: String,
+}
+
+impl Refusal {
+    fn new(stage: &'static str, code: impl Into<String>, message: impl Into<String>) -> Self {
+        Refusal {
+            stage,
+            code: code.into(),
+            message: message.into(),
+        }
+    }
+
+    /// A refusal whose message is its code.
+    fn code(stage: &'static str, code: impl Into<String>) -> Self {
+        let code = code.into();
+        Refusal::new(stage, code.clone(), code)
+    }
+
+    /// The operation's refusal document.
+    pub fn document(&self) -> String {
+        serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":self.stage,"code":self.code,"message":self.message}}).to_string()
+    }
+}
+
+/// Every computed stage of one custody operation, in its stage model.
+pub struct Stages {
+    pub components: serde_json::Value,
+    pub evidence: serde_json::Value,
+    pub interpretation: kassiber_pyjson::Value,
+    pub gaps: serde_json::Value,
+    pub quantity: kassiber_pyjson::Value,
+    /// `None` for a decision-only operation, which skips finalization.
+    pub finalized_projection: Option<kassiber_pyjson::Value>,
+}
+
 /// Versioned JSON operation; missing stages are explicit and never fabricated.
 pub fn custody(request: &str) -> String {
     custody_with_finalized(request, true)
@@ -35,6 +76,42 @@ pub fn custody(request: &str) -> String {
 /// Decision-only callers explicitly skip finalization, including its refusals.
 /// The control is outside snapshot v1; the snapshot remains raw facts only.
 pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
+    let snapshot = match parse(request) {
+        Ok(snapshot) => snapshot,
+        Err(refusal) => return refusal.document(),
+    };
+    let stages = match run(&snapshot, finalized) {
+        Ok(stages) => stages,
+        Err(refusal) => return refusal.document(),
+    };
+    let _span = timing::span("response");
+    let large = snapshot.transactions.len() >= 256;
+    let text = response(&stages, large);
+    // Freeing a large book's values takes a noticeable share of the
+    // operation and changes no output; release them off the caller's path
+    // when a thread is available.
+    if large {
+        let values = (snapshot, stages);
+        let _ = std::thread::Builder::new().spawn(move || drop(values));
+    }
+    text
+}
+
+/// The v1 snapshot in `request`, admitted by its schema checks.
+pub fn parse(request: &str) -> Result<snapshot::Snapshot, Refusal> {
+    let _span = timing::span("parse");
+    serde_json::from_str::<snapshot::Snapshot>(request)
+        .map_err(|e| e.to_string())
+        .and_then(|snapshot| {
+            snapshot.validate()?;
+            Ok(snapshot)
+        })
+        .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))
+}
+
+/// Admission and every stage, in Python's order. The first refusal ends the
+/// operation; decision-only operations skip finalization.
+pub fn run(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stages, Refusal> {
     struct Memos;
     impl Drop for Memos {
         fn drop(&mut self) {
@@ -42,119 +119,110 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
         }
     }
     let _memos = Memos;
-    let parse = timing::span("parse");
-    let parsed = serde_json::from_str::<snapshot::Snapshot>(request)
-        .map_err(|e| e.to_string())
-        .and_then(|snapshot| {
-            snapshot.validate()?;
-            Ok(snapshot)
-        });
-    drop(parse);
-    match parsed {
-        Ok(snapshot) => {
-            let admission = timing::span("admission");
-            let gate = timing::span("admission.accounting");
-            if let Err((code, message)) = gates::require_accounting(&snapshot) {
-                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
-            }
-            drop(gate);
-            let gate = timing::span("admission.confirmation");
-            // Python captures confirmation provenance before rates and channel
-            // admission, retaining the original rows rather than enriched rows.
-            let projection_rows = match finalized_projection::runtime::confirmation_rows(&snapshot) {
-                Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string(),
-            };
-            drop(gate);
-            let gate = timing::span("admission.rates_channels");
-            if let Err((code, message)) = gates::require_rates(&snapshot) {
-                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
-            }
-            if let Err(code) = interpretation::admit_channels(&snapshot) {
-                return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string();
-            }
-            drop(gate);
-            drop(admission);
-            let span = timing::span("components+migration");
-            let components = match components::compute(&snapshot) {
-                Ok(value) => value,
-                Err(error) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":error.code,"message":error.message}}).to_string(),
-            };
-            let migration = match interpretation::migration_quarantines(&snapshot) {
-                Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string(),
-            };
-            drop(span);
-            let span = timing::span("evidence");
-            let evidence = match evidence::compute(&snapshot) {
-                Ok(value) => value,
-                Err(message) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"evidence","code":"custody_evidence_invalid","message":message}}).to_string(),
-            };
-            drop(span);
-            let span = timing::span("interpretation");
-            let interpretation = match interpretation::stage(&snapshot, &components, &evidence, migration) {
-                Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"interpretation","code":code,"message":code}}).to_string(),
-            };
-            drop(span);
-            let span = timing::span("gaps");
-            let gaps = match gaps::stage(&snapshot, &components, &evidence, &interpretation) {
-                Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"gaps","code":code,"message":code}}).to_string(),
-            };
-            drop(span);
-            let span = timing::span("quantity");
-            let quantity = match quantity::runtime::stage(&snapshot, &components, &evidence, &interpretation, &gaps) {
-                Ok(value) => value,
-                Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"quantity","code":code,"message":code}}).to_string(),
-            };
-            drop(span);
-            let span = timing::span("finalized_projection");
-            let projection = if finalized {
-                match finalized_projection::runtime::stage_with_rows(&snapshot, projection_rows, &quantity, &interpretation) {
-                    Ok(value) => Some(value),
-                    Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"finalized_projection","code":code,"message":code}}).to_string(),
-                }
-            } else { None };
-            drop(span);
-            let _span = timing::span("response");
-            if let Some(text) = response_text(
-                snapshot.transactions.len() >= 256,
-                &components,
-                &evidence,
-                &gaps,
-                &interpretation,
+    let admission = timing::span("admission");
+    let gate = timing::span("admission.accounting");
+    gates::require_accounting(snapshot)
+        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    drop(gate);
+    let gate = timing::span("admission.confirmation");
+    // Python captures confirmation provenance before rates and channel
+    // admission, retaining the original rows rather than enriched rows.
+    let projection_rows = finalized_projection::runtime::confirmation_rows(snapshot)
+        .map_err(|code| Refusal::code("components", code))?;
+    drop(gate);
+    let gate = timing::span("admission.rates_channels");
+    gates::require_rates(snapshot)
+        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    interpretation::admit_channels(snapshot).map_err(|code| Refusal::code("components", code))?;
+    drop(gate);
+    drop(admission);
+    let span = timing::span("components+migration");
+    let components = components::compute(snapshot)
+        .map_err(|error| Refusal::new("components", error.code, error.message))?;
+    let migration = interpretation::migration_quarantines(snapshot)
+        .map_err(|code| Refusal::code("components", code))?;
+    drop(span);
+    let span = timing::span("evidence");
+    let evidence = evidence::compute(snapshot)
+        .map_err(|message| Refusal::new("evidence", "custody_evidence_invalid", message))?;
+    drop(span);
+    let span = timing::span("interpretation");
+    let interpretation = interpretation::stage(snapshot, &components, &evidence, migration)
+        .map_err(|code| Refusal::code("interpretation", code))?;
+    drop(span);
+    let span = timing::span("gaps");
+    let gaps = gaps::stage(snapshot, &components, &evidence, &interpretation)
+        .map_err(|code| Refusal::code("gaps", code))?;
+    drop(span);
+    let span = timing::span("quantity");
+    let quantity =
+        quantity::runtime::stage(snapshot, &components, &evidence, &interpretation, &gaps)
+            .map_err(|code| Refusal::code("quantity", code))?;
+    drop(span);
+    let span = timing::span("finalized_projection");
+    let finalized_projection = if finalized {
+        Some(
+            finalized_projection::runtime::stage_with_rows(
+                snapshot,
+                projection_rows,
                 &quantity,
-                projection.as_ref(),
-            ) {
-                // Freeing a large book's values takes a noticeable share of the
-                // operation and changes no output; release them off the
-                // caller's path when a thread is available.
-                if snapshot.transactions.len() >= 256 {
-                    let values = (snapshot, components, evidence, interpretation, gaps, quantity, projection);
-                    let _ = std::thread::Builder::new().spawn(move || drop(values));
-                }
-                return text;
-            }
-            let response = serde_json::json!({
-                "schema_version":1,
-                "engine_version":ENGINE_VERSION,
-                "stages":{"components":components,"evidence":evidence,"gaps":gaps},
-                "skipped_stages":if finalized { vec!["fusion"] } else { vec!["finalized_projection", "fusion"] }
-            });
-            let mut response = codec::from_json(&response).expect("computed custody response");
-            let mut stages = graph::stored::get(&response, "stages").clone();
-            graph::stored::put(&mut stages, "interpretation", interpretation);
-            graph::stored::put(&mut stages, "quantity", quantity);
-            if let Some(projection) = projection {
-                graph::stored::put(&mut stages, "finalized_projection", projection);
-            }
-            graph::stored::put(&mut response, "stages", stages);
-            kassiber_pyjson::dumps(&response, &kassiber_pyjson::Options::new())
-                .expect("computed JSON values")
-        },
-        Err(message) => serde_json::json!({"schema_version": 1, "engine_version": ENGINE_VERSION, "error": {"stage":"snapshot","code": "custody_snapshot_invalid", "message": message}}).to_string(),
+                &interpretation,
+            )
+            .map_err(|code| Refusal::code("finalized_projection", code))?,
+        )
+    } else {
+        None
+    };
+    drop(span);
+    Ok(Stages {
+        components,
+        evidence,
+        interpretation,
+        gaps,
+        quantity,
+        finalized_projection,
+    })
+}
+
+/// The successful response document. `concurrent` encodes the stages on
+/// separate threads, which large books use.
+pub fn response(stages: &Stages, concurrent: bool) -> String {
+    let projection = stages.finalized_projection.as_ref();
+    if let Some(text) = response_text(
+        concurrent,
+        &stages.components,
+        &stages.evidence,
+        &stages.gaps,
+        &stages.interpretation,
+        &stages.quantity,
+        projection,
+    ) {
+        return text;
     }
+    let response = serde_json::json!({
+        "schema_version":1,
+        "engine_version":ENGINE_VERSION,
+        "stages":{"components":stages.components,"evidence":stages.evidence,"gaps":stages.gaps},
+        "skipped_stages":if projection.is_some() { vec!["fusion"] } else { vec!["finalized_projection", "fusion"] }
+    });
+    let mut response = codec::from_json(&response).expect("computed custody response");
+    let mut stages_value = graph::stored::get(&response, "stages").clone();
+    graph::stored::put(
+        &mut stages_value,
+        "interpretation",
+        stages.interpretation.clone(),
+    );
+    graph::stored::put(&mut stages_value, "quantity", stages.quantity.clone());
+    if let Some(projection) = projection {
+        graph::stored::put(
+            &mut stages_value,
+            "finalized_projection",
+            projection.clone(),
+        );
+    }
+    graph::stored::put(&mut response, "stages", stages_value);
+    kassiber_pyjson::dumps(&response, &kassiber_pyjson::Options::new())
+        .expect("computed JSON values")
 }
 
 /// The successful response exactly as `kassiber_pyjson::dumps` writes the

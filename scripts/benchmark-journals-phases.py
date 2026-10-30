@@ -193,16 +193,24 @@ def child(args) -> None:
     start = time.perf_counter()
     text = json.dumps(snapshot, ensure_ascii=True, allow_nan=True)
     dumps_time = time.perf_counter() - start
-    rust = []
-    for _ in range(args.rust_runs):
+    rust_binding = None
+    if args.rust_runs > 0:
+        rust = []
+        for _ in range(args.rust_runs):
+            start = time.perf_counter()
+            response = kassiber_tax.custody(text)
+            rust.append(time.perf_counter() - start)
         start = time.perf_counter()
-        response = kassiber_tax.custody(text)
-        rust.append(time.perf_counter() - start)
-    start = time.perf_counter()
-    decoded = json.loads(response)
-    loads_time = time.perf_counter() - start
-    if "error" in decoded:
-        raise SystemExit(f"rust custody refused: {decoded['error']}")
+        decoded = json.loads(response)
+        loads_time = time.perf_counter() - start
+        if "error" in decoded:
+            raise SystemExit(f"rust custody refused: {decoded['error']}")
+        rust_binding = {
+            "snapshot_dumps_seconds": dumps_time,
+            "custody_seconds_best": min(rust),
+            "response_bytes": len(response),
+            "response_loads_seconds": loads_time,
+        }
     if args.snapshot_out:
         Path(args.snapshot_out).write_text(text)
     report = {
@@ -212,12 +220,7 @@ def child(args) -> None:
         "phases": [[list(path), seconds, count] for path, (seconds, count) in timer.records.items()],
         "result": {key: envelope["data"].get(key) for key in ("entries_created", "quarantined", "processed_transactions", "cross_asset_pairs", "transfers_detected", "rebuilt")},
         "snapshot_bytes": len(text),
-        "rust_binding": {
-            "snapshot_dumps_seconds": dumps_time,
-            "custody_seconds_best": min(rust),
-            "response_bytes": len(response),
-            "response_loads_seconds": loads_time,
-        },
+        "rust_binding": rust_binding,
     }
     Path(args.report).write_text(json.dumps(report))
 
@@ -265,6 +268,9 @@ def render(runs: list[dict], boot: float) -> str:
 
     visit((), 1)
     rust = best["rust_binding"]
+    if rust is None:
+        lines.append(f"snapshot {best['snapshot_bytes'] / 1e6:.1f} MB")
+        return "\n".join(lines)
     lines += [
         f"snapshot {best['snapshot_bytes'] / 1e6:.1f} MB; Rust custody response {rust['response_bytes'] / 1e6:.1f} MB",
         f"  Python json.dumps(snapshot): {rust['snapshot_dumps_seconds']:.3f} s",
@@ -310,14 +316,14 @@ def parent(args) -> None:
     print(f"book: {book}\nload average: {os.getloadavg()}\n{text}", flush=True)
     if args.out:
         with open(args.out, "a") as handle:
-            handle.write(json.dumps({"book": str(book), "load": os.getloadavg(), "runs": runs}) + "\n")
+            handle.write(json.dumps({"book": str(book), "load": os.getloadavg(), "boot_seconds": boot, "runs": runs}) + "\n")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--book")
     parser.add_argument("--runs", type=int, default=3)
-    parser.add_argument("--rust-runs", type=int, default=3)
+    parser.add_argument("--rust-runs", type=int, default=3, help="binding runs on the snapshot; 0 skips them")
     parser.add_argument("--scratch", default=str(REPO_ROOT / "target" / "r4-bench"))
     parser.add_argument("--out")
     parser.add_argument("--snapshot-out")

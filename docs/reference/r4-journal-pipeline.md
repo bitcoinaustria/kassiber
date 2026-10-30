@@ -1,6 +1,7 @@
 # R4 journal pipeline design
 
-**Status:** R4-0 integrated, 2026-10-30; R4-1 onward remains design. The
+**Status:** R4-0 integrated, 2026-10-30; the R4-1 bench harness is committed
+and records the baseline; R4-2 onward remains design. The
 [R6 integration audit](rust-backend-r6-integration.md) records the linear restack
 and its verification. This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
@@ -52,8 +53,10 @@ Two measurements shape the whole design:
 
 The generic books were created with this branch's Python CLI from the
 `bench.py` generator's CSVs. The multi-wallet and barrier books are the
-performance checkpoint's bench books. Both generators live in the local
-verification tooling, not in the repository:
+performance checkpoint's bench books. Those generators lived in the local
+verification tooling; R4-1 commits the generic and multi-wallet ones as
+[`scripts/journals-bench-books.py`](../../scripts/journals-bench-books.py),
+which writes byte-identical CSVs:
 
 | Book | Shape |
 | --- | --- |
@@ -392,6 +395,72 @@ above. The other lines are targets.
   Results are appended as JSON lines next to the checkpoint evidence.
 - The bench books are synthetic, generated from committed seeds. Owner-book
   timings stay local, as owner-book comparisons do today.
+
+## Bench harness (R4-1)
+
+Four tools time a step, and the step record keeps what they report.
+
+- **Bench books.** [`scripts/journals-bench-books.py`](../../scripts/journals-bench-books.py)
+  builds a book with this checkout's CLI from a committed seed: `generic`
+  (seed 1) or `multi-wallet` (seed 7), at any size. Its CSVs are
+  byte-identical to the books the design measured. The multi-wallet book pairs
+  half of its pegs, at most 300, with `transfers pair`, which authors custody
+  components; at 20,000 transactions that takes about 15 minutes. The book
+  ends processed, and `bench-book.json` records its shape, seed and CSV
+  digests.
+- **Python profile.** [`scripts/benchmark-journals-phases.py`](../../scripts/benchmark-journals-phases.py)
+  times Python's phases on a fresh copy of the book and writes the raw
+  snapshot. `--rust-runs 0` skips its binding comparison.
+- **Rust bench.** `crates/journals` holds `kassiber_journals::compute`:
+  custody, fusion and the tax engine in one process, which no command calls
+  yet. Until fusion is typed (R4-8) it reads the finalized projection, the
+  profile and the wallets in the JSON model the comparison harness reads, and
+  a test proves both build the same ledger request and response. The
+  `journals-bench` example (`cargo build --release -p kassiber-journals
+  --features timing --example journals-bench`) times `compute` on a snapshot,
+  with custody's spans and its own (`fusion.input`, `fusion.request`,
+  `fusion.text`, `engine`). `--oracle` also writes and hashes the custody
+  response text, which only the parity harness needs. `--check` compares the
+  pipeline's fusion with `custody_with_fusion` over request files. Release
+  builds never enable `timing`.
+- **Recorder.** [`scripts/journals-bench-record.py`](../../scripts/journals-bench-record.py)
+  runs Python and Rust back to back on one book and appends a record.
+  `--rust-before` adds the previous step's bench to every pair, so a step's
+  before and after come from the same minutes; every Rust run must report
+  the same ledger hashes. It waits while the 1-minute load average is above
+  `--max-load`. After `--wait-minutes` it measures anyway with at least five
+  pairs and marks the record `loaded`.
+
+### Bench records
+
+A record is one JSON line with schema `kassiber.journals-bench.v1`:
+
+| Field | Contents |
+| --- | --- |
+| `step`, `note`, `commit`, `dirty`, `recorded_at` | What was measured, from which checkout, and when |
+| `machine` | CPU count, platform and Python version |
+| `book` | Name, kind, transactions, seed, CSV digests and paired pegs from `bench-book.json` |
+| `policy`, `max_load`, `loads` | `quiet` or `loaded`, the load cap and the load average before each pair |
+| `python` | End-to-end time per pair and for the best pair, its command time, imports, result counts, snapshot size, and every phase of the best pair keyed by path |
+| `rust`, `rust_before` | Compute time per pair and for the best pair, every span of the best pair, the fusion outcome and the SHA-256 of the ledger request and response |
+| `lines` | The comparable lines below, for Python, Rust and the previous step |
+
+The lines map the profile onto the pipeline. Python's paths are under
+`dispatch/process_journals`; lines Rust does not run yet show no Rust time.
+
+| Line | Python phases | Rust spans |
+| --- | --- | --- |
+| Snapshot in | `build/snapshot_load` (SQL) | `parse` (the JSON adapter until R4-9) |
+| Custody | `build/custody_compute` | `admission`, `boundary`, the six stages |
+| Fusion request | `request_build`, `request_dumps` | `fusion.input`, `fusion.request`, `fusion.text` |
+| Tax engine | `engine_rust` | `engine` |
+| Render and joins | `response_loads`, `response_render`, `balance_join`, `ownership_join` | — |
+| Persistence | `store` | — |
+| JSON parse and admission | — | `parse`, `admission` (the R4-2 target) |
+
+Records of the synthetic books are committed in
+[`r4-bench-records.jsonl`](r4-bench-records.jsonl); evidence of each run
+stays with the step's local verification.
 
 ## Authority switch (R4-16)
 

@@ -1683,6 +1683,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-journals"
+version = "0.1.0"
+dependencies = [
+ "kassiber-custody",
+ "kassiber-pyjson",
+ "kassiber-tax-core",
+ "serde_json",
+]
+
+[[package]]
 name = "kassiber-net"
 version = "0.1.0"
 dependencies = [

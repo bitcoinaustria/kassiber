@@ -16,6 +16,7 @@ members = [
   "crates/envelope",
   "crates/kassiber",
   "crates/imports",
+  "crates/journals",
   "crates/net",
   "crates/rates",
   "crates/paths",

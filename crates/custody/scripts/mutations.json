@@ -1653,8 +1653,8 @@
   {
     "id": "rates-before-components",
     "file": "crates/custody/src/lib.rs",
-    "find": "gates::require_rates(&snapshot)",
-    "replace": "gates::require_accounting(&snapshot)",
+    "find": "gates::require_rates(snapshot)",
+    "replace": "gates::require_accounting(snapshot)",
     "expect_failing": [
       "components_refusal_rate_exact"
     ],
@@ -11546,8 +11546,8 @@
   {
     "id": "REC-OPERATION-03",
     "file": "crates/custody/src/lib.rs",
-    "find": "if let Err(code) = interpretation::admit_channels(&snapshot)",
-    "replace": "if let Err(code) = Ok::<(), String>(())",
+    "find": "interpretation::admit_channels(snapshot).map_err(",
+    "replace": "Ok::<(), String>(()).map_err(",
     "rule": "Admit channel facts before authored component facts.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -11556,8 +11556,8 @@
   {
     "id": "REC-OPERATION-04",
     "file": "crates/custody/src/lib.rs",
-    "find": "            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":code,\"message\":code}}).to_string(),\n            };\n",
-    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":code,\"message\":code}}).to_string(),\n            };\n            let components = match components::compute(&snapshot) {\n                Ok(value) => value,\n                Err(error) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":error.code,\"message\":error.message}}).to_string(),\n            };\n",
+    "find": "    let components = components::compute(snapshot)\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;\n    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n",
+    "replace": "    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n    let components = components::compute(snapshot)\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;\n",
     "rule": "Materialize components before migration quarantine admission.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -11566,8 +11566,8 @@
   {
     "id": "REC-OPERATION-05",
     "file": "crates/custody/src/lib.rs",
-    "find": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":code,\"message\":code}}).to_string(),\n            };\n",
-    "replace": "            let migration = match interpretation::migration_quarantines(&snapshot) {\n                Ok(value) => value,\n                Err(code) => return serde_json::json!({\"schema_version\":1,\"engine_version\":ENGINE_VERSION,\"error\":{\"stage\":\"components\",\"code\":\"incorrect_migration_error\",\"message\":code}}).to_string(),\n            };\n",
+    "find": "    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::code(\"components\", code))?;\n",
+    "replace": "    let migration = interpretation::migration_quarantines(snapshot)\n        .map_err(|code| Refusal::new(\"components\", \"incorrect_migration_error\", code))?;\n",
     "rule": "Preserve migration admission error families at the operation boundary.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -22366,8 +22366,8 @@
   {
     "id": "projection8-capture-before-rates",
     "file": "crates/custody/src/lib.rs",
-    "find": "let projection_rows = match finalized_projection::runtime::confirmation_rows(&snapshot) {",
-    "replace": "let projection_rows = match (|| { gates::require_rates(&snapshot).map_err(|(code, _)| code.to_owned())?; finalized_projection::runtime::confirmation_rows(&snapshot) })() {",
+    "find": "let projection_rows = finalized_projection::runtime::confirmation_rows(snapshot)",
+    "replace": "let projection_rows = (|| { gates::require_rates(snapshot).map_err(|(code, _)| code.to_owned())?; finalized_projection::runtime::confirmation_rows(snapshot) })()",
     "expect_failing": [
       "projection_capture_precedes_rates"
     ],
