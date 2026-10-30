@@ -49,9 +49,14 @@ export function Assistant() {
     setIncognito,
     sessionId,
     attachment,
+    attachmentState,
     attachFile,
+    attachFiles,
+    attachDroppedFile,
     clearAttachment,
   } = useAssistantSession();
+  // A file can be dropped anywhere on the page, not only on the composer.
+  const pageRef = React.useRef<HTMLDivElement>(null);
   const assistantDraft = useAssistantDraftStore((s) => s.draft);
   const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
   const replaceAssistantDraft = useAssistantDraftStore((s) => s.replaceDraft);
@@ -122,8 +127,12 @@ export function Assistant() {
       toolProfile={toolProfile}
       onToolProfileChange={setToolProfile}
       onAttach={attachFile}
-      attachedFilename={attachment?.filename ?? null}
+      attachment={attachment}
+      attachmentState={attachmentState}
       onClearAttachment={clearAttachment}
+      onAttachFiles={attachFiles}
+      onNativeFileDrop={attachDroppedFile}
+      dropTargetRef={pageRef}
       historyMessages={messages}
       {...(hasMessages ? { prompts: [] } : {})}
     />
@@ -131,6 +140,7 @@ export function Assistant() {
 
   return (
     <div
+      ref={pageRef}
       data-assistant-surface="page"
       className={cn(
         "flex w-full flex-col bg-background",

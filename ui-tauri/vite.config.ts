@@ -343,6 +343,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.chat.cancel",
   "ai.tool_call.consent",
   "ai.chat.permission_mode",
+  "ui.chat.attachments.upload",
   "ui.chat.sessions.list",
   "ui.chat.sessions.get",
   "ui.chat.sessions.delete",
@@ -990,7 +991,7 @@ async function handleBridgeFilePicker(
         kind: stageKind,
         args: {
           source_file: paths[0],
-          ...(analysisPurpose ? {purpose: analysisPurpose} : {}),
+          ...(analysisPurpose ? {purpose: analysisPurpose} : forChat ? { purpose: "chat_attachment" } : {}),
           ...(request.expected_scope === undefined ? {} : { expected_scope: request.expected_scope }),
           ...(request.review_case_id === undefined ? {} : { review_case_id: request.review_case_id }),
           ...(request.review_recipe === undefined ? {} : { review_recipe: request.review_recipe }),

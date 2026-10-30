@@ -525,6 +525,22 @@ entry point. The desktop first uses the privileged native picker to invoke
 but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
 the canonical source path in a bounded, expiring, process-local daemon session
 and returns only an opaque `document_token` plus safe filename/type metadata.
+`source.kind` is `spreadsheet`, `delimited`, `pdf` or `image`. The chat's picker
+and a file dropped on the window pass `purpose: "chat_attachment"`, which
+accepts exports as well as images and PDFs; without it only images and PDFs
+are staged. A file dropped on the window is staged by the shell's
+`stage_dropped_chat_attachment` command, which takes no path: it uses the
+paths the native window reported for the drop, once and within ten seconds.
+
+`ui.chat.attachments.upload` stages a pasted file without a path. The first
+chunk names the file (`filename`, `total_bytes`) at `offset` 0; later chunks
+send the returned `upload_id` and the next `offset`. Each `chunk_base64` holds
+at most 512 KiB, and the whole file at most 25 MB of a chat file type.
+Partial replies are `{complete: false, upload_id, received_bytes}`; the last
+one returns `{complete: true, document_token, source}` like the picker. The
+bytes go to an owner-only temporary file the daemon deletes with the grant.
+Out-of-order, oversized or abandoned uploads are refused and removed. It is an
+AI runtime kind, so the AI switch refuses it.
 
 `ui.wallets.document_import.preview` accepts that `document_token`, optional
 `provider`, optional `model`, `confidence_threshold`, `max_pages`, and an

@@ -388,6 +388,15 @@ until that process stops. `kassiber status` reports the effective root.
   protects the project directory with OS or volume encryption.
 - `<state-root>/projects/<project>/exports/` — generated reports and handoff
   artifacts. These are plaintext user outputs and are outside SQLCipher.
+- A file pasted into the chat has no path of its own, so the daemon writes it
+  to an owner-only file in a private `kassiber-chat-uploads-*` directory under
+  the OS temporary directory. It is deleted when the daemon drops its staging
+  grant: after 30 minutes unused, when more than eight files are staged, when
+  another project or profile opens, on a restore or lock, and when the daemon
+  exits. Removing the card or starting a new chat stops the chat using it at
+  once; the file itself goes by those rules. An unfinished upload is deleted
+  after five idle minutes. A picked or dropped file is read where it is and
+  never copied there. Attaching either fetches and sends nothing.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.

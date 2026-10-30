@@ -55,6 +55,7 @@ import {
   type AiToolConsentRequest,
 } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
+import { ChatAttachmentCard } from "@/components/ai/ChatAttachmentCard";
 
 interface ChatMessageProps {
   message: AiChatMessage;
@@ -384,6 +385,7 @@ function UserMessage({
       className="group/user flex w-full flex-col items-end gap-1"
       data-message-id={message.id}
     >
+      {message.attachment ? <ChatAttachmentCard attachment={message.attachment} /> : null}
       <div className="max-w-[82%] rounded-2xl bg-message p-3 text-sm text-foreground sm:max-w-[80%]">
         <p
           className={cn(

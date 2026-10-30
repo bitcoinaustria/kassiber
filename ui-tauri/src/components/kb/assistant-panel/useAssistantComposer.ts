@@ -62,8 +62,11 @@ export function useAssistantComposer(): ComposerProps {
     onToolProfileChange: session.setToolProfile,
     modelPickerEnabled: true,
     onAttach: session.attachFile,
-    attachedFilename: session.attachment?.filename ?? null,
+    attachment: session.attachment,
+    attachmentState: session.attachmentState,
     onClearAttachment: session.clearAttachment,
+    onAttachFiles: session.attachFiles,
+    onNativeFileDrop: session.attachDroppedFile,
     historyMessages: session.messages,
   };
 }

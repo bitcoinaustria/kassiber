@@ -1694,6 +1694,20 @@ prices, exclusions, unpairs and component creation. Conversion components
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
 
+A file reaches the chat three ways, all of them one file per chat: the **+**
+button opens the native picker; a file dropped on the desktop window over the
+assistant is staged by the shell, which records the paths of that drop and
+stages the first one only when the window asks right after it (the webview
+never names a path); and a pasted file (or, in the browser preview, a dropped
+one) goes to the daemon as bytes in chunks of at most 512 KiB through
+`ui.chat.attachments.upload`, up to 25 MB. All three return the same opaque
+token and are staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
+JPEG, WebP and GIF. The composer shows the file as a card with its type and
+size, and a pasted image as a small thumbnail the renderer draws from the bytes
+it already holds. The message that first carries the file shows the same card;
+the file stays with the chat for later turns until it is removed. Sending waits
+while a pasted file is still on its way.
+
 A chat attachment can be imported, not only analyzed.
 `ui_wallets_import_attachment_plan` runs the desktop's generic-ledger import of
 the staged file inside a rolled-back savepoint and returns its exact effect

@@ -52,6 +52,23 @@
     "queueMessage": "Queue message",
     "attach": "Attach a file",
     "removeAttachment": "Remove attachment",
+    "removeAttachmentNamed": "Remove {{filename}}",
+    "dropToAttach": "Drop to attach",
+    "attachmentUploading": "Attaching…",
+    "attachmentInChat": "Stays with this chat",
+    "attachmentOnlyFirst": {
+      "title": "One file per chat",
+      "body": "{{filename}} is attached. The assistant works with one file per chat for now."
+    },
+    "attachmentUnsupported": {
+      "title": "This file can't be attached",
+      "body": "Attach a CSV, TSV, XLSX, PDF or image file."
+    },
+    "attachmentTooLarge": {
+      "title": "{{filename}} is too large to paste",
+      "body": "Pasted files can be up to 25 MB. Attach larger ones with the + button."
+    },
+    "attachmentFailed": "The file couldn't be attached",
     "modelContext": "Model context",
     "thinking": "Thinking",
     "reasoningEffort": "Reasoning effort",

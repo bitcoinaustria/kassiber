@@ -52,6 +52,23 @@
     "queueMessage": "Nachricht in Warteschlange stellen",
     "attach": "Datei anhängen",
     "removeAttachment": "Anhang entfernen",
+    "removeAttachmentNamed": "{{filename}} entfernen",
+    "dropToAttach": "Zum Anhängen loslassen",
+    "attachmentUploading": "Wird angehängt…",
+    "attachmentInChat": "Bleibt in diesem Chat",
+    "attachmentOnlyFirst": {
+      "title": "Eine Datei pro Chat",
+      "body": "{{filename}} ist angehängt. Der Assistent arbeitet vorerst mit einer Datei pro Chat."
+    },
+    "attachmentUnsupported": {
+      "title": "Diese Datei kann nicht angehängt werden",
+      "body": "Hänge eine CSV-, TSV-, XLSX-, PDF- oder Bilddatei an."
+    },
+    "attachmentTooLarge": {
+      "title": "{{filename}} ist zu groß zum Einfügen",
+      "body": "Eingefügte Dateien dürfen bis zu 25 MB groß sein. Größere hängst du über die +-Schaltfläche an."
+    },
+    "attachmentFailed": "Die Datei konnte nicht angehängt werden",
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
     "reasoningEffort": "Denkaufwand",

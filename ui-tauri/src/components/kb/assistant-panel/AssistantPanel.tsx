@@ -137,7 +137,8 @@ export function AssistantPanelBody({ inFront }: { inFront: boolean }) {
           </div>
         ) : null}
         <AssistantFocusChip />
-        <Ai02 {...composer} className="max-w-none" prompts={[]} />
+        {/* A file can be dropped anywhere on the tab, not only on the composer. */}
+        <Ai02 {...composer} className="max-w-none" prompts={[]} dropTargetRef={bodyRef} />
       </div>
     </div>
   );
