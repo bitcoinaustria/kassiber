@@ -939,6 +939,49 @@ def _migrate_stored_error_credentials(conn) -> int:
     return 1
 
 
+PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
+
+
+def _migrate_partial_payout_semantics(conn) -> int:
+    """Invalidate only profiles with active partial source payout reviews."""
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (PARTIAL_PAYOUT_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    from .core.custody_authored_migration import list_payout_review_records
+    from .core.custody_evidence import row_principal_msat
+
+    affected = []
+    for profile in conn.execute("SELECT id FROM profiles").fetchall():
+        for payout in list_payout_review_records(conn, profile_id=profile["id"]):
+            source = conn.execute(
+                "SELECT * FROM transactions WHERE id = ?",
+                (payout["out_transaction_id"],),
+            ).fetchone()
+            if 0 < int(payout["reviewed_out_amount_msat"]) < row_principal_msat(source):
+                affected.append(profile["id"])
+                break
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (PARTIAL_PAYOUT_SEMANTICS_MIGRATION, PARTIAL_PAYOUT_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": PARTIAL_PAYOUT_SEMANTICS_MIGRATION,
+                     "affected_profile_count": len(affected)}, sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.executemany(
+        """UPDATE profiles SET last_processed_at = NULL,
+               last_processed_tx_count = 0,
+               journal_input_version = journal_input_version + 1,
+               ownership_review_counts_json = NULL WHERE id = ?""",
+        [(profile_id,) for profile_id in affected],
+    )
+    return 1
+
+
 SCHEMA = """
 PRAGMA foreign_keys = ON;
 
@@ -5708,6 +5751,8 @@ def ensure_schema_compat(conn):
 
     migration = refresh_legacy_authored_components(conn)
     if migration.changed:
+        conn.commit()
+    if _migrate_partial_payout_semantics(conn):
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)

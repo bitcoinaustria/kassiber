@@ -1,0 +1,93 @@
+"""Partial-payout semantic upgrade and exact historical journal regression."""
+import json
+import subprocess
+import sys
+from decimal import Decimal
+
+import pytest
+
+from kassiber.cli.handlers import create_direct_swap_payout, process_journals
+from kassiber.core.custody_review_terms import delete_payout_review
+from kassiber.db import open_db, PARTIAL_PAYOUT_SEMANTICS_MIGRATION
+from tests.test_custody_authored_migration import _scope, _tx, NOW
+
+
+@pytest.fixture
+def book(tmp_path):
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, 'out', 'btc', 'outbound', 'BTC', 100000, NOW)
+    conn.commit()
+    yield conn
+    conn.close()
+
+
+@pytest.mark.parametrize('partial,deleted', [(True, False), (False, False), (True, True)])
+def test_partial_payout_migration_is_targeted_once(book, tmp_path, partial, deleted):
+    payout = create_direct_swap_payout(book, 'Books', 'Book', 'out', payout_asset='EUR', payout_amount='1',
+                                     payout_fiat_value='10', out_amount='0.0000004' if partial else None)
+    if deleted:
+        delete_payout_review(book, 'profile', payout['id'])
+    book.execute("INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at, last_processed_at) VALUES('unrelated', 'ws', 'Other', 'EUR', ?, ?)", (NOW, NOW))
+    book.execute("UPDATE profiles SET last_processed_at=? WHERE id='profile'", (NOW,))
+    book.execute('DELETE FROM schema_migration_audits WHERE migration_name=?', (PARTIAL_PAYOUT_SEMANTICS_MIGRATION,))
+    version = book.execute("SELECT journal_input_version FROM profiles WHERE id='profile'").fetchone()[0]
+    book.commit()
+    conn = open_db(tmp_path)
+    try:
+        affected = partial and not deleted
+        assert conn.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0] == (None if affected else NOW)
+        assert conn.execute("SELECT last_processed_at FROM profiles WHERE id='unrelated'").fetchone()[0] == NOW
+        expected = version + int(affected)
+        assert conn.execute("SELECT journal_input_version FROM profiles WHERE id='profile'").fetchone()[0] == expected
+        audit = conn.execute('SELECT impact_json FROM schema_migration_audits WHERE migration_name=?', (PARTIAL_PAYOUT_SEMANTICS_MIGRATION,)).fetchone()[0]
+        assert json.loads(audit)['affected_profile_count'] == int(affected)
+    finally:
+        conn.close()
+    conn = open_db(tmp_path)
+    assert conn.execute("SELECT journal_input_version FROM profiles WHERE id='profile'").fetchone()[0] == expected
+    conn.close()
+
+
+def test_pre_fix_historical_book_requires_rebuild(tmp_path):
+    """Exact ca9a672f book: old process stored 20 rather than 11.2 proceeds."""
+    import base64
+    import gzip
+    import sqlite3
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / 'fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64'
+    database = tmp_path / 'kassiber.sqlite3'
+    database.write_bytes(gzip.decompress(base64.decodebytes(fixture.read_bytes())))
+    with sqlite3.connect(database) as before:
+        assert before.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0]
+        assert sum(Decimal(row[0]) for row in before.execute("SELECT proceeds_exact FROM journal_entries WHERE entry_type='disposal'")) == 20
+    conn = open_db(tmp_path)
+    try:
+        assert conn.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0] is None
+        command = [sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(tmp_path),
+                   'reports', 'capital-gains', '--workspace', 'Books', '--profile', 'Book']
+        stale = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        assert stale['kind'] == 'error'
+        assert 'fresh journals' in stale['error']['message']
+        process_journals(conn, 'Books', 'Book')
+        report = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        assert report['kind'] != 'error'
+        assert sum(Decimal(str(row['proceeds'])) for row in report['data']) == Decimal('11.2')
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == 'ok'
+    finally:
+        conn.close()
+
+
+def test_whole_principal_payout_with_included_fee_stays_current(book, tmp_path):
+    book.execute("UPDATE transactions SET fee=1000, amount_includes_fee=1 WHERE id='out'")
+    book.commit()
+    create_direct_swap_payout(book, 'Books', 'Book', 'out', payout_asset='EUR', payout_amount='1', payout_fiat_value='10')
+    book.execute("UPDATE profiles SET last_processed_at=? WHERE id='profile'", (NOW,))
+    book.execute('DELETE FROM schema_migration_audits WHERE migration_name=?', (PARTIAL_PAYOUT_SEMANTICS_MIGRATION,))
+    book.commit()
+    conn = open_db(tmp_path)
+    try:
+        assert conn.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0] == NOW
+    finally:
+        conn.close()

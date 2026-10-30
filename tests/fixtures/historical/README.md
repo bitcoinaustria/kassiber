@@ -12,7 +12,7 @@ The two source commits have byte-identical database schema code. They remain
 separate fixtures because the PR boundaries are independent compatibility
 promises.
 
-Each database contains:
+Each of the two custody-overhaul databases above contains:
 
 - one explicit, reviewed manual transfer pair;
 - two concurrent authored-active custody components from different replicas;
@@ -33,3 +33,18 @@ The fixtures are plaintext SQLite because they test schema/data migration.
 SQLCipher encryption, passphrase rotation, and plaintext-to-encrypted migration
 have separate tests; cipher-page compatibility is not claimed by these files.
 
+
+## Partial payout pricing correction
+
+`pre_partial_payout_ca9a672f.sqlite3.gz.b64` was built and processed with
+`ca9a672f`, before the partial payout projection fix. Source `db.py` SHA-256:
+`4c44164d25de749da4abe619cffd9887251f1d277639a572e5f7778a50ed5a2e`; decoded database SHA-256:
+`1d5647d6122b362ea05db518a1dda3b614b0c9742bffe5b697abdf7d5d62ad20`.
+
+The disposable generic EUR book has a 200,000-msat buy at 1,000,000 EUR/BTC,
+a 100,000-msat outbound at 2,000,000 EUR/BTC and a taxable direct payout covering
+40,000 msat with reviewed value 10 EUR. Historical processing stored 20 EUR
+proceeds by pricing both slices at the full payout value. The upgrade must
+refuse reports until rebuilding; corrected proceeds are 11.2 EUR (10 + 1.2).
+It was generated with the reviewer's `upg_a.py`, changing only its scratch/source
+paths, against an archived historical Python tree. It contains no real data.

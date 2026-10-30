@@ -77,9 +77,12 @@ are not rewritten.
   Use an explicit replacement review to correct the asserted economics.
 - The partial direct payout projection correction changes rebuilt derived
   journals and live reports: residuals no longer inherit payout pricing or a
-  carrying-value policy. No schema migration or automatic stale marker is
-  added for this correction. Run `journals process` on existing affected books
-  to replace their stored projection, even if previously marked current.
+  carrying-value policy. The one-time `custody-partial-payout-pricing-v1`
+  migration marks journals stale for exactly profiles with an active payout
+  covering less than its whole source. Reports require `journals process`
+  before using those journals again. Other profiles remain current. The
+  `pre_partial_payout_ca9a672f` fixture was processed with pre-fix code and
+  verifies refusal before rebuilding and corrected proceeds afterward.
   Missing residual prices can now block output rather than fabricate proceeds.
   Saved exports and filed snapshots remain unchanged; review any resulting
   report differences through the existing amendment workflow.
