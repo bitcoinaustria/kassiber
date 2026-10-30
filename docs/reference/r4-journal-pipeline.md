@@ -2,6 +2,7 @@
 
 **Status:** R4-0 integrated, 2026-10-30; the R4-1 bench harness is committed
 and records the baseline; R4-2 onward remains design. The
+[Storage-format speedups](#storage-format-speedups) are designed for Python first, with R4-12 mirroring them.
 [R6 integration audit](rust-backend-r6-integration.md) records the linear restack
 and its verification. This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
@@ -567,6 +568,324 @@ Within the owner's scope (R4 and R5 now, R6 and R7 untouched):
 - **Engine cost.** At 28–75 µs per entry, the engine is the largest compute
   line once custody is typed, and it is outside custody's typed rewrite.
 
+## Storage-format speedups
+
+The owner approved all three of decision 4 on 2026-10-30: compact retained
+calculations, deterministic entry ids with changed-row writes, and a faster
+SQLCipher write mode. Python implements them first as the reference, one
+commit each, and R4-12 mirrors that behavior. Every report, export and AI
+projection keeps its values. The visible changes are the entry ids, the
+order among entries with the same timestamp, and `created_at`. They are
+listed under each speedup.
+
+### Prototype measurements
+
+A prototype in the local scratch tooling replays generic 20,000's stored rows
+(20,000 entries, 40,000 quantity postings). It times only the statements
+`store_ledger_state` would run on each table, plus `COMMIT`, through Python's
+drivers with the connection settings of `kassiber/db.py`:
+
+- plaintext uses WAL/NORMAL on SQLite 3.53.1;
+- SQLCipher uses DELETE/FULL on `sqlcipher3` 0.6.2 (SQLCipher 4.12.0,
+  SQLite 3.51.1).
+
+Each run starts from a fresh copy whose state is what the previous build
+left. The figures are best of five; variants ran round-robin because the
+1-minute load stayed between 11 and 32.
+
+| Write, seconds | Plaintext | SQLCipher |
+| --- | ---: | ---: |
+| `journal_entries` today: delete, then insert 20,000 uuid4 rows | 0.87 | 2.28 |
+| … compact calculations | 0.67 | 1.47 |
+| … 128 MiB rebuild page cache | 0.74 | 1.48 |
+| … compact calculations and 128 MiB cache | 0.58 | 1.07 |
+| … deterministic ids, nothing changed (read and compare only) | 0.14 | 0.29 |
+| … compact, nothing changed | 0.11 | 0.19 |
+| … compact, 1% of entries appended | 0.14 | 0.26 |
+| … compact, 5% of entries changed | 0.33–0.36 | 0.56 |
+| `journal_quantity_postings` today: delete, then insert 40,000 rows | 0.51 | 0.98 |
+| … nothing changed (read and compare only) | 0.15 | 0.27 |
+| Reference: SQLCipher WAL/NORMAL, full entries rewrite | | 1.87 |
+| Reference: SQLCipher WAL/NORMAL with 128 MiB cache, compact | | 0.95 |
+
+- Python's persistence plus commit at generic 20,000 is 2.25 s today, of
+  which the two tables above are about 1.4 s plaintext and 3.3 s SQLCipher.
+- In a rebuild that changes little, both tables cost 0.25 s plaintext and
+  0.46 s SQLCipher.
+- A full rewrite drops from 1.38 s to 0.9 s plaintext and from 3.3 s to
+  about 1.9 s SQLCipher. A full rewrite happens on a fresh book, on the
+  first build after the upgrade, and when an early change moves later lots.
+- Peak memory during the SQLCipher full rewrite rose from 121 to 173 MB with
+  the 128 MiB cache.
+
+### 1. Compact retained calculations
+
+**On disk.** `journal_entries` gains a nullable `calculation_compact TEXT`.
+A realized entry's engine calculation is stored there as one positional JSON
+array (`[2, engine, method, sources, fragments]`), specified in
+`kassiber/core/journal_calculation.py`.
+`calculation_json` is NULL on those rows.
+
+- Each distinct event or lot is stored once and referenced by index. In every
+  bench book, all fragments of an entry share one event.
+- The twelve pricing values are positional.
+- Each `*_msat_exact` string is restored as the string of its integer.
+- A calculation the encoding cannot restore exactly keeps today's
+  `calculation_json` text and a NULL `calculation_compact`. This covers an
+  unknown key, a float, a mismatched exact string or a boolean. No row has
+  both columns set.
+
+Calculations shrink to 29–30% of their size: 37.2 → 10.8 MB at generic
+20,000 and 37.7 → 11.4 MB at multi-wallet 20,000. That takes
+`journal_entries` from 49.6 to about 23 MB.
+
+**Rejected alternatives:**
+
+- Compact separators alone save 6%.
+- Compression: CPython's zlib and Rust's `miniz_oxide` emit different bytes,
+  which breaks R4-12's database-dump parity, and compression costs CPU on
+  every build.
+- Sharing lots across rows (11,955 distinct lots for 19,988 references at
+  generic 20,000): rows would depend on each other, which defeats
+  changed-row writes and gives readers a join.
+
+**Exactness.** The decoder returns what `json.loads` returns for the legacy
+text: the same values, types and sorted key order. It builds a new object
+for each reference, because the explanation writes `inherited_basis` into
+each lot. Re-serializing a decoded value with `json.dumps(sort_keys=True)`
+reproduces the legacy bytes. A check over every calculation in the five
+bench books found every one representable and every legacy byte reproduced.
+Encoding costs about as much as today's `json.dumps`: 0.31 s against 0.28 s
+at 20,000 under load.
+
+**Migration.** `ensure_column(journal_entries, calculation_compact, TEXT)`
+runs after the msat rebuild, whose fixed column list would otherwise drop
+it. A fresh schema places the column after `calculation_json`.
+
+- Old rows are read from `calculation_json` as today. The next build writes
+  compact rows.
+- There is no conversion at open. The first build after the upgrade
+  rewrites every row anyway (speedup 2), so converting at open would only
+  add a second rewrite of about 37 MB at launch.
+
+**An older binary with a newer book:**
+
+- Older Python ignores the column.
+- Its `reports explain-capital-gain` finds `calculation_json` NULL on compact
+  rows and reports `engine_detail_unavailable`. That fails closed and invents
+  no numbers.
+- Its `journals events get` shows `calculation_json: null` and the extra
+  `calculation_compact` field.
+- Its next `journals process` writes legacy rows, which current readers read.
+- An older Rust binary refuses the book because its schema manifest lacks
+  the column. R3 refuses every newer schema the same way.
+
+**Readers:**
+
+- `retained_calculation`, used by the explanation and the inherited-carry
+  chain, reads through `stored_calculation(row)`.
+- `journals events get` returns `calculation_json` as the legacy bytes and
+  omits `calculation_compact`, so its output is unchanged.
+- `load_stored_ledger_state` passes the row to the exit-tax path, which
+  reads neither column.
+- No Rust reader, report, export, audit package, filed-report hash or AI
+  tool reads calculation text. The explanation is a desktop and CLI read,
+  not an AI or MCP tool.
+
+**Risks:**
+
+- Explanation output is the decoded value and stays byte-identical.
+- Tests that edit `calculation_json` to simulate corruption must now edit
+  the column the row uses.
+- Backup and restore copy whole files. Restoring an older backup runs the
+  migration on open.
+
+**R4-12 mirror.**
+
+- Write the same bytes: the compact array with `,` and `:` separators and
+  Python's `ensure_ascii` escaping.
+- Use the legacy fallback (`json.dumps(sort_keys=True)`, default separators)
+  for any calculation the typed model could produce outside the checks.
+- This commit already carries the store mirror: the schema manifest, the
+  ordered pass and the fixtures.
+
+### 2. Deterministic entry ids and changed-row writes
+
+**On disk.** Entry ids and `created_at` are written as follows:
+
+- **Id.** `journal_entries.id` is a UUIDv8 (RFC 9562) built from the first
+  16 bytes of SHA-256 over
+  `["kassiber-journal-entry-v1", profile_id, transaction_id, wallet_id, entry_type, asset, ordinal]`
+  (compact JSON, ASCII).
+- **Ordinal.** The ordinal counts earlier entries of the same build with the
+  same four values, in the engine's entry order.
+- **Shape.** Ids keep today's 36-character shape. Nothing parses them as
+  UUIDs.
+
+A build reads the profile's rows and compares them with the new rows on
+their stored values. REAL columns compare the sign of zero as well, because
+Python treats `0.0 == -0.0` as equal.
+
+- Rows the build no longer produces are deleted.
+- A tie group is every row with the same `occurred_at`. If any of its rows
+  is new or changed, the whole group is written: its old rows are deleted,
+  and its rows are inserted in engine order with the build's `created_at`.
+- Every other row is left untouched and keeps its `created_at`.
+
+**Why tie groups.** Readers order by `occurred_at, created_at, id`.
+
+- Today all rows share one `created_at`, so the effective order is
+  `occurred_at, id`.
+- Rewriting a whole tie group keeps one `created_at` per `occurred_at`. The
+  order therefore stays `occurred_at, id` regardless of build history, and
+  equals what a build from scratch would give. No reader query changes.
+- A tie group whose kept rows disagree on `created_at` (rows written outside
+  Kassiber) is rewritten.
+
+**Postings.** `journal_quantity_postings` already has deterministic
+`posting_id`s and holds about 30% of the journal bytes written. It gets the
+same changed-row write. Nothing reads its `created_at` or orders by it, so it
+needs no tie rule. The other journal tables are small and keep full
+replacement and uuid4 ids: quarantines, tax summary, holdings, quantity
+issues and balances, custody decisions, relations, reconciliations and gap
+inputs.
+
+**Migration.** No schema change. The first build after the upgrade matches
+none of the old uuid4 ids and rewrites every row, as every build does
+today. Later builds write only changes. Rekeying at open would be a full
+rewrite at launch for no gain, so there is no open-time step and no audit
+row.
+
+**An older binary with a newer book:**
+
+- Older Python deletes and reinserts every row with uuid4 ids and one
+  `created_at`, which keeps the tie-group property. The next current build
+  rewrites everything once.
+- Older readers in either runtime return rows in the same order.
+
+**Visible changes:**
+
+1. **Entry ids are stable** across rebuilds and change from random uuid4 to
+   UUIDv8. They appear in:
+   - `journals list` and `journals events list/get`;
+   - `reports journal-entries`;
+   - `reports capital-gains` (`explanation_reference.entry_id`);
+   - `ui.journals.events.list`;
+   - the transfer review context and review worklist;
+   - the audit package and audit evidence summary;
+   - the year-handoff workbook;
+   - the derived pair id `journal-transfer:<out>:<in>`.
+2. **Ties have a fixed order.** Entries with the same `occurred_at` stay in
+   id order instead of a random order per rebuild. This affects:
+   - row order in the journal, capital-gains, Austrian, year-handoff and
+     verification outputs;
+   - cutoffs at the desktop capital-gains limit (200), the journals snapshot
+     limit (12) and event-list pages;
+   - first-match journal-transfer pairing;
+   - order-sensitive float sums in desktop cost-basis views.
+
+   The Austrian CSV bundle's `content_sha256` becomes reproducible.
+3. **`created_at` is the build that last wrote the row.** Before, it was
+   the latest build. This shows in `journals events list/get`,
+   `ui.journals.events.list` (`createdAt`) and list cursors.
+   `ui.audit.changes_since_last_answer` changes with it:
+   - `counts_since.journal_entries` counts rewritten entries only;
+   - `latest.journal_entries` is the last time an entry changed;
+   - a rebuild that changes no entry no longer sets `changed` by itself;
+   - `latest.journals_processed_at` still reports the build.
+4. Explanation references still expire with every rebuild, because they bind
+   `processed_at`. A list cursor now survives a rebuild that leaves its rows
+   unchanged.
+
+Values, every other column, report totals, freshness and filed-report
+impact resolution are unchanged.
+
+**Risks:**
+
+- **Hashes.** No hash covers journal rows except exported file bytes (the
+  year-handoff workbook and Austrian CSV bundle), which already changed with
+  every rebuild.
+- **Collisions.** The `id` primary key is global, not per profile. The hash
+  covers `profile_id`. A collision fails the `INSERT`, and the build rolls
+  back with its freshness markers stale.
+- **Privacy.** An id derives only from ids that the same outputs already
+  carry. Stable ids link two exports of one book no more than their
+  transaction ids already do. AI projections keep their shapes and
+  redaction.
+- **Atomicity.** The write stays inside `journals_process`'s savepoint and
+  transaction. The desktop daemon, the freshness journal job and review
+  apply all call the same function.
+- **Unordered reads.** Readers without `ORDER BY` are counts, sets and
+  per-transaction sums. Physical row order now follows write history
+  between tie groups. Within a group it follows engine order, as a build
+  from scratch would.
+
+**R4-12 mirror.**
+
+- The same id derivation, with ordinals in engine order.
+- The same read, compare and tie-group rule.
+- Deletes before inserts, with inserts in engine order.
+- The same signed-zero REAL comparison.
+- The posting changed-row write.
+
+Both runtimes then leave identical database state from one starting copy
+and clock. R4-12's dump comparison needs no id mapping for these two tables.
+
+### 3. SQLCipher write mode
+
+**WAL is not available.**
+
+- Python's bundled `sqlcipher3` 0.6.2 embeds SQLite 3.51.1, which lacks the
+  [WAL-reset fix](https://www.sqlite.org/wal.html#walresetbug).
+  `_journal_settings_for_sqlite_version` already picks WAL for any
+  connection whose SQLite has the fix, SQLCipher included.
+- Rust's bundled SQLCipher 4.14.0 is SQLite 3.51.3, which has the fix.
+- Every runtime that opens a book must have the fix, so Rust keeps
+  SQLCipher on DELETE/FULL while Python can still open books.
+
+**What does work.** SQLCipher's write cost is mostly the page cache spilling
+mid-transaction. With Kassiber's 16 MB cache, each spill syncs the rollback
+journal and encrypts pages that are written again later.
+
+- A 128 MiB page cache for the journal transaction brings 2.28 s down to
+  1.48 s.
+- 64 MiB gives 1.65 s; 256 MiB gives the same as 128 MiB.
+- WAL/NORMAL alone gives 1.87 s.
+- TRUNCATE and PERSIST journaling gain nothing.
+- Disabling spills with `cache_spill=OFF` is slower (3.0 s).
+- Plaintext gains too: 0.87 → 0.74 s.
+
+**On disk.** Nothing changes, and DELETE/FULL durability stays.
+`process_journals` and review apply raise the connection's `cache_size` to
+128 MiB (`-131072`) for their transaction. They restore the previous value
+after commit or rollback, so the daemon's long-lived connection returns to
+16 MB. Past 128 MiB of dirty pages, SQLite spills as it does today.
+
+**Migration.** None, because nothing is stored. Older binaries are
+unaffected.
+
+**Risks:**
+
+- **Memory.** Peak memory rises by about 50 MB at generic 20,000, at most
+  128 MiB.
+- **Decrypted pages in memory.** More decrypted pages stay in RAM during the
+  build. The build already holds the book's rows in RAM, and nothing reaches
+  disk or logs.
+
+**R4-12 mirror.** The same scoped cache size around the rebuild
+transaction.
+
+**Optional owner decision.**
+
+- WAL for SQLCipher books needs a `sqlcipher3` release whose SQLite has the
+  fix. 0.6.3 and 0.6.4 exist; whether they embed SQLite 3.51.3 or later is
+  unverified. Each platform wheel would need checking, and Rust's
+  coexistence rule would need changing with it.
+- WAL would add about 0.1–0.3 s on a full 20,000 rewrite on top of the
+  cache. Its real benefit is that readers are not blocked during writes.
+- Recommendation: not for speed now. Decide it as a concurrency question
+  with the next dependency update.
+
 ## Decisions
 
 The owner answered decisions 1 to 4 on 2026-10-30. Decisions 5 and 6 remain
@@ -607,12 +926,8 @@ open.
    - SQLCipher books would need WAL once the SQLCipher SQLite has the
      WAL-reset fix.
 
-   Defer them all until after R7?
-
-   **Decided: do the storage-format speed-ups now, not after R7:** a slimmer
-   `calculation_json`, deterministic entry ids with incremental rewrites, and
-   a faster SQLCipher write mode. A separate worker designs them and
-   implements the Python reference first; Rust then matches that reference.
+   Defer them all until after R7? Decided 2026-10-30: do them now. See
+   [storage-format speedups](#storage-format-speedups).
 5. **Book open cost.** The R5 binary spends 0.10 s opening a 2,000-transaction
    book. That is a fifth of the 2,000-transaction budget. Should R4 trim the
    open path, or should R3/R5 own it? **Open.**
