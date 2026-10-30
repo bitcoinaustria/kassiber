@@ -46,6 +46,10 @@ def test_electrum_coinbase_fetch_and_record_keep_the_observed_receipt():
         def __exit__(self, *_):
             return False
 
+        def call(self, method, params):
+            assert method == "blockchain.headers.subscribe"
+            return {"height": 100, "hex": "00" * 80}
+
         def batch_call(self, requests):
             results = []
             for method, params in requests:

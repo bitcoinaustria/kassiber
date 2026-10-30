@@ -9,6 +9,7 @@ import pytest
 from kassiber.cli.handlers import _wallet_sync_hooks, process_journals
 from kassiber.core import custody_filed_reports as reports, filed_report_chain as impacts
 from kassiber.core import chain_analysis_watches as watches
+from kassiber.core import sync_backends
 from kassiber.core.sync import sync_wallet_from_backend
 from kassiber.core.wallets import update_wallet
 from tests.custody_tax_helpers import persist_authoritative_chain_observation
@@ -45,10 +46,10 @@ def book(tmp_path):
         resolve_backend=lambda *_: {"name": "fixture", "kind": "esplora", "url": "https://example.invalid"},
         backend_adapters={"esplora": adapter})
 
-    def sync(*, changed_hooks=None):
+    def sync(*, changed_hooks=None, checkpoint=None):
         profile = conn.execute("SELECT * FROM profiles WHERE id=?", (PROFILE,)).fetchone()
         wallet = conn.execute("SELECT * FROM wallets WHERE id='wallet-a'").fetchone()
-        return sync_wallet_from_backend(conn, {}, profile, wallet, changed_hooks or hooks)
+        return sync_wallet_from_backend(conn, {}, profile, wallet, changed_hooks or hooks, checkpoint=checkpoint)
 
     sync()
     conn.execute("UPDATE transactions SET fiat_rate=40000")
@@ -63,6 +64,52 @@ def book(tmp_path):
 
     yield conn, state, sync, export, hooks
     conn.close()
+
+
+@pytest.mark.parametrize("same_timestamp", [False, True])
+def test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report(book, same_timestamp):
+    conn, state, sync, export, hooks = book
+    original = dict(conn.execute("SELECT * FROM transactions").fetchone())
+    graph = json.loads(original["raw_json"])
+    state["block_time"] = 1767225600
+
+    def history(*_args, **_kwargs):
+        return [{**graph, "status": {"confirmed": True, "block_height": 100,
+                 "block_hash": state["block_hash"], "block_time": state["block_time"]}}]
+
+    real_hooks = replace(hooks, backend_adapters={"esplora": sync_backends.compatibility_esplora_sync_adapter})
+    checkpoint = None
+
+    def refresh():
+        nonlocal checkpoint
+        outcome = sync(changed_hooks=real_hooks, checkpoint=checkpoint)
+        checkpoint = outcome["freshness_checkpoint"]
+        return outcome
+
+    with patch.object(sync_backends, "http_get_text", side_effect=lambda *_args, **_kwargs: state["block_hash"]), patch.object(
+        sync_backends, "esplora_scripthash_stats",
+        return_value={"chain_stats": {"tx_count": 1}, "mempool_stats": {"tx_count": 0}},
+    ), patch.object(sync_backends, "fetch_esplora_scripthash_transactions", side_effect=history), patch.object(
+        sync_backends, "fetch_esplora_scripthash_utxos", return_value=[],
+    ), patch.object(sync_backends, "_esplora_tip_height", return_value=100):
+        refresh()
+        process_journals(conn, "Main", "Default")
+        saved = export()
+        conn.commit()
+        assert refresh()["records_fetched"] == 0
+        state["block_hash"] = "22" * 32
+        if not same_timestamp:
+            state["block_time"] += 600
+        outcome = refresh()
+        assert outcome["records_fetched"] == 1
+        assert outcome["saved_report_impacts"] == 1
+        current = dict(conn.execute("SELECT * FROM transactions").fetchone())
+        assert current["confirmed_at"] == (original["confirmed_at"] if same_timestamp else "2026-01-01T00:10:00Z")
+        assert json.loads(current["raw_json"])["status"]["block_hash"] == state["block_hash"]
+        item = watches.inbox(conn, PROFILE, {})["items"][0]
+        assert item["code"] == "evidence_changed"
+        assert item["report_impact"]["snapshot_id"] == saved["id"]
+        assert refresh()["saved_report_impacts"] == 0
 
 
 def test_export_retraction_inbox_and_rebuild_preserve_original(book):

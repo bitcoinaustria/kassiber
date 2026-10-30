@@ -1,6 +1,7 @@
 """An unchanged wallet row can still supply a newer confirmation observation."""
 
 from dataclasses import replace
+from contextlib import nullcontext
 import json
 from unittest.mock import patch
 
@@ -10,9 +11,103 @@ from kassiber.cli.handlers import _wallet_sync_hooks, process_journals
 from kassiber.core.custody_journal import CustodyJournalBuilder, projection_freshness
 from kassiber.core.sync import sync_wallet_from_backend
 from kassiber.core.sync_backends import record_from_bitcoin_esplora_tx
+from kassiber.core import sync_backends
+from kassiber.core.sync import WalletSyncState
 from kassiber.db import open_db
 from tests import test_rp2_ownership_transfers as fixtures
 from tests.test_source_overlap import ADDR_A, ADDR_B, _script
+
+
+@pytest.mark.parametrize("kind", ["esplora", "electrum"])
+def test_configured_backend_target_resolution_does_not_probe_chain_tips(kind):
+    backend = {"name": "fixture", "kind": kind, "url": "https://unused.invalid",
+               "chain": "bitcoin", "network": "main"}
+    wallet = {"id": "wallet", "kind": "address", "config_json": json.dumps({
+        "chain": "bitcoin", "network": "main", "backend": "fixture", "addresses": [ADDR_A],
+    })}
+    with patch.object(sync_backends, "http_get_text") as http, patch.object(
+        sync_backends, "_electrum_client_context",
+    ) as electrum:
+        assert sync_backends.resolve_wallet_sync_targets(backend, wallet).targets
+    http.assert_not_called()
+    electrum.assert_not_called()
+
+
+@pytest.mark.parametrize("tip_change", ["reorg", "advance", "missing", "invalid", "legacy"])
+def test_electrum_refreshes_cached_confirmation_when_chain_anchor_changes(tip_change):
+    script = _script(ADDR_A)
+    target = {"script_pubkey": script}
+    txid = "aa" * 32
+    timestamp = 1767225600
+    tip = {"height": 100, "hex": "00" * 80}
+    history = [{"tx_hash": txid, "height": 100}]
+    calls = []
+
+    class Client:
+        def call(self, method, params):
+            calls.append((method, params))
+            if method == "blockchain.headers.subscribe":
+                return tip
+            if method == "blockchain.scripthash.subscribe":
+                return "unchanged-status"
+            if method == "blockchain.scripthash.get_history":
+                return history
+            if method == "blockchain.transaction.get":
+                return "synthetic-transaction"
+            assert method == "blockchain.block.header"
+            return (b"\x00" * 68 + timestamp.to_bytes(4, "little") + b"\x00" * 8).hex()
+
+        def batch_call(self, requests):
+            return [self.call(method, params) for method, params in requests]
+
+    state = WalletSyncState(chain="bitcoin", network="regtest", descriptor_plan=None,
+        policy_asset_id="", targets=[target], tracked_scripts={script: target}, history_cache={})
+    backend = {"name": "fixture", "kind": "electrum", "url": "tcp://unused.invalid:1"}
+    graph = {"txid": txid, "vin": [], "vout": [{"script_hex": script, "value_sats": 1000}]}
+    with patch.object(sync_backends, "_electrum_client_context", side_effect=lambda _: nullcontext(Client())), patch.object(
+        sync_backends, "decode_raw_transaction", return_value=graph,
+    ):
+        records, meta = sync_backends.compatibility_electrum_records_for_wallet(backend, state)
+        initial_confirmation = records[0]["confirmed_at"]
+        state = replace(state, checkpoint=meta["freshness_checkpoint"], history_cache={txid: records[0]["raw_json"]})
+        assert sync_backends.compatibility_electrum_records_for_wallet(backend, state)[0] == []
+        if tip_change == "legacy":
+            state.checkpoint.pop("electrum_tip_fingerprint")
+        else:
+            tip = {"height": 100 + (tip_change == "advance"), "hex": "11" * 80}
+            if tip_change == "missing":
+                tip = None
+            elif tip_change == "invalid":
+                tip["hex"] = "invalid"
+        timestamp += 600
+        calls.clear()
+        records, meta = sync_backends.compatibility_electrum_records_for_wallet(backend, state)
+        assert len(records) == 1
+        assert records[0]["confirmed_at"] == "2026-01-01T00:10:00Z"
+        assert records[0]["confirmed_at"] != initial_confirmation
+        assert meta["header_cache_hits"] == 0
+        assert ("blockchain.block.header", [100]) in calls
+        assert not any(method == "blockchain.transaction.get" for method, _ in calls)
+
+
+@pytest.mark.parametrize("tip", [None, "", "²" * 64, "bad"])
+def test_esplora_does_not_reuse_histories_without_a_valid_tip(tip):
+    from tests.test_sync_backends import EsploraHistoryRetractionTest
+    fixture = EsploraHistoryRetractionTest()
+    tx = fixture.transaction(1, confirmed=True)
+    _, initial, _ = fixture.scan({1: [tx]})
+    state = WalletSyncState(chain="bitcoin", network="main", descriptor_plan=None,
+        policy_asset_id="", targets=[fixture.target(1)],
+        tracked_scripts={fixture.target(1)["script_pubkey"]: fixture.target(1)},
+        history_cache={}, checkpoint=initial["freshness_checkpoint"])
+    with patch.object(sync_backends, "http_get_text", return_value=tip or ""), patch.object(
+        sync_backends, "esplora_scripthash_stats",
+        return_value={"chain_stats": {"tx_count": 1}, "mempool_stats": {"tx_count": 0}},
+    ), patch.object(sync_backends, "fetch_esplora_scripthash_transactions", return_value=[tx]) as history:
+        records, _ = sync_backends.compatibility_esplora_records_for_wallet(
+            {"name": "node", "kind": "esplora", "url": "https://node.example"}, state)
+    assert len(records) == 1
+    history.assert_called_once()
 
 
 @pytest.mark.parametrize("scenario", ["chronology", "authority", "semantics"])

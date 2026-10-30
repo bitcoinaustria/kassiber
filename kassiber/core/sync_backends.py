@@ -2013,6 +2013,21 @@ def _confirmations_from_heights(block_height, tip_height):
     return normalized_tip_height - normalized_block_height + 1
 
 
+def _esplora_tip_hash(
+    base_url, timeout=30, *, headers=None, proxy_url=None, ssl_context=None
+):
+    """Read a cache anchor only during an explicitly requested wallet sync."""
+    try:
+        value = http_get_text(
+            append_url_path(base_url, "blocks/tip/hash"),
+            **_esplora_call_kwargs(timeout=timeout, headers=headers,
+                                   proxy_url=proxy_url, ssl_context=ssl_context),
+        ).strip()
+    except AppError:
+        return None
+    return canonical_txid(value)
+
+
 def _esplora_tip_height(
     base_url, timeout=30, *, headers=None, proxy_url=None, ssl_context=None
 ):
@@ -2945,6 +2960,12 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     proxy_url = _backend_proxy_url(backend)
     ssl_context = _backend_ssl_context(backend)
     checkpoint = _checkpoint_mapping(sync_state)
+    tip_hash = _esplora_tip_hash(
+        backend["url"],
+        **_esplora_call_kwargs(timeout=timeout, headers=headers,
+                               proxy_url=proxy_url, ssl_context=ssl_context),
+    )
+    same_tip = tip_hash is not None and checkpoint.get("esplora_tip_hash") == tip_hash
     # Bind the complete private transport configuration, not just the backend
     # name. This digest remains inside the local-only freshness checkpoint.
     # A different endpoint, credential, route or TLS policy cannot inherit
@@ -3008,7 +3029,8 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         previous = previous_stats.get(scripthash) if isinstance(previous_stats, dict) else None
         previous_dirty = isinstance(previous, dict) and bool(previous.get("mempool_dirty"))
         unchanged = (
-            isinstance(previous, dict)
+            same_tip
+            and isinstance(previous, dict)
             and previous.get("fingerprint") == fingerprint
             and not previous_dirty
             and memberships.reusable(scripthash, fingerprint)
@@ -3184,6 +3206,7 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
+            "esplora_tip_hash": tip_hash,
             "esplora_scripthashes": dict(sorted(next_stats.items())),
             "esplora_history_memberships": membership_checkpoint,
             "highest_used": dict(sorted(highest_used.items())),
@@ -4733,6 +4756,26 @@ def _electrum_utxo_status(raw_utxo, header_timestamps):
     }
 
 
+def _electrum_tip_fingerprint(client):
+    """Anchor history and timestamp caches to the full header, not its height."""
+    try:
+        tip = client.call("blockchain.headers.subscribe", [])
+    except AppError:
+        return None
+    if not isinstance(tip, dict) or type(tip.get("height")) is not int or tip["height"] < 0:
+        return None
+    header = tip.get("hex")
+    if not isinstance(header, str):
+        return None
+    try:
+        raw = bytes.fromhex(header)
+    except ValueError:
+        return None
+    if len(raw) < 80:
+        return None
+    return hashlib.sha256(raw).hexdigest()
+
+
 def _electrum_tip_height(client):
     try:
         header = client.call("blockchain.headers.subscribe", [])
@@ -4915,6 +4958,15 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     changed_scripts = 0
     header_cache_hits = 0
     with _electrum_client_context(backend) as client:
+        tip_fingerprint = _electrum_tip_fingerprint(client)
+        same_tip = (
+            tip_fingerprint is not None
+            and checkpoint.get("electrum_tip_fingerprint") == tip_fingerprint
+        )
+        if not same_tip:
+            # Subscription statuses contain txids/heights, not block identity.
+            # Even identical history entries can have new confirmation times.
+            header_timestamps.clear()
         histories = []
         target_by_scripthash = {}
         scripthashes = []
@@ -4949,7 +5001,8 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     )
                 continue
             if (
-                stored_graph_current
+                same_tip
+                and stored_graph_current
                 and status == previous_statuses.get(scripthash)
                 and scripthash not in previous_dirty
             ):
@@ -5001,7 +5054,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     for item in normalized_history
                     if isinstance(item, dict)
                     and item.get("tx_hash")
-                    and prior_entries.get(str(item["tx_hash"])) != json_ready(item)
+                    and (not same_tip or prior_entries.get(str(item["tx_hash"])) != json_ready(item))
                 )
                 next_history_entries[scripthash] = current_entries
                 if any(_history_needs_recheck(item) for item in normalized_history):
@@ -5177,6 +5230,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
+            "electrum_tip_fingerprint": tip_fingerprint,
             "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
             "electrum_headers": {
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)

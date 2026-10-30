@@ -62,6 +62,11 @@ def _header_hex(timestamp):
 
 
 class LiquidElectrumSyncTest(unittest.TestCase):
+    def setUp(self):
+        anchor = patch("kassiber.core.sync_backends._electrum_tip_fingerprint", return_value="ab" * 32)
+        anchor.start()
+        self.addCleanup(anchor.stop)
+
     def test_validate_backend_allows_liquid_electrum(self):
         backend = {
             "name": "liquid",
