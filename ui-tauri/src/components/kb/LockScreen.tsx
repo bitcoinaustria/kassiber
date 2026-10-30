@@ -195,8 +195,8 @@ export function LockScreen({
 
   // A failed attempt hands the keyboard back to the passphrase field, so the
   // next try (or the fallback from a cancelled Touch ID sheet) is typing. The
-  // field is disabled while the attempt runs and cannot take focus then, so
-  // this waits for the attempt to settle.
+  // field is disabled during a passphrase attempt and absent during Touch ID,
+  // so this waits until it is mounted and enabled again.
   const refocusPassphrase = React.useRef(false);
   React.useEffect(() => {
     if (busy || !refocusPassphrase.current) return;
@@ -215,7 +215,7 @@ export function LockScreen({
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (submitting) return;
+    if (busy) return;
     // An empty field cannot open the books, and asking the daemon anyway
     // would re-lock the screen as if a passphrase had been refused.
     if (passphraseRequired && passphrase === "") {
@@ -314,7 +314,7 @@ export function LockScreen({
       decrypt
       decryptKey={attempt}
       title={passphraseRequired ? t("lock.title") : t("lock.sessionTitle")}
-      lead={t(`lock.lead.${reason}`)}
+      lead={touchIdSubmitting ? t("lock.touchIdLead") : t(`lock.lead.${reason}`)}
       footer={
         <LockFooter
           label={t("lock.backToSetup")}
@@ -323,130 +323,130 @@ export function LockScreen({
         />
       }
     >
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(event) => {
-          void submit(event);
-        }}
-      >
-        {/*
-         * The passphrase field stays mounted while Touch ID is pending — it
-         * used to be swapped out for a "Unlocking with Touch ID…" row, which
-         * said the same thing the Touch ID button already says while it
-         * waits, and collapsed the form mid-interaction. Disabling it instead
-         * keeps one progress signal, holds the layout steady, and leaves
-         * `inputRef` alive so a failed Touch ID attempt can still focus it.
-         */}
-        {passphraseRequired ? (
-          <div className="relative">
-            <label htmlFor="lock-passphrase" className="sr-only">
-              {t("lock.passphrase")}
-            </label>
-            {/* The screen's one lock, where the key goes. */}
-            <LockKeyhole
-              className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-3"
-              aria-hidden="true"
-            />
-            <Input
-              id="lock-passphrase"
-              ref={inputRef}
-              type="password"
-              autoComplete="current-password"
-              placeholder={t("lock.passphrase")}
-              className="h-11 pr-12 pl-10"
-              value={passphrase}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? "lock-error" : undefined}
-              onChange={(event) => {
-                setPassphrase(event.target.value);
-                if (error) setError(null);
-              }}
-              disabled={busy}
-            />
-            {/* Placed by a wrapper: `kb-hit-floor` keeps every button
-                `position: relative`, outranking an `absolute` utility. */}
-            <div className="absolute inset-y-0 right-1.5 flex items-center">
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={busy}
-                aria-label={unlockLabel}
-                title={unlockLabel}
-              >
-                {submitting ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <ArrowRight aria-hidden="true" />
-                )}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            size="lg"
-            type="submit"
-            className="group w-full"
-            disabled={busy}
-          >
-            {submitting ? (
-              <Loader2 className="animate-spin" aria-hidden="true" />
-            ) : null}
-            {unlockLabel}
-            {submitting ? null : (
-              <ArrowRight
-                className="transition-transform group-hover:translate-x-0.5"
+      {touchIdSubmitting ? (
+        <div
+          role="status"
+          className="flex min-h-11 items-center justify-center gap-2 text-sm text-ink-2"
+        >
+          <Fingerprint className="size-5" aria-hidden="true" />
+          {t("lock.waitingForTouchId")}
+        </div>
+      ) : (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+        >
+          {passphraseRequired ? (
+            <div className="relative">
+              <label htmlFor="lock-passphrase" className="sr-only">
+                {t("lock.passphrase")}
+              </label>
+              {/* The screen's one lock, where the key goes. */}
+              <LockKeyhole
+                className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-3"
                 aria-hidden="true"
               />
-            )}
-          </Button>
-        )}
-        {/* A line stays reserved for the error, so a wrong passphrase does
-            not jolt the centred form upwards. */}
-        <div className="min-h-5">
-          {error ? <LockError id="lock-error">{error}</LockError> : null}
-        </div>
-        {canUseTouchId ? (
-          <Button
-            size="lg"
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={busy}
-            onClick={() => {
-              void submitTouchId();
-            }}
-          >
-            <Fingerprint aria-hidden="true" />
-            {touchIdSubmitting
-              ? t("lock.waitingForTouchId")
-              : t("lock.unlockWithTouchId")}
-          </Button>
-        ) : null}
-        {touchIdNote ? (
-          <p className="m-0 text-xs leading-5 text-ink-3">{touchIdNote}</p>
-        ) : null}
-        {canEnrollTouchId ? (
-          <label
-            htmlFor="lock-touch-id-enroll"
-            className="mt-2 flex items-center justify-between gap-4 rounded-(--kb-radius-card) border border-border/70 bg-card/40 px-4 py-3 text-left"
-          >
-            <span className="min-w-0 space-y-1">
-              <span className="block text-sm font-medium text-ink">
-                {t("lock.useTouchIdNextTime")}
+              <Input
+                id="lock-passphrase"
+                ref={inputRef}
+                type="password"
+                autoComplete="current-password"
+                placeholder={t("lock.passphrase")}
+                className="h-11 pr-12 pl-10"
+                value={passphrase}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "lock-error" : undefined}
+                onChange={(event) => {
+                  setPassphrase(event.target.value);
+                  if (error) setError(null);
+                }}
+                disabled={busy}
+              />
+              {/* Placed by a wrapper: `kb-hit-floor` keeps every button
+                  `position: relative`, outranking an `absolute` utility. */}
+              <div className="absolute inset-y-0 right-1.5 flex items-center">
+                <Button
+                  type="submit"
+                  size="icon-sm"
+                  disabled={busy}
+                  aria-label={unlockLabel}
+                  title={unlockLabel}
+                >
+                  {submitting ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ArrowRight aria-hidden="true" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="lg"
+              type="submit"
+              className="group w-full"
+              disabled={busy}
+            >
+              {submitting ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : null}
+              {unlockLabel}
+              {submitting ? null : (
+                <ArrowRight
+                  className="transition-transform group-hover:translate-x-0.5"
+                  aria-hidden="true"
+                />
+              )}
+            </Button>
+          )}
+          {/* A line stays reserved for the error, so a wrong passphrase does
+              not jolt the centred form upwards. */}
+          <div className="min-h-5">
+            {error ? <LockError id="lock-error">{error}</LockError> : null}
+          </div>
+          {canUseTouchId ? (
+            <Button
+              size="lg"
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={busy}
+              onClick={() => {
+                void submitTouchId();
+              }}
+            >
+              <Fingerprint aria-hidden="true" />
+              {t("lock.unlockWithTouchId")}
+            </Button>
+          ) : null}
+          {touchIdNote ? (
+            <p className="m-0 text-xs leading-5 text-ink-3">{touchIdNote}</p>
+          ) : null}
+          {canEnrollTouchId ? (
+            <label
+              htmlFor="lock-touch-id-enroll"
+              className="mt-2 flex items-center justify-between gap-4 rounded-(--kb-radius-card) border border-border/70 bg-card/40 px-4 py-3 text-left"
+            >
+              <span className="min-w-0 space-y-1">
+                <span className="block text-sm font-medium text-ink">
+                  {t("lock.useTouchIdNextTime")}
+                </span>
+                <span className="block text-xs leading-normal text-ink-3">
+                  {t("lock.useTouchIdNextTimeBody")}
+                </span>
               </span>
-              <span className="block text-xs leading-normal text-ink-3">
-                {t("lock.useTouchIdNextTimeBody")}
-              </span>
-            </span>
-            <Switch
-              id="lock-touch-id-enroll"
-              checked={enrollTouchId}
-              disabled={submitting}
-              onCheckedChange={setEnrollTouchId}
-            />
-          </label>
-        ) : null}
-      </form>
+              <Switch
+                id="lock-touch-id-enroll"
+                checked={enrollTouchId}
+                disabled={submitting}
+                onCheckedChange={setEnrollTouchId}
+              />
+            </label>
+          ) : null}
+        </form>
+      )}
     </LockedFrame>
   );
 }

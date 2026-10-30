@@ -254,6 +254,7 @@
     "useTouchIdNextTime": "Beim nächsten Mal Touch ID verwenden",
     "useTouchIdNextTimeBody": "Speichere einen eigenen Desktop-Keychain-Eintrag, den Kassiber nach Touch ID verwenden kann. Die gemerkte CLI-Entsperrung bleibt getrennt.",
     "waitingForTouchId": "Warten auf Touch ID…",
+    "touchIdLead": "Bestätige mit Touch ID im macOS-Dialog.",
     "unlockWithTouchId": "Mit Touch ID entsperren",
     "unlocking": "Wird entsperrt…",
     "unlock": "Entsperren",

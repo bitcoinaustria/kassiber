@@ -254,6 +254,7 @@
     "useTouchIdNextTime": "Use Touch ID next time",
     "useTouchIdNextTimeBody": "Save a desktop-only Keychain entry that Kassiber can use after Touch ID. CLI remembered unlock stays separate.",
     "waitingForTouchId": "Waiting for Touch ID...",
+    "touchIdLead": "Confirm with Touch ID in the macOS prompt.",
     "unlockWithTouchId": "Unlock with Touch ID",
     "unlocking": "Unlocking...",
     "unlock": "Unlock",
