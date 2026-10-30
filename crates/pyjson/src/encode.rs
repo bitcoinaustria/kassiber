@@ -18,6 +18,11 @@ pub const INT_MAX_STR_DIGITS: usize = 4300;
 /// CPython encodes is within this bound.
 pub const MAX_DEPTH: usize = 1000;
 
+/// Lists at least this long are encoded in [`PARALLEL_CHUNKS`] concurrent
+/// chunks; the text is the same as encoding them in turn.
+const PARALLEL_ITEMS: usize = 1024;
+const PARALLEL_CHUNKS: usize = 8;
+
 /// `indent`: a number of spaces, or the text itself.
 ///
 /// Python's `indent=0`, a negative number, and `""` all start each item on a
@@ -304,14 +309,77 @@ impl Encoder<'_> {
         }
         self.out.push('[');
         self.open(level);
+        if items.len() >= PARALLEL_ITEMS {
+            self.items_concurrently(items, level)?;
+        } else {
+            self.items(items, level)?;
+        }
+        self.close(level);
+        self.out.push(']');
+        Ok(())
+    }
+
+    /// The list's items, separated, at `level`.
+    fn items(&mut self, items: &[Value], level: usize) -> Result<(), Error> {
         for (index, item) in items.iter().enumerate() {
             if index > 0 {
                 self.separate(level);
             }
             self.value(item, level + 1)?;
         }
-        self.close(level);
-        self.out.push(']');
+        Ok(())
+    }
+
+    /// [`Self::items`] for a long list: contiguous chunks are encoded on
+    /// scoped threads (or in turn, when no thread is available) and joined in
+    /// order. The first chunk with an error reports the error sequential
+    /// encoding reaches first; dropped surrogates are combined.
+    fn items_concurrently(&mut self, items: &[Value], level: usize) -> Result<(), Error> {
+        let size = items.len().div_ceil(PARALLEL_CHUNKS);
+        let encode = |chunk: &[Value]| {
+            let mut encoder = Encoder {
+                options: self.options,
+                indent: self.indent,
+                item_separator: self.item_separator,
+                key_separator: self.key_separator,
+                out: String::new(),
+                surrogate: false,
+            };
+            encoder
+                .items(chunk, level)
+                .map(|()| (encoder.out, encoder.surrogate))
+        };
+        let parts: Vec<_> = std::thread::scope(|scope| {
+            let workers: Vec<_> = items
+                .chunks(size)
+                .map(|chunk| {
+                    let encode = &encode;
+                    (
+                        chunk,
+                        std::thread::Builder::new()
+                            .spawn_scoped(scope, move || encode(chunk))
+                            .ok(),
+                    )
+                })
+                .collect();
+            workers
+                .into_iter()
+                .map(|(chunk, worker)| match worker {
+                    Some(worker) => worker
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+                    None => encode(chunk),
+                })
+                .collect()
+        });
+        for (index, part) in parts.into_iter().enumerate() {
+            let (text, surrogate) = part?;
+            if index > 0 {
+                self.separate(level);
+            }
+            self.out.push_str(&text);
+            self.surrogate |= surrogate;
+        }
         Ok(())
     }
 
@@ -663,6 +731,71 @@ mod tests {
         assert_eq!(
             dumps(&Value::Int(limit * 10), &Options::new()),
             Err(Error::IntTooLarge)
+        );
+    }
+
+    #[test]
+    fn long_lists_encode_as_their_items_in_turn() {
+        let item = |i: usize| match i % 4 {
+            0 => Value::Int(i.into()),
+            1 => Value::Str(format!("é{i}\u{1f600}").as_str().into()),
+            2 => dict(vec![("k".into(), Value::Float(i as f64 / 3.0))]),
+            _ => Value::List(vec![Value::Null, Value::Bool(i % 8 == 3)]),
+        };
+        let items: Vec<Value> = (0..PARALLEL_ITEMS * 2 + 7).map(item).collect();
+        for (options, open, separator, close) in [
+            (Options::new(), "[", ", ", "]"),
+            (Options::new().compact().sort_keys(true), "[", ",", "]"),
+            (
+                Options::new().indent(2).ensure_ascii(false),
+                "[\n  ",
+                ",\n  ",
+                "\n]",
+            ),
+        ] {
+            // Each item alone in a one-item list is encoded at the same level.
+            let texts: Vec<String> = items
+                .iter()
+                .map(|item| {
+                    let text = dumps(&Value::List(vec![item.clone()]), &options).unwrap();
+                    text[open.len()..text.len() - close.len()].to_owned()
+                })
+                .collect();
+            let expected = format!("{open}{}{close}", texts.join(separator));
+            assert_eq!(
+                dumps(&Value::List(items.clone()), &options).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn long_lists_report_the_first_error_in_order() {
+        let mut items: Vec<Value> = (0..PARALLEL_ITEMS * 3)
+            .map(|i| Value::Int(i.into()))
+            .collect();
+        items[PARALLEL_ITEMS + 5] = Value::Float(f64::NAN);
+        items[PARALLEL_ITEMS * 2 + 9] = Value::Decimal("1.5".parse().unwrap());
+        let strict = Options::new().allow_nan(false);
+        assert_eq!(
+            dumps(&Value::List(items.clone()), &strict),
+            Err(Error::OutOfRangeFloat)
+        );
+        items[PARALLEL_ITEMS + 5] = Value::Int(0.into());
+        assert_eq!(
+            dumps(&Value::List(items.clone()), &strict),
+            Err(Error::NotSerializable)
+        );
+        items[3] = Value::Str(PyStr::from_code_points([0xd800]).unwrap());
+        let unicode = Options::new().ensure_ascii(false).default_str(true);
+        assert_eq!(
+            dumps(&Value::List(items.clone()), &unicode),
+            Err(Error::Surrogate)
+        );
+        items[PARALLEL_ITEMS * 2 + 9] = Value::Decimal("1.5".parse().unwrap());
+        assert_eq!(
+            dumps(&Value::List(items), &Options::new().ensure_ascii(false)),
+            Err(Error::NotSerializable)
         );
     }
 
