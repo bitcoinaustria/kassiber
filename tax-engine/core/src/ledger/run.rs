@@ -49,6 +49,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::engine::{self, compute_parsed, ParsedAsset};
 use crate::error::{EngineError, EngineResult};
 use crate::model::{AssetOutput, ConfigSpec, CountrySpec};
+use crate::par;
 use crate::swaps;
 use crate::ENGINE_VERSION;
 
@@ -213,28 +214,33 @@ pub(crate) struct Pass {
 /// One prepare pass over every asset, in order (`_prepare_assets`,
 /// `adapter.py:1671-1706`): normalize, then walk, over each asset's rows
 /// the pass does not leave out. The stages it reached, and the failure that
-/// ended it, as the adapter's first failure ends its pass.
+/// ended it, as the adapter's first failure ends its pass. Each asset's
+/// stages depend only on the book and the pass, so the assets are prepared
+/// concurrently and taken in order, up to the first failure.
 pub(crate) fn prepare_assets(
     book: &Book,
     config: &ConfigSpec,
     pass: &Pass,
 ) -> (Vec<Stages>, Option<EngineError>) {
-    let mut stages = Vec::new();
-    for part in &book.assets {
+    let _span = crate::timing::span("prepare");
+    let prepared = par::map(&book.assets, 1, |part| {
         let active: Vec<usize> = part
             .rows
             .iter()
             .copied()
             .filter(|row| !pass.excluded.contains(row))
             .collect();
-        let span = crate::timing::span("normalize");
-        let normalized = match normalize(book, part, &active, &pass.links) {
-            Ok(normalized) => normalized,
+        let normalized = normalize(book, part, &active, &pass.links)?;
+        let walked = walk(book, part, &normalized, config);
+        Ok((normalized, walked))
+    });
+    let mut stages = Vec::new();
+    for outcome in prepared {
+        let (normalized, walked) = match par::unwrap(outcome) {
+            Ok(prepared) => prepared,
             Err(error) => return (stages, Some(error)),
         };
-        drop(span);
-        let _walk = crate::timing::span("walk");
-        match walk(book, part, &normalized, config) {
+        match walked {
             Ok(walked) => stages.push(Stages {
                 normalized,
                 walked: Some(walked),
@@ -629,16 +635,24 @@ pub(crate) fn compute(
         }
         Err(assets) => assets,
     };
-    assets
-        .into_iter()
-        .map(|parsed| {
-            let asset = parsed.asset.clone();
-            compute_parsed(parsed, country, method).map_err(|error| StagedError {
-                asset: Some(asset),
-                ..StagedError::new(Stage::Compute, error)
-            })
+    // Each asset's computation is its own, so they run concurrently and
+    // are taken in order, up to the first failure.
+    par::map(&assets, 1, |parsed| {
+        let borrowed = ParsedAsset {
+            asset: parsed.asset.clone(),
+            entries: Cow::Borrowed(&parsed.entries),
+        };
+        compute_parsed(borrowed, country, method)
+    })
+    .into_iter()
+    .zip(&assets)
+    .map(|(outcome, parsed)| {
+        par::unwrap(outcome).map_err(|error| StagedError {
+            asset: Some(parsed.asset.clone()),
+            ..StagedError::new(Stage::Compute, error)
         })
-        .collect()
+    })
+    .collect()
 }
 
 /// The carried rows as the response names them: by id, in row order.

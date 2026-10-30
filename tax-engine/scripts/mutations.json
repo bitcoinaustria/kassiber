@@ -1030,8 +1030,8 @@
   {
     "id": "run-compute-failure-names-no-asset",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "                asset: Some(asset),",
-    "replace": "                asset: None,",
+    "find": "            asset: Some(parsed.asset.clone()),",
+    "replace": "            asset: None,",
     "expect_failing": [
       "ledger::compose::tests::a_failing_computation_names_its_asset"
     ],
