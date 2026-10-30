@@ -110,6 +110,10 @@ Admission still reads current evidence; no cross-call validity cache is added.
 
 ## Schema proposal — measured, not implemented
 
+The owner subsequently approved only the page index; its implementation and
+new measurements are tracked in [transaction page index](transaction-page-index.md).
+The flow and metrics indexes below remain unimplemented proposals.
+
 Measurements below use rusqlite's bundled SQLite **3.51.3**, the same library as
 the native service, on another disposable copy of the 20,000-row book. Each
 query is prepared, bound, stepped and decoded; results are compared exactly

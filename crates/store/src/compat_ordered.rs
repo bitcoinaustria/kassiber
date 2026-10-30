@@ -209,12 +209,98 @@ fn ensure_schema_compat(
     repairs::freshness(conn)?;
     repairs::step(conn, "graph-cache", observer)?;
     crate::retired::retire_ledger_with_observer(conn, observer)?;
+    transaction_page_index(conn, observer)?;
+    Ok(())
+}
+
+fn transaction_page_index(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let tx = conn.transaction().map_err(map_sqlite_error)?;
+    observer("transaction_page_index.before")?;
+    tx.execute_batch(super::sql("_ensure_transaction_page_index", 1))
+        .map_err(map_sqlite_error)?;
+    let definition: String = tx.query_row(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_transactions_profile_page'",
+        [], |row| row.get(0),
+    ).map_err(map_sqlite_error)?;
+    let normalized = definition
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(" if not exists", "");
+    if normalized != "create index idx_transactions_profile_page on transactions(profile_id, occurred_at, created_at, id, wallet_id)" {
+        return Err(Error::migration("transaction_page_index"));
+    }
+    observer("transaction_page_index.after")?;
+    tx.commit().map_err(map_sqlite_error)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_index_storage_errors_roll_back_and_retry() {
+        for failure in ["busy", "full", "rollback"] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("errors.sqlite3");
+            let mut conn = Connection::open(&path).unwrap();
+            conn.execute_batch("CREATE TABLE transactions(profile_id,occurred_at,created_at,id,wallet_id); INSERT INTO transactions VALUES(1,2,3,4,5);").unwrap();
+            conn.busy_timeout(std::time::Duration::ZERO).unwrap();
+            let other = Connection::open(&path).unwrap();
+            let cookie: i64 = conn
+                .query_row("PRAGMA schema_version", [], |r| r.get(0))
+                .unwrap();
+            if failure == "busy" {
+                other.execute_batch("BEGIN IMMEDIATE").unwrap();
+            } else if failure == "full" {
+                let pages: i64 = conn
+                    .query_row("PRAGMA page_count", [], |r| r.get(0))
+                    .unwrap();
+                conn.execute_batch(&format!("PRAGMA max_page_count={pages}"))
+                    .unwrap();
+            }
+            assert!(transaction_page_index(&mut conn, &mut |label| {
+                if failure == "rollback" && label == "transaction_page_index.after" {
+                    Err(Error::migration("injected"))
+                } else {
+                    Ok(())
+                }
+            })
+            .is_err());
+            assert!(conn.is_autocommit());
+            assert_eq!(
+                conn.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                cookie
+            );
+            assert_eq!(
+                conn.query_row(
+                    "SELECT count(*) FROM sqlite_master WHERE type='index'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+                0
+            );
+            if failure == "busy" {
+                other.execute_batch("ROLLBACK").unwrap();
+            }
+            conn.execute_batch("PRAGMA max_page_count=1073741823")
+                .unwrap();
+            transaction_page_index(&mut conn, &mut |_| Ok(())).unwrap();
+            transaction_page_index(&mut conn, &mut |_| Ok(())).unwrap();
+            assert_eq!(
+                conn.query_row("PRAGMA schema_version", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                cookie + 1
+            );
+        }
+    }
 
     #[test]
     fn current_open_repairs_changed_indexes_and_view_before_admission() {

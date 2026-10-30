@@ -1472,3 +1472,159 @@ def test_normalized_dump_includes_internal_objects_and_storage_classes():
     finally:
         integer.close()
         real.close()
+
+
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+@pytest.mark.parametrize("first", ["python", "rust"])
+def test_transaction_page_index_upgrade(storage_probe, tmp_path, encrypted, first):
+    root = tmp_path / "page/data"
+    conn = reference_open(root, encrypted)
+    conn.executescript("""
+        INSERT INTO workspaces VALUES('page-ws','Page','fixed');
+        INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('page-pf','page-ws','Page','fixed');
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at)
+            VALUES('page-wallet','page-ws','page-pf','Page','manual','fixed');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,created_at)
+            VALUES('page-tx','page-ws','page-pf','page-wallet','page-tx','2025-01-01','inbound','BTC',9007199254740997,'fixed');
+    """)
+    conn.close()
+    conn = reference_open(root, encrypted)
+    conn.execute("DROP INDEX idx_transactions_profile_page")
+    conn.commit()
+    before = normalized_dump(conn)[1:]
+    conn.close()
+    if first == "rust":
+        result = invoke(storage_probe, root, encrypted=encrypted, op="migrate")
+        assert result["ok"], result
+    conn = reference_open(root, encrypted)
+    assert normalized_dump(conn)[1:] == before
+    expected = normalized_dump(conn)
+    conn.close()
+    assert invoke(storage_probe, root, encrypted=encrypted, op="migrate")["ok"]
+    conn = reference_open(root, encrypted)
+    assert normalized_dump(conn) == expected
+    conn.close()
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+@pytest.mark.parametrize("checkpoint", ["transaction_page_index.before", "transaction_page_index.after"])
+def test_transaction_page_index_rollback(storage_probe, tmp_path, encrypted, checkpoint):
+    root = tmp_path / "page/data"
+    conn = reference_open(root, encrypted)
+    conn.close()
+    conn = reference_open(root, encrypted)
+    conn.execute("DROP INDEX idx_transactions_profile_page")
+    conn.commit()
+    before = normalized_dump(conn)
+    conn.close()
+    result = invoke(storage_probe, root, encrypted=encrypted, op="migrate", fail_at=checkpoint)
+    assert not result["ok"]
+    conn = sqlcipher.open_encrypted(root / "kassiber.sqlite3", PASSPHRASE, enforce_operator_identity=False) if encrypted else sqlite3.connect(root / "kassiber.sqlite3")
+    assert normalized_dump(conn) == before
+    conn.close()
+    assert invoke(storage_probe, root, encrypted=encrypted, op="migrate")["ok"]
+
+
+@pytest.mark.parametrize("resume", ["python", "rust"])
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_transaction_page_index_killed_creation(storage_probe, tmp_path, resume, encrypted):
+    root = tmp_path / "page/data"
+    conn = reference_open(root, encrypted)
+    conn.close()
+    conn = reference_open(root, encrypted)
+    conn.execute("DROP INDEX idx_transactions_profile_page")
+    conn.commit()
+    before = normalized_dump(conn)
+    conn.close()
+    # invoke's secret descriptor cannot outlive its call; use the same explicit
+    # temporary descriptor protocol while the child waits at the checkpoint.
+    with tempfile.TemporaryFile() as secret:
+        secret.write(PASSPHRASE.encode())
+        secret.seek(0)
+        request = dict(op="migrate", data_root=str(root), owner_root=str(root.parent / "owners"), identity=IDENTITY,
+                       timestamp=TIMESTAMP, kill_at="transaction_page_index.after")
+        if encrypted:
+            request["fd"] = secret.fileno()
+        process = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, pass_fds=(secret.fileno(),) if encrypted else ())
+        try:
+            process.stdin.write(json.dumps(request) + "\n")
+            process.stdin.flush()
+            assert json.loads(process.stdout.readline()) == {"checkpoint": "transaction_page_index.after"}
+        finally:
+            process.kill()
+            process.communicate(timeout=10)
+    conn = sqlcipher.open_encrypted(root / "kassiber.sqlite3", PASSPHRASE, enforce_operator_identity=False) if encrypted else sqlite3.connect(root / "kassiber.sqlite3")
+    assert normalized_dump(conn) == before
+    conn.close()
+    if resume == "rust":
+        assert invoke(storage_probe, root, encrypted=encrypted, op="migrate")["ok"]
+    conn = reference_open(root, encrypted)
+    assert conn.execute("SELECT count(*) FROM sqlite_master WHERE name='idx_transactions_profile_page'").fetchone()[0] == 1
+    conn.close()
+
+
+@pytest.mark.parametrize("failure", ["interrupt", "busy", "full"])
+def test_python_transaction_page_index_storage_errors(tmp_path, failure):
+    path = tmp_path / "errors.sqlite3"
+    conn = sqlite3.connect(path, timeout=0)
+    conn.executescript("CREATE TABLE transactions(profile_id,occurred_at,created_at,id,wallet_id);"
+                       "INSERT INTO transactions SELECT value,value,value,value,value FROM json_each('[1,2,3,4,5]');")
+    cookie = conn.execute("PRAGMA schema_version").fetchone()[0]
+    other = sqlite3.connect(path, timeout=0)
+    if failure == "busy":
+        other.execute("BEGIN IMMEDIATE")
+    elif failure == "full":
+        conn.execute(f"PRAGMA max_page_count={conn.execute('PRAGMA page_count').fetchone()[0]}")
+    else:
+        def interrupt_creation(sql):
+            if sql.startswith("CREATE INDEX"):
+                def stop():
+                    conn.set_progress_handler(None, 0)
+                    return 1
+                conn.set_progress_handler(stop, 1)
+        conn.set_trace_callback(interrupt_creation)
+    try:
+        with pytest.raises(sqlite3.OperationalError, match={"busy": "locked", "full": "full", "interrupt": "interrupted"}[failure]):
+            db._ensure_transaction_page_index(conn)
+    finally:
+        conn.set_progress_handler(None, 0)
+        conn.set_trace_callback(None)
+        other.rollback()
+        other.close()
+    assert conn.execute("PRAGMA schema_version").fetchone()[0] == cookie
+    assert conn.execute("SELECT count(*) FROM sqlite_master WHERE type='index'").fetchone()[0] == 0
+    assert not conn.in_transaction
+    conn.close()
+
+
+def test_python_transaction_page_index_definition_and_cookie(tmp_path):
+    conn = sqlite3.connect(tmp_path / "definition.sqlite3")
+    conn.execute("CREATE TABLE transactions(profile_id,occurred_at,created_at,id,wallet_id)")
+    cookie = conn.execute("PRAGMA schema_version").fetchone()[0]
+    db._ensure_transaction_page_index(conn)
+    rootpage = conn.execute("SELECT rootpage FROM sqlite_master WHERE name='idx_transactions_profile_page'").fetchone()[0]
+    db._ensure_transaction_page_index(conn)
+    assert conn.execute("PRAGMA schema_version").fetchone()[0] == cookie + 1
+    assert conn.execute("SELECT rootpage FROM sqlite_master WHERE name='idx_transactions_profile_page'").fetchone()[0] == rootpage
+    conn.execute("DROP INDEX idx_transactions_profile_page")
+    conn.execute("CREATE INDEX idx_transactions_profile_page ON transactions(id)")
+    with pytest.raises(sqlite3.DatabaseError, match="unexpected transaction page index definition"):
+        db._ensure_transaction_page_index(conn)
+    assert conn.execute("PRAGMA index_info(idx_transactions_profile_page)").fetchone()[2] == "id"
+    conn.close()
+
+
+@pytest.mark.parametrize("fixture", HISTORICAL_FIXTURES, ids=lambda path: path.name)
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+def test_transaction_page_index_original_historical_python_first(storage_probe, tmp_path, fixture, encrypted):
+    root = tmp_path / "original/data"
+    decode_historical(root, fixture, encrypted)
+    conn = reference_open(root, encrypted)
+    expected = normalized_dump(conn)
+    assert conn.execute("PRAGMA index_info(idx_transactions_profile_page)").fetchall()
+    conn.close()
+    assert invoke(storage_probe, root, encrypted=encrypted, op="migrate")["ok"]
+    conn = reference_open(root, encrypted)
+    assert normalized_dump(conn) == expected
+    conn.close()

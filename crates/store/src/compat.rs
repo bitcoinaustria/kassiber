@@ -82,7 +82,8 @@ pub(crate) fn install_base(conn: &Connection) -> Result<()> {
     let script = if empty {
         format!("BEGIN;\n{base}\nCOMMIT;")
     } else {
-        base.to_owned()
+        // Existing books add this index at the transactional ordered step.
+        base.replace("CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON transactions(profile_id, occurred_at, created_at, id, wallet_id);", "")
     };
     conn.execute_batch(&script).map_err(map_sqlite_error)
 }

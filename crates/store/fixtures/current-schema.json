@@ -784,6 +784,12 @@
     ],
     [
       "index",
+      "idx_transactions_profile_page",
+      "transactions",
+      "CREATE INDEX idx_transactions_profile_page ON transactions(profile_id, occurred_at, created_at, id, wallet_id)"
+    ],
+    [
+      "index",
       "idx_transactions_wallet_external_ci_match",
       "transactions",
       "CREATE INDEX idx_transactions_wallet_external_ci_match\n    ON transactions(wallet_id, LOWER(external_id), direction, asset)\n    WHERE external_id IS NOT NULL"
