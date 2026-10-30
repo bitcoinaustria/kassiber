@@ -27,7 +27,12 @@ const CHUNK_DIGITS: usize = 19;
 
 /// Number of decimal digits in `v`; zero has one digit.
 pub(crate) fn ndigits(v: u128) -> usize {
-    POW10.partition_point(|&p| p <= v).max(1)
+    // A value of `bits` bits has `guess` or `guess + 1` digits, where
+    // `guess = floor(bits * 1233 / 4096)` and 1233 / 4096 is just below
+    // log10(2); the test checks this for every bit length.
+    let bits = (u128::BITS - v.leading_zeros()) as usize;
+    let guess = (bits * 1233) >> 12;
+    (guess + usize::from(v >= POW10[guess])).max(1)
 }
 
 /// `c * 10^k`, when it fits.
@@ -276,6 +281,24 @@ mod tests {
         }
         assert_eq!(ndigits(0), 1);
         assert_eq!(ndigits(u128::MAX), 39);
+        // Every bit length: its smallest and largest values, and the
+        // powers of ten and their neighbours inside it.
+        for bits in 1..=128u32 {
+            let low = 1u128 << (bits - 1);
+            let high = if bits == 128 {
+                u128::MAX
+            } else {
+                (1u128 << bits) - 1
+            };
+            for v in [low, high] {
+                assert_eq!(ndigits(v), v.to_string().len(), "{v}");
+            }
+        }
+        for &power in &POW10[1..] {
+            for v in [power - 1, power, power + 1] {
+                assert_eq!(ndigits(v), v.to_string().len(), "{v}");
+            }
+        }
         let max = U256 {
             hi: u128::MAX,
             lo: u128::MAX,
