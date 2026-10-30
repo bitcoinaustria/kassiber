@@ -18,7 +18,6 @@ from kassiber.core.source_funds import create_source
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from tests import cli_runner
-from tests.custody_engine_compare import injected_stage_failure
 from tests.test_btcpay_commercial_provenance import _hooks
 from tests.test_custody_authored_migration import _scope, _tx, NOW
 
@@ -148,22 +147,115 @@ def test_split_payout_fails_closed(book, monkeypatch, policy, asset):
         state = replace(state, projection=replace(state.projection, decisions=tuple(decisions)))
         if hasattr(state.tax_eligibility, 'eligible_decisions'):
             state = replace(state, tax_eligibility=replace(state.tax_eligibility, eligible_decisions=tuple(decisions)))
-        try:
-            return original(profile, rows, state, **kwargs)
-        except AppError as error:
-            if error.code == 'validation' and str(error) == 'Transaction out: split payout allocation requires review':
-                injections.enter_context(injected_stage_failure('finalized_projection', error))
-            raise
+        return original(profile, rows, state, **kwargs)
     monkeypatch.setattr(ctp, 'compile_finalized_tax_projection', split)
-    with ExitStack() as injections, pytest.raises(AppError, match='out: split payout'):
-        CustodyJournalBuilder(book, book.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()).build_custody_projection()
+    result = CustodyJournalBuilder(book, book.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()).build_custody_projection().finalized_tax_projection
+    assert any(row['transaction_id'] == 'out' and row['reason'] == 'split_payout_requires_review' for row in result.quarantines)
+    assert not result.rows
 
 
-def test_legacy_price_error_identifies_transaction(book):
-    book.execute("UPDATE transactions SET fiat_rate='inf', fiat_rate_exact='Infinity' WHERE id='out'")
+@pytest.mark.parametrize('rate', ['Infinity', '1e-13'])
+def test_legacy_price_quarantine_identifies_transaction(book, rate):
+    book.execute("UPDATE transactions SET fiat_rate=?, fiat_rate_exact=? WHERE id='out'", (rate, rate))
     book.commit()
-    with pytest.raises(AppError, match='transaction out: fiat_rate'):
-        process_journals(book, 'Books', 'Book')
+    result = process_journals(book, 'Books', 'Book')
+    assert result['quarantined'] >= 1
+    row = book.execute("SELECT * FROM journal_quarantines WHERE transaction_id='out'").fetchone()
+    assert row['reason'] == 'invalid_transaction_price'
+    assert 'transaction out:' in json.loads(row['detail_json'])['cause']
+    assert not book.execute("SELECT 1 FROM journal_entries WHERE transaction_id='out'").fetchone()
+    # Rebuilds still complete while the invalid assertion awaits correction.
+    process_journals(book, 'Books', 'Book')
+
+
+@pytest.mark.parametrize('field,value', [('fiat_rate', '1e-13'), ('fiat_value', '1e308')])
+def test_metadata_rejects_unsupported_derived_price_without_writes(book, field, value):
+    from kassiber.daemon import _transaction_metadata_update_payload
+    from kassiber.db import set_setting
+    set_setting(book, 'context_workspace', 'ws')
+    set_setting(book, 'context_profile', 'profile')
+    book.commit()
+    before = book.total_changes
+    with pytest.raises(AppError) as error:
+        _transaction_metadata_update_payload(book, dict(transaction='out',
+            pricing_source_kind='manual_override', pricing_quality='exact', **{field: value}), default_source='gui')
+    assert error.value.code == 'validation'
+    assert 'supported decimal range' in str(error.value) or 'finite decimal' in str(error.value)
+    assert book.total_changes == before
+
+
+def test_cached_rate_with_unsupported_derived_value_quarantines_only_its_transaction(book):
+    set_manual_rate(book, 'BTC-EUR', NOW, '1e-13')
+    process_journals(book, 'Books', 'Book')
+    row = book.execute("SELECT * FROM transactions WHERE id='out'").fetchone()
+    assert row['fiat_value_exact'] is None
+    quarantine = book.execute("SELECT * FROM journal_quarantines WHERE transaction_id='out'").fetchone()
+    assert quarantine['reason'] == 'invalid_transaction_price'
+    assert 'cached rate' in json.loads(quarantine['detail_json'])['cause']
+    set_manual_rate(book, 'BTC-EUR', NOW, '100000')
+    process_journals(book, 'Books', 'Book')
+    assert book.execute("SELECT fiat_value_exact FROM transactions WHERE id='out'").fetchone()[0] == '0.100000'
+    assert not book.execute("SELECT 1 FROM journal_quarantines WHERE reason='invalid_transaction_price'").fetchone()
+
+
+@pytest.mark.parametrize('kind,flag', [('transfer', 'authoritative_chain_observer'), ('routing_income', None)])
+def test_amount_refresh_validates_recomputed_fiat_value(book, kind, flag):
+    from kassiber.core.imports import _transaction_merge_updates
+    book.execute("UPDATE transactions SET fiat_rate=1e-13, fiat_rate_exact='1e-13' WHERE id='out'")
+    existing = book.execute("SELECT * FROM transactions WHERE id='out'").fetchone()
+    normalized = normalize_import_record(dict(txid='out', occurred_at=NOW, direction='outbound',
+                                              asset='BTC', amount='0.000002', kind=kind))
+    with pytest.raises(AppError) as error:
+        _transaction_merge_updates(existing, normalized, 'changed', **({flag: True} if flag else {}))
+    assert error.value.code == 'validation'
+
+
+def test_supplied_value_does_not_bypass_derived_value_bound():
+    with pytest.raises(AppError) as error:
+        normalize_import_record(dict(amount='0.000001', occurred_at=NOW, fiat_rate='1e-13', fiat_value='1'))
+    assert error.value.code == 'validation'
+
+
+@pytest.mark.parametrize('field,value', [('fiat_rate', '1e-13'), ('fiat_value', '1e308')])
+def test_history_revert_rejects_unsupported_derived_price_without_writes(book, field, value):
+    from kassiber.cli.handlers import _metadata_hooks
+    book.execute(f"UPDATE transactions SET {field}=?, {field}_exact=? WHERE id='out'", (float(value), value))
+    book.commit()
+    corrected = metadata.update_transaction_metadata(book, 'Books', 'Book', 'out', _metadata_hooks(),
+        pricing_update=dict(fiat_rate='100000', source_kind='manual_override', quality='exact'))
+    before = book.total_changes
+    with pytest.raises(AppError) as error:
+        metadata.revert_transaction_edit(book, 'Books', 'Book', 'out', _metadata_hooks(),
+            event_id=corrected['history_event_id'], field=field)
+    assert error.value.code == 'validation'
+    assert 'derived' in str(error.value)
+    assert book.total_changes == before
+    assert book.execute("SELECT fiat_rate_exact, fiat_value_exact FROM transactions WHERE id='out'").fetchone()[:] == ('100000', '0.100000')
+
+
+def test_component_terms_validate_derived_payout_rate():
+    from kassiber.core.custody_components import normalize_economic_terms
+    legs = [dict(id='source', ordinal=0, role='source', amount_msat=1),
+            dict(id='target', ordinal=1, role='external_sink', amount_msat=1)]
+    term = dict(source_leg_id='source', target_leg_id='target', term_kind='direct_swap_payout',
+                source_row_hash='a'*64, payout_fiat_value_exact='1e308')
+    with pytest.raises(AppError) as error:
+        normalize_economic_terms([term], legs)
+    assert error.value.code == 'validation'
+
+
+def test_invalid_price_preserves_prior_entries_and_blocks_later_basis(book):
+    _tx(book, 'prior', 'btc', 'inbound', 'BTC', 100000000, '2025-01-01T00:00:00Z')
+    _tx(book, 'later', 'btc', 'outbound', 'BTC', 100000, '2027-01-01T00:00:00Z')
+    book.execute("UPDATE transactions SET fiat_rate=100000, fiat_rate_exact='100000'")
+    book.execute("UPDATE transactions SET fiat_rate=1e-13, fiat_rate_exact='1e-13' WHERE id='out'")
+    book.commit()
+    process_journals(book, 'Books', 'Book')
+    assert book.execute("SELECT 1 FROM journal_entries WHERE transaction_id='prior'").fetchone()
+    assert not book.execute("SELECT 1 FROM journal_entries WHERE transaction_id IN ('out','later')").fetchone()
+    reasons = {row['transaction_id']: row['reason'] for row in book.execute('SELECT * FROM journal_quarantines')}
+    assert reasons['out'] == 'invalid_transaction_price'
+    assert reasons['later'] == 'custody_basis_barrier'
 
 
 @pytest.mark.parametrize('export_format', ['csv', 'xlsx'])

@@ -34,6 +34,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 import uuid
 
 from ..errors import AppError, build_remediation
+from ..msat import msat_to_btc
 from .custody_pricing import finite_decimal
 from ..time_utils import parse_iso_datetime_or_none, parse_timestamp
 from ..transfers import (
@@ -637,7 +638,13 @@ def normalize_economic_terms(
                 details={"ordinal": ordinal},
             )
         if raw.get("payout_fiat_value_exact") not in (None, ""):
-            finite_decimal(raw["payout_fiat_value_exact"], "payout_fiat_value_exact")
+            payout_value = finite_decimal(raw["payout_fiat_value_exact"], "payout_fiat_value_exact")
+            for field, leg in (("reviewed_source_amount_msat", source), ("payout_amount_msat", target)):
+                quantity = _exact_optional_signed_int(raw.get(field), field)
+                if quantity is None:
+                    quantity = leg.get("amount_msat")
+                if quantity and quantity > 0:
+                    finite_decimal(payout_value / msat_to_btc(quantity), "payout_fiat_rate")
         normalized.append(
             {
                 "id": _optional_text(raw.get("id"), "id") or str(uuid.uuid4()),

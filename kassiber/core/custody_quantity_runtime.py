@@ -8,7 +8,7 @@ owns tax-basis calculation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from typing import Any, Iterable, Mapping, Sequence
@@ -714,6 +714,29 @@ def _source_hold_claim(hold: CustodyGapHold, reason: str) -> QuantityClaim:
         priority=ClaimPriority.ACCOUNTING_CONVENTION,
         reason=reason,
     )
+
+
+def with_tax_projection_blockers(
+    state: CanonicalQuantityState,
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+    blockers: Sequence[Mapping[str, Any]],
+) -> CanonicalQuantityState:
+    """Apply late valuation holds through the same pool basis barriers."""
+    issues = tuple(
+        QuantityIssue(
+            issue_id=_issue_id(("tax_projection_blocked", item["transaction_id"], item["reason"])),
+            issue_type="custody_interpreter_blocked", state=CONFLICTING,
+            asset=str(_field(rows_by_id[item["transaction_id"]], "asset") or ""),
+            amount_msat=None,
+            occurred_at=str(_field(rows_by_id[item["transaction_id"]], "occurred_at") or ""),
+            transaction_ids=(item["transaction_id"],), reason=item["reason"],
+            details=json.loads(item["detail_json"]),
+        ) for item in blockers
+    )
+    combined = (*state.issues, *issues)
+    return replace(state, issues=combined, tax_eligibility=_tax_eligibility(
+        state.canonical_input, state.projection, combined, rows_by_id,
+    ))
 
 
 def _tax_eligibility(

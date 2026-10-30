@@ -40,6 +40,7 @@ from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
 from ..core import journal_calculation as core_journal_calculation
+from ..core.custody_pricing import finite_decimal
 from ..core import quarantine_resolution as core_quarantine_resolution
 from ..core import quarantine_review as core_quarantine_review
 from ..core import transaction_verify as core_transaction_verify
@@ -4395,33 +4396,43 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
-        rate = pricing.decimal_from_exact(
-            row["fiat_rate_exact"],
-            cached_rate.get("rate_exact"),
-            row["fiat_rate"],
-            cached_rate["rate"],
-        )
-        fiat_value = pricing.decimal_from_exact(row["fiat_value_exact"])
-        if fiat_value is None and rate is not None and row["amount"] > 0:
-            fiat_value = rate * msat_to_btc(row["amount"])
-        if fiat_value is None:
-            fiat_value = pricing.decimal_from_exact(row["fiat_value"])
-        if rate is None and fiat_value is not None and row["amount"] > 0:
-            rate = fiat_value / msat_to_btc(row["amount"])
-        source_kind = pricing.rate_cache_source_kind(cached_rate)
-        quality = pricing.rate_cache_quality(cached_rate)
-        payload = pricing.pricing_payload(
-            rate=rate,
-            value=fiat_value,
-            source_kind=source_kind,
-            quality=quality,
-            provider=cached_rate["source"],
-            pair=cached_rate["pair"],
-            pricing_timestamp=cached_rate["timestamp"],
-            fetched_at=cached_rate["fetched_at"],
-            granularity=cached_rate.get("granularity"),
-            method=cached_rate.get("method"),
-        )
+        try:
+            rate = pricing.decimal_from_exact(
+                row["fiat_rate_exact"],
+                cached_rate.get("rate_exact"),
+                row["fiat_rate"],
+                cached_rate["rate"],
+            )
+            rate = finite_decimal(rate, "fiat_rate") if rate is not None else None
+            fiat_value = pricing.decimal_from_exact(row["fiat_value_exact"])
+            if fiat_value is None and rate is not None and row["amount"] > 0:
+                fiat_value = rate * msat_to_btc(row["amount"])
+            if fiat_value is None:
+                fiat_value = pricing.decimal_from_exact(row["fiat_value"])
+            if rate is None and fiat_value is not None and row["amount"] > 0:
+                rate = fiat_value / msat_to_btc(row["amount"])
+            source_kind = pricing.rate_cache_source_kind(cached_rate)
+            quality = pricing.rate_cache_quality(cached_rate)
+            payload = pricing.pricing_payload(
+                amount_msat=row["amount"],
+                rate=rate,
+                value=fiat_value,
+                source_kind=source_kind,
+                quality=quality,
+                provider=cached_rate["source"],
+                pair=cached_rate["pair"],
+                pricing_timestamp=cached_rate["timestamp"],
+                fetched_at=cached_rate["fetched_at"],
+                granularity=cached_rate.get("granularity"),
+                method=cached_rate.get("method"),
+            )
+        except AppError as exc:
+            if exc.code != "validation":
+                raise
+            # Retain no invalid derived price. A local quarantine explains the
+            # unusable cached valuation and a later valid cache can retry it.
+            conn.execute("UPDATE transactions SET pricing_method='unsupported_price_range', pricing_quality='missing' WHERE id=?", (row["id"],))
+            continue
         conn.execute(
             """
             UPDATE transactions
