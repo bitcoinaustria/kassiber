@@ -1,7 +1,8 @@
 """Byte-level desktop backup JSONL oracle, with disposable containers only.
 
-Only OS randomness and the private restore suffix are injected by the harness;
-no response fields, separators or progress records are normalized.
+The harness injects OS randomness and the private restore suffix and waits for
+the real local-watch database startup. No response fields, separators or
+progress records are normalized.
 """
 from collections import Counter
 from contextlib import contextmanager
@@ -68,6 +69,29 @@ def temporary(suffix=None,prefix=None,dir=None):
         return str(path)
     return original(suffix=suffix,prefix=prefix,dir=dir)
 tempfile.mkdtemp=temporary
+# The real local-watch worker opens a second SQLCipher connection even when
+# there is no pending work. Finish that startup before taking a backup's
+# database-generation fingerprint, rather than capturing its transient journal.
+# Keep the worker and the product fingerprint/restore code unchanged.
+import threading
+from kassiber import daemon, daemon_chain_analysis_watches as watches
+watch_ready=threading.Event()
+watch_open=watches.open_db
+watch_start=daemon._start_watch_worker
+def opened_watch(*args,**kwargs):
+    try:
+        return watch_open(*args,**kwargs)
+    finally:
+        watch_ready.set()
+def started_watch(ctx,**kwargs):
+    previous=getattr(ctx,"watch_worker",None)
+    if previous is None or not previous.is_alive():
+        watch_ready.clear()
+    watch_start(ctx,**kwargs)
+    if getattr(ctx,"watch_worker",None) is not previous:
+        assert watch_ready.wait(30),"local-watch database startup timed out"
+watches.open_db=opened_watch
+daemon._start_watch_worker=started_watch
 from kassiber.cli.main import main
 raise SystemExit(main(sys.argv[1:]))
 '''
