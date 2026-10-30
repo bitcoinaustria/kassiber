@@ -263,18 +263,18 @@ fn issue(
 ) -> Value {
     json!({"$type":"QuantityIssue","issue_id":id,"issue_type":kind,"state":"conflicting","asset":asset,"amount_msat":null,"occurred_at":at,"transaction_ids":ids,"reason":reason,"details":details})
 }
-fn observations(c: &Value) -> Result<Vec<(String, Value)>, String> {
+fn observations(c: &Value) -> Result<Vec<(String, &Value)>, String> {
     let hashes: BTreeMap<_, _> = array(&c["events"])
         .iter()
         .flat_map(|e| array(&e["legs"]))
         .map(|o| (text(&o["quantity_hash"]), o))
         .collect();
-    let mut result: Vec<(String, Value)> = Vec::new();
+    let mut result: Vec<(String, &Value)> = Vec::new();
     let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for event in array(&c["events"]) {
         for a in array(&event["observation_aliases"]) {
             let id = text(&a[0]);
-            let o = (*hashes.get(&text(&a[1])).ok_or("KeyError")?).clone();
+            let o = *hashes.get(&text(&a[1])).ok_or("KeyError")?;
             // Insertion order is the first occurrence; a later alias replaces it.
             if let Some(&at) = positions.get(&id) {
                 result[at].1 = o;
@@ -302,7 +302,7 @@ pub fn component_claims(
 ) -> Result<Value, String> {
     let obs = observations(canonical)?;
     let observed =
-        super::reviewed::Observations::new(obs.iter().map(|(k, v)| (k.clone(), v)).collect());
+        super::reviewed::Observations::new(obs.iter().map(|(k, v)| (k.clone(), *v)).collect());
     let mut first_observation: HashMap<&str, &Value> = HashMap::new();
     let mut hashes_by_tx: HashMap<&str, Vec<String>> = HashMap::new();
     for (tx, o) in &obs {
