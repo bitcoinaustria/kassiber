@@ -78,8 +78,6 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
   Sidebar,
   SidebarContent,
@@ -125,12 +123,13 @@ import {
 } from "@/daemon/transport";
 import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
-  canEnrollTouchIdPassphrase,
+  appCanStartTouchIdPrompt,
   lockScreenConfig,
   shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
+  unlockFailureKey,
 } from "@/lib/appLock";
 import { formatShortcut, isMacPlatform } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
@@ -175,6 +174,7 @@ import { shellReveal, shellRevealPlayed } from "@/lib/shellReveal";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
 import { KassiberWordmark } from "./KassiberWordmark";
+import { ImportRootRestoreScreen, LockScreen } from "./LockScreen";
 import { AssistantLayout } from "./assistant-panel/AssistantLayout";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
 import {
@@ -369,16 +369,6 @@ function useRailSubmenuTrigger(setSubmenuOpen: (open: boolean) => void) {
     setNavOpen(true);
     setSubmenuOpen(true);
   };
-}
-
-function appCanStartTouchIdPrompt() {
-  if (typeof document === "undefined") {
-    return { appVisible: true, windowFocused: true };
-  }
-  const appVisible = document.visibilityState === "visible";
-  const windowFocused =
-    typeof document.hasFocus !== "function" || document.hasFocus();
-  return { appVisible, windowFocused };
 }
 
 function foregroundTouchIdAutoPrompt(autoPromptRequested: boolean) {
@@ -1045,13 +1035,18 @@ export function AppShell() {
           clearDaemonQueryCache();
           setLocked(true);
         }
+        const failureKey = unlockFailureKey(
+          "passphrase",
+          envelope.error?.code,
+        );
         return {
           ok: unlocked,
-          error:
-            formatDaemonEnvelopeError(envelope) ??
-            (envelope.kind === "auth_required"
-              ? t("lock.passphraseRequiredError")
-              : null),
+          error: failureKey
+            ? t(failureKey)
+            : (formatDaemonEnvelopeError(envelope) ??
+              (envelope.kind === "auth_required"
+                ? t("lock.passphraseRequiredError")
+                : null)),
         };
       }
 
@@ -1143,9 +1138,12 @@ export function AppShell() {
       setAppLockPolicy({ touchIdUnlock: false });
       await refreshTouchIdStatus();
     }
+    const failureKey = unlockFailureKey("touch-id", envelope.error?.code);
     return {
       ok: false,
-      error: formatDaemonEnvelopeError(envelope) ?? t("lock.touchIdNotFound"),
+      error: failureKey
+        ? t(failureKey)
+        : (formatDaemonEnvelopeError(envelope) ?? t("lock.touchIdFailed")),
     };
   }, [
     bumpDaemonSession,
@@ -3482,326 +3480,5 @@ function CurrencyToggle() {
         {symbol}
       </span>
     </Button>
-  );
-}
-
-/**
- * The lock and import-restore screens, drawn in the shell's own outline: the
- * chrome, the title bar row above (traffic lights and the alpha chip stay on
- * it), and an inset panel with the page panel's hairline and gutters, with the
- * card centred in it under the wordmark. A locked window keeps looking like
- * this app, and nothing of the book shows through: the panel covers the nav
- * and the page. `decrypt` decodes the wordmark in as the screen appears.
- */
-function LockedFrame({
-  children,
-  decrypt = false,
-}: {
-  children: React.ReactNode;
-  decrypt?: boolean;
-}) {
-  return (
-    <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto overscroll-none bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
-        <div className="flex w-full max-w-md flex-col items-center gap-8 py-6">
-          <KassiberWordmark cell={3} animate={decrypt} />
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LockScreen({
-  reason,
-  passphraseRequired = true,
-  onUnlock,
-  onTouchIdUnlock,
-  touchIdEnabled,
-  touchIdPlatformSupported,
-  touchIdStatus,
-  autoTouchIdPrompt,
-  onReset,
-}: {
-  reason?: string;
-  passphraseRequired?: boolean;
-  onUnlock: (
-    passphrase: string,
-    options?: { rememberWithTouchId?: boolean },
-  ) => Promise<{ ok: boolean; error?: string | null }>;
-  onTouchIdUnlock: () => Promise<{ ok: boolean; error?: string | null }>;
-  touchIdEnabled: boolean;
-  touchIdPlatformSupported: boolean;
-  touchIdStatus: TouchIdPassphraseStatus | null;
-  autoTouchIdPrompt: boolean;
-  onReset: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  const [passphrase, setPassphrase] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
-  const [touchIdSubmitting, setTouchIdSubmitting] = React.useState(false);
-  const autoTouchIdPrompted = React.useRef(false);
-  const canEnrollTouchId = canEnrollTouchIdPassphrase({
-    platformSupported: touchIdPlatformSupported,
-    passphraseRequired,
-    touchIdEnabled,
-    touchIdAvailable: touchIdStatus?.available !== false,
-    touchIdStale: touchIdStatus?.stale === true,
-  });
-  const [enrollTouchId, setEnrollTouchId] = React.useState(
-    () => touchIdEnabled && canEnrollTouchId,
-  );
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const canUseTouchId =
-    touchIdEnabled &&
-    touchIdPlatformSupported &&
-    passphraseRequired &&
-    touchIdStatus?.available === true &&
-    touchIdStatus.configured;
-  React.useEffect(() => {
-    if (passphraseRequired) inputRef.current?.focus();
-  }, [passphraseRequired]);
-
-  React.useEffect(() => {
-    if (!canEnrollTouchId) {
-      setEnrollTouchId(false);
-    }
-  }, [canEnrollTouchId]);
-
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (submitting) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const result = await onUnlock(passphrase, {
-        rememberWithTouchId: canEnrollTouchId ? enrollTouchId : undefined,
-      });
-      if (!result.ok) {
-        setError(result.error ?? t("lock.passphraseFailed"));
-        setPassphrase("");
-        if (passphraseRequired) inputRef.current?.focus();
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const submitTouchId = React.useCallback(async () => {
-    if (touchIdSubmitting || submitting) return;
-    let keepPending = false;
-    setError(null);
-    setTouchIdSubmitting(true);
-    try {
-      const result = await onTouchIdUnlock();
-      if (!result.ok) {
-        setError(result.error ?? t("lock.touchIdFailed"));
-      } else {
-        keepPending = true;
-      }
-    } finally {
-      if (!keepPending) {
-        setTouchIdSubmitting(false);
-      }
-    }
-  }, [onTouchIdUnlock, submitting, t, touchIdSubmitting]);
-
-  React.useEffect(() => {
-    if (!autoTouchIdPrompt || !canUseTouchId) return;
-    if (autoTouchIdPrompted.current) return;
-    const { appVisible, windowFocused } = appCanStartTouchIdPrompt();
-    autoTouchIdPrompted.current = true;
-    if (
-      !shouldAutoPromptTouchId({
-        autoPromptRequested: autoTouchIdPrompt,
-        canUseTouchId,
-        appVisible,
-        windowFocused,
-      })
-    ) {
-      return;
-    }
-    void submitTouchId();
-  }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
-
-  return (
-    <LockedFrame decrypt>
-      <form
-        className="kb-surface w-full max-w-md p-5 text-card-foreground"
-        onSubmit={(event) => {
-          void submit(event);
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <LockKeyhole className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">
-              {passphraseRequired
-                ? t("lock.passphraseRequiredTitle")
-                : t("lock.booksLocked")}
-            </h2>
-            <p className="m-0 text-xs text-muted-foreground">
-              {reason ?? t("lock.defaultReason")}
-            </p>
-          </div>
-        </div>
-        {/*
-         * The passphrase field stays mounted while Touch ID is pending — it used
-         * to be swapped out for a "Unlocking with Touch ID…" row, which said the
-         * same thing the Touch ID button below already says while it waits, and
-         * collapsed the card mid-interaction. Disabling it instead keeps one
-         * progress signal, holds the card's height steady, and leaves `inputRef`
-         * alive so a failed Touch ID attempt can still focus it.
-         */}
-        {passphraseRequired ? (
-          <div className="mt-5 space-y-2">
-            <label
-              htmlFor="lock-passphrase"
-              className="text-sm font-medium text-foreground"
-            >
-              {t("lock.passphrase")}
-            </label>
-            <Input
-              id="lock-passphrase"
-              ref={inputRef}
-              type="password"
-              autoComplete="current-password"
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.target.value)}
-              disabled={submitting || touchIdSubmitting}
-            />
-            {error && <p className="m-0 text-xs text-destructive">{error}</p>}
-            {touchIdEnabled &&
-            touchIdPlatformSupported &&
-            touchIdStatus?.available === false ? (
-              <p className="m-0 text-xs text-muted-foreground">
-                {touchIdStatus.reason
-                  ? t("lock.touchIdUnavailableReason", {
-                      reason: touchIdStatus.reason,
-                    })
-                  : t("lock.touchIdUnavailable")}
-              </p>
-            ) : null}
-            {touchIdEnabled &&
-            touchIdPlatformSupported &&
-            touchIdStatus?.available === true &&
-            !touchIdStatus.configured ? (
-              <p className="m-0 text-xs text-muted-foreground">
-                {touchIdStatus.reason
-                  ? t("lock.touchIdNotSetUpReason", {
-                      reason: touchIdStatus.reason,
-                    })
-                  : t("lock.touchIdNotSetUp")}
-              </p>
-            ) : null}
-            {canEnrollTouchId ? (
-              <label
-                htmlFor="lock-touch-id-enroll"
-                className="flex items-center justify-between gap-3 rounded-md border bg-background p-3"
-              >
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-foreground">
-                    {t("lock.useTouchIdNextTime")}
-                  </span>
-                  <span className="block text-xs leading-5 text-muted-foreground">
-                    {t("lock.useTouchIdNextTimeBody")}
-                  </span>
-                </span>
-                <Switch
-                  id="lock-touch-id-enroll"
-                  checked={enrollTouchId}
-                  disabled={submitting}
-                  onCheckedChange={setEnrollTouchId}
-                />
-              </label>
-            ) : null}
-          </div>
-        ) : (
-          error && (
-            <p className="mt-5 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </p>
-          )
-        )}
-        {canUseTouchId ? (
-          <Button
-            className="mt-5 w-full"
-            type="button"
-            variant="outline"
-            disabled={submitting || touchIdSubmitting}
-            onClick={() => {
-              void submitTouchId();
-            }}
-          >
-            <Fingerprint className="size-4" aria-hidden="true" />
-            {touchIdSubmitting
-              ? t("lock.waitingForTouchId")
-              : t("lock.unlockWithTouchId")}
-          </Button>
-        ) : null}
-        <Button
-          className="mt-5 w-full"
-          type="submit"
-          disabled={submitting || touchIdSubmitting}
-        >
-          {submitting
-            ? t("lock.unlocking")
-            : passphraseRequired
-              ? t("lock.unlock")
-              : t("lock.openBooks")}
-        </Button>
-        <Button
-          className="mt-2 w-full"
-          type="button"
-          variant="ghost"
-          disabled={submitting}
-          onClick={onReset}
-        >
-          {t("lock.backToSetup")}
-        </Button>
-      </form>
-    </LockedFrame>
-  );
-}
-
-function ImportRootRestoreScreen({
-  error,
-  onReset,
-}: {
-  error: string | null;
-  onReset: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  return (
-    <LockedFrame>
-      <div className="kb-surface w-full max-w-sm p-5 text-card-foreground">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Database className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">{t("importRoot.title")}</h2>
-            <p className="m-0 text-xs text-muted-foreground">
-              {t("importRoot.body")}
-            </p>
-          </div>
-        </div>
-        {error ? (
-          <>
-            <p className="mt-4 text-xs text-destructive">{error}</p>
-            <Button className="mt-5 w-full" type="button" onClick={onReset}>
-              {t("importRoot.backToSetup")}
-            </Button>
-          </>
-        ) : (
-          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-          </div>
-        )}
-      </div>
-    </LockedFrame>
   );
 }

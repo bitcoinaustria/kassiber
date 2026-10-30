@@ -239,9 +239,13 @@
     "importRootOpening": "Kassiber is still opening the selected local books folder.",
     "passphraseRequiredError": "Database passphrase is required.",
     "touchIdNotFound": "No Touch ID passphrase was found for these books. Unlock once with the passphrase to save it again.",
-    "passphraseRequiredTitle": "Database passphrase required",
-    "booksLocked": "Books locked",
-    "defaultReason": "Enter the database passphrase to unlock.",
+    "title": "Unlock your books",
+    "sessionTitle": "Your books are locked",
+    "lead": {
+      "encrypted": "Enter the passphrase to decrypt them on this device.",
+      "daemon-auth": "Kassiber needs the passphrase again before it can show them.",
+      "session": "Nothing from your books shows while Kassiber is locked."
+    },
     "passphrase": "Passphrase",
     "touchIdUnavailableReason": "Touch ID unlock is unavailable: {{reason}}",
     "touchIdUnavailable": "Touch ID unlock is unavailable for this desktop session.",
@@ -255,8 +259,11 @@
     "unlock": "Unlock",
     "openBooks": "Open books",
     "backToSetup": "Back to setup",
-    "passphraseFailed": "Passphrase did not unlock this session.",
-    "touchIdFailed": "Touch ID did not unlock this session."
+    "passphraseEmpty": "Enter the passphrase first.",
+    "passphraseFailed": "That passphrase did not unlock these books.",
+    "unlockFailed": "Kassiber could not unlock these books. Try again.",
+    "touchIdFailed": "Touch ID did not unlock these books.",
+    "touchIdStale": "The passphrase saved for Touch ID no longer opens these books. Unlock once with the passphrase to save it again."
   },
   "importRoot": {
     "title": "Opening local books",

@@ -18,19 +18,26 @@ export function shouldLockEncryptedWorkspaceOnLaunch({
   return encryptedWorkspace && !hasSessionUnlock;
 }
 
+/**
+ * Why the lock screen is up, for its copy: `encrypted` books ask for their
+ * passphrase, `daemon-auth` means the daemon asked for it again (a restarted
+ * session), and `session` is a plaintext book behind the app lock alone.
+ */
+export type LockReason = "encrypted" | "daemon-auth" | "session";
+
 export function lockScreenConfig({
   daemonAuthRequired,
   encryptedWorkspace,
 }: {
   daemonAuthRequired: boolean;
   encryptedWorkspace: boolean;
-}) {
+}): { reason: LockReason; passphraseRequired: boolean } {
   return {
     reason: daemonAuthRequired
-      ? "The daemon needs the database passphrase before it can return live books data."
+      ? "daemon-auth"
       : encryptedWorkspace
-        ? undefined
-        : "Open the local daemon session to continue.",
+        ? "encrypted"
+        : "session",
     passphraseRequired: encryptedWorkspace || daemonAuthRequired,
   };
 }
@@ -93,4 +100,33 @@ export function shouldAutoPromptTouchId({
   windowFocused: boolean;
 }) {
   return autoPromptRequested && canUseTouchId && appVisible && windowFocused;
+}
+
+export function appCanStartTouchIdPrompt() {
+  if (typeof document === "undefined") {
+    return { appVisible: true, windowFocused: true };
+  }
+  const appVisible = document.visibilityState === "visible";
+  const windowFocused =
+    typeof document.hasFocus !== "function" || document.hasFocus();
+  return { appVisible, windowFocused };
+}
+
+/**
+ * The lock screen's own words for a daemon refusal the user can act on, by
+ * the way they tried to unlock; null keeps the daemon's detail. A refused
+ * passphrase is the everyday failure, and a refused Touch ID passphrase means
+ * the saved one went stale, so neither should read as raw daemon English.
+ */
+export function unlockFailureKey(
+  method: "passphrase" | "touch-id",
+  code: string | null | undefined,
+): "lock.passphraseFailed" | "lock.touchIdStale" | "lock.touchIdNotFound" | null {
+  if (code === "local_auth_denied") {
+    return method === "passphrase" ? "lock.passphraseFailed" : "lock.touchIdStale";
+  }
+  if (method === "touch-id" && code === "touch_id_passphrase_not_found") {
+    return "lock.touchIdNotFound";
+  }
+  return null;
 }
