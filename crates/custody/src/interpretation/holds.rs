@@ -148,23 +148,51 @@ pub(crate) fn capture_confirmation(row: &Value) -> Result<Value, String> {
     )
 }
 
-fn confirmation_states(rows: &[Value]) -> Result<BTreeMap<Physical, bool>, String> {
+/// Pure per-row facts the confirmation detectors read: the parsed graph, its
+/// conflict scope and its explicit status. They are derived concurrently and
+/// read in each detector's own row order, so refusals keep their order.
+pub(super) struct Facts {
+    parsed: Result<Option<Py>, String>,
+    scope: Option<Physical>,
+    explicit: Option<bool>,
+}
+pub(super) fn facts(rows: &[Value]) -> Vec<Facts> {
+    crate::par::map(rows, |row| {
+        let parsed = stored::parse(&row["raw_json"]);
+        let scope = match &parsed {
+            Ok(parsed) => conflict_scope(row, parsed.as_ref()),
+            Err(_) => None,
+        };
+        Facts {
+            parsed,
+            scope,
+            explicit: explicit(&payload(row, true)),
+        }
+    })
+    .into_iter()
+    .map(crate::par::unwrap)
+    .collect()
+}
+
+fn confirmation_states(
+    rows: &[Value],
+    facts: &[Facts],
+) -> Result<BTreeMap<Physical, bool>, String> {
     let mut legacy = BTreeMap::new();
     let mut observed: BTreeMap<Physical, Vec<(i64, bool)>> = BTreeMap::new();
-    for row in rows {
-        let parsed = stored::parse(&row["raw_json"])?;
-        let Some(scope) = conflict_scope(row, parsed.as_ref()) else {
+    for (row, fact) in rows.iter().zip(facts) {
+        fact.parsed.as_ref().map_err(Clone::clone)?;
+        let Some(scope) = fact.scope.clone() else {
             continue;
         };
-        let confirmed =
-            explicit(&payload(row, true)).unwrap_or_else(|| truth(&row["confirmed_at"]));
+        let confirmed = fact.explicit.unwrap_or_else(|| truth(&row["confirmed_at"]));
         *legacy.entry(scope.clone()).or_insert(false) |= confirmed;
         // Raw snapshot v1 never contains Python's captured dataclass. Recompute
         // its closed provenance from the raw hashes and chronology instead.
         if !evidence::current_observation(row).map_err(|e| e.code.to_owned())? {
             continue;
         }
-        let Some(confirmed) = explicit(&payload(row, true)) else {
+        let Some(confirmed) = fact.explicit else {
             continue;
         };
         let Some(timestamp) =
@@ -205,13 +233,13 @@ fn canonical_outpoint(value: &Py) -> Option<String> {
     Some(format!("{txid}:{vout}"))
 }
 
-pub(super) fn conflicts(rows: &[Value]) -> Result<Ids, String> {
-    let states = confirmation_states(rows)?;
+pub(super) fn conflicts(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> {
+    let states = confirmation_states(rows, facts)?;
     let mut row_txid = BTreeMap::new();
     let mut outpoints: BTreeMap<Physical, BTreeSet<Physical>> = BTreeMap::new();
-    for row in rows {
-        let parsed = stored::parse(&row["raw_json"])?;
-        let Some(scope) = conflict_scope(row, parsed.as_ref()) else {
+    for (row, fact) in rows.iter().zip(facts) {
+        let parsed = fact.parsed.as_ref().map_err(Clone::clone)?;
+        let Some(scope) = fact.scope.clone() else {
             continue;
         };
         row_txid.insert(codec::pystr(&row["id"]), scope.clone());
@@ -247,18 +275,18 @@ pub(super) fn conflicts(rows: &[Value]) -> Result<Ids, String> {
         .collect())
 }
 
-pub(super) fn pending(rows: &[Value]) -> Result<Ids, String> {
-    let states = confirmation_states(rows)?;
+pub(super) fn pending(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> {
+    let states = confirmation_states(rows, facts)?;
     let mut row_txid = BTreeMap::new();
     let mut explicit_txids = BTreeSet::new();
-    for row in rows {
+    for (row, fact) in rows.iter().zip(facts) {
         // The stored tx wrapper is accepted by both explicit-state detection
         // and confirmation chronology.
-        if explicit(&payload(row, true)).is_none() {
+        if fact.explicit.is_none() {
             continue;
         }
-        let parsed = stored::parse(&row["raw_json"])?;
-        if let Some(scope) = conflict_scope(row, parsed.as_ref()) {
+        fact.parsed.as_ref().map_err(Clone::clone)?;
+        if let Some(scope) = fact.scope.clone() {
             row_txid.insert(codec::pystr(&row["id"]), scope.clone());
             explicit_txids.insert(scope);
         }
@@ -269,9 +297,9 @@ pub(super) fn pending(rows: &[Value]) -> Result<Ids, String> {
             (explicit_txids.contains(&scope) && !confirmed).then_some(scope)
         })
         .collect();
-    for row in rows {
-        let parsed = stored::parse(&row["raw_json"])?;
-        if let Some(scope) = conflict_scope(row, parsed.as_ref()) {
+    for (row, fact) in rows.iter().zip(facts) {
+        fact.parsed.as_ref().map_err(Clone::clone)?;
+        if let Some(scope) = fact.scope.clone() {
             if pending.contains(&scope) {
                 row_txid.insert(codec::pystr(&row["id"]), scope);
             }
@@ -450,12 +478,13 @@ pub(super) struct Inputs<'a> {
 }
 
 pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
+    let facts = facts(input.rows);
     let conflict_ids = if input.has_chain_events {
-        conflicts(input.rows)?
+        conflicts(input.rows, &facts)?
     } else {
         Ids::new()
     };
-    let pending_ids = pending(input.rows)?;
+    let pending_ids = pending(input.rows, &facts)?;
     let by_id: BTreeMap<_, _> = input
         .rows
         .iter()
@@ -628,7 +657,7 @@ mod tests {
                         json!(conflict_scope(&vector["row"], parsed.as_ref()).map(|(c,n,t)| (c,n,t,"conflict-only")))
                     }
                     "outpoint" => json!(canonical_outpoint(&codec::from_json(&vector["value"]).unwrap())),
-                    "detectors" => json!({"conflicts":conflicts(rows)?,"pending":pending(rows)?,"fanout":fanout(rows,&ids("covered"))?,"unscoped":unscoped(rows)?}),
+                    "detectors" => json!({"conflicts":conflicts(rows, &facts(rows))?,"pending":pending(rows, &facts(rows))?,"fanout":fanout(rows,&ids("covered"))?,"unscoped":unscoped(rows)?}),
                     "filter" => json!(without_held(array(&vector["pairs"]), &ids("held"))),
                     "holds" => json!(compute(Inputs { rows, derivation_rows: array(&vector["derivation_rows"]), pairs: array(&vector["pairs"]), wallets: &serde_json::from_value(vector["wallets"].clone()).unwrap(), has_chain_events: vector["has_chain_events"].as_bool().unwrap(), excluded: &ids("excluded"), blocked: &ids("blocked"), resolved: &ids("resolved") })?),
                     _ => unreachable!(),

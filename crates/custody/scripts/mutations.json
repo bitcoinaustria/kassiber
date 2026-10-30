@@ -6956,8 +6956,8 @@
   {
     "id": "R2c-safety-legacy-confirmed",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "explicit(&payload(row, true)).unwrap_or_else(|| truth(&row[\"confirmed_at\"]))",
-    "replace": "explicit(&payload(row, true)).unwrap_or(false)",
+    "find": "fact.explicit.unwrap_or_else(|| truth(&row[\"confirmed_at\"]))",
+    "replace": "fact.explicit.unwrap_or(false)",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7086,7 +7086,7 @@
   {
     "id": "R2c-safety-pending-explicit",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "if explicit(&payload(row, true)).is_none() {",
+    "find": "if fact.explicit.is_none() {",
     "replace": "if false {",
     "expect_failing": [
       "raw_observation_detector_vectors"
