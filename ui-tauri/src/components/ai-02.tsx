@@ -53,6 +53,12 @@ interface PromptOption {
   prompt: string;
 }
 
+/** A file card in the composer; `key` is what removing it names. */
+export interface ComposerAttachment extends ChatAttachmentView {
+  key: string;
+  state: "uploading" | "ready" | "sent";
+}
+
 interface Ai02Props {
   className?: string;
   /** Extra classes for the inner composer surface (border/fill/shadow). */
@@ -106,14 +112,13 @@ interface Ai02Props {
   modelPickerEnabled?: boolean;
   /** Open the native picker to attach a file. Omit to disable the button. */
   onAttach?: () => void;
-  /** The chat's file, shown as a removable card above the text. */
-  attachment?: ChatAttachmentView | null;
   /**
-   * `uploading` while a pasted file is handed over; `sent` once a message
-   * carried it (it stays with the chat until removed).
+   * The chat's files, shown as removable cards above the text: `uploading`
+   * while a pasted file is handed over, `sent` once a message carried it
+   * (it stays with the chat until removed).
    */
-  attachmentState?: "uploading" | "ready" | "sent";
-  onClearAttachment?: () => void;
+  attachments?: ComposerAttachment[];
+  onRemoveAttachment?: (key: string) => void;
   /** Files pasted into the text, or dropped in the browser preview. */
   onAttachFiles?: (files: File[]) => void;
   /** A file dropped on the desktop window over the drop target. */
@@ -197,9 +202,8 @@ export default function Ai02({
   onToolProfileChange,
   modelPickerEnabled = true,
   onAttach,
-  attachment = null,
-  attachmentState = "ready",
-  onClearAttachment,
+  attachments = [],
+  onRemoveAttachment,
   onAttachFiles,
   onNativeFileDrop,
   dropTargetRef,
@@ -306,7 +310,7 @@ export default function Ai02({
     // A newly attached file makes the composer non-empty: recalling an old
     // prompt into it would send that prompt with a new file, which ArrowUp
     // never meant. A file the chat already has is not new.
-    if (attachment && attachmentState !== "sent") return false;
+    if (attachments.some((file) => file.state !== "sent")) return false;
     // A typed draft with no active recall can never step.
     if (historyPositionRef.current === null && inputValue.length > 0) {
       return false;
@@ -509,14 +513,21 @@ export default function Ai02({
               {t("composer.dropToAttach")}
             </div>
           ) : null}
-          {attachment ? (
-            <div className="relative z-10 flex items-center gap-1.5 px-3 pt-3">
-              <ChatAttachmentCard
-                attachment={attachment}
-                uploading={attachmentState === "uploading"}
-                note={attachmentState === "sent" ? t("composer.attachmentInChat") : undefined}
-                onRemove={attachmentState === "uploading" ? undefined : onClearAttachment}
-              />
+          {attachments.length ? (
+            <div className="relative z-10 flex flex-wrap items-center gap-1.5 px-3 pt-3">
+              {attachments.map((file) => (
+                <ChatAttachmentCard
+                  key={file.key}
+                  attachment={file}
+                  uploading={file.state === "uploading"}
+                  note={file.state === "sent" ? t("composer.attachmentInChat") : undefined}
+                  onRemove={
+                    file.state === "uploading" || !onRemoveAttachment
+                      ? undefined
+                      : () => onRemoveAttachment(file.key)
+                  }
+                />
+              ))}
             </div>
           ) : null}
           <div className="relative z-10 min-h-0 flex-1">

@@ -13,7 +13,7 @@ import {
   resolveExecutable,
   runProvider,
 } from "./executables.js";
-import { promptFromMessages, systemInstructions } from "./prompt.js";
+import { promptFromMessages, promptImages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
   safeErrorMessage,
@@ -578,6 +578,13 @@ export async function openCodeChat(
           type: "text",
           text: promptFromMessages(request.messages, resumed),
         },
+        // Inline data URLs only: never a path OpenCode would read itself.
+        ...promptImages(request.messages, resumed).map((image, index) => ({
+          type: "file" as const,
+          mime: image.media_type,
+          filename: `image-${index + 1}.${image.media_type.split("/")[1]}`,
+          url: `data:${image.media_type};base64,${image.data}`,
+        })),
       ],
     }));
     await completed;

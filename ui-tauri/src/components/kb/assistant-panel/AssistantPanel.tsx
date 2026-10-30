@@ -12,6 +12,7 @@ import Ai02 from "@/components/ai-02";
 import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { ModelSetupCard } from "@/components/ai/ModelSetupCard";
 import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,27 +105,32 @@ export function AssistantPanelBody({ inFront }: { inFront: boolean }) {
           <p className="text-xs leading-5 text-muted-foreground">
             {t("panel.emptyBody")}
           </p>
-          {/* A vertical list fits the panel's width; the composer's own
-              chip row would wrap and clip here. */}
-          <ul className="mt-2 flex flex-col gap-1">
-            {DEFAULT_COMPOSER_PROMPT_KEYS.map(({ icon: Icon, key }) => (
-              <li key={key}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => {
-                    useAssistantDraftStore
-                      .getState()
-                      .replaceDraft(t(`prompts.${key}.prompt`));
-                    useUiStore.getState().openAssistantPanel({ focusComposer: true });
-                  }}
-                >
-                  <Icon className="size-4 shrink-0" aria-hidden="true" />
-                  {t(`prompts.${key}.text`)}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {/* Without a model, choosing one comes first. A vertical list
+              fits the panel's width; the composer's own chip row would wrap
+              and clip here. */}
+          {session.selection?.model ? (
+            <ul className="mt-2 flex flex-col gap-1">
+              {DEFAULT_COMPOSER_PROMPT_KEYS.map(({ icon: Icon, key }) => (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => {
+                      useAssistantDraftStore
+                        .getState()
+                        .replaceDraft(t(`prompts.${key}.prompt`));
+                      useUiStore.getState().openAssistantPanel({ focusComposer: true });
+                    }}
+                  >
+                    <Icon className="size-4 shrink-0" aria-hidden="true" />
+                    {t(`prompts.${key}.text`)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ModelSetupCard className="mt-2" />
+          )}
         </div>
       )}
       <div className="flex shrink-0 flex-col gap-2 p-2">

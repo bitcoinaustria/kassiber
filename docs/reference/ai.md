@@ -325,7 +325,8 @@ file's cell values and name. `restricted` keeps an off-device provider to the
 projected surface: those tools are denied with `agent_access_restricted`,
 chain-analysis results are projected, and an attachment is reduced to headers,
 counts and the column plan (its import plan likewise drops dates, amounts and
-the filename). A provider on this device (kind `local` at a
+the filename). Attached images and PDFs are not shown to a restricted
+provider at all. A provider on this device (kind `local` at a
 loopback URL) always has full access.
 
 Set it in the provider form (**Restrict what the assistant can use**) or with
@@ -825,6 +826,16 @@ discovers only the selected provider through `ai.list_models`; checking one
 native CLI must not refresh global runtime status or start other providers.
 Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
+
+Until a model is chosen, the empty chat (the Assistant page and the panel)
+shows **Choose a model to start**: the coding agents (Claude, Codex, GitHub
+Copilot, OpenCode) as rows with **Use**, and a link to Settings for local
+models, servers and API keys. Showing it reads only the provider list and
+cached check results. **Use** switches the agent on if needed and runs the
+same check as Settings, after the off-device confirmation and refused in
+offline mode; a ready agent becomes the default provider and the chat's
+model, and one that is not ready says why in its row (not installed,
+sign-in needed with the CLI's hint).
 
 Typing in the picker ranks every provider's already-known models (configured
 defaults and earlier check results) at once; it never contacts a provider.
@@ -1694,19 +1705,58 @@ prices, exclusions, unpairs and component creation. Conversion components
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
 
-A file reaches the chat three ways, all of them one file per chat: the **+**
-button opens the native picker; a file dropped on the desktop window over the
-assistant is staged by the shell, which records the paths of that drop and
-stages the first one only when the window asks right after it (the webview
-never names a path); and a pasted file (or, in the browser preview, a dropped
-one) goes to the daemon as bytes in chunks of at most 512 KiB through
+A chat holds up to eight files, which reach it three ways. The **+** button
+opens the native picker. Files dropped on the desktop window over the
+assistant are staged by the shell, which records the paths of that drop and
+stages them only when the window asks right after it; the webview never names
+a path. A pasted file (or, in the browser preview, a dropped one) goes to the
+daemon as bytes in chunks of at most 512 KiB through
 `ui.chat.attachments.upload`, up to 25 MB. All three return the same opaque
 token and are staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
-JPEG, WebP and GIF. The composer shows the file as a card with its type and
+JPEG, WebP and GIF. The composer shows each file as a card with its type and
 size, and a pasted image as a small thumbnail the renderer draws from the bytes
-it already holds. The message that first carries the file shows the same card;
-the file stays with the chat for later turns until it is removed. Sending waits
+it already holds. The message that first carries a file shows the same card;
+the files stay with the chat for later turns until removed. Sending waits
 while a pasted file is still on its way.
+
+`ai.chat` takes the chat's files as `attachments: [{token, label?, new?}]`, in
+order; the daemon names them `file-1` … `file-8` and adds a note to the turn
+listing each one and how the model can read it. `new` marks the files the
+message first sends. What the model sees depends on its
+[agent access](#agent-access):
+
+- **Spreadsheets** (CSV, TSV, XLSX) are read through `ui_wallets_analyze_file`
+  and imported through the plan and apply below, naming the file by id
+  (`file`, optional when only one export is attached). A restricted provider
+  gets headers, counts and the column plan.
+- **Images and PDFs** are shown to a provider with full access on the user's
+  message: an image as an image (reduced to 1568 px on the long edge when it is
+  larger and Pillow is available), a PDF as its text layer via Poppler's
+  `pdftotext` (up to 30 pages and 40,000 characters, framed as data rather
+  than instructions), or as images of its first three pages when it has no
+  text (a scan). One message carries at most eight images and 12 MB, the
+  files a message first sends taking that budget first. When the chat has a
+  saved native session (Claude, Codex, Copilot), the files of earlier turns go
+  in a separate message just before the user's: the broker replays only the
+  user's message when it does resume, and the whole conversation, those files
+  included, when it starts a fresh thread instead (the session is gone or the
+  advertised tools changed). The note naming the chat's files rides on the
+  user's message then, so a resumed session still learns which file is
+  which. A stateless provider is shown every file on the user's message on
+  every turn. A restricted provider is told an
+  image or PDF is attached, by its extension only, and is shown none of it.
+- **Any file** can be kept as evidence on a transaction with the consented
+  `ui_attachments_add_from_chat` (`transaction`, `file`, optional `label`):
+  the same managed copy as attaching it in the transaction's evidence. It
+  documents the row and changes no accounting.
+
+The note tells the model that what a file shows is evidence for the user to
+confirm, not an established fact, and that amounts and dates never go from a
+file into an import by hand. CLI agents get the images through the broker:
+Claude as a stream-json image block, Codex and OpenCode as inline data URLs,
+and an ACP agent only when it advertises image prompts (otherwise the prompt
+says the image was left out). In the CLI, `kassiber chat --file PATH` repeats
+for several files, and the nth `--file-context` describes the nth file.
 
 A chat attachment can be imported, not only analyzed.
 `ui_wallets_import_attachment_plan` runs the desktop's generic-ledger import of

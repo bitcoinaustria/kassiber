@@ -55,8 +55,8 @@ export interface AiChatMessage {
   provider?: string;
   model?: string;
   provenance?: AiAnswerProvenance;
-  /** The file a user message first sent to the chat; display only. */
-  attachment?: AiChatMessageAttachment;
+  /** The files a user message first sent to the chat; display only. */
+  attachments?: AiChatMessageAttachment[];
 }
 
 /** What a sent message shows about its file: never a path or a token. */
@@ -228,13 +228,13 @@ export interface AiChatRequest {
    */
   seedNotices?: { index: number; notices: AiChatNotice[] }[];
   /**
-   * One file the user attached to this chat, as an opaque staging grant minted
-   * by the native picker. A token and never a path: the renderer does not learn
-   * where the file is, and the model cannot point the analysis tool elsewhere.
-   * File contents are not sent here — the daemon reads the file locally, and
-   * only sends an off-device model the column headers.
+   * The files attached to this chat, in order, as opaque staging grants. A
+   * token and never a path: the renderer does not learn where a file is, and
+   * the model cannot point a tool elsewhere. File contents are not sent here;
+   * the daemon reads the files locally. `new` marks the files this message
+   * first sends.
    */
-  attachment?: { token: string; label?: string | null };
+  attachments?: { token: string; label?: string | null; new?: boolean }[];
   /** Typed, ephemeral UI state. Never includes descriptors, file content, or secrets. */
   screenContext?: {
     route?: string;
@@ -316,11 +316,12 @@ export function buildAiChatStreamArgs(
     seed_history: request.seedHistory ? true : undefined,
     seed_notices:
       request.seedHistory && request.seedNotices?.length ? request.seedNotices : undefined,
-    attachment: request.attachment
-      ? {
-          token: request.attachment.token,
-          label: request.attachment.label ?? undefined,
-        }
+    attachments: request.attachments?.length
+      ? request.attachments.map((attachment) => ({
+          token: attachment.token,
+          label: attachment.label ?? undefined,
+          new: attachment.new ? true : undefined,
+        }))
       : undefined,
     screen_context: request.screenContext
       ? {
@@ -524,7 +525,7 @@ export interface UseAiChatStreamResult {
   send: (
     request: AiChatRequest,
     userMessageContent: string,
-    userAttachment?: AiChatMessageAttachment,
+    userAttachments?: AiChatMessageAttachment[],
   ) => Promise<{ refused: boolean }>;
   sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
   /**
@@ -1097,7 +1098,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
     async (
       request: AiChatRequest,
       userMessageContent: string,
-      userAttachment?: AiChatMessageAttachment,
+      userAttachments?: AiChatMessageAttachment[],
     ): Promise<{ refused: boolean }> => {
       if (isStreaming) return { refused: false };
       setError(null);
@@ -1115,7 +1116,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: "user",
           content: userMessageContent,
           status: "done",
-          ...(userAttachment ? { attachment: userAttachment } : {}),
+          ...(userAttachments?.length ? { attachments: userAttachments } : {}),
         },
         {
           id: assistantId,

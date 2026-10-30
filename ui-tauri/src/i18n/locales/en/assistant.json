@@ -56,9 +56,9 @@
     "dropToAttach": "Drop to attach",
     "attachmentUploading": "Attaching…",
     "attachmentInChat": "Stays with this chat",
-    "attachmentOnlyFirst": {
-      "title": "One file per chat",
-      "body": "{{filename}} is attached. The assistant works with one file per chat for now."
+    "attachmentLimit": {
+      "title": "A chat holds up to {{max}} files",
+      "body": "Some files weren't attached. Remove one, or start a new chat for more."
     },
     "attachmentUnsupported": {
       "title": "This file can't be attached",
@@ -648,8 +648,10 @@
       "received": "The local setup or import finished; verify what data is now available.",
       "partial": "Some local changes were saved, but setup or sync did not finish. Inspect current data and the remaining blockers.",
       "attached": "The selected file was saved as evidence for this transaction and is available for analysis. No transaction history was imported; the case is not necessarily resolved.",
-      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence."
+      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence.",
+      "attachedNotInChat": "The selected file was saved as evidence for this transaction, but this chat already holds as many files as it can, so the file is not available for analysis here. No transaction history was imported; the case is not necessarily resolved."
     },
+    "attachedNotInChat": "The file was saved as evidence on the transaction but not added to this chat. Remove a file, or start a new chat, to analyze it here.",
     "continuePrompt": "Continue the evidence review. {{outcome}} Inspect the current cases again before making a proposal. Cases: {{cases}}",
     "sourceFundsContinuePrompt": "Continue the source-of-funds review for the same target, amount and purpose. {{outcome}} Read the current source-of-funds review context and evidence again. Keep recorded provenance separate from accounting and request consent before changes. Cases: {{cases}}",
     "importTarget": "Import into connection",
@@ -1045,5 +1047,14 @@
       "coinbase": "A Coinbase API connection is needed.",
       "binance": "A Binance API connection is needed."
     }
+  },
+  "modelSetup": {
+    "title": "Choose a model to start",
+    "body": "A coding agent you're already signed into works best. Nothing is contacted until you choose one.",
+    "use": "Use",
+    "retry": "Check again",
+    "useAria": "Use {{name}}",
+    "other": "Local models, servers and API keys are set up in Settings.",
+    "openSettings": "Open Settings"
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,7 +16,7 @@ from kassiber.ai.providers import (
 from kassiber.daemon import (
     AiToolRuntime,
     _analyze_attached_file_for_ai,
-    _attachment_context_for_model,
+    _chat_files_note,
     _provider_has_full_agent_access,
 )
 from kassiber.db import open_db
@@ -66,7 +67,7 @@ class AgentAccessDecisionTests(unittest.TestCase):
     def test_full_access_remote_reads_attachment_cells_but_never_the_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = _write(tmp, "opaque.csv", OPAQUE_CSV)
-            state = {"attachment_source_file": path, "provider_on_device": False}
+            state = {**{"chat_files": [{"id": "file-1", "source_file": path, "filename": os.path.basename(path), "kind": "delimited", "new": True}]}, "provider_on_device": False}
             full = _analyze_attached_file_for_ai(
                 AiToolRuntime(tmp, {}, queue.Queue(), {**state, "provider_full_access": True}),
                 {"column_map": OPAQUE_PLAN},
@@ -80,13 +81,16 @@ class AgentAccessDecisionTests(unittest.TestCase):
         self.assertTrue(restricted["cell_values_withheld"])
 
     def test_attachment_note_names_the_file_only_with_full_access(self):
-        state = {"attachment_filename": "Umsatzliste_AT61.csv", "provider_on_device": False}
+        state = {
+            "chat_files": [{"id": "file-1", "filename": "Umsatzliste_AT61.csv", "kind": "delimited"}],
+            "provider_on_device": False,
+        }
         self.assertIn(
             "Umsatzliste_AT61.csv",
-            _attachment_context_for_model({**state, "provider_full_access": True}),
+            _chat_files_note({**state, "provider_full_access": True}, {}),
         )
         self.assertNotIn(
-            "AT61", _attachment_context_for_model({**state, "provider_full_access": False})
+            "AT61", _chat_files_note({**state, "provider_full_access": False}, {})
         )
 
 

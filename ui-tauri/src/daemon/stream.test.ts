@@ -467,17 +467,17 @@ describe("buildAiChatStreamArgs", () => {
     });
   });
 
-  it("forwards a file attachment as a token, never a path or contents", () => {
+  it("forwards attached files as tokens, never a path or contents", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "What is in this export?" }],
-      attachment: { token: "stage-token-1" },
+      attachments: [{ token: "stage-token-1" }, { token: "stage-token-2", new: true }],
     });
 
-    expect(args.attachment).toEqual({
-      token: "stage-token-1",
-      label: undefined,
-    });
+    expect(args.attachments).toEqual([
+      { token: "stage-token-1", label: undefined, new: undefined },
+      { token: "stage-token-2", label: undefined, new: true },
+    ]);
     // The daemon reads the file itself; the renderer must not ship bytes or a
     // filesystem path through the chat request.
     const serialized = JSON.stringify(args);
@@ -485,13 +485,13 @@ describe("buildAiChatStreamArgs", () => {
     expect(serialized).not.toContain("source_file");
   });
 
-  it("omits the attachment field when nothing is attached", () => {
+  it("omits the attachments field when nothing is attached", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "hi" }],
     });
 
-    expect(args.attachment).toBeUndefined();
+    expect(args.attachments).toBeUndefined();
   });
 
   it("names the chat's permission mode and tool set", () => {

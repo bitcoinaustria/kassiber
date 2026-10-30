@@ -7,6 +7,7 @@ import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
 import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { ModelSetupCard } from "@/components/ai/ModelSetupCard";
 import { useIncognitoScope } from "@/components/ai/incognitoScope";
 import { RecentChats } from "@/components/ai/RecentChats";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
@@ -48,12 +49,11 @@ export function Assistant() {
     incognito,
     setIncognito,
     sessionId,
-    attachment,
-    attachmentState,
+    attachments,
     attachFile,
     attachFiles,
-    attachDroppedFile,
-    clearAttachment,
+    attachDroppedFiles,
+    removeAttachment,
   } = useAssistantSession();
   // A file can be dropped anywhere on the page, not only on the composer.
   const pageRef = React.useRef<HTMLDivElement>(null);
@@ -127,11 +127,10 @@ export function Assistant() {
       toolProfile={toolProfile}
       onToolProfileChange={setToolProfile}
       onAttach={attachFile}
-      attachment={attachment}
-      attachmentState={attachmentState}
-      onClearAttachment={clearAttachment}
+      attachments={attachments}
+      onRemoveAttachment={removeAttachment}
       onAttachFiles={attachFiles}
-      onNativeFileDrop={attachDroppedFile}
+      onNativeFileDrop={attachDroppedFiles}
       dropTargetRef={pageRef}
       historyMessages={messages}
       {...(hasMessages ? { prompts: [] } : {})}
@@ -260,6 +259,7 @@ export function Assistant() {
               <h2 className="text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
                 {t("page.heading")}
               </h2>
+              {selection?.model ? null : <ModelSetupCard />}
               <div className="w-full">
                 <AssistantFocusChip className="mb-2 justify-center" />
                 {composer}

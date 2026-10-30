@@ -799,12 +799,12 @@ async fn pick_chat_attachment_source(
     .await
 }
 
-/// Stage the file the user just dropped onto the window for the assistant.
+/// Stage the files the user just dropped onto the window for the assistant.
 ///
 /// The webview names no path: it can only ask for the drop the native window
-/// reported moments ago, once. The first file is staged with the same chat
-/// filter as the picker; the count tells the composer whether others were
-/// left out.
+/// reported moments ago, once. Each file of a type the chat takes is staged
+/// with the same filter as the picker, up to a chat's limit; the counts tell
+/// the composer what was left out.
 #[tauri::command]
 async fn stage_dropped_chat_attachment(
     app: tauri::AppHandle,
@@ -816,31 +816,37 @@ async fn stage_dropped_chat_attachment(
         return Ok(None);
     };
     let dropped = paths.len();
-    let Some(path) = paths.into_iter().next() else {
-        return Ok(None);
-    };
-    if !is_chat_attachment_path(&path) {
-        return Ok(Some(json!({
-            "rejected": "unsupported_type",
-            "dropped_count": dropped,
-        })));
+    let accepted: Vec<PathBuf> = paths
+        .into_iter()
+        .filter(|path| is_chat_attachment_path(path))
+        .collect();
+    let unsupported = dropped - accepted.len();
+    let mut staged = Vec::new();
+    for path in accepted.into_iter().take(MAX_CHAT_DROP_FILES) {
+        staged.push(
+            stage_source(
+                app.clone(),
+                state.clone(),
+                path,
+                StagingRequest {
+                    purpose: Some(CHAT_ATTACHMENT_PURPOSE),
+                    expected_scope: expected_scope.clone(),
+                    ..StagingRequest::default()
+                },
+            )
+            .await?,
+        );
     }
-    let mut staged = stage_source(
-        app,
-        state,
-        path,
-        StagingRequest {
-            purpose: Some(CHAT_ATTACHMENT_PURPOSE),
-            expected_scope,
-            ..StagingRequest::default()
-        },
-    )
-    .await?;
-    staged["dropped_count"] = json!(dropped);
-    Ok(Some(staged))
+    Ok(Some(json!({
+        "staged": staged,
+        "dropped_count": dropped,
+        "unsupported_count": unsupported,
+    })))
 }
 
 const CHAT_ATTACHMENT_PURPOSE: &str = "chat_attachment";
+/// A chat holds up to eight files; the daemon refuses more.
+const MAX_CHAT_DROP_FILES: usize = 8;
 /// A drop is staged only on the webview's prompt request right after it.
 const CHAT_DROP_MAX_AGE: Duration = Duration::from_secs(10);
 

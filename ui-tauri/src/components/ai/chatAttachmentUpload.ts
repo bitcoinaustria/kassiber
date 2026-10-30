@@ -88,31 +88,37 @@ export async function uploadChatAttachment(
   throw new ChatAttachmentError("chat_attachment_failed", file.name);
 }
 
-export type DroppedChatAttachment =
-  | { status: "staged"; selection: DocumentImportSourceSelection; droppedCount: number }
-  | { status: "unsupported"; droppedCount: number }
-  | { status: "none" };
+export interface DroppedChatAttachments {
+  staged: DocumentImportSourceSelection[];
+  droppedCount: number;
+  /** Dropped files of a type the chat does not take. */
+  unsupportedCount: number;
+}
+
+function isSelection(value: unknown): value is DocumentImportSourceSelection {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.document_token === "string" && Boolean(candidate.source);
+}
 
 /**
- * Stage the file just dropped on the desktop window. The native side kept
+ * Stage the files just dropped on the desktop window. The native side kept
  * the paths of that drop; the webview can only ask for it, once.
  */
-export async function stageDroppedChatAttachment(
+export async function stageDroppedChatAttachments(
   expectedScope: { workspace_id: string; profile_id: string },
-): Promise<DroppedChatAttachment> {
-  if (!isTauriRuntime) return { status: "none" };
+): Promise<DroppedChatAttachments | null> {
+  if (!isTauriRuntime) return null;
   const { invoke } = await import("@tauri-apps/api/core");
   const result = await invoke<Record<string, unknown> | null>(
     "stage_dropped_chat_attachment",
     { expectedScope },
   );
-  if (!result) return { status: "none" };
-  const droppedCount = typeof result.dropped_count === "number" ? result.dropped_count : 1;
-  if (result.rejected) return { status: "unsupported", droppedCount };
-  if (typeof result.document_token !== "string" || !result.source) return { status: "none" };
+  if (!result) return null;
+  const staged = Array.isArray(result.staged) ? result.staged.filter(isSelection) : [];
   return {
-    status: "staged",
-    selection: result as unknown as DocumentImportSourceSelection,
-    droppedCount,
+    staged,
+    droppedCount: typeof result.dropped_count === "number" ? result.dropped_count : staged.length,
+    unsupportedCount: typeof result.unsupported_count === "number" ? result.unsupported_count : 0,
   };
 }

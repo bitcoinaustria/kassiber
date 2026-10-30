@@ -51,7 +51,8 @@ executors, and result redaction, within the access the user grants.
   acquisition tools; `restricted` hides those tools and projects
   chain-analysis results. The agent's model counts as off-device either way.
 - **Not chat-only tools.** Tools that need a chat attachment
-  (`wallets_analyze_file`, attachment import), a desktop handoff card (the
+  (`wallets_analyze_file`, attachment import, keeping a chat file as
+  evidence), a desktop handoff card (the
   `request_input` tools), a chat visual, a cross-book view, a PSBT or dataset
   the desktop staged, the desktop daemon's background jobs, or its per-process
   egress ledger are not exposed. Book pinning still applies: one call reads or
