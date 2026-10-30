@@ -1276,7 +1276,7 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios):
+    def _file_import_parity(self, command, scenarios, extra=()):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
@@ -1306,7 +1306,7 @@ class RustRealStoreParityTest(_Roots):
                 results,states=[],[]
                 for rust in (False,True):
                     database.write_bytes(baseline)
-                    args=["wallets",command,"--wallet","Import source","--file",str(file)]
+                    args=["wallets",command,"--wallet","Import source","--file",str(file),*extra]
                     if rust:
                         result=self.call(True,args,secret=secret)
                     else:
@@ -1384,6 +1384,16 @@ class RustRealStoreParityTest(_Roots):
             "Date,Sent Amount,Sent Currency,Received Amount,Received Currency\n2025-01-02,1,EUR,0.001,BTC\n",
             "bad,header\nx,y\n",
         ])
+
+    def test_bull_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_cli_smoke import _BULLBITCOIN_ORDERS_CSV
+        self._file_import_parity("import-bull", [
+            _BULLBITCOIN_ORDERS_CSV,
+            "ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,USD,0.002,BTC,2025-01-02,repeat\ncompleted,100,USD,0.002,BTC,2025-01-02,repeat\n",
+            "ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,foreign\n",
+            "bad,header\nx,y\n",
+            "",
+        ], extra=("--mode", "full"))
 
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV
@@ -1563,6 +1573,7 @@ class RustShellDriftTest(unittest.TestCase):
     def test_file_import_vectors_match_python(self):
         self.check("crates/wallets/scripts/generate_import_vectors.py")
         self.check("crates/wallets/scripts/generate_exchange_vectors.py")
+        self.check("crates/wallets/scripts/generate_bull_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

@@ -193,6 +193,56 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-river"]
         self.assertEqual(calls, [{"command":"wallets.import-river","served_by":"rust"}] * len(cases))
 
+    def test_bull_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Bull workspace"))
+        self.ok(self.cli("profiles", "create", "Bull book", "--workspace", "Bull workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Bull workspace", "--profile", "Bull book"))
+        self.ok(self.cli("wallets", "create", "--label", "Bull source", "--kind", "bullbitcoin"))
+        source = self.data_root.parent / "bull.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_bull_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for mode in ("relevant", "full"):
+                for case in cases:
+                    with self.subTest(mode=mode, case=case["name"]):
+                        source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                        result = self.cli("wallets", "import-bull", "--wallet", "Bull source", "--mode", mode, "--file", str(source))
+                        self.assertIn(result.returncode, (0,1), (result.stdout, result.stderr))
+                        self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-bull"]
+        self.assertEqual(calls, [{"command":"wallets.import-bull","served_by":"rust"}] * (2 * len(cases)))
+
+    def test_bull_coordinator_default_wallet_alias_reimport_and_rollback_dump(self):
+        from tests.test_cli_smoke import _BULLBITCOIN_EXISTING_CSV, _BULLBITCOIN_ORDERS_CSV
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Bull workspace"))
+        self.ok(self.cli("profiles", "create", "Bull book", "--workspace", "Bull workspace", "--fiat-currency", "USD"))
+        self.ok(self.cli("context", "set", "--workspace", "Bull workspace", "--profile", "Bull book"))
+        source = self.data_root.parent / "bull.csv"
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            self.ok(self.cli("wallets", "create", "--label", "Observed", "--kind", "custom"))
+            source.write_text(_BULLBITCOIN_EXISTING_CSV)
+            self.ok(self.cli("wallets", "import-csv", "--wallet", "Observed", "--file", str(source)))
+            source.write_text(_BULLBITCOIN_ORDERS_CSV)
+            self.ok(self.cli("wallets", "import-bullbitcoin", "--file", str(source)))
+            self.ok(self.cli("wallets", "import-bull", "--mode", "full", "--file", str(source)))
+            repeated = self.ok(self.cli("wallets", "import-bullbitcoin", "--mode", "full", "--file", str(source)))["data"]
+            self.assertEqual(repeated["imported"], 0)
+            source.write_text(_BULLBITCOIN_ORDERS_CSV.replace("USD","EUR").replace("2026-04-16 09:50:00.000Z","invalid"))
+            refused=self.cli("wallets", "import-bull", "--file", str(source))
+            self.assertEqual(refused.returncode,1,refused.stderr)
+            self.assertEqual(json.loads(refused.stdout)["error"]["message"],"Imported price currency EUR does not match profile fiat currency USD")
+            source.write_text("bad,header\nx,y\n")
+            refused = self.cli("wallets", "import-bull", "--mode", "full", "--wallet", "missing", "--file", str(source))
+            self.assertEqual(refused.returncode, 1)
+            source.write_text(_BULLBITCOIN_ORDERS_CSV)
+            batch = self.ok(self.cli("imports", "list", "--wallet", "Bull Bitcoin"))["data"]["batches"][0]["id"]
+            self.ok(self.cli("imports", "rollback", "--batch", batch, "--confirm"))
+            self.ok(self.cli("wallets", "import-bullbitcoin", "--mode", "full", "--file", str(source)))
+        calls=[item for item in self.served() if item["command"] in {"wallets.import-bull","wallets.import-bullbitcoin"}]
+        self.assertEqual(len(calls),6)
+        self.assertTrue(all(item["served_by"]=="rust" for item in calls))
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

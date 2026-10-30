@@ -1485,7 +1485,8 @@
     "find": "if result.is_ok() {",
     "replace": "if true {",
     "expect_failing": [
-      "river_metadata_failure_rolls_back_observations_tags_and_run"
+      "river_metadata_failure_rolls_back_observations_tags_and_run",
+      "bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation"
     ],
     "rule": "River metadata failures roll back the entire import and journal invalidation."
   },
@@ -1688,5 +1689,595 @@
       "python_river_import_vectors"
     ],
     "rule": "LBTC is stripped before its BTC substring, following the corrected Python reference."
+  },
+  {
+    "id": "W-bull-header",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "    \"ORDER_STATUS\",",
+    "replace": "    \"WRONG_STATUS\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull header behavior."
+  },
+  {
+    "id": "W-bull-status-order_status",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"ORDER_STATUS\", \"PAYIN_STATUS\", \"PAYOUT_STATUS\"",
+    "replace": "\"UNKNOWN\", \"PAYIN_STATUS\", \"PAYOUT_STATUS\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull status order_status behavior."
+  },
+  {
+    "id": "W-bull-status-payin_status",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"ORDER_STATUS\", \"PAYIN_STATUS\", \"PAYOUT_STATUS\"",
+    "replace": "\"ORDER_STATUS\", \"UNKNOWN\", \"PAYOUT_STATUS\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull status payin_status behavior."
+  },
+  {
+    "id": "W-bull-status-payout_status",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"ORDER_STATUS\", \"PAYIN_STATUS\", \"PAYOUT_STATUS\"",
+    "replace": "\"ORDER_STATUS\", \"PAYIN_STATUS\", \"UNKNOWN\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull status payout_status behavior."
+  },
+  {
+    "id": "W-bull-completed",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "river::column(&v) != \"completed\"",
+    "replace": "river::column(&v) != \"pending\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull completed behavior."
+  },
+  {
+    "id": "W-bull-empty-amount",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"Bull Bitcoin CSV has a completed row with an empty amount\"",
+    "replace": "\"Bull Bitcoin CSV has an empty amount\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull empty amount behavior."
+  },
+  {
+    "id": "W-bull-payin-amount",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.get(&[\"PAYIN_AMOUNT\"])",
+    "replace": "columns.get(&[\"PAYOUT_AMOUNT\"])",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull payin amount behavior."
+  },
+  {
+    "id": "W-bull-payout-amount",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.get(&[\"PAYOUT_AMOUNT\"])",
+    "replace": "columns.get(&[\"PAYIN_AMOUNT\"])",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull payout amount behavior."
+  },
+  {
+    "id": "W-bull-sell-direction",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"outbound\",",
+    "replace": "\"inbound\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull sell direction behavior."
+  },
+  {
+    "id": "W-bull-buy-direction",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"inbound\",",
+    "replace": "\"outbound\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull buy direction behavior."
+  },
+  {
+    "id": "W-bull-sell-kind",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"sell\",",
+    "replace": "\"buy\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull sell kind behavior."
+  },
+  {
+    "id": "W-bull-buy-kind",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"buy\",",
+    "replace": "\"sell\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull buy kind behavior."
+  },
+  {
+    "id": "W-bull-txid",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.opt(&[\"TRANSACTION_ID\"])",
+    "replace": "columns.opt(&[\"ORDER_ID\"])",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull txid behavior."
+  },
+  {
+    "id": "W-bull-rate",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.get(&[\"EXCHANGE_RATE_AMOUNT\"])",
+    "replace": "columns.get(&[\"ABSENT_RATE\"])",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull rate behavior."
+  },
+  {
+    "id": "W-bull-divide",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "arithmetic(&value, &amount, '/')?",
+    "replace": "arithmetic(&value, &amount, '*')?",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull divide behavior."
+  },
+  {
+    "id": "W-bull-reference-order",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "&[\"ORDER_ID\", \"ORDER_NUMBER\"]",
+    "replace": "&[\"ORDER_NUMBER\", \"ORDER_ID\"]",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull reference order behavior."
+  },
+  {
+    "id": "W-bull-reference-txid",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "unwrap_or_else(|| txid.clone())",
+    "replace": "unwrap_or_else(|| \"wrong\".into())",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull reference txid behavior."
+  },
+  {
+    "id": "W-bull-date-completed",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"COMPLETED_AT (UTC)\", \"SENT_AT (UTC)\",",
+    "replace": "\"SENT_AT (UTC)\", \"COMPLETED_AT (UTC)\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull date completed behavior."
+  },
+  {
+    "id": "W-bull-date-sent",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"SENT_AT (UTC)\",",
+    "replace": "\"ABSENT_SENT\",",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull date sent behavior."
+  },
+  {
+    "id": "W-bull-date-created",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"CREATED_AT (UTC)\"]",
+    "replace": "\"ABSENT_CREATED\"]",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull date created behavior."
+  },
+  {
+    "id": "W-bull-method-payin",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.opt(&[\"PAYIN_METHOD\"])",
+    "replace": "columns.opt(&[\"ABSENT_PAYIN\"])",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull method payin behavior."
+  },
+  {
+    "id": "W-bull-method-payout",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.opt(&[\"PAYOUT_METHOD\"])",
+    "replace": "columns.opt(&[\"ABSENT_PAYOUT\"])",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull method payout behavior."
+  },
+  {
+    "id": "W-bull-method-join",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": ".join(\" to \")",
+    "replace": ".join(\" / \")",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull method join behavior."
+  },
+  {
+    "id": "W-bull-raw",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "config::stored_json(&columns.json())",
+    "replace": "config::stored_json(&json!({}))",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull raw behavior."
+  },
+  {
+    "id": "W-bull-fee",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"fee\":\"0\"",
+    "replace": "\"fee\":\"0.00000000001\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull fee behavior."
+  },
+  {
+    "id": "W-bull-provider",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"pricing_provider\":\"Bull Bitcoin\"",
+    "replace": "\"pricing_provider\":\"Bull\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull provider behavior."
+  },
+  {
+    "id": "W-bull-quality",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "\"pricing_quality\":\"exact\"",
+    "replace": "\"pricing_quality\":\"indicative\"",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull quality behavior."
+  },
+  {
+    "id": "W-bull-pair",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "format!(\"{asset}-{f}\")",
+    "replace": "format!(\"{f}-{asset}\")",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull pair behavior."
+  },
+  {
+    "id": "W-bull-columns-strip",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "let clean = kassiber_pytext::strip(key).to_owned();",
+    "replace": "let clean = key.to_owned();",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull columns strip behavior."
+  },
+  {
+    "id": "W-bull-columns-order",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "                .rev()\n                .find",
+    "replace": "                .find",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull columns order behavior."
+  },
+  {
+    "id": "W-bull-columns-whitespace",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": ".filter(|v| !v.is_empty())\n        })\n    }\n    pub fn json",
+    "replace": ".filter(|_| true)\n        })\n    }\n    pub fn json",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull columns whitespace behavior."
+  },
+  {
+    "id": "W-bull-lbtc",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "\"LBTC\" | \"L-BTC\" => Some(\"LBTC\")",
+    "replace": "\"LBTC\" | \"L-BTC\" => Some(\"BTC\")",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull lbtc behavior."
+  },
+  {
+    "id": "W-bull-xbt",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "\"BTC\" | \"XBT\" | \"XXBT\" => Some(\"BTC\")",
+    "replace": "\"BTC\" | \"XBT\" | \"XXBT\" => Some(\"LBTC\")",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Preserve Python Bull xbt behavior."
+  },
+  {
+    "id": "W-bull-match-profile",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "t.profile_id=? AND external_id=?",
+    "replace": "t.profile_id!=? AND external_id=?",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull match profile behavior."
+  },
+  {
+    "id": "W-bull-match-external",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "external_id=? AND direction=?",
+    "replace": "external_id!=? AND direction=?",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull match external behavior."
+  },
+  {
+    "id": "W-bull-match-direction",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "direction=? AND asset=?",
+    "replace": "direction!=? AND asset=?",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull match direction behavior."
+  },
+  {
+    "id": "W-bull-match-asset",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "asset=? AND amount=?",
+    "replace": "asset!=? AND amount=?",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull match asset behavior."
+  },
+  {
+    "id": "W-bull-match-amount",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "amount=? AND (NOT ?",
+    "replace": "amount!=? AND (NOT ?",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull match amount behavior."
+  },
+  {
+    "id": "W-bull-match-exact-fee",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "NOT ? OR fee=?",
+    "replace": "NOT ? OR fee!=?",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull match exact fee behavior."
+  },
+  {
+    "id": "W-bull-ambiguity",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "LIMIT 2",
+    "replace": "LIMIT 1",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull ambiguity behavior."
+  },
+  {
+    "id": "W-bull-fee-fallback",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "rows = query(false)?;",
+    "replace": "rows = query(true)?;",
+    "expect_failing": [
+      "bull_profile_matching_fee_precedence_ambiguity_and_scope"
+    ],
+    "rule": "Preserve Python Bull fee fallback behavior."
+  },
+  {
+    "id": "W-bull-exclude-wallet",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "wallet_id!=?",
+    "replace": "wallet_id=?",
+    "expect_failing": [
+      "bull_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Python Bull exclude wallet behavior."
+  },
+  {
+    "id": "W-bull-price-guard",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "fiat != kassiber_pytext::upper(currency)",
+    "replace": "fiat == kassiber_pytext::upper(currency)",
+    "expect_failing": [
+      "bull_relevant_validates_only_matched_prices_and_preserves_committed_raw"
+    ],
+    "rule": "Preserve Python Bull price guard behavior."
+  },
+  {
+    "id": "W-bull-observation-commitment",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "WHERE transaction_id=t.id) AS observation_authority_version",
+    "replace": "WHERE transaction_id='absent') AS observation_authority_version",
+    "expect_failing": [
+      "bull_relevant_validates_only_matched_prices_and_preserves_committed_raw"
+    ],
+    "rule": "Preserve Python Bull observation commitment behavior."
+  },
+  {
+    "id": "W-bull-exclude-full",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "UPDATE transactions SET excluded=1 WHERE id=?",
+    "replace": "UPDATE transactions SET excluded=0 WHERE id=?",
+    "expect_failing": [
+      "bull_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Python Bull exclude full behavior."
+  },
+  {
+    "id": "W-bull-clear-flags",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id=?",
+    "replace": "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id!=?",
+    "expect_failing": [
+      "bull_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Python Bull clear flags behavior."
+  },
+  {
+    "id": "W-bull-tag-status",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "if status == &tag_status {",
+    "replace": "if status != &tag_status {",
+    "expect_failing": [
+      "bull_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Python Bull tag status behavior."
+  },
+  {
+    "id": "W-bull-reconcile-invalidation",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "    invalidate_journals(conn, &request.profile_id)?;\n    result.extend",
+    "replace": "    // mutation: omit reconciliation invalidation\n    result.extend",
+    "expect_failing": [
+      "bull_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Python Bull reconcile invalidation behavior."
+  },
+  {
+    "id": "W-bull-enrich-invalidation",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "    if !updated.is_empty() {\n        invalidate_journals",
+    "replace": "    if updated.is_empty() {\n        invalidate_journals",
+    "expect_failing": [
+      "bull_relevant_validates_only_matched_prices_and_preserves_committed_raw"
+    ],
+    "rule": "Preserve Python Bull enrich invalidation behavior."
+  },
+  {
+    "id": "W-bull-mode-full",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "\"full\" => Ok(\"full\")",
+    "replace": "\"full\" => Ok(\"relevant\")",
+    "expect_failing": [
+      "bull_import_mode_aliases_and_refusals"
+    ],
+    "rule": "Preserve Python Bull mode full behavior."
+  },
+  {
+    "id": "W-bull-mode-alias",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "\"match\" | \"match-only\" | \"match_only\"",
+    "replace": "\"wrong\" | \"match-only\" | \"match_only\"",
+    "expect_failing": [
+      "bull_import_mode_aliases_and_refusals"
+    ],
+    "rule": "Preserve Python Bull mode alias behavior."
+  },
+  {
+    "id": "W-bull-mode-error",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "Unsupported exchange-evidence import mode '{}'",
+    "replace": "Unsupported import mode '{}'",
+    "expect_failing": [
+      "bull_import_mode_aliases_and_refusals"
+    ],
+    "rule": "Preserve Python Bull mode error behavior."
+  },
+  {
+    "id": "W-bull-default-label",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "let label = \"Bull Bitcoin\";",
+    "replace": "let label = \"Bull\";",
+    "expect_failing": [
+      "bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
+    ],
+    "rule": "Preserve Python Bull default wallet label behavior."
+  },
+  {
+    "id": "W-bull-default-kind",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "kind: \"bullbitcoin\".into(),",
+    "replace": "kind: \"custom\".into(),",
+    "expect_failing": [
+      "bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
+    ],
+    "rule": "Preserve Python Bull default wallet kind behavior."
+  },
+  {
+    "id": "W-bull-default-reuse",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "if let Some(id) = existing {",
+    "replace": "if let Some(id) = existing.filter(|_| false) {",
+    "expect_failing": [
+      "bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
+    ],
+    "rule": "Preserve Python Bull default wallet reuse behavior."
+  },
+  {
+    "id": "W-bull-unchanged",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "unchanged += 1;",
+    "replace": "unchanged += 0;",
+    "expect_failing": [
+      "bull_relevant_validates_only_matched_prices_and_preserves_committed_raw"
+    ],
+    "rule": "Preserve the unchanged counter when authored metadata and higher-priority pricing prevent enrichment."
+  },
+  {
+    "id": "W-bull-mixed-legs",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "        _ => return Ok(None),",
+    "replace": "        _ => (\"inbound\", \"BTC\", abs(payout)?, abs(payin)?, payin_currency, \"buy\"),",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Skip orders unless exactly one side is a supported Bitcoin-family asset."
+  },
+  {
+    "id": "W-bull-missing-txid",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "columns.opt(&[\"TRANSACTION_ID\"])",
+    "replace": "columns.opt(&[\"TRANSACTION_ID\"]).or_else(|| Some(\"missing\".into()))",
+    "expect_failing": [
+      "python_bull_import_vectors"
+    ],
+    "rule": "Skip completed orders without transaction identity."
+  },
+  {
+    "id": "W-bull-normalization-order",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "let records = if mode == Some(\"relevant\") {",
+    "replace": "let records = if false && mode == Some(\"relevant\") {",
+    "expect_failing": [
+      "bull_relevant_preserves_reference_error_order_and_rollback"
+    ],
+    "rule": "Relevant-mode matching and price validation precede normalization of later rows."
   }
 ]

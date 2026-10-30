@@ -436,6 +436,25 @@ pub fn execute_with_creation_identity(
     operation: Operation,
     identity: Option<&CreationIdentity>,
 ) -> Result<Py, AppError> {
+    execute_with_creation_source(conn, operation, &mut |conn| {
+        Ok(CreationIdentity {
+            id: identity
+                .map(|v| v.id.clone())
+                .map_or_else(|| uuid(conn), Ok)?,
+            created_at: identity
+                .map(|v| v.created_at.clone())
+                .map_or_else(|| now(conn), Ok)?,
+        })
+    })
+}
+
+// Allocate identity only after account, configuration and network admission,
+// exactly as the Python coordinator does for an automatically created wallet.
+pub(crate) fn execute_with_creation_source(
+    conn: &Connection,
+    operation: Operation,
+    identity: &mut dyn FnMut(&Connection) -> Result<CreationIdentity, AppError>,
+) -> Result<Py, AppError> {
     match operation {
         Operation::List { profile_id } => list(conn, &profile_id),
         Operation::Get { profile_id, wallet } => details(&load(conn, &profile_id, &wallet)?),
@@ -456,7 +475,7 @@ pub fn execute_with_creation_identity(
 fn write(
     conn: &Connection,
     operation: Operation,
-    identity: Option<&CreationIdentity>,
+    identity: &mut dyn FnMut(&Connection) -> Result<CreationIdentity, AppError>,
 ) -> Result<Py, AppError> {
     match operation {
         Operation::Create {
@@ -480,12 +499,9 @@ fn write(
             network::guard(conn, &profile_id, &config, None)?;
             let config = config::validate(&kind, &config)?;
             network::guard(conn, &profile_id, &config, None)?;
-            let id = identity
-                .map(|v| v.id.clone())
-                .map_or_else(|| uuid(conn), Ok)?;
-            let created_at = identity
-                .map(|v| v.created_at.clone())
-                .map_or_else(|| now(conn), Ok)?;
+            let identity = identity(conn)?;
+            let id = identity.id;
+            let created_at = identity.created_at;
             conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,account_id,label,kind,config_json,created_at) VALUES(?,?,?,?,?,?,?,?)",params![id,workspace_id,profile_id,account,label,kind,config::stored_json(&config),created_at]).map_err(|e|if matches!(e,kassiber_store::rusqlite::Error::SqliteFailure(ref e,_) if e.code==kassiber_store::rusqlite::ErrorCode::ConstraintViolation){conflict(conn,&profile_id,&label,false)}else{database_error(e)})?;
             invalidate_journals(conn, &profile_id)?;
             details(&load(conn, &profile_id, &id)?)

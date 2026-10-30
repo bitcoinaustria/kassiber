@@ -26,13 +26,18 @@ pub fn execute(
                 namespace.flag("force_full"),
             );
         }
-        "import-csv" | "import-json" | "import-phoenix" | "import-river" => {
+        "import-csv" | "import-json" | "import-phoenix" | "import-river" | "import-bull"
+        | "import-bullbitcoin" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,
                 wallet,
+                mode: namespace.text("mode").map(str::to_owned),
                 file: namespace.text("file").unwrap_or_default().into(),
                 format: match namespace.text("wallets_command") {
                     Some("import-json") => kassiber_wallets::file_import::Format::Json,
+                    Some("import-bull" | "import-bullbitcoin") => {
+                        kassiber_wallets::file_import::Format::Bull
+                    }
                     Some("import-river") => kassiber_wallets::file_import::Format::River,
                     Some("import-phoenix") => kassiber_wallets::file_import::Format::Phoenix,
                     _ => kassiber_wallets::file_import::Format::Csv,

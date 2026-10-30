@@ -93,7 +93,7 @@ def main() -> None:
     # exec keeps stdin, inherited descriptors (--db-passphrase-fd) and the
     # working directory exactly as the test passed them.
     if served_by == "rust":
-        if command in {"wallets.import-csv", "wallets.import-phoenix", "wallets.import-json", "wallets.import-river"} and os.environ.get(IMPORT_ORACLE_ENV) == "1":
+        if command in {"wallets.import-csv", "wallets.import-phoenix", "wallets.import-json", "wallets.import-river", "wallets.import-bull", "wallets.import-bullbitcoin"} and os.environ.get(IMPORT_ORACLE_ENV) == "1":
             # Direct script execution puts tests/rust_port first on sys.path.
             sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
             from tests.rust_port.file_import_oracle import run

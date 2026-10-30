@@ -51,6 +51,7 @@ fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, A
             wallet: "Source".into(),
             file: file.to_str().unwrap().into(),
             format,
+            mode: None,
         },
         None,
     );
@@ -459,6 +460,7 @@ fn assert_import_vectors(cases: &Json) {
             "json" => Format::Json,
             "phoenix_csv" => Format::Phoenix,
             "river_csv" => Format::River,
+            "bullbitcoin_csv" => Format::Bull,
             _ => Format::Csv,
         };
         let result = format.load(path.to_str().unwrap()).and_then(|rows| {
@@ -814,4 +816,459 @@ fn river_metadata_failure_rolls_back_observations_tags_and_run() {
         ),
         0
     );
+}
+
+#[test]
+fn python_bull_import_vectors() {
+    let cases: Json =
+        serde_json::from_str(include_str!("../../tests/vectors/python_bull_imports.json")).unwrap();
+    assert_import_vectors(&cases);
+}
+
+fn bull(conn: &Connection, mode: &str) -> Py {
+    let rows = bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let records = rows
+        .iter()
+        .map(normalize)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: "bull.csv".into(),
+        format: Format::Bull,
+        mode: Some(mode.into()),
+    };
+    if mode == "relevant" {
+        exchange::enrich(conn, &request, &rows).unwrap()
+    } else {
+        apply(
+            conn,
+            &request,
+            &resolve(conn, "p", "Source").unwrap(),
+            &rows,
+            &records,
+            &mut Ids {
+                identity: None,
+                at: 0,
+            },
+        )
+        .unwrap()
+    }
+}
+#[test]
+fn bull_profile_matching_fee_precedence_ambiguity_and_scope() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    import(
+        &conn,
+        "date,txid,amount,fee\n2025-01-01,match,0.002,0.00001\n",
+    )
+    .unwrap();
+    // Fee fallback enriches the observed row without rewriting its fee/date/id.
+    let result = bull(&conn, "relevant");
+    assert_eq!(
+        kassiber_envelope::get(&result, "matched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 1000000);
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='buy' AND fiat_value_exact='100' AND occurred_at='2025-01-01T00:00:00Z'"),1);
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01'),('foreign','ws','q','Foreign','custom','{}','2025-01-01');").unwrap();
+    let row=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let r = normalize(&row[0]).unwrap();
+    let mut fields = r.fields.clone();
+    for (k, v) in [
+        ("id", "exact"),
+        ("workspace_id", "ws"),
+        ("profile_id", "p"),
+        ("wallet_id", "other"),
+        ("created_at", "2025-01-01"),
+        ("fingerprint", "other-fp"),
+    ] {
+        fields.insert(k.into(), Sql::Text(v.into()));
+    }
+    insert(&conn, "transactions", &fields).unwrap();
+    let found = exchange::find_profile(&conn, "p", &r, None).unwrap();
+    assert_eq!(
+        string(&found.0.unwrap(), "id"),
+        "exact",
+        "exact fee wins over amount-only match"
+    );
+    assert_eq!(
+        exchange::find_profile(&conn, "p", &r, Some("other"))
+            .unwrap()
+            .1,
+        "matched"
+    );
+    conn.execute("UPDATE transactions SET fee=1 WHERE id='exact'", [])
+        .unwrap();
+    assert_eq!(
+        exchange::find_profile(&conn, "p", &r, None).unwrap().1,
+        "ambiguous"
+    );
+    assert_eq!(
+        kassiber_envelope::get(&bull(&conn, "relevant"), "skipped_ambiguous"),
+        Some(&Py::from(1))
+    );
+    conn.execute("UPDATE transactions SET fee=0", []).unwrap();
+    assert_eq!(
+        exchange::find_profile(&conn, "p", &r, None).unwrap().1,
+        "ambiguous"
+    );
+    conn.execute(
+        "UPDATE transactions SET profile_id='q',wallet_id='foreign' WHERE id='exact'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(
+        exchange::find_profile(&conn, "p", &r, None).unwrap().1,
+        "matched"
+    );
+    for (column, value) in [
+        ("direction", "outbound"),
+        ("asset", "LBTC"),
+        ("external_id", "different"),
+    ] {
+        conn.execute(
+            &format!("UPDATE transactions SET {column}=? WHERE wallet_id='wallet'"),
+            [value],
+        )
+        .unwrap();
+        assert_eq!(
+            exchange::find_profile(&conn, "p", &r, None).unwrap().1,
+            "unmatched",
+            "{column}"
+        );
+        conn.execute(
+            &format!("UPDATE transactions SET {column}=? WHERE wallet_id='wallet'"),
+            [string(&r.fields, column)],
+        )
+        .unwrap();
+    }
+    conn.execute(
+        "UPDATE transactions SET amount=1 WHERE wallet_id='wallet'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(
+        exchange::find_profile(&conn, "p", &r, None).unwrap().1,
+        "unmatched"
+    );
+    assert_eq!(
+        kassiber_envelope::get(&bull(&conn, "relevant"), "skipped_unmatched"),
+        Some(&Py::from(1))
+    );
+}
+#[test]
+fn bull_full_exclusion_reconciliation_dedupe_and_readiness() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let first = bull(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&first, "unmatched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions WHERE excluded=1"),
+        1
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 3);
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='bullbitcoin-wallet-gap' AND label='Bull Bitcoin wallet gap'"),1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        2
+    );
+    let repeat = bull(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "updated"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "unmatched"),
+        Some(&Py::from(1)),
+        "exclude destination wallet before insertion"
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        4
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='q'"
+        ),
+        0
+    );
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('observed','ws','p','other','match','o','2025-01-01','inbound','BTC',200000000,0,'2025-01-01');").unwrap();
+    let matched = bull(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&matched, "matched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='bullbitcoin-matched' AND label='Bull Bitcoin matched'"),1);
+    conn.execute_batch("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('sibling','ws','p','other','match','s','2025-01-01','inbound','BTC',200000000,0,'2025-01-01');").unwrap();
+    let ambiguous = bull(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&ambiguous, "ambiguous"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='bullbitcoin-ambiguous' AND label='Bull Bitcoin ambiguous'"),1);
+}
+#[test]
+fn bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation() {
+    for step in ["tags", "transaction_tags", "import_batches"] {
+        let conn = fixture();
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        conn.execute_batch(&format!(
+            "CREATE TRIGGER deny BEFORE INSERT ON {step} BEGIN SELECT RAISE(ABORT,'denied');END;"
+        ))
+        .unwrap();
+        let file =
+            std::env::temp_dir().join(format!("bull-atomic-{}-{step}.csv", std::process::id()));
+        std::fs::write(&file,"ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,atomic\n").unwrap();
+        let result = execute(
+            &conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Source".into(),
+                file: file.to_string_lossy().into_owned(),
+                format: Format::Bull,
+                mode: Some("full".into()),
+            },
+            None,
+        );
+        std::fs::remove_file(file).unwrap();
+        assert!(result.is_err(), "{step}");
+        for table in [
+            "transactions",
+            "tags",
+            "transaction_tags",
+            "import_batches",
+            "import_batch_transactions",
+        ] {
+            assert_eq!(
+                scalar(&conn, &format!("SELECT count(*) FROM {table}")),
+                0,
+                "{step}: {table}"
+            );
+        }
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            0,
+            "{step}"
+        );
+        assert!(conn.is_autocommit());
+    }
+}
+#[test]
+fn bull_import_mode_aliases_and_refusals() {
+    for mode in [
+        None,
+        Some(""),
+        Some("relevant"),
+        Some("ReLeVaNt"),
+        Some("match"),
+        Some("match-only"),
+        Some("match_only"),
+        Some("relevant-only"),
+        Some("relevant_only"),
+    ] {
+        assert_eq!(exchange::mode(mode).unwrap(), "relevant");
+    }
+    assert_eq!(exchange::mode(Some(" FULL\u{a0}")).unwrap(), "full");
+    let error = exchange::mode(Some("bad")).unwrap_err();
+    assert_eq!(error.code, "validation");
+    assert_eq!(
+        error.message,
+        "Unsupported exchange-evidence import mode 'bad'"
+    );
+    assert!(error.hint.unwrap().contains("Choose 'relevant'"));
+}
+
+#[test]
+fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
+    let conn = fixture();
+    let result = bull(&conn, "relevant"); // EUR evidence is unmatched in a USD book.
+    assert_eq!(
+        kassiber_envelope::get(&result, "skipped_unmatched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        0
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    import(&conn, "date,txid,amount\n2025-01-01,match,0.002\n").unwrap();
+    let rows=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: "bull.csv".into(),
+        format: Format::Bull,
+        mode: None,
+    };
+    let error = exchange::enrich(&conn, &request, &rows).unwrap_err();
+    assert_eq!(error.code, "validation");
+    assert_eq!(
+        error.message,
+        "Imported price currency EUR does not match profile fiat currency USD"
+    );
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let raw = r#"{"observer":"synthetic"}"#;
+    conn.execute("UPDATE transactions SET raw_json=?,kind='authored',description='authored',counterparty='authored',note='authored'",[raw]).unwrap();
+    let id: String = conn
+        .query_row("SELECT id FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    let value = json!({"wallet_id":"wallet","external_id":"match","direction":"inbound","asset":"BTC","amount":200000000_i64,"fee":0,"amount_includes_fee":0});
+    let graph = kassiber_custody::evidence::graph_hash(&json!(raw))
+        .unwrap()
+        .0;
+    let quantity = kassiber_custody::evidence::observed_hash(&value).unwrap().0;
+    conn.execute("INSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES(?,'ws','p','wallet',1,'[]','[]','bitcoin','main','r',?,?,'exact','2025-01-01','2025-01-01')",params![id,graph,quantity]).unwrap();
+    bull(&conn, "relevant");
+    let stored: String = conn
+        .query_row("SELECT raw_json FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(stored, raw);
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='authored' AND description='authored' AND counterparty='authored' AND note='authored' AND fiat_value_exact='100'"),1);
+    conn.execute(
+        "UPDATE transactions SET pricing_source_kind='manual_override'",
+        [],
+    )
+    .unwrap();
+    let version = scalar(
+        &conn,
+        "SELECT journal_input_version FROM profiles WHERE id='p'",
+    );
+    let unchanged = bull(&conn, "relevant");
+    assert_eq!(
+        kassiber_envelope::get(&unchanged, "unchanged"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&unchanged, "journal_invalidated"),
+        Some(&Py::Bool(false))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        version
+    );
+}
+
+#[test]
+fn bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read() {
+    let conn = fixture();
+    let request = || Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: std::env::temp_dir()
+            .join("missing-bull-input.csv")
+            .to_string_lossy()
+            .into_owned(),
+        format: Format::Bull,
+        mode: Some("full".into()),
+    };
+    let identity = Identity {
+        ids: vec![],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("treasury"), "{error:?}");
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 1);
+    conn.execute_batch("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    let identity = Identity {
+        ids: vec!["auto-wallet".into()],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("Import file not found"));
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM wallets WHERE id='auto-wallet' AND kind='bullbitcoin' AND label='Bull Bitcoin' AND account_id='treasury'"),1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        1
+    );
+    // Existing default labels are reused, even when their kind is custom.
+    conn.execute(
+        "UPDATE wallets SET label='bull bitcoin',kind='custom' WHERE id='auto-wallet'",
+        [],
+    )
+    .unwrap();
+    let identity = Identity {
+        ids: vec![],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("Import file not found"));
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 2);
+}
+
+#[test]
+fn bull_relevant_preserves_reference_error_order_and_rollback() {
+    let conn = fixture();
+    import(&conn, "date,txid,amount\n2025-01-01,match,0.002\n").unwrap();
+    let version = scalar(
+        &conn,
+        "SELECT journal_input_version FROM profiles WHERE id='p'",
+    );
+    let file = std::env::temp_dir().join(format!("bull-order-{}.csv", std::process::id()));
+    std::fs::write(&file,"ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\ncompleted,100,USD,0.002,BTC,invalid,later\n").unwrap();
+    let error = execute(
+        &conn,
+        Request {
+            profile_id: "p".into(),
+            wallet: "Source".into(),
+            file: file.to_string_lossy().into_owned(),
+            format: Format::Bull,
+            mode: Some("relevant".into()),
+        },
+        None,
+    )
+    .unwrap_err();
+    std::fs::remove_file(file).unwrap();
+    assert_eq!(error.code, "validation");
+    assert_eq!(
+        error.message,
+        "Imported price currency EUR does not match profile fiat currency USD"
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        version
+    );
+    assert!(conn.is_autocommit());
 }

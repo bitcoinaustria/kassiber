@@ -18,7 +18,7 @@ import uuid
 def run(binary, argv):
     from kassiber.cli.main import build_parser
     from kassiber.cli import handlers
-    from kassiber.core import imports, import_batches, metadata
+    from kassiber.core import imports, import_batches, metadata, wallets
     from kassiber.envelope import json_ready
     from kassiber.errors import AppError
     from tests.test_rust_store_migrations import normalized_dump
@@ -45,10 +45,10 @@ def run(binary, argv):
         reference.row_factory = sqlite3.Row
         reference.execute("PRAGMA foreign_keys=ON")
         id_source = SimpleNamespace(uuid4=new_id)
-        with mock.patch.object(imports, "uuid", id_source), mock.patch.object(import_batches, "uuid", id_source), mock.patch.object(metadata, "uuid", id_source), mock.patch.object(imports, "now_iso", return_value=timestamp), mock.patch.object(import_batches, "now_iso", return_value=timestamp), mock.patch.object(handlers, "now_iso", return_value=timestamp):
+        with mock.patch.object(wallets, "uuid", id_source), mock.patch.object(wallets, "now_iso", return_value=timestamp), mock.patch.object(imports, "uuid", id_source), mock.patch.object(import_batches, "uuid", id_source), mock.patch.object(metadata, "uuid", id_source), mock.patch.object(imports, "now_iso", return_value=timestamp), mock.patch.object(import_batches, "now_iso", return_value=timestamp), mock.patch.object(handlers, "now_iso", return_value=timestamp):
             error = None
             try:
-                outcome = handlers.import_into_wallet(reference, args.workspace, args.profile, args.wallet, args.file, {"import-phoenix":"phoenix_csv", "import-json":"json", "import-csv":"csv", "import-river":"river_csv"}[args.wallets_command])
+                outcome = handlers.import_into_wallet(reference, args.workspace, args.profile, args.wallet, args.file, {"import-phoenix":"phoenix_csv", "import-json":"json", "import-csv":"csv", "import-river":"river_csv", "import-bull":"bullbitcoin_csv", "import-bullbitcoin":"bullbitcoin_csv"}[args.wallets_command], getattr(args,"mode",None))
             except Exception as exc:
                 reference.rollback()
                 error = exc
@@ -71,4 +71,7 @@ def run(binary, argv):
             assert result.returncode == 1, result.stdout
             code = error.code if isinstance(error, AppError) else "internal_error"
             assert payload["error"]["code"] == code, (payload, error)
+            if args.wallets_command in {"import-bull", "import-bullbitcoin"}:
+                assert payload["error"]["message"] == str(error), (payload,error)
+                assert payload["error"].get("hint") == (error.hint if isinstance(error,AppError) else None), (payload,error)
     return result

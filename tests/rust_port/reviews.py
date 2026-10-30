@@ -278,6 +278,11 @@ REVIEWS["tests/test_payment_hash_promotion.py"] = {
 }
 
 REVIEWS["tests/test_exchange_importers.py"] = {
+    "ExchangeImporterTest::test_bullbitcoin_parser_accepts_lbtc_amount_suffix": {
+        "disposition": "rust-test", "group": "imports",
+        "reason": "native Bull vectors pin LBTC/BTC suffixes and buy/sell amounts; remaining provider-file/API duties stay unported",
+        "replacement": "crates/wallets/src/file_import/tests.rs::python_bull_import_vectors",
+    },
     "ExchangeImporterTest::test_river_loader_normalizes_header_whitespace_like_row_parsing": {
         "disposition": "rust-test", "group": "imports",
         "reason": "native River vectors pin whitespace, case folding and ordered duplicate/colliding headers; other provider-file/API duties remain unported",

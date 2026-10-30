@@ -12,7 +12,7 @@ const REQUIRED: &[&str] = &[
 // Only folds that can contribute to these ASCII column names are relevant.
 // Rust's lowercase covers ordinary case mappings; Python casefold also folds
 // long-s and the Latin presentation ligatures into ASCII sequences.
-fn column(key: &str) -> String {
+pub(super) fn column(key: &str) -> String {
     kassiber_pytext::lower(key)
         .replace('ſ', "s")
         .replace('ß', "ss")
@@ -48,13 +48,13 @@ fn clean_decimal(raw: &str) -> Option<String> {
     }
     Some(text)
 }
-fn number(raw: Option<String>) -> Result<Option<PriceNumber>, AppError> {
+pub(super) fn number(raw: Option<String>) -> Result<Option<PriceNumber>, AppError> {
     raw.as_deref()
         .and_then(clean_decimal)
         .map(|s| PriceNumber::parse(&s))
         .transpose()
 }
-fn abs(n: PriceNumber) -> Result<PriceNumber, AppError> {
+pub(super) fn abs(n: PriceNumber) -> Result<PriceNumber, AppError> {
     match n {
         PriceNumber::Finite(v) => v.abs(&CTX).map(PriceNumber::Finite).map_err(decimal_error),
         PriceNumber::Special(v) if v.contains("sNaN") => {
@@ -69,7 +69,7 @@ fn zero() -> PriceNumber {
 fn truth(n: &PriceNumber) -> bool {
     !matches!(n, PriceNumber::Finite(v) if v.is_zero())
 }
-fn repr(n: &PriceNumber) -> String {
+pub(super) fn repr(n: &PriceNumber) -> String {
     match n {
         PriceNumber::Finite(v) => v.to_string(),
         PriceNumber::Special(v) => v.clone(),
@@ -84,7 +84,11 @@ fn positive(n: &PriceNumber) -> Result<bool, AppError> {
         PriceNumber::Special(v) => Ok(!v.starts_with('-')),
     }
 }
-fn arithmetic(a: &PriceNumber, b: &PriceNumber, op: char) -> Result<PriceNumber, AppError> {
+pub(super) fn arithmetic(
+    a: &PriceNumber,
+    b: &PriceNumber,
+    op: char,
+) -> Result<PriceNumber, AppError> {
     use PriceNumber::{Finite, Special};
     if let (Finite(a), Finite(b)) = (a, b) {
         return match op {

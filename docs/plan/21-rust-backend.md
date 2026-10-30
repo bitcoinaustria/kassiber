@@ -1877,6 +1877,38 @@ wallet sync and AI projections remain out of scope. The separate reference fix
 buy/sell regression. River also preserves context-sensitive lowercase across
 the whole provider tag code. No dependency or egress path is introduced.
 
+### R5 exchange file-import batch 1: Bull continuation (partial)
+
+`wallets import-bull` and `import-bullbitcoin` now port the commercial-evidence
+coordinator as well as the parser. Relevant mode enriches unique profile-wide
+matches without inserting rows; full mode creates excluded evidence with
+matched/gap/ambiguous reconciliation flags. Fees, authored metadata and closed
+observation commitments remain separate from provider execution evidence.
+Default-wallet creation and its commit-before-file-read behavior match Python.
+
+The 206 frozen parser cases run through both modes with complete typed book-dump
+comparison and native served-by assertions. Coordinator, SQLite/SQLCipher
+wire/state/rollback and failure-injection tests cover the surrounding paths.
+The 59 added mutations pin parsing, mapping, matching, reconciliation, defaults,
+refusals and invalidation; shared CSV/decimal/dedupe/run/atomicity mutations
+remain applicable. See the [Bull checkpoint](../reference/rust-shell.md#bull-file-ingestion-continuation-r5-importers-batch-1-partial)
+for the named killers and final verification.
+
+Hybrid acceptance totals 425 Bull Rust calls and zero Bull Python fallbacks:
+412 mode/vector combinations, six coordinator calls and seven existing fixture
+imports. Ten SQLite/SQLCipher import cases also compare wire bytes, complete
+state and rollback. Final fmt/clippy, 1,309 workspace tests and 14 harness tests
+passed. The requested Python suite passed 83 tests and 1,457 subtests; after the
+final error-order correction, native checks and all affected Bull parity/fixture
+tests passed again on the rebuilt harness.
+All 228 wallet mutations were killed after 43 unmutated named baselines passed;
+the temporary mutation source/build trees were removed.
+The final classifier update and preflight also passed (57 checks).
+
+Coinfinity, 21bitcoin, Pocket/Pocketbitcoin and Strike still need their own
+verified importer commits. Batch 2, exchange API syncs, wallet sync and AI
+projections remain out of scope. Python remains the reference.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

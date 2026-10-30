@@ -1578,6 +1578,140 @@ continuation. The mixed `ExchangeImporterTest` disposition retains its unported
 API/other-file duties;
 its River parser obligation is covered by the new native vectors.
 
+
+## Bull file-ingestion continuation (R5 importers batch 1, partial)
+
+`t3code/r5-importers-3` starts at `1b3d5ae2`. Native `wallets import-bull`
+and `import-bullbitcoin` now include Python's coordinator paths. Relevant mode
+is profile-wide, insert-free enrichment. Exact-fee matches take precedence over
+amount-only exchange execution matches; multiple candidates remain ambiguous.
+Full mode imports excluded evidence into the selected or default Bull Bitcoin
+wallet and replaces reconciliation flags for matched, unmatched and ambiguous
+rows. Existing wallet-derived fees, authored metadata, and closed observation
+commitments retain their authority. Prior reports remain evidence.
+
+The local CSV reader preserves Python's UTF-8/BOM, delimiter, quoting, heading
+alias/collision and field-limit behavior. Bitcoin/Liquid aliases, exact Decimal
+fiat arithmetic, integer msat rounding, completion/status guards, dates, references,
+methods and raw provenance have 206 frozen Python vectors. Each vector runs
+through relevant and full mode with complete typed book-dump comparison, including
+refusals and repeated imports on populated books. Default-wallet selection and
+creation, alias routing, reimports and confirmed rollback have a separate hybrid
+scenario. SQLite/SQLCipher wire/state/rollback cases exercise full imports,
+in-run dedupe, foreign-fiat refusal, malformed headers and empty files.
+Relevant mode preserves row-by-row normalization, matching and price-validation
+error precedence, including a matched foreign-fiat refusal before a later
+invalid timestamp. Its oracle compares error codes, messages and hints as well
+as the complete book state.
+
+Default-wallet admission allocates identities after account/configuration/network
+validation. As in Python, successful automatic wallet creation commits before
+reading the file, so an unreadable file retains the created wallet. Transaction,
+tag, reconciliation, import-run and journal changes share the import savepoint;
+tag/link/batch failures restore the whole import. Full-mode reconciliation also
+preserves Python's unconditional journal invalidation, including an empty import.
+
+Hybrid routing on the final harness is recorded separately from direct-binary
+wire comparisons and repeated verification runs:
+
+| Bull acceptance path | Rust calls | Python fallbacks |
+| --- | ---: | ---: |
+| 206 frozen files through relevant and full modes | 412 | 0 |
+| Default wallet, aliases, reimport, error precedence and rollback | 6 | 0 |
+| Existing Bull CLI fixtures | 7 | 0 |
+| **Total** | **425** | **0** |
+
+The aliases account for 422 `wallets.import-bull` calls and three
+`wallets.import-bullbitcoin` calls. All 425 hybrid imports compare complete typed
+book dumps with Python. Ten direct-binary import cases additionally compare wire
+bytes, complete state and rollback across SQLite and SQLCipher.
+
+Final fmt and clippy with warnings denied passed for the workspace and harness;
+all 1,309 workspace tests and 14 harness tests passed. The requested Python suite
+passed 83 tests and 1,457 subtests, including inventory, contracts and vector
+drift. After the final relevant-mode error-order correction, the workspace and
+harness checks were rerun, followed by all three Bull parity tests (422 subtests)
+and eight existing fixture/LBTC regressions (two subtests) on the rebuilt harness.
+The final classifier update and `preflight --ci` passed (57 checks).
+
+The mutation catalog retains the 169 existing entries and adds 59 Bull entries.
+`W-river-atomic` also names
+`bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation`.
+The added entries and their named killers are:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-bull-header` | `python_bull_import_vectors` |
+| `W-bull-status-order_status` | `python_bull_import_vectors` |
+| `W-bull-status-payin_status` | `python_bull_import_vectors` |
+| `W-bull-status-payout_status` | `python_bull_import_vectors` |
+| `W-bull-completed` | `python_bull_import_vectors` |
+| `W-bull-empty-amount` | `python_bull_import_vectors` |
+| `W-bull-payin-amount` | `python_bull_import_vectors` |
+| `W-bull-payout-amount` | `python_bull_import_vectors` |
+| `W-bull-sell-direction` | `python_bull_import_vectors` |
+| `W-bull-buy-direction` | `python_bull_import_vectors` |
+| `W-bull-sell-kind` | `python_bull_import_vectors` |
+| `W-bull-buy-kind` | `python_bull_import_vectors` |
+| `W-bull-txid` | `python_bull_import_vectors` |
+| `W-bull-rate` | `python_bull_import_vectors` |
+| `W-bull-divide` | `python_bull_import_vectors` |
+| `W-bull-reference-order` | `python_bull_import_vectors` |
+| `W-bull-reference-txid` | `python_bull_import_vectors` |
+| `W-bull-date-completed` | `python_bull_import_vectors` |
+| `W-bull-date-sent` | `python_bull_import_vectors` |
+| `W-bull-date-created` | `python_bull_import_vectors` |
+| `W-bull-method-payin` | `python_bull_import_vectors` |
+| `W-bull-method-payout` | `python_bull_import_vectors` |
+| `W-bull-method-join` | `python_bull_import_vectors` |
+| `W-bull-raw` | `python_bull_import_vectors` |
+| `W-bull-fee` | `python_bull_import_vectors` |
+| `W-bull-provider` | `python_bull_import_vectors` |
+| `W-bull-quality` | `python_bull_import_vectors` |
+| `W-bull-pair` | `python_bull_import_vectors` |
+| `W-bull-columns-strip` | `python_bull_import_vectors` |
+| `W-bull-columns-order` | `python_bull_import_vectors` |
+| `W-bull-columns-whitespace` | `python_bull_import_vectors` |
+| `W-bull-lbtc` | `python_bull_import_vectors` |
+| `W-bull-xbt` | `python_bull_import_vectors` |
+| `W-bull-match-profile` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-match-external` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-match-direction` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-match-asset` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-match-amount` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-match-exact-fee` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-ambiguity` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-fee-fallback` | `bull_profile_matching_fee_precedence_ambiguity_and_scope` |
+| `W-bull-exclude-wallet` | `bull_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-bull-price-guard` | `bull_relevant_validates_only_matched_prices_and_preserves_committed_raw` |
+| `W-bull-observation-commitment` | `bull_relevant_validates_only_matched_prices_and_preserves_committed_raw` |
+| `W-bull-exclude-full` | `bull_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-bull-clear-flags` | `bull_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-bull-tag-status` | `bull_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-bull-reconcile-invalidation` | `bull_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-bull-enrich-invalidation` | `bull_relevant_validates_only_matched_prices_and_preserves_committed_raw` |
+| `W-bull-mode-full` | `bull_import_mode_aliases_and_refusals` |
+| `W-bull-mode-alias` | `bull_import_mode_aliases_and_refusals` |
+| `W-bull-mode-error` | `bull_import_mode_aliases_and_refusals` |
+| `W-bull-default-label` | `bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read` |
+| `W-bull-default-kind` | `bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read` |
+| `W-bull-default-reuse` | `bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read` |
+| `W-bull-unchanged` | `bull_relevant_validates_only_matched_prices_and_preserves_committed_raw` |
+| `W-bull-mixed-legs` | `python_bull_import_vectors` |
+| `W-bull-missing-txid` | `python_bull_import_vectors` |
+| `W-bull-normalization-order` | `bull_relevant_preserves_reference_error_order_and_rollback` |
+
+All 228 mutations were killed by their named tests after all 43 unmutated named
+baselines passed. This includes every retained entry and all 59 Bull additions;
+the normalization-order mutant reproduces the corrected error precedence.
+Disposable mutation source/build trees were removed after recording the summary.
+
+Coinfinity, 21bitcoin, Pocket/Pocketbitcoin and Strike remain unported at this
+verified importer boundary. Their economic matching, withdrawal pairing or
+active custodial coordinator paths have no native parity claim. Batch 2,
+exchange API syncs, wallet sync and AI projections remain outside this work.
+No dependency, provider probe or new egress path is added.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

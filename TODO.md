@@ -271,7 +271,10 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port River CSV imports with ordered header aliases, exact cash/BTC fee
   mapping, full book-dump/rollback parity and named mutation killers. See the
   batch-1 continuation in plan 21.
-- [ ] Port the remaining 29 wallet commands after file-ingestion acceptance,
+- [x] Port Bull/Bullbitcoin order files with profile-wide commercial matching,
+  excluded full-mode reconciliation, complete book-dump/rollback parity and
+  named mutation killers. See the Bull continuation in plan 21.
+- [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.
   Complete malformed descriptor/preflight error parity beyond the frozen cases.
