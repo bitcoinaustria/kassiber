@@ -17,6 +17,7 @@ type Terminal = { kind: string; data?: Record<string, unknown>; error?: unknown 
 
 const BOOK_A: Scope = { workspace_id: "ws-1", profile_id: "profile-a" };
 const BOOK_B: Scope = { workspace_id: "ws-1", profile_id: "profile-b" };
+const EVIDENCE_ID = "a".repeat(64);
 
 const mocks = vi.hoisted(() => ({
   scope: null as Scope | null,
@@ -34,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   holdUpload: false,
   // Tokens the next turn reports as no longer readable.
   expired: [] as string[],
+  // Extra records the next turn streams, such as a tool call.
+  records: [] as Array<{ kind: string; data: Record<string, unknown> }>,
 }));
 
 vi.hoisted(() => {
@@ -59,6 +62,9 @@ vi.mock("@/daemon/transport", async (importOriginal) => ({
         return new Promise<Terminal>((resolve) => {
           mocks.held = resolve;
         });
+      }
+      for (const record of mocks.records.splice(0)) {
+        options.onRecord?.({ ...record, request_id: (request as { request_id?: string }).request_id });
       }
       options.onRecord?.({
         kind: "ai.chat.delta",
@@ -93,6 +99,9 @@ vi.mock("@/daemon/transport", async (importOriginal) => ({
             source: { filename: request.args?.filename, kind: "delimited", size_bytes: request.args?.total_bytes },
           },
         };
+      }
+      if (request.kind === "ui.source_funds.request_input") {
+        return { kind: request.kind, data: { request_id: EVIDENCE_ID } };
       }
       if (request.kind === "ui.chat.sessions.get") {
         return {
@@ -144,6 +153,7 @@ import {
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
+import { evidenceRequest } from "./evidenceRequest";
 
 let session: AssistantSessionContextValue;
 function Probe() {
@@ -177,6 +187,8 @@ describe("a pasted chat file", () => {
     mocks.uploadHeld = null;
     mocks.holdUpload = false;
     mocks.expired = [];
+    mocks.records = [];
+    mocks.picker.mockReset();
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
       notifications: [],
@@ -289,6 +301,49 @@ describe("a pasted chat file", () => {
     expect(session.attachments).toEqual([]);
     expect(uploads()).toHaveLength(0);
     expect(useUiStore.getState().notifications.at(-1)?.title).toBe("This file can't be attached");
+  });
+
+  it("still continues a source-of-funds review when the evidence file finds the chat full", async () => {
+    const view = render(provider());
+    const many = Array.from({ length: 8 }, (_, index) => csv(`f${index}.csv`));
+    await act(async () => session.attachFiles!(many));
+    view.rerender(provider());
+    expect(session.attachments).toHaveLength(8);
+
+    const packet = {
+      schema_version: 1, request_id: EVIDENCE_ID, ...BOOK_A, input_version: 3,
+      action: "attach_evidence", explanation: null, domain: "source_funds",
+      cases: [{ case_id: "source_funds:tx-1", transaction_id: "tx-1", reason: "origin" }],
+      target_transaction: "tx-1", review_fingerprint: "b".repeat(64), recipe: { amount: "0.1" },
+    };
+    mocks.records = [
+      { kind: "ai.chat.tool_call", data: { call_id: "call-1", name: "ui.source_funds.request_input", kind_class: "read" } },
+      { kind: "ai.chat.tool_result", data: { call_id: "call-1", ok: true,
+        envelope: { kind: "ui.source_funds.request_input", data: packet } } },
+    ];
+    await act(async () => session.sendPrompt("Where did this come from?"));
+    view.rerender(provider());
+    const call = session.messages[1].toolCalls?.[0];
+    expect(call?.status).toBe("done");
+
+    // The picker saves the file on the transaction and stages it for the chat.
+    mocks.picker.mockResolvedValue({
+      attachment_id: "att-1", transaction_id: "tx-1", document_token: "grant-receipt.pdf",
+      source: { filename: "receipt.pdf", kind: "pdf", size_bytes: 10 },
+    });
+    const chatsBefore = mocks.chats.length;
+    await act(async () => session.openEvidenceRequest!(evidenceRequest(call!)!));
+    view.rerender(provider());
+
+    // The chat stays at its limit, and the review continues regardless.
+    expect(session.attachments).toHaveLength(8);
+    expect(session.evidenceRequests?.[EVIDENCE_ID]?.status).toBe("continuing");
+    expect(mocks.chats).toHaveLength(chatsBefore + 1);
+    const continued = session.messages.at(-2)?.content ?? "";
+    expect(continued).toContain("Continue the source-of-funds review");
+    expect(continued).toContain("not available for analysis here");
+    expect(lastChat().attachments).not.toContainEqual(expect.objectContaining({ token: "grant-receipt.pdf" }));
+    expect(useUiStore.getState().notifications[0]?.body).toContain("not added to this chat");
   });
 
   it("drops a paste that finishes after another book opened", async () => {

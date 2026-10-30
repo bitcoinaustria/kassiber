@@ -9940,7 +9940,9 @@ def _auto_tool_context_for_model(context: list[dict[str, Any]]) -> str:
     )
 
 
-def _insert_auto_tool_context_message(messages: list[dict[str, Any]], content: str) -> None:
+def _insert_auto_tool_context_message(
+    messages: list[dict[str, Any]], content: str | list[dict[str, Any]]
+) -> None:
     for index in range(len(messages) - 1, -1, -1):
         if messages[index].get("role") == "user":
             messages.insert(index, {"role": "user", "content": content})
@@ -10037,10 +10039,15 @@ def _attach_chat_files_to_turn(
     """Add the chat's files to this turn: a note, and what the model may see.
 
     A provider with full agent access is shown images and PDFs on the user's
-    message. One that resumes its own session saw the files of earlier turns
-    there, so it is shown only the files this message first sends; a
-    stateless provider is shown them on every turn. A restricted provider is
-    told the files exist and is shown none of them.
+    message. A saved session cursor (`resumed`) only says the provider may
+    resume: the broker still starts a fresh thread when the session is gone
+    or the advertised tools changed. So the files of earlier turns go in a
+    message of their own just before the user's, which a provider that does
+    resume skips (it replays only the user's message and already saw them)
+    and a fresh one reads. The note naming the files rides on the user's
+    message then, so a resumed session still learns this turn's files. A stateless provider is shown every file on the
+    user's message on every turn. A restricted provider is told the files
+    exist and is shown none of them.
     """
     state = runtime.maintenance_state
     files = [entry for entry in state.get("chat_files") or () if isinstance(entry, Mapping)]
@@ -10048,16 +10055,16 @@ def _attach_chat_files_to_turn(
         return
     views: dict[str, core_chat_files.ChatFileView] = {}
     parts: list[dict[str, Any]] = []
+    earlier_parts: list[dict[str, Any]] = []
     images = 0
     image_bytes = 0
     if _ai_full_access(runtime):
-        for entry in files:
-            if entry.get("kind") not in {"image", "pdf"}:
-                continue
+        shown = [entry for entry in files if entry.get("kind") in {"image", "pdf"}]
+        if resumed:
+            # What this message first sends takes the image budget first.
+            shown.sort(key=lambda entry: not entry.get("new"))
+        for entry in shown:
             file_id = str(entry["id"])
-            if resumed and not entry.get("new"):
-                views[file_id] = core_chat_files.ChatFileView(shown="shown in an earlier message")
-                continue
             try:
                 view = core_chat_files.chat_file_view(
                     str(entry["source_file"]), str(entry["kind"]), file_id=file_id
@@ -10078,10 +10085,29 @@ def _attach_chat_files_to_turn(
                 image_bytes += size
             views[file_id] = view
             if view.parts:
-                parts.append({"type": "text", "text": f"{file_id}:"})
-                parts.extend(view.parts)
-    _insert_auto_tool_context_message(messages, _chat_files_note(state, views))
-    if not parts:
+                target = earlier_parts if resumed and not entry.get("new") else parts
+                target.append({"type": "text", "text": f"{file_id}:"})
+                target.extend(view.parts)
+    note = _chat_files_note(state, views)
+    lead: list[dict[str, Any]] = []
+    if resumed:
+        # A resuming provider replays only the user's message, so the note
+        # (which file is which, and how to read it) rides on that message.
+        lead.append({"type": "text", "text": note})
+    else:
+        _insert_auto_tool_context_message(messages, note)
+    if earlier_parts:
+        _insert_auto_tool_context_message(
+            messages,
+            [
+                {
+                    "type": "text",
+                    "text": "Kassiber: the files attached in earlier messages of this chat.",
+                },
+                *earlier_parts,
+            ],
+        )
+    if not lead and not parts:
         return
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
@@ -10090,7 +10116,10 @@ def _attach_chat_files_to_turn(
         content = message.get("content")
         text = content if isinstance(content, str) else ""
         # A new dict: the conversation itself stays text and is stored as such.
-        messages[index] = {**message, "content": [{"type": "text", "text": text}, *parts]}
+        messages[index] = {
+            **message,
+            "content": [*lead, {"type": "text", "text": text}, *parts],
+        }
         return
 
 
@@ -13372,13 +13401,13 @@ def _attach_chat_file_ai_payload(
         file_path=str(chat_file["source_file"]),
         label=label or str(chat_file["filename"]),
     )
-    if not _ai_full_access(runtime) and not label:
-        # The note gave a restricted provider the extension only.
-        payload = {
-            key: value
-            for key, value in payload.items()
-            if key not in {"label", "display_label", "original_filename", "filename"}
-        }
+    if not _ai_full_access(runtime):
+        # The note gave a restricted provider the extension only. A label it
+        # chose itself may come back; the file's own name never does.
+        withheld = {"original_filename", "filename"}
+        if not label:
+            withheld |= {"label", "display_label"}
+        payload = {key: value for key, value in payload.items() if key not in withheld}
     return payload
 
 
