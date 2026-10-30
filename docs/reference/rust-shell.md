@@ -3438,3 +3438,86 @@ final rerun passed, but that does not resolve the flake. Reproduce without any
 book or network using
 `.venv/bin/python crates/transfers/scripts/repro_component_id_redaction.py`.
 Python is left unchanged; the repro records this issue for separate review.
+
+### Component plan/apply checkpoint
+
+The local `t3code/r5-transfers-6` continuation starts at `01e113a8` and adds
+`transfers components plan`, `transfers components apply`,
+`ui.transfers.components.plan` and `ui.transfers.components.apply`. The
+supported subset is now **17/29 CLI leaves and 16 desktop kinds**. All five
+review actions are served: create (single or bulk, active or draft), revise,
+undo, activate and supersede. Gap plan/apply and their desktop kinds remain
+`not_implemented`; automatic pairing stays with R4 and AI projections stay
+Python.
+
+`component_review.rs` owns the version-bound planner: argument rules, reference
+resolution (transaction id before external id, wallet id before label), rail,
+exposure and unit defaults, `amount_btc` conversion with CPython decimal
+signals, deterministic UUIDv5 bulk, revision and row ids, planned untracked
+wallets and the bulk caps. `component_rows.rs` ports Python's authored
+component contract: header, leg, allocation and economic-term normalization,
+anchor checks, immutable creation and revision rows, activation with
+author-bound evidence, supersession and membership reconciliation. Every
+apply rebuilds its plan inside one savepoint after the input-version check.
+Interpretation is not duplicated: `components::review` gains
+`plan_validation` (conservation and raw anchors for unsaved rows),
+`planned_batch_routes` (route continuity across active and planned quantity
+rows) and `materialize_component` (Python's `get_component`, with
+cross-component routes only when another active quantity component exists).
+Planned wallet ids use a generated CPython 3.11 / Unicode 14 `casefold` table
+in `kassiber-pytext`; component timestamps use Python's microsecond
+`isoformat`, wallet timestamps stay second-precision.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Ordered outputs and complete normalized rows | `component_reviews_match_python_complete_database_rows_and_refusals`: 24 scenarios, 253 operations (125 successes, 128 refusals); every unrelated application table unchanged |
+| Late failure and caller transaction | `component_apply_rolls_back_late_failure_and_preserves_outer_transaction` |
+| CLI bytes, normalized rows and hybrid routing | `test_component_plan_apply_cli_bytes_rows_and_hybrid`: 21 CLI calls (13 plan, 8 apply), all served by Rust, zero Python fallbacks |
+| Daemon transcript and rows | `test_native_daemon_component_review_matches_python`: 11 requests |
+| Desktop cap, alias, version and authorship rules | `desktop_component_review_caps_aliases_versions_and_authority` |
+
+`crates/transfers/scripts/export_components.py` generates the fixed-source
+oracle. Scenarios cover the full lifecycle, drafts, revisions (notes, legs,
+allocations, evidence, conversion metadata), batches, raw-active conflicts and
+competing active revisions, untracked placeholders (created, reused, missing
+treasury account, Unicode case-folding collisions), wallet references,
+quantity and `amount_btc` edge values, ~70 validation refusals, requested ids
+and lineages, local location references, conversion and Liquid components,
+profile scope, desktop authorship, stale revisions, revising drafts, pair
+components with migrated economic terms, untracked route continuity across a
+batch, recovered same-transaction native support and a late invalidation
+failure. No output UUID, timestamp, hash or
+serialized value is normalized in the native oracle. Process tests normalize
+only wall-clock times; component ids are deterministic.
+
+| New mutation | Named killing test |
+| --- | --- |
+| `component-bulk-id`, `component-revision-id`, `component-row-id`, `component-planned-wallet-casefold`, `component-batch-conflict`, `component-plan-replacing-lineage`, `component-quantity-range`, `component-input-version`, `component-already-applied`, `component-wallet-invalidation`, `component-supersedes-link`, `component-supersede-reconcile`, `component-default-type`, `component-undo-reason`, `component-hidden-location`, `component-json-constant`, `component-lightning-rail`, `component-economic-term-legs`, `component-effective-superseded`, `component-native-support`, `component-batch-route-filter`, `component-valuation-groups`, `component-planned-wallet-anchor` | `component_reviews_match_python_complete_database_rows_and_refusals` |
+| `component-apply-atomic` | `component_apply_rolls_back_late_failure_and_preserves_outer_transaction` (and the oracle) |
+| `desktop-component-cap`, `desktop-component-source`, `desktop-component-version` | `desktop_component_review_caps_aliases_versions_and_authority` |
+
+Two reference behaviors are recorded with repros and left unchanged:
+
+- A create plan can succeed while its own apply refuses it. Planned
+  untracked-wallet ids case-fold labels, but label lookup uses SQLite's
+  ASCII-only `lower()`. After `Straße` exists, `STRASSE` plans against the
+  existing row and apply reports that `STRASSE` already exists:
+  `.venv/bin/python crates/transfers/scripts/repro_planned_wallet_casefold.py`.
+- Create plans echo caller-supplied `location_ref` values on planned legs to
+  the renderer/AI projection, while materialized components and revision plans
+  drop them: `.venv/bin/python crates/transfers/scripts/repro_batch_plan_location_ref.py`.
+
+Rust matches both behaviors byte for byte.
+
+Verification used Rust 1.99.1, locked Python 3.11, offline Cargo and disposable
+books. Workspace fmt, workspace and harness-feature clippy with `-D warnings`
+passed; all **958 workspace tests** passed. Oracle regeneration is
+byte-identical. The catalog has **184 applicable entries**; the 27 new entries
+were built and killed on scratch copies of the tree (24 in the first run; one
+equivalent route-guard mutation was replaced by `component-native-support`,
+and two survivors gained the `competing-active` and leading-zero cases before
+their reruns killed them). The real-process transfer, shell, hybrid-candidate,
+CLI-runner and `tests/rust_port` gate passed **74 tests and 178 subtests**; the
+regenerated inventory and the preflight shard passed **57 tests**. Mutation
+scratch trees were removed after their summaries. No push or PR was performed.
+

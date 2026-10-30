@@ -156,7 +156,7 @@ pub struct Sink<'a> {
 
 /// Expand the current user's home; refuse forms the shell cannot resolve
 /// before touching the filesystem, as Path.expanduser does on failure.
-fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
+pub(crate) fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
     let normalized = output_path(target);
     let target = normalized
         .to_str()

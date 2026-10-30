@@ -1731,9 +1731,10 @@ journal invalidation. Rust rolls back late invalidation failures completely;
 the separate Python atomicity fix remains pending. The shell reference records
 the native rollback test, repro, mutation table and process routing evidence.
 
-Component plan/apply and gap plan/apply remain unported.
-Version-bound fingerprints, filed-report impacts, complete normalized row parity
-and mutations remain acceptance requirements for those four commands. All ten
+Component plan/apply is ported in the [component checkpoint](../reference/rust-shell.md#component-planapply-checkpoint)
+below; gap plan/apply remains unported. Version-bound candidate fingerprints,
+filed-report impacts, complete normalized row parity and mutations remain
+acceptance requirements for those two commands. All ten
 computation-dependent commands remain `not_implemented`, including component
 materialization, suggestions/bulk/rules matching and review cases/plan/apply.
 AI projections stay Python. This verified numbered-step boundary does not claim
@@ -1952,3 +1953,22 @@ against the repaired reference. The old bug repros are replaced by shared
 failure-path oracle cases. See the [transfer checkpoint](../reference/rust-shell.md#savepoint-reference-fix-parity-checkpoint)
 for parity counts and verification. Component/gap plan/apply and their daemon
 kinds are still outstanding; automatic pairing remains R4.
+
+### R5 component plan/apply checkpoint
+
+The continuation on `t3code/r5-transfers-6` starts at `01e113a8` and serves
+component plan/apply for all five review actions through CLI and desktop:
+**17/29 CLI leaves and 16 desktop kinds**, with zero Python fallbacks on those
+paths. Planning and persistence live in `crates/transfers`; conservation,
+anchors, routes, evidence and materialization reuse the `crates/custody`
+component stage through three new `components::review` facades. A 253-operation
+fixed-source oracle (125 successes, 128 refusals) compares ordered outputs and
+complete normalized rows, including untracked-wallet creation and late-failure
+rollback. 27 named mutations are killed. Two reference behaviors (a case-folding
+plan/apply disagreement and `location_ref` echo in create plans) are recorded
+with repros and matched, not changed.
+
+Gap plan/apply and `ui.custody.review.plan|apply` are still `not_implemented`.
+Their create, revise and dismiss actions re-derive the current gap candidate, so
+they need the gap search engine, which exists only in the R2 custody stack and is
+not part of this R5 base. See the [shell reference](../reference/rust-shell.md#component-planapply-checkpoint).

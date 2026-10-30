@@ -52,6 +52,10 @@ pub fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Val
 pub trait Sources {
     fn uuid(&self, conn: &Connection) -> Result<String>;
     fn now(&self, conn: &Connection) -> Result<String>;
+    /// `datetime.now(timezone.utc).isoformat()` (microseconds when non-zero).
+    fn now_precise(&self, conn: &Connection) -> Result<String> {
+        self.now(conn)
+    }
 }
 pub struct SystemSources;
 impl Sources for SystemSources {
@@ -77,6 +81,41 @@ impl Sources for SystemSources {
         })
         .map_err(error)
     }
+    fn now_precise(&self, _: &Connection) -> Result<String> {
+        let elapsed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| AppError::new("internal_error", "system clock is before 1970"))?;
+        Ok(iso_micros(
+            elapsed.as_secs() as i64,
+            elapsed.subsec_micros(),
+        ))
+    }
+}
+/// Python's UTC `isoformat()` with a `Z` suffix; microseconds only when non-zero.
+pub fn iso_micros(seconds: i64, micros: u32) -> String {
+    let days = seconds.div_euclid(86_400);
+    let clock = seconds.rem_euclid(86_400);
+    // Howard Hinnant's civil-from-days.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    let fraction = if micros == 0 {
+        String::new()
+    } else {
+        format!(".{micros:06}")
+    };
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}{fraction}Z",
+        clock / 3600,
+        clock / 60 % 60,
+        clock % 60
+    )
 }
 /// Own the operation savepoint; never commit another service's partial writes.
 pub fn atomic<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T> {

@@ -73,6 +73,10 @@ fn payout_creations_match_python_complete_database_rows_and_refusals() {
 fn payout_deletions_match_python_complete_database_rows_and_refusals() {
     run_sequences(include_str!("payout_delete.json"));
 }
+#[test]
+fn component_reviews_match_python_complete_database_rows_and_refusals() {
+    run_sequences(include_str!("components.json"));
+}
 fn run_sequences(input: &str) {
     let fixture = kassiber_pytext::loads(input).unwrap();
     let dir = tempfile::tempdir().unwrap();
@@ -92,7 +96,7 @@ fn run_sequences(input: &str) {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        let changed = [
+        let default = [
             "chain_index_clock",
             "chain_index_dirty",
             "profiles",
@@ -104,13 +108,17 @@ fn run_sequences(input: &str) {
             "custody_authored_evidence_snapshots",
             "custody_component_evidence_commitments",
         ];
+        let changed: Vec<String> = match get(&fixture, "tables") {
+            Some(tables) => list(tables).iter().map(py_str).collect(),
+            None => default.iter().map(|t| t.to_string()).collect(),
+        };
         for case in list(field(scenario, "cases")) {
             for sql in list(field(case, "setup")) {
                 c.execute_batch(&py_str(sql)).unwrap();
             }
             let untouched: Vec<_> = tables
                 .iter()
-                .filter(|n| !changed.contains(&n.as_str()))
+                .filter(|n| !changed.contains(n))
                 .map(|n| (n.clone(), bytes(&dump(c, n))))
                 .collect();
             let id = py_str(field(case, "id"));
@@ -538,4 +546,92 @@ fn payout_creation_rolls_back_late_failure_and_preserves_outer_transaction() {
     for (table, expected) in tables.iter().zip(&before) {
         assert_eq!(&bytes(&dump(c, table)), expected, "{table}");
     }
+}
+
+#[test]
+fn component_apply_rolls_back_late_failure_and_preserves_outer_transaction() {
+    let fixture = kassiber_pytext::loads(include_str!("components.json")).unwrap();
+    let scenario = list(field(&fixture, "scenarios"))
+        .iter()
+        .find(|s| field(s, "name") == &s_("late-failure"))
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(dir.path(), None).unwrap();
+    let c = book.connection();
+    for sql in list(field(scenario, "sql")) {
+        c.execute_batch(&py_str(sql)).unwrap();
+    }
+    let tables: Vec<String> = c
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let before: Vec<_> = tables.iter().map(|t| bytes(&dump(c, t))).collect();
+    let case = &list(field(scenario, "cases"))[0];
+    for sql in list(field(case, "setup")) {
+        c.execute_batch(&py_str(sql)).unwrap();
+    }
+    let scope = Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    };
+    let fixed = Fixed {
+        id: py_str(field(case, "id")),
+        now: py_str(field(case, "now")),
+    };
+    // The first activation writes rows before the second invalidation fails.
+    for outer in [false, true] {
+        if outer {
+            c.execute_batch(
+                "BEGIN; INSERT INTO settings(key,value) VALUES('outer-component','keep')",
+            )
+            .unwrap();
+        }
+        let error = execute_with_sources(
+            c,
+            &scope,
+            "transfers.components.apply",
+            field(case, "args"),
+            &fixed,
+        )
+        .unwrap_err();
+        assert_eq!(error.message, "late component activation invalidation");
+        assert_eq!(c.is_autocommit(), !outer);
+        if outer {
+            assert_eq!(
+                c.query_row(
+                    "SELECT value FROM settings WHERE key='outer-component'",
+                    [],
+                    |r| r.get::<_, String>(0)
+                )
+                .unwrap(),
+                "keep"
+            );
+            c.execute_batch("ROLLBACK").unwrap();
+        }
+        for (table, expected) in tables.iter().zip(&before) {
+            assert_eq!(&bytes(&dump(c, table)), expected, "{table}");
+        }
+    }
+    c.execute_batch("DROP TRIGGER refuse_component_activation; BEGIN")
+        .unwrap();
+    let applied = execute_with_sources(
+        c,
+        &scope,
+        "transfers.components.apply",
+        field(case, "args"),
+        &fixed,
+    )
+    .unwrap();
+    assert_eq!(list(field(&applied, "components")).len(), 2);
+    assert!(!c.is_autocommit());
+    c.execute_batch("ROLLBACK").unwrap();
+    for (table, expected) in tables.iter().zip(&before) {
+        assert_eq!(&bytes(&dump(c, table)), expected, "{table}");
+    }
+}
+fn s_(text: &str) -> Value {
+    s(text)
 }

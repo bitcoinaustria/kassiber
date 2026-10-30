@@ -11,6 +11,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.unpair",
     "ui.transfers.update",
     "ui.transfers.dismiss",
+    "ui.transfers.components.plan",
+    "ui.transfers.components.apply",
     "ui.custody.gaps.history",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
@@ -25,6 +27,12 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if matches!(
+        kind,
+        "ui.transfers.components.plan" | "ui.transfers.components.apply"
+    ) {
+        return components(book, kind, args);
+    }
     let mut operation = if kind == "ui.custody.gaps.history" {
         let allowed = ["workspace", "profile", "gap_id", "limit"];
         let mut unknown: Vec<_> = fields
@@ -301,6 +309,69 @@ fn key_text(key: &kassiber_pyjson::Key) -> String {
     })
 }
 
+/// Desktop component review: the bulk cap precedes scope; apply then requires
+/// the plan's exact input version. Authorship is the desktop's, never the request's.
+fn components(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
+    component_cap(kind, args)?;
+    book.resolve_scope(get(args, "workspace"), get(args, "profile"))?;
+    let (operation, payload) = component_payload(kind, args)?;
+    Ok(exact_integers(book.transfers(operation, &payload)?))
+}
+
+fn component_cap(kind: &str, args: &Value) -> Result<(), AppError> {
+    if let Some(Value::List(items)) = get(args, "components") {
+        if items.len() > 50 {
+            return Err(AppError::new(
+                "validation",
+                format!("{kind} accepts at most 50 components"),
+            )
+            .with_details(dict([
+                ("count", Value::Int(items.len().into())),
+                ("max_components", Value::Int(50.into())),
+            ])));
+        }
+    }
+    Ok(())
+}
+
+fn component_payload(kind: &str, args: &Value) -> Result<(&'static str, Value), AppError> {
+    let field = |key: &str| get(args, key).cloned().unwrap_or(Value::Null);
+    let mut payload = dict([
+        (
+            "action",
+            get(args, "action").cloned().unwrap_or_else(|| s("create")),
+        ),
+        ("components", field("components")),
+        ("component_id", field("component_id")),
+        (
+            "spec",
+            get(args, "spec")
+                .cloned()
+                .unwrap_or_else(|| field("component")),
+        ),
+        ("activate", field("activate")),
+        ("reason", field("reason")),
+        ("authored_source", s("gui")),
+    ]);
+    for key in ["workspace", "profile"] {
+        if let Some(v) = get(args, key) {
+            kassiber_envelope::set(&mut payload, key, v.clone());
+        }
+    }
+    if kind != "ui.transfers.components.apply" {
+        return Ok(("transfers.components.plan", payload));
+    }
+    let version = field("expected_input_version");
+    if !matches!(&version, Value::Int(n) if n >= &0.into()) {
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} requires the input version returned by plan"),
+        ));
+    }
+    kassiber_envelope::set(&mut payload, "expected_input_version", version);
+    Ok(("transfers.components.apply", payload))
+}
+
 fn exact_integers(value: Value) -> Value {
     match value {
         Value::Int(ref n)
@@ -322,6 +393,58 @@ fn exact_integers(value: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_component_review_caps_aliases_versions_and_authority() {
+        let plan = "ui.transfers.components.plan";
+        let apply = "ui.transfers.components.apply";
+        let many = dict([("components", Value::List(vec![dict::<&str>([]); 51]))]);
+        let error = component_cap(plan, &many).unwrap_err();
+        assert_eq!(
+            error.message,
+            format!("{plan} accepts at most 50 components")
+        );
+        assert_eq!(
+            kassiber_pyjson::dumps(&error.details.unwrap(), &Default::default()).unwrap(),
+            r#"{"count": 51, "max_components": 50}"#
+        );
+        let fifty = dict([("components", Value::List(vec![dict::<&str>([]); 50]))]);
+        assert!(component_cap(apply, &fifty).is_ok());
+        let args = dict([
+            ("component", dict([("notes", s("alias"))])),
+            ("authored_source", s("ai_tool")),
+            ("action", Value::Null),
+        ]);
+        let (operation, payload) = component_payload(plan, &args).unwrap();
+        assert_eq!(operation, "transfers.components.plan");
+        assert_eq!(get(&payload, "action"), Some(&Value::Null));
+        assert_eq!(get(&payload, "authored_source"), Some(&s("gui")));
+        assert_eq!(get(&payload, "spec"), Some(&dict([("notes", s("alias"))])));
+        let explicit = dict([("spec", Value::Null), ("component", dict::<&str>([]))]);
+        let (_, payload) = component_payload(plan, &explicit).unwrap();
+        assert_eq!(get(&payload, "spec"), Some(&Value::Null));
+        assert_eq!(get(&payload, "action"), Some(&s("create")));
+        for version in [
+            Value::Bool(true),
+            Value::Int((-1).into()),
+            s("0"),
+            Value::Null,
+        ] {
+            let args = dict([("expected_input_version", version)]);
+            let error = component_payload(apply, &args).unwrap_err();
+            assert_eq!(
+                error.message,
+                format!("{apply} requires the input version returned by plan")
+            );
+        }
+        let args = dict([("expected_input_version", Value::Int(0.into()))]);
+        let (operation, payload) = component_payload(apply, &args).unwrap();
+        assert_eq!(operation, "transfers.components.apply");
+        assert_eq!(
+            get(&payload, "expected_input_version"),
+            Some(&Value::Int(0.into()))
+        );
+    }
 
     #[test]
     fn desktop_payout_delete_requires_id_and_overrides_source() {

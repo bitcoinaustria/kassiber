@@ -233,6 +233,11 @@ pub fn validation_projection(value: &Value) -> Result<kassiber_pyjson::Value, St
                     .collect::<Result<_, _>>()?,
             )),
             Value::Object(fields) => {
+                let context = if context == "groups" && fields.contains_key("valuation_unit") {
+                    "by_valuation_unit"
+                } else {
+                    context
+                };
                 let order = match context {
                     "validation" => "conservation_mode activatable issues suspense_msat source_msat owned_destination_msat by_asset by_conservation_unit by_valuation_unit allocations warnings anchors",
                     "by_asset" => "asset source_msat destination_msat fee_msat external_msat retained_msat suspense_msat sink_msat residual_msat",
@@ -273,4 +278,102 @@ pub fn validation_projection(value: &Value) -> Result<kassiber_pyjson::Value, St
         }
     }
     project(value, "validation", issues)
+}
+
+/// Python's `validate_component_plan` stages for unsaved rows: conservation and
+/// raw anchors. Planned legs carry no component identity, so profile route
+/// issues do not apply; active-membership arbitration is a storage read.
+pub fn plan_validation(
+    snapshot: &Snapshot,
+    legs: &[Value],
+    allocations: &[Value],
+    header: &Value,
+) -> Result<Value, Error> {
+    let mut validation = conservation::validate(legs, allocations, header)?;
+    let anchors = anchors::validate(
+        snapshot,
+        legs,
+        allocations,
+        &[],
+        &text(&header["conservation_mode"]),
+        &[],
+    )?;
+    if !array(&anchors["issues"]).is_empty() {
+        validation["activatable"] = json!(false);
+        let mut issues = array(&validation["issues"]).to_vec();
+        issues.extend(array(&anchors["issues"]).iter().cloned());
+        validation["issues"] = json!(issues);
+    }
+    if !array(&anchors["warnings"]).is_empty() {
+        let mut warnings = array(&validation["warnings"]).to_vec();
+        warnings.extend(array(&anchors["warnings"]).iter().cloned());
+        validation["warnings"] = json!(warnings);
+    }
+    validation["anchors"] = anchors;
+    Ok(validation)
+}
+
+/// Route continuity across existing authored-active and planned active quantity
+/// rows (Python's `validate_planned_active_batch`). Issues naming components
+/// keep only those touching a planned component.
+pub fn planned_batch_routes(
+    snapshot: &Snapshot,
+    legs: &[Value],
+    allocations: &[Value],
+    planned: &BTreeSet<String>,
+) -> Result<Vec<Value>, Error> {
+    Ok(scope::profile_routes(snapshot, legs, allocations)?
+        .into_iter()
+        .filter(|issue| {
+            let ids = array(&issue["component_ids"]);
+            ids.is_empty() || ids.iter().any(|id| planned.contains(&pystr(id)))
+        })
+        .collect())
+}
+
+/// One stored component as Python's `get_component` materializes it, without
+/// local evidence. Cross-component routes apply only when another authored-active
+/// quantity component shares the profile.
+pub fn materialize_component(snapshot: &Snapshot, component: &Component) -> Result<Value, Error> {
+    let h = &component.header;
+    let own = legs(component)?;
+    let mut routes = Vec::new();
+    if h["conservation_mode"] == "quantity" && !own.is_empty() {
+        let mut others: Vec<_> = snapshot
+            .components
+            .iter()
+            .filter(|c| {
+                c.header["profile_id"] == h["profile_id"]
+                    && c.header["state"] == "active"
+                    && c.header["conservation_mode"] == "quantity"
+                    && c.header["id"] != h["id"]
+            })
+            .collect();
+        others.sort_by_key(|c| pystr(&c.header["id"]));
+        let mut other_legs = Vec::new();
+        let mut other_allocations = Vec::new();
+        for c in others {
+            other_legs.extend(legs(c)?);
+            other_allocations.extend(allocations(c)?);
+        }
+        if !other_legs.is_empty() {
+            let mut combined = own.clone();
+            combined.extend(other_legs);
+            let mut combined_allocations = allocations(component)?;
+            combined_allocations.extend(other_allocations);
+            routes = scope::profile_routes(snapshot, &combined, &combined_allocations)?;
+        }
+    }
+    let native = if h["state"] == "active" {
+        commitments::native_context(snapshot)?
+    } else {
+        Vec::new()
+    };
+    let mut result = materialize(snapshot, component, &routes, &native)?;
+    if h["state"] == "superseded" {
+        result["effective_state"] = json!("superseded");
+    } else if h["state"] != "active" {
+        result["effective_state"] = json!("draft");
+    }
+    Ok(result)
 }

@@ -297,3 +297,127 @@ class RustTransferServicesTest(unittest.TestCase):
             self.assertEqual(c.execute("SELECT authored_source FROM custody_components WHERE state='active'").fetchone()[0],'gui',rows)
             c.close()
         self.assertEqual(*records)
+
+    def _component_book(self, name):
+        root = self.base / name
+        fixture = json.loads((ROOT / 'crates/transfers/tests/components.json').read_text())
+        c = open_db(root)
+        for statement in fixture['scenarios'][0]['sql']:
+            c.execute(statement)
+        c.execute("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury-account','w','p','treasury','Treasury','asset','2025-01-01T00:00:00Z')")
+        c.execute("INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p')")
+        c.commit()
+        c.close()
+        return root
+
+    @staticmethod
+    def _without_clock(text):
+        import re
+        return re.sub(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z', '<time>', text)
+
+    def _component_rows(self, root):
+        tables = json.loads((ROOT / 'crates/transfers/tests/components.json').read_text())['tables']
+        c = open_db(root)
+        try:
+            return {t: self._without_clock(json.dumps(sorted((dict(r) for r in c.execute(f'SELECT * FROM "{t}"')), key=lambda r: json.dumps(r, sort_keys=True)), sort_keys=True)) for t in tables}
+        finally:
+            c.close()
+
+    def test_component_plan_apply_cli_bytes_rows_and_hybrid(self):
+        roots = [self._component_book('components-python'), self._component_book('components-rust')]
+        spec = self.base / 'components.json'
+        spec.write_text(json.dumps({'components': [{'legs': [{'role': 'source', 'transaction': 'j', 'amount_msat': 1000}, {'role': 'destination', 'untracked_wallet': 'Vault', 'amount_msat': 1000, 'occurred_at': '2025-02-01T00:00:00Z'}]}]}))
+        bridge = json.dumps([{'notes': ' € 🚀 ', 'legs': [{'role': 'source', 'transaction': 'd', 'amount_msat': 1000}, {'role': 'destination', 'transaction': 'e', 'amount_msat': 1000}]}])
+        log = self.base / 'components-hybrid.jsonl'
+        env = {**self.env, 'KASSIBER_HYBRID_RUST_BIN': RUST_BIN, 'KASSIBER_HYBRID_LOG': str(log)}
+        steps = [
+            ('plan', '--action', 'create', '--json', bridge),
+            ('apply', '--action', 'create', '--json', bridge, '--expected-input-version', '0'),
+            ('apply', '--action', 'create', '--json', bridge, '--expected-input-version', '1'),
+            ('plan', '--action', 'create', '--file', str(spec), '--draft'),
+            ('apply', '--action', 'create', '--file', str(spec), '--expected-input-version', '1'),
+            ('plan', '--action', 'create', '--json', ''),
+            ('plan', '--action', 'create', '--json', '[1'),
+            ('plan', '--action', 'create', '--file', str(self.base / 'missing.json')),
+            ('plan', '--action', 'create'),
+            ('plan', '--action', 'revise', '--component-id', '@0', '--draft'),
+            ('plan', '--action', 'revise', '--component-id', '@0'),
+            ('plan', '--action', 'revise', '--component-id', '@0', '--json', '{"notes":"second"}', '--activate'),
+            ('apply', '--action', 'revise', '--component-id', '@0', '--json', '{"notes":"second"}', '--activate', '--expected-input-version', '3'),
+            ('plan', '--action', 'supersede', '--component-id', '@0', '--reason', 'replaced'),
+            ('apply', '--action', 'supersede', '--component-id', '@0', '--expected-input-version', '4'),
+            ('plan', '--action', 'undo', '--component-id', '@0'),
+            ('apply', '--action', 'undo', '--component-id', '@0', '--expected-input-version', '4'),
+            ('plan', '--action', 'activate', '--component-id', '@0', '--activate'),
+            ('plan', '--action', 'activate', '--component-id', '@0', '--json', '{}'),
+            ('apply', '--action', 'supersede', '--component-id', 'absent', '--expected-input-version', '-1'),
+            ('apply', '--action', 'supersede', '--component-id', 'absent', '--expected-input-version', '99'),
+        ]
+        first = None
+        for step in steps:
+            command, *rest = step
+            rest = [first if arg == '@0' else arg for arg in rest]
+            argv = ['--machine', '--data-root', str(roots[0]), 'transfers', 'components', command, *rest]
+            options = dict(capture_output=True, env=self.env, cwd=ROOT, timeout=120)
+            expected = cli_runner.run(argv, reference=True, **options)
+            argv[2] = str(roots[1])
+            actual = subprocess.run([sys.executable, str(ROOT / 'tests/rust_port/hybrid_cli.py'), *argv], capture_output=True, env=env, cwd=ROOT, timeout=120)
+            # Stored component times are wall-clock values; the native oracle pins them.
+            normalize = self._without_clock
+            self.assertEqual((actual.returncode, normalize(actual.stdout.decode()), actual.stderr), (expected.returncode, normalize(expected.stdout.decode()), expected.stderr), step)
+            if first is None and command == 'apply' and expected.returncode == 0:
+                first = json.loads(expected.stdout)['data']['components'][0]['id']
+        self.assertEqual(self._component_rows(roots[0]), self._component_rows(roots[1]))
+        observed = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual(len(observed), len(steps))
+        self.assertTrue(all(row['served_by'] == 'rust' for row in observed), observed)
+        self.assertEqual({row['command'] for row in observed}, {'transfers.components.plan', 'transfers.components.apply'})
+
+    def test_native_daemon_component_review_matches_python(self):
+        bridge = [{'legs': [{'role': 'source', 'transaction': 'd', 'amount_msat': 1000}, {'role': 'destination', 'transaction': 'e', 'amount_msat': 9007199254740993}]}]
+        exact = [{'legs': [{'role': 'source', 'transaction': 'd', 'amount_msat': 1000}, {'role': 'destination', 'transaction': 'e', 'amount_msat': 1000}]}]
+        transcripts = []
+        rows = []
+        for rust in (False, True):
+            root = self._component_book('daemon-components-' + str(rust))
+            requests = [
+                {'kind': 'ui.transfers.components.plan', 'args': {'components': exact * 51}},
+                {'kind': 'ui.transfers.components.plan', 'args': {'components': bridge, 'activate': False}},
+                {'kind': 'ui.transfers.components.plan', 'args': {'components': exact, 'authored_source': 'ai_tool'}},
+                {'kind': 'ui.transfers.components.apply', 'args': {'components': exact}},
+                {'kind': 'ui.transfers.components.apply', 'args': {'components': exact, 'expected_input_version': True}},
+                {'kind': 'ui.transfers.components.apply', 'args': {'components': exact, 'expected_input_version': 0}},
+                {'kind': 'ui.transfers.components.plan', 'args': {'action': 'revise', 'component_id': '@', 'component': {'notes': 'alias'}}},
+                {'kind': 'ui.transfers.components.plan', 'args': {'action': 'revise', 'component_id': '@', 'spec': None, 'component': {'notes': 'ignored'}}},
+                {'kind': 'ui.transfers.components.plan', 'args': {'action': None}},
+                {'kind': 'ui.transfers.components.plan', 'args': {'action': 'supersede', 'component_id': '@', 'profile': 'missing'}},
+                {'kind': 'ui.transfers.components.apply', 'args': {'action': 'supersede', 'component_id': '@', 'expected_input_version': 1}},
+                {'kind': 'daemon.shutdown'},
+            ]
+            args = ['--data-root', str(root), 'daemon']
+            options = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.env, cwd=ROOT)
+            process = (subprocess.Popen([RUST_BIN, *args], **options) if rust else cli_runner.popen(args, reference=True, **options))
+            self.addCleanup(lambda p=process: p.kill() if p.poll() is None else None)
+            self.assertEqual(json.loads(process.stdout.readline())['kind'], 'daemon.ready')
+            results = []
+            component = None
+            for i, request in enumerate(requests):
+                request = json.loads(json.dumps(request).replace('"@"', json.dumps(component)))
+                process.stdin.write(json.dumps({**request, 'request_id': str(i)}) + '\n')
+                process.stdin.flush()
+                line = process.stdout.readline()
+                record = json.loads(line)
+                if record.get('kind') == 'ui.transfers.components.apply' and component is None:
+                    component = record['data']['components'][0]['id']
+                if (record.get('error') or {}).get('code') == 'internal_error':
+                    record['error']['debug'] = None
+                results.append(self._without_clock(json.dumps(record)))
+            process.stdin.close()
+            process.wait(timeout=60)
+            self.assertEqual(process.returncode, 0, process.stderr.read())
+            process.stdout.close()
+            process.stderr.close()
+            transcripts.append(results)
+            rows.append(self._component_rows(root))
+        self.assertEqual(transcripts[0], transcripts[1])
+        self.assertEqual(rows[0], rows[1])

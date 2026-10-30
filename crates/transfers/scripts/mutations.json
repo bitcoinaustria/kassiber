@@ -1570,5 +1570,276 @@
       "payout_deletions_match_python_complete_database_rows_and_refusals"
     ],
     "rule": "Trigger refusal messages match Python on late failures while the operation rolls back every table."
+  },
+  {
+    "id": "component-bulk-id",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "\"kassiber:custody-bulk:{}:{source}:{}:{index}:{canonical}\",",
+    "replace": "\"kassiber:custody-bulk:{}:{source}:{}:{index}:\",",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Bulk component ids commit to the canonical authored spec."
+  },
+  {
+    "id": "component-revision-id",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": ":{source}:{}:{reason_text}:{canonical}\",",
+    "replace": ":{source}:{}::{canonical}\",",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revision ids commit to the review reason."
+  },
+  {
+    "id": "component-row-id",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "\"kassiber:custody-component:{component}:{kind}:{ordinal}\"",
+    "replace": "\"kassiber:custody-component:{component}:{ordinal}\"",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Planned leg and allocation ids are kind-scoped deterministic UUIDv5s."
+  },
+  {
+    "id": "component-planned-wallet-casefold",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "kassiber_pytext::casefold(&label)",
+    "replace": "kassiber_pytext::lower(&label)",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Planned untracked wallet ids use full Unicode case folding."
+  },
+  {
+    "id": "component-batch-conflict",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "    for (tx, ids) in by_transaction {\n        if ids.len() > 1 {",
+    "replace": "    for (tx, ids) in by_transaction {\n        if ids.len() > 2 {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An anchor shared by two planned active components blocks the batch."
+  },
+  {
+    "id": "component-plan-replacing-lineage",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "if replacing_lineage.is_some_and(|lineage| text(&row, \"lineage_id\") == lineage) {",
+    "replace": "if replacing_lineage.is_some_and(|lineage| text(&row, \"lineage_id\") == lineage) && false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A revision does not conflict with the active revision it replaces."
+  },
+  {
+    "id": "component-quantity-range",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "let trimmed = raw.trim_start_matches('0');",
+    "replace": "let trimmed = raw;",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Decimal-string quantities drop leading zeros before the SQLite range check."
+  },
+  {
+    "id": "component-input-version",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "if Value::Int(current.into()) != *expected {",
+    "replace": "if Value::Int(current.into()) == *expected {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Apply refuses a plan whose input version is stale."
+  },
+  {
+    "id": "component-already-applied",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "if !persisted.is_empty() {",
+    "replace": "if persisted.is_empty() && !persisted.is_empty() {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Reapplying a persisted batch is a stale plan."
+  },
+  {
+    "id": "component-wallet-invalidation",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "        store::invalidate(c, scope.profile_id)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Creating a planned untracked wallet invalidates journals."
+  },
+  {
+    "id": "component-supersedes-link",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "\"UPDATE custody_components SET superseded_by_component_id=? WHERE id=? AND state='superseded'\",",
+    "replace": "\"UPDATE custody_components SET superseded_by_component_id=superseded_by_component_id WHERE ?1=?1 AND id=?2 AND state='superseded'\",",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Activating a revision links the superseded prior revision forward."
+  },
+  {
+    "id": "component-supersede-reconcile",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "        reconcile(c, scope, &profile, sources)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Superseding an active component rebuilds effective memberships."
+  },
+  {
+    "id": "component-default-type",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "or(\"component_type\", \"manual_bridge\")",
+    "replace": "or(\"component_type\", \"swap\")",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Created components default to manual bridges."
+  },
+  {
+    "id": "component-undo-reason",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "result.reason = if truthy(&reason) { reason } else { s(\"undo\") };",
+    "replace": "result.reason = reason;",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Undo defaults its reason so the revision identity and change reason match."
+  },
+  {
+    "id": "component-hidden-location",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "set(&mut leg, \"location_ref\", location.clone());",
+    "replace": "let _ = location;",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revisions preserve hidden local location references of unchanged legs."
+  },
+  {
+    "id": "component-json-constant",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "Ok(_) if has_constant(&raw) => return Err(valid()),",
+    "replace": "Ok(_) if false => return Err(valid()),",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "String evidence refuses JSON NaN/Infinity constants as invalid JSON."
+  },
+  {
+    "id": "component-lightning-rail",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "const LIGHTNING_KINDS: &[&str] = &[\"cln\", \"coreln\", \"lightning\", \"lnd\", \"nwc\", \"phoenix\"];",
+    "replace": "const LIGHTNING_KINDS: &[&str] = &[\"cln\", \"coreln\", \"lightning\", \"nwc\", \"phoenix\"];",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Legs in Lightning wallets default to the lightning rail."
+  },
+  {
+    "id": "component-economic-term-legs",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "let (Some(source_id), Some(target_id)) = (source_id, target_id) else {",
+    "replace": "let (Some(source_id), Some(target_id)) = (source_id.or(Some(String::new())), target_id.or(Some(String::new()))) else {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revisions refuse to drop legs bound by migrated economic terms."
+  },
+  {
+    "id": "component-apply-atomic",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "atomic(c, || apply_review(c, scope, &a, args, &source, sources))",
+    "replace": "apply_review(c, scope, &a, args, &source, sources)",
+    "expect_failing": [
+      "component_apply_rolls_back_late_failure_and_preserves_outer_transaction",
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A late failure rolls back every component apply write and keeps the caller transaction."
+  },
+  {
+    "id": "component-effective-superseded",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "        result[\"effective_state\"] = json!(\"superseded\");",
+    "replace": "        result[\"effective_state\"] = json!(\"draft\");",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Superseded components materialize as superseded, not draft."
+  },
+  {
+    "id": "component-native-support",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "    let native = if h[\"state\"] == \"active\" {",
+    "replace": "    let native = if false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Active components report recovered native-event support for their anchored boundaries."
+  },
+  {
+    "id": "component-batch-route-filter",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "ids.is_empty() || ids.iter().any(|id| planned.contains(&pystr(id)))",
+    "replace": "ids.is_empty()",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Batch route issues naming a planned component block activation."
+  },
+  {
+    "id": "component-valuation-groups",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "let context = if context == \"groups\" && fields.contains_key(\"valuation_unit\") {",
+    "replace": "let context = if false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Valuation conservation groups keep Python field order."
+  },
+  {
+    "id": "component-planned-wallet-anchor",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "if found.is_empty() && planned_wallets.contains(&py_str(&wallet)) {",
+    "replace": "if found.is_empty() && planned_wallets.contains(&py_str(&wallet)) && false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Planned untracked wallets satisfy leg wallet scope before they exist."
+  },
+  {
+    "id": "desktop-component-cap",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "        if items.len() > 50 {",
+    "replace": "        if items.len() > 51 {",
+    "expect_failing": [
+      "desktop_component_review_caps_aliases_versions_and_authority"
+    ],
+    "rule": "Desktop component plans cap bulk components before scope resolution."
+  },
+  {
+    "id": "desktop-component-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "        (\"authored_source\", s(\"gui\")),\n    ]);\n    for key in [\"workspace\", \"profile\"] {",
+    "replace": "        (\"authored_source\", field(\"authored_source\")),\n    ]);\n    for key in [\"workspace\", \"profile\"] {",
+    "expect_failing": [
+      "desktop_component_review_caps_aliases_versions_and_authority"
+    ],
+    "rule": "Desktop component authorship is gui regardless of request fields."
+  },
+  {
+    "id": "desktop-component-version",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "if !matches!(&version, Value::Int(n) if n >= &0.into()) {",
+    "replace": "if matches!(&version, Value::Null) {",
+    "expect_failing": [
+      "desktop_component_review_caps_aliases_versions_and_authority"
+    ],
+    "rule": "Desktop apply requires a non-negative integer input version."
   }
 ]
