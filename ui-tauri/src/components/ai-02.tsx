@@ -11,13 +11,12 @@ import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
 import {
   PermissionModePicker,
-  ToolProfilePicker,
 } from "@/components/ai/ComposerModePickers";
 import { ComposerControlSeparator } from "@/components/ai/ComposerControl";
 import { ChatAttachmentCard } from "@/components/ai/ChatAttachmentCard";
 import type { ChatAttachmentView } from "@/components/ai/chatAttachments";
 import { useChatFileDrop } from "@/components/ai/useChatFileDrop";
-import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
+import type { AiPermissionMode } from "@/daemon/stream";
 import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import {
@@ -103,12 +102,6 @@ interface Ai02Props {
    */
   permissionMode?: AiPermissionMode;
   onPermissionModeChange?: (mode: AiPermissionMode) => void;
-  /**
-   * The tools the next turn offers the model; the picker appears with its
-   * change handler. A choice applies from the next message.
-   */
-  toolProfile?: AiToolProfile;
-  onToolProfileChange?: (profile: AiToolProfile) => void;
   modelPickerEnabled?: boolean;
   /** Open the native picker to attach a file. Omit to disable the button. */
   onAttach?: () => void;
@@ -198,8 +191,6 @@ export default function Ai02({
   onFastModeChange,
   permissionMode = "approval",
   onPermissionModeChange,
-  toolProfile = "full",
-  onToolProfileChange,
   modelPickerEnabled = true,
   onAttach,
   attachments = [],
@@ -619,14 +610,6 @@ export default function Ai02({
                     labelClassName="hidden @sm/composer-toolbar:inline"
                   />
                 </>
-              ) : null}
-              {onToolProfileChange ? (
-                <ToolProfilePicker
-                  value={toolProfile}
-                  onChange={onToolProfileChange}
-                  onOpenChange={handleOverlayOpenChange}
-                  labelClassName="hidden @md/composer-toolbar:inline"
-                />
               ) : null}
             </div>
 

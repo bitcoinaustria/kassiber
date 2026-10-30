@@ -1,7 +1,7 @@
 /**
- * The chat's permission mode and tool set in the composer toolbar: icon and
- * label on the trigger, each option with its one-line description, and the
- * current description as the tooltip. Full access marks its trigger in a
+ * The chat's permission mode in the composer toolbar: icon and label on the
+ * trigger, each option with its one-line description, and the current
+ * description as the tooltip. Full access marks its trigger in a
  * warning tone, since it also runs network actions without asking.
  *
  * Modelled on T3 Code's runtime-mode select (MIT, Copyright (c) 2026 T3
@@ -26,17 +26,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  isAiPermissionMode,
-  isAiToolProfile,
-  type AiPermissionMode,
-  type AiToolProfile,
-} from "@/daemon/stream";
+import { isAiPermissionMode, type AiPermissionMode } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
 import { ComposerControl, ComposerControlChevron } from "./ComposerControl";
 import { PERMISSION_MODE_OPTIONS, permissionModeOption } from "./permissionMode";
-import { TOOL_PROFILE_OPTIONS, toolProfileOption } from "./toolProfile";
 
 interface MenuOption<T extends string> {
   value: T;
@@ -159,27 +153,6 @@ export function PermissionModePicker(props: PickerProps<AiPermissionMode>) {
         description: t(option.descriptionKey),
         // A quiet warning, as T3 Code marks its open lock.
         warning: option.value === "full_access",
-      }))}
-    />
-  );
-}
-
-/** All tools / Focused / Minimal for this chat. */
-export function ToolProfilePicker(props: PickerProps<AiToolProfile>) {
-  const { t } = useTranslation("assistant");
-  const value = toolProfileOption(props.value).value;
-  return (
-    <ComposerOptionMenu
-      {...props}
-      value={value}
-      name="tool-profile"
-      title={t("composer.toolProfile.label")}
-      isValue={isAiToolProfile}
-      options={TOOL_PROFILE_OPTIONS.map((option) => ({
-        value: option.value,
-        icon: option.icon,
-        label: t(option.labelKey),
-        description: t(option.descriptionKey),
       }))}
     />
   );

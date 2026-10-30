@@ -7,7 +7,6 @@ import type {
   AiPermissionMode,
   AiToolConsentDecision,
   AiToolConsentRequest,
-  AiToolProfile,
 } from "@/daemon/stream";
 
 export type AssistantReturnPath =
@@ -234,13 +233,6 @@ export interface AssistantSessionContextValue {
    * answer, and the daemon releases waiting approvals the new mode covers.
    */
   setPermissionMode?: (mode: AiPermissionMode) => void;
-  /**
-   * The tools the next turn offers the model: this chat's pick for the
-   * selected provider, else that provider's setting, else all tools.
-   */
-  toolProfile?: AiToolProfile;
-  /** This chat's pick for the selected provider (from the next turn on). */
-  setToolProfile?: (profile: AiToolProfile) => void;
   abort: () => void;
   reset: () => void;
   /** Load a persisted session into the conversation. */

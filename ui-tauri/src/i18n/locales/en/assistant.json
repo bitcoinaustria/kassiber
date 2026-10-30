@@ -113,7 +113,6 @@
       }
     },
     "toolProfile": {
-      "label": "Tools",
       "full": {
         "label": "All tools",
         "description": "Offers every Kassiber tool with each question."
