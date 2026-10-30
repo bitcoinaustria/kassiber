@@ -12,7 +12,7 @@ from export_pairs import ROOT, STAMP, TABLES, seed, dump, terms, migration, comp
 
 def main():
     states = {}; scenarios = []
-    for name in ('single', 'independent', 'drift', 'scope', 'superseded', 'gui'):
+    for name in ('single', 'independent', 'drift', 'scope', 'superseded', 'gui', 'late-failure'):
         with tempfile.TemporaryDirectory(prefix='kassiber-payout-delete-') as root:
             c = open_db(root); sql = seed(c)
             with ExitStack() as stack:
@@ -51,16 +51,28 @@ def main():
                 replay.close()
             cases=[]
             for i, (id, profile) in enumerate([(payout['id'], 'other' if name == 'scope' else 'p'), (payout['id'],'p'), (payout['id'],'p'), ('missing','p')]):
+                setup=[]
+                if name == 'late-failure' and i == 0:
+                    version=c.execute("SELECT journal_input_version FROM profiles WHERE id='p'").fetchone()[0]
+                    setup=[f"CREATE TEMP TRIGGER refuse_payout_invalidation BEFORE UPDATE OF journal_input_version ON profiles WHEN NEW.id='p' AND NEW.journal_input_version={version+2} BEGIN SELECT RAISE(ABORT,'late payout invalidation'); END"]
+                elif name == 'late-failure' and i == 1:
+                    setup=['DROP TRIGGER refuse_payout_invalidation']
+                for statement in setup: c.execute(statement)
+                c.commit()
+                before={t:dump(c,t) for t in tables}
                 now='2025-06-01T00:00:00Z'
                 with ExitStack() as stack:
                     for module, field in ((terms,'now_iso'), (migration,'now_iso'), (components,'_now_iso')): stack.enter_context(patch.object(module,field,return_value=now))
                     try: expected={'result':handlers.delete_direct_swap_payout(c,'w',profile,id,authored_source='gui' if name == 'gui' else 'cli')}
                     except Exception as e:
                         c.rollback(); expected={'error':dict(code=e.code if isinstance(e,AppError) else 'internal_error',message=str(e),hint=getattr(e,'hint',None),details=getattr(e,'details',None))}
+                if name == 'late-failure' and i == 0:
+                    assert expected['error']['message'] == 'late payout invalidation'
+                    assert {t:dump(c,t) for t in tables} == before
                 rows={}
                 for table in TABLES:
                     data=dump(c,table); key=hashlib.sha256(json.dumps(data,sort_keys=True,ensure_ascii=True).encode()).hexdigest();states[key]=data;rows[table]=key
-                cases.append(dict(operation='transfers.payouts.delete',args={'payout_id':id, 'authored_source':'gui' if name == 'gui' else 'cli'},setup=[],profile=profile,id='unused',now=now,rows=rows,**expected))
+                cases.append(dict(operation='transfers.payouts.delete',args={'payout_id':id, 'authored_source':'gui' if name == 'gui' else 'cli'},setup=setup,profile=profile,id='unused',now=now,rows=rows,**expected))
             scenarios.append(dict(name=name,sql=sql,cases=cases));c.close()
     (ROOT/'crates/transfers/tests/payout_delete.json').write_text(json.dumps(dict(states=states,scenarios=scenarios),indent=2,ensure_ascii=True)+'\n')
     print(f'{len(scenarios)} scenarios, {sum(len(s["cases"]) for s in scenarios)} operations')

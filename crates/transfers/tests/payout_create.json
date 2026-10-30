@@ -8649,6 +8649,69 @@
       ]
     },
     {
+      "name": "late-failure",
+      "sql": [
+        "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z')",
+        "INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at,last_processed_at,last_processed_tx_count,ownership_review_counts_json) VALUES('p','w','Book','EUR','at','2025-01-01T00:00:00Z','2025-01-01T00:00:00Z',42,'{\"owned\":7}')",
+        "INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('other','w','Other','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('source','w','p','source','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('target','w','p','target','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('liquid','w','p','liquid','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('a','w','p','source','fp-a','a-ext','BTC','outbound',1000,10,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('b','w','p','target','fp-b','b-ext','BTC','inbound',600,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('c','w','p','target','fp-c','c-ext','BTC','inbound',400,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('d','w','p','source','fp-d','d-ext','BTC','outbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('e','w','p','target','fp-e','e-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('f','w','p','source','fp-f','f-ext','BTC','outbound',1010,10,1,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('g','w','p','liquid','fp-g','g-ext','LBTC','inbound',800,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('h','w','p','target','fp-h','h-ext','ETH','inbound',700,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('j','w','p','source','fp-j','j-ext','BTC','outbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('k','w','p','target','fp-k','k-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('l','w','p','target','fp-l','j-ext','BTC','inbound',200,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('zero','w','p','source','fp-zero','zero-ext','BTC','outbound',0,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('neg','w','p','source','fp-neg','neg-ext','BTC','outbound',10,20,1,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('bad','w','p','target','fp-bad','bad-ext','BTC','inbound',1000,1,1,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('excluded','w','p','target','fp-excluded','excluded-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('net','w','p','target','fp-net','net-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{\"network\":\"regtest\"}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('contradiction','w','p','target','fp-contradiction','contradiction-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{\"chain\":\"liquid\"}','2025-01-01T00:00:00Z')",
+        "UPDATE transactions SET excluded=1 WHERE id='excluded'"
+      ],
+      "cases": [
+        {
+          "operation": "transfers.payouts.create",
+          "args": {
+            "tx_out": "d",
+            "payout_asset": "ETH",
+            "payout_amount": "0.000000008"
+          },
+          "setup": [
+            "CREATE TEMP TRIGGER refuse_payout_creation BEFORE UPDATE OF journal_input_version ON profiles WHEN NEW.id='p' AND NEW.journal_input_version=2 BEGIN SELECT RAISE(ABORT,'late payout creation invalidation'); END"
+          ],
+          "profile": "p",
+          "id": "3e30bfe2-2677-520d-b6e0-6d49d1bd5e26",
+          "now": "2025-06-01T00:00:00Z",
+          "error": {
+            "code": "internal_error",
+            "message": "late payout creation invalidation",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "a1c231c0ed114003dea1251b87b291bafdcf00faccd78405de1efac8a9a283df",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        }
+      ]
+    },
+    {
       "name": "edge-payout_amount",
       "sql": [
         "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z')",

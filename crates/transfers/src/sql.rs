@@ -11,6 +11,14 @@ pub struct Scope<'a> {
 }
 
 pub fn error(error: kassiber_store::rusqlite::Error) -> AppError {
+    // Python propagates trigger refusals through the service boundary. Preserve
+    // their message without exposing the SQL statement or connection details.
+    // The shell's shared envelope still applies output redaction.
+    if let kassiber_store::rusqlite::Error::SqliteFailure(code, Some(message)) = &error {
+        if code.extended_code == kassiber_store::rusqlite::ffi::SQLITE_CONSTRAINT_TRIGGER {
+            return AppError::new("internal_error", message.clone());
+        }
+    }
     let e = kassiber_store::map_sqlite_error(error);
     AppError::new(e.code, e.message).retryable(e.retryable)
 }

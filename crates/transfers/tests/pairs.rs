@@ -491,7 +491,7 @@ fn payout_creation_rolls_back_late_failure_and_preserves_outer_transaction() {
         id: py_str(field(case, "id")),
         now: py_str(field(case, "now")),
     };
-    // Reference bug, Python fix pending: compare every table with pre-operation state.
+    // The fixed Python oracle also pins complete rollback on this failure path.
     for outer in [false, true] {
         if outer {
             c.execute_batch("BEGIN; INSERT INTO settings(key,value) VALUES('outer-create','keep')")

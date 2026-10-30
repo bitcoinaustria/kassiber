@@ -1943,3 +1943,12 @@ checkpoint; append-only revisions, commitments, native residual validation and
 invalidation must be ported together before pairing/components/gap application
 can be advertised.
 
+
+### R5 transfer atomicity reference checkpoint
+
+The transfer continuation incorporates Python's savepoint atomicity fix and
+compares payout create/delete late-failure errors and complete rollback state
+against the repaired reference. The old bug repros are replaced by shared
+failure-path oracle cases. See the [transfer checkpoint](../reference/rust-shell.md#savepoint-reference-fix-parity-checkpoint)
+for parity counts and verification. Component/gap plan/apply and their daemon
+kinds are still outstanding; automatic pairing remains R4.

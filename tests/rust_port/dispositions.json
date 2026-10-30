@@ -590,6 +590,17 @@
       "test_leg_role_rebuild_preserves_existing_economic_term_foreign_keys": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1},
       "test_review_notes_schema_migration_backfills_and_refreezes_terms": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1}
     },
+    "tests/test_custody_authoring_atomicity.py": {
+      "test_late_review_invalidation_rolls_back_every_table": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_component_apply_late_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_component_planner, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_component_commit_false_leaves_success_rollbackable": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_component_planner, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_single_statement_authoring_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_gap_apply_last_step_failure": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gap_reviews, kassiber.core.custody_gaps directly", "reviewed": false, "tests": 1},
+      "test_gap_commit_false_leaves_success_rollbackable": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gap_reviews, kassiber.core.custody_gaps directly", "reviewed": false, "tests": 1},
+      "test_batch_pairing_late_invalidation_rolls_back": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_payout_component_revision_late_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_component_planner, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
+      "test_successful_authoring_has_one_explicit_commit": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_component_planner directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_custody_build_clock.py": {
       "InterpreterAsOfTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_evidence directly", "reviewed": false, "tests": 3},
       "BuilderAsOfTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.sync directly", "reviewed": false, "tests": 5}

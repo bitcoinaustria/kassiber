@@ -3254,15 +3254,11 @@ UUIDs, timestamps, hashes or array orders are masked. Real-process byte checks
 use a stored deletion timestamp; first deletion timestamps and persisted bytes
 are checked by the fixed-source native oracle.
 
-**Python bug left unchanged:** a final journal invalidation failure can leave
-payout supersession committed even after caller rollback. Run
-`.venv/bin/python crates/transfers/scripts/repro_payout_delete_rollback.py`.
-It creates a disposable book, injects a trigger refusing the second input-version
-increment, catches `IntegrityError: late payout invalidation`, rolls back and
-prints `State after caller rollback: superseded`. Rust's named rollback test
-requires the complete database to remain unchanged. This durability difference
-is intentional to satisfy the service-slice atomicity requirement; it is not a
-change to Python in this checkpoint.
+The Python savepoint atomicity fix (`ba651df7`, cherry-picked as `be959dd6`)
+now makes late payout invalidation rollback match Rust. The deletion oracle's
+`late-failure` scenario rejects the second input-version increment and compares
+every application table with its pre-operation state after caller rollback.
+The old payout-delete bug repro is retired; this path is failure-path parity.
 
 Payout creation, component plan/apply and gap plan/apply remain unported.
 The ten computation-dependent commands and the additional desktop kinds listed
@@ -3343,14 +3339,12 @@ native residuals, idempotent deletion/recreation, Unicode asset and decimal
 normalization, non-finite values, integer overflow, timestamp normalization,
 optional text validation and original-versus-normalized return fields.
 
-**Reference bug, Python fix pending:** late payout-create invalidation can
-commit an active component despite failure and caller rollback. Reproduce with
-`.venv/bin/python crates/transfers/scripts/repro_payout_create_rollback.py`.
-The disposable book refuses the second journal-input-version increment and
-prints `IntegrityError: late payout creation invalidation`, followed by
-`Active components after caller rollback: 1`. Rust compares every application
-table with its pre-operation state on that path, both standalone and inside
-an outer transaction. Python product code is unchanged.
+The fixed Python reference now rolls back late payout-create invalidation.
+The creation oracle's `late-failure` scenario rejects the second input-version
+increment, checks every application table is unchanged, and supplies the same
+error and complete normalized rows to the Rust parity runner. The old
+payout-create bug repro is retired. Rust additionally checks standalone and
+outer-transaction failure, preserving the caller's unrelated pending writes.
 
 | New mutation | Named killing test |
 | --- | --- |
@@ -3387,3 +3381,49 @@ exactly the corrected handshake tests. The nine transfer process tests all
 passed, including payout-create's **4 Rust / 0 Python** hybrid witness.
 Mutation targets and the verification build tree were removed after recording
 results. No push or PR was performed.
+
+### Savepoint reference-fix parity checkpoint
+
+The local `t3code/r5-transfers-5` continuation starts at `b3721292` and
+cherry-picks the Python atomicity fix `ba651df7` as `be959dd6`. The cherry-pick
+had one documentation conflict; its unrelated dependency-origin context is
+excluded from this branch's database compatibility notes.
+
+The two payout rollback repro scripts are retired. Both fixed-source exporters
+now inject a refusal of the final, second journal-input-version increment,
+assert that Python leaves every application table unchanged after caller
+rollback, and export the exact failure response and complete normalized rows
+for Rust. Trigger refusal text now survives the transfer service error adapter;
+it does not expose SQL statements or connection details, and the shell still
+applies shared output redaction. Other SQLite errors retain the existing store
+mapping. This is a failure-path parity checkpoint, not an added command family.
+
+| Parity boundary | Result |
+| --- | --- |
+| Payout creation | 39 scenarios / 99 operations; 36 successes, 63 refusals, including late rollback |
+| Payout deletion | 7 scenarios / 28 operations, including late rollback followed by successful retry |
+| Complete service rows, responses and caller-transaction checks | All 8 `pairs.rs` tests pass |
+| Reference atomicity regression | 29 tests pass |
+| Existing transfer CLI, daemon and hybrid tests | 9 tests pass; 26 Rust calls, zero Python fallbacks |
+| Fixture regeneration | Both payout fixtures regenerate byte-identically |
+| Mutation checks | `payout-create-atomic`, `payout-delete-atomic`, and new `trigger-refusal-message` built and killed by named tests; all 157 entries apply |
+| Required checks | Workspace fmt, workspace and harness clippy with `-D warnings`, 954 workspace tests, regenerated test inventory and 57-test preflight pass |
+
+The new trigger-message mutation is killed by both
+`payout_creations_match_python_complete_database_rows_and_refusals` and
+`payout_deletions_match_python_complete_database_rows_and_refusals`.
+
+Verification used Rust 1.99.1, locked Python 3.11 and offline Cargo. Disposable
+mutation trees were removed immediately after their summaries. Restricted
+workspace tests initially failed to bind owned loopback listeners; the complete
+suite passed with the required sandbox permissions. Reference daemon checks
+also needed ownership-lock permissions. A simultaneous workspace rebuild
+replaced the harness executable during one process run; the successful final
+process gate used an isolated copy. Persistent trigger injection at the process
+boundary is correctly refused by structural schema admission, so late-write
+injection remains in the service oracle rather than weakening admission.
+
+Component plan/apply, gap plan/apply and their daemon kinds remain unported.
+The supported command subset is still 15/29 CLI leaves and 14 desktop kinds.
+Automatic pairing remains with R4. This checkpoint does not complete the
+requested component/gap authoring continuation. No push or PR was performed.

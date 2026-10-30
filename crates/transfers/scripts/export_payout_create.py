@@ -23,6 +23,7 @@ def main():
         'generic':[payout(__sql=["UPDATE profiles SET tax_country='generic',bitcoin_rail_carrying_value=0 WHERE id='p'"]),delete('@0'),payout(policy='carrying-value'),payout(payout_asset='LBTC')],
         'validation':[payout('absent'),payout(kind='bad'),payout(policy='bad'),payout(payout_asset=''),payout(payout_amount='0'),payout(payout_amount='bad'),payout(out_amount='1'),payout(payout_fiat_value='-1'),payout(payout_occurred_at='bad'),payout(notes=12),payout(counterparty=12),payout(payout_external_id=12),payout(payout_amount='0.000000000001'),payout(payout_amount='0.000000000005')],
     }
+    scenarios['late-failure']=[]
     for field in ('payout_amount','out_amount','payout_fiat_value'):
         scenarios['edge-'+field]=[payout(**{field:v}) for v in (None,'',' ',True,'NaN','Infinity','-Infinity','bad','１_２e-11','1e9999','-0','0.000000000005')]
     for field in ('payout_amount','payout_fiat_value'):
@@ -36,6 +37,9 @@ def main():
     for name,operations in scenarios.items():
         with tempfile.TemporaryDirectory(prefix='kassiber-pair-oracle-') as root:
             c=open_db(root);sql=seed(c);cases=[];ids={}
+            if name == 'late-failure':
+                version=c.execute("SELECT journal_input_version FROM profiles WHERE id='p'").fetchone()[0]
+                operations=[payout(__sql=[f"CREATE TEMP TRIGGER refuse_payout_creation BEFORE UPDATE OF journal_input_version ON profiles WHEN NEW.id='p' AND NEW.journal_input_version={version+2} BEGIN SELECT RAISE(ABORT,'late payout creation invalidation'); END"])]
             tables=[r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
             untouched={t:dump(c,t) for t in tables if t not in TABLES}
             for i,(operation,raw) in enumerate(operations):
@@ -45,6 +49,7 @@ def main():
                 for statement in setup:c.execute(statement)
                 c.commit()
                 untouched={t:dump(c,t) for t in tables if t not in TABLES}
+                before={t:dump(c,t) for t in tables}
                 override=args.pop('__now',None)
                 override_id=args.pop('__id',None)
                 id=str(uuid.uuid5(uuid.NAMESPACE_DNS,f'pair-oracle-{name}-{i}'));now=(datetime.datetime(2025,6,1,tzinfo=datetime.timezone.utc)+datetime.timedelta(hours=i)).isoformat().replace('+00:00','Z')
@@ -63,6 +68,9 @@ def main():
                     except Exception as e:
                         c.rollback()
                         expected={'error':dict(code=e.code if isinstance(e,AppError) else 'internal_error',message=str(e),hint=getattr(e,'hint',None),details=getattr(e,'details',None))}
+                if name == 'late-failure':
+                    assert expected['error']['message'] == 'late payout creation invalidation'
+                    assert {t:dump(c,t) for t in tables} == before
                 rows={}
                 for table in TABLES:
                     data=dump(c,table);encoded=json.dumps(data,sort_keys=True,ensure_ascii=True);key=hashlib.sha256(encoded.encode()).hexdigest();states[key]=data;rows[table]=key

@@ -1559,5 +1559,16 @@
       "payout_creations_match_python_complete_database_rows_and_refusals"
     ],
     "rule": "Oversized payout quantities fail before SQLite with exact validation details."
+  },
+  {
+    "id": "trigger-refusal-message",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "return AppError::new(\"internal_error\", message.clone());",
+    "replace": "return AppError::new(\"internal_error\", \"database operation failed\");",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals",
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Trigger refusal messages match Python on late failures while the operation rolls back every table."
   }
 ]
