@@ -13335,13 +13335,13 @@ def _attach_chat_file_ai_payload(
         file_path=str(chat_file["source_file"]),
         label=label or str(chat_file["filename"]),
     )
-    if not _ai_full_access(runtime) and not label:
-        # The note gave a restricted provider the extension only.
-        payload = {
-            key: value
-            for key, value in payload.items()
-            if key not in {"label", "display_label", "original_filename", "filename"}
-        }
+    if not _ai_full_access(runtime):
+        # The note gave a restricted provider the extension only. A label it
+        # chose itself may come back; the file's own name never does.
+        withheld = {"original_filename", "filename"}
+        if not label:
+            withheld |= {"label", "display_label"}
+        payload = {key: value for key, value in payload.items() if key not in withheld}
     return payload
 
 
