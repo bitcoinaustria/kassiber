@@ -181,6 +181,111 @@ mod tests {
     use super::*;
     use kassiber_store::rusqlite;
 
+    struct Fixed(String);
+    impl Sources for Fixed {
+        fn uuid(&self, _: &Connection) -> Result<String> {
+            Ok(self.0.clone())
+        }
+        fn now(&self, _: &Connection) -> Result<String> {
+            Ok("2026-01-02T03:04:05Z".into())
+        }
+    }
+    fn encode(v: &Value) -> String {
+        kassiber_pyjson::dumps(
+            v,
+            &kassiber_pyjson::Options {
+                sort_keys: true,
+                separators: Some((",".into(), ":".into())),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+    fn dump(conn: &Connection) -> Value {
+        let tables = rows(conn, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", []).unwrap();
+        dict(tables.iter().map(|table| {
+            let name = text(table, "name");
+            let mut contents = rows(conn, &format!("SELECT * FROM \"{name}\""), []).unwrap();
+            contents.sort_by_key(encode);
+            (name, Value::List(contents))
+        }))
+    }
+    /// Complete Python exports, repeated explicit filing, failures and drafts.
+    /// Compare every table after each action, keeping stored JSON literal.
+    #[test]
+    fn csv_export_sequences_match_python_artifacts_and_database() {
+        let vectors =
+            kassiber_pytext::loads(include_str!("../tests/data/export_sequences.json")).unwrap();
+        for case in artifact_csv::list(&vectors) {
+            let (root, book) = book();
+            let conn = book.connection();
+            conn.execute_batch(&text(case, "sql")).unwrap();
+            assert_eq!(
+                encode(&dump(conn)),
+                encode(value(case, "before")),
+                "{}: starting database",
+                text(case, "name")
+            );
+            for (index, action) in artifact_csv::list(value(case, "actions"))
+                .iter()
+                .enumerate()
+            {
+                let command = text(action, "command");
+                let sources = Fixed(format!("00000000-0000-0000-0000-{:012x}", index + 1));
+                let args = value(action, "args");
+                let result = if command == "reports.filed-snapshots.create" {
+                    crate::execute_with_sources(conn, &command, args, &sources)
+                } else {
+                    export(
+                        conn,
+                        &command,
+                        args,
+                        &root.path().join(text(action, "target")),
+                        &sources,
+                    )
+                };
+                let result = match result {
+                    Ok(v) => dict([("ok", v)]),
+                    Err(e) => dict([(
+                        "error",
+                        dict([
+                            ("code", s(e.code)),
+                            ("message", s(e.message)),
+                            ("hint", e.hint.map(s).unwrap_or(Value::Null)),
+                            ("details", e.details.unwrap_or(Value::Null)),
+                            ("retryable", Value::Bool(e.retryable)),
+                        ]),
+                    )]),
+                };
+                assert_eq!(
+                    encode(&result).replace(&root.path().to_string_lossy().to_string(), "<root>"),
+                    encode(value(action, "expected")),
+                    "{} action {index}",
+                    text(case, "name")
+                );
+                assert_eq!(
+                    encode(&dump(conn)),
+                    encode(value(action, "tables")),
+                    "{} action {index}: database",
+                    text(case, "name")
+                );
+                if let Value::Dict(files) = value(action, "files") {
+                    for (name, expected) in files {
+                        let kassiber_pyjson::Key::Str(name) = name else {
+                            panic!()
+                        };
+                        assert_eq!(
+                            std::fs::read(root.path().join(name.as_str().unwrap())).unwrap(),
+                            py_str(expected).as_bytes(),
+                            "{} action {index}: {name:?}",
+                            text(case, "name")
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn book() -> (tempfile::TempDir, kassiber_store::Book) {
         let root = tempfile::tempdir().unwrap();
         let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();

@@ -1063,6 +1063,17 @@ authoritative dependencies, admission retained through publication/completion,
 complete DB export sequences and transport/hybrid proof still gate registration.
 See the [standalone CSV checkpoint](../reference/rust-shell.md#standalone-transaction-csv-preparation-r5-eighth-continuation-partial).
 
+The ninth reports continuation implements saved CSV completion (34 Python
+vectors, actual file/manifest hashes, exact summaries and authoritative
+dependencies) and calendar ranges (824 cases over 25 frozen zones). The tenth
+adds nine whole-export sequences comparing 36 actions, 51 files and every one
+of 112 SQLite tables after each action, including repeated explicit filing and
+failed completion. One admitted write transaction spans preparation,
+publication and completion; stale input versions fail before publication.
+See the [completion checkpoint](../reference/rust-shell.md#saved-csv-completion-and-export-sequence-checkpoint-r5-ninthtenth-continuations)
+for verification and the deferred XLSX/PDF rendering, font and parity needs.
+Transport registration still requires its own process and hybrid proof.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

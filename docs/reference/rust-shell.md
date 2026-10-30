@@ -3060,6 +3060,49 @@ export-sequence DB oracles and hybrid registration proof remain required.
 Capital-gains CSV, XLSX and PDF are not newly enabled. Only explicit filing can
 create a filed marker. No further Python bug was found in this boundary.
 
+## Saved CSV completion and export-sequence checkpoint (R5 ninth/tenth continuations)
+
+The ninth continuation (`1eef14a8`, `a97296d3`) implements automatic completion
+and calendar ranges, superseding the unfinished completion/range statements
+above. Saved exports hold `BEGIN IMMEDIATE` from preparation through publication
+and completion. Another writer cannot change the admitted book/input version;
+after it proceeds, a stale journal is refused before publication. Completion
+computes the actual file or sorted bundle-manifest SHA-256, exact 32-digit
+summaries and authoritative chain dependencies. Failed completion rolls back
+the marker/capture while retaining the published artifact. Transaction lists
+register nothing; only explicit filing creates a filed marker.
+
+The inherited evidence is 34 Python completion vectors, including literal
+stored JSON/table dumps, and 824 calendar-range cases over 25 hermetic TZif
+zones. The two commits record 42 completion/confirmation and 23 calendar
+mutations killed by named tests. The native completion, admission, failure and
+range tests are rerun in this continuation before relying on them. Graphless
+Liquid raw-hex dependency identity remains explicitly refused pending the
+native transaction decoder; no identity is guessed.
+
+`csv_export_sequences_match_python_artifacts_and_database` adds nine frozen
+FIFO/HIFO/Austrian sequences: 36 actions, 51 resulting CSV files, and all 112
+SQLite tables compared after each action. Starting migration times and action
+UUIDs/clocks are fixed before execution. Only the disposable artifact root is
+substituted in returned paths; stored JSON and artifact bytes remain literal.
+Sequences include wallet scopes, Austrian bundles, stale-journal drafts,
+capture failures after publication and repeated explicit filing with frozen
+dependency copies. Two additional mutations remove completion or capture and
+are killed by this named test. Transport registration remains the next boundary.
+
+This boundary reruns all 22 report unit tests and three artifact-vector tests
+successfully. The two new mutation baselines pass and both mutations are killed;
+the disposable mutation tree is removed after recording its summary under
+`target/r5-reports10/sequence-mutations.log`.
+
+XLSX needs the planned `rust_xlsxwriter`/`calamine` rendering and reading
+libraries, formula/cached-result and verification-sheet comparisons, and a
+reviewed ZIP metadata/XML ordering strategy before claiming byte parity.
+PDF needs the chosen Typst/ReportLab replacement, bundled licensed fonts,
+network-free font resolution and layout review. Its acceptance compares
+extracted text, tables and page structure; PDF byte equality needs a separate
+deterministic metadata/font-subset/compression strategy and is not assumed.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

@@ -5229,5 +5229,25 @@
       "export_range_vectors"
     ],
     "rule": "The book calendar compares the stored policy without stripping it."
+  },
+  {
+    "id": "sequence-completion-marker",
+    "file": "crates/reports/src/export.rs",
+    "find": "    if let Some(completion) = &prepared.completion {",
+    "replace": "    if let Some(completion) = &None::<export_completion::Completion> {",
+    "expect_failing": [
+      "csv_export_sequences_match_python_artifacts_and_database"
+    ],
+    "rule": "A completed accounting CSV registers exactly its saved marker; transaction lists register none."
+  },
+  {
+    "id": "sequence-completion-capture",
+    "file": "crates/reports/src/export_completion.rs",
+    "find": "    capture_dependencies(conn, &snapshot, &sources.now(conn)?)?;",
+    "replace": "    let _ = &snapshot;",
+    "expect_failing": [
+      "csv_export_sequences_match_python_artifacts_and_database"
+    ],
+    "rule": "Every completed saved export captures authoritative dependencies and explicit filing copies them."
   }
 ]
