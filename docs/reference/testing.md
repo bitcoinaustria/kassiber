@@ -76,7 +76,10 @@ The required PR workflow is fail-fast without reducing the test inventory:
 `scripts/python_test_shards.py` is the single file-to-lane mapping. Unknown new
 test modules default to `core-accounting`, while `tests/test_ci_shards.py`
 proves that every discovered module appears once and that sensitive modules do
-not enter xdist. PR pushes use a concurrency group and cancel superseded CI;
+not enter xdist. A local `pytest -n N` without `--dist` also keeps each test
+class on one worker (`tests/conftest.py` defaults it to `loadscope`), since
+some classes, like the CLI smoke suite, are ordered steps over one book. PR
+pushes use a concurrency group and cancel superseded CI;
 test failures are never broadly retried. Locked uv and pnpm stores are cached;
 cache misses still install only from the checked-in lockfiles.
 

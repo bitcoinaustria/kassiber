@@ -1,23 +1,9 @@
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Minus,
-  Monitor,
-  Moon,
-  Plus,
-  Sun,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
-import {
-  SegmentedControl,
-  SettingsGroup,
-  SettingsRow,
-} from "./SettingsControls";
+import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 import { SUPPORTED_LANGUAGES, type LanguageCode } from "@/i18n/config";
 import {
+  APP_SCALE_STEP,
   DEFAULT_APP_SCALE,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
@@ -29,13 +15,19 @@ import {
 
 export type CurrencyMode = "btc" | "eur";
 
+const percent = (scale: number) => Math.round(scale * 100);
+
+/** Every scale the store keeps, as whole percents: 80, 85, … 120. */
+const SCALE_PERCENTS = Array.from(
+  { length: Math.round((MAX_APP_SCALE - MIN_APP_SCALE) / APP_SCALE_STEP) + 1 },
+  (_, index) => percent(MIN_APP_SCALE + index * APP_SCALE_STEP),
+);
+
 export function AppearanceSettingsPanel({
   theme,
   setTheme,
   appScale,
-  increaseAppScale,
-  decreaseAppScale,
-  resetAppScale,
+  setAppScale,
   currency,
   setCurrency,
   lang,
@@ -44,15 +36,13 @@ export function AppearanceSettingsPanel({
   theme: ThemePreference;
   setTheme: (theme: ThemePreference) => void;
   appScale: number;
-  increaseAppScale: () => void;
-  decreaseAppScale: () => void;
-  resetAppScale: () => void;
+  setAppScale: (appScale: number) => void;
   currency: CurrencyMode;
   setCurrency: (currency: CurrencyMode) => void;
   lang: LanguageCode;
   setLang: (lang: LanguageCode) => void;
 }) {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation("settings");
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const assistantClosedBar = useUiStore((s) => s.assistantClosedBar);
   const setAssistantClosedBar = useUiStore((s) => s.setAssistantClosedBar);
@@ -60,92 +50,71 @@ export function AppearanceSettingsPanel({
   const setAssistantDockPosition = useUiStore(
     (s) => s.setAssistantDockPosition,
   );
-  const scalePercent = Math.round(appScale * 100);
   return (
     <div className="space-y-6">
       <SettingsGroup>
         <SettingsRow
           label={t("appearance.theme.title")}
           description={t("appearance.theme.description")}
+          htmlFor="settings-theme"
         >
-          <SegmentedControl
-            label={t("appearance.theme.title")}
+          <SettingsSelect<ThemePreference>
             value={theme}
             onValueChange={setTheme}
             options={[
-              { value: "system", label: t("appearance.theme.system"), icon: <Monitor aria-hidden="true" /> },
-              { value: "light", label: t("appearance.theme.light"), icon: <Sun aria-hidden="true" /> },
-              { value: "dark", label: t("appearance.theme.dark"), icon: <Moon aria-hidden="true" /> },
+              { value: "system", label: t("appearance.theme.system") },
+              { value: "light", label: t("appearance.theme.light") },
+              { value: "dark", label: t("appearance.theme.dark") },
             ]}
+            triggerProps={{ id: "settings-theme" }}
           />
         </SettingsRow>
         <SettingsRow
           label={t("appearance.denomination.title")}
           description={t("appearance.denomination.description")}
+          htmlFor="settings-denomination"
         >
-          <SegmentedControl<CurrencyMode>
-            label={t("appearance.denomination.title")}
+          <SettingsSelect<CurrencyMode>
             value={currency}
             onValueChange={setCurrency}
             options={[
-              { value: "eur", label: t("appearance.denomination.euro"), icon: <span aria-hidden="true">€</span> },
-              { value: "btc", label: t("appearance.denomination.bitcoin"), icon: <span aria-hidden="true">₿</span> },
+              { value: "eur", label: t("appearance.denomination.euro") },
+              { value: "btc", label: t("appearance.denomination.bitcoin") },
             ]}
+            triggerProps={{ id: "settings-denomination" }}
           />
         </SettingsRow>
         <SettingsRow
           label={t("appearance.scale.title")}
           description={t("appearance.scale.description")}
+          htmlFor="settings-scale"
         >
-          <div className="inline-flex items-center rounded-lg border">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="rounded-r-none"
-              aria-label={t("appearance.scale.decrease")}
-              disabled={appScale <= MIN_APP_SCALE}
-              onClick={decreaseAppScale}
-            >
-              <Minus className="size-4" aria-hidden="true" />
-            </Button>
-            <span className="w-14 text-center font-mono text-sm tabular-nums">
-              {t("appearance.scale.value", { percent: scalePercent })}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="rounded-l-none"
-              aria-label={t("appearance.scale.increase")}
-              disabled={appScale >= MAX_APP_SCALE}
-              onClick={increaseAppScale}
-            >
-              <Plus className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={resetAppScale}
-            disabled={appScale === DEFAULT_APP_SCALE}
-          >
-            {t("common:actions.reset")}
-          </Button>
+          <SettingsSelect
+            value={String(percent(appScale))}
+            onValueChange={(value) => setAppScale(Number(value) / 100)}
+            options={SCALE_PERCENTS.map((value) => ({
+              value: String(value),
+              label:
+                value === percent(DEFAULT_APP_SCALE)
+                  ? t("appearance.scale.defaultValue", { percent: value })
+                  : t("appearance.scale.value", { percent: value }),
+            }))}
+            triggerProps={{ id: "settings-scale" }}
+          />
         </SettingsRow>
         <SettingsRow
           label={t("appearance.language.title")}
           description={t("appearance.language.description")}
+          htmlFor="settings-language"
         >
-          <SegmentedControl<LanguageCode>
-            label={t("appearance.language.title")}
+          <SettingsSelect<LanguageCode>
             value={lang}
             onValueChange={setLang}
             options={SUPPORTED_LANGUAGES.map((language) => ({
               value: language.code,
               label: language.label,
             }))}
+            triggerProps={{ id: "settings-language" }}
           />
         </SettingsRow>
       </SettingsGroup>
@@ -155,9 +124,9 @@ export function AppearanceSettingsPanel({
           <SettingsRow
             label={t("appearance.assistantDock.closedBar")}
             description={t("appearance.assistantDock.closedBarDescription")}
+            htmlFor="settings-assistant-closed-bar"
           >
-            <SegmentedControl<AssistantClosedBarMode>
-              label={t("appearance.assistantDock.closedBar")}
+            <SettingsSelect<AssistantClosedBarMode>
               value={assistantClosedBar}
               onValueChange={setAssistantClosedBar}
               options={[
@@ -165,19 +134,23 @@ export function AppearanceSettingsPanel({
                 { value: "launcher", label: t("appearance.assistantDock.closedBarLauncher") },
                 { value: "hidden", label: t("appearance.assistantDock.closedBarHidden") },
               ]}
+              triggerProps={{ id: "settings-assistant-closed-bar" }}
             />
           </SettingsRow>
           {assistantClosedBar === "hidden" ? null : (
-            <SettingsRow label={t("appearance.assistantDock.position")}>
-              <SegmentedControl<AssistantDockPosition>
-                label={t("appearance.assistantDock.position")}
+            <SettingsRow
+              label={t("appearance.assistantDock.position")}
+              htmlFor="settings-assistant-position"
+            >
+              <SettingsSelect<AssistantDockPosition>
                 value={assistantDockPosition}
                 onValueChange={setAssistantDockPosition}
                 options={[
-                  { value: "left", label: t("appearance.assistantDock.positionLeft"), icon: <AlignLeft aria-hidden="true" /> },
-                  { value: "center", label: t("appearance.assistantDock.positionCenter"), icon: <AlignCenter aria-hidden="true" /> },
-                  { value: "right", label: t("appearance.assistantDock.positionRight"), icon: <AlignRight aria-hidden="true" /> },
+                  { value: "left", label: t("appearance.assistantDock.positionLeft") },
+                  { value: "center", label: t("appearance.assistantDock.positionCenter") },
+                  { value: "right", label: t("appearance.assistantDock.positionRight") },
                 ]}
+                triggerProps={{ id: "settings-assistant-position" }}
               />
             </SettingsRow>
           )}
