@@ -128,6 +128,9 @@ def _import(
         expected_source_sha256=str(source.get("sha256") or ""),
         confidence_threshold=draft.get("confidence_threshold"),
         attach_evidence=attach_evidence,
+        # The plan runs without copying the document, but must still refuse
+        # what the apply would refuse.
+        check_evidence_budget=True,
         commit=False,
     )
     # Records-based imports record no run of their own; this one is a file

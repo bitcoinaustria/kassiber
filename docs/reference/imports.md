@@ -684,9 +684,11 @@ exactly that plan after once-only consent: it is bound to the draft's rows
 (a second read of the page is a new plan, even if only a fiat value moved),
 the document's SHA-256, the book's input version and the plan digest. Rows held
 for review are never imported from chat; the plan says how many and points to
-the desktop's OCR import. The document is kept as evidence on each imported
-row, and the run is recorded in the import history; because rolling it back
-would also delete that evidence, the rollback is done in the desktop.
+the desktop's OCR import. An import whose evidence copies would exceed the
+storage budget is blocked in the plan, before consent is asked. The document
+is kept as evidence on each imported row, and the run is recorded in the
+import history; because rolling it back would also delete that evidence, the
+rollback is done in the desktop.
 
 ## Wallet completeness and scan bounds
 

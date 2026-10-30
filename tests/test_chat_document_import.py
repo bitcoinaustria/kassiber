@@ -181,6 +181,21 @@ class ChatDocumentImportTests(unittest.TestCase):
         self.assertEqual(applied["reason"], "import_plan_stale")
         self.assertEqual(self.tx_count(), 0)
 
+    def test_evidence_over_the_storage_budget_is_blocked_in_the_plan(self):
+        runtime = self.runtime()
+        draft = self.read_receipt(runtime)
+        with patch.object(document_import, "MAX_PROJECTED_ATTACHMENT_BYTES", len(PNG) - 1):
+            plan = self.read("ui.wallets.import_document.plan",
+                             {"draft": draft["draft"], "wallet": "Receipts"}, runtime)["envelope"]["data"]
+            self.assertFalse(plan["ready"])
+            self.assertIn("document_import_evidence_budget_exceeded",
+                          [blocker["code"] for blocker in plan["blockers"]])
+            applied = self.write("ui.wallets.import_document.apply",
+                                 {"draft": draft["draft"], "wallet": "Receipts", **plan["apply_with"]}, runtime)
+        self.assertFalse(applied["ok"], applied)
+        self.assertEqual(applied["reason"], "import_plan_blocked")
+        self.assertEqual(self.tx_count(), 0)
+
     def test_a_restricted_provider_gets_counts_not_values(self):
         runtime = self.runtime(full_access=False)
         draft = self.read_receipt(runtime)
