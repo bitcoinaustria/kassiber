@@ -253,6 +253,24 @@ read Python-produced journals through ten CLI leaves and five daemon kinds.
 - [ ] Port PDF/XLSX artifacts in a later slice. Keep unsupported commands
   disabled and all AI projections in Python.
 
+## Rust backend R4
+
+The [R4 journal pipeline design](docs/reference/r4-journal-pipeline.md) holds
+the measured phase profile, the typed architecture, the performance budget
+and the owner decisions it needs.
+
+- [ ] Get the owner's decisions on the design's six open questions.
+- [ ] R4-0: restack `t3code/r2g-fusion-6` on `t3code/r2-custody-perf`, then
+  onto the R5 stack tip, with every custody gate green.
+- [ ] R4-1: commit the Rust end-to-end bench, bench-book generators and the
+  regression record; record the baseline.
+- [ ] R4-2 to R4-8: typed rows, custody stages and fusion, one step per run,
+  each with the full mutation catalog rerun and before/after timings.
+- [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
+  persistence, each with byte or database-dump parity.
+- [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
+  freshness journal job and the authority switch.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in

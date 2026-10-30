@@ -1830,3 +1830,25 @@ separately for unhandled diagnostics export failures, `error.debug`; tests pin
 the normalization scope. All other bytes retain Python parity.
 See the [slice acceptance](../reference/rust-diagnostics-r5-status.md) and
 [implementation contract](../reference/rust-shell.md#diagnostics-service-slice-r5).
+### R4 journal pipeline design
+
+The [R4 design](../reference/r4-journal-pipeline.md) (2026-10-30, design only)
+profiles Python's `journals process` by phase and plans the Rust binary's
+in-process pipeline: typed SQLite loading, typed custody stages, typed fusion
+into the tax engine's own request and response types, rendering and atomic
+persistence, with the JSON snapshot and stage interface kept as the
+byte-compared parity oracle. It splits the work into seventeen single-worker
+steps (R4-0 to R4-16), each keeping the generators, replay, census and
+shadow and the full mutation catalog.
+
+Measured on this branch, Python takes 1.8 s at 2,000 and 12.8 s at 20,000
+generic transactions, and 21.7 s at 20,000 multi-wallet transactions. Custody
+is 40–75% of that. Behind the binding, Rust custody is only 1.0–2.3× faster,
+and the parse and serialization alone cost Rust 0.8–0.9 s and Python 1.9–2.2 s at
+20,000. SQLite's own write floor (1.25–1.7 s plaintext, about 3 s SQLCipher at
+20,000) caps end-to-end gains under byte parity. The design therefore targets
+10× for custody and at least 4× end to end, guarded by deterministic counters
+and a ratio gate in CI and a local 20,000-transaction gate. Its open owner
+decisions cover an early PyO3 production path, the targets and a tax-engine
+performance slice, automatic pairing, persisted-shape changes beyond parity,
+the book-open cost and the allocator.
