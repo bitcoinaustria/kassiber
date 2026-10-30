@@ -5105,3 +5105,128 @@ Step 3 still requires scoped descriptor-wallet registration for `wallets sync`,
 unsupported hybrid routes on Python, and prove per-command native served-by
 counts with zero in-scope Python fallbacks. Do not add `IMPLEMENTED` entries
 before step 2's complete-book acceptance is met.
+
+### Bitcoin retraction and final-metadata primitives (R5, partial step 2)
+
+Local branch `t3code/r5-sync-8` starts at `ad51a96a`. **Step 2 remains
+incomplete.** `wallets::publication` adds local persistence primitives, not the
+complete scope/network/source-overlap-fenced wallet coordinator. No product
+route or `IMPLEMENTED` entry changes.
+
+`with_wallet_savepoint` uses a rollback-on-drop SQLite savepoint, checks
+cancellation before and after local apply, and rolls back on errors and Rust
+unwinding. Successful nested use releases only its own savepoint; it does not
+commit an unrelated caller transaction. There is no progress emitter or
+transport in these primitives. A future coordinator must finish acquisition
+before entry and must not pass commit-capable progress callbacks into apply.
+
+`retract_records` matches Python's `retract_wallet_records(commit=False)`:
+Python Unicode trimming, case-insensitive sorted/deduplicated candidates,
+500-candidate chunks, profile/wallet selection, physical deletion with foreign-
+key collateral effects, exact integer-msat outcome rows, and one journal-input
+invalidation for a nonempty result. Its input must already have passed the
+cross-observer live-record veto; this helper does not infer absence authority.
+
+`mark_synced` ports successful wallet-config and optional onchain freshness
+checkpoint publication. It preserves existing paused state and retry counts,
+uses Python's distinct config/checkpoint JSON encodings and separate clock
+readings for success and freshness updates, retains unrelated config fields
+and clears the old error/cooldown fields. Paused, blocking and
+partial-success status precedence matches Python. Both writers require an
+existing caller transaction and never commit independently.
+
+`generate_publication_vectors.py` calls the unchanged Python retraction and
+successful-sync helpers against synthetic books with the current schema,
+including graph-index triggers. Eight cases compare outcomes and every table's
+rows: empty/missing retractions, duplicate/padded/case-varied identities,
+collateral deletion, partial success, blocking reports, paused state and retry
+preservation. These are full-table comparisons **of these two helpers**, not
+full post-sync book parity. Additional native tests cover 1,100 candidates,
+outer transactions, cancellation, panic, stale epochs and observer/coverage
+rollback after a later writer fails.
+
+| Evidence | Result / limit |
+| --- | --- |
+| Retraction/final-metadata Python oracle | 8 cases; every table compared |
+| Native publication tests | 5 pass |
+| Encrypted-book failure injection | 6 write points restore all rows across restart |
+| Combined observer/retraction/freshness failure injection | 7 write points plus stale-epoch refusal restore all rows |
+| Empty, receive/change, checkpoint, multi-script, fixed, gap-one, reorg, retraction, mempool, coinbase on Electrum and Esplora | Full post-sync dump parity not implemented |
+| `reanchor`, `reorg-drop`, `preflight-race`, `mempool-drop-return`, `replacement`, `height-change`, `force-full`, `force-without-state`, including restarts | Full post-sync dump parity not implemented |
+| Product sync command routing | Unregistered |
+
+Physical ciphertext identity is **not** proven by logical rollback. With
+DELETE/FULL SQLCipher, the Rust experiment restores all tables at every tested
+failure point, but encrypted bytes change at five of six points. The unchanged
+Python wallet savepoint reproduces this too: an injected failure in a
+`transaction_tags` cascade restores every table while changing the encrypted
+file SHA256. Reproduce on disposable data with:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/wallets/scripts/reproduce_ciphertext_rollback.py
+```
+
+This is a storage-level distinction, not evidence of lost accounting rows or a
+new Python accounting bug. A physical encrypted-file byte-identity requirement
+remains unsatisfied by both implementations; do not describe these tests as
+physical rollback acceptance.
+
+Verification transcripts and mutation summaries are local ignored artifacts in
+`target/r5-sync-8-artifacts/`. Mutation and verification build trees are removed
+after their summaries are retained.
+
+Rust 1.99.1 offline/locked formatting and workspace/all-target plus
+harness/all-target clippy pass with `-D warnings`. The workspace attempt has
+991 passes and 58 forbidden-loopback failures (chain 12, net 16, rates 11,
+wallets 19). All five publication tests pass in the final focused and workspace
+runs. The binary harness has 14 passes.
+All wallet/chain examples and the harness binary build. The four sync parity
+modules have 42 passes and 52 forbidden-loopback failures; the final pure
+record/oracle module separately passes all three tests. `classify_tests update`
+and `check` pass without a disposition change. Final preflight passes 57 tests
+and 60 subtests. No full frontend/Python quality gate, Docker regtest or
+owner-lock integration run was performed at this partial checkpoint.
+
+`persistence_mutations.json` now contains 49 entries: the 24 inherited observer
+writer rules and 25 new savepoint/retraction/final-metadata rules. All 49 are
+killed by named tests in a complete final catalog run. Build failures and
+missing test selections do not count as kills. All original 340 sync catalog
+entries pass application checks. Eight chain-protocol entries with runnable
+baselines are also killed. All 293 runnable inherited wallet entries are killed
+in a separate complete run: discovery 14, acquisition 5, observer state 82, native
+BDK/cache/canonical authority 110 and record/composition 82. Together with the
+eight chain entries this freshly kills 301 of the original 340 sync mutations.
+
+| Catalog | Fresh kills / entries |
+| --- | ---: |
+| Discovery | 14 / 20 |
+| Acquisition | 5 / 19 |
+| Observer state/reuse | 82 / 82 |
+| Native BDK/cache/canonical authority | 110 / 114 |
+| Record/composition | 82 / 83 |
+| Chain protocols | 8 / 22 |
+| Observer and publication persistence | 49 / 49 |
+| Total | 350 / 389 |
+
+Thirty-nine inherited entries require the forbidden loopback fixtures (25
+wallet entries and 14 chain entries); they have no fresh kill claim here.
+The twelve separate descriptor mutations were not rerun.
+
+The remaining step-2 work is authoritative transaction identity resolution,
+insertion/merge/enrichment and supersession; closed provenance and its journal
+staleness checks; saved-report impacts; graph/output inventory; policy coverage;
+complete native output facts; and a coordinator that fences captured wallet,
+book network, source overlap and observer epochs before publishing all effects
+atomically. Add the ten-fixture/two-protocol and eight-sequence/restart complete
+book comparisons, then inject failures at every additional write. These
+primitives must not be connected to a product route before those requirements
+are met.
+
+Step 3 subsequently needs scoped Bitcoin descriptor-wallet registration for
+`wallets sync`, `ui.wallets.sync`, `ui.freshness.run` and
+`ui.workspace.freshness.run`; shared CLI/daemon service use; exact request-local
+network consent, offline and cancellation behavior; unsupported hybrid routes
+remaining on Python; subprocess/restart full-book parity and per-command native
+served-by counts with zero in-scope Python fallback. `IMPLEMENTED` remains
+unchanged until the preceding persistence acceptance passes.

@@ -156,7 +156,11 @@ through the shared setup crate.
   Prepare complete native output/coverage facts, preserve named observer routes
   and recheck source-overlap/book-network/scope/epoch before application.
   The private observer JSON/coverage writer now has captured-epoch fencing and
-  Python row/error oracles; it is not connected to a wallet apply coordinator.
+  Python row/error oracles. Rollback-on-drop savepoints, canonical retractions
+  and final wallet/freshness metadata primitives now have Python full-table
+  oracles and cancellation/SQLCipher restart rollback tests. The complete apply
+  coordinator and post-sync book parity remain missing; encrypted file byte
+  identity on rollback is not established (Python reproduces the distinction).
 - [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
   hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
   Silent Payments sync remain `not_implemented` in the Rust binary.
