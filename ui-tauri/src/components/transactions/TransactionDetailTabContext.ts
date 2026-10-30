@@ -6,6 +6,7 @@ import {
   austrianTaxClassificationFor,
   pricingPriceMoment,
   transactionFlow,
+  type DraftPricingOption,
   type LoanMark,
   type Transaction,
   type TransactionEditDraft,
@@ -62,7 +63,9 @@ export type TransactionDetailTabContext = {
   removeTag: (tag: string) => void;
   availableTagSuggestions: string[];
   amountBtc: number;
+  /** The pricing choice the draft falls under. */
   pricingValue: string;
+  choosePricingOption: (option: DraftPricingOption) => void;
   updateManualPrice: (rawPrice: string) => void;
   updateManualValue: (rawValue: string) => void;
   manualPriceRef: React.RefObject<HTMLInputElement | null>;

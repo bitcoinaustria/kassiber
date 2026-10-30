@@ -26,7 +26,7 @@ from .journal_markers import (
     parse_marker,
     parse_marker_int,
 )
-from ..time_utils import _iso_z, _parse_iso_datetime, now_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -161,6 +161,9 @@ _UI_TRANSACTION_PERIOD_DAYS = {
     "1year": 365,
     "1years": 365,
     "1y": 365,
+    "4years": 365 * 4,
+    "4year": 365 * 4,
+    "4y": 365 * 4,
     "5years": 365 * 5,
     "5year": 365 * 5,
     "5y": 365 * 5,
@@ -531,7 +534,7 @@ def _coerce_ui_transaction_period(value: str) -> str:
     if normalized in _UI_TRANSACTION_PERIOD_DAYS:
         return normalized
     raise AppError(
-        "period must be one of: 30days, 3months, 6months, ytd, 1year, 5years, 10years, 15years, all",
+        "period must be one of: 30days, 3months, 6months, ytd, 1year, 4years, 5years, 10years, 15years, all",
         code="validation",
         details={"period": value},
         retryable=False,
@@ -5175,16 +5178,49 @@ def _dashboard_add_stats(stats: dict[str, Any], tx: dict[str, Any]) -> None:
         }
 
 
-def _dashboard_bucket_key(local_date: datetime, period: str) -> tuple[str, datetime]:
+# "All" over a long book reads as a run of years: a decade of quarters is
+# already forty bars.
+_DASHBOARD_YEARLY_BUCKET_MIN_YEARS = 10
+
+
+def _history_years(earliest: str, end: datetime) -> float:
+    return max(
+        0.0,
+        (
+            end.astimezone(timezone.utc)
+            - _parse_iso_datetime(earliest, "earliest")
+        ).total_seconds()
+        / (365.2425 * 24 * 60 * 60),
+    )
+
+
+def _dashboard_bucket_size(period: str, history_years: float) -> str:
     if period == "30days":
+        return "day"
+    if period == "3months":
+        return "week"
+    if period == "all" and history_years >= _DASHBOARD_YEARLY_BUCKET_MIN_YEARS:
+        return "year"
+    if period in {"4years", "5years", "10years", "15years", "all"}:
+        return "quarter"
+    return "month"
+
+
+def _dashboard_bucket_key(local_date: datetime, size: str) -> tuple[str, datetime]:
+    if size == "day":
         start = local_date.replace(hour=0, minute=0, second=0, microsecond=0)
         return start.date().isoformat(), start
-    if period == "3months":
+    if size == "week":
         start = (local_date - timedelta(days=local_date.weekday())).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         return start.date().isoformat(), start
-    if period in {"5years", "10years", "15years", "all"}:
+    if size == "year":
+        start = local_date.replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        return str(start.year), start
+    if size == "quarter":
         quarter_month = ((local_date.month - 1) // 3) * 3 + 1
         start = local_date.replace(
             month=quarter_month, day=1, hour=0, minute=0, second=0, microsecond=0
@@ -5194,12 +5230,14 @@ def _dashboard_bucket_key(local_date: datetime, period: str) -> tuple[str, datet
     return f"{start.year}-{start.month:02d}", start
 
 
-def _dashboard_next_bucket(value: datetime, period: str) -> datetime:
-    if period == "30days":
+def _dashboard_next_bucket(value: datetime, size: str) -> datetime:
+    if size == "day":
         return value + timedelta(days=1)
-    if period == "3months":
+    if size == "week":
         return value + timedelta(days=7)
-    months = 3 if period in {"5years", "10years", "15years", "all"} else 1
+    if size == "year":
+        return value.replace(year=value.year + 1, month=1, day=1)
+    months = 3 if size == "quarter" else 1
     month_index = value.year * 12 + value.month - 1 + months
     return value.replace(year=month_index // 12, month=month_index % 12 + 1, day=1)
 
@@ -5212,6 +5250,8 @@ def _dashboard_auto_period(
     earliest: str | None,
     end: datetime,
 ) -> str:
+    # Auto settles on a range the page offers: twelve months, a halving
+    # cycle, a decade, or everything.
     if not earliest:
         return "1year"
     rows = conn.execute(
@@ -5225,7 +5265,7 @@ def _dashboard_auto_period(
         [*params, _DASHBOARD_AUTO_MIN_AMOUNT_MSAT],
     ).fetchall()
     if not rows:
-        return "ytd"
+        return "1year"
     dates = [
         _parse_iso_datetime(str(row["occurred_at"]), "occurred_at").astimezone(
             end.tzinfo
@@ -5233,18 +5273,11 @@ def _dashboard_auto_period(
         for row in rows
     ]
 
-    history_years = max(
-        0.0,
-        (
-            end.astimezone(timezone.utc)
-            - _parse_iso_datetime(earliest, "earliest")
-        ).total_seconds()
-        / (365.2425 * 24 * 60 * 60),
-    )
-    candidates = ["ytd", "1year"]
+    history_years = _history_years(earliest, end)
+    candidates = ["1year"]
     candidates.extend(
         period
-        for period, years in (("5years", 5), ("10years", 10), ("15years", 15))
+        for period, years in (("4years", 4), ("10years", 10))
         if history_years >= years * 0.8
     )
     candidates.append("all")
@@ -5253,8 +5286,6 @@ def _dashboard_auto_period(
     def period_start(period: str) -> datetime | None:
         if period == "all":
             return None
-        if period == "ytd":
-            return end.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         years = int(period.removesuffix("years").removesuffix("year"))
         try:
             return end.replace(year=end.year - years)
@@ -5272,7 +5303,8 @@ def _dashboard_auto_period(
         if len(visible) < target_count:
             continue
         qualifying.append(period)
-        buckets = {_dashboard_bucket_key(date, period)[0] for date in visible}
+        size = _dashboard_bucket_size(period, history_years)
+        buckets = {_dashboard_bucket_key(date, size)[0] for date in visible}
         if len(buckets) >= _DASHBOARD_AUTO_MIN_BUCKETS:
             return period
     return qualifying[0] if qualifying else "all"
@@ -5290,6 +5322,59 @@ def _accounting_calendar(conn: sqlite3.Connection, profile_id: str) -> dict[str,
         "accountingYears": accounting_years(conn, profile),
         "accountingTimezone": str(book_timezone(profile).key),
     }
+
+
+def _dashboard_years(
+    conn: sqlite3.Connection,
+    filters: list[str],
+    params: list[Any],
+    tz: ZoneInfo,
+) -> list[dict[str, Any]]:
+    """The calendar years that hold activity, newest first.
+
+    Counted in the page's display calendar, the one its bars and row dates
+    use, so a yearly bar, the year it opens and the menu's count hold the same
+    transactions. Exports keep the book's calendar. An undated transaction is
+    stored at 1970-01-01 and is not a year of its own.
+    """
+    dated = [*filters, "t.occurred_at NOT IN ('', ?)"]
+    dated_params = [*params, UNKNOWN_OCCURRED_AT]
+    row = conn.execute(
+        f"""
+        SELECT MIN(t.occurred_at) AS first, MAX(t.occurred_at) AS last
+        FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(dated)}
+        """,
+        dated_params,
+    ).fetchone()
+    if row is None or not row["first"] or not row["last"]:
+        return []
+    first = _parse_iso_datetime(str(row["first"]), "first").astimezone(tz).year
+    last = _parse_iso_datetime(str(row["last"]), "last").astimezone(tz).year
+    years: list[dict[str, Any]] = []
+    for year in range(last, first - 1, -1):
+        start = datetime(year, 1, 1, tzinfo=tz).astimezone(timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=tz).astimezone(timezone.utc)
+        count = conn.execute(
+            f"""
+            SELECT COUNT(*) FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+            WHERE {' AND '.join(dated)}
+              AND t.occurred_at >= ? AND t.occurred_at < ?
+            """,
+            [*dated_params, _iso_z(start), _iso_z(end)],
+        ).fetchone()[0]
+        if count:
+            years.append(
+                {
+                    "year": year,
+                    "count": int(count),
+                    "since": _iso_z(start),
+                    # Inclusive, whole-second: bounds compare as text, and a
+                    # fractional until would sort before an exact timestamp.
+                    "until": _iso_z(end - timedelta(seconds=1)),
+                }
+            )
+    return years
 
 
 def build_transactions_dashboard_snapshot(
@@ -5327,6 +5412,7 @@ def build_transactions_dashboard_snapshot(
                 "latest": None,
                 "accountingYears": [],
                 "accountingTimezone": "UTC",
+                "years": [],
                 "walletOptions": [],
                 **({"autoPeriod": "1year"} if resolve_auto else {}),
             },
@@ -5339,6 +5425,7 @@ def build_transactions_dashboard_snapshot(
                 "markedSwapCount": 0,
                 "swapCandidateCount": 0,
             },
+            "bucketSize": "month",
             "buckets": [],
             "candidates": [],
             "swapCandidateTotal": 0,
@@ -5491,6 +5578,12 @@ def build_transactions_dashboard_snapshot(
         "pending": 0,
         "failed": 0,
     }
+    bucket_size = _dashboard_bucket_size(
+        period,
+        _history_years(str(history["earliest"]), datetime.now(display_timezone))
+        if history["earliest"]
+        else 0.0,
+    )
     buckets_by_key: dict[str, dict[str, Any]] = {}
     if transactions:
         start_value = (
@@ -5503,9 +5596,9 @@ def build_transactions_dashboard_snapshot(
             if until
             else _parse_iso_datetime(str(history["latest"]), "latest").astimezone(display_timezone)
         )
-        _, cursor = _dashboard_bucket_key(start_value, period)
+        _, cursor = _dashboard_bucket_key(start_value, bucket_size)
         while cursor <= end_value:
-            bucket_key, bucket_start = _dashboard_bucket_key(cursor, period)
+            bucket_key, bucket_start = _dashboard_bucket_key(cursor, bucket_size)
             buckets_by_key[bucket_key] = {
                 "bucketKey": bucket_key,
                 "bucketStart": bucket_start.isoformat(),
@@ -5514,7 +5607,7 @@ def build_transactions_dashboard_snapshot(
                     for segment in ("incoming", "outgoing", "transfers", "swaps")
                 },
             }
-            cursor = _dashboard_next_bucket(cursor, period)
+            cursor = _dashboard_next_bucket(cursor, bucket_size)
 
     external_count = 0
     for tx in transactions:
@@ -5528,7 +5621,7 @@ def build_transactions_dashboard_snapshot(
             str(tx.get("occurredAt") or tx["date"]),
             "occurredAt",
         ).astimezone(display_timezone)
-        bucket_key, bucket_start = _dashboard_bucket_key(tx_date, period)
+        bucket_key, bucket_start = _dashboard_bucket_key(tx_date, bucket_size)
         bucket = buckets_by_key.setdefault(
             bucket_key,
             {
@@ -5607,12 +5700,16 @@ def build_transactions_dashboard_snapshot(
             "earliest": history["earliest"],
             "latest": history["latest"],
             **_accounting_calendar(conn, profile_id),
+            "years": _dashboard_years(
+                conn, base_filters, base_params, display_timezone
+            ),
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
             **({"autoPeriod": auto_period} if auto_period else {}),
         },
         "counts": {"all": len(transactions), "external": external_count},
         "summary": summary,
+        "bucketSize": bucket_size,
         "buckets": list(buckets_by_key.values()),
         "candidates": compact_candidates,
         "swapCandidateTotal": sum(

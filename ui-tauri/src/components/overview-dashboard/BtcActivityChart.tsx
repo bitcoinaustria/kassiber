@@ -91,7 +91,9 @@ import {
   rawTreasuryBrushRange,
   resolveAutoTimePeriod,
   sameTreasuryBrushRange,
+  periodKeys,
   selectableTimePeriods,
+  treasuryYears,
   serializeActivityMarkerMinimum,
   useHoverHighlight,
   useResolvedColorMode,
@@ -411,8 +413,11 @@ export const BtcActivityChart = ({
   // selected rather than silently losing its chip).
   const periodOptions = React.useMemo(() => {
     const options = selectableTimePeriods(snapshot);
-    return options.includes(period) ? options : [...options, period];
-  }, [period, snapshot]);
+    return periodKeys.filter(
+      (key) => options.includes(key) || key === resolvedPeriod,
+    );
+  }, [resolvedPeriod, snapshot]);
+  const periodYears = React.useMemo(() => treasuryYears(snapshot), [snapshot]);
   const handlePeriodChange = React.useCallback((next: TimePeriod) => {
     // The brush window is a zoom *within* a period's data, keyed by index.
     // Switching periods swaps the underlying series (and its length), so any
@@ -1518,6 +1523,7 @@ export const BtcActivityChart = ({
               period={period}
               periodOptions={periodOptions}
               resolvedPeriod={period === "auto" ? resolvedPeriod : null}
+              years={periodYears}
               onPeriodChange={handlePeriodChange}
               yScaleLog={yScaleLog}
               onYScaleLogChange={setYScaleLog}

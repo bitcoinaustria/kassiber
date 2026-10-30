@@ -12,6 +12,7 @@ import {
   MIN_APP_SCALE,
   normalizeAppScale,
   normalizeAnalysisNetwork,
+  normalizeBookChartPeriods,
   migrateUiState,
   normalizeAssistantChatPermissionModes,
   normalizeAssistantModelFavorites,
@@ -116,19 +117,31 @@ describe("UI persistence", () => {
 
   it("persists overview chart periods per book", () => {
     useUiStore.setState({ bookChartPeriods: {} });
-    useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "5years");
-    useUiStore.getState().setBookChartPeriod("db:/books/b.sqlite3", "30days");
+    useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "4years");
+    useUiStore.getState().setBookChartPeriod("db:/books/b.sqlite3", "2033");
 
     expect(useUiStore.getState().bookChartPeriods).toMatchObject({
-      "db:/books/a.sqlite3": "5years",
-      "db:/books/b.sqlite3": "30days",
+      "db:/books/a.sqlite3": "4years",
+      "db:/books/b.sqlite3": "2033",
     });
 
     const encoded = JSON.stringify(
       uiStatePartialForStorage(useUiStore.getState()),
     );
     expect(encoded).toContain('"bookChartPeriods"');
-    expect(encoded).toContain('"db:/books/a.sqlite3":"5years"');
+    expect(encoded).toContain('"db:/books/a.sqlite3":"4years"');
+  });
+
+  it("lands a stored retired range on the closest one offered", () => {
+    expect(
+      normalizeBookChartPeriods({
+        a: "5years",
+        b: "6months",
+        c: "2033",
+        d: "fortnight",
+        e: 7,
+      }),
+    ).toEqual({ a: "4years", b: "1year", c: "2033" });
   });
 
   it("keeps active maintenance progress transient and clears by id", () => {

@@ -11249,9 +11249,9 @@ class ReviewRegressionTest(unittest.TestCase):
             f"2026-06-{index % 28 + 1:02d}T12:{index % 60:02d}:00Z"
             for index in range(101)
         ] + [
-            "2022-02-10T12:00:00Z",
-            "2022-02-14T12:00:00Z",
-            "2022-02-18T12:00:00Z",
+            "2022-08-10T12:00:00Z",
+            "2022-08-14T12:00:00Z",
+            "2022-08-18T12:00:00Z",
         ]
         conn.executemany(
             """
@@ -11307,7 +11307,134 @@ class ReviewRegressionTest(unittest.TestCase):
                 "resolveAuto": True,
             },
         )
-        self.assertEqual(dashboard["history"]["autoPeriod"], "5years")
+        # Twelve months hold only June: one bar. A halving cycle reaches the
+        # August 2022 rows that only the full-history bounds know about.
+        self.assertEqual(dashboard["history"]["autoPeriod"], "4years")
+
+    def test_ui_transactions_dashboard_years_hold_what_their_bars_hold(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Main', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, tax_country, created_at)
+            VALUES('profile', 'ws', 'Default', 'EUR', 'at', '2026-01-01T00:00:00Z')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, created_at
+            ) VALUES(
+                'wallet', 'ws', 'profile', 'Years', 'custom', '2026-01-01T00:00:00Z'
+            )
+            """
+        )
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", "profile")
+        # 23:30Z on 31 December is still New Year's Eve in UTC and already New
+        # Year in Vienna; 2016-2023 hold nothing, so they are not years to choose.
+        dates = [
+            "2012-05-01T12:00:00Z",
+            "2013-12-31T23:30:00Z",
+            "2015-03-01T12:00:00Z",
+            "2024-06-01T12:00:00Z",
+        ]
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                kind, description, excluded, raw_json, created_at
+            ) VALUES(?, 'ws', 'profile', 'wallet', ?, ?, ?, 'inbound', 'BTC',
+                     100000000, 0, 'EUR', 'deposit', '', 0, '{}', ?)
+            """,
+            [
+                (f"year-{index}", f"year-{index}", f"fp-year-{index}", occurred_at, occurred_at)
+                for index, occurred_at in enumerate(dates)
+            ],
+        )
+        conn.commit()
+
+        dashboard = build_transactions_dashboard_snapshot(
+            conn, {"period": "all", "timezone": "Europe/Vienna"}
+        )
+
+        self.assertEqual(
+            dashboard["history"]["years"],
+            [
+                {"year": 2024, "count": 1, "since": "2023-12-31T23:00:00Z", "until": "2024-12-31T22:59:59Z"},
+                {"year": 2015, "count": 1, "since": "2014-12-31T23:00:00Z", "until": "2015-12-31T22:59:59Z"},
+                {"year": 2014, "count": 1, "since": "2013-12-31T23:00:00Z", "until": "2014-12-31T22:59:59Z"},
+                {"year": 2012, "count": 1, "since": "2011-12-31T23:00:00Z", "until": "2012-12-31T22:59:59Z"},
+            ],
+        )
+        # A decade and more of history reads as one bar per year.
+        self.assertEqual(dashboard["bucketSize"], "year")
+        self.assertEqual(
+            [bucket["bucketKey"] for bucket in dashboard["buckets"]],
+            [str(year) for year in range(2012, 2025)],
+        )
+
+        # A chosen year is its bounds, in its twelve months.
+        year = dashboard["history"]["years"][2]
+        in_year = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "1year",
+                "since": year["since"],
+                "until": year["until"],
+                "timezone": "Europe/Vienna",
+            },
+        )
+        self.assertEqual(in_year["counts"]["all"], 1)
+        self.assertEqual(in_year["bucketSize"], "month")
+        self.assertEqual(
+            [bucket["bucketKey"] for bucket in in_year["buckets"]],
+            [f"2014-{month:02d}" for month in range(1, 13)],
+        )
+
+        # Viewed from UTC the same transaction is 2013's: its yearly bar, the
+        # year that bar opens and the menu's count all hold it.
+        from_utc = build_transactions_dashboard_snapshot(
+            conn, {"period": "all", "timezone": "UTC"}
+        )
+        utc_years = {entry["year"]: entry for entry in from_utc["history"]["years"]}
+        self.assertEqual(sorted(utc_years), [2012, 2013, 2015, 2024])
+        bar = next(
+            bucket for bucket in from_utc["buckets"] if bucket["bucketKey"] == "2013"
+        )
+        self.assertEqual(sum(stats["count"] for stats in bar["stats"].values()), 1)
+        self.assertEqual(utc_years[2013]["count"], 1)
+        opened = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "1year",
+                "since": utc_years[2013]["since"],
+                "until": utc_years[2013]["until"],
+                "timezone": "UTC",
+            },
+        )
+        self.assertEqual(opened["counts"]["all"], 1)
+        self.assertEqual(
+            [bucket["bucketKey"] for bucket in opened["buckets"]],
+            [f"2013-{month:02d}" for month in range(1, 13)],
+        )
+
+        # The halving-cycle range is accepted alongside the older ranges.
+        four_years = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "4years",
+                "since": "2021-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "timezone": "UTC",
+            },
+        )
+        self.assertEqual(four_years["bucketSize"], "quarter")
+        self.assertEqual(four_years["counts"]["all"], 1)
 
     def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
         self._bootstrap_wallet(label="Ledger")

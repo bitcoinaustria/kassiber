@@ -3,10 +3,10 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { getTransport } from "@/daemon/transport";
 import { isFilePickerAvailable, isFileSaveAvailable, pickFile, saveFile } from "@/lib/filePicker";
 import { useUiStore } from "@/store/ui";
+import { SettingsGroup, SettingsRow } from "./SettingsControls";
 
 interface BackupPreview {
   token: string;
@@ -154,38 +154,50 @@ export function BackupSettings() {
     }
   }
 
-  return <div className="space-y-3 rounded-lg border bg-background p-4">
-    <p className="max-w-prose text-sm text-muted-foreground">{t("backup.description")}</p>
-    <p className="text-sm text-muted-foreground">{t("backup.scope")}</p>
-    {!mode ? <div className="flex flex-wrap gap-2">
-      <Button variant="outline" disabled={!isFileSaveAvailable} onClick={() => { setMode("export"); setMessage(null); }}>{t("backup.export")}</Button>
-      <Button variant="outline" disabled={!isFilePickerAvailable} onClick={() => { setMode("restore"); setMessage(null); }}>{t("backup.restore")}</Button>
-    </div> : <div className="space-y-3">
-      {!preview ? <>
-        <div className="space-y-1"><Label htmlFor="backup-passphrase">{t("backup.passphrase")}</Label>
-          <Input id="backup-passphrase" type="password" autoComplete="off" value={passphrase} disabled={busy} onChange={(event) => setPassphrase(event.target.value)} /></div>
-        <div className="space-y-1"><Label htmlFor="backup-second-passphrase">{mode === "export" ? t("backup.confirmPassphrase") : t("backup.databasePassphrase")}</Label>
-          <Input id="backup-second-passphrase" type="password" autoComplete="off" value={secondPassphrase} disabled={busy} onChange={(event) => setSecondPassphrase(event.target.value)} /></div>
-        <Button disabled={busy || !passphrase || !secondPassphrase || (mode === "export" && passphrase !== secondPassphrase)} onClick={() => void run(mode === "export" ? "export" : "preview")}>
+  const passphraseInput = (id: string, label: string, value: string, onChange: (value: string) => void) => (
+    <SettingsRow label={label} htmlFor={id}>
+      <Input id={id} type="password" autoComplete="off" className="h-8 w-48" value={value} disabled={busy} onChange={(event) => onChange(event.target.value)} />
+    </SettingsRow>
+  );
+
+  return <SettingsGroup title={t("data.backupHeading")} footer={t("backup.scope")}>
+    {!mode ? <>
+      <SettingsRow label={t("backup.exportLabel")} description={t("backup.exportDescription")}>
+        <Button type="button" variant="outline" size="sm" disabled={!isFileSaveAvailable} onClick={() => { setMode("export"); setMessage(null); }}>{t("backup.export")}</Button>
+      </SettingsRow>
+      <SettingsRow label={t("backup.restoreLabel")} description={t("backup.restoreDescription")}>
+        <Button type="button" variant="outline" size="sm" disabled={!isFilePickerAvailable} onClick={() => { setMode("restore"); setMessage(null); }}>{t("backup.restore")}</Button>
+      </SettingsRow>
+    </> : !preview ? <>
+      {passphraseInput("backup-passphrase", t("backup.passphrase"), passphrase, setPassphrase)}
+      {passphraseInput("backup-second-passphrase", mode === "export" ? t("backup.confirmPassphrase") : t("backup.databasePassphrase"), secondPassphrase, setSecondPassphrase)}
+      <div className="flex justify-end gap-2 px-4 py-3">
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={reset}>{t("backup.cancel")}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={busy || !passphrase || !secondPassphrase || (mode === "export" && passphrase !== secondPassphrase)} onClick={() => void run(mode === "export" ? "export" : "preview")}>
           {busy ? t("backup.working") : mode === "export" ? t("backup.export") : t("backup.preview")}
         </Button>
-      </> : <>
-        <p className="text-sm font-medium">{t("backup.replaceTarget", { count: preview.target.book_count })}</p>
-        <p className="break-all font-mono text-xs">{preview.target_data_root}</p>
-        <p className="text-sm">{preview.target.books.join(", ")}</p>
-        <p className="text-sm">{t("backup.incoming", { count: preview.incoming.book_count, attachments: preview.attachments_files })}</p>
-        <p className="text-sm">{preview.incoming.books.join(", ")}</p>
-        <p className="text-sm text-muted-foreground">{t("backup.replaces", { paths: preview.replaces.join(", ") })}</p>
-        <p className="text-sm text-muted-foreground">{t("backup.recovery")}</p>
-        {preview.unavailable_secrets && <p className="text-sm text-amber-700 dark:text-amber-400">{t("backup.secretWarning")}</p>}
-        <div className="space-y-1"><Label htmlFor="backup-confirmation">{t("backup.confirmRestore")}</Label>
-          <Input id="backup-confirmation" value={confirmation} disabled={busy} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} /></div>
-        <Button variant="destructive" disabled={busy || confirmation !== "RESTORE"} onClick={() => void run("apply")}>{busy ? t("backup.working") : t("backup.replace")}</Button>
-      </>}
-      <Button className="ml-2" variant="ghost" disabled={busy} onClick={reset}>{t("backup.cancel")}</Button>
-    </div>}
-    {!isFileSaveAvailable && <p className="text-sm text-muted-foreground">{t("backup.desktopOnly")}</p>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {message && <p role="status" className="break-all text-sm">{message}</p>}
-  </div>;
+      </div>
+    </> : <>
+      <div className="space-y-1 px-4 py-3 text-sm">
+        <p className="font-medium">{t("backup.replaceTarget", { count: preview.target.book_count })}</p>
+        <p className="break-all font-mono text-xs text-muted-foreground">{preview.target_data_root}</p>
+        <p className="text-muted-foreground">{preview.target.books.join(", ")}</p>
+        <p className="pt-2 font-medium">{t("backup.incoming", { count: preview.incoming.book_count, attachments: preview.attachments_files })}</p>
+        <p className="text-muted-foreground">{preview.incoming.books.join(", ")}</p>
+        <p className="pt-2 text-muted-foreground">{t("backup.replaces", { paths: preview.replaces.join(", ") })}</p>
+        <p className="text-muted-foreground">{t("backup.recovery")}</p>
+      </div>
+      {preview.unavailable_secrets && <p className="px-4 py-3 text-sm text-amber-700 dark:text-amber-300">{t("backup.secretWarning")}</p>}
+      <SettingsRow label={t("backup.confirmRestore")} htmlFor="backup-confirmation">
+        <Input id="backup-confirmation" className="h-8 w-48" value={confirmation} disabled={busy} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} />
+      </SettingsRow>
+      <div className="flex justify-end gap-2 px-4 py-3">
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={reset}>{t("backup.cancel")}</Button>
+        <Button type="button" variant="destructive" size="sm" disabled={busy || confirmation !== "RESTORE"} onClick={() => void run("apply")}>{busy ? t("backup.working") : t("backup.replace")}</Button>
+      </div>
+    </>}
+    {!isFileSaveAvailable && <p className="px-4 py-3 text-sm text-muted-foreground">{t("backup.desktopOnly")}</p>}
+    {error && <p role="alert" className="px-4 py-3 text-sm text-destructive">{error}</p>}
+    {message && <p role="status" className="break-all px-4 py-3 text-sm">{message}</p>}
+  </SettingsGroup>;
 }
