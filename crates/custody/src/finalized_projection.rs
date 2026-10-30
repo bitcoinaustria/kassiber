@@ -17,6 +17,10 @@ pub use fees::FeeAllocation;
 pub use principal::slice_row;
 
 fn string(value: &Value) -> String {
+    // str() of a JSON string is the string itself.
+    if let Value::String(text) = value {
+        return text.clone();
+    }
     python_value_string(&codec::from_json(value).expect("JSON primitive input"))
 }
 fn text(value: &Value) -> String {
@@ -190,6 +194,10 @@ pub fn fee_row(
 }
 
 fn integer_big(v: &Value) -> Result<BigInt, String> {
+    // int(n or 0) of a JSON integer within i64 is that integer.
+    if let Some(n) = v.as_i64() {
+        return Ok(BigInt::from(n));
+    }
     let value = crate::interpretation::integer_or_zero(v)?;
     BigInt::from_str(&value.to_string()).map_err(|_| "ValueError".into())
 }

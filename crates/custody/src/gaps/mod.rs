@@ -209,6 +209,10 @@ pub fn compute(
 
 /// Preserve Python stringification for raw containers as well as scalar facts.
 fn string(v: &Value) -> String {
+    // str() of a JSON string is the string itself.
+    if let Value::String(text) = v {
+        return text.clone();
+    }
     crate::interpretation::python_value_string(&codec::from_json(v).expect("JSON value"))
 }
 pub(crate) fn raw_string(v: &Value) -> String {
