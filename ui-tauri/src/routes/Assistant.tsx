@@ -40,8 +40,6 @@ export function Assistant() {
     sendBlockedReason,
     permissionMode,
     setPermissionMode,
-    toolProfile,
-    setToolProfile,
     abort,
     reset,
     branchFromMessage,
@@ -124,8 +122,6 @@ export function Assistant() {
       onFastModeChange={setFastMode}
       permissionMode={permissionMode}
       onPermissionModeChange={setPermissionMode}
-      toolProfile={toolProfile}
-      onToolProfileChange={setToolProfile}
       onAttach={attachFile}
       attachments={attachments}
       onRemoveAttachment={removeAttachment}
