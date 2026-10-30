@@ -354,6 +354,190 @@ fn bdk_full_scan_and_restart_use_the_native_index_graph_and_merge() {
     assert_eq!(restarted.changeset(), state);
     assert_eq!(restarted.wallet.transactions().count(), 1);
 }
+
+fn projection_branches() -> Vec<Branch> {
+    vec![
+        Branch {
+            key: "receive".into(),
+            index: 0,
+            label: "receive".into(),
+            internal: false,
+        },
+        Branch {
+            key: "change".into(),
+            index: 1,
+            label: "change".into(),
+            internal: true,
+        },
+    ]
+}
+
+#[test]
+fn bdk_complete_update_orders_records_by_descending_chain_position() {
+    let mut wallet = action(None).wallet().unwrap();
+    let script = wallet
+        .public_descriptor(KeychainKind::External)
+        .at_derivation_index(0)
+        .unwrap()
+        .script_pubkey();
+    let mut tx_update = TxUpdate::<ConfirmationBlockTime>::default();
+    let mut ids = vec![];
+    for index in 0..3 {
+        let (mut parent, mut tx) = fixture_tx(script.clone(), false);
+        parent.lock_time = absolute::LockTime::from_consensus(index);
+        let point = OutPoint::new(parent.compute_txid(), 0);
+        tx.input[0].previous_output = point;
+        tx_update.txouts.insert(point, parent.output[0].clone());
+        ids.push(tx.compute_txid().to_string());
+        tx_update
+            .seen_ats
+            .insert((tx.compute_txid(), 100 + u64::from(index)));
+        tx_update.txs.push(Arc::new(tx));
+    }
+    wallet
+        .apply_update(Update {
+            tx_update,
+            ..Default::default()
+        })
+        .unwrap();
+    let p = Prepared {
+        aggregate: wallet.take_staged().unwrap(),
+        wallet,
+        canonical_txids: ids.iter().cloned().collect(),
+        retracted_external_ids: BTreeSet::new(),
+        rebuilt: false,
+        full_scan: true,
+    };
+    let records = p
+        .records("fixture", "1:fixture", None, None)
+        .unwrap()
+        .records;
+    ids.reverse();
+    assert_eq!(
+        records
+            .iter()
+            .map(|r| r["txid"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>(),
+        ids
+    );
+}
+
+#[test]
+fn bdk_complete_update_covers_outputs_policy_horizon_and_private_state() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 2, true, false);
+    let p = a.execute(&mut fake, 100).unwrap();
+    let u = p
+        .update(
+            &projection_branches(),
+            "main",
+            "fixture",
+            "1:fixture",
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(u["state"]["bdk_changeset"], p.changeset());
+    assert_eq!(u["state"]["canonical_txids"], json!(p.canonical_txids));
+    assert_eq!(u["state"]["schema_version"], 1);
+    assert_eq!(u["state"]["record_fingerprint_version"], "1:fixture");
+    assert_eq!(
+        u["facts"]["transaction_records"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        u["state"]["record_fingerprints"].as_object().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        u["facts"]["coverage"],
+        json!([
+        {"branch_key":"receive","scanned_to":6,"highest_used":2,"details":{"branch_index":0,"observer":"bdk"}},
+        {"branch_key":"change","scanned_to":3,"highest_used":null,"details":{"branch_index":1,"observer":"bdk"}}])
+    );
+    let cp = &u["facts"]["freshness_checkpoint"];
+    assert_eq!(
+        *cp,
+        json!({"observer":"bdk","tip_height":12,"tip_hash":p.wallet.latest_checkpoint().hash().to_string(),"highest_used":{"0":2},"canonical_txids":p.canonical_txids})
+    );
+    let outputs = u["facts"]["outputs"].as_array().unwrap();
+    assert_eq!(outputs.len(), 1);
+    let output = &outputs[0];
+    let script = p.wallet.list_unspent().next().unwrap().txout.script_pubkey;
+    assert_eq!(
+        *output,
+        json!({"txid":p.canonical_txids.iter().next().unwrap(),"vout":0,"asset":"BTC","amount_sats":99001,
+        "confirmation_status":"confirmed","confirmations":3,"block_height":10,"block_time":fake.header.time,
+        "chain":"bitcoin","network":"main","branch_index":0,"branch_label":"receive","address_index":2,
+        "address":bitcoin::Address::from_script(&script,bitcoin::Network::Bitcoin).unwrap().to_string(),"script_pubkey":script.to_hex_string(),
+        "derivation_path":null,"derivation_paths":[],"key_origins":[],"raw":{"source":"bdk_wallet","confirmed":true}})
+    );
+    let reload = action(Some(&p.changeset()));
+    let restarted = reload.execute(&mut fake, 101).unwrap();
+    let reused = restarted
+        .update(
+            &projection_branches(),
+            "main",
+            "fixture",
+            "1:fixture",
+            Some(&u["state"]),
+            Some(p.canonical_txids.clone()),
+        )
+        .unwrap();
+    assert_eq!(reused["facts"]["transaction_records"], json!([]));
+    assert_eq!(reused["facts"]["reused_records"], 1);
+    assert_eq!(reused["facts"]["outputs"], u["facts"]["outputs"]);
+    assert_eq!(reused["facts"]["coverage"], u["facts"]["coverage"]);
+}
+
+#[test]
+fn bdk_complete_update_keeps_mempool_unknown_height_and_clears_empty_inventory() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 0, false, false);
+    let p = a.execute(&mut fake, 100).unwrap();
+    let u = p
+        .update(
+            &projection_branches(),
+            "main",
+            "fixture",
+            "1:fixture",
+            None,
+            None,
+        )
+        .unwrap();
+    let output = &u["facts"]["outputs"][0];
+    assert_eq!(output["confirmation_status"], "mempool");
+    assert_eq!(output["confirmations"], 0);
+    assert_eq!(output["block_height"], Value::Null);
+    assert_eq!(output["block_time"], Value::Null);
+    assert_eq!(output["raw"]["confirmed"], false);
+    fake.history.clear();
+    let empty = a
+        .execute(&mut fake, 101)
+        .unwrap()
+        .update(
+            &projection_branches(),
+            "main",
+            "fixture",
+            "1:fixture",
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(empty["facts"]["outputs"], json!([]));
+    assert_eq!(
+        empty["facts"]["freshness_checkpoint"]["highest_used"],
+        json!({})
+    );
+    let mut branches = projection_branches();
+    branches[0].internal = true;
+    assert_eq!(
+        p.update(&branches, "main", "fixture", "1:fixture", None, None)
+            .unwrap_err()
+            .code,
+        "observer_capability_unsupported"
+    );
+}
 #[test]
 fn bdk_snapshot_precedes_histories_and_caches_transactions_and_anchors_per_request() {
     let a = action(None);

@@ -915,3 +915,12 @@ snapshots and book network are bound before granting the exact action. Cached
 reads remain subject to consent and offline checks; proxies never retry directly.
 No product route, AI disclosure or durable write is enabled by this preparation
 checkpoint. See [native execution egress](rust-port-egress.md#native-bitcoin-bdk-execution-and-compatibility-caches-r5-step-1).
+
+The unregistered native fetch assembler captures the supported single-wallet
+scope and observer epochs locally before consent. One exact-action grant is
+shared across its discovery, acquisition and BDK stages; revocation reaches
+each transport. Missing or foreign grants, stale scope, cancellation and
+offline mode refuse before traffic. Other source shapes refuse before egress.
+The guarded test driver can publish the completed fetch to a disposable book;
+no CLI/daemon/AI route is enabled. See the
+[native fetch checkpoint](rust-shell.md#bitcoin-native-fetch-assembly-r5).

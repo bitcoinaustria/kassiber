@@ -93,6 +93,8 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_observer_state",
         "test_rust_bdk_execution",
         "test_rust_bitcoin_records",
+        "test_rust_wallet_publication",
+        "test_rust_wallet_fetch",
     }
 )
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})

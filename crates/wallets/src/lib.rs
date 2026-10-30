@@ -18,6 +18,7 @@ mod lifecycle;
 mod network;
 pub use lifecycle::{execute, execute_with_creation_identity, CreationIdentity, Operation};
 pub mod descriptors;
+pub mod fetch;
 pub mod material;
 pub mod observer_apply;
 pub mod observer_state;

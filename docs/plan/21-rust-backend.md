@@ -134,7 +134,7 @@ Replacements for today's dependencies, decided per stage:
 | Python | Rust |
 | --- | --- |
 | `sqlcipher3`, `sqlite3` | `rusqlite` with bundled SQLCipher 4, `backup` and `functions` |
-| `bdkpython`, `lwk` | `bdk_wallet` with `bdk_electrum`/`bdk_esplora`, `lwk_wollet`, with Kassiber's own persisted state formats |
+| `bdkpython`, `lwk` | `bdk_wallet`/`bdk_chain`/`bdk_core` through Kassiber's gated transports (no BDK networking crates); `lwk_wollet`, with Kassiber's own persisted state formats |
 | `embit` | `bitcoin`, `miniscript`, `elements`, `elements-miniscript`, `secp256k1`; the hand-written PSBT v2 reader stays hand-written |
 | `XlsxWriter`, `openpyxl` | `rust_xlsxwriter`, `calamine` |
 | `reportlab` | a rewrite, most likely Typst as a library with the bundled fonts; the hand-written PDF 1.4 report ports directly |
@@ -2477,3 +2477,30 @@ are not implemented; their fresh simulation and atomic verified persistence
 cannot use stored journal projections. The [integration checkpoint](../reference/rust-shell.md#r7-transfer-route-integration-r5-transfers-9-partial)
 records evidence and the precise remaining boundaries. This does not complete
 the transfers/review service slice. Python and AI projections are unchanged.
+
+### R5 Bitcoin sync: native fetch assembly checkpoint
+
+The unregistered `wallets::fetch::Fetch` captures the supported single-wallet
+Bitcoin scope, local discovery horizon, freshness checkpoint, observer epochs
+and closed record-reuse evidence before a request-local grant can be created.
+It assembles ordinary native BDK Electrum updates and compatibility Esplora
+fetches through `kassiber-net`, with no dependency networking crates. BDK facts
+include complete outputs, policy coverage, private aggregate/fingerprints and
+source-bound canonical membership even when records are reused. Esplora keeps
+the reference's unchanged-cache behavior and named `http_route_policy` route.
+
+Rust independently prepares and publishes all 102 rounds of the publication
+corpus on both protocols, matching serialized Python fetches and every table's
+canonical logical rows. Tests reopen the Rust process and book each round and
+freeze only BDK's public request clock; a backend race is replayed separately
+for each implementation. The fixed-descriptor witness also pins bdkpython's
+descending chain-position record order, which the raw Rust iterator does not
+provide. Missing/foreign/revoked grants, changed scope, offline and cancelled
+actions refuse without traffic; unsupported source shapes refuse locally.
+
+This checkpoint does not register any of the four sync routes. Shared
+CLI/daemon wallet/freshness services, product request cancellation and scope
+fences, unsupported hybrid fallback and a zero-fallback hybrid workload remain.
+The Python same-statistics Esplora reorg-cache bug remains an external
+dependency; this checkpoint preserves its existing stale-evidence outcome.
+See the [native fetch handoff](../reference/rust-shell.md#bitcoin-native-fetch-assembly-r5).

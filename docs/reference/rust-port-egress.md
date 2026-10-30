@@ -713,3 +713,23 @@ Electrum decoder serialization fixes occur after acquisition. No fallback
 connection, DNS lookup or proxy shortcut is introduced. Complete record JSON
 parity grants no durable application authority: the future coordinator must
 still bind scope/epoch and apply every state group in one wallet savepoint.
+
+## Bitcoin native fetch assembly (R5)
+
+`wallets::fetch::Fetch` captures local single-wallet scope, observer epochs,
+freshness and closed reuse evidence without transport or writes. Its exact
+action grant wraps one shared `kassiber-net::Consent`; the discovery,
+acquisition and BDK stages inherit that same revocable transport grant.
+Configuration, display, construction and saved observer state grant nothing.
+The assembler introduces no connector and no BDK networking crate. Esplora's
+tip read uses the existing consent-bound HTTP client after history and before
+UTXOs, preserving the Python depth-reference ordering.
+
+The native fetch refusal tests prove no DNS, connection or HTTP metadata for
+missing/foreign/revoked consent, changed scope, cancellation and offline mode.
+Unsupported source/backend shapes, additional profile wallets and active
+transactions refuse locally. The test-only publication driver independently
+prepares and publishes against owned loopback fixtures under the subprocess
+guard. CLI, daemon and AI sync routing remain unregistered; this checkpoint
+does not enable automatic freshness. See the
+[fetch handoff](rust-shell.md#bitcoin-native-fetch-assembly-r5).

@@ -673,3 +673,10 @@ tests, regtest confirmation/RBF/reorg/restart coverage, fault injection around
 every apply stage, and packaged-binary smoke on each supported release target.
 Compatibility routes remain narrow, named and tested; unsupported
 configurations are never described as migrated.
+
+The plan-21 Rust port now has an unregistered native fetch assembler for the
+single-wallet Bitcoin descriptor scope: native BDK on ordinary Electrum and
+the named compatibility route on Esplora. Its complete native preparation and
+publication match Python across the existing fixture/restart/reviewed corpus.
+Shared product services and route acceptance remain pending; see the
+[native fetch handoff](rust-shell.md#bitcoin-native-fetch-assembly-r5).

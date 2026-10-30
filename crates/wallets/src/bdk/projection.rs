@@ -13,10 +13,120 @@ pub struct RecordProjection {
     pub reused_records: u64,
 }
 
+/// The stored plan's mapping from BDK keychains to Kassiber policy branches.
+pub struct Branch {
+    pub key: String,
+    pub index: u32,
+    pub label: String,
+    pub internal: bool,
+}
+
 fn output(output: &TxOut) -> Value {
     json!({"value":output.value.to_sat(),"scriptpubkey":output.script_pubkey.to_hex_string()})
 }
 impl Prepared {
+    /// Assemble the complete JSON-only observer update. Output inventory is a
+    /// full snapshot even when every confirmed transaction record is reused.
+    pub fn update(
+        &self,
+        branches: &[Branch],
+        network: &str,
+        backend_name: &str,
+        fingerprint_version: &str,
+        prior_state: Option<&Value>,
+        current_txids: Option<BTreeSet<String>>,
+    ) -> Result<Value> {
+        if branches.is_empty()
+            || branches.len() > 2
+            || branches.iter().filter(|b| !b.internal).count() != 1
+            || branches.iter().filter(|b| b.internal).count() > 1
+        {
+            return Err(AppError::new(
+                "observer_capability_unsupported",
+                "The Bitcoin descriptor source cannot be represented by one BDK observer",
+            ));
+        }
+        let projection = self.records(
+            backend_name,
+            fingerprint_version,
+            prior_state,
+            current_txids,
+        )?;
+        let tip = self.wallet.latest_checkpoint();
+        let position = |p: ChainPosition<ConfirmationBlockTime>| match p {
+            ChainPosition::Confirmed { anchor, .. } => json!({
+                "confirmation_status":"confirmed", "confirmations":tip.height().saturating_add(1).saturating_sub(anchor.block_id.height),
+                "block_height":anchor.block_id.height,"block_time":anchor.confirmation_time}),
+            ChainPosition::Unconfirmed { .. } => {
+                json!({"confirmation_status":"mempool","confirmations":0,"block_height":null,"block_time":null})
+            }
+        };
+        let mut highest = BTreeMap::<KeychainKind, u32>::new();
+        for local in self.wallet.list_output() {
+            highest
+                .entry(local.keychain)
+                .and_modify(|i| *i = (*i).max(local.derivation_index))
+                .or_insert(local.derivation_index);
+        }
+        let mut outputs = vec![];
+        for local in self.wallet.list_unspent() {
+            let Some(branch) = branches
+                .iter()
+                .find(|b| b.internal == (local.keychain == KeychainKind::Internal))
+            else {
+                continue;
+            };
+            let mut output = position(local.chain_position);
+            let confirmed = output["confirmation_status"] == "confirmed";
+            let script = &local.txout.script_pubkey;
+            let fields = json!({"txid":local.outpoint.txid.to_string(),"vout":local.outpoint.vout,"asset":"BTC",
+                "amount_sats":local.txout.value.to_sat(),"chain":"bitcoin","network":network,
+                "branch_index":branch.index,"branch_label":branch.label,"address_index":local.derivation_index,
+                "address":bitcoin::Address::from_script(script,self.wallet.network()).ok().map(|a|a.to_string()),
+                "script_pubkey":script.to_hex_string(),"derivation_path":null,"derivation_paths":[],"key_origins":[],
+                "raw":{"source":"bdk_wallet","confirmed":confirmed}});
+            output
+                .as_object_mut()
+                .expect("position")
+                .extend(fields.as_object().expect("output").clone());
+            outputs.push(output);
+        }
+        let mut coverage = vec![];
+        let mut checkpoint_highest = serde_json::Map::new();
+        for branch in branches {
+            let keychain = if branch.internal {
+                KeychainKind::Internal
+            } else {
+                KeychainKind::External
+            };
+            let used = highest.get(&keychain).copied();
+            let scanned_to = self
+                .wallet
+                .derivation_index(keychain)
+                .map_or(0u64, |i| u64::from(i) + 1);
+            if used.is_some_and(|i| u64::from(i) >= scanned_to) {
+                return Err(AppError::new(
+                    "observer_accounting_ambiguous",
+                    "BDK reported a used output outside its revealed scan horizon",
+                ));
+            }
+            coverage.push(
+                json!({"branch_key":branch.key,"scanned_to":scanned_to,"highest_used":used,
+                "details":{"branch_index":branch.index,"observer":"bdk"}}),
+            );
+            if let Some(used) = used {
+                checkpoint_highest.insert(branch.index.to_string(), json!(used));
+            }
+        }
+        Ok(
+            json!({"state":{"schema_version":1,"bdk_changeset":self.changeset(),"canonical_txids":self.canonical_txids,
+                "record_fingerprint_version":fingerprint_version,"record_fingerprints":projection.fingerprints},
+            "facts":{"transaction_records":projection.records,"retracted_external_ids":self.retracted_external_ids,
+                "outputs":outputs,"coverage":coverage,"reused_records":projection.reused_records,
+                "freshness_checkpoint":{"observer":"bdk","tip_height":tip.height(),"tip_hash":tip.hash().to_string(),
+                    "highest_used":checkpoint_highest,"canonical_txids":self.canonical_txids}}}),
+        )
+    }
     /// The coordinator supplies reuse evidence from the same scoped snapshot.
     /// A fresh, forced or reorg scan always disables reuse independently of it.
     pub fn records(
@@ -61,7 +171,12 @@ impl Prepared {
             reused_records: 0,
         };
         let tip = self.wallet.latest_checkpoint().height();
-        for canonical in self.wallet.transactions() {
+        // bdkpython's wallet projection sorts newest chain positions first.
+        // The underlying Rust iterator itself has no presentation ordering.
+        for canonical in self
+            .wallet
+            .transactions_sort_by(|a, b| b.chain_position.cmp(&a.chain_position))
+        {
             let tx = &canonical.tx_node.tx;
             let id = tx.compute_txid();
             let vin: Vec<_> = tx.input.iter().map(|input| json!({"txid":input.previous_output.txid.to_string(),"vout":input.previous_output.vout,"prevout":txouts.get(&input.previous_output).map(output),"witness":input.witness.iter().map(|v| bitcoin::hex::DisplayHex::as_hex(v).to_string()).collect::<Vec<_>>()})).collect();

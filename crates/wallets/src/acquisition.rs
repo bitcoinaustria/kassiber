@@ -56,6 +56,13 @@ pub struct AcquisitionConsent {
     started: AtomicBool,
 }
 impl AcquisitionConsent {
+    pub(crate) fn for_fetch(action: &Acquisition, transport: Consent) -> Self {
+        Self {
+            identity: action.identity.clone(),
+            transport,
+            started: AtomicBool::new(false),
+        }
+    }
     /// Only the explicit user action may create this request-local grant.
     pub fn explicit_trigger(action: &Acquisition) -> Self {
         Self {

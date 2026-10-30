@@ -459,6 +459,9 @@ pub struct Branch {
     selected: Parsed,
 }
 impl Branch {
+    pub(crate) fn selected_descriptor(&self) -> String {
+        self.selected.canonical()
+    }
     pub fn ranged(&self) -> bool {
         self.selected.ranged()
     }

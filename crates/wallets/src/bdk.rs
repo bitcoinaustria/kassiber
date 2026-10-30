@@ -28,7 +28,7 @@ use std::{
     time::Instant,
 };
 mod projection;
-pub use projection::RecordProjection;
+pub use projection::{Branch, RecordProjection};
 
 type Result<T> = std::result::Result<T, AppError>;
 fn invalid() -> AppError {
@@ -67,6 +67,13 @@ pub struct ExecutionConsent {
     started: AtomicBool,
 }
 impl ExecutionConsent {
+    pub(crate) fn for_fetch(action: &Execution, transport: Consent) -> Self {
+        Self {
+            identity: action.identity.clone(),
+            transport,
+            started: AtomicBool::new(false),
+        }
+    }
     pub fn explicit_trigger(action: &Execution) -> Self {
         Self {
             identity: action.identity.clone(),

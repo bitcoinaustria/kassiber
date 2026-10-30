@@ -14,9 +14,9 @@ mod physical;
 pub mod policy;
 pub mod provenance;
 pub mod reports;
-mod row;
+pub(crate) mod row;
 #[cfg(test)]
-mod testbook;
+pub(crate) mod testbook;
 pub mod wallet;
 
 type Result<T> = std::result::Result<T, AppError>;

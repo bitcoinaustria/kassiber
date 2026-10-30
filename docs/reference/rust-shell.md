@@ -5992,3 +5992,144 @@ idempotent retries after book changes, caller-owned transactions, and injected
 failures during operation N, journal storage and receipt insertion. AI
 projections must read the resulting native history/receipts unchanged. Only
 then register the three review leaves and their three daemon kinds.
+
+### Bitcoin native fetch assembly (R5)
+
+Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements
+native preparation for the publication coordinator, without product route
+registration. `wallets::fetch::Fetch::new` captures the wallet/configuration,
+book network, finite local discovery horizon, freshness checkpoint, observer
+epochs and closed reuse evidence. It requires autocommit and performs no
+transport or writes. Its request-local grant binds that immutable action;
+discovery, acquisition and BDK inherit the same revocable `kassiber-net` grant.
+Missing/foreign/revoked grants, changed scope, offline and cancellation refuse
+without DNS, connection or HTTP metadata. A failed transport attempt consumes
+the grant, so retrying requires another explicit action.
+
+The supported scope remains a profile's sole Bitcoin descriptor/xpub wallet,
+with a named ordinary Electrum or Esplora backend. Samourai, alternate source
+routes, enrichment, other backend kinds and unverified compatibility transport
+shapes refuse locally. The latter include proxy/onion, custom CA, serialized
+backend configuration and Esplora custom authentication/timeout/TLS reasons.
+Operator-pinned HTTPS CA overrides also refuse. These need their own route
+witnesses before widening support. The caller still owns current product
+scope/configuration validation and cancellation integration; no saved backend
+or checkpoint supplies consent.
+
+`bdk::Prepared::update` assembles the complete private aggregate and release-
+bound fingerprint map, canonical membership/retractions, transaction records,
+unspent-output snapshot, actual revealed coverage and highest-use checkpoint.
+Reused records never suppress the output or coverage snapshot. Record order
+matches bdkpython's descending chain positions; the raw Rust iterator does not
+provide that presentation order. Esplora joins compatibility discovery,
+source-bound cached acquisition, exact output facts and the named
+`http_route_policy` metadata. Its tip read occurs after history and before
+UTXOs. Invalid output amounts and missing inventory containers refuse.
+
+The guarded `publication_fixture` now accepts `native_backend` to prepare its
+own fetch from the disposable book, then publish it under the existing fenced
+savepoint. The oracle supplies only fixture backend configuration and test
+clock/identity seams; it supplies no Python-prepared records, observer state,
+output inventory or coverage. Every round starts another Rust process and
+opens the book anew. Python uses unchanged product preparation/application;
+only BDK's public request clock is frozen. The preflight-race backend is reset
+to the same starting state before each implementation observes its race.
+Tests compare the entire serialized fetch and canonical bytes of every
+table's logical rows, retaining numeric types and array order. As in the
+previous publication oracle, elapsed wall time is normalized to zero and
+publication identities/timestamps use deterministic seams.
+
+| Fixture | Electrum native preparation/publication | Esplora native preparation/publication |
+| --- | --- | --- |
+| Empty | Equal | Equal |
+| Receive/change | Equal | Equal |
+| Checkpoint | 3 equal rounds | 3 equal rounds |
+| Multi-script | Equal | Equal |
+| Fixed | Equal | Equal |
+| Gap-one | Equal | Equal |
+| Reorg | 2 equal rounds | 2 equal rounds |
+| Retraction | 2 equal rounds | 2 equal rounds |
+| Mempool | 2 equal rounds | 2 equal rounds |
+| Coinbase | Equal | Equal |
+
+| Sequence, including restarts | Electrum | Esplora |
+| --- | --- | --- |
+| `reanchor` | 3 equal rounds | 3 equal rounds |
+| `reorg-drop` | 3 equal rounds | 3 equal rounds |
+| `preflight-race` | 3 equal rounds | 3 equal rounds |
+| `mempool-drop-return` | 3 equal rounds | 3 equal rounds |
+| `replacement` | 3 equal rounds | 3 equal rounds |
+| `height-change` | 3 equal rounds | 3 equal rounds |
+| `force-full` | 3 equal rounds | 3 equal rounds |
+| `force-without-state` | 3 equal rounds | 3 equal rounds |
+
+Reviewed checkpoint, reorg, retraction, mempool and missing-authority books add
+12 equal rounds per protocol. The corpus totals 102 successful native rounds:
+30 fixture rounds, 48 sequence rounds and 24 reviewed rounds. The known Python
+Esplora same-statistics reorg-cache bug remains unchanged: incremental refresh
+supplies no changed confirmation record or saved-report impact. The separate
+Python fix remains a dependency; rerun these native oracles when it lands.
+
+The new `fetch_mutations.json` catalog covers complete BDK output/coverage/state,
+record order, Esplora output/cache/depth metadata and exact-action consent,
+revocation propagation, replay and scope checks. The unified sync checker also
+validates all inherited recipes. CI and the local quality gate now build the
+publication fixture and route both publication and native-fetch Python suites
+through the serial Rust-enabled shard, rather than silently skipping them in
+a shard without a Rust binary.
+
+All 36 new fetch recipes are killed after their 12 named baselines pass.
+The final recipe pins distinct observer-source counting: duplicate script-type
+labels do not disable single-source record reuse. The unified catalog validates
+488 applicable entries. The inherited 452 recipes were not killed again in
+this checkpoint; their last complete run is recorded above. Build failures
+and absent test selections count as errors, never kills. Combined summaries
+and logs remain in `target/r5-sync-11-artifacts/`; completed mutation trees
+were removed.
+
+The consent regressions also pass under the strict attempt observer, including
+hostname and loopback HTTP/TCP/TLS inputs. Missing/foreign/revoked consent,
+changed scope, offline and cancellation leave both attempt and egress buffers
+empty. HTTPS with an ambient pinned CA remains outside the supported assembler
+scope; the tests retain that environment and do not change its trust settings.
+
+Final formatting and production/harness workspace clippy pass with warnings
+denied. The final production workspace passes 1,074 tests, including the
+encrypted publication failure/restart regression; the guarded binary run
+passes 14, the separate network observer run passes 63, and the strict fetch
+consent run passes three. All seven sync parity suites pass 204 tests with no
+skips, including the 46 new oracle cases and their 102 successful native
+rounds. The required classifier update/check passes with 5,413 inventoried
+definitions, followed by `python_test_shards.py run preflight --ci`: 57 tests
+pass. The local machine-readable verification summary retains the counts and
+remaining acceptance work. Verification build trees and disposable test roots
+are removed after recording those results.
+
+The full Python/frontend quality gate, inherited sync and separate descriptor
+mutation executions, tax/custody shadow overlays, Docker regtest and
+packaged/platform gates were not run. Product-boundary and hybrid sync
+acceptance remain unrun because the shared services and route registrations
+are still pending. No requested preparation gate remains blocked by the
+sandbox.
+
+No shared wallet/freshness service or `IMPLEMENTED` entry changes here.
+Successful native **product-route** served-by counts remain:
+
+| Route | Native served-by |
+| --- | ---: |
+| `wallets.sync` | 0 |
+| `ui.wallets.sync` | 0 |
+| `ui.freshness.run` | 0 |
+| `ui.workspace.freshness.run` | 0 |
+
+Remaining work is shared CLI/daemon wallet/freshness coordination, exact product
+consent and current scope/offline/cancellation fences, pre-bootstrap unsupported
+hybrid routing, registration of all four routes, product-boundary full-book
+parity and a hybrid workload with zero Python fallbacks for those routes.
+Unsupported requests must select Python before bootstrap, database opening or
+secret consumption; a failure after native execution starts must not retry
+through Python. The helpers' internal capability refusals do not establish that
+product routing boundary.
+Liquid, Core RPC, Lightning, Silent Payments and additional-wallet overlap
+semantics remain unported. Native preparation/publication parity alone does
+not establish that product acceptance.

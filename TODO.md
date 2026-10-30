@@ -127,7 +127,7 @@ through the shared setup crate.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
-## Rust backend R5 Bitcoin wallet sync (publication; product routes pending)
+## Rust backend R5 Bitcoin wallet sync (native preparation; product routes pending)
 
 - [x] Port the compatibility descriptor gap walker for Esplora and Electrum,
   with exact-action consent, cancellation, progress, loopback differential
@@ -159,10 +159,12 @@ through the shared setup crate.
   wallet; captured config, book scope and observer epochs are fenced. Additional
   wallets and unported repairs refuse. Failure injection compares logical rows;
   SQLCipher ciphertext can change after rollback in Python and Rust.
-- [ ] Assemble complete native prepared fetches, including output/coverage facts
-  and named observer routes, through the shared CLI/daemon service. Existing
-  full-book publication proofs consume Python-prepared fetches; they do not
-  prove end-to-end native sync or authorize product route registration.
+- [x] Assemble complete native prepared fetches, including output/coverage facts
+  and named observer routes. Compare native preparation and full-book
+  publication against Python on the 102-round fixture/restart/reviewed corpus.
+  This is an unregistered preparation seam; see the native fetch handoff.
+- [ ] Connect native preparation/publication to shared CLI/daemon wallet and
+  freshness services, retaining pre-egress refusal of unsupported shapes.
 - [ ] Resolve the Python reference's Esplora compatibility-cache reorg miss when
   script statistics are unchanged, in separate work. The disposable repro is
   `tests/rust_port/repro_esplora_reorg_cache.py`; incremental sync leaves saved

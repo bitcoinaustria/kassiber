@@ -53,6 +53,8 @@ class PythonShardContractTest(unittest.TestCase):
             "tests/test_rust_wallet_discovery.py": "serial-daemon",
             "tests/test_rust_wallet_acquisition.py": "serial-daemon",
             "tests/test_rust_observer_state.py": "serial-daemon",
+            "tests/test_rust_wallet_publication.py": "serial-daemon",
+            "tests/test_rust_wallet_fetch.py": "serial-daemon",
             "tests/test_chain_analysis_consent.py": "daemon-cli",
             "tests/test_review_regressions.py": "serial-regressions",
             "tests/test_remembered_unlock.py": "serial-integration",
@@ -273,6 +275,8 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIn(bdk_build, steps[build_index]["run"])
         records_build = "cargo build -p kassiber-wallets --example records_fixture --features test-harness --offline --locked"
         self.assertIn(records_build, steps[build_index]["run"])
+        publication_build = "cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked"
+        self.assertIn(publication_build, steps[build_index]["run"])
         setup_index = next(index for index, step in enumerate(steps)
                            if step.get("uses") == "./.github/actions/setup-rust")
         run_index = next(index for index, step in enumerate(steps)
@@ -294,6 +298,7 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertLess(gate.index("run " + observer_build), gate.index(select))
         self.assertLess(gate.index("run " + bdk_build), gate.index(select))
         self.assertLess(gate.index("run " + records_build), gate.index(select))
+        self.assertLess(gate.index("run " + publication_build), gate.index(select))
         self.assertIn("run py crates/wallets/scripts/bdk_mutation_check.py --check", gate)
         self.assertIn("run py crates/wallets/scripts/record_mutation_check.py --check", gate)
         self.assertIn("run py crates/wallets/scripts/observer_mutation_check.py --check", gate)

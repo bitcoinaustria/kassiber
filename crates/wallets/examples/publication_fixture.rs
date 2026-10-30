@@ -1,5 +1,6 @@
-//! Guarded publication driver: applies one serialized prepared fetch to a
-//! disposable plaintext test book. No network, consent or product routing.
+//! Guarded driver for disposable plaintext test books. Replays one prepared
+//! fetch, or independently prepares it against an explicitly supplied owned
+//! fixture backend with an exact-action grant. No product routing.
 use kassiber_wallets::publication::wallet::{apply, Request, Sources};
 use serde_json::{json, Value};
 use std::io::Read;
@@ -37,14 +38,49 @@ fn main() {
         now: input["now"].as_i64().unwrap_or(0),
     };
     let fail = input["fail_stage"].as_str().map(str::to_owned);
+    let (fetch, captured_config) = if input["native_backend"].is_object() {
+        use kassiber_net::{Gate, Ledger, Offline};
+        use kassiber_wallets::{
+            fetch::{Fetch, FetchConsent},
+            scan::Cancellation,
+        };
+        use std::time::{Duration, Instant};
+        let gate = Gate::new(|| Offline::Online, Ledger::default());
+        let action = Fetch::new(
+            &conn,
+            input["profile_id"].as_str().unwrap(),
+            input["wallet_id"].as_str().unwrap(),
+            &input["native_backend"],
+            input["force_full"] == true,
+            input["version"].as_str().unwrap(),
+        )
+        .unwrap();
+        let consent = FetchConsent::explicit_trigger(&action);
+        let fetch = action
+            .run(
+                &gate,
+                action.scope(),
+                Some(&consent),
+                Instant::now() + Duration::from_secs(60),
+                &Cancellation::default(),
+                input["start_time"].as_u64().unwrap_or(1_700_000_000),
+            )
+            .unwrap();
+        (fetch, action.captured_config().to_owned())
+    } else {
+        (
+            input["fetch"].clone(),
+            input["captured_config"].as_str().unwrap().to_owned(),
+        )
+    };
     let mut stages = vec![];
     let result = apply(
         &mut conn,
         &Request {
             profile_id: input["profile_id"].as_str().unwrap(),
             wallet_id: input["wallet_id"].as_str().unwrap(),
-            captured_config: input["captured_config"].as_str().unwrap(),
-            fetch: &input["fetch"],
+            captured_config: &captured_config,
+            fetch: &fetch,
         },
         &mut sources,
         |stage| {
@@ -62,7 +98,7 @@ fn main() {
         "{}",
         match result {
             Ok(results) =>
-                json!({"result": serde_json::from_str::<Value>(&text(kassiber_pyjson::Value::List(results))).unwrap(), "stages": stages}),
+                json!({"result": serde_json::from_str::<Value>(&text(kassiber_pyjson::Value::List(results))).unwrap(), "stages": stages, "fetch": fetch}),
             Err(e) =>
                 json!({"error": {"code": e.code, "message": e.message, "details": e.details.map(|d| serde_json::from_str::<Value>(&text(d)).unwrap())}, "stages": stages}),
         }

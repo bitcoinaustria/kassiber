@@ -76,6 +76,13 @@ pub struct DiscoveryConsent {
     started: AtomicBool,
 }
 impl DiscoveryConsent {
+    pub(crate) fn for_fetch(action: &CompatibilityDiscovery, transport: Consent) -> Self {
+        Self {
+            identity: action.identity.clone(),
+            transport,
+            started: AtomicBool::new(false),
+        }
+    }
     /// Call only after the user explicitly triggers this discovery action.
     pub fn explicit_trigger(action: &CompatibilityDiscovery) -> Self {
         Self {

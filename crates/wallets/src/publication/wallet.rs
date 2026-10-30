@@ -186,7 +186,7 @@ fn network_wallet_config(
 }
 
 /// `wallet_for_network_sync`: guard the authored scope, then route from it.
-fn network_scope(
+pub(crate) fn network_scope(
     conn: &Connection,
     profile_id: &str,
     kind: &str,

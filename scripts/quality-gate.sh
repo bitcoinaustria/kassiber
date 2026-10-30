@@ -62,6 +62,7 @@ run cargo build -p kassiber-wallets --example acquisition_fixture --features tes
 run cargo build -p kassiber-wallets --example observer_state_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example bdk_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example records_fixture --features test-harness --offline --locked
+run cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked
 run cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
 export KASSIBER_TEST_CUSTODY_LOADER_BIN="$ROOT/target/release/examples/custody-load"
 run py crates/wallets/scripts/discovery_mutation_check.py --check
@@ -69,6 +70,7 @@ run py crates/wallets/scripts/acquisition_mutation_check.py --check
 run py crates/wallets/scripts/observer_mutation_check.py --check
 run py crates/wallets/scripts/bdk_mutation_check.py --check
 run py crates/wallets/scripts/record_mutation_check.py --check
+run py crates/wallets/scripts/sync_mutation_check.py --check
 export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate

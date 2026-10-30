@@ -191,7 +191,16 @@ impl Acquisition {
         let skipped = !c.checkpoint.as_object().is_none_or(Map::is_empty)
             && changed == 0
             && !scripts.is_empty();
+        // Python obtains the depth reference after history, before UTXOs. A
+        // missing tip means unknown depth, never an invented zero height.
+        let mut tip_height = None;
         if !skipped {
+            cancel.check(deadline)?;
+            tip_height = client
+                .get_text("blocks/tip/height", Some(consent), deadline)
+                .ok()
+                .and_then(|s| kassiber_pytext::parse_int(kassiber_pytext::strip(&s)).ok())
+                .and_then(|n| i64::try_from(n).ok());
             for script in &mut scripts {
                 cancel.check(deadline)?;
                 let h = script_hash(
@@ -209,7 +218,7 @@ impl Acquisition {
         cp["esplora_history_memberships"] = membership;
         cancel.check(deadline)?;
         Ok(
-            json!({"scripts":scripts,"transactions":transactions,"freshness_checkpoint":cp,"scripts_changed":changed,"scripts_unchanged":self.targets.len()-changed,"utxos_skipped_unchanged":skipped,"esplora_history_complete":complete,"observer_retracted_external_ids":retracted}),
+            json!({"scripts":scripts,"transactions":transactions,"freshness_checkpoint":cp,"scripts_changed":changed,"scripts_unchanged":self.targets.len()-changed,"utxos_skipped_unchanged":skipped,"esplora_history_complete":complete,"observer_retracted_external_ids":retracted,"tip_height":tip_height}),
         )
     }
     pub(super) fn cached_electrum(
@@ -509,6 +518,7 @@ mod tests {
             (200, json!([tx]).to_string()),
             (200, "[]".into()),
             (200, stats.to_string()),
+            (200, "12".into()),
             (200, "[]".into()),
             (200, stats.to_string()),
         ])
@@ -533,6 +543,9 @@ mod tests {
         );
         assert_eq!(first["scripts_changed"], 1);
         assert_eq!(first["utxos_skipped_unchanged"], false);
+        assert_eq!(first["tip_height"], 12);
+        assert!(server.requests()[4].starts_with("GET /blocks/tip/height "));
+        assert!(server.requests()[5].contains("/utxo "));
         let a = Acquisition::new_cached(
             scope(),
             &backend,
@@ -547,7 +560,7 @@ mod tests {
         assert_eq!(second["scripts_changed"], 0);
         assert_eq!(second["scripts_unchanged"], 1);
         assert_eq!(second["utxos_skipped_unchanged"], true);
-        assert_eq!(server.requests().len(), 6);
+        assert_eq!(server.requests().len(), 7);
         assert_eq!(second["freshness_checkpoint"], *checkpoint);
         let prior = BTreeMap::from([(
             "omitted".into(),
