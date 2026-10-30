@@ -2,10 +2,10 @@
  * The empty chat's first step when no model is chosen: the coding agents
  * (Claude, Codex, Copilot, OpenCode) as rows with **Use**. Nothing is
  * contacted until the user picks one; that runs the same check Settings →
- * Assistant runs, asking first for an off-device one. A ready agent becomes
- * the default provider and this chat's model. One that is not ready says why
- * (not installed, sign-in needed) in its row. Other providers stay in
- * Settings.
+ * Assistant runs, asking first for an off-device one. An agent that check
+ * finds ready becomes the default provider and this chat's model. One that is
+ * not ready, or whose check fails or is declined, says why in its row. Other
+ * providers stay in Settings.
  */
 
 import * as React from "react";
@@ -111,6 +111,10 @@ export function ModelSetupCard({ className }: { className?: string }) {
     const state = checks.stateFor(row);
     if (state.pending) return;
     setChecked(null);
+    // Only this check counts: a refused or failed one leaves the earlier
+    // result on display (a failed refresh marks it stale), and that is no
+    // reason to choose the agent.
+    if (checks.refusalFor(row) || state.error || state.stale) return;
     if (runtimeSummary(state.runtime).tone !== "ready") return;
     // The row now says the agent works; make it the one chats start with.
     setDefault.mutate({ name: row.name });

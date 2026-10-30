@@ -2,8 +2,9 @@
 
 Pinned here: a provider with full agent access is shown an image as an image
 and a PDF as its text (or page images of a scan); a restricted provider is
-shown none of them and is not told their names; a provider that resumes its
-own session is shown only the files a message first sends; the conversation
+shown none of them and is not told their names; a provider that may resume
+its own session gets earlier files apart from the user's message, so a fresh
+thread still sees them and a resumed one skips them; the conversation
 itself stays text; and the broker passes only inline images.
 """
 
@@ -172,14 +173,41 @@ class TurnTests(unittest.TestCase):
         self.assertNotIn("Mustermann", note)
         self.assertIn("file-2: image (.png), not shown: this provider's agent access is restricted", note)
 
-    def test_a_resumed_session_is_shown_only_new_files(self):
+    def test_a_saved_session_keeps_earlier_files_for_a_fresh_thread(self):
+        # A saved cursor does not mean the provider resumes: the broker starts
+        # a fresh thread when the session is gone or the tools changed. The
+        # earlier files travel in their own message before the user's, which
+        # a resuming broker skips (it replays only the user's message) and a
+        # fresh thread reads.
         old = [{**entry, "new": False} for entry in self.files]
         messages, _ = self.turn(resumed=True, files=old)
-        self.assertIn("file-2: image 'Beleg_Mustermann.png', shown in an earlier message", messages[-2]["content"])
-        self.assertEqual(messages[-1]["content"], "What is on the receipt?")
-        # A stateless provider sees the file again on every turn.
+        earlier, message = (entry["content"] for entry in messages[-2:])
+        self.assertEqual(earlier[1], {"type": "text", "text": "file-2:"})
+        self.assertEqual(earlier[2]["type"], "image_url")
+        broker = _broker_messages_for_context(responses_request_context(messages))
+        self.assertNotIn("images", broker[-1])
+        self.assertEqual(base64.b64decode(broker[-2]["images"][0]["data"]), png())
+        # The note naming the files is on the user's message, the one message
+        # a resuming broker replays.
+        self.assertIn(
+            "file-2: image 'Beleg_Mustermann.png', shown below as an image",
+            broker[-1]["content"],
+        )
+        self.assertTrue(broker[-1]["content"].endswith("What is on the receipt?"))
+        # A stateless provider sees the file on the user's message every turn.
         messages, _ = self.turn(resumed=False, files=old)
         self.assertIsInstance(messages[-1]["content"], list)
+
+    def test_a_saved_session_shows_new_files_on_the_users_message(self):
+        messages, _ = self.turn(resumed=True)
+        note, text, label = messages[-1]["content"][:3]
+        self.assertIn("file-2: image 'Beleg_Mustermann.png'", note["text"])
+        self.assertEqual(text, {"type": "text", "text": "What is on the receipt?"})
+        self.assertEqual(label, {"type": "text", "text": "file-2:"})
+        self.assertNotIn("earlier messages", str(messages[-2]["content"]))
+        # Resuming replays only the user's message: it still names the files.
+        broker = _broker_messages_for_context(responses_request_context(messages))
+        self.assertIn("file-2: image 'Beleg_Mustermann.png'", broker[-1]["content"])
 
     def test_no_files_no_note(self):
         messages = [{"role": "user", "content": "hi"}]

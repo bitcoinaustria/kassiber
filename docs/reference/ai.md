@@ -1730,10 +1730,16 @@ sees depends on its [agent access](#agent-access):
   larger and Pillow is available), a PDF as its text layer via Poppler's
   `pdftotext` (up to 30 pages and 40,000 characters, framed as data rather
   than instructions), or as images of its first three pages when it has no
-  text (a scan). One message carries at most eight images and 12 MB. A
-  provider that resumes its own session (Claude, Codex, Copilot) is shown only
-  the files that message first sends, since it already saw the others; a
-  stateless one is shown them on every turn. A restricted provider is told an
+  text (a scan). One message carries at most eight images and 12 MB, the
+  files a message first sends taking that budget first. When the chat has a
+  saved native session (Claude, Codex, Copilot), the files of earlier turns go
+  in a separate message just before the user's: the broker replays only the
+  user's message when it does resume, and the whole conversation, those files
+  included, when it starts a fresh thread instead (the session is gone or the
+  advertised tools changed). The note naming the chat's files rides on the
+  user's message then, so a resumed session still learns which file is
+  which. A stateless provider is shown every file on the user's message on
+  every turn. A restricted provider is told an
   image or PDF is attached, by its extension only, and is shown none of it.
 - **Rows from an image or PDF** come only through the on-device reader:
   `ui_wallets_read_document` (a local vision model; consent, as it starts a

@@ -8,9 +8,11 @@ user's consent:
 
 - Only `ready` rows are imported. Rows the reader was unsure of stay for the
   desktop's document import, where the user reviews them against the page.
-- The plan is bound to the draft, the document's SHA-256 (the import refuses
-  a file that changed since it was read), the book's input version and a
-  digest of the effect; applying refuses if any of them moved.
+- The plan is bound to the draft's rows (a second read of the same page
+  may differ in values the effect does not show, such as a fiat value), the
+  document's SHA-256 (the import refuses a file that changed since it was
+  read), the book's input version and a digest of the effect; applying
+  refuses if any of them moved.
 - Targets follow the spreadsheet import: a file-backed wallet, or a new
   `custom` wallet. The document is attached to each imported row as
   evidence, and the import is recorded as an import run. Because a rollback
@@ -26,6 +28,7 @@ from typing import Any, Mapping
 
 from ..errors import AppError
 from . import attachment_import as core_attachment_import
+from . import attachments as core_attachments
 from . import document_import as core_document_import
 from . import import_batches as core_import_batches
 from . import wallet_completeness as core_wallet_completeness
@@ -35,6 +38,7 @@ PLAN_SCHEMA_VERSION = 1
 SOURCE_FORMAT = core_document_import.DOCUMENT_IMPORT_FORMAT
 NEW_WALLET_KIND = "custom"
 _SAVEPOINT = "document_chat_import_plan"
+_APPLY_SAVEPOINT = "document_chat_import_apply"
 _PLAN_TOOL = "ui_wallets_import_document_plan"
 # What the model may see of a row it read: values, never the page text.
 _ROW_FIELDS = ("id", "status", "flags", "confidence", "record")
@@ -46,6 +50,13 @@ def ready_row_ids(draft: Mapping[str, Any]) -> list[str]:
         for row in draft.get("rows") or ()
         if isinstance(row, Mapping) and row.get("status") == "ready" and row.get("id")
     ]
+
+
+def _draft_digest(draft: Mapping[str, Any]) -> str:
+    """Everything the import reads from the draft, so a re-read is a new plan."""
+    return core_attachment_import._digest(
+        {"rows": draft.get("rows") or [], "confidence_threshold": draft.get("confidence_threshold")}
+    )
 
 
 def project_draft(draft: Mapping[str, Any], *, full_access: bool) -> dict[str, Any]:
@@ -119,19 +130,36 @@ def _import(
         expected_source_sha256=str(source.get("sha256") or ""),
         confidence_threshold=draft.get("confidence_threshold"),
         attach_evidence=attach_evidence,
+        # The plan runs without copying the document, but must still refuse
+        # what the apply would refuse.
+        check_evidence_budget=True,
         commit=False,
     )
     # Records-based imports record no run of their own; this one is a file
     # import like any other, so it gets one.
-    batch_id = core_import_batches.record_batch(
-        conn,
-        profile,
-        wallet_id=str(wallet["id"]),
-        source_format=SOURCE_FORMAT,
-        source_filename=os.path.basename(str(source.get("filename") or source_file)),
-        column_map=None,
-        outcome=outcome,
-    )
+    try:
+        batch_id = core_import_batches.record_batch(
+            conn,
+            profile,
+            wallet_id=str(wallet["id"]),
+            source_format=SOURCE_FORMAT,
+            source_filename=os.path.basename(str(source.get("filename") or source_file)),
+            column_map=None,
+            outcome=outcome,
+        )
+    except Exception:
+        # The caller rolls the rows back; the evidence copies are files.
+        attachments_root = core_attachments._attachments_root(data_root)
+        for attached in outcome.get("attached_evidence") or ():
+            path, valid = core_attachments._resolve_stored_path(
+                attachments_root, attached.get("stored_relpath")
+            )
+            if path is not None and valid:
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+        raise
     if batch_id:
         outcome["import_batch_id"] = batch_id
     return outcome
@@ -266,7 +294,8 @@ def plan_or_apply(
             "blockers": blockers,
             "ready": not blockers,
         }
-        plan_digest = core_attachment_import._digest(plan)
+        # The draft's digest binds the plan without crossing to the model.
+        plan_digest = core_attachment_import._digest({**plan, "draft": _draft_digest(draft)})
     finally:
         # The simulation never stays, even when applying: the real import
         # below runs once more with the document attached as evidence.
@@ -297,14 +326,24 @@ def plan_or_apply(
             details={"remediation": {"action": "replan", "tool": _PLAN_TOOL, "target": {}, "desktop_only": False}},
             retryable=False,
         )
+    # One savepoint holds the wallet, the rows, their evidence and the import
+    # run: the import's own savepoint would otherwise commit the rows before
+    # the run is recorded.
+    conn.execute(f"SAVEPOINT {_APPLY_SAVEPOINT}")
+    savepoint_active = True
     try:
         target_wallet = wallet if wallet is not None else _create_target_wallet(conn, described_target)
         outcome = _import(
             conn, profile, target_wallet, source_file=source_file, draft=draft,
             hooks=hooks, data_root=data_root, attach_evidence=True,
         )
+        conn.execute(f"RELEASE SAVEPOINT {_APPLY_SAVEPOINT}")
+        savepoint_active = False
         conn.commit()
     except Exception:
+        if savepoint_active:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {_APPLY_SAVEPOINT}")
+            conn.execute(f"RELEASE SAVEPOINT {_APPLY_SAVEPOINT}")
         conn.rollback()
         raise
     return {

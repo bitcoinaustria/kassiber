@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   confirm: vi.fn(),
   runtime: {} as Record<string, Record<string, unknown>>,
+  // What an earlier check left: the display read returns it without probing.
+  cached: {} as Record<string, Record<string, unknown>>,
+  // Set to make the next refresh fail, or come back as the stale last result.
+  refresh: null as null | "error" | "stale",
 }));
 
 vi.hoisted(() => {
@@ -71,13 +75,19 @@ function daemon(request: Request) {
     case "ai.providers.set_default":
       return envelope(request.kind, { name: args.name });
     case "ai.provider_runtime.status": {
-      const result = args.cached_only ? undefined : mocks.runtime[String(args.provider)];
+      if (!args.cached_only && mocks.refresh === "error") {
+        return { kind: "error", schema_version: 1, error: { code: "ai_provider_error", message: "Claude did not answer." } };
+      }
+      const stale = !args.cached_only && mocks.refresh === "stale";
+      const result = args.cached_only || stale
+        ? mocks.cached[String(args.provider)]
+        : mocks.runtime[String(args.provider)];
       return envelope(request.kind, {
         provider: args.provider,
         providers: result ? [result] : [],
         checked_at: result ? NOW : null,
-        stale: false,
-        error: null,
+        stale,
+        error: stale ? { code: "ai_provider_error", message: "Claude did not answer." } : null,
       });
     }
     case "ai.list_models":
@@ -113,6 +123,8 @@ describe("ModelSetupCard", () => {
     mocks.invoke.mockImplementation((request: Request) => Promise.resolve(daemon(request)));
     mocks.confirm.mockReturnValue(true);
     mocks.runtime = {};
+    mocks.cached = {};
+    mocks.refresh = null;
     useUiStore.setState({ aiFeaturesEnabled: true, assistantModelSelection: null });
   });
   afterEach(() => {
@@ -172,6 +184,30 @@ describe("ModelSetupCard", () => {
     expect(within(row("claude")).getByRole("button", { name: "Use Claude" }).textContent).toBe("Check again");
     expect(useUiStore.getState().assistantModelSelection).toBeNull();
     expect(requests().some((request) => request.kind === "ai.providers.set_default")).toBe(false);
+  });
+
+  it("chooses nothing on an earlier ready result when this check does not succeed", async () => {
+    for (const outcome of ["declined", "error", "stale"] as const) {
+      mocks.invoke.mockClear();
+      mocks.cached.claude = { provider: "claude", state: "ready", version: "2.1.0" };
+      mocks.confirm.mockReturnValue(outcome !== "declined");
+      mocks.refresh = outcome === "declined" ? null : outcome;
+      useUiStore.setState({ assistantModelSelection: null });
+      await mount();
+      await act(async () => {
+        fireEvent.click(within(row("claude")).getByRole("button", { name: "Use Claude" }));
+      });
+      await waitFor(() =>
+        expect(within(row("claude")).getByRole("button", { name: "Use Claude" }).hasAttribute("disabled")).toBe(false),
+      );
+      expect(useUiStore.getState().assistantModelSelection, outcome).toBeNull();
+      expect(requests().some((request) => request.kind === "ai.providers.set_default"), outcome).toBe(false);
+      // The row shows the failed check instead of the card moving on.
+      if (outcome !== "declined") {
+        await waitFor(() => expect(within(row("claude")).getByText("Claude did not answer.")).toBeTruthy());
+      }
+      cleanup();
+    }
   });
 
   it("does not check when the confirmation is declined", async () => {

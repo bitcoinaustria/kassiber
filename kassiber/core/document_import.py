@@ -1644,6 +1644,7 @@ def import_document_draft(
     expected_source_sha256: str | None = None,
     confidence_threshold: Any = None,
     attach_evidence: bool = True,
+    check_evidence_budget: bool = False,
     commit: bool = True,
 ) -> dict[str, Any]:
     source_path = _source_path(source_file)
@@ -1697,7 +1698,10 @@ def import_document_draft(
         )
     source_bytes = stable_path.stat().st_size
     projected_attachment_bytes = source_bytes * len(records)
-    if attach_evidence and projected_attachment_bytes > MAX_PROJECTED_ATTACHMENT_BYTES:
+    if (
+        (attach_evidence or check_evidence_budget)
+        and projected_attachment_bytes > MAX_PROJECTED_ATTACHMENT_BYTES
+    ):
         stable_dir.cleanup()
         raise AppError(
             "Document evidence copies would exceed the import storage budget",

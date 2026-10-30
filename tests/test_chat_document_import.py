@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 from kassiber import daemon
 from kassiber.ai.tools import CHAT_DOCUMENT_TOOL_NAMES, get_tool, tool_capabilities
-from kassiber.core import document_import
+from kassiber.core import attachments, document_import, import_batches
 from kassiber.db import open_db
 from tests.test_document_import import FakeVisionClient
 
@@ -164,6 +164,67 @@ class ChatDocumentImportTests(unittest.TestCase):
         applied = self.write("ui.wallets.import_document.apply",
                              {"draft": draft["draft"], "wallet": "Receipts", **plan["apply_with"]}, runtime)
         self.assertFalse(applied["ok"])
+        self.assertEqual(self.tx_count(), 0)
+
+    def test_a_reread_with_other_values_needs_a_new_plan(self):
+        runtime = self.runtime()
+        first = self.read_receipt(runtime)
+        plan = self.read("ui.wallets.import_document.plan",
+                         {"draft": first["draft"], "wallet": "Receipts"}, runtime)["envelope"]["data"]
+        # Same BTC amounts, another fiat value: the effect looks the same.
+        self.client._content = self.client._content.replace('"500.00"', '"999.00"')
+        second = self.read_receipt(runtime)
+        self.assertEqual(second["rows"][0]["record"]["fiat_value"], "999")
+        applied = self.write("ui.wallets.import_document.apply",
+                             {"draft": second["draft"], "wallet": "Receipts", **plan["apply_with"]}, runtime)
+        self.assertFalse(applied["ok"], applied)
+        self.assertEqual(applied["reason"], "import_plan_stale")
+        self.assertEqual(self.tx_count(), 0)
+
+    def test_a_failed_import_run_leaves_no_rows_or_evidence(self):
+        runtime = self.runtime()
+        draft = self.read_receipt(runtime)
+        plan = self.read("ui.wallets.import_document.plan",
+                         {"draft": draft["draft"], "wallet": "Receipts"}, runtime)["envelope"]["data"]
+        self.assertTrue(plan["ready"], plan["blockers"])
+        record_batch = import_batches.record_batch
+        calls = []
+
+        def fail_the_real_run(*args, **kwargs):
+            # The apply re-plans first; the second run is the real one.
+            calls.append(kwargs)
+            if len(calls) == 2:
+                raise RuntimeError("disk full")
+            return record_batch(*args, **kwargs)
+
+        with patch.object(import_batches, "record_batch", side_effect=fail_the_real_run):
+            applied = self.write("ui.wallets.import_document.apply",
+                                 {"draft": draft["draft"], "wallet": "Receipts", **plan["apply_with"]}, runtime)
+        self.assertFalse(applied["ok"], applied)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(self.conn.in_transaction)
+        self.assertEqual(self.tx_count(), 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0], 0)
+        stored = [
+            name
+            for _, _, files in os.walk(attachments._attachments_root(self.data_root))
+            for name in files
+        ]
+        self.assertEqual(stored, [])
+
+    def test_evidence_over_the_storage_budget_is_blocked_in_the_plan(self):
+        runtime = self.runtime()
+        draft = self.read_receipt(runtime)
+        with patch.object(document_import, "MAX_PROJECTED_ATTACHMENT_BYTES", len(PNG) - 1):
+            plan = self.read("ui.wallets.import_document.plan",
+                             {"draft": draft["draft"], "wallet": "Receipts"}, runtime)["envelope"]["data"]
+            self.assertFalse(plan["ready"])
+            self.assertIn("document_import_evidence_budget_exceeded",
+                          [blocker["code"] for blocker in plan["blockers"]])
+            applied = self.write("ui.wallets.import_document.apply",
+                                 {"draft": draft["draft"], "wallet": "Receipts", **plan["apply_with"]}, runtime)
+        self.assertFalse(applied["ok"], applied)
+        self.assertEqual(applied["reason"], "import_plan_blocked")
         self.assertEqual(self.tx_count(), 0)
 
     def test_a_restricted_provider_gets_counts_not_values(self):
