@@ -5,6 +5,7 @@ Dumps carry every row, including trigger-maintained rows, so the Rust replay
 loads tables before it creates triggers.
 """
 from contextlib import ExitStack, contextmanager
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -54,6 +55,11 @@ def error(exc):
             "hint": getattr(exc, "hint", None), "details": getattr(exc, "details", None)}
 
 
+def timestamp(step):
+    """The `step`-th deterministic clock reading, one second apart."""
+    return (datetime(2030, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=step)).isoformat().replace("+00:00", "Z")
+
+
 @contextmanager
 def deterministic(*clock_modules, prefix="id"):
     """Replace uuid4 and the named modules' `now_iso` with fixed sequences."""
@@ -65,7 +71,7 @@ def deterministic(*clock_modules, prefix="id"):
 
     def next_now():
         counter["now"] += 1
-        return f"2030-01-01T00:00:{counter['now']:02d}Z"
+        return timestamp(counter["now"])
 
     with ExitStack() as stack:
         stack.enter_context(patch("uuid.uuid4", side_effect=next_id))

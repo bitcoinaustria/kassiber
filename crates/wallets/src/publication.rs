@@ -7,6 +7,7 @@ use kassiber_store::rusqlite::{params, params_from_iter, Connection, OptionalExt
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
+mod balance;
 pub mod insert;
 pub mod inventory;
 mod physical;
@@ -16,6 +17,7 @@ pub mod reports;
 mod row;
 #[cfg(test)]
 mod testbook;
+pub mod wallet;
 
 type Result<T> = std::result::Result<T, AppError>;
 

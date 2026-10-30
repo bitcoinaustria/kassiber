@@ -143,6 +143,6 @@ impl Clock {
     }
     pub(crate) fn now(&mut self) -> String {
         self.now += 1;
-        format!("2030-01-01T00:00:{:02}Z", self.now)
+        kassiber_chain::format_unix_time(1_893_456_000 + i64::from(self.now)).unwrap()
     }
 }
