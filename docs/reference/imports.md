@@ -215,6 +215,9 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 If imported transactions carry `fiat_rate` or `fiat_value`, Kassiber stores both
 the legacy numeric value and an exact decimal string plus pricing provenance.
+Fiat values and rates must pass the shared [pricing limits](tax.md#rates-and-tax-input-quality).
+When only a fiat value is supplied, import validates the rate derived from that
+value and the Bitcoin amount before storing the transaction.
 Generic imports default to `pricing_source_kind=generic_import`; source-specific
 exports may pass stronger kinds such as `exchange_execution`,
 `btcpay_invoice`, `btcpay_payment`, or `btcpay_payout`. Stronger later pricing can replace weaker

@@ -190,7 +190,21 @@ def payout_to_dict(row) -> dict[str, Any]:
     )
     swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
     out_amount = row["out_amount"] if "out_amount" in keys else None
+    invalid_price = False
+    try:
+        numeric_price = (
+            float(finite_decimal(payout_fiat_value, "payout_fiat_value"))
+            if payout_fiat_value is not None else None
+        )
+    except AppError:
+        numeric_price = None
+        invalid_price = True
     return {
+        "invalid": invalid_price,
+        "validation_error": (
+            "Invalid payout_fiat_value; delete and recreate this payout"
+            if invalid_price else None
+        ),
         "id": row["id"],
         "component_id": row["component_id"] if "component_id" in keys else None,
         "workspace_id": row["workspace_id"],
@@ -202,10 +216,7 @@ def payout_to_dict(row) -> dict[str, Any]:
         "payout_amount": float(msat_to_btc(row["payout_amount"])),
         "payout_amount_msat": int(row["payout_amount"]),
         "payout_occurred_at": row["payout_occurred_at"],
-        "payout_fiat_value": (
-            float(finite_decimal(payout_fiat_value, "payout_fiat_value"))
-            if payout_fiat_value is not None else None
-        ),
+        "payout_fiat_value": numeric_price,
         "payout_external_id": row["payout_external_id"],
         "counterparty": row["counterparty"],
         "notes": row["notes"],
