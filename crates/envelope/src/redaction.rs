@@ -88,6 +88,7 @@ struct Patterns {
     assigned_secret: Regex,
     sk_secret: Regex,
     txid: Regex,
+    amount_id: Regex,
     keyed_amount: Regex,
     amount: Regex,
     amount_num: Regex,
@@ -213,6 +214,7 @@ fn patterns() -> &'static Patterns {
             )),
             sk_secret: compile(&format!(r"{B}sk-[A-Za-z0-9._~+/-]{{6,}}{B}")),
             txid: compile(&format!(r"(?i){B}[0-9a-f]{{64,}}{B}")),
+            amount_id: compile(r"(?i)(?<![A-Za-z0-9_-])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![A-Za-z0-9_-])"),
             keyed_amount: compile(&format!(
                 r#"(?i){B}([A-Za-z][A-Za-z0-9_]*(?:msats?|sats?)){B}(['"]?{S}*[:=]{S}*['"]?)([+-]?\d[\d.,_]*\d|[+-]?\d)"#
             )),
@@ -309,7 +311,11 @@ fn operational_text(value: &str) -> Result<String, Withheld> {
     let text = substitute(&p.txid, value, |caps| {
         format!("txid#{}", stable_hash(&nth(caps, 0).to_lowercase()))
     })?;
+    let id_spans = amount_id_spans(&text)?;
     let text = substitute(&p.keyed_amount, &text, |caps| {
+        if overlaps_id(caps, &id_spans) {
+            return nth(caps, 0).to_owned();
+        }
         let (key, sep, num) = (nth(caps, 1), nth(caps, 2), nth(caps, 3));
         let unit = if key.to_lowercase().contains("msat") {
             "msat"
@@ -318,12 +324,16 @@ fn operational_text(value: &str) -> Result<String, Withheld> {
         };
         format!("{key}{sep}{}", amount_pseudonym(num, unit))
     })?;
+    let id_spans = amount_id_spans(&text)?;
     let mut failed = false;
     let result = substitute(&p.amount, &text, |caps| {
         let Some(whole) = caps.get(0) else {
             return String::new();
         };
         let token = whole.as_str();
+        if overlaps_id(caps, &id_spans) {
+            return token.to_owned();
+        }
         match is_market_rate_tail(&text, whole.start()) {
             Ok(true) => return token.to_owned(),
             Ok(false) => {}
@@ -354,6 +364,22 @@ fn operational_text(value: &str) -> Result<String, Withheld> {
         return Err(Withheld);
     }
     Ok(result)
+}
+
+fn amount_id_spans(text: &str) -> Result<Vec<(usize, usize)>, Withheld> {
+    patterns()
+        .amount_id
+        .find_iter(text)
+        .map(|found| found.map(|m| (m.start(), m.end())).map_err(|_| Withheld))
+        .collect()
+}
+
+fn overlaps_id(caps: &Captures<'_, str>, spans: &[(usize, usize)]) -> bool {
+    caps.get(0).is_some_and(|m| {
+        spans
+            .iter()
+            .any(|&(start, end)| m.start() < end && m.end() > start)
+    })
 }
 
 fn secret_text(value: &str) -> Result<String, Withheld> {

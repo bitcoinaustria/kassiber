@@ -11596,6 +11596,14 @@
 {"op":"secret_text","in":"\ud807\udf02Bearer abcdef\u212a","out":"\ud807\udf02Bearer [redacted]\u212a"}
 {"op":"secret_text","in":"\ud807\udf02Bearer abcdef\ud839\udcd0","out":"\ud807\udf02Bearer [redacted]\ud839\udcd0"}
 {"op":"secret_text","in":"\ud807\udf02Bearer abcdef\ud807\udf02","out":"\ud807\udf02Bearer [redacted]\ud807\udf02"}
+{"op":"operational_text","in":"component 3cad1234-1234-1234-1234-123456789abc missing","out":"component 3cad1234-1234-1234-1234-123456789abc missing"}
+{"op":"operational_text","in":"component 3cad1234123412341234123456789abc missing","out":"component 3cad1234123412341234123456789abc missing"}
+{"op":"operational_text","in":"component 3CAD1234-1234-1234-1234-123456789ABC missing; paid 3 CAD","out":"component 3CAD1234-1234-1234-1234-123456789ABC missing; paid amount#<salted>"}
+{"op":"operational_text","in":"amount_sat=12345678901234567890123456789012 fee_msat=12","out":"amount_sat=12345678901234567890123456789012 fee_msat=amount#<salted>"}
+{"op":"operational_text","in":"3cad1234-1234-1234-1234-123456789abc and 4cad1234123412341234123456789abc","out":"3cad1234-1234-1234-1234-123456789abc and 4cad1234123412341234123456789abc"}
+{"op":"operational_text","in":"\u00e93cad1234-1234-1234-1234-123456789abc\u00e9 3 CAD","out":"\u00e93cad1234-1234-1234-1234-123456789abc\u00e9 amount#<salted>"}
+{"op":"operational_text","in":"prefix_3cad1234-1234-1234-1234-123456789abc_suffix 3cad1","out":"prefix_3cad1234-1234-1234-1234-123456789abc_suffix 3cad1"}
+{"op":"operational_text","in":"3cad1234-1234-1234-1234-123456789ab 3cad1234123412341234123456789ab","out":"3cad1234-1234-1234-1234-123456789ab 3cad1234123412341234123456789ab"}
 {"op":"operational_text","in":"tx aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa done","out":"tx txid#d96f0f85 done"}
 {"op":"operational_text","in":"TX AbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCdAbCde","out":"TX txid#c9e12960"}
 {"op":"operational_text","in":"two ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","out":"two txid#ce29bfc5"}

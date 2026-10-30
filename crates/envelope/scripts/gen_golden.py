@@ -137,6 +137,14 @@ SECRET_TEXTS = [
 ]
 
 OPERATIONAL_TEXTS = [
+    "component 3cad1234-1234-1234-1234-123456789abc missing",
+    "component 3cad1234123412341234123456789abc missing",
+    "component 3CAD1234-1234-1234-1234-123456789ABC missing; paid 3 CAD",
+    "amount_sat=12345678901234567890123456789012 fee_msat=12",
+    "3cad1234-1234-1234-1234-123456789abc and 4cad1234123412341234123456789abc",
+    "é3cad1234-1234-1234-1234-123456789abcé 3 CAD",
+    "prefix_3cad1234-1234-1234-1234-123456789abc_suffix 3cad1",
+    "3cad1234-1234-1234-1234-123456789ab 3cad1234123412341234123456789ab",
     "tx " + "a" * 64 + " done",
     "TX " + "AbCd" * 16 + "e",
     "two " + "f" * 128,
