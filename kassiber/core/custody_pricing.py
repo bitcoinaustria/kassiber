@@ -1,4 +1,4 @@
-"""Decimal validation shared by custody admission and finalized projections."""
+"""Bounded decimal pricing shared by write boundaries and tax projections."""
 
 import math
 from decimal import Decimal, InvalidOperation
@@ -19,4 +19,13 @@ def finite_decimal(value, field: str) -> Decimal:
             f"{field} must be a finite decimal number",
             code="validation", retryable=False,
         )
-    return number
+    # Bound before any fixed-point formatting; RP2 compares prices
+    # at 13 decimal places. Never admit a nonzero price that becomes zero.
+    if number and (
+        abs(number.as_tuple().exponent) > 308 or abs(number) < Decimal("1e-13")
+    ):
+        raise AppError(
+            f"{field} is outside the supported decimal range",
+            code="validation", retryable=False,
+        )
+    return number if number else Decimal(0)
