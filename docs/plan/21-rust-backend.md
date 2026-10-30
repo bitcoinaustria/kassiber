@@ -2406,3 +2406,17 @@ record sampled byte parity, mutation coverage and back-to-back timings.
 R4-11 remains incomplete: the 0.15 s generic-20k budget, lossless legacy edge
 values, exhaustive rendering/join mutations and full inherited campaign gates
 still need completion.
+
+### R5 pairing command checkpoint
+
+`t3code/r5-transfers-8` starts at `f2464d20` and imports R4-14's pairing library
+from `d8f3bac6`. Suggestions, bulk pairing and rule application now register
+through CLI and daemon, bringing this subset to **22/29 CLI leaves and
+21 desktop kinds**. The adapters reuse the pairing module, preserve CLI dry
+runs and desktop coercion/authorship, and own only their outer transaction.
+Fixed-source ordered-output and complete-database oracles exercise command
+dispatch; process tests pin wire bytes, hybrid routing and Python projections.
+The [shell checkpoint](../reference/rust-shell.md#pairing-command-checkpoint-r5-transfers-8)
+records the evidence and remaining work. Review cases/plan/apply still require
+current ledger composition, whose interpretation/quantity/finalized stages
+are absent on this base; they must not be approximated from stored journals.

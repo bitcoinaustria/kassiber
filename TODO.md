@@ -394,9 +394,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 ## Rust backend R5 transfers and review
 
 The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-classification-r5)
-serves all five stored reads and fourteen authoring commands (rule CRUD/toggles,
-dismissals, pair/unpair/update, payout create/delete, component and gap plan/apply):
-19/29 CLI leaves and 18 desktop kinds. Full
+serves all five stored reads, fourteen authoring commands (rule CRUD/toggles,
+dismissals, pair/unpair/update, payout create/delete, component and gap plan/apply),
+and suggestions/bulk pairing/rule application: 22/29 CLI leaves and 21 desktop kinds. Full
 normalized authoring row parity is pinned for that subset; AI projections remain
 Python.
 
@@ -413,13 +413,15 @@ Python.
 - [x] Port gap plan/apply and desktop kinds with version-bound candidate
   fingerprints, append-only corrections and filed-report impacts. Reuse the
   pure R2 gap search; pin complete rows, late-failure rollback and mutations.
-- [ ] Port the ten computation-dependent commands and related desktop kinds
-  after custody/journal services are available. Matching needs its own mutation
-  catalog and Python/naive-all-pairs oracle before native suggestions or auto-pair
-  can be enabled; review cases/plan/apply must retain readiness barriers.
+- [x] Register suggestions, bulk pairing and rule application through the shared
+  R4 pairing library, with command-level full-row parity, atomic dry runs,
+  daemon coercion/authorship, hybrid process witnesses and named mutations.
+- [ ] Port gaps list/review and components list/show with their desktop kinds.
+- [ ] Port review cases/plan/apply after complete current-state ledger composition
+  is available; retain readiness barriers rather than reading stale journals.
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the
   matcher/rules/bulk implementation and its oracle/mutation evidence; R4-13 and
-  R4-15 still need to integrate its atomic journal boundary before route enablement.
+  R4-15 still need to integrate its atomic journal boundary for journal processing.
 
 ## Accounting correctness and custody
 

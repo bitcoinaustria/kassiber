@@ -10,6 +10,7 @@ mod history;
 mod pair_authoring;
 mod pair_spec;
 pub mod pairing;
+mod pairing_commands;
 mod payout_create;
 mod payout_delete;
 mod records;
@@ -52,6 +53,9 @@ pub fn execute_with_sources(
     sources: &dyn Sources,
 ) -> Result<Value> {
     match operation {
+        "transfers.suggest" | "transfers.bulk-pair" | "transfers.rules.apply" => {
+            pairing_commands::execute(conn, scope, operation, args, sources)
+        }
         "transfers.pair" | "transfers.unpair" | "transfers.update" => {
             pair_authoring::execute(conn, scope, operation, args, sources)
         }

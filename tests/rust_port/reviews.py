@@ -303,4 +303,6 @@ REVIEWS["tests/test_review_regressions.py"] = {
         "disposition": "rust-test", "group": "secrets-backup",
         "reason": "Rust replacements: all_text_rules_match_python_bytes, every_sensitive_key_matches_python, recursive_details_shapes_match_python, every_argument_class_matches_python in crates/diagnostics/tests",
     },
+    "tests/test_rust_pairing_commands.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "Compares pairing CLI and daemon wire bytes with Python, checks complete unchanged read/dry-run rows and Python projections of Rust writes, and requires zero hybrid fallbacks"}},
+
 }

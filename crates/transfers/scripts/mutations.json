@@ -2151,5 +2151,195 @@
       "desktop_gap_checks_shape_authority_and_dispatch"
     ],
     "rule": "Residual authoring requires a textual classification."
+  },
+  {
+    "id": "pairing-command-time_window_seconds",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "bounded_integer(args, \"time_window_seconds\",",
+    "replace": "bounded_integer(args, \"missing_time_window_seconds\",",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing command numeric options preserve explicit CLI values."
+  },
+  {
+    "id": "pairing-command-fee_sats_min",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "bounded_integer(args, \"fee_sats_min\",",
+    "replace": "bounded_integer(args, \"missing_fee_sats_min\",",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing command numeric options preserve explicit CLI values."
+  },
+  {
+    "id": "pairing-command-fee-pct",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "get(args, \"fee_pct_max\")",
+    "replace": "get(args, \"missing_fee_pct_max\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "The fee percentage reaches the shared matcher unchanged."
+  },
+  {
+    "id": "pairing-command-confidence",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"confidence\")",
+    "replace": "option(args, \"missing_confidence\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-asset_pair",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"asset_pair\")",
+    "replace": "option(args, \"missing_asset_pair\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-route_pair",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"route_pair\")",
+    "replace": "option(args, \"missing_route_pair\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-method",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"method\")",
+    "replace": "option(args, \"missing_method\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-candidate_type",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"candidate_type\")",
+    "replace": "option(args, \"missing_candidate_type\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-authored_source",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"authored_source\")",
+    "replace": "option(args, \"missing_authored_source\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-transaction",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "sql::atomic(c, run)",
+    "replace": "run()",
+    "expect_failing": [
+      "pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback"
+    ],
+    "rule": "The command commits only its own transaction and preserves caller rollback."
+  },
+  {
+    "id": "pairing-command-dry-run",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "if get(args, \"dry_run\").is_some_and(truthy) {",
+    "replace": "if false && get(args, \"dry_run\").is_some_and(truthy) {",
+    "expect_failing": [
+      "pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback"
+    ],
+    "rule": "Dry runs restore every database row after calculating the result."
+  },
+  {
+    "id": "pairing-command-dispatch",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "if operation == \"transfers.bulk-pair\" {",
+    "replace": "if operation == \"transfers.rules.apply\" {",
+    "expect_failing": [
+      "pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback"
+    ],
+    "rule": "Bulk pairing and rule application invoke their corresponding shared service."
+  },
+  {
+    "id": "desktop-pairing-authority",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "let mut payload = dict([(\"authored_source\", s(\"gui\"))]);",
+    "replace": "let mut payload = dict([(\"authored_source\", s(\"cli\"))]);",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "desktop-pairing-window-default",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".unwrap_or(86400.into());",
+    "replace": ".unwrap_or(0.into());",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "desktop-pairing-fee-default",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".unwrap_or(Value::Float(0.01));",
+    "replace": ".unwrap_or(Value::Float(0.0));",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "desktop-pairing-floor-default",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".unwrap_or(2500.into());",
+    "replace": ".unwrap_or(0.into());",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "pairing-command-window-overflow",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "if options.time_window_seconds_overflow {",
+    "replace": "if false && options.time_window_seconds_overflow {",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Unbounded CLI integers preserve Python float conversion overflow at the timed comparison."
+  },
+  {
+    "id": "pairing-command-filter-types",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "if !matches!(raw, Value::Str(_)) {",
+    "replace": "if false && !matches!(raw, Value::Str(_)) {",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Non-text pair filters preserve Python split errors instead of silently stringifying containers."
+  },
+  {
+    "id": "pairing-window-overflow-cache",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "window_overflow: options.time_window_seconds_overflow,",
+    "replace": "window_overflow: false,",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "The matcher cache cannot hide a changed numeric option refusal."
   }
 ]

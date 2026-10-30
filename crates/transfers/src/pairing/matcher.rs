@@ -5,6 +5,8 @@ use provider::Evidence;
 #[derive(Clone)]
 pub struct MatchOptions {
     pub time_window_seconds: i64,
+    /// Python converts the integer bound to a float only at a timed comparison.
+    pub time_window_seconds_overflow: bool,
     pub fee_pct_max: f64,
     pub fee_sats_min: i64,
     pub now: String,
@@ -14,6 +16,7 @@ impl Default for MatchOptions {
     fn default() -> Self {
         Self {
             time_window_seconds: 86400,
+            time_window_seconds_overflow: false,
             fee_pct_max: 0.01,
             fee_sats_min: 2500,
             now: String::new(),
@@ -398,6 +401,7 @@ struct CacheKey {
     dismissed: HashSet<(String, String)>,
     booked: HashSet<String>,
     window: i64,
+    window_overflow: bool,
     pct: u64,
     floor: i64,
     heuristics: bool,
@@ -439,6 +443,7 @@ pub fn suggest(
         dismissed: dismissed.clone(),
         booked: booked.clone(),
         window: options.time_window_seconds,
+        window_overflow: options.time_window_seconds_overflow,
         pct: options.fee_pct_max.to_bits(),
         floor: options.fee_sats_min,
         heuristics: options.include_heuristics,
@@ -524,6 +529,12 @@ pub fn suggest(
             }
             let Some(t) = o.seconds else { continue };
             let threshold = threshold(o.amount, options.fee_pct_max, options.fee_sats_min)?;
+            if options.time_window_seconds_overflow {
+                return Err(AppError::new(
+                    "internal_error",
+                    "int too large to convert to float",
+                ));
+            }
             let lo = entries.partition_point(|&i| {
                 rows[i].seconds.unwrap() < t - options.time_window_seconds as f64
             });

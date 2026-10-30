@@ -5623,3 +5623,53 @@ exact action-local consent, scope/offline/cancellation handling, unsupported
 hybrid fallback, native end-to-end full-book parity and zero in-scope Python
 fallbacks. Successful native served-by counts remain zero for `wallets.sync`,
 `ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.
+
+### Pairing command checkpoint (R5 transfers-8)
+
+The continuation starts at `f2464d20` and cherry-picks R4-14's `d8f3bac6`
+locally as `7150d69a`; both documentation conflicts retain the gap checkpoint
+and append the pairing checkpoint. It enables `transfers suggest`,
+`transfers bulk-pair`, `transfers rules apply` and the corresponding three
+`ui.transfers.*` kinds. The subset is **22/29 CLI leaves (21 transfers,
+1 review) and 21 desktop kinds**.
+
+`pairing_commands.rs` handles command options and transaction ownership around
+R4-14's existing suggestions, rules and bulk services. No second matcher is
+introduced. CLI dry runs restore the exact database state; desktop unknown
+fields cannot override GUI authorship or enable dry runs. Desktop truthy
+numeric defaults, integer/float coercion and validation order match Python.
+The shared matcher additionally retains Python's deferred overflow refusal for
+an integer time window beyond binary64, and its cache binds that option.
+Non-text asset/route filters retain Python's `split` exception.
+
+| Parity boundary | Named evidence | Comparison |
+| --- | --- | --- |
+| Command dispatch, ordered outputs and every application-table row | `pairing_command_routes_match_python_complete_database_rows_and_ordered_results` | Existing 255-book, 1,860-operation fixed-source pairing oracle, now through command dispatch |
+| Dry runs, successful commit, caller rollback and late failure | `pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback` | Exact complete database restoration; caller transaction retained |
+| Numeric options, filters and GUI authorship | `pairing_command_filters_numeric_options_and_authorship_match_python`, `desktop_pairing_defaults_coercion_and_authority_match_python` | Explicit zero values, Python defaults, refusal messages and persisted authorship |
+| Real CLI/daemon output, hybrid routing and unchanged Python projections | `tests/test_rust_pairing_commands.py` | Raw wire bytes with only new pair/component identities and current clock readings bound; Python-only traceback debug follows the shell contract |
+
+The new transfer mutation entries name the focused option, transaction,
+desktop and cache witnesses above. The imported pairing matcher/service
+catalog remains separate. Fixed-source tests normalize no identity, timestamp,
+hash or serialized field. Process dry runs and read operations compare complete
+pre/post database rows; after Rust mutations the unchanged Python transfer
+list, rule list and review-context projections remain readable.
+
+All **19 new mutations** were built and killed by their four named witnesses;
+the transfer catalog now contains **234 applicable entries**. The two process
+tests pass across eleven generated shapes: **88 pairing CLI calls**, **154
+supporting CLI reads**, and **99 pairing requests in three daemon sessions**.
+Every hybrid invocation is served by Rust, with zero Python fallbacks.
+Workspace fmt and all-target clippy with `-D warnings` pass. The refreshed
+pairing/daemon native run passes **21 tests**, including both full service
+oracle replays. Full workspace and preflight results are recorded at the final
+continuation boundary below.
+
+Seven CLI leaves remain disabled at this checkpoint: gaps list/review,
+components list/show, and review cases/plan/apply. The latter three call
+`review_workflow._build`, which always invokes `custody_journal.build_ledger_state`;
+this base still explicitly skips interpretation, quantity and finalized
+projection in the Rust custody product API. Stored journal rows cannot replace
+that current-state recomputation. AI projections remain Python, and journal
+pairing integration remains R4's responsibility.

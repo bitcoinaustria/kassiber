@@ -20,6 +20,9 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
     "ui.transfers.rules.set_enabled",
+    "ui.transfers.suggest",
+    "ui.transfers.bulk_pair",
+    "ui.transfers.rules.apply",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
@@ -29,6 +32,20 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if matches!(
+        kind,
+        "ui.transfers.suggest" | "ui.transfers.bulk_pair" | "ui.transfers.rules.apply"
+    ) {
+        let payload = pairing_args(kind, args)?;
+        return book.transfers(
+            if kind == "ui.transfers.bulk_pair" {
+                "transfers.bulk-pair"
+            } else {
+                kind.strip_prefix("ui.").unwrap()
+            },
+            &payload,
+        );
+    }
     if matches!(kind, "ui.custody.review.plan" | "ui.custody.review.apply") {
         return gaps(book, kind, args);
     }
@@ -164,6 +181,85 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         "ui.transfers.rules.list" => Ok(dict([("rules", result)])),
         _ => Ok(result),
     }
+}
+
+fn pairing_args(kind: &str, args: &Value) -> Result<Value, AppError> {
+    use kassiber_envelope::{py_str, set, truthy};
+    let mut payload = dict([("authored_source", s("gui"))]);
+    for name in [
+        "workspace",
+        "profile",
+        "confidence",
+        "asset_pair",
+        "route_pair",
+        "method",
+        "candidate_type",
+    ] {
+        if let Some(value) = get(args, name) {
+            set(&mut payload, name, value.clone());
+        }
+    }
+    if kind == "ui.transfers.bulk_pair" {
+        let confidence = get(args, "confidence")
+            .filter(|v| truthy(v))
+            .map(py_str)
+            .unwrap_or_else(|| "exact".into());
+        set(&mut payload, "confidence", s(confidence));
+    }
+    let window = get(args, "time_window_seconds")
+        .filter(|v| truthy(v))
+        .cloned()
+        .unwrap_or(86400.into());
+    set(
+        &mut payload,
+        "time_window_seconds",
+        Value::Int(expiry_days(&window)?),
+    );
+    let fee = get(args, "fee_pct_max")
+        .filter(|v| truthy(v))
+        .cloned()
+        .unwrap_or(Value::Float(0.01));
+    let fee = match &fee {
+        Value::Float(n) => *n,
+        Value::Bool(n) => f64::from(u8::from(*n)),
+        Value::Int(n) => n
+            .to_string()
+            .parse::<f64>()
+            .ok()
+            .filter(|n| n.is_finite())
+            .ok_or_else(|| AppError::new("internal_error", "int too large to convert to float"))?,
+        Value::Str(t) => {
+            kassiber_pytext::parse_float(t.as_str().unwrap_or_default()).map_err(|_| {
+                AppError::new(
+                    "internal_error",
+                    format!(
+                        "could not convert string to float: {}",
+                        kassiber_envelope::py_repr(&fee)
+                    ),
+                )
+            })?
+        }
+        v => {
+            return Err(AppError::new(
+                "internal_error",
+                format!(
+                    "float() argument must be a string or a real number, not '{}'",
+                    type_name(v)
+                ),
+            ))
+        }
+    };
+    set(&mut payload, "fee_pct_max", Value::Float(fee));
+    let floor = get(args, "fee_sats_min")
+        .filter(|v| truthy(v))
+        .cloned()
+        .unwrap_or(2500.into());
+    set(
+        &mut payload,
+        "fee_sats_min",
+        Value::Int(expiry_days(&floor)?),
+    );
+    Ok(payload)
 }
 
 fn normalize_payout_create_args(kind: &str, args: &mut Value) {
@@ -398,6 +494,58 @@ fn exact_integers(value: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_pairing_defaults_coercion_and_authority_match_python() {
+        for kind in [
+            "ui.transfers.suggest",
+            "ui.transfers.bulk_pair",
+            "ui.transfers.rules.apply",
+        ] {
+            assert!(KINDS.contains(&kind));
+            let args = dict([
+                ("time_window_seconds", 0.into()),
+                ("fee_pct_max", Value::Float(0.0)),
+                ("fee_sats_min", Value::Bool(false)),
+                ("authored_source", s("untrusted")),
+                ("dry_run", Value::Bool(true)),
+                ("skip_user_unpaired", Value::Bool(true)),
+            ]);
+            let payload = pairing_args(kind, &args).unwrap();
+            assert_eq!(get(&payload, "time_window_seconds"), Some(&86400.into()));
+            assert_eq!(get(&payload, "fee_pct_max"), Some(&Value::Float(0.01)));
+            assert_eq!(get(&payload, "fee_sats_min"), Some(&2500.into()));
+            assert_eq!(get(&payload, "authored_source"), Some(&s("gui")));
+            assert!(get(&payload, "dry_run").is_none());
+            assert!(get(&payload, "skip_user_unpaired").is_none());
+            if kind == "ui.transfers.bulk_pair" {
+                assert_eq!(get(&payload, "confidence"), Some(&s("exact")));
+            } else {
+                assert!(get(&payload, "confidence").is_none());
+            }
+            let args = dict([
+                ("time_window_seconds", s(" ８６_４００ ")),
+                ("fee_pct_max", s("0.5")),
+                ("fee_sats_min", Value::Float(2500.9)),
+            ]);
+            let payload = pairing_args(kind, &args).unwrap();
+            assert_eq!(get(&payload, "time_window_seconds"), Some(&86400.into()));
+            assert_eq!(get(&payload, "fee_pct_max"), Some(&Value::Float(0.5)));
+            assert_eq!(get(&payload, "fee_sats_min"), Some(&2500.into()));
+            let error = pairing_args(
+                kind,
+                &dict([
+                    ("time_window_seconds", s("bad")),
+                    ("fee_pct_max", s("also bad")),
+                ]),
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.message,
+                "invalid literal for int() with base 10: 'bad'"
+            );
+        }
+    }
 
     #[test]
     fn desktop_component_review_caps_aliases_versions_and_authority() {

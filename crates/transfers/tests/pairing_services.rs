@@ -109,6 +109,15 @@ fn restore(c: &Connection, scenario: &Value) {
 }
 #[test]
 fn pairing_services_match_python_seeded_complete_database_rows_and_ordered_results() {
+    assert_services(false);
+}
+
+#[test]
+fn pairing_command_routes_match_python_complete_database_rows_and_ordered_results() {
+    assert_services(true);
+}
+
+fn assert_services(commands: bool) {
     let fixture = kassiber_pytext::loads(include_str!("pairing_services.json")).unwrap();
     assert_eq!(list(field(&fixture, "scenarios")).len(), 255);
     assert_eq!(
@@ -154,12 +163,30 @@ fn pairing_services_match_python_seeded_complete_database_rows_and_ordered_resul
                     *target = get(fields, k).map(py_str);
                 }
             }
-            let result = match op.as_str() {
-                "suggest" => pairing::suggestions(c, &scope, &opts),
-                "auto" => pairing::auto_pair_before_journals(c, &scope, &source),
-                "rules" => pairing::apply_rules(c, &scope, &opts, None, &source),
-                "bulk" => pairing::bulk_pair(c, &scope, &opts, None, &source),
-                _ => panic!("operation"),
+            let result = if commands && op != "auto" {
+                let args = get(case, "options")
+                    .cloned()
+                    .unwrap_or_else(|| dict::<&str>([]));
+                kassiber_transfers::execute_with_sources(
+                    c,
+                    &scope,
+                    match op.as_str() {
+                        "suggest" => "transfers.suggest",
+                        "rules" => "transfers.rules.apply",
+                        "bulk" => "transfers.bulk-pair",
+                        _ => panic!("operation"),
+                    },
+                    &args,
+                    &source,
+                )
+            } else {
+                match op.as_str() {
+                    "suggest" => pairing::suggestions(c, &scope, &opts),
+                    "auto" => pairing::auto_pair_before_journals(c, &scope, &source),
+                    "rules" => pairing::apply_rules(c, &scope, &opts, None, &source),
+                    "bulk" => pairing::bulk_pair(c, &scope, &opts, None, &source),
+                    _ => panic!("operation"),
+                }
             };
             if let Some(expected) = get(case, "result") {
                 let actual = result.unwrap_or_else(|e| panic!("{name} {op}: {e:?}"));
@@ -207,6 +234,177 @@ fn pairing_services_match_python_seeded_complete_database_rows_and_ordered_resul
             );
         }
     }
+}
+
+#[test]
+fn pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback() {
+    let fixture = kassiber_pytext::loads(include_str!("pairing_services.json")).unwrap();
+    let scenario = list(field(&fixture, "scenarios"))
+        .iter()
+        .find(|s| py_str(field(s, "name")) == "1-multi-wallet")
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(dir.path(), None).unwrap();
+    let c = book.connection();
+    restore(c, scenario);
+    let scope = Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    };
+    let source = Fixed { next: Cell::new(1) };
+    let before = bytes(&dump(c));
+    let preview = kassiber_transfers::execute_with_sources(
+        c,
+        &scope,
+        "transfers.bulk-pair",
+        &dict([("dry_run", Value::Bool(true))]),
+        &source,
+    )
+    .unwrap();
+    assert_eq!(field(field(&preview, "summary"), "count"), &2.into());
+    assert_eq!(get(&preview, "dry_run"), Some(&Value::Bool(true)));
+    assert_eq!(bytes(&dump(c)), before);
+    assert!(c.is_autocommit());
+    c.execute_batch("BEGIN; UPDATE profiles SET label='Outer edit' WHERE id='p'; CREATE TEMP TRIGGER fail_second_pair BEFORE INSERT ON custody_components WHEN (SELECT COUNT(*) FROM custody_components)>0 BEGIN SELECT RAISE(ABORT,'late second pair failure'); END;").unwrap();
+    let outer = bytes(&dump(c));
+    let error = kassiber_transfers::execute_with_sources(
+        c,
+        &scope,
+        "transfers.bulk-pair",
+        &dict::<&str>([]),
+        &source,
+    )
+    .unwrap_err();
+    assert_eq!(error.message, "late second pair failure");
+    assert_eq!(bytes(&dump(c)), outer);
+    assert!(!c.is_autocommit());
+    c.execute_batch("DROP TRIGGER fail_second_pair").unwrap();
+    kassiber_transfers::execute_with_sources(
+        c,
+        &scope,
+        "transfers.bulk-pair",
+        &dict::<&str>([]),
+        &source,
+    )
+    .unwrap();
+    assert!(!c.is_autocommit());
+    c.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(bytes(&dump(c)), before);
+    kassiber_transfers::execute_with_sources(
+        c,
+        &scope,
+        "transfers.bulk-pair",
+        &dict::<&str>([]),
+        &source,
+    )
+    .unwrap();
+    assert!(c.is_autocommit());
+    assert_ne!(bytes(&dump(c)), before);
+}
+
+#[test]
+fn pairing_command_filters_numeric_options_and_authorship_match_python() {
+    let fixture = kassiber_pytext::loads(include_str!("pairing_services.json")).unwrap();
+    let scenario = list(field(&fixture, "scenarios"))
+        .iter()
+        .find(|s| py_str(field(s, "name")) == "1-tolerance")
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(dir.path(), None).unwrap();
+    let c = book.connection();
+    restore(c, scenario);
+    c.execute_batch(
+        "UPDATE transactions SET occurred_at='2026-03-14T17:30:01Z' WHERE direction='inbound'",
+    )
+    .unwrap();
+    let scope = Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    };
+    let source = Fixed { next: Cell::new(1) };
+    let run = |args| {
+        kassiber_transfers::execute_with_sources(c, &scope, "transfers.suggest", &args, &source)
+            .unwrap()
+    };
+    for (args, message) in [
+        (
+            dict([(
+                "time_window_seconds",
+                Value::Int(format!("1{}", "0".repeat(400)).parse().unwrap()),
+            )]),
+            "int too large to convert to float",
+        ),
+        (
+            dict([("asset_pair", Value::List(vec![s("BTC")]))]),
+            "'list' object has no attribute 'split'",
+        ),
+        (
+            dict([("route_pair", 1.into())]),
+            "'int' object has no attribute 'split'",
+        ),
+    ] {
+        let error = kassiber_transfers::execute_with_sources(
+            c,
+            &scope,
+            "transfers.suggest",
+            &args,
+            &source,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "internal_error");
+        assert_eq!(error.message, message);
+    }
+    assert_eq!(
+        field(field(&run(dict::<&str>([])), "counts"), "total"),
+        &1.into()
+    );
+    assert_eq!(
+        field(
+            field(
+                &run(dict([
+                    ("fee_pct_max", Value::Float(1.0)),
+                    ("fee_sats_min", 0.into())
+                ])),
+                "counts"
+            ),
+            "total"
+        ),
+        &2.into()
+    );
+    for args in [
+        dict([("time_window_seconds", 0.into())]),
+        dict([
+            ("fee_pct_max", Value::Float(0.0)),
+            ("fee_sats_min", 0.into()),
+        ]),
+        dict([("confidence", s("exact"))]),
+        dict([("method", s("payment_hash"))]),
+        dict([("asset_pair", s("BTC-LBTC"))]),
+        dict([("route_pair", s("BTC-LNBTC"))]),
+        dict([("candidate_type", s("swap"))]),
+    ] {
+        assert_eq!(
+            field(field(&run(args.clone()), "counts"), "total"),
+            &0.into(),
+            "{args:?}"
+        );
+    }
+    let result = kassiber_transfers::execute_with_sources(
+        c,
+        &scope,
+        "transfers.bulk-pair",
+        &dict([("confidence", s("strong")), ("authored_source", s("gui"))]),
+        &source,
+    )
+    .unwrap();
+    assert_eq!(field(field(&result, "summary"), "count"), &1.into());
+    assert_eq!(
+        c.query_row("SELECT authored_source FROM custody_components", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap(),
+        "gui"
+    );
 }
 
 #[test]

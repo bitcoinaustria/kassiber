@@ -13,6 +13,8 @@ pub struct PairingOptions {
     /// Automatic journal runs preserve explicit unpair decisions.
     pub skip_user_unpaired: bool,
     pub authored_source: Option<String>,
+    /// Uncoerced transport filters retain Python's non-text split refusals.
+    pub raw_pair_filters: Option<Value>,
 }
 #[derive(Default, Clone)]
 pub struct ProjectionGuards {
@@ -196,6 +198,17 @@ fn filter(
     }
     for (name, selected) in [("asset_pair", &o.asset_pair), ("route_pair", &o.route_pair)] {
         if let Some(v) = selected.as_ref().filter(|v| !v.is_empty()) {
+            if let Some(raw) = o.raw_pair_filters.as_ref().and_then(|args| get(args, name)) {
+                if !matches!(raw, Value::Str(_)) {
+                    return Err(AppError::new(
+                        "internal_error",
+                        format!(
+                            "'{}' object has no attribute 'split'",
+                            kassiber_envelope::type_name(raw)
+                        ),
+                    ));
+                }
+            }
             let Some((out, input)) = v.split_once('-') else {
                 return Err(AppError::new(
                     "validation",

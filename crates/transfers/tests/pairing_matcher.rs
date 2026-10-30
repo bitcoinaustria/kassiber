@@ -83,6 +83,14 @@ fn pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options() {
     let empty = HashSet::new();
     let baseline = suggest(&pop, &[], &[], &empty, &options).unwrap();
     assert_eq!(baseline.len(), 1);
+    options.time_window_seconds_overflow = true;
+    assert_eq!(
+        suggest(&pop, &[], &[], &empty, &options)
+            .unwrap_err()
+            .message,
+        "int too large to convert to float"
+    );
+    options.time_window_seconds_overflow = false;
     assert_eq!(
         bytes(&baseline[0].data),
         bytes(&suggest(&pop, &[], &[], &empty, &options).unwrap()[0].data)
