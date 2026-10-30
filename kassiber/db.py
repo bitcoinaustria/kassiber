@@ -617,7 +617,8 @@ def _migrate_wages_acquisition_semantics(conn) -> int:
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
             journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
+            ownership_review_counts_json = NULL,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE EXISTS (
             SELECT 1
             FROM transactions transaction_row
@@ -685,7 +686,8 @@ def _migrate_rp2_pool_basis_semantics(conn) -> int:
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
             journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
+            ownership_review_counts_json = NULL,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE {affected}
         """
     )
@@ -749,7 +751,8 @@ def _migrate_custody_hold_semantics(conn) -> int:
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
             journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
+            ownership_review_counts_json = NULL,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE {affected}
         """
     )
@@ -1051,7 +1054,8 @@ def _migrate_partial_payout_semantics(conn) -> int:
         """UPDATE profiles SET last_processed_at = NULL,
                last_processed_tx_count = 0,
                journal_input_version = journal_input_version + 1,
-               ownership_review_counts_json = NULL WHERE id = ?""",
+               ownership_review_counts_json = NULL,
+               required_journal_semantics_version = MAX(required_journal_semantics_version, 1) WHERE id = ?""",
         [(profile_id,) for profile_id in affected],
     )
     return 1
@@ -1100,6 +1104,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     cost_basis_pool_scope TEXT NOT NULL DEFAULT 'global',
     journal_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
+    required_journal_semantics_version INTEGER NOT NULL DEFAULT 0,
+    journal_semantics_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
     last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
     ownership_review_counts_json TEXT,
@@ -5501,6 +5507,29 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "cost_basis_pool_scope", "TEXT NOT NULL DEFAULT 'global'")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
+    semantics_added = _ensure_column_no_commit(
+        conn, "profiles", "required_journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
+    )
+    _ensure_column_no_commit(
+        conn, "profiles", "journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
+    )
+    if semantics_added:
+        # Historical builds did not stamp their calculation semantics. The
+        # custody-hold correction applies to every previously processed book.
+        conn.execute("""UPDATE profiles SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+            WHERE last_processed_at IS NOT NULL OR EXISTS (
+                SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+            )""")
+    # Older binaries update these markers but know nothing about semantics.
+    # Invalidate the stamp even if they rebuild twice at the same timestamp.
+    # Current builders stamp separately, after publishing the input markers.
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_journal_semantics_unstamped
+        AFTER UPDATE OF last_processed_at, last_processed_input_version ON profiles
+        BEGIN
+            UPDATE profiles SET journal_semantics_version = 0,
+                required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+            WHERE id = NEW.id;
+        END""")
     # Cached count of unresolved swap/transfer candidates, written when the
     # matcher runs during journal processing, surfaced as a side-nav hint.
     # NULL = never computed (no badge).

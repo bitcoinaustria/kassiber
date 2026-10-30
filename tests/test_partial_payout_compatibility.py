@@ -90,3 +90,62 @@ def test_whole_principal_payout_with_included_fee_stays_current(book, tmp_path):
         assert conn.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0] == NOW
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize('rebuild_current_first', [False, True])
+def test_older_rebuild_cannot_reuse_current_semantics_stamp(tmp_path, rebuild_current_first):
+    import base64
+    import gzip
+    from pathlib import Path
+    from kassiber.core.custody_journal import projection_freshness
+    from kassiber.core import transaction_graph
+    from kassiber.cli import handlers
+
+    fixture = Path(__file__).parent / 'fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64'
+    (tmp_path / 'kassiber.sqlite3').write_bytes(gzip.decompress(base64.decodebytes(fixture.read_bytes())))
+    conn = open_db(tmp_path)
+    cache = {}
+    projection_sql = handlers._transaction_custody_projection_exists_sql()
+    if rebuild_current_first:
+        process_journals(conn, 'Books', 'Book')
+        assert projection_freshness(conn, 'profile')['is_current']
+        assert transaction_graph._load_profile_semantics(conn, 'profile', cache=cache).semantics['projection_current']
+        assert conn.execute(f"SELECT COUNT(*) FROM transactions t WHERE {projection_sql}").fetchone()[0] > 0
+    # The exact historical builder's publication contract. Unknown additive
+    # columns survive an older binary; they must not preserve a current stamp.
+    for _ in range(2):
+        conn.execute("""UPDATE profiles SET last_processed_at=?,
+            last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='profile' AND excluded=0),
+            last_processed_input_version=journal_input_version WHERE id='profile'""", (NOW,))
+        conn.execute("UPDATE journal_entries SET proceeds_exact='20', proceeds=20 WHERE entry_type='disposal'")
+        conn.commit()
+        assert not projection_freshness(conn, 'profile')['is_current']
+        profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+        assert not handlers._journal_processing_status(conn, profile)['processed_journals_current']
+        assert conn.execute(f"SELECT COUNT(*) FROM transactions t WHERE {projection_sql}").fetchone()[0] == 0
+        assert not transaction_graph._load_profile_semantics(conn, 'profile', cache=cache).semantics['projection_current']
+    conn.close()
+    conn = open_db(tmp_path)
+    try:
+        assert not projection_freshness(conn, 'profile')['is_current']
+        command = [sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(tmp_path),
+                   'reports', 'capital-gains', '--workspace', 'Books', '--profile', 'Book']
+        stale = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        assert stale['kind'] == 'error'
+        process_journals(conn, 'Books', 'Book')
+        assert projection_freshness(conn, 'profile')['is_current']
+        report = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        assert sum(Decimal(str(row['proceeds'])) for row in report['data']) == Decimal('11.2')
+    finally:
+        conn.close()
+
+
+def test_first_older_build_in_new_book_requires_semantics_stamp(book):
+    from kassiber.core.custody_journal import projection_freshness
+    assert book.execute("SELECT required_journal_semantics_version FROM profiles WHERE id='profile'").fetchone()[0] == 0
+    create_direct_swap_payout(book, 'Books', 'Book', 'out', payout_asset='EUR', payout_amount='1',
+                             payout_fiat_value='10', out_amount='0.0000004')
+    book.execute("""UPDATE profiles SET last_processed_at=?, last_processed_tx_count=1,
+        last_processed_input_version=journal_input_version WHERE id='profile'""", (NOW,))
+    book.commit()
+    assert not projection_freshness(book, 'profile')['is_current']

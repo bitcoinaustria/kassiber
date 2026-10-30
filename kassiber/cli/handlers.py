@@ -252,24 +252,8 @@ def _row_int(row, key, default=0):
 
 
 def _journals_current_for_profile(conn, profile):
-    current_count = conn.execute(
-        """
-        SELECT COUNT(*) AS count
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        """,
-        (profile["id"],),
-    ).fetchone()["count"]
-    input_version = _row_int(profile, "journal_input_version")
-    processed_version = _row_int(profile, "last_processed_input_version")
-    return (
-        int(current_count or 0),
-        bool(
-            profile["last_processed_at"]
-            and int(current_count or 0) == _row_int(profile, "last_processed_tx_count")
-            and input_version == processed_version
-        ),
-    )
+    freshness = core_custody_journal.projection_freshness(conn, profile)
+    return freshness["active_transaction_count"], freshness["is_current"]
 
 
 BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
@@ -3885,13 +3869,18 @@ def _normalize_transaction_payment_method(value):
 
 
 def _transaction_custody_projection_exists_sql(relation_type=None):
-    freshness = """
+    freshness = f"""
         EXISTS (
           SELECT 1 FROM profiles custody_profile
           WHERE custody_profile.id = t.profile_id
             AND custody_profile.last_processed_at IS NOT NULL
             AND custody_profile.journal_input_version =
                 custody_profile.last_processed_input_version
+            AND (custody_profile.required_journal_semantics_version = 0 OR (
+                custody_profile.journal_semantics_version = {core_custody_journal.JOURNAL_CALCULATION_SEMANTICS_VERSION}
+                AND custody_profile.journal_semantics_version >=
+                    custody_profile.required_journal_semantics_version
+            ))
         )
     """
     move = """

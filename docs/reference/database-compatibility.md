@@ -157,7 +157,9 @@ an audit sentinel alone cannot establish what generated retained journals.
   carrying-value policy. The one-time `custody-partial-payout-pricing-v1`
   migration marks journals stale for exactly profiles with an active payout
   covering less than its whole source. Reports require `journals process`
-  before using those journals again. Other profiles remain current. The
+  before using those journals again. This migration bumps input versions only
+  for those profiles; initial semantics-stamp adoption above also requires
+  previously processed books to rebuild. The
   `pre_partial_payout_ca9a672f` fixture was processed with pre-fix code and
   verifies refusal before rebuilding and corrected proceeds afterward.
   Missing residual prices can now block output rather than fabricate proceeds.

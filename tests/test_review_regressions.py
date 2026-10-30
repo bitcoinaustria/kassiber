@@ -90,7 +90,7 @@ from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
 from tests.custody_tax_helpers import finalized_tax_inputs
-from tests.custody_projection_fixtures import insert_reviewed_projection
+from tests.custody_projection_fixtures import insert_reviewed_projection, stamp_journal_semantics
 from tests import cli_runner
 
 
@@ -3983,6 +3983,7 @@ class ReviewRegressionTest(unittest.TestCase):
             """,
             (now,),
         )
+        stamp_journal_semantics(conn, 'pf-swap-ui')
         conn.executemany(
             """
             INSERT INTO journal_entries(
@@ -11617,6 +11618,7 @@ class ReviewRegressionTest(unittest.TestCase):
             """,
             ("2024-01-01T00:00:00Z", profile["id"]),
         )
+        stamp_journal_semantics(conn, profile['id'])
         conn.commit()
         conn.close()
 
@@ -14014,6 +14016,7 @@ class ReviewRegressionTest(unittest.TestCase):
             WHERE id = '{profile["id"]}';
             """
         )
+        stamp_journal_semantics(conn, profile['id'])
         conn.commit()
         conn.close()
 

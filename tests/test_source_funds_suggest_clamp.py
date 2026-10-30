@@ -20,6 +20,7 @@ from pathlib import Path
 from kassiber.core import source_funds as sf
 from kassiber.core.source_funds import SourceFundsHooks
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 def _build_hooks(workspace_id: str, profile_id: str) -> SourceFundsHooks:
@@ -195,6 +196,7 @@ class SuggestLinksClampTest(unittest.TestCase):
             """,
             (count, self.profile_id),
         )
+        stamp_journal_semantics(self.conn, self.profile_id)
         self.conn.commit()
 
     def test_oversized_max_suggestions_arg_does_not_lift_ceiling(self):

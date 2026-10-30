@@ -30,6 +30,7 @@ from kassiber.core.custody_journal import (
 )
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -855,6 +856,7 @@ def test_transaction_flow_filters_use_only_current_custody_projection(tmp_path):
         ("a" * 64, "b" * 64, "c" * 64, NOW),
     )
 
+    stamp_journal_semantics(conn, 'profile')
     transfers, _ = list_transactions(conn, "ws", "profile", flow="transfer")
     assert {row["id"] for row in transfers} == {"flow-out", "flow-in"}
     incoming, _ = list_transactions(conn, "ws", "profile", flow="incoming")
