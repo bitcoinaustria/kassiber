@@ -38,7 +38,7 @@ fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Err
         .filter(|r| r.get("profile_id") == h.get("profile_id") && ids.contains(&pystr(&r["id"])))
         .map(without_provenance)
         .collect();
-    rows.sort_by_key(order);
+    rows.sort_by_cached_key(order);
     let enriched = evidence::enriched_rows(&rows)?;
     let canonical = evidence::canonical_input(&enriched, &json!({}), &BTreeSet::new())?;
     let rejected: BTreeSet<_> = array(&canonical["rejected_events"])
@@ -203,19 +203,27 @@ impl Native {
 }
 pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
     let profile = pystr(&snapshot.profile["id"]);
-    let mut rows: Vec<_> = snapshot
+    let profile = json!(profile);
+    let selected: Vec<_> = snapshot
         .transactions
         .iter()
-        .filter(|r| r.get("profile_id") == Some(&json!(profile)) && !truth(&r["excluded"]))
-        .map(without_provenance)
+        .filter(|r| r.get("profile_id") == Some(&profile) && !truth(&r["excluded"]))
         .collect();
-    rows.sort_by_key(order);
+    let mut rows: Vec<_> = crate::par::map(&selected, |r| without_provenance(r))
+        .into_iter()
+        .map(crate::par::unwrap)
+        .collect();
+    rows.sort_by_cached_key(order);
     let rows = evidence::enriched_rows(&rows)?;
     let mut observations: Vec<Value> = Vec::new();
     // Position per encoded transaction id; encoding equality is Value equality.
     let mut positions: HashMap<String, usize> = HashMap::new();
-    for row in rows {
-        let built = evidence::event_key(&row).and_then(|key| evidence::observation(&row, &key));
+    // Observations are pure per row; build them concurrently, apply in order.
+    let built = crate::par::map(&rows, |row| {
+        evidence::event_key(row).and_then(|key| evidence::observation(row, &key))
+    });
+    for built in built {
+        let built = crate::par::unwrap(built);
         match built {
             Ok(o) => {
                 if let Some(&at) = positions.get(&o["transaction_id"].to_string()) {

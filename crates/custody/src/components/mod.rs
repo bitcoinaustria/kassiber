@@ -569,13 +569,18 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
             })
             .collect::<Result<Vec<_>, _>>()?
     };
+    let span = crate::timing::span("components.routes");
     let routes = scope::profile_routes(snapshot, &quantity_legs, &quantity_allocs)?;
+    drop(span);
+    let span = crate::timing::span("components.native");
     let native = if components.is_empty() {
         Vec::new()
     } else {
         commitments::native_context(snapshot)?
     };
     let native = commitments::Native::new(native);
+    drop(span);
+    let _span = crate::timing::span("components.materialize");
     let shared = Shared::new(snapshot);
     let components: Vec<_> = components
         .into_iter()
