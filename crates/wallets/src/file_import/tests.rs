@@ -585,6 +585,21 @@ fn json_import_identity_fee_relaxation_routing_and_atomicity() {
         .unwrap();
     assert_eq!(value, "20");
     run(json!([{"date":"2025-01-03","txid":"unpriced","amount":1,"kind":"routing_income","fiat_value":10}])).unwrap();
+    // Current imports derive a rate from the supplied value. Keep this
+    // recovery witness about legacy rows whose stored rate is absent.
+    let rate: String = conn
+        .query_row(
+            "SELECT fiat_rate_exact FROM transactions WHERE external_id='unpriced'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(rate, "10");
+    conn.execute(
+        "UPDATE transactions SET fiat_rate=NULL,fiat_rate_exact=NULL WHERE external_id='unpriced'",
+        [],
+    )
+    .unwrap();
     run(json!([{"date":"2025-01-03","txid":"unpriced","amount":2,"kind":"routing_income"}]))
         .unwrap();
     assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE external_id='unpriced' AND fiat_value IS NULL AND fiat_value_exact IS NULL"),1);
