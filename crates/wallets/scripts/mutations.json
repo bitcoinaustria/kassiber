@@ -1148,5 +1148,545 @@
       "python_file_import_vectors"
     ],
     "rule": "Non-finite principals must not turn a priced total into zero."
+  },
+  {
+    "id": "W-river-header",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "!missing.is_empty()",
+    "replace": "false",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Missing required River columns must fail before normalization."
+  },
+  {
+    "id": "W-river-casefold",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": ".replace('\u017f', \"s\")",
+    "replace": ".replace('\u017f', \"z\")",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Python casefold accepts long-s in column aliases."
+  },
+  {
+    "id": "W-river-whitespace",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": ".join(\" \")",
+    "replace": ".join(\"\")",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Column normalization collapses Unicode whitespace to one space."
+  },
+  {
+    "id": "W-river-alias-order",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": ".iter()\n                .rev()",
+    "replace": ".iter()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Header aliases preserve original dict insertion order."
+  },
+  {
+    "id": "W-river-header-duplicates",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if !original_keys.insert(key) {",
+    "replace": "if false && !original_keys.insert(key) {",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Exact duplicate CSV headings do not move dict keys."
+  },
+  {
+    "id": "W-river-parentheses",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "text.starts_with('(') && text.ends_with(')')",
+    "replace": "false",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Parenthesized decimal amounts are negative before absolute conversion."
+  },
+  {
+    "id": "W-river-symbols",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "text.replace(symbol, \"\")",
+    "replace": "text.replace(symbol, \"!\")",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Exported currency symbols are removed before decimal parsing."
+  },
+  {
+    "id": "W-river-commas",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "text.replace([',', ' '], \"\")",
+    "replace": "text.replace(' ', \"\")",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Grouping commas are removed from exported amounts."
+  },
+  {
+    "id": "W-river-absolute",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "v.abs(&CTX).map(PriceNumber::Finite)",
+    "replace": "v.plus(&CTX).map(PriceNumber::Finite)",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "BTC and cash legs use absolute context-rounded quantities."
+  },
+  {
+    "id": "W-river-btc-alias",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "[\"BTC\", \"XBT\", \"XXBT\"]",
+    "replace": "[\"BTC\", \"XBT\", \"BOGUS\"]",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "XXBT is a supported BTC alias."
+  },
+  {
+    "id": "W-river-fiat-guard",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "currency.is_none() || btc(currency) != is_btc",
+    "replace": "currency.is_none()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Only the leg matching the currency family participates."
+  },
+  {
+    "id": "W-river-received-priority",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if let Some(amount) = received_btc {",
+    "replace": "if let Some(amount) = sent_btc.as_ref().map(|v| PriceNumber::parse(&repr(v)).unwrap()) {",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "The received BTC leg takes precedence when both are present."
+  },
+  {
+    "id": "W-river-buy-fee",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "Some(arithmetic(fiat, &fee_fiat, '+')?)",
+    "replace": "Some(arithmetic(fiat, &fee_fiat, '-')?)",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Buy cost includes fiat fees."
+  },
+  {
+    "id": "W-river-sell-fee",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "arithmetic(fiat, &fee_fiat, '-')?",
+    "replace": "arithmetic(fiat, &fee_fiat, '+')?",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Sell proceeds deduct fiat fees."
+  },
+  {
+    "id": "W-river-sell-floor",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if positive(&n)? { n } else { zero() }",
+    "replace": "n",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Sell proceeds have a zero floor."
+  },
+  {
+    "id": "W-river-rate",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "arithmetic(value, &amount, '/')?",
+    "replace": "arithmetic(value, &amount, '*')?",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "The paired execution total determines the fiat rate."
+  },
+  {
+    "id": "W-river-zero-rate",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "Some(value) if positive(&amount)? =>",
+    "replace": "Some(value) =>",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Zero principal retains the optional exported price instead of dividing by zero."
+  },
+  {
+    "id": "W-river-reference",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "opt(&[\"Transaction ID\", \"Reference Code\"])",
+    "replace": "opt(&[\"Reference Code\", \"Transaction ID\"])",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "On-chain transaction IDs take priority over reference codes."
+  },
+  {
+    "id": "W-river-tag",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "opt(&[\"Tag\", \"Transaction Type\"])",
+    "replace": "opt(&[\"Transaction Type\", \"Tag\"])",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Explicit tags take priority over transaction types for metadata."
+  },
+  {
+    "id": "W-river-counterparty",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if direction == \"outbound\" { destination } else { source }",
+    "replace": "if direction == \"inbound\" { destination } else { source }",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Counterparty follows the BTC direction."
+  },
+  {
+    "id": "W-river-fee",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"fee\":repr(&fee_btc)",
+    "replace": "\"fee\":\"0\"",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Only the BTC-denominated fee becomes the transaction fee."
+  },
+  {
+    "id": "W-river-provenance",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"raw_json\":config::stored_json(&sanitized)",
+    "replace": "\"raw_json\":\"{}\"",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Sanitized source rows remain complete provenance."
+  },
+  {
+    "id": "W-river-quality",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "Some(\"provider_sample\")",
+    "replace": "Some(\"exact\")",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Price-only valuations remain provider samples."
+  },
+  {
+    "id": "W-river-metadata-authority",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": ".filter(|_| note.as_ref().is_none_or(String::is_empty))",
+    "replace": ".filter(|_| true || note.as_ref().is_none_or(String::is_empty))",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Imported descriptions cannot overwrite authored notes."
+  },
+  {
+    "id": "W-river-tag-code",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "kassiber_pytext::lower(&format!(\"river:{kind}\")).replace(' ', \"_\")",
+    "replace": "kassiber_pytext::lower(&format!(\"river:{kind}\")).replace(' ', \"-\")",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "River tags have provider-scoped lowercase underscore codes."
+  },
+  {
+    "id": "W-river-tag-idempotency",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "INSERT OR IGNORE INTO transaction_tags",
+    "replace": "INSERT OR REPLACE INTO transaction_tags",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Repeated tag links must not count as new changes."
+  },
+  {
+    "id": "W-river-metadata-invalidation",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if !invalidated && (notes > 0 || tags > 0) {",
+    "replace": "if false && !invalidated && (notes > 0 || tags > 0) {",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Metadata-only enrichment invalidates the journal once."
+  },
+  {
+    "id": "W-river-kind-withdrawal",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"automatic withdrawal\" => \"withdrawal\".into()",
+    "replace": "\"automatic withdrawal\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Preserve River kind alias automatic withdrawal."
+  },
+  {
+    "id": "W-river-kind-cash_deposit",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"cash deposit\" => \"cash_deposit\".into()",
+    "replace": "\"cash deposit\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Preserve River kind alias cash deposit."
+  },
+  {
+    "id": "W-river-kind-cash_withdrawal",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"cash withdrawal\" => \"cash_withdrawal\".into()",
+    "replace": "\"cash withdrawal\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Preserve River kind alias cash withdrawal."
+  },
+  {
+    "id": "W-river-kind-mining",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"mining payout\" => \"mining\".into()",
+    "replace": "\"mining payout\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Preserve River kind alias mining payout."
+  },
+  {
+    "id": "W-river-kind-income",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"referral reward\" => \"income\".into()",
+    "replace": "\"referral reward\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Preserve River kind alias referral reward."
+  },
+  {
+    "id": "W-river-kind-interest",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"bitcoin interest on cash\" => \"interest\".into()",
+    "replace": "\"bitcoin interest on cash\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Preserve River kind alias bitcoin interest on cash."
+  },
+  {
+    "id": "W-river-atomic",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if result.is_ok() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "river_metadata_failure_rolls_back_observations_tags_and_run"
+    ],
+    "rule": "River metadata failures roll back the entire import and journal invalidation."
+  },
+  {
+    "id": "W-river-strip-collision",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "*old = value;",
+    "replace": "drop(value);",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Stripped duplicate headings retain the last value at their original position."
+  },
+  {
+    "id": "W-river-empty-cell",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": ".filter(|v| !v.is_empty())",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Empty aliases allow the next requested name to supply a value."
+  },
+  {
+    "id": "W-river-empty-currency",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "currency.is_none() || btc(currency) != is_btc",
+    "replace": "btc(currency) != is_btc",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "A leg without a currency is absent rather than fiat."
+  },
+  {
+    "id": "W-river-no-btc",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "} else {\n        return Ok(None);\n    };",
+    "replace": "} else {\n        return Err(AppError::new(\"validation\", \"missing BTC\"));\n    };",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Fiat-only rows are skipped in the Bitcoin subledger."
+  },
+  {
+    "id": "W-river-inbound-direction",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"inbound\",\n                amount,\n                Some(arithmetic",
+    "replace": "\"outbound\",\n                amount,\n                Some(arithmetic",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "A cash-funded received Bitcoin leg is inbound."
+  },
+  {
+    "id": "W-river-outbound-direction",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"outbound\",\n                amount,\n                Some(nonnegative",
+    "replace": "\"inbound\",\n                amount,\n                Some(nonnegative",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "A Bitcoin leg with cash proceeds is outbound."
+  },
+  {
+    "id": "W-river-inbound-valuation",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"inbound\",\n                amount,\n                value,\n                false,",
+    "replace": "\"inbound\",\n                amount,\n                None,\n                false,",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "A received Bitcoin leg retains its exported price valuation."
+  },
+  {
+    "id": "W-river-outbound-valuation",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"outbound\",\n                amount,\n                value,\n                false,",
+    "replace": "\"outbound\",\n                amount,\n                None,\n                false,",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "A sent Bitcoin leg retains its exported price valuation."
+  },
+  {
+    "id": "W-river-fiat-currency",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if sent_fiat.is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Sent cash selects the buy valuation currency before other legs."
+  },
+  {
+    "id": "W-river-cash-source",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if cash { Some(\"exchange_execution\") }",
+    "replace": "if cash { Some(\"fmv_provider\") }",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Paired cash legs provide execution pricing provenance."
+  },
+  {
+    "id": "W-river-fmv-source",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "else if value.is_some() { Some(\"fmv_provider\") }",
+    "replace": "else if value.is_some() { Some(\"exchange_execution\") }",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Exported price samples do not gain execution provenance."
+  },
+  {
+    "id": "W-river-description-default",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"Imported from River\".into()",
+    "replace": "\"River\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Absent description parts use the reference default."
+  },
+  {
+    "id": "W-river-payment-hash",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "and_then(|v| hash(&v))",
+    "replace": "and_then(|v| hash(&format!(\"invalid{v}\")))",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Valid payment hashes retain their importer provenance."
+  },
+  {
+    "id": "W-river-transaction-type",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": ".or_else(|| tag.clone())",
+    "replace": ".or_else(|| None)",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "An absent transaction type falls back to the exported tag."
+  },
+  {
+    "id": "W-river-kind-default",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"\" => \"river_activity\".into()",
+    "replace": "\"\" => \"unknown\".into()",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "An absent non-trade type retains the River activity kind."
+  },
+  {
+    "id": "W-river-kind-unknown",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "tag.replace(' ', \"_\")",
+    "replace": "tag.replace(' ', \"-\")",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "Unrecognized kinds preserve lowercase underscore normalization."
+  },
+  {
+    "id": "W-river-metadata-once",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "if !invalidated && (notes > 0 || tags > 0) {",
+    "replace": "if notes > 0 || tags > 0 {",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Metadata does not invalidate a journal twice during one import."
+  },
+  {
+    "id": "W-river-tags-created",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "created += 1;",
+    "replace": "created += 0;",
+    "expect_failing": [
+      "river_metadata_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "The response counts newly created provider tags."
+  },
+  {
+    "id": "W-river-tag-context",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "kassiber_pytext::lower(&format!(\"river:{kind}\")).replace(' ', \"_\")",
+    "replace": "format!(\"river:{}\", kassiber_pytext::lower(&kind)).replace(' ', \"_\")",
+    "expect_failing": [
+      "river_tag_codes_lowercase_the_provider_prefix_and_tag_together"
+    ],
+    "rule": "Context-sensitive lowercase includes the provider prefix, preserving final sigma."
+  },
+  {
+    "id": "W-river-symbol-prefix",
+    "file": "crates/wallets/src/file_import/river.rs",
+    "find": "\"GBP\", \"LBTC\", \"BTC\", \"XBT\",",
+    "replace": "\"GBP\", \"BTC\", \"XBT\", \"LBTC\",",
+    "expect_failing": [
+      "python_river_import_vectors"
+    ],
+    "rule": "LBTC is stripped before its BTC substring, following the corrected Python reference."
   }
 ]

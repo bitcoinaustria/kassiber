@@ -372,6 +372,7 @@ fn csv_enrichment_preserves_closed_observer_evidence() {
     conn.execute("UPDATE transactions SET raw_json=?", [raw])
         .unwrap();
     let record = normalize(&csv::Row {
+        headers: vec![],
         original: None,
         data: json!({"date":"2025-01-01","txid":id,"amount":"1"}),
         rest: None,
@@ -421,6 +422,17 @@ fn csv_dialect_preserves_python_rows() {
 fn python_file_import_vectors() {
     let cases: Json =
         serde_json::from_str(include_str!("../../tests/vectors/python_imports.json")).unwrap();
+    assert_import_vectors(&cases);
+}
+#[test]
+fn python_river_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_exchange_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+fn assert_import_vectors(cases: &Json) {
     for case in cases.as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let bytes = case.get("bytes").map(|v| {
@@ -431,8 +443,9 @@ fn python_file_import_vectors() {
                 .collect::<Vec<_>>()
         });
         let path = std::env::temp_dir().join(format!(
-            "kassiber-import-vector-{}-{}.csv",
+            "kassiber-import-vector-{}-{:?}-{}.csv",
             std::process::id(),
+            std::thread::current().id(),
             name.bytes().map(u32::from).sum::<u32>()
         ));
         std::fs::write(
@@ -445,6 +458,7 @@ fn python_file_import_vectors() {
         let format = match case["format"].as_str().unwrap() {
             "json" => Format::Json,
             "phoenix_csv" => Format::Phoenix,
+            "river_csv" => Format::River,
             _ => Format::Csv,
         };
         let result = format.load(path.to_str().unwrap()).and_then(|rows| {
@@ -671,6 +685,113 @@ fn json_sqlcipher_binding_refusal_preserves_the_reference_driver_message() {
         "Error binding parameter 29 - probably unsupported type."
     );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        0
+    );
+}
+
+#[test]
+fn river_metadata_preserves_authored_notes_and_invalidates_once() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let content = "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Reference Code,Transaction Type,Tag,Method\n2025-01-02,,,0.002,BTC,,,buy,Buy,Buy Reward,wire\n";
+    let result = import_kind(&conn, content, Format::River).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "river_tags_created"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "river_notes_set"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "river_tags_added"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM tags WHERE code='river:buy_reward' AND label='Buy Reward'"
+        ),
+        1
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE amount=200000000 AND fiat_value_exact IS NULL AND fiat_rate_exact IS NULL AND note='Buy - wire'"),1);
+    let repeated = import_kind(&conn, content, Format::River).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&repeated, "journal_invalidated"),
+        Some(&Py::Bool(false)),
+        "{repeated:?}"
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeated, "river_tags_created"),
+        Some(&Py::from(0))
+    );
+    conn.execute_batch("DELETE FROM transaction_tags; UPDATE transactions SET note=NULL")
+        .unwrap();
+    let enriched = import_kind(&conn, content, Format::River).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&enriched, "journal_invalidated"),
+        Some(&Py::Bool(true))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        2
+    );
+    conn.execute_batch("UPDATE transactions SET note='authored'")
+        .unwrap();
+    import_kind(&conn, content, Format::River).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE note='authored'"
+        ),
+        1
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+}
+#[test]
+fn river_tag_codes_lowercase_the_provider_prefix_and_tag_together() {
+    let conn = fixture();
+    import_kind(&conn, "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Reference Code,Tag\n2025-01-02,,,0.002,BTC,greek,Σ\n", Format::River).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM tags WHERE code='river:ς' AND label='Σ'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn river_metadata_failure_rolls_back_observations_tags_and_run() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    conn.execute_batch("CREATE TRIGGER refuse_river_tag BEFORE INSERT ON transaction_tags BEGIN SELECT RAISE(ABORT, 'river metadata failure'); END").unwrap();
+    let error = import_kind(&conn,"Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Reference Code,Tag\n2025-01-02,100,EUR,0.002,BTC,buy,Buy\n",Format::River).unwrap_err();
+    assert_eq!(error.code, "internal_error", "{error:?}");
+    for table in [
+        "transactions",
+        "tags",
+        "transaction_tags",
+        "import_batches",
+        "import_batch_transactions",
+    ] {
+        assert_eq!(
+            scalar(&conn, &format!("SELECT count(*) FROM {table}")),
+            0,
+            "{table}"
+        );
+    }
     assert_eq!(
         scalar(
             &conn,

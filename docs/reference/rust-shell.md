@@ -24,7 +24,7 @@ verification, including per-command Rust routing counts.
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
-| `crates/wallets` | local public descriptor parsing, derivation and preview |
+| `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
@@ -110,10 +110,10 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv` and `import-phoenix`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix` and `import-river`,
 the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 120 recognized leaves total). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 122 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -1394,8 +1394,9 @@ Every one of those imports compared its complete typed book dump with Python.
 The 26 wire/state scenarios also passed in both codecs, including rollback.
 Python production code is unchanged; no Python reference bug was found.
 
-The wallet mutation catalog has 111 entries: the inherited 83 plus these
-28 JSON entries, each with a named killer:
+The original wallet mutation catalog had 111 entries: the inherited 83 plus
+28 JSON entries. The rebase adds four finite-price entries at the end of this
+table, bringing the catalog to 115. Each has a named killer:
 
 | Mutation | Named killer |
 | --- | --- |
@@ -1438,6 +1439,146 @@ remain `not_implemented` in Rust; their provider modules have no native dump
 parity claim. Their commercial evidence modes, matching and reconciliation
 flags still need porting. Batch 2, API syncs, wallet sync and AI projections
 remain outside this checkpoint.
+
+## River file-ingestion continuation (R5 importers batch 1, partial)
+
+`t3code/r5-importers-2` starts at `1e6565c8`; `5ef4aa2f` reapplies the JSON
+importer and the current reference's finite-price refusals. The continuation
+adds native `wallets import-river`. The remaining exchange file commands still
+fail before bootstrap. The separate Python reference fix `86d364cf` strips
+`LBTC` before `BTC`, preserving supported Liquid amount suffixes. No dependency,
+network path, wallet sync or AI projection is added.
+
+River accepts both Bitcoin Activity and Account Activity exports through the
+shared CSV reader. UTF-8/BOM behavior, quoting, short/extra cells, field limits,
+header case folding and Unicode whitespace follow Python. Original heading
+order is retained separately from the sorted JSON projection, including exact
+duplicates and aliases that collide after stripping/case folding. Raw evidence
+keeps the sanitized original columns. BTC/XBT/XXBT legs use exact integer msat;
+fiat arithmetic uses `crates/pydecimal` and the existing timestamp normalizer.
+
+Paired cash legs preserve exchange execution pricing: fiat buy fees increase
+cost and sell fees reduce proceeds with a zero floor. BTC fees remain separate.
+An exported price without a cash leg remains an FMV provider sample. Transaction
+IDs precede reference codes; transaction types and explicit tags preserve their
+separate precedence. Imported notes do not overwrite authored notes. Tags and
+notes are idempotent; priced reimports retain Python's pricing refresh and
+journal invalidation behavior. Provenance capture does not grant observer,
+commercial-matching, ownership or tax authority.
+
+The 247 River vectors include the existing CLI fixture and derived parser
+branches. Native tests pin metadata idempotency/authorship, metadata-only
+invalidation and complete savepoint rollback after a tag-write failure. The
+hybrid oracle compares every typed table and schema object after each vector;
+the wire suite compares successful/refused imports and confirmed rollback in
+both SQLite and SQLCipher. Existing CSV/Phoenix/JSON vectors remain enabled.
+
+Two regressions were observed failing before their fixes. Python's Bull parser
+rejected buy and sell rows with `0.002 LBTC` because the shared cleaner left
+`0.002L`; `86d364cf` fixes the cleaner and pins both directions. Rust's River
+tag code lowercased the tag before adding its prefix. It now lowercases the
+whole `river:{tag}` string, preserving context-sensitive final sigma
+(`river:Σ` -> `river:ς`). The native regression and full-dump vector pin this.
+
+Final native verification passed: workspace fmt, workspace/harness clippy with
+`-D warnings`, 1,301 workspace Rust tests, 14 harness tests, the offline harness
+build, both vector drift checks and all 57 preflight tests (including inventory
+and contracts). The combined normalization corpus contains 836 cases.
+
+The exact requested Python suite passed **80 tests and 1,035 subtests** against
+the final harness. The exchange importer module and selected JSON/River review
+regressions passed **25 tests and two subtests** separately. Combined importer
+routing from the 444 JSON and 247 River vector loops plus those regressions was:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `wallets.import-json` | 461 | 0 |
+| `wallets.import-river` | 248 | 0 |
+
+Every listed import compared its complete typed book dump with Python,
+including refusals and reimports on populated books. JSON's 26 wire/state
+scenarios and River's four scenarios passed in both SQLite and SQLCipher,
+including confirmed rollback. Other unported services in the review scenarios
+retain their expected Python routing.
+
+There are 54 new River mutation entries (169 wallet entries total). The shared
+CSV/decimal/dedupe/import-run mutations remain applicable. River-specific
+entries and their named killers are:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-river-header` | `python_river_import_vectors` |
+| `W-river-casefold` | `python_river_import_vectors` |
+| `W-river-whitespace` | `python_river_import_vectors` |
+| `W-river-alias-order` | `python_river_import_vectors` |
+| `W-river-header-duplicates` | `python_river_import_vectors` |
+| `W-river-parentheses` | `python_river_import_vectors` |
+| `W-river-symbols` | `python_river_import_vectors` |
+| `W-river-commas` | `python_river_import_vectors` |
+| `W-river-absolute` | `python_river_import_vectors` |
+| `W-river-btc-alias` | `python_river_import_vectors` |
+| `W-river-fiat-guard` | `python_river_import_vectors` |
+| `W-river-received-priority` | `python_river_import_vectors` |
+| `W-river-buy-fee` | `python_river_import_vectors` |
+| `W-river-sell-fee` | `python_river_import_vectors` |
+| `W-river-sell-floor` | `python_river_import_vectors` |
+| `W-river-rate` | `python_river_import_vectors` |
+| `W-river-zero-rate` | `python_river_import_vectors` |
+| `W-river-reference` | `python_river_import_vectors` |
+| `W-river-tag` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-counterparty` | `python_river_import_vectors` |
+| `W-river-fee` | `python_river_import_vectors` |
+| `W-river-provenance` | `python_river_import_vectors` |
+| `W-river-quality` | `python_river_import_vectors` |
+| `W-river-metadata-authority` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-tag-code` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-tag-idempotency` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-metadata-invalidation` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-kind-withdrawal` | `python_river_import_vectors` |
+| `W-river-kind-cash_deposit` | `python_river_import_vectors` |
+| `W-river-kind-cash_withdrawal` | `python_river_import_vectors` |
+| `W-river-kind-mining` | `python_river_import_vectors` |
+| `W-river-kind-income` | `python_river_import_vectors` |
+| `W-river-kind-interest` | `python_river_import_vectors` |
+| `W-river-atomic` | `river_metadata_failure_rolls_back_observations_tags_and_run` |
+| `W-river-strip-collision` | `python_river_import_vectors` |
+| `W-river-empty-cell` | `python_river_import_vectors` |
+| `W-river-empty-currency` | `python_river_import_vectors` |
+| `W-river-no-btc` | `python_river_import_vectors` |
+| `W-river-inbound-direction` | `python_river_import_vectors` |
+| `W-river-outbound-direction` | `python_river_import_vectors` |
+| `W-river-inbound-valuation` | `python_river_import_vectors` |
+| `W-river-outbound-valuation` | `python_river_import_vectors` |
+| `W-river-fiat-currency` | `python_river_import_vectors` |
+| `W-river-cash-source` | `python_river_import_vectors` |
+| `W-river-fmv-source` | `python_river_import_vectors` |
+| `W-river-description-default` | `python_river_import_vectors` |
+| `W-river-payment-hash` | `python_river_import_vectors` |
+| `W-river-transaction-type` | `python_river_import_vectors` |
+| `W-river-kind-default` | `python_river_import_vectors` |
+| `W-river-kind-unknown` | `python_river_import_vectors` |
+| `W-river-metadata-once` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-tags-created` | `river_metadata_preserves_authored_notes_and_invalidates_once` |
+| `W-river-tag-context` | `river_tag_codes_lowercase_the_provider_prefix_and_tag_together` |
+| `W-river-symbol-prefix` | `python_river_import_vectors` |
+
+All 169 mutations were killed by their named tests. The first 149-entry run
+killed 148; an added unspaced-header refusal killed the whitespace survivor.
+Targeted retries covered the clippy rate-match correction, 18 further mapping
+audit entries, and the final tag-code/LBTC corrections. Every retry's baseline
+passed. Disposable mutation build/source trees were removed after recording
+the summaries.
+
+Batch 1 remains partial: Bull/Bullbitcoin, Coinfinity, 21bitcoin,
+Pocket/Pocketbitcoin and Strike are still unported. Bull, Coinfinity and Pocket
+need profile-wide commercial matching/enrichment and full-mode excluded
+reconciliation. 21bitcoin and Strike use the reference's active custodial
+ledger path: full mode by default, refusal of relevant mode and provider-wallet
+selection. None of those coordinator paths has a native acceptance claim.
+Batch 2, exchange API syncs, wallet sync and AI projections remain outside this
+continuation. The mixed `ExchangeImporterTest` disposition retains its unported
+API/other-file duties;
+its River parser obligation is covered by the new native vectors.
 
 ## Daemon
 

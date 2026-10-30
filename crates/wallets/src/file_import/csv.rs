@@ -6,6 +6,7 @@ use super::*;
 #[derive(Debug)]
 pub(super) struct Row {
     pub data: Json,
+    pub headers: Vec<String>,
     pub rest: Option<Vec<String>>,
     pub original: Option<Py>,
 }
@@ -85,6 +86,7 @@ pub(super) fn rows(text: &str) -> Result<Vec<Row>, AppError> {
             }
             Ok(Row {
                 data: Json::Object(object),
+                headers: header.clone(),
                 rest,
                 original: None,
             })

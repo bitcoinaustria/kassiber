@@ -175,6 +175,24 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-json"]
         self.assertEqual(calls, [{"command":"wallets.import-json","served_by":"rust"}] * sum(case["format"]=="json" for case in cases))
 
+    def test_river_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "River workspace"))
+        self.ok(self.cli("profiles", "create", "River book", "--workspace", "River workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "River workspace", "--profile", "River book"))
+        self.ok(self.cli("wallets", "create", "--label", "River source", "--kind", "river"))
+        source = self.data_root.parent / "river.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_exchange_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-river", "--wallet", "River source", "--file", str(source))
+                    self.assertIn(result.returncode, (0,1), (result.stdout, result.stderr))
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-river"]
+        self.assertEqual(calls, [{"command":"wallets.import-river","served_by":"rust"}] * len(cases))
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

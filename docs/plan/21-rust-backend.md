@@ -1850,6 +1850,33 @@ unported. Batch 2, exchange API syncs, wallet sync and AI projections remain
 outside the checkpoint. Python production code is unchanged; no reference bug
 was found and no dependency or egress path was added.
 
+### R5 exchange file-import batch 1: River continuation (partial)
+
+`wallets import-river` now uses the shared native ingestion service. Original
+CSV heading order preserves Python's duplicate/colliding alias behavior;
+247 frozen cases cover accepted/refused encodings, dialect, header, numeric,
+fee, cash/BTC leg, timestamp, identity and provenance branches. Notes/tags,
+import runs, rollback and journal invalidation remain in the same savepoint.
+Priced repeats preserve Python's refresh behavior. The current JSON reference
+has 444 cases, including its finite-price validation correction on this base.
+
+The continuation adds 54 named River mutations to the 115-entry JSON/rebase
+catalog. Native vectors and metadata atomicity tests, hybrid full typed book
+dumps, SQLite/SQLCipher wire/state/rollback comparisons and final verification
+are recorded in the [River checkpoint](../reference/rust-shell.md#river-file-ingestion-continuation-r5-importers-batch-1-partial).
+
+Final verification passed: fmt/clippy, workspace/harness tests, vector drift,
+the requested Python suite (80 tests and 1,035 subtests), 25 selected hybrid
+regressions, inventory/contracts and all 169 wallet mutations. Importer routing
+totals 461 JSON and 248 River Rust calls, with zero importer Python fallbacks.
+
+This is a partial batch boundary. Bull/Bullbitcoin, Coinfinity, 21bitcoin,
+Pocket/Pocketbitcoin and Strike remain unported. Batch 2, exchange API syncs,
+wallet sync and AI projections remain out of scope. The separate reference fix
+`86d364cf` corrects overlapping `LBTC`/`BTC` suffix removal and has a failing-before
+buy/sell regression. River also preserves context-sensitive lowercase across
+the whole provider tag code. No dependency or egress path is introduced.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

@@ -1032,7 +1032,7 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
-        response = self.call(True, ["wallets", "import-river", "--wallet", "unused", "--file", "unused.csv"], root=unrelated)
+        response = self.call(True, ["wallets", "import-ledger-live", "--wallet", "unused", "--file", "unused.csv"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
@@ -1376,6 +1376,15 @@ class RustRealStoreParityTest(_Roots):
         ]
         self._file_import_parity("import-json", scenarios)
 
+    def test_river_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_cli_smoke import _RIVER_CSV
+        self._file_import_parity("import-river", [
+            _RIVER_CSV,
+            "Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Reference Code,Tag\n2025-01-02,100,USD,0.002,BTC,id,Buy\n2025-01-02,100,USD,0.002,BTC,id,Buy\n",
+            "Date,Sent Amount,Sent Currency,Received Amount,Received Currency\n2025-01-02,1,EUR,0.001,BTC\n",
+            "bad,header\nx,y\n",
+        ])
+
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV
         scenarios = [
@@ -1547,6 +1556,10 @@ class RustShellDriftTest(unittest.TestCase):
     def test_generated_grammar_matches_build_parser(self):
         self.check("crates/cli/scripts/gen_parser_spec.py")
         self.check("crates/setup/scripts/export_vectors.py")
+
+    def test_file_import_vectors_match_python(self):
+        self.check("crates/wallets/scripts/generate_import_vectors.py")
+        self.check("crates/wallets/scripts/generate_exchange_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

@@ -271,11 +271,24 @@ REVIEWS["tests/test_payment_hash_promotion.py"] = {
     },
 }
 
+REVIEWS["tests/test_exchange_importers.py"] = {
+    "ExchangeImporterTest::test_river_loader_normalizes_header_whitespace_like_row_parsing": {
+        "disposition": "rust-test", "group": "imports",
+        "reason": "native River vectors pin whitespace, case folding and ordered duplicate/colliding headers; other provider-file/API duties remain unported",
+        "replacement": "crates/wallets/src/file_import/tests.rs::python_river_import_vectors",
+    },
+}
+
 REVIEWS["tests/test_rust_diagnostics.py"] = {"*": {
     "disposition": "oracle", "group": "secrets-backup",
     "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions",
 }}
 REVIEWS["tests/test_review_regressions.py"] = {
+    "ReviewRegressionTest::test_river_parser_accepts_xbt_amount_suffix": {
+        "disposition": "rust-test", "group": "imports",
+        "reason": "native River vectors pin XBT amount suffixes and the accepted currency aliases",
+        "replacement": "crates/wallets/src/file_import/tests.rs::python_river_import_vectors",
+    },
     "ReviewRegressionTest::test_public_diagnostics_collect_omits_sensitive_state": {
         "disposition": "boundary-fixture", "group": "secrets-backup",
         "reason": "runs diagnostics collect/save with planted wallet/backend/transaction secrets; native hybrid routing is required",

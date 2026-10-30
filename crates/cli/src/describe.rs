@@ -119,6 +119,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.derive",
     "wallets.import-csv",
     "wallets.import-json",
+    "wallets.import-river",
     "wallets.import-phoenix",
     "wallets.create",
     "wallets.list",

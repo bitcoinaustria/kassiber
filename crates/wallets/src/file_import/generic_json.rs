@@ -59,6 +59,7 @@ pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
         .into_iter()
         .map(|record| {
             Ok(csv::Row {
+                headers: vec![],
                 data: projection(&record),
                 rest: None,
                 original: Some(record),
@@ -219,6 +220,7 @@ pub(super) fn prepare(record: &Py) -> Result<csv::Row, AppError> {
         };
     }
     Ok(csv::Row {
+        headers: vec![],
         data,
         rest: None,
         original: None,

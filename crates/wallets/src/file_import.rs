@@ -2,6 +2,7 @@
 mod csv;
 mod generic_json;
 mod phoenix;
+mod river;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pydecimal::{Context, Decimal, DecimalError, Rounding};
@@ -30,6 +31,7 @@ pub enum Format {
     Csv,
     Json,
     Phoenix,
+    River,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -37,6 +39,7 @@ impl Format {
             Self::Csv => "csv",
             Self::Json => "json",
             Self::Phoenix => "phoenix_csv",
+            Self::River => "river_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
@@ -44,6 +47,7 @@ impl Format {
             Self::Json => generic_json::load(file),
             Self::Csv => csv::load(file),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
+            Self::River => river::parse(csv::load(file)?),
         }
     }
 }
@@ -1301,6 +1305,17 @@ fn apply(
     ];
     if request.format == Format::Phoenix {
         phoenix::metadata(
+            conn,
+            (profile, &workspace),
+            &wallet.id,
+            rows,
+            ids,
+            &mut result,
+            invalidated,
+        )?;
+    }
+    if request.format == Format::River {
+        river::metadata(
             conn,
             (profile, &workspace),
             &wallet.id,

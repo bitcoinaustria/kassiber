@@ -89,6 +89,7 @@ fn record(row: csv::Row) -> Result<csv::Row, AppError> {
     let description = optional(&row, "description");
     let payment_hash = hash(&text(&row, "payment_hash"));
     Ok(csv::Row {
+        headers: vec![],
         original: None,
         data: json!({
             "txid":row.get("id"),"occurred_at":row.get("date"),"direction":direction,"asset":"BTC",

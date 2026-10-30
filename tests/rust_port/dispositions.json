@@ -1209,7 +1209,8 @@
       "test_electrum_coinbase_fetch_and_record_keep_the_observed_receipt": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync, kassiber.core.sync_backends directly", "reviewed": false, "tests": 1}
     },
     "tests/test_exchange_importers.py": {
-      "ExchangeImporterTest": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.exchange_imports directly", "reviewed": false, "tests": 8}
+      "ExchangeImporterTest": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.exchange_imports directly", "reviewed": false, "tests": 8},
+      "ExchangeImporterTest::test_river_loader_normalizes_header_whitespace_like_row_parsing": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "native River vectors pin whitespace, case folding and ordered duplicate/colliding headers; other provider-file/API duties remain unported", "replacement": "crates/wallets/src/file_import/tests.rs::python_river_import_vectors", "reviewed": true, "tests": 1}
     },
     "tests/test_exit_tax.py": {
       "ExitTaxComputeTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.exit_tax directly", "reviewed": false, "tests": 17},
@@ -1886,7 +1887,7 @@
       "ReviewRegressionTest::test_ui_snapshots_show_reviewed_swap_movement_with_fee": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.custody_evidence, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1},
       "ReviewRegressionTest::test_ui_transactions_snapshot_cursor_roundtrips_sort_ties": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.ui_snapshot", "reviewed": false, "tests": 1},
       "ReviewRegressionTest::test_river_import_rejects_price_currency_mismatch": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
-      "ReviewRegressionTest::test_river_parser_accepts_xbt_amount_suffix": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.importers directly", "reviewed": false, "tests": 1},
+      "ReviewRegressionTest::test_river_parser_accepts_xbt_amount_suffix": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "native River vectors pin XBT amount suffixes and the accepted currency aliases", "replacement": "crates/wallets/src/file_import/tests.rs::python_river_import_vectors", "reviewed": true, "tests": 1},
       "ReviewRegressionTest::test_capital_gains_snapshot_uses_latest_reportable_year_and_forms": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db, kassiber.core.ui_snapshot", "reviewed": false, "tests": 1},
       "ReviewRegressionTest::test_command_needs_db_skips_static_command_surfaces": {"disposition": "rust-test", "flags": [], "group": "cli-shell", "reason": "calls kassiber.cli.main directly", "reviewed": false, "tests": 1},
       "ReviewRegressionTest::test_public_diagnostics_collect_omits_sensitive_state": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "secrets-backup", "reason": "runs diagnostics collect/save with planted wallet/backend/transaction secrets; native hybrid routing is required", "reviewed": true, "tests": 1},
@@ -2114,7 +2115,7 @@
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_hybrid_candidate.py": {
-      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 8}
+      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 9}
     },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 7}
@@ -2179,8 +2180,8 @@
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},
-      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 33},
-      "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 3}
+      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 34},
+      "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 4}
     },
     "tests/test_rust_store_interop.py": {
       "test_python_created_books_rust_reads_and_writes": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary", "reviewed": true, "tests": 1},
