@@ -89,6 +89,39 @@ def test_unknown_custody_modes_fail_closed():
         compare.install_custody_mode("native")
 
 
+@pytest.mark.parametrize("patched", [False, True])
+def test_policy_builder_patch_skips_only_fusion(tmp_path, monkeypatch, patched):
+    from dataclasses import replace
+    from kassiber import tax_policy
+    from kassiber.core import custody_journal
+    from tests.custody_snapshot_generator import snapshot
+
+    book = snapshot(0)
+    if patched:
+        book["profile"]["cost_basis_pool_scope"] = "wallet"
+        monkeypatch.setitem(tax_policy.POLICY_BUILDERS, "generic", lambda profile: replace(
+            tax_policy.build_generic_policy(profile), allowed_cost_basis_pool_scopes=("global", "wallet"),
+        ))
+
+    class Builder:
+        conn = None
+        profile = book["profile"]
+
+        def load_snapshot(self):
+            return book
+
+    monkeypatch.setattr(custody_journal, "_build_observer_factory", None)
+    monkeypatch.setattr(compare, "_INSTALLED_MODE", "census")
+    monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / "records"))
+    compare._build(Builder(), finalized=True)
+    row, = compare.read_records(tmp_path / "records")
+    assert row["outcome"] == "result"
+    assert set(row["compared"]) == set(compare.STAGES) - ({"fusion"} if patched else set())
+    assert row["skipped"] == (["fusion"] if patched else [])
+    assert row.get("reason") == (compare.PATCHED_POLICY_REASON if patched else None)
+    assert not compare.session_report([row])[1]
+
+
 def test_every_implemented_stage_is_compared(monkeypatch):
     import kassiber_tax
     expected = {"components": {"blockers": []}, "evidence": {}}

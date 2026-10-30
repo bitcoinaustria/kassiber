@@ -52,6 +52,7 @@ def assert_same(expected, actual, label="custody"):
 import os
 from pathlib import Path
 from kassiber.core import custody_journal
+from kassiber import tax_policy
 from kassiber.core.custody_compute import STAGES as CUSTODY_STAGES, compute_custody_decisions, compute_custody_projection
 from tests.custody_fusion_stage import add_fusion
 
@@ -64,6 +65,11 @@ INJECT_ENV = "KASSIBER_TEST_CUSTODY_INJECT_DIFFERENCE"
 _ORIGINAL = None
 _INSTALLED_MODE = None
 _INJECTED_FAILURE = ContextVar("custody_injected_failure", default=None)
+_PRODUCTION_POLICY_BUILDERS = {
+    tax_policy.DEFAULT_TAX_COUNTRY: tax_policy.build_generic_policy,
+    tax_policy.AUSTRIAN_TAX_COUNTRY: tax_policy.build_austrian_policy,
+}
+PATCHED_POLICY_REASON = "patched POLICY_BUILDERS: Rust fusion uses production profile policy"
 
 
 @contextmanager
@@ -200,6 +206,8 @@ def _build(self, *, finalized):
     audit_reference = _INSTALLED_MODE == "shadow"
     snapshot = None
     python_stages = {}
+    patched_policy = tax_policy.POLICY_BUILDERS != _PRODUCTION_POLICY_BUILDERS
+    skip_reason = PATCHED_POLICY_REASON if patched_policy and finalized else None
     def emit(name, value):
         if observer is not None:
             observer.stage(name, value)
@@ -224,6 +232,9 @@ def _build(self, *, finalized):
                 rust_results(snapshot, python_error=error, python_stage=failed, finalized=finalized)
             else:
                 results, skipped = rust_results(snapshot, finalized=finalized)
+                if skip_reason:
+                    results.pop("fusion", None)
+                    skipped = tuple(stage for stage in STAGES if stage in skipped or stage == "fusion")
                 for stage in STAGES:
                     if stage in results:
                         assert stage in python_stages, "Python omitted implemented stage: " + stage
@@ -250,7 +261,7 @@ def _build(self, *, finalized):
         compute = compute_custody_projection if finalized else compute_custody_decisions
         try:
             result = compute(snapshot, stage_observer=emit, owned_index_observer=observer.owned_index if observer is not None else None)
-            if finalized:
+            if finalized and not skip_reason:
                 from tests.custody_fusion_stage import python_fusion
                 emit("fusion", python_fusion(snapshot, python_stages["finalized_projection"]))
         except BaseException as exc:
@@ -267,11 +278,11 @@ def _build(self, *, finalized):
             observer.fail(exc)
         matched_error = expected_error is not None and type(exc) is type(expected_error) and str(exc) == str(expected_error)
         if not recorded:
-            record("error" if not audit_reference or matched_error or snapshot is None else "difference", compared=compared, skipped=skipped, reference=matched_error, refusing_stage=next((s for s in STAGES if s not in python_stages), None))
+            record("error" if not audit_reference or matched_error or snapshot is None else "difference", compared=compared, skipped=skipped, reference=matched_error, reason=skip_reason, refusing_stage=next((s for s in STAGES if s not in python_stages), None))
         raise
     if observer is not None:
         observer.finish(result)
-    record("result", compared=compared, skipped=skipped, reference=audit_reference)
+    record("result", compared=compared, skipped=skipped, reference=audit_reference, reason=skip_reason)
     return result
 
 
@@ -301,6 +312,8 @@ def session_report(records):
     lines.extend(f"{name}: {counts[name]} compared, {skipped[name]} skipped" for name in STAGES)
     injected = [row for row in records if row["outcome"] == "injected"]
     lines.append(f"injected builds: {len(injected)} (all stages skipped)")
+    patched = [row for row in records if row.get("reason") == PATCHED_POLICY_REASON]
+    lines.append(f"patched-policy builds: {len(patched)} (fusion skipped)")
     failures = [row for row in records if row["outcome"] == "difference"]
     empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
     errors = ([f"custody differences: {len(failures)}"] if failures else [])
@@ -311,6 +324,8 @@ def session_report(records):
         errors.append("custody stage inventory is incomplete")
     if any(row.get("reason") != "injected" or row["compared"] or set(row["skipped"]) != set(STAGES) for row in injected):
         errors.append("custody injected skip record is invalid")
+    if any("fusion" in row["compared"] or "fusion" not in row["skipped"] for row in patched):
+        errors.append("custody patched-policy skip record is invalid")
     if empty:
         errors.append("custody binding compared no stages")
     return lines, errors
