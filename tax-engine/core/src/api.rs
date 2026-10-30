@@ -156,6 +156,22 @@ pub fn ledger(request: &str) -> String {
 }
 
 fn ledger_inner(request: &str) -> Result<String, StagedError> {
+    // A document that reads whole as a ledger or prepare request of this
+    // schema version has the version and operation the head reads below
+    // would give, so it is read once. Any other document takes those reads,
+    // and fails as they fail.
+    let span = crate::timing::span("parse");
+    let whole = v2::parse::<LedgerRequest>(request).ok().filter(|parsed| {
+        parsed.schema_version == v2::SCHEMA_VERSION
+            && matches!(
+                parsed.operation,
+                v2::Operation::Ledger | v2::Operation::Prepare
+            )
+    });
+    drop(span);
+    if let Some(parsed) = whole {
+        return run_parsed(parsed);
+    }
     match v2::operation(request).map_err(StagedError::contract)? {
         v2::Operation::Manifest => {
             let _: ManifestRequest = v2::parse(request).map_err(StagedError::contract)?;
@@ -179,15 +195,23 @@ fn ledger_inner(request: &str) -> Result<String, StagedError> {
                     ))
                 }
             };
-            match run::prepare(&request) {
-                Ok(response) => v2_json(&response),
-                Err(failure) => v2_json(&failure),
-            }
+            run_parsed(request)
         }
         v2::Operation::Ledger => {
-            let parse = crate::timing::span("parse");
             let request: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
-            drop(parse);
+            run_parsed(request)
+        }
+    }
+}
+
+/// Runs a `ledger` or `prepare` request that was read whole.
+fn run_parsed(request: LedgerRequest) -> Result<String, StagedError> {
+    match request.operation {
+        v2::Operation::Prepare => match run::prepare(&request) {
+            Ok(response) => v2_json(&response),
+            Err(failure) => v2_json(&failure),
+        },
+        _ => {
             let response = run::ledger(&request)?;
             let _serialize = crate::timing::span("serialize");
             v2_json(&response)
