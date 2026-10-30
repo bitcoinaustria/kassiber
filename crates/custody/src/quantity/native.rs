@@ -45,7 +45,11 @@ fn issue(
         json!({"$type":"NativeAuditIssue","issue_id":id,"reason":reason,"occurred_at":text(&a["occurred_at"]),"transaction_ids":ids,"asset":asset,"amount_msat":amount,"details":details}),
     )
 }
-fn observations(events: &BTreeMap<EventKey, Value>) -> Result<BTreeMap<String, Value>, String> {
+/// Observation per alias transaction id, borrowed; a later alias replaces an
+/// earlier one and an alias without its leg is a `KeyError`.
+fn observation_refs(
+    events: &BTreeMap<EventKey, Value>,
+) -> Result<BTreeMap<String, &Value>, String> {
     let by_hash: BTreeMap<_, _> = events
         .values()
         .flat_map(|e| array(&e["legs"]))
@@ -55,10 +59,16 @@ fn observations(events: &BTreeMap<EventKey, Value>) -> Result<BTreeMap<String, V
     for e in events.values() {
         for alias in array(&e["observation_aliases"]) {
             let o = by_hash.get(&text(&alias[1])).ok_or("KeyError")?;
-            by_tx.insert(text(&alias[0]), (*o).clone());
+            by_tx.insert(text(&alias[0]), *o);
         }
     }
     Ok(by_tx)
+}
+fn observations(events: &BTreeMap<EventKey, Value>) -> Result<BTreeMap<String, Value>, String> {
+    Ok(observation_refs(events)?
+        .into_iter()
+        .map(|(id, o)| (id, o.clone()))
+        .collect())
 }
 fn add(event: &mut Value, o: Value, aliases: BTreeMap<String, Value>) {
     let mut legs = array(&event["legs"]).to_vec();
@@ -113,11 +123,16 @@ fn virtual_sources(
     audits: &[Value],
     issues: &mut Vec<Value>,
 ) -> Result<(), String> {
-    let mut by_tx = observations(events)?;
     let mut audits: Vec<_> = audits
         .iter()
         .filter(|a| a["virtual_source"] == true && a["pairing_source"] == "channel_lifecycle")
         .collect();
+    if audits.is_empty() {
+        // Only alias admission can refuse; no observation copy is needed.
+        observation_refs(events)?;
+        return Ok(());
+    }
+    let mut by_tx = observations(events)?;
     audits.sort_by_key(|a| (text(&a["occurred_at"]), text(&a["out_id"])));
     for a in audits {
         let out = text(&a["out_id"]);
@@ -200,7 +215,7 @@ fn parse(
     excluded: &BTreeSet<String>,
     issues: &mut Vec<Value>,
 ) -> Result<Vec<Leg>, String> {
-    let by_tx = observations(events)?;
+    let by_tx = observation_refs(events)?;
     let mut legs = Vec::new();
     let mut audits: Vec<_> = audits
         .iter()
@@ -308,7 +323,7 @@ fn parse(
             out,
             input,
             source_id,
-            source: o.clone(),
+            source: Value::clone(o),
             wallet,
             asset,
             received,
