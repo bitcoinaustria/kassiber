@@ -81,20 +81,86 @@ pub(crate) fn transfer_object(value: &Value) -> Value {
 }
 
 type Scope = Option<(String, String, String, String)>;
+/// The row fields a scope reads.
+const SCOPE_FIELDS: [&str; 8] = [
+    "id",
+    "raw_json",
+    "config_json",
+    "wallet_config_json",
+    "external_id",
+    "external_id_kind",
+    "wallet_kind",
+    "asset",
+];
+type ScopeFields = [Value; 8];
 thread_local! {
     static SCOPES: std::cell::RefCell<std::collections::HashMap<String, Scope>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// A row address hint: a hit still compares every scope field.
+    static SCOPE_ROWS: std::cell::RefCell<std::collections::HashMap<usize, (Box<ScopeFields>, Scope)>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Releases memoized scopes at the end of an operation.
 pub(crate) fn clear_scopes() {
     SCOPES.with(|m| m.borrow_mut().clear());
+    SCOPE_ROWS.with(|m| m.borrow_mut().clear());
 }
 
 /// Physical Bitcoin-family grouping; contradictory graph/configuration facts refuse it.
 /// The scope reads only these row fields, so it is memoized by their exact JSON.
 pub(crate) fn onchain_scope(row: &Value) -> Scope {
-    let key = serde_json::to_string(&[
+    // The same row is probed many times; its address finds its fields without
+    // encoding them, and a hit requires every field to be equal.
+    let address = row as *const Value as usize;
+    let hit = SCOPE_ROWS.with(|m| {
+        m.borrow()
+            .get(&address)
+            .filter(|(fields, _)| fields.iter().zip(SCOPE_FIELDS).all(|(v, k)| *v == row[k]))
+            .map(|(_, scope)| scope.clone())
+    });
+    if let Some(hit) = hit {
+        return hit;
+    }
+    let key = scope_key(row);
+    let scope = match SCOPES.with(|m| m.borrow().get(&key).cloned()) {
+        Some(hit) => hit,
+        None => {
+            let scope = physical_scope(row);
+            SCOPES.with(|m| m.borrow_mut().insert(key, scope.clone()));
+            scope
+        }
+    };
+    let fields = Box::new(SCOPE_FIELDS.map(|k| row[k].clone()));
+    SCOPE_ROWS.with(|m| m.borrow_mut().insert(address, (fields, scope.clone())));
+    scope
+}
+
+/// `onchain_scope` of every row, in order. Misses are computed concurrently
+/// and memoized on the calling thread.
+pub(crate) fn onchain_scopes(rows: &[Value]) -> Vec<Scope> {
+    let computed = crate::par::map(rows, |row| {
+        let key = scope_key(row);
+        let hit = SCOPES.with(|m| m.borrow().get(&key).cloned());
+        let scope = hit.unwrap_or_else(|| physical_scope(row));
+        (key, scope)
+    });
+    computed
+        .into_iter()
+        .map(|outcome| {
+            let (key, scope) = crate::par::unwrap(outcome);
+            SCOPES.with(|m| {
+                m.borrow_mut()
+                    .entry(key)
+                    .or_insert_with(|| scope.clone())
+                    .clone()
+            })
+        })
+        .collect()
+}
+
+fn scope_key(row: &Value) -> String {
+    serde_json::to_string(&[
         &row["id"],
         &row["raw_json"],
         &row["config_json"],
@@ -104,13 +170,7 @@ pub(crate) fn onchain_scope(row: &Value) -> Scope {
         &row["wallet_kind"],
         &row["asset"],
     ])
-    .expect("JSON values");
-    if let Some(hit) = SCOPES.with(|m| m.borrow().get(&key).cloned()) {
-        return hit;
-    }
-    let scope = physical_scope(row);
-    SCOPES.with(|m| m.borrow_mut().insert(key, scope.clone()));
-    scope
+    .expect("JSON values")
 }
 
 fn physical_scope(row: &Value) -> Scope {
@@ -665,8 +725,8 @@ type ChainScope = (String, String, String, String);
 pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, String> {
     let mut grouped: Vec<(ChainScope, Vec<Value>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
-    for row in rows {
-        if let Some(scope) = onchain_scope(row) {
+    for (row, scope) in rows.iter().zip(onchain_scopes(rows)) {
+        if let Some(scope) = scope {
             codec::push_grouped(&mut grouped, &mut index, scope, row.clone());
         }
     }
