@@ -30,30 +30,35 @@ const CRYPTO_PLACES: u32 = 8;
 
 /// `str(transaction)` for a constructed entry.
 pub fn entry_text(entry: &Entry) -> EngineResult<String> {
-    let stamp = timestamp_text(&entry.ts);
-    let mut lines = vec![
-        format!("{}:", entry.kind.class_name()),
-        format!("id={}", entry.row),
-        format!("timestamp={stamp}"),
-        format!("asset={}", entry.asset),
-    ];
-    let transaction_type = format!("transaction_type={}", entry.transaction_type);
-    let spot_price = format!("spot_price={}", fiat(&entry.spot_price)?);
-    let unique_id = format!("unique_id={}", entry.unique_id);
+    let mut stamp = String::with_capacity(32);
+    write_timestamp(&mut stamp, &entry.ts);
+    // The values are formatted in the order `v1_request.entry_text` reads
+    // them, so the first that fails is its first.
+    let spot_price = fiat(&entry.spot_price)?;
+    let fiat_taxable_amount = fiat(&entry.fiat_taxable_amount())?;
     // `v1_request.entry_text` reads `is_taxable` from the derived values,
     // where a comparison that raises is `None`.
-    let is_taxable = format!(
-        "is_taxable={}",
-        match entry.is_taxable() {
-            Ok(true) => "True",
-            Ok(false) => "False",
-            Err(_) => "None",
-        }
-    );
-    let fiat_taxable_amount = format!(
-        "fiat_taxable_amount={}",
-        fiat(&entry.fiat_taxable_amount())?
-    );
+    let is_taxable = match entry.is_taxable() {
+        Ok(true) => "True",
+        Ok(false) => "False",
+        Err(_) => "None",
+    };
+    let mut out = String::with_capacity(512);
+    out.push_str(entry.kind.class_name());
+    out.push(':');
+    field(&mut out, "id", &entry.row.to_string());
+    field(&mut out, "timestamp", &stamp);
+    field(&mut out, "asset", &entry.asset);
+    let transaction_type = |out: &mut String| {
+        field(out, "transaction_type", "TransactionType.");
+        out.extend(
+            entry
+                .transaction_type
+                .value()
+                .chars()
+                .map(|c| c.to_ascii_uppercase()),
+        );
+    };
     match &entry.detail {
         Detail::In {
             exchange,
@@ -63,39 +68,39 @@ pub fn entry_text(entry: &Entry) -> EngineResult<String> {
             fiat_in_no_fee,
             fiat_in_with_fee,
             ..
-        } => lines.extend([
-            format!("exchange={exchange}"),
-            format!("holder={holder}"),
-            transaction_type,
-            spot_price,
-            format!("crypto_in={}", crypto(crypto_in)?),
-            format!("fiat_fee={}", fiat(fiat_fee)?),
-            format!("fiat_in_no_fee={}", fiat(fiat_in_no_fee)?),
-            format!("fiat_in_with_fee={}", fiat(fiat_in_with_fee)?),
-            unique_id,
-            is_taxable,
-            fiat_taxable_amount,
-            "from_lot=".to_owned(),
-            "to_lots=".to_owned(),
-            format!("cost_basis_timestamp={stamp}"),
-        ]),
+        } => {
+            field(&mut out, "exchange", exchange);
+            field(&mut out, "holder", holder);
+            transaction_type(&mut out);
+            field(&mut out, "spot_price", &spot_price);
+            field(&mut out, "crypto_in", &crypto(crypto_in)?);
+            field(&mut out, "fiat_fee", &fiat(fiat_fee)?);
+            field(&mut out, "fiat_in_no_fee", &fiat(fiat_in_no_fee)?);
+            field(&mut out, "fiat_in_with_fee", &fiat(fiat_in_with_fee)?);
+            field(&mut out, "unique_id", &entry.unique_id);
+            field(&mut out, "is_taxable", is_taxable);
+            field(&mut out, "fiat_taxable_amount", &fiat_taxable_amount);
+            field(&mut out, "from_lot", "");
+            field(&mut out, "to_lots", "");
+            field(&mut out, "cost_basis_timestamp", &stamp);
+        }
         Detail::Out {
             exchange,
             holder,
             crypto_out_no_fee,
             crypto_fee,
             ..
-        } => lines.extend([
-            format!("exchange={exchange}"),
-            format!("holder={holder}"),
-            transaction_type,
-            spot_price,
-            format!("crypto_out_no_fee={}", crypto(crypto_out_no_fee)?),
-            format!("crypto_fee={}", crypto(crypto_fee)?),
-            unique_id,
-            is_taxable,
-            fiat_taxable_amount,
-        ]),
+        } => {
+            field(&mut out, "exchange", exchange);
+            field(&mut out, "holder", holder);
+            transaction_type(&mut out);
+            field(&mut out, "spot_price", &spot_price);
+            field(&mut out, "crypto_out_no_fee", &crypto(crypto_out_no_fee)?);
+            field(&mut out, "crypto_fee", &crypto(crypto_fee)?);
+            field(&mut out, "unique_id", &entry.unique_id);
+            field(&mut out, "is_taxable", is_taxable);
+            field(&mut out, "fiat_taxable_amount", &fiat_taxable_amount);
+        }
         Detail::Intra {
             from_exchange,
             from_holder,
@@ -105,23 +110,32 @@ pub fn entry_text(entry: &Entry) -> EngineResult<String> {
             crypto_received,
             crypto_fee,
             fiat_fee,
-        } => lines.extend([
-            format!("from_exchange={from_exchange}"),
-            format!("from_holder={from_holder}"),
-            format!("to_exchange={to_exchange}"),
-            format!("to_holder={to_holder}"),
-            transaction_type,
-            spot_price,
-            format!("crypto_sent={}", crypto(crypto_sent)?),
-            format!("crypto_received={}", crypto(crypto_received)?),
-            format!("crypto_fee={}", crypto(crypto_fee)?),
-            format!("fiat_fee={}", fiat(fiat_fee)?),
-            unique_id,
-            is_taxable,
-            fiat_taxable_amount,
-        ]),
+        } => {
+            field(&mut out, "from_exchange", from_exchange);
+            field(&mut out, "from_holder", from_holder);
+            field(&mut out, "to_exchange", to_exchange);
+            field(&mut out, "to_holder", to_holder);
+            transaction_type(&mut out);
+            field(&mut out, "spot_price", &spot_price);
+            field(&mut out, "crypto_sent", &crypto(crypto_sent)?);
+            field(&mut out, "crypto_received", &crypto(crypto_received)?);
+            field(&mut out, "crypto_fee", &crypto(crypto_fee)?);
+            field(&mut out, "fiat_fee", &fiat(fiat_fee)?);
+            field(&mut out, "unique_id", &entry.unique_id);
+            field(&mut out, "is_taxable", is_taxable);
+            field(&mut out, "fiat_taxable_amount", &fiat_taxable_amount);
+        }
     }
-    Ok(lines.join("\n  "))
+    Ok(out)
+}
+
+/// Appends one `name=value` line, after the newline and two spaces that
+/// join the lines.
+fn field(out: &mut String, name: &str, value: &str) {
+    out.push_str("\n  ");
+    out.push_str(name);
+    out.push('=');
+    out.push_str(value);
 }
 
 fn fiat(value: &Decimal) -> EngineResult<String> {
@@ -132,15 +146,27 @@ fn crypto(value: &Decimal) -> EngineResult<String> {
     Ok(value.to_fixed_places(CRYPTO_PLACES, CTX.rounding)?)
 }
 
-/// `strftime("%Y-%m-%d %H:%M:%S.%f %z")` of the timestamp in its own offset.
-/// `%Y` is glibc's, which CPython uses on Linux: years before 1000 are not
-/// padded (`999-06-01`).
+/// [`write_timestamp`]'s text.
+#[cfg(test)]
 fn timestamp_text(ts: &Timestamp) -> String {
+    let mut out = String::new();
+    write_timestamp(&mut out, ts);
+    out
+}
+
+/// Appends `strftime("%Y-%m-%d %H:%M:%S.%f %z")` of the timestamp in its own
+/// offset. `%Y` is glibc's, which CPython uses on Linux: years before 1000
+/// are not padded (`999-06-01`).
+fn write_timestamp(out: &mut String, ts: &Timestamp) {
+    use std::fmt::Write;
+
     let local = i128::from(ts.us) + i128::from(ts.offset_s) * US_PER_SECOND;
     let time = local.rem_euclid(US_PER_DAY);
     let seconds = time / US_PER_SECOND;
     let date = ts.date;
-    format!(
+    // Writing to a String cannot fail.
+    let _ = write!(
+        out,
         "{}-{:02}-{:02} {:02}:{:02}:{:02}.{:06} {}",
         date.year,
         date.month,
@@ -150,7 +176,7 @@ fn timestamp_text(ts: &Timestamp) -> String {
         seconds % 60,
         time % US_PER_SECOND,
         utc_offset_text(ts.offset_s)
-    )
+    );
 }
 
 /// `strftime("%z")`: `+HHMM`, or `+HHMMSS` when the offset has seconds.
