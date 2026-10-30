@@ -45,10 +45,15 @@ fn blocked_ids(interpreter: &Py, projection: &Py) -> Result<Value, String> {
 
 /// Capture the original row population before rates and interpreter admission.
 pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
-    let mut rows = Map::new();
-    for raw in &snapshot.transactions {
+    // Rows are captured independently; insert them, or the first refusal, in order.
+    let captured = crate::par::map(&snapshot.transactions, |raw| {
         let mut row = Value::Object(raw.clone());
         row["_closed_confirmation_observation"] = interpretation::capture_confirmation(&row)?;
+        Ok::<_, String>(row)
+    });
+    let mut rows = Map::new();
+    for row in captured {
+        let row = crate::par::unwrap(row)?;
         let id = if codec::truth(&row["id"]) {
             codec::pystr(&row["id"])
         } else {

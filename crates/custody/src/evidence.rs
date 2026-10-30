@@ -380,9 +380,9 @@ pub fn authority(row: &Value) -> Result<Value, Error> {
 
 const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
 pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
-    let mut result = Vec::new();
     let fields: BTreeSet<&str> = FIELDS.split_whitespace().collect();
-    for row in rows {
+    // Rows are enriched independently; keep them, or the first refusal, in order.
+    let enrich = |row: &Record| -> Result<Value, Error> {
         // Indexing a JSON object yields null for an absent field.
         let original = |key: &str| row.get(key).unwrap_or(&Value::Null);
         let mut item = Value::Object(
@@ -419,13 +419,20 @@ pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
             },
         );
         item.remove("config_json");
-        result.push(Value::Object(item));
+        Ok(Value::Object(item))
+    };
+    let mut result = Vec::with_capacity(rows.len());
+    for item in crate::par::map(rows, enrich) {
+        result.push(crate::par::unwrap(item)?);
     }
     crate::graph::normalize_owned_fees(&mut result)?;
     let mut groups: BTreeMap<EventKey, Vec<usize>> = BTreeMap::new();
-    for (i, row) in result.iter().enumerate() {
-        if row["direction"] == "outbound" {
-            if let Ok(key) = event_key(row) {
+    let keys = crate::par::map(&result, |row| {
+        (row["direction"] == "outbound").then(|| event_key(row))
+    });
+    for (i, key) in keys.into_iter().enumerate() {
+        if let Some(key) = crate::par::unwrap(key) {
+            if let Ok(key) = key {
                 if key.native_namespace == "chain" {
                     groups.entry(key).or_default().push(i);
                 }

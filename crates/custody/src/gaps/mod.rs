@@ -176,8 +176,9 @@ pub fn compute(
     limit: usize,
 ) -> Result<Value, String> {
     let span = crate::timing::span("gaps.admission");
-    for row in rows {
-        normalize::leg(row, &BTreeSet::new())?;
+    // Admission normalizes every row; the first refusal in row order wins.
+    for leg in crate::par::map(rows, |row| normalize::leg(row, &BTreeSet::new())) {
+        crate::par::unwrap(leg)?;
     }
     drop(span);
     let _span = crate::timing::span("gaps.search");

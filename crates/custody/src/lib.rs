@@ -50,21 +50,27 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
     match parsed {
         Ok(snapshot) => {
             let admission = timing::span("admission");
+            let gate = timing::span("admission.accounting");
             if let Err((code, message)) = gates::require_accounting(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
             }
+            drop(gate);
+            let gate = timing::span("admission.confirmation");
             // Python captures confirmation provenance before rates and channel
             // admission, retaining the original rows rather than enriched rows.
             let projection_rows = match finalized_projection::runtime::confirmation_rows(&snapshot) {
                 Ok(value) => value,
                 Err(code) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string(),
             };
+            drop(gate);
+            let gate = timing::span("admission.rates_channels");
             if let Err((code, message)) = gates::require_rates(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":message}}).to_string();
             }
             if let Err(code) = interpretation::admit_channels(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"stage":"components","code":code,"message":code}}).to_string();
             }
+            drop(gate);
             drop(admission);
             let span = timing::span("components+migration");
             let components = match components::compute(&snapshot) {

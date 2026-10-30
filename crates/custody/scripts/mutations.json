@@ -12976,8 +12976,8 @@
   {
     "id": "GAP-120",
     "file": "crates/custody/src/gaps/mod.rs",
-    "find": "for row in rows {\n        normalize::leg(row, &BTreeSet::new())?;\n    }",
-    "replace": "for row in rows.iter().take(0) {\n        normalize::leg(row, &BTreeSet::new())?;\n    }",
+    "find": "crate::par::map(rows, |row| normalize::leg(row, &BTreeSet::new()))",
+    "replace": "crate::par::map(&rows[..0], |row| normalize::leg(row, &BTreeSet::new()))",
     "rule": "Normalize all raw worklist rows before applying ignored ids.",
     "expect_failing": [
       "gaps_operation_vectors"
@@ -22146,8 +22146,8 @@
   {
     "id": "projection8-row-order",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "for raw in &snapshot.transactions {",
-    "replace": "for raw in snapshot.transactions.iter().rev() {",
+    "find": "    for row in captured {",
+    "replace": "    for row in captured.into_iter().rev() {",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
