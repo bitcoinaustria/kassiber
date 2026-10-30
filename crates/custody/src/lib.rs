@@ -247,10 +247,10 @@ fn response_text(
 /// custody itself retains no tax-engine dependency or persistence authority.
 pub fn custody_with_fusion(request: &str, finalized: bool, ledger: fn(&str) -> String) -> String {
     let response = custody_with_finalized(request, finalized);
-    let mut response = codec::to_json(&codec::loads(&response).expect("custody response"));
+    let mut original = codec::loads(&response).expect("custody response");
+    let response = codec::to_json(&original);
     if !finalized || response.get("error").is_some() {
-        return codec::dumps(&codec::from_json(&response).expect("response"), true)
-            .expect("response");
+        return codec::dumps(&original, true).expect("response");
     }
     let snapshot = codec::to_json(&codec::loads(request).expect("admitted snapshot"));
     let wallets = snapshot["wallets"]
@@ -274,8 +274,19 @@ pub fn custody_with_fusion(request: &str, finalized: bool, ledger: fn(&str) -> S
         }
         Err(error) => serde_json::json!({"outcome":"refusal","error":error.document()}),
     };
-    response["stages"]["fusion"] = fusion;
-    response["skipped_stages"] = serde_json::json!([]);
-    codec::dumps(&codec::from_json(&response).expect("fusion response"), true)
-        .expect("fusion response")
+    // The builder reads named JSON fields, but existing stage diagnostics may
+    // contain Python surrogate code points. Preserve their lossless values.
+    let mut stages = graph::stored::get(&original, "stages").clone();
+    graph::stored::put(
+        &mut stages,
+        "fusion",
+        codec::from_json(&fusion).expect("fusion"),
+    );
+    graph::stored::put(&mut original, "stages", stages);
+    graph::stored::put(
+        &mut original,
+        "skipped_stages",
+        kassiber_pyjson::Value::List(vec![]),
+    );
+    codec::dumps(&original, true).expect("fusion response")
 }

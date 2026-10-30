@@ -131,16 +131,18 @@ def test_review_witnesses_match_live_reference():
         assert_same(evaluate(case), {'expected': case['expected']}, case['case'])
 
 
-def test_binding_distinguishes_same_code_at_different_stages(tmp_path):
+def test_binding_retains_refusal_stages_after_partial_carry_fix(tmp_path):
     import kassiber_tax
     from tests.custody_projection_payout_books import books
     from tests.test_custody_quantity_stage import raw_refusal_snapshot
-    partial = next(book for name, book in books(tmp_path) if name.startswith('partial_carry_'))
+    partial = next(book for name, book in books(tmp_path) if name == 'partial_carry')
+    assert 'error' not in json.loads(kassiber_tax.custody(json.dumps(partial)))
+    from tests.custody_fanout_generator import fanout_snapshot
     stages = []
-    for book in (raw_refusal_snapshot(), partial):
+    for book in (raw_refusal_snapshot(), fanout_snapshot(24)):
         reference = expected(book)
         actual = json.loads(kassiber_tax.custody(json.dumps(book)))['error']
-        assert reference['error'] == actual['code'] == 'ValueError'
+        assert reference['error'] == actual['code']
         assert reference['stage'] == actual['stage']
         stages.append(actual['stage'])
     assert stages == ['components', 'finalized_projection']

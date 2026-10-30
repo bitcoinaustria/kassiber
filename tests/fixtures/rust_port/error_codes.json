@@ -9231,35 +9231,35 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_review_terms.py:730",
+      "at": "kassiber/core/custody_review_terms.py:731",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_review_terms.py:774",
+      "at": "kassiber/core/custody_review_terms.py:775",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_review_terms.py:813",
+      "at": "kassiber/core/custody_review_terms.py:814",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_review_terms.py:817",
+      "at": "kassiber/core/custody_review_terms.py:818",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_review_terms.py:823",
+      "at": "kassiber/core/custody_review_terms.py:824",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -20113,7 +20113,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/diagnostics.py:654",
+      "at": "kassiber/diagnostics.py:665",
       "code": {
         "expression": "sanitize_text(str(getattr(error, 'code', 'internal_error') or 'internal_error'))"
       },

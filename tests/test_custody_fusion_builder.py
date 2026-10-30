@@ -82,9 +82,9 @@ def test_fusion_builder_from_rust_finalized_projection(fusion):
                     assert actual['error']['code'] == getattr(exc, 'code', type(exc).__name__)
                 else:
                     if result.direct_payout_records:
-                        # Live parity only: partial direct payouts have a known
-                        # Python reference bug, expected to change on restack.
-                        counts['direct_payout_reference_bug_expected_to_change'] += 1
+                        # The restacked reference restricts payout terms to
+                        # their reviewed source allocation.
+                        counts['direct_payout_live_reference'] += 1
                     expected = outcome(book['profile'], TaxEngineLedgerInputs(
                         finalized_tax_projection=result.finalized_tax_projection,
                         wallet_refs_by_id=refs))

@@ -63,7 +63,7 @@ def test_decision_only_quantity_stage_explicitly_skips_finalized_projection():
     from tests.custody_engine_compare import rust_results
     stages,skipped=rust_results(snapshot(0), finalized=False)
     assert set(stages)=={"components","evidence","interpretation","gaps","quantity"}
-    assert skipped==("finalized_projection",)
+    assert skipped==("finalized_projection", "fusion")
 
 
 def test_quantity_transfer_vectors_and_active_generated_counts(primitive_driver):

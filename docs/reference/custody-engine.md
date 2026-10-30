@@ -3605,3 +3605,5 @@ The retained corpus was read only; no push or PR was created.
 ### R6 integration reference alignment
 
 Partial direct payouts apply authored terms only to the reviewed decision and matching component. Residual slices retain ordinary pricing and carrying rows occur once. Real-writer payout parity now asserts the corrected Python reference, including exact persisted decimal terms.
+
+Fusion appends its comparison result to the existing lossless stage values, preserving lone surrogate code points in diagnostics. Decision-only responses explicitly skip both finalized projection and fusion.

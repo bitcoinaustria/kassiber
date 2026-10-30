@@ -812,7 +812,7 @@
       "test_real_writer_payout_books": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "compares the full finalized stage against unchanged Python over raw generators and permutations, including refusals; regenerates independent adapter-family and admission-order witnesses", "reviewed": true, "tests": 1},
       "test_projection_row_mapping_order_is_not_a_contract": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "compares the full finalized stage against unchanged Python over raw generators and permutations, including refusals; regenerates independent adapter-family and admission-order witnesses", "reviewed": true, "tests": 1},
       "test_review_witnesses_match_live_reference": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares the full finalized stage against unchanged Python over raw generators and permutations, including refusals; regenerates independent adapter-family and admission-order witnesses", "reviewed": true, "tests": 1},
-      "test_binding_distinguishes_same_code_at_different_stages": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares the full finalized stage against unchanged Python over raw generators and permutations, including refusals; regenerates independent adapter-family and admission-order witnesses", "reviewed": true, "tests": 1},
+      "test_binding_retains_refusal_stages_after_partial_carry_fix": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares the full finalized stage against unchanged Python over raw generators and permutations, including refusals; regenerates independent adapter-family and admission-order witnesses", "reviewed": true, "tests": 1},
       "test_migration_surrogate_blocker_finalized_parity": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares the full finalized stage against unchanged Python over raw generators and permutations, including refusals; regenerates independent adapter-family and admission-order witnesses", "reviewed": true, "tests": 1}
     },
     "tests/test_custody_quantity.py": {
@@ -1146,6 +1146,16 @@
     },
     "tests/test_device_sync_removal.py": {
       "DeviceSyncRemovalTests": {"disposition": "rust-test", "flags": ["sql"], "group": "chain-sync", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 3}
+    },
+    "tests/test_diagnostics_save.py": {
+      "test_reports_are_named_by_their_timestamp": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.diagnostics directly", "reviewed": false, "tests": 1},
+      "test_a_later_report_never_overwrites_an_earlier_one": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.diagnostics directly", "reviewed": false, "tests": 1},
+      "test_a_custom_target_is_written_where_the_user_asked": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.diagnostics directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_direct_payout_slices.py": {
+      "test_partial_payout_terms_do_not_price_residual": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (daemon) but also calls kassiber.core.custody_journal, kassiber.daemon", "reviewed": false, "tests": 1},
+      "test_payout_preserves_authored_decimal": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
+      "test_partial_payout_ledger_journals_and_report": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.custody_journal", "reviewed": false, "tests": 1}
     },
     "tests/test_direct_payout_timestamps.py": {
       "DirectPayoutTimestampTests": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the cli entry in process", "reviewed": false, "tests": 5},
@@ -2069,7 +2079,8 @@
       "test_unhandled_envelope_normalization_preserves_every_other_byte": {"disposition": "oracle", "flags": [], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1},
       "test_collect_save_unhandled_io_failure_debug_and_report_bytes": {"disposition": "oracle", "flags": ["subprocess"], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1},
       "test_best_effort_error_report_write_failure_preserves_original_error": {"disposition": "oracle", "flags": ["subprocess"], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1},
-      "test_global_flag_success_and_usage_error_do_not_write_error_reports": {"disposition": "oracle", "flags": ["subprocess"], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1}
+      "test_global_flag_success_and_usage_error_do_not_write_error_reports": {"disposition": "oracle", "flags": ["subprocess"], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1},
+      "test_automatic_reports_keep_timestamp_and_collisions": {"disposition": "oracle", "flags": ["subprocess"], "group": "secrets-backup", "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_document_services.py": {
       "RustDocumentServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares document CLI and daemon refusals, evidence storage and prior-report archives, stored matching and commercial context against Python on disposable books", "reviewed": true, "tests": 4}

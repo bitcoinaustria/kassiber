@@ -35,7 +35,7 @@ def test_every_quantity_raw_generator_matches_both_engines(suite,scenarios,gener
                     for engine in counts: counts[engine][case] += 1
                 continue
             stages,skipped=rust_results(b, finalized=False)
-            assert 'quantity' in stages and skipped==('finalized_projection',)
+            assert 'quantity' in stages and skipped==('finalized_projection', 'fusion')
             assert_same(expected['expected'],stages['quantity'],f'{suite}:{case}:{seed}:{shuffled}')
             if not shuffled:
                 for engine,state in (('Python',expected['expected']),('Rust',stages['quantity'])):
