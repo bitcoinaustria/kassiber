@@ -1683,8 +1683,8 @@
   {
     "id": "carry-stops-after-a-pass",
     "file": "tax-engine/core/src/ledger/carry.rs",
-    "find": "        if !rows_changed && !blocks_changed {\n            break;\n        }",
-    "replace": "        if true {\n            break;\n        }",
+    "find": "        if rows_changed || blocks_changed {\n            continue;\n        }",
+    "replace": "        if rows_changed || blocks_changed {\n            break;\n        }",
     "expect_failing": [
       "ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried"
     ],
@@ -1845,7 +1845,7 @@
     "id": "run-carry-pricing-unread",
     "file": "tax-engine/core/src/ledger/run.rs",
     "find": "    let carried = carry.request(request)?;",
-    "replace": "    let carried = std::borrow::Cow::Borrowed(request);",
+    "replace": "    let carried = std::borrow::Cow::Borrowed(request);\n    carry.settled = None;",
     "expect_failing": [
       "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -1855,8 +1855,8 @@
   {
     "id": "run-carry-blocks-unread",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));\n    if let Some(error) = error {",
-    "replace": "    } = final_pass(&book, &config, &HashSet::new());\n    if let Some(error) = error {",
+    "find": "    } = final_pass(&book, &config, &book.rows_of(&carry.blocked), settled);\n    if let Some(error) = error {",
+    "replace": "    } = final_pass(&book, &config, &HashSet::new(), settled);\n    if let Some(error) = error {",
     "expect_failing": [
       "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good",
       "the_ledger_operation_reproduces_every_stored_response"

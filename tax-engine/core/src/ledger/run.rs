@@ -51,7 +51,7 @@ use crate::model::{AssetOutput, ConfigSpec, CountrySpec};
 use crate::swaps;
 use crate::ENGINE_VERSION;
 
-use super::carry::{carry, Carried, Carry, CarryFailure};
+use super::carry::{carry, Carried, Carry, CarryFailure, Settled};
 use super::compose::{compose, ComputedAsset};
 use super::normalize::{normalize, Item, Normalized, Quarantine};
 use super::request::{Country, LedgerRequest, Policy, Row, Wallet, SCHEMA_VERSION};
@@ -256,6 +256,9 @@ struct FinalPass {
     stages: Vec<Stages>,
     selection: Option<Selection>,
     error: Option<EngineError>,
+    /// The lot engine's results on `stages`, when the carry's settled pass
+    /// computed them.
+    outputs: Option<Vec<AssetOutput>>,
 }
 
 /// The first pass, without the rows the rail carry withholds
@@ -263,20 +266,34 @@ struct FinalPass {
 /// nothing on a generic book), and, when the selection links or blocks a
 /// pair, a second pass, also without the blocked pairs' rows, whose stages
 /// replace the first's. The first failure ends it, as it ends the adapter's
-/// run.
-fn final_pass(book: &Book, config: &ConfigSpec, carry_blocked: &HashSet<usize>) -> FinalPass {
+/// run. The carry's settled pass, which read the same carried request, is
+/// the first pass when it left out the same rows (a pass has no links
+/// before the selection).
+fn final_pass(
+    book: &Book,
+    config: &ConfigSpec,
+    carry_blocked: &HashSet<usize>,
+    settled: Option<Settled>,
+) -> FinalPass {
     let first = Pass {
         excluded: carry_blocked.clone(),
         links: HashMap::new(),
     };
-    let (stages, error) = prepare_assets(book, config, &first);
-    if error.is_some() {
-        return FinalPass {
-            stages,
-            selection: None,
-            error,
-        };
-    }
+    let (stages, mut outputs) = match settled.filter(|settled| settled.excluded == first.excluded) {
+        Some(settled) => (settled.stages, Some(settled.outputs)),
+        None => {
+            let (stages, error) = prepare_assets(book, config, &first);
+            if error.is_some() {
+                return FinalPass {
+                    stages,
+                    selection: None,
+                    error,
+                    outputs: None,
+                };
+            }
+            (stages, None)
+        }
+    };
     let first_pass = stages.iter().filter_map(|stages| {
         stages
             .walked
@@ -290,6 +307,7 @@ fn final_pass(book: &Book, config: &ConfigSpec, carry_blocked: &HashSet<usize>) 
                 stages,
                 selection: None,
                 error: Some(error),
+                outputs: None,
             }
         }
     };
@@ -298,8 +316,11 @@ fn final_pass(book: &Book, config: &ConfigSpec, carry_blocked: &HashSet<usize>) 
             stages,
             selection: Some(selection),
             error: None,
+            outputs,
         };
     }
+    // The second pass's stages replace the first's.
+    outputs = None;
     let mut excluded = carry_blocked.clone();
     // A blocked id no row has (a direct payout's `<pair>:out` without that
     // row) leaves nothing out.
@@ -313,6 +334,7 @@ fn final_pass(book: &Book, config: &ConfigSpec, carry_blocked: &HashSet<usize>) 
         stages,
         selection: Some(selection),
         error,
+        outputs,
     }
 }
 
@@ -348,7 +370,7 @@ pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, Box<Pr
     };
     let config = request.config.spec();
     let book = Book::new(request).map_err(contract)?;
-    let carry = match carry(&book, &config) {
+    let mut carry = match carry(&book, &config) {
         Ok(carry) => carry,
         Err(CarryFailure { error, stages }) => {
             return Err(Box::new(PrepareFailure::new(
@@ -372,11 +394,13 @@ pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, Box<Pr
         }
     };
     let book = Book::new(&carried).map_err(contract)?;
+    let settled = carry.take_settled();
     let FinalPass {
         stages,
         selection,
         error,
-    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));
+        ..
+    } = final_pass(&book, &config, &book.rows_of(&carry.blocked), settled);
     let assets = assets_out(&book, stages);
     let swap_links = selection.map(|selection| swap_links_out(&book, selection));
     let rail_carry = rail_carry_out(&book, carry);
@@ -409,35 +433,45 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
     let book = Book::new(request).map_err(StagedError::contract)?;
     drop(span);
     let span = crate::timing::span("carry");
-    let carry = carry(&book, &config).map_err(|failure| failure.error)?;
+    let mut carry = carry(&book, &config).map_err(|failure| failure.error)?;
     drop(span);
     let span = crate::timing::span("carried_request");
     let carried = carry.request(request)?;
     let book = Book::new(&carried).map_err(StagedError::contract)?;
+    let settled = carry.take_settled();
     drop(span);
     let span = crate::timing::span("final_pass");
     let FinalPass {
         stages,
         selection,
         error,
-    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));
+        outputs,
+    } = final_pass(&book, &config, &book.rows_of(&carry.blocked), settled);
     if let Some(error) = error {
         return Err(StagedError::new(Stage::Prepare, error));
     }
     drop(span);
     // A final pass that did not fail always has its selection.
     let selection = selection.unwrap_or_default();
-    // The assets the lot engine computes, in order.
-    let span = crate::timing::span("lot_inputs");
-    let assets = lot_assets(&book, &stages);
-    drop(span);
-    let span = crate::timing::span("validate");
-    swaps::validate_parsed(&assets, engine_country(&request.policy.country))
-        .map_err(|error| StagedError::new(Stage::Validate, error))?;
-    drop(span);
-    let span = crate::timing::span("compute");
-    let mut outputs = compute(&book, assets)?.into_iter();
-    drop(span);
+    let mut outputs = match outputs {
+        // The carry's settled pass computed these stages. Its lot engine
+        // ran the set checks the country's checks run, and a generic book,
+        // the only one the carry passes, has no other check.
+        Some(outputs) => outputs,
+        None => {
+            // The assets the lot engine computes, in order.
+            let span = crate::timing::span("lot_inputs");
+            let assets = lot_assets(&book, &stages);
+            drop(span);
+            let span = crate::timing::span("validate");
+            swaps::validate_parsed(&assets, engine_country(&request.policy.country))
+                .map_err(|error| StagedError::new(Stage::Validate, error))?;
+            drop(span);
+            let _compute = crate::timing::span("compute");
+            compute(&book, assets)?
+        }
+    }
+    .into_iter();
     let _compose = crate::timing::span("compose");
     let mut response = LedgerResponse {
         schema_version: SCHEMA_VERSION,
