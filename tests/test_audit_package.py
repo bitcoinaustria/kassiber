@@ -9,6 +9,7 @@ from kassiber.core import custody_filed_reports
 from kassiber.core import source_funds
 from kassiber.db import open_db, resolve_attachments_root
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 NOW = "2026-05-01T12:00:00Z"
@@ -173,6 +174,7 @@ class AuditPackageCoreTest(unittest.TestCase):
             """,
             (NOW, self.profile_id),
         )
+        stamp_journal_semantics(self.conn, self.profile_id)
         self.conn.commit()
 
     def _add_file_attachment(self, name="receipt.pdf", content=b"receipt\n", tx_id=None):

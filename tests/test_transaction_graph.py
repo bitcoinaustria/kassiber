@@ -11,7 +11,7 @@ from kassiber.cli.handlers import create_transaction_pair, process_journals
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
 from kassiber.errors import AppError
-from tests.custody_projection_fixtures import insert_reviewed_projection
+from tests.custody_projection_fixtures import insert_reviewed_projection, stamp_journal_semantics
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -3919,6 +3919,7 @@ class TransactionGraphTest(unittest.TestCase):
             (NOW,),
         )
 
+        stamp_journal_semantics(self.conn, 'profile-1')
         payload = self._graph("swap-out")
 
         route = payload["swapRoute"]
@@ -3999,6 +4000,7 @@ class TransactionGraphTest(unittest.TestCase):
             (NOW,),
         )
 
+        stamp_journal_semantics(self.conn, 'profile-1')
         payload = self._graph("coinjoin-out")
 
         route = payload["swapRoute"]

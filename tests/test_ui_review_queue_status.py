@@ -17,7 +17,7 @@ from kassiber.daemon import (
 )
 from kassiber.errors import AppError
 from tests import test_transaction_graph as fixtures
-from tests.custody_projection_fixtures import insert_reviewed_projection
+from tests.custody_projection_fixtures import insert_reviewed_projection, stamp_journal_semantics
 
 CONFIRMED_AT = "2026-01-02T00:00:00Z"
 
@@ -123,6 +123,7 @@ class ReviewQueueStatusTests(unittest.TestCase):
             """,
             (CONFIRMED_AT,),
         )
+        stamp_journal_semantics(self.conn, 'profile-1')
         self.conn.commit()
 
     def test_a_reviewed_pair_counts_once_in_the_card_list_and_health(self):
@@ -460,6 +461,7 @@ class ReviewQueuePerformanceTests(unittest.TestCase):
             """,
             (CONFIRMED_AT, 2 * self.PAIRS),
         )
+        stamp_journal_semantics(self.conn, 'profile-1')
         self.conn.commit()
 
     def tearDown(self):

@@ -160,6 +160,10 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
             "last_processed_input_version = journal_input_version WHERE id = 'profile'",
             (NOW,),
         )
+        self.conn.execute(
+            "UPDATE profiles SET journal_semantics_version = ? WHERE id = 'profile'",
+            (custody_journal.JOURNAL_CALCULATION_SEMANTICS_VERSION,),
+        )
         self.conn.commit()
 
     def _insert_tx(self, tx_id, wallet_id, external_id, direction, amount, raw_json):

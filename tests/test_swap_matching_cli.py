@@ -16,6 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from tests import cli_runner
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -137,6 +138,7 @@ def _mark_journals_processed(data_root):
             """,
             ("2026-03-14T17:35:00Z", tx_count, profile[1], profile[0]),
         )
+        stamp_journal_semantics(conn, profile[0])
         conn.commit()
     finally:
         conn.close()

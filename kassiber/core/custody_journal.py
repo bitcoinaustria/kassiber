@@ -16,6 +16,7 @@ import uuid
 from typing import Any, Callable, Mapping
 
 from ..errors import AppError
+from ..db import JOURNAL_CALCULATION_SEMANTICS_VERSION
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import now_iso, parse_iso_datetime_or_none
 from ..tax_policy import require_tax_processing_supported
@@ -52,10 +53,17 @@ def evaluate_projection_freshness(
     processed_count = int(profile["last_processed_tx_count"] or 0)
     input_version = int(profile["journal_input_version"] or 0)
     processed_version = int(profile["last_processed_input_version"] or 0)
+    required_semantics = int(profile["required_journal_semantics_version"] or 0) if "required_journal_semantics_version" in profile.keys() else 0
+    built_semantics = int(profile["journal_semantics_version"] or 0) if "journal_semantics_version" in profile.keys() else 0
+    semantics_current = not required_semantics or (
+        built_semantics == JOURNAL_CALCULATION_SEMANTICS_VERSION
+        and built_semantics >= required_semantics
+    )
     is_current = bool(
         processed_at
         and processed_count == active_count
         and input_version == processed_version
+        and semantics_current
     )
     if active_count == 0:
         status = "no_transactions"
@@ -69,6 +77,9 @@ def evaluate_projection_freshness(
     elif input_version != processed_version:
         status = "stale"
         reason = "journal inputs changed since last processing"
+    elif not semantics_current:
+        status = "stale"
+        reason = "journal calculation semantics changed; rebuild with current Kassiber"
     else:
         status = "current"
         reason = "journals match the active transaction count and input version"
@@ -96,6 +107,7 @@ def projection_freshness(
             """
             SELECT p.last_processed_at, p.last_processed_tx_count,
                    p.journal_input_version, p.last_processed_input_version,
+                   p.required_journal_semantics_version, p.journal_semantics_version,
                    (SELECT COUNT(*) FROM transactions t
                     WHERE t.profile_id = p.id AND t.excluded = 0)
                        AS active_transaction_count
@@ -1068,6 +1080,11 @@ def store_ledger_state(
         ),
     )
     filed_impact_resolutions = []
+    conn.execute(
+        """UPDATE profiles SET journal_semantics_version = ?,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, ?) WHERE id = ?""",
+        (JOURNAL_CALCULATION_SEMANTICS_VERSION, JOURNAL_CALCULATION_SEMANTICS_VERSION, profile_id),
+    )
     chain_impact_resolution_count = 0
     if (
         not state.get("custody_component_blockers")
