@@ -32,6 +32,38 @@ describe("typed app logs", () => {
     clearAppLogRecords();
   });
 
+  it("preserves complete hex IDs while redacting neighboring amounts", () => {
+    const ids = [
+      "00000000-cad1-4000-8000-000000000000",
+      "00000000-1cad-4000-8000-000000000000",
+      "00000000-CAD1-4000-8000-000000000000",
+      "cad10000000000000000000000000000",
+      "00000000000000000000000000001cad",
+      "00000000000000000000000000000000",
+    ];
+    for (const identity of ids) {
+      for (const mode of ["high_signal", "public_safe"] as const) {
+        const msg = `${identity}; {"component_id":"${identity}"}; amount_sat=${identity}; €${identity}; ${identity}€; CAD 1; 1 CAD; cad1; 1cad; amount_sat=5; €5`;
+        const emitted = emitAppLog({ ...record(), msg });
+        const out = formatLogRecord(emitted!, { redacted: true, mode });
+        expect(out.split(identity).length - 1).toBe(5);
+        expect(out.match(/amount#/g)).toHaveLength(6);
+      }
+    }
+  });
+
+  it("does not exempt partial UUID lookalikes from amount redaction", () => {
+    for (const msg of [
+      "00000000-cad1-4000-8000",
+      "00000000-1cad-4000-8000",
+      "00000000-cad1-4000-8000-00000000000",
+      "00000000-cad1-4000-8000-000000000000-extra",
+    ]) {
+      const emitted = emitAppLog({ ...record(), msg });
+      expect(formatLogRecord(emitted!, { redacted: true })).toContain("amount#");
+    }
+  });
+
   it("always captures debug and trace records", () => {
     emitAppLog({ ...record(), level: "trace" });
     emitAppLog({ ...record(), level: "debug" });
