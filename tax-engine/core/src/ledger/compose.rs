@@ -39,6 +39,7 @@ use crate::error::{EngineError, EngineResult};
 use crate::manifest::{EntryType, NON_REPORTABLE_CATEGORY_OVERRIDES};
 use crate::model::{AssetOutput, Dec, EntryKind, GainLossOut};
 use crate::num;
+use crate::par;
 
 use super::request::{Country, Row};
 use super::response::{
@@ -79,6 +80,9 @@ pub(crate) fn compose(book: &Book, asset: &ComputedAsset) -> EngineResult<Compos
         tax_summary: composer.tax_summary(),
     })
 }
+
+/// Items per worker when composition runs concurrently.
+const PARALLEL_CHUNK: usize = 256;
 
 fn internal(message: &str) -> EngineError {
     EngineError::runtime(format!("Internal error: {message}"))
@@ -248,31 +252,41 @@ impl<'c, 'a> Composer<'c, 'a> {
             .ok_or_else(|| internal("a lot is not an acquisition"))
     }
 
-    /// An acquisition per visible lot, in lot order.
+    /// An acquisition per visible lot, in lot order. Each is its lot's own,
+    /// so they are composed concurrently and taken in lot order, up to the
+    /// first failure.
     fn acquisitions(&self) -> EngineResult<Vec<EntryOut>> {
         let output = self.asset.output;
-        let mut entries = Vec::with_capacity(output.in_transactions.len());
-        for (number, basis) in output
+        let lots: Vec<(i64, &Dec)> = output
             .in_transactions
             .iter()
+            .copied()
             .zip(&output.in_fiat_in_with_fee)
-        {
-            let built = self.entry(*number, EntryKind::In)?;
-            let lot = built.entry;
-            let quantity = Self::crypto_in(lot)?;
-            let unit_cost = num::div(&basis.0, quantity)?;
-            entries.push(EntryOut::Acquisition(AcquisitionOut {
-                entry_type: EntryType::Acquisition,
-                row: self.row_id(built),
-                wallet: wallet_label(lot).to_owned(),
-                asset: lot.asset.clone(),
-                quantity: Dec(quantity.clone()),
-                fiat_value: basis.clone(),
-                unit_cost: Dec(unit_cost),
-                description: description(lot)?,
-            }));
-        }
-        Ok(entries)
+            .collect();
+        par::map(&lots, PARALLEL_CHUNK, |&(number, basis)| {
+            self.acquisition(number, basis)
+        })
+        .into_iter()
+        .map(par::unwrap)
+        .collect()
+    }
+
+    /// The acquisition of the lot `number`, at its effective basis.
+    fn acquisition(&self, number: i64, basis: &Dec) -> EngineResult<EntryOut> {
+        let built = self.entry(number, EntryKind::In)?;
+        let lot = built.entry;
+        let quantity = Self::crypto_in(lot)?;
+        let unit_cost = num::div(&basis.0, quantity)?;
+        Ok(EntryOut::Acquisition(AcquisitionOut {
+            entry_type: EntryType::Acquisition,
+            row: self.row_id(built),
+            wallet: wallet_label(lot).to_owned(),
+            asset: lot.asset.clone(),
+            quantity: Dec(quantity.clone()),
+            fiat_value: basis.clone(),
+            unit_cost: Dec(unit_cost),
+            description: description(lot)?,
+        }))
     }
 
     /// The fragment's values and the facts of its event and lot.
@@ -323,7 +337,15 @@ impl<'c, 'a> Composer<'c, 'a> {
         // book category, in the order they first appear.
         let mut groups: Vec<Realized> = Vec::new();
         let mut positions: HashMap<(i64, bool, Option<String>), usize> = HashMap::new();
-        for gain_loss in &self.asset.output.gain_losses {
+        // Each fragment depends only on its own gain/loss row, so the
+        // fragments are built concurrently and each is taken where the loop
+        // builds it.
+        let gain_losses = &self.asset.output.gain_losses;
+        let fragments = par::map(gain_losses, PARALLEL_CHUNK, |gain_loss| {
+            let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
+            self.fragment(gain_loss, event)
+        });
+        for (gain_loss, fragment) in gain_losses.iter().zip(fragments) {
             let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
             let entry = event.entry;
             let kind = entry.transaction_type;
@@ -367,7 +389,7 @@ impl<'c, 'a> Composer<'c, 'a> {
                     groups.len() - 1
                 }
             };
-            let fragment = self.fragment(gain_loss, event)?;
+            let fragment = par::unwrap(fragment)?;
             let group = &mut groups[position];
             group.fragments.push(fragment);
             group.quantity = num::add(&group.quantity, &gain_loss.crypto_amount.0)?;

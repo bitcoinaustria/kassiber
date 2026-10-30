@@ -895,8 +895,8 @@
   {
     "id": "compose-unit-cost-multiplies",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "            let unit_cost = num::div(&basis.0, quantity)?;",
-    "replace": "            let unit_cost = num::mul(&basis.0, quantity)?;",
+    "find": "        let unit_cost = num::div(&basis.0, quantity)?;",
+    "replace": "        let unit_cost = num::mul(&basis.0, quantity)?;",
     "expect_failing": [
       "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
       "the_ledger_operation_reproduces_every_stored_response"
