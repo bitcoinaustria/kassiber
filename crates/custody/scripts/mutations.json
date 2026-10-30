@@ -17486,8 +17486,8 @@
   {
     "id": "QN-133",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
-    "replace": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input_mutated\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
+    "find": "compilation.insert(\"canonical_input\".into(), Value::Object(input));",
+    "replace": "compilation.insert(\"canonical_input_mutated\".into(), Value::Object(input));",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17496,8 +17496,8 @@
   {
     "id": "QN-134",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
-    "replace": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events_mutated\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
+    "find": "        \"events\".into(),\n        Value::Array(events.into_values().collect()),",
+    "replace": "        \"events_mutated\".into(),\n        Value::Array(events.into_values().collect()),",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17506,8 +17506,8 @@
   {
     "id": "QN-135",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
-    "replace": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events_mutated\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
+    "find": "        \"rejected_events\".into(),\n        canonical[\"rejected_events\"].clone(),",
+    "replace": "        \"rejected_events_mutated\".into(),\n        canonical[\"rejected_events\"].clone(),",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17516,8 +17516,8 @@
   {
     "id": "QN-136",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
-    "replace": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims_mutated\":claims,\"issues\":issues}),",
+    "find": "compilation.insert(\"claims\".into(), Value::Array(claims));",
+    "replace": "compilation.insert(\"claims_mutated\".into(), Value::Array(claims));",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17526,8 +17526,8 @@
   {
     "id": "QN-137",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues\":issues}),",
-    "replace": "        json!({\"$type\":\"NativeAuditCompilation\",\"canonical_input\":{\"$type\":\"CanonicalQuantityInput\",\"events\":events.into_values().collect::<Vec<_>>(),\"rejected_events\":canonical[\"rejected_events\"]},\"claims\":claims,\"issues_mutated\":issues}),",
+    "find": "compilation.insert(\"issues\".into(), Value::Array(issues));",
+    "replace": "compilation.insert(\"issues_mutated\".into(), Value::Array(issues));",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],

@@ -582,7 +582,21 @@ pub fn compile(
     }
     claims.sort_by_key(|c| text(&c["claim_id"]));
     issues.sort_by_key(|i| text(&i["issue_id"]));
-    Ok(
-        json!({"$type":"NativeAuditCompilation","canonical_input":{"$type":"CanonicalQuantityInput","events":events.into_values().collect::<Vec<_>>(),"rejected_events":canonical["rejected_events"]},"claims":claims,"issues":issues}),
-    )
+    // The objects json! would build, with the lists moved rather than copied.
+    let mut input = serde_json::Map::new();
+    input.insert("$type".into(), json!("CanonicalQuantityInput"));
+    input.insert(
+        "events".into(),
+        Value::Array(events.into_values().collect()),
+    );
+    input.insert(
+        "rejected_events".into(),
+        canonical["rejected_events"].clone(),
+    );
+    let mut compilation = serde_json::Map::new();
+    compilation.insert("$type".into(), json!("NativeAuditCompilation"));
+    compilation.insert("canonical_input".into(), Value::Object(input));
+    compilation.insert("claims".into(), Value::Array(claims));
+    compilation.insert("issues".into(), Value::Array(issues));
+    Ok(Value::Object(compilation))
 }
