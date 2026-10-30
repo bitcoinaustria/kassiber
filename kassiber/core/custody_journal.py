@@ -36,6 +36,7 @@ from . import tax_events
 from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from .engines import KassiberTaxEngine, TaxEngineLedgerInputs
+from .journal_calculation import encode_calculation
 from .lightning import channel_lifecycle
 from .repo import resolve_scope
 
@@ -822,6 +823,7 @@ def store_ledger_state(
     for entry in state["entries"]:
         exact_payload = pricing.journal_exact_payload(entry)
         tx_pricing = pricing_by_tx.get(entry["transaction_id"])
+        calculation_json, calculation_compact = encode_calculation(entry.get("calculation"))
         journal_entry_rows.append(
             (
                 entry["id"],
@@ -848,7 +850,8 @@ def store_ledger_state(
                 exact_payload["cost_basis_exact"],
                 exact_payload["proceeds_exact"],
                 exact_payload["gain_loss_exact"],
-                json.dumps(entry["calculation"], sort_keys=True) if entry.get("calculation") else None,
+                calculation_json,
+                calculation_compact,
                 tx_pricing["pricing_source_kind"] if tx_pricing else None,
                 tx_pricing["pricing_quality"] if tx_pricing else None,
                 entry["description"],
@@ -864,10 +867,10 @@ def store_ledger_state(
             id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
             occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
             cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
-            cost_basis_exact, proceeds_exact, gain_loss_exact, calculation_json, pricing_source_kind,
-            pricing_quality, description, at_category, at_kennzahl,
-            capital_gains_type, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            cost_basis_exact, proceeds_exact, gain_loss_exact, calculation_json,
+            calculation_compact, pricing_source_kind, pricing_quality, description,
+            at_category, at_kennzahl, capital_gains_type, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         journal_entry_rows,
     )

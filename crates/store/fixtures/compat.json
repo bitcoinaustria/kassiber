@@ -1403,6 +1403,11 @@
           "TEXT"
         ],
         [
+          "journal_entries",
+          "calculation_compact",
+          "TEXT"
+        ],
+        [
           "transactions",
           "external_id_kind",
           "TEXT CHECK(external_id_kind IS NULL OR external_id_kind = 'txid')"

@@ -294,6 +294,8 @@ pub(crate) fn finish_msat_columns(conn: &Connection) -> Result<()> {
     ] {
         ensure_column(conn, "transactions", column, definition)?;
     }
+    // Python adds the compact calculation column right after the msat rebuild.
+    ensure_column(conn, "journal_entries", "calculation_compact", "TEXT")?;
     for values in data()["functions"]["_ensure_swap_matching_schema"]["columns"]
         .as_array()
         .expect("swap columns")

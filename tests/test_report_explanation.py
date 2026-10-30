@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from kassiber.core import custody_journal
+from kassiber.core.journal_calculation import stored_calculation
 from kassiber.core.report_explanation import explain_capital_gain, result_reference
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -65,7 +66,7 @@ def test_wrong_book_version_rebuild_and_legacy_fail_explicitly(tmp_path):
             with pytest.raises(AppError) as raised:
                 explain_capital_gain(conn, profile, {**reference,field:value})
             assert raised.value.code == 'report_explanation_stale'
-        conn.execute("UPDATE journal_entries SET calculation_json=NULL")
+        conn.execute("UPDATE journal_entries SET calculation_json=NULL, calculation_compact=NULL")
         conn.commit()
         assert explain_capital_gain(conn, profile, reference)['status'] == 'engine_detail_unavailable'
         conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1")
@@ -80,9 +81,9 @@ def test_wrong_book_version_rebuild_and_legacy_fail_explicitly(tmp_path):
 def test_corrupt_detail_does_not_claim_reconciliation(tmp_path):
     conn, profile, reference = _book(tmp_path)
     try:
-        record = json.loads(conn.execute("SELECT calculation_json FROM journal_entries WHERE id=?", (reference['entry_id'],)).fetchone()[0])
+        record = stored_calculation(conn.execute("SELECT * FROM journal_entries WHERE id=?", (reference['entry_id'],)).fetchone())
         record['fragments'][0]['gain_loss_exact']='999999'
-        conn.execute("UPDATE journal_entries SET calculation_json=? WHERE id=?", (json.dumps(record),reference['entry_id']))
+        conn.execute("UPDATE journal_entries SET calculation_json=?, calculation_compact=NULL WHERE id=?", (json.dumps(record),reference['entry_id']))
         conn.commit()
         result = explain_capital_gain(conn, profile, reference)
         assert result['status'] == 'engine_detail_mismatch'

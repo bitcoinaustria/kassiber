@@ -47,6 +47,19 @@ There is no reliable historical failed-request marker from which to reconstruct
 an owner's intended review. Opening an existing book does not silently repair
 or replay authoring; see [recovery](custody-components.md#authoring-transactions-and-recovery).
 
+## Compact retained calculations
+
+Opening a book adds the nullable `journal_entries.calculation_compact` column
+after the msat rebuild. Existing rows keep their `calculation_json` text and
+are read as before. The next `journals process` stores each realized entry's
+calculation in the compact column and leaves `calculation_json` NULL. A
+calculation the compact form cannot restore exactly keeps the legacy column.
+Explanations and `journals events get` return the same values and bytes from
+either column. An older Python build ignores the column: it reports
+compact rows' engine detail as unavailable until it rebuilds the journal
+itself. An older Rust build refuses the newer schema. See
+[storage-format speedups](r4-journal-pipeline.md#storage-format-speedups).
+
 ## Intentionally not inferred during upgrade
 
 - Direct payout decimal precision lost through historical float conversion

@@ -167,7 +167,7 @@ fn ensure_schema_compat(
     columns_between(
         conn,
         ("transactions", "amount_includes_fee"),
-        ("transactions", "kind_override"),
+        ("journal_entries", "calculation_compact"),
     )?;
     crate::semantics::migrate_stage(conn, true, observer)?;
     columns_between(

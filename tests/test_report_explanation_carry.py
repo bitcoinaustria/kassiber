@@ -6,6 +6,7 @@ import pytest
 
 from kassiber.cli.handlers import create_transaction_pair, process_journals
 from kassiber.core import report_explanation_carry
+from kassiber.core.journal_calculation import stored_calculation
 from kassiber.core.report_explanation import explain_capital_gain, result_reference
 from kassiber.db import open_db
 from tests.custody_tax_helpers import persist_authoritative_chain_observation
@@ -84,14 +85,14 @@ def test_cross_rail_sale_follows_real_retained_engine_lots_and_fees(carried_book
     assert fragment['lot']['spot_price_exact'] == '80000'
     assert fragment['event']['crypto_fee_msat_exact'] == '10000000'
     assert fragment['event']['fiat_fee_exact'] == '8.0080'
-    stored = json.loads(conn.execute('SELECT calculation_json FROM journal_entries WHERE id=?', (reference['entry_id'],)).fetchone()[0])
+    stored = stored_calculation(conn.execute('SELECT * FROM journal_entries WHERE id=?', (reference['entry_id'],)).fetchone())
     assert 'inherited_basis' not in stored['fragments'][0]['lot']
 
 
 @pytest.mark.parametrize('corruption,status', [(None, 'engine_detail_unavailable'), ('{}', 'engine_detail_mismatch')])
 def test_missing_or_invalid_inherited_detail_is_explicit(carried_book, corruption, status):
     conn, profile, reference = carried_book
-    conn.execute("UPDATE journal_entries SET calculation_json=? WHERE transaction_id='swap-out'", (corruption,))
+    conn.execute("UPDATE journal_entries SET calculation_json=?, calculation_compact=NULL WHERE transaction_id='swap-out'", (corruption,))
     conn.commit()
     result = explain_capital_gain(conn, profile, reference)
     assert result['status'] == 'available'  # The displayed sale still reconciles.
@@ -114,11 +115,11 @@ def test_source_trace_is_bounded_and_does_not_invent_pool_sources(carried_book, 
 def test_recursive_source_trace_stops_on_cycle(carried_book):
     conn, profile, reference = carried_book
     row = conn.execute("SELECT * FROM journal_entries WHERE transaction_id='swap-out'").fetchone()
-    calculation = json.loads(row['calculation_json'])
+    calculation = stored_calculation(row)
     lot = calculation['fragments'][0]['lot']
     lot.update(transaction_id='swap-in', asset='LBTC')
     lot['pricing']['pricing_method'] = 'carrying_value'
-    conn.execute('UPDATE journal_entries SET calculation_json=? WHERE id=?', (json.dumps(calculation), row['id']))
+    conn.execute('UPDATE journal_entries SET calculation_json=?, calculation_compact=NULL WHERE id=?', (json.dumps(calculation), row['id']))
     conn.commit()
     result = explain_capital_gain(conn, profile, reference)
     inherited = result['calculation']['fragments'][0]['lot']['inherited_basis']
