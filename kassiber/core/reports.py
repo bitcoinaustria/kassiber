@@ -3,8 +3,11 @@ from __future__ import annotations
 import csv
 import ipaddress
 import json
+import os
 import re
 import sqlite3
+import stat
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -5561,9 +5564,27 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
 
 
 def _write_csv_rows(path, rows):
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerows(rows)
+    """Replace ``path`` only once every row is written.
+
+    Like ``open("w")``, this writes through a final symlink, gives a new file
+    the umask's default mode and keeps an existing file's mode.
+    """
+    target = Path(os.path.realpath(path))
+    try:
+        mode = stat.S_IMODE(os.stat(target).st_mode)
+    except FileNotFoundError:
+        mode = None
+    staged = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+    descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            csv.writer(handle).writerows(rows)
+        if mode is not None:
+            os.chmod(staged, mode)
+        os.replace(staged, target)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
 
 
 def _austrian_e1kv_overview_csv_rows(report):
