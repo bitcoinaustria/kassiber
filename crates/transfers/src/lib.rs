@@ -9,6 +9,7 @@ mod gap_review_store;
 mod history;
 mod pair_authoring;
 mod pair_spec;
+pub mod pairing;
 mod payout_create;
 mod payout_delete;
 mod records;

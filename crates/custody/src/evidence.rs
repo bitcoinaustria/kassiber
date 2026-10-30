@@ -1,5 +1,5 @@
 //! Port of custody_evidence's canonical identities, commitments and quantities.
-use crate::codec::{self, int, integer, object, text, truth, wide};
+use crate::codec::{self, int, integer, text, truth, wide};
 use crate::components::Error;
 use crate::python_text::PythonText;
 use crate::python_text::{isalnum, strip};
@@ -69,8 +69,8 @@ pub fn network(chain: &str, original: &Value) -> Result<String, Error> {
     })
 }
 pub fn scope(row: &Value) -> Result<(String, String), Error> {
-    let raw = object(&row["raw_json"]);
-    let config = object(if truth(&row["config_json"]) {
+    let raw = crate::graph::transfer_object(&row["raw_json"]);
+    let config = crate::graph::transfer_object(if truth(&row["config_json"]) {
         &row["config_json"]
     } else {
         &row["wallet_config_json"]
@@ -124,7 +124,7 @@ pub fn txid(value: &Value) -> Option<String> {
 }
 
 pub fn event_key(row: &Value) -> Result<EventKey, Error> {
-    let raw = object(&row["raw_json"]);
+    let raw = crate::graph::transfer_object(&row["raw_json"]);
     let (chain, network) = scope(row)?;
     let raw_ordered = if let Some(s) = row["raw_json"].as_str() {
         codec::loads(s).unwrap_or(Py::Null)
@@ -398,8 +398,8 @@ pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
         if truth(&auth["authoritative"]) {
             item.insert("_kassiber_verified_chain_observation".into(), auth);
         }
-        let config = object(original("config_json"));
-        let raw = object(original("raw_json"));
+        let config = crate::graph::transfer_object(original("config_json"));
+        let raw = crate::graph::transfer_object(original("raw_json"));
         let mut chain = if truth(&raw["chain"]) {
             raw["chain"].clone()
         } else {

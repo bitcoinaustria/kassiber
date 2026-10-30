@@ -3613,3 +3613,12 @@ suggest, bulk-pair, rules apply, and review cases/plan/apply. Their associated
 desktop computation/projection kinds and AI projections remain Python.
 Automatic journal pairing belongs to R4 and is unchanged by this continuation.
 The UUID-redaction fix is reserved for integration.
+
+## R4 automatic pairing library checkpoint
+
+R4-14 supplies `kassiber_transfers::pairing` for suggestions, rule application,
+bulk exact pairing and the four-pass journal automatic-pairing sequence.
+[Its contract and parity report](rust-pairing.md) describe the R4-13/R4-15
+transaction boundary, generated and fixture oracles, performance and mutations.
+No additional CLI leaf or daemon kind is registered; route totals above stay
+unchanged. Python desktop/AI projections continue reading the same authored rows.

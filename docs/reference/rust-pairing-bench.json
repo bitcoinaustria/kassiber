@@ -1,0 +1,258 @@
+[
+  {
+    "book": "generic-2000",
+    "runs": [
+      {
+        "python": {
+          "seconds": 0.3391608849997283,
+          "load_1m": 6.00244140625
+        },
+        "rust": {
+          "seconds": 0.033222944,
+          "load_1m": "6.00"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.032099123,
+          "load_1m": "6.00"
+        },
+        "python": {
+          "seconds": 0.3272044420009479,
+          "load_1m": 6.00244140625
+        }
+      },
+      {
+        "python": {
+          "seconds": 0.329823921998468,
+          "load_1m": 5.76171875
+        },
+        "rust": {
+          "seconds": 0.034768056,
+          "load_1m": "5.76"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.034656883,
+          "load_1m": "5.76"
+        },
+        "python": {
+          "seconds": 0.3334088600004179,
+          "load_1m": 5.76171875
+        }
+      },
+      {
+        "python": {
+          "seconds": 0.32358586599912087,
+          "load_1m": 5.76171875
+        },
+        "rust": {
+          "seconds": 0.036457381,
+          "load_1m": "5.76"
+        }
+      }
+    ],
+    "best": {
+      "python": 0.32358586599912087,
+      "rust": 0.032099123
+    },
+    "speedup": 10.08083199030456,
+    "database_parity": true,
+    "suggestion_byte_parity": true,
+    "suggestions_before": 0,
+    "suggestions_after": 0
+  },
+  {
+    "book": "rich-2000",
+    "runs": [
+      {
+        "python": {
+          "seconds": 0.42871316299897444,
+          "load_1m": 5.76171875
+        },
+        "rust": {
+          "seconds": 0.057987741,
+          "load_1m": "5.54"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.061838883,
+          "load_1m": "5.54"
+        },
+        "python": {
+          "seconds": 0.45472548299949267,
+          "load_1m": 5.54052734375
+        }
+      },
+      {
+        "python": {
+          "seconds": 0.42560809000133304,
+          "load_1m": 5.54052734375
+        },
+        "rust": {
+          "seconds": 0.059131261,
+          "load_1m": "5.54"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.059968924,
+          "load_1m": "5.54"
+        },
+        "python": {
+          "seconds": 0.4366773780002404,
+          "load_1m": 5.54052734375
+        }
+      },
+      {
+        "python": {
+          "seconds": 0.4320947449996311,
+          "load_1m": 5.3369140625
+        },
+        "rust": {
+          "seconds": 0.064008003,
+          "load_1m": "5.34"
+        }
+      }
+    ],
+    "best": {
+      "python": 0.42560809000133304,
+      "rust": 0.057987741
+    },
+    "speedup": 7.339621834920816,
+    "database_parity": true,
+    "suggestion_byte_parity": true,
+    "suggestions_before": 173,
+    "suggestions_after": 173
+  },
+  {
+    "book": "generic-20000",
+    "runs": [
+      {
+        "python": {
+          "seconds": 3.6736664249983733,
+          "load_1m": 5.3369140625
+        },
+        "rust": {
+          "seconds": 0.339816862,
+          "load_1m": "5.31"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.336138014,
+          "load_1m": "5.43"
+        },
+        "python": {
+          "seconds": 3.6891473940013384,
+          "load_1m": 5.43505859375
+        }
+      },
+      {
+        "python": {
+          "seconds": 3.6131964229989535,
+          "load_1m": 5.28759765625
+        },
+        "rust": {
+          "seconds": 0.336754211,
+          "load_1m": "5.18"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.333481523,
+          "load_1m": "5.17"
+        },
+        "python": {
+          "seconds": 3.7063724830004503,
+          "load_1m": 5.1689453125
+        }
+      },
+      {
+        "python": {
+          "seconds": 3.5868173290000414,
+          "load_1m": 4.98876953125
+        },
+        "rust": {
+          "seconds": 0.327020909,
+          "load_1m": "4.83"
+        }
+      }
+    ],
+    "best": {
+      "python": 3.5868173290000414,
+      "rust": 0.327020909
+    },
+    "speedup": 10.968159008450561,
+    "database_parity": true,
+    "suggestion_byte_parity": true,
+    "suggestions_before": 0,
+    "suggestions_after": 0
+  },
+  {
+    "book": "rich-20000",
+    "runs": [
+      {
+        "python": {
+          "seconds": 5.078831708000507,
+          "load_1m": 4.5478515625
+        },
+        "rust": {
+          "seconds": 0.468366222,
+          "load_1m": "4.50"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.493847408,
+          "load_1m": "4.46"
+        },
+        "python": {
+          "seconds": 5.115964222999537,
+          "load_1m": 4.42626953125
+        }
+      },
+      {
+        "python": {
+          "seconds": 5.188953140001104,
+          "load_1m": 4.3603515625
+        },
+        "rust": {
+          "seconds": 0.491165297,
+          "load_1m": "4.33"
+        }
+      },
+      {
+        "rust": {
+          "seconds": 0.49055178,
+          "load_1m": "4.36"
+        },
+        "python": {
+          "seconds": 5.0091972579994035,
+          "load_1m": 4.3603515625
+        }
+      },
+      {
+        "python": {
+          "seconds": 5.044149842000479,
+          "load_1m": 4.75439453125
+        },
+        "rust": {
+          "seconds": 0.514319731,
+          "load_1m": "4.69"
+        }
+      }
+    ],
+    "best": {
+      "python": 5.0091972579994035,
+      "rust": 0.468366222
+    },
+    "speedup": 10.695043798438999,
+    "database_parity": true,
+    "suggestion_byte_parity": true,
+    "suggestions_before": 1778,
+    "suggestions_after": 1778
+  }
+]

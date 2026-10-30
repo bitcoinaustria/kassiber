@@ -110,6 +110,22 @@ pub fn protocol_scope(row: &Value) -> (String, Option<String>, Option<String>) {
     }
 }
 
+/// Read-only matching adapters reuse the custody identity and timestamp rules.
+pub fn matching_scope(row: &Value) -> Option<(String, String, String, String)> {
+    crate::graph::onchain_scope(row)
+}
+
+pub fn matching_output_sats(output: &Value) -> Option<i64> {
+    crate::graph::sats(output)
+}
+
+pub fn matching_instant(value: &Value) -> Option<f64> {
+    time::instant(value).ok().flatten().map(|us| {
+        // datetime.timestamp() rounds the complete integer microsecond count.
+        (us - 62_135_596_800_000_000) as f64 / 1_000_000.0
+    })
+}
+
 pub fn canonical_timestamp(value: &Value) -> Result<String, Error> {
     let raw = pystr(value);
     let raw = raw.py_strip();
@@ -183,6 +199,11 @@ pub fn network_domain_evidence(row: &Value) -> (Option<String>, bool) {
         let valid = domain.is_some();
         return (domain, valid);
     }
+    matching_domain_fallback(row)
+}
+
+/// Network metadata after a caller has already refused on-chain scope.
+pub fn matching_domain_fallback(row: &Value) -> (Option<String>, bool) {
     let raw = crate::graph::transfer_object(&row["raw_json"]);
     let config = crate::graph::transfer_object(if truth(&row["config_json"]) {
         &row["config_json"]

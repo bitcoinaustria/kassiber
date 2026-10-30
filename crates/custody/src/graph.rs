@@ -17,6 +17,45 @@ fn graph_integer(value: &Value) -> BigInt {
 fn integer_value(value: &BigInt) -> Value {
     serde_json::from_str(&value.to_string()).expect("computed integer")
 }
+pub(crate) fn sats(entry: &Value) -> Option<i64> {
+    let explicit = !entry["value_sats"].is_null();
+    let value = if explicit {
+        &entry["value_sats"]
+    } else {
+        &entry["value"]
+    };
+    if value.is_null() || value == "" || value.is_boolean() {
+        return None;
+    }
+    let spelling = codec::pystr(value);
+    if explicit
+        || value
+            .as_number()
+            .is_some_and(|n| !n.to_string().contains(['.', 'e', 'E']))
+        || value.is_string() && !spelling.contains('.')
+    {
+        return spelling.py_strip().parse::<i64>().ok().or_else(|| {
+            if explicit {
+                value.as_f64().filter(|v| v.is_finite()).map(|v| v as i64)
+            } else {
+                None
+            }
+        });
+    }
+    let spelling = if value.is_number() {
+        codec::pystr(value)
+    } else {
+        spelling
+    };
+    Decimal::from_str(&spelling)
+        .ok()?
+        .mul(&Decimal::from(100_000_000), &Context::RP2)
+        .ok()?
+        .to_fixed_places(0, Rounding::HalfEven)
+        .ok()?
+        .parse()
+        .ok()
+}
 pub(crate) fn strict_txid(v: &Value) -> Option<String> {
     let s = text(v).py_strip().py_lower();
     if s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()) {

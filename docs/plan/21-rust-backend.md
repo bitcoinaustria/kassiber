@@ -1993,3 +1993,13 @@ The [shell reference](../reference/rust-shell.md#gap-planapply-checkpoint)
 records parity counts, named mutation witnesses and verification results.
 The ten computation-dependent commands and their kinds remain unported;
 AI projections remain Python and automatic pairing belongs to R4.
+
+### R4 automatic pairing library checkpoint
+
+R4-14 on `t3code/r4-14-pairing`, based at `c3d18194`, ports suggestions, rule
+selection and bulk exact pairing in an isolated `crates/transfers/src/pairing`
+module. The four-pass journal helper reuses parsed observations, preserves
+projection guards and leaves all successful writes pending for the journal
+caller. [The pairing reference](../reference/rust-pairing.md) records parity,
+performance, mutation evidence and the R4-13/R4-15 calling contract. This library
+checkpoint activates no product route and does not complete R4 journal routing.

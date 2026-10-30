@@ -299,7 +299,9 @@ Python.
   after custody/journal services are available. Matching needs its own mutation
   catalog and Python/naive-all-pairs oracle before native suggestions or auto-pair
   can be enabled; review cases/plan/apply must retain readiness barriers.
-  Automatic pairing during journal processing belongs to R4.
+  The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the
+  matcher/rules/bulk implementation and its oracle/mutation evidence; R4-13 and
+  R4-15 still need to integrate its atomic journal boundary before route enablement.
 
 ## Accounting correctness and custody
 
