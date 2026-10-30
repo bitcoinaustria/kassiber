@@ -32,7 +32,7 @@ verification, including per-command Rust routing counts.
 | `crates/transfers` | stored effective pairs/payouts, gap history, historical receipts, local matching-rule configuration and advisory dismissals |
 
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
-| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, and append-only saved/filed snapshot markers |
+| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV artifacts, and append-only saved/filed snapshot markers |
 
 ## Command line
 
@@ -118,10 +118,12 @@ the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fo
 and forward-edit reverts), `imports list`, `imports rollback`, `wallets derive`,
 the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
 the [explicit snapshot marker write](#reports-explicit-snapshot-write-checkpoint-r5-fifth-continuation-partial),
+the [CSV artifact exports](#csv-export-transport-checkpoint-r5-tenth-continuation),
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 82 total). Each family registers through its own
-CLI module. Every other leaf parses exactly as in Python and then fails
+and `offline` (26 setup leaves; 85 total, with transaction export limited to CSV).
+Each family registers through its own CLI module. Every other leaf parses
+exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -2729,14 +2731,18 @@ whose binary was replaced by a concurrent workspace build are discarded; the
 final 22-scenario run uses the stable rebuilt harness. No full quality-gate or
 push-readiness claim is made.
 
-Remaining work is export-completion saved registration, app-computed summaries
-and artifact/bundle hashes, dependency capture from booked authoritative inputs,
+At this checkpoint, remaining work was export-completion saved registration,
+app-computed summaries and artifact/bundle hashes, dependency capture from
+booked authoritative inputs,
 full-report CSV, the Austrian E1kv CSV bundle, report-owned transaction CSV
 (including draft/range semantics), and their daemon export kinds, including
-capital-gains CSV. Those commands and kinds keep `not_implemented`.
+capital-gains CSV. Those commands and kinds retained `not_implemented`.
 XLSX/PDF, exit-tax, explanations, privacy/Lightning/cross-check/commercial reads
-and network reads also keep `not_implemented`. AI projections remain Python.
+and network reads also retained `not_implemented`. AI projections remained Python.
 This is **not complete reports slice acceptance**.
+
+The later [CSV transport checkpoint](#csv-export-transport-checkpoint-r5-tenth-continuation)
+supersedes this historical export/completion list and records current deferrals.
 
 ## Reports CSV preparation checkpoint (R5 sixth continuation, partial)
 
@@ -3098,10 +3104,92 @@ the disposable mutation tree is removed after recording its summary under
 XLSX needs the planned `rust_xlsxwriter`/`calamine` rendering and reading
 libraries, formula/cached-result and verification-sheet comparisons, and a
 reviewed ZIP metadata/XML ordering strategy before claiming byte parity.
-PDF needs the chosen Typst/ReportLab replacement, bundled licensed fonts,
-network-free font resolution and layout review. Its acceptance compares
+PDF needs the chosen Typst/ReportLab replacement (the R0 spike used Typst 0.15),
+a decision between its bundled Vera faces and Python's effective Helvetica
+fallback, a complete licensed font bundle, network-free font resolution and
+layout review. Its acceptance compares
 extracted text, tables and page structure; PDF byte equality needs a separate
 deterministic metadata/font-subset/compression strategy and is not assumed.
+
+## CSV export transport checkpoint (R5 tenth continuation)
+
+The CLI now registers `reports export-csv`, `reports export-austrian-e1kv-csv`
+and `transactions export --export-format csv` in `IMPLEMENTED`. The transaction
+leaf's XLSX and platform formats remain unported: its probe selects Python for
+those whole invocations and direct native execution refuses before bootstrap.
+The four daemon kinds are `ui.reports.export_csv`,
+`ui.reports.export_austrian_e1kv_csv`, `ui.reports.export_capital_gains_csv`
+and `ui.transactions.export_csv`. Shared report services resolve calendar
+ranges and managed filenames while retaining admission. Desktop requests use
+the active book and keep expected-scope and source-freshness barriers.
+Capital-gains CSV and observed transaction lists create no saved marker, matching
+Python. Full reports and Austrian bundles create saved markers; filing remains
+an explicit action. AI allowlists and disclosure projections are unchanged.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Completion/export sequences | Nine FIFO/HIFO/Austrian sequences; 36 actions, 51 files and all 112 SQLite tables after every action |
+| Managed desktop requests | 76 Python vectors: 30 successes, 46 exact errors and 86 literal CSV files |
+| Native CLI/daemon | 13 process scenarios; machine JSON, table/plain/CSV output, ranges, repeated filing, daemon collisions, stale refusal, transaction drafts and failing parent paths |
+| Daemon wire | 57 export requests through three native sessions; normalized generated identities only, fixed clocks, literal artifacts and stored JSON |
+| Capture failure | Native service injection verifies rollback after publication; process startup intentionally refuses the extra test trigger as `requires_python_migration` |
+
+The fresh process log records these served-by counts, with no fallback for any
+registered CSV command. Each native daemon advertises all four export kinds.
+
+| Command/session | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.export-csv` | 20 | 0 |
+| `reports.export-austrian-e1kv-csv` | 6 | 0 |
+| `transactions.export` (CSV) | 17 | 0 |
+| `reports.filed-snapshots.create` | 6 | 0 |
+| `daemon` | 3 | 0 |
+
+Those sessions serve `ui.reports.export_csv` 12 times, capital-gains CSV 24,
+Austrian bundle CSV three and transaction CSV 18. The no-egress observer is
+armed on every process. `HOME` is inherited unchanged; books, clocks, owner
+locks, exports and scratch are disposable. The report clock override exists
+only in the test-harness binary. Generated UUIDs retain their production source
+and are mapped one-to-one across the response and every database reference.
+
+New request mutation killers are `managed_csv_export_requests_match_python`
+(source freshness, active-book authority, conflicting wallets, zone selection,
+annual gains and Vienna boundaries),
+`managed_csv_paths_do_not_overwrite_existing_actions` (filename collisions), and
+`transaction_export_admission_only_registers_native_csv` (format admission).
+The two sequence mutations retain their separate checkpoint evidence above.
+
+`crates/reports/scripts/repro_python_directory_error.py` reproduces a Python
+reference bug: exporting CSV to an existing directory includes a random staging
+UUID/path in `IsADirectoryError`. Repeated identical actions have different error
+bytes. Rust retains its stable error naming the destination; byte parity for
+this error is not claimed. Parent-file and non-directory-ancestor refusals have
+exact process parity, including unchanged database state. Python product code
+is unchanged.
+
+Final verification uses Rust 1.99.1, locked Python 3.11 and offline/locked Cargo.
+Formatting, workspace and test-harness clippy with `-D warnings`, all 993
+workspace tests and all 14 harness tests pass. The 13 new process scenarios
+pass with direct read-only SQLite dumps; the 22 inherited scenarios also pass,
+recording 309 existing report calls served by Rust and zero report fallbacks.
+The CLI-runner regressions pass eight tests and six subtests. Completion,
+calendar-range, sequence and request generators all check cleanly.
+`classify_tests update` records the new oracle module, and the required CI
+preflight passes all 57 tests, including inventory and source contracts.
+
+The 531-entry mutation catalog validates; all ten new sequence/request entries
+are killed by the named tests above. The inherited 521 entries retain their
+previous checkpoint evidence and are not rerun as mutations in this batch.
+Verification and routing summaries are retained under
+`target/r5-reports10/{verification-summary,routing-summary,inherited-routing-summary}.json`.
+Owned mutation and verification build trees are removed after recording their
+summaries. Verification is Linux-only.
+
+This enables the CSV artifact batch, not the complete reports slice. Remaining
+work includes the graphless Liquid raw-hex dependency decoder refusal described
+above, XLSX/PDF and their rendering/font/parity requirements, platform-specific
+transaction exports, and the remaining report reads/kinds listed in the earlier
+checkpoints. No Python product code or dependency/lockfile changes are included.
 
 ## Not yet ported
 

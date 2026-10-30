@@ -155,6 +155,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.components.plan",
     "transfers.components.apply",
     "review.receipt",
+
+    "reports.export-csv",
+    "reports.export-austrian-e1kv-csv",
+    "transactions.export",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

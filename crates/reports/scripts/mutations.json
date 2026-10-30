@@ -5249,5 +5249,85 @@
       "csv_export_sequences_match_python_artifacts_and_database"
     ],
     "rule": "Every completed saved export captures authoritative dependencies and explicit filing copies them."
+  },
+  {
+    "id": "request-source-freshness",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "    if count == 0 {",
+    "replace": "    if count >= 0 {",
+    "expect_failing": [
+      "managed_csv_export_requests_match_python"
+    ],
+    "rule": "Desktop accounting exports retain the source freshness barrier before writing artifacts."
+  },
+  {
+    "id": "request-active-book",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "        replace(&mut args, \"workspace\", Value::Null);",
+    "replace": "",
+    "expect_failing": [
+      "managed_csv_export_requests_match_python"
+    ],
+    "rule": "Desktop exports use the admitted active book and ignore unrecognized workspace selectors."
+  },
+  {
+    "id": "request-wallet-conflict",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "        if !matches!(wallet, Value::Null) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "managed_csv_export_requests_match_python"
+    ],
+    "rule": "Transaction exports reject conflicting singular and plural wallet selections."
+  },
+  {
+    "id": "request-range-zone",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "        value(args, \"timezone\"),",
+    "replace": "        &Value::Null,",
+    "expect_failing": [
+      "managed_csv_export_requests_match_python"
+    ],
+    "rule": "The user-selected calendar zone controls resolved range bounds and payloads."
+  },
+  {
+    "id": "request-path-counter",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "    let mut counter = 2;",
+    "replace": "    let mut counter = 1;",
+    "expect_failing": [
+      "managed_csv_paths_do_not_overwrite_existing_actions"
+    ],
+    "rule": "Repeated managed exports skip both prior files and occupied directory names."
+  },
+  {
+    "id": "capital-csv-year",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "    if let Some(year) = year {",
+    "replace": "    if let Some(year) = year.filter(|_| false) {",
+    "expect_failing": [
+      "managed_csv_export_requests_match_python"
+    ],
+    "rule": "Capital-gains CSV includes only the selected tax year."
+  },
+  {
+    "id": "capital-csv-calendar",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "kassiber_pytext::lower(&text(profile, \"tax_country\")) == \"at\"",
+    "replace": "kassiber_pytext::lower(&text(profile, \"tax_country\")) == \"generic\"",
+    "expect_failing": [
+      "managed_csv_export_requests_match_python"
+    ],
+    "rule": "Austrian capital-gains CSV uses Vienna-year boundaries while generic books use stored calendar years."
+  },
+  {
+    "id": "request-cli-format-admission",
+    "file": "crates/cli/src/run.rs",
+    "find": "args.text(\"export_format\") == Some(\"csv\")",
+    "replace": "args.text(\"export_format\").is_some()",
+    "expect_failing": [
+      "transaction_export_admission_only_registers_native_csv"
+    ],
+    "rule": "Unported transaction formats remain refused before bootstrap and are not falsely served by the Rust hybrid probe."
   }
 ]

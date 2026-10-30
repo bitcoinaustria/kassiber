@@ -1072,7 +1072,15 @@ failed completion. One admitted write transaction spans preparation,
 publication and completion; stale input versions fail before publication.
 See the [completion checkpoint](../reference/rust-shell.md#saved-csv-completion-and-export-sequence-checkpoint-r5-ninthtenth-continuations)
 for verification and the deferred XLSX/PDF rendering, font and parity needs.
-Transport registration still requires its own process and hybrid proof.
+The tenth continuation also registers the two CLI report CSV artifacts,
+transaction export's CSV form and four desktop CSV kinds, including capital
+gains. Thirteen process scenarios compare wire output, literal files and full
+normalized DB state; the routing log proves zero Python fallbacks for each
+registered CSV command. Non-CSV transaction formats remain refused before
+bootstrap. A repro records Python's nondeterministic staging-path error when a
+CSV destination is an existing directory; exact error-byte parity remains open
+for that case. See the [transport checkpoint](../reference/rust-shell.md#csv-export-transport-checkpoint-r5-tenth-continuation)
+for per-command counts, mutations and final verification.
 
 ### Service slice contract (R4 onward)
 

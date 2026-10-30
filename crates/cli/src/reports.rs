@@ -15,6 +15,9 @@ pub const COMMANDS: &[&str] = &[
     "reports.austrian-e1kv",
     "reports.austrian-tax-summary",
     "reports.balance-history",
+    "reports.export-csv",
+    "reports.export-austrian-e1kv-csv",
+    "transactions.export",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -24,6 +27,32 @@ pub fn kind(command: &str) -> Option<&'static str> {
     }
 }
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if matches!(
+        command,
+        "reports.export-csv" | "reports.export-austrian-e1kv-csv" | "transactions.export"
+    ) {
+        return book.reports(
+            command,
+            &dict(
+                [
+                    "workspace",
+                    "profile",
+                    "wallet",
+                    "wallets",
+                    "file",
+                    "dir",
+                    "history_limit",
+                    "year",
+                    "export_format",
+                    "period",
+                    "from_day",
+                    "to_day",
+                    "timezone",
+                ]
+                .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+            ),
+        );
+    }
     if command == "reports.filed-snapshots.create" {
         return book.reports(command, &snapshot_request(args));
     }

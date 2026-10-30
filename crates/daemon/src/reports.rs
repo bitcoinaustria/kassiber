@@ -8,8 +8,27 @@ pub const KINDS: &[&str] = &[
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.export_csv",
+    "ui.reports.export_capital_gains_csv",
+    "ui.reports.export_austrian_e1kv_csv",
+    "ui.transactions.export_csv",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if matches!(
+        kind,
+        "ui.reports.export_csv"
+            | "ui.reports.export_capital_gains_csv"
+            | "ui.reports.export_austrian_e1kv_csv"
+            | "ui.transactions.export_csv"
+    ) {
+        let empty = dict::<&str>([]);
+        let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
+        if !matches!(args, Value::Dict(_)) {
+            return Err(AppError::new("validation", "daemon args must be an object")
+                .with_details(dict([("type", s(type_name(args)))])));
+        }
+        return book.reports(kind, args);
+    }
     if kind == "ui.reports.balance_history" {
         return book.reports(kind, &history_args(raw)?);
     }

@@ -675,6 +675,22 @@ struct RealBook {
     db_passphrase: Option<Secret>,
     backends: backends::Config,
 }
+
+/// Only test builds accept an injected report clock. UUIDs retain their native
+/// source and process oracles declare a one-to-one mapping for generated ids.
+struct ReportSources;
+impl kassiber_setup::Sources for ReportSources {
+    fn uuid(&self, conn: &Connection) -> kassiber_setup::Result<String> {
+        kassiber_setup::SystemSources.uuid(conn)
+    }
+    fn now(&self, conn: &Connection) -> kassiber_setup::Result<String> {
+        #[cfg(feature = "test-harness")]
+        if let Ok(stamp) = std::env::var("KASSIBER_RUST_TEST_REPORT_TIME") {
+            return Ok(stamp);
+        }
+        kassiber_setup::SystemSources.now(conn)
+    }
+}
 impl RealBook {
     fn conn(&self) -> Result<&Connection, AppError> {
         self.book
@@ -1113,7 +1129,41 @@ impl Book for RealBook {
         kassiber_wallets::snapshot(self.conn()?, default_backend, &self.backend_kinds)
     }
     fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
-        kassiber_reports::execute(self.conn()?, command, args)
+        if kassiber_reports::export_request::handles(command) {
+            let paths = context()?
+                .resolve(&ResolveOptions {
+                    data_root: Some(PathBuf::from(&self.data_root)),
+                    ..Default::default()
+                })
+                .map_err(error)?;
+            let mut args = args.clone();
+            if !command.starts_with("ui.") {
+                let key = if command == "reports.export-austrian-e1kv-csv" {
+                    "dir"
+                } else {
+                    "file"
+                };
+                let raw = kassiber_envelope::get(&args, key)
+                    .map(kassiber_envelope::py_str)
+                    .unwrap_or_default();
+                let path = context()?.expand_user(Path::new(&raw)).map_err(error)?;
+                if let Value::Dict(fields) = &mut args {
+                    for (k, v) in fields {
+                        if *k == key.into() {
+                            *v = kassiber_envelope::s(path.to_string_lossy().into_owned());
+                        }
+                    }
+                }
+            }
+            return kassiber_reports::export_request::execute(
+                self.conn()?,
+                command,
+                &args,
+                &paths.exports_root,
+                &ReportSources,
+            );
+        }
+        kassiber_reports::execute_with_sources(self.conn()?, command, args, &ReportSources)
     }
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         kassiber_wallets::derive_wallet(self.conn()?, request)

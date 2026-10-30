@@ -158,6 +158,13 @@ fn selected_leaf(namespace: &Namespace) -> (Vec<&'static str>, ParserId) {
 #[cfg(feature = "test-probe")]
 pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
+// The transaction-export leaf also contains XLSX and platform formats. Keep
+// those whole invocations unported and refuse them before opening a book.
+fn implemented(command: &str, args: &Namespace) -> bool {
+    IMPLEMENTED.contains(&command)
+        && (command != "transactions.export" || args.text("export_format") == Some("csv"))
+}
+
 /// Runs one command line (without the program name); returns the exit code.
 pub fn run(
     argv: &[String],
@@ -276,7 +283,7 @@ pub fn run(
     if env.test_probe {
         let _ = writeln!(stdout, "{dotted}");
         let _ = stdout.flush();
-        return if IMPLEMENTED.contains(&dotted.as_str()) {
+        return if implemented(&dotted, &namespace) {
             0
         } else {
             PROBE_NOT_IMPLEMENTED
@@ -305,7 +312,7 @@ pub fn run(
     };
 
     let prepared = (|| -> Result<(), AppError> {
-        if !IMPLEMENTED.contains(&dotted.as_str()) {
+        if !implemented(&dotted, &namespace) {
             let mut error = not_implemented("cli", &format!("the command `{}`", path.join(" ")));
             error.details = Some(dict([
                 ("component", s("cli")),
@@ -792,4 +799,33 @@ fn route_brokered(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+
+    #[test]
+    fn transaction_export_admission_only_registers_native_csv() {
+        for format in ["csv", "xlsx", "cointracking-csv", "blockpit-csv"] {
+            let argv = [
+                "transactions",
+                "export",
+                "--export-format",
+                format,
+                "--file",
+                "unused",
+            ]
+            .map(String::from);
+            let args = parse_args(
+                &argv,
+                Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            assert_eq!(implemented("transactions.export", &args), format == "csv");
+        }
+    }
 }

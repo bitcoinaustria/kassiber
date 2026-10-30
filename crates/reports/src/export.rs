@@ -32,7 +32,7 @@ pub fn io_error(error: std::io::Error, path: Option<&Path>) -> AppError {
 
 /// Run `operation` in the admitted write transaction (or a savepoint of the
 /// caller's transaction), committing only after every step succeeded.
-fn admitted<T>(conn: &Connection, operation: impl FnOnce() -> Result<T>) -> Result<T> {
+pub(crate) fn admitted<T>(conn: &Connection, operation: impl FnOnce() -> Result<T>) -> Result<T> {
     let owns = conn.is_autocommit();
     conn.execute_batch(if owns {
         "BEGIN IMMEDIATE"
@@ -77,6 +77,31 @@ fn file_entry(file: &PublishedFile) -> Value {
         ("rows", Value::Int(file.rows.into())),
     ])
 }
+
+/// Path.mkdir(parents=True, exist_ok=True), retaining the actual failing
+/// ancestor in the error rather than substituting the final artifact path.
+fn create_directory(path: &Path) -> Result<()> {
+    match std::fs::create_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let Some(parent) = path.parent().filter(|parent| *parent != path) else {
+                return Err(io_error(error, Some(path)));
+            };
+            create_directory(if parent.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                parent
+            })?;
+            match std::fs::create_dir(path) {
+                Ok(()) => Ok(()),
+                Err(_) if path.is_dir() => Ok(()),
+                Err(error) => Err(io_error(error, Some(path))),
+            }
+        }
+        Err(_) if path.is_dir() => Ok(()),
+        Err(error) => Err(io_error(error, Some(path))),
+    }
+}
 /// Publish `prepared`, then register its saved marker when it has one.
 fn complete(
     conn: &Connection,
@@ -91,11 +116,18 @@ fn complete(
     let mut result;
     let mut files = None;
     let paths: Vec<PathBuf> = if bundle {
+        create_directory(target)?;
         let published = artifact_publication::bundle(&prepared, target).map_err(failed)?;
         result = dict([("dir", path_text(&target.canonicalize().map_err(failed)?))]);
         files = Some(Value::List(published.iter().map(file_entry).collect()));
         published.into_iter().map(|file| file.path).collect()
     } else {
+        create_directory(
+            target
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new(".")),
+        )?;
         let published = artifact_publication::file(&prepared, target).map_err(failed)?;
         result = dict([
             ("file", path_text(&published.path)),

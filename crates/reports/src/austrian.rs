@@ -107,8 +107,26 @@ fn year(args: &Value) -> Result<i64> {
             "--year is required for Austrian E 1kv export",
         ));
     }
-    let year = kassiber_pytext::parse_int(&text(args, "year"))
-        .map_err(|_| AppError::new("validation", "--year must be a four-digit tax year"))?;
+    normalize_tax_year(value(args, "year"))
+}
+
+pub(super) fn normalize_tax_year(raw: &Value) -> Result<i64> {
+    let year = match raw {
+        Value::Int(n) => Some(n.clone()),
+        Value::Bool(n) => Some(i64::from(*n).into()),
+        Value::Float(n) if n.is_finite() => {
+            kassiber_pytext::parse_int(&format!("{:.0}", n.trunc())).ok()
+        }
+        Value::Float(n) if n.is_infinite() => {
+            return Err(AppError::new(
+                "internal_error",
+                "cannot convert float infinity to integer",
+            ))
+        }
+        Value::Str(n) => n.as_str().and_then(|n| kassiber_pytext::parse_int(n).ok()),
+        _ => None,
+    }
+    .ok_or_else(|| AppError::new("validation", "--year must be a four-digit tax year"))?;
     if !(2009.into()..=2100.into()).contains(&year) {
         return Err(AppError::new(
             "validation",

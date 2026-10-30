@@ -1,4 +1,4 @@
-//! CSV artifact preparation. Transport registration waits for completion saves.
+//! Shared CSV artifact preparation for native export transports.
 //! Preparation holds one read snapshot and never publishes files or writes rows.
 use super::*;
 
@@ -62,6 +62,7 @@ pub fn prepare(
         }
         require_context(conn, &profile, false)?;
         match command {
+            "reports.export-capital-gains-csv" => capital_csv::prepare(conn, &profile, &args),
             "reports.export-csv" => full_csv::prepare(conn, &workspace, &profile, &args, sources),
             "reports.export-austrian-e1kv-csv" => {
                 austrian_csv::prepare(conn, &workspace, &profile, &args)

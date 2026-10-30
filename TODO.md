@@ -248,16 +248,16 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
   callers exist and the stack includes phase 5; preserve append-only history.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
   explanation, privacy, Lightning and cross-check reads.
-- [ ] Port full-report, Austrian bundle and transaction CSV artifacts, saved
+- [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.
-  Full-report and Austrian CSV preparation/publication now has frozen byte
-  oracles and atomic per-file writes. Standalone preparation now covers draft
-  withholding, multiple wallets and resolved ranges. Finish calendar preset/zone
-  admission, completion saves with authoritative dependency capture, and
-  process/state parity before
-  enabling the commands. See the
-  [standalone checkpoint](docs/reference/rust-shell.md#standalone-transaction-csv-preparation-r5-eighth-continuation-partial).
+  Completion computes hashes, exact summaries and authoritative dependencies
+  under retained admission. Complete normalized DB sequences and native
+  CLI/daemon process oracles prove byte parity and zero CSV fallbacks, including
+  desktop capital-gains CSV. Keep graphless Liquid raw-hex dependency identity
+  fail-closed until its decoder is ported. XLSX/PDF and platform transaction
+  formats remain separate work; see the
+  [CSV transport checkpoint](docs/reference/rust-shell.md#csv-export-transport-checkpoint-r5-tenth-continuation).
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
 - [ ] Port PDF/XLSX artifacts in a later slice. Keep unsupported commands
