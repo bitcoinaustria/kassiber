@@ -384,20 +384,32 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
             projected.push(fee_row(o, &integer_big(&o["fee_msat"])?, rows, "fee-only")?);
         }
     }
-    projected.sort_by_key(|r| (string(&r["occurred_at"]), string(&r["id"])));
+    projected.sort_by_cached_key(|r| (string(&r["occurred_at"]), string(&r["id"])));
     moves.sort_by_key(string);
     if finalize {
         quarantines.finish(&projected, &barrier_receipts, &observations)?;
-        cross = super::conversions::evaluate(
-            &json!({"rows":projected,"pairs":cross,"reviewed":array(&v["reviewed"])}),
-        )?
-        .as_array()
-        .expect("conversion array")
-        .clone();
+        // The operand json! would build, with the rows lent rather than copied.
+        let mut operand = serde_json::Map::new();
+        operand.insert("rows".into(), Value::Array(projected));
+        operand.insert("pairs".into(), Value::Array(cross));
+        operand.insert("reviewed".into(), json!(array(&v["reviewed"])));
+        let mut operand = Value::Object(operand);
+        cross = super::conversions::evaluate(&operand)?
+            .as_array()
+            .expect("conversion array")
+            .clone();
+        let Value::Array(projected) = operand["rows"].take() else {
+            unreachable!("lent rows")
+        };
         let quarantines = quarantines.sorted()?;
         validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-        let mut result = codec::from_json(&json!({"$type":"FinalizedTaxProjection",
-            "rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves}))?;
+        let mut result = serde_json::Map::new();
+        result.insert("$type".into(), json!("FinalizedTaxProjection"));
+        result.insert("rows".into(), Value::Array(projected));
+        result.insert("intra_pairs".into(), json!(intra));
+        result.insert("cross_asset_pairs".into(), json!(cross));
+        result.insert("selected_move_ids".into(), json!(moves));
+        let mut result = codec::from_json(&Value::Object(result))?;
         crate::graph::stored::put(&mut result, "quarantines", Py::List(quarantines));
         return Ok(result);
     }
