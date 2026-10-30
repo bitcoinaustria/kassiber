@@ -213,8 +213,8 @@
   {
     "id": "quantity-unit",
     "file": "crates/reports/src/lib.rs",
-    "find": "100_000_000_000_i64",
-    "replace": "100_000_000_i64",
+    "find": "Decimal::from_parts(msat < 0, msat.unsigned_abs().into(), -11).map_err(arithmetic)",
+    "replace": "Decimal::from_parts(msat < 0, msat.unsigned_abs().into(), -8).map_err(arithmetic)",
     "expect_failing": [
       "holdings_vectors"
     ],
