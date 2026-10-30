@@ -41,6 +41,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::iter;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 
 use serde_json::{json, Map, Value};
 
@@ -53,6 +54,7 @@ use crate::manifest::{
 };
 use crate::model::{ConfigSpec, Dec, EntryInput, EntryKind};
 use crate::num;
+use crate::par;
 
 use super::describe::{self, EventNotes, TransferLeg, TransferNotes};
 use super::normalize::{Event, Item, Normalized, Quarantine, Transfer};
@@ -259,6 +261,8 @@ struct Walker<'w, 'a> {
     first_drop_at: Option<String>,
     /// The next entry's row number (`row_index`).
     row_index: i64,
+    /// The constructor calls the walk made, in order.
+    calls: Vec<Call>,
     ins: Vec<(BuiltEntry, Entry)>,
     outs: Vec<(BuiltEntry, Entry)>,
     moves: Vec<(BuiltEntry, Entry)>,
@@ -285,6 +289,7 @@ impl<'w, 'a> Walker<'w, 'a> {
             priced: num::zero(),
             first_drop_at: lot_contamination(book.rows, normalized, austrian),
             row_index: 1,
+            calls: Vec::new(),
             ins: Vec::new(),
             outs: Vec::new(),
             moves: Vec::new(),
@@ -294,6 +299,58 @@ impl<'w, 'a> Walker<'w, 'a> {
     }
 
     fn run(mut self, normalized: &'w Normalized) -> EngineResult<Walked> {
+        // A failure of the walk, or a panic, comes after every constructor
+        // call it made, so the first of those that fails is raised first.
+        let visited = catch_unwind(AssertUnwindSafe(|| self.visit(normalized)));
+        let config = self.config;
+        let constructed = par::map(&self.calls, 128, |call| construct(call, config));
+        let mut built = Vec::with_capacity(constructed.len());
+        for outcome in constructed {
+            built.push(par::unwrap(outcome)?);
+        }
+        match visited {
+            Ok(visited) => visited?,
+            Err(panic) => resume_unwind(panic),
+        }
+        for (call, (entry, text)) in std::mem::take(&mut self.calls).into_iter().zip(built) {
+            let mut input = call.input;
+            input.text = text;
+            let kind = entry.kind;
+            let built = (
+                BuiltEntry {
+                    input,
+                    row: call.row,
+                },
+                entry,
+            );
+            match kind {
+                EntryKind::In => self.ins.push(built),
+                EntryKind::Out => self.outs.push(built),
+                EntryKind::Intra => self.moves.push(built),
+            }
+        }
+        let entries = (!self.ins.is_empty()).then(|| {
+            let count = self.ins.len() + self.outs.len() + self.moves.len();
+            let mut entries = BuiltEntries {
+                built: Vec::with_capacity(count),
+                entries: Vec::with_capacity(count),
+            };
+            for (built, entry) in self.ins.into_iter().chain(self.outs).chain(self.moves) {
+                entries.built.push(built);
+                entries.entries.push(entry);
+            }
+            entries
+        });
+        Ok(Walked {
+            entries,
+            quarantines: self.quarantines,
+            audit: self.audit,
+        })
+    }
+
+    /// Visits the items in walk order: the gates, the balance mirror, and
+    /// the constructor calls.
+    fn visit(&mut self, normalized: &'w Normalized) -> EngineResult<()> {
         let order = walk_order(self.rows, normalized);
         let events: HashMap<usize, &Event> = normalized
             .events
@@ -328,23 +385,7 @@ impl<'w, 'a> Walker<'w, 'a> {
                 }
             }
         }
-        let entries = (!self.ins.is_empty()).then(|| {
-            let count = self.ins.len() + self.outs.len() + self.moves.len();
-            let mut entries = BuiltEntries {
-                built: Vec::with_capacity(count),
-                entries: Vec::with_capacity(count),
-            };
-            for (built, entry) in self.ins.into_iter().chain(self.outs).chain(self.moves) {
-                entries.built.push(built);
-                entries.entries.push(entry);
-            }
-            entries
-        });
-        Ok(Walked {
-            entries,
-            quarantines: self.quarantines,
-            audit: self.audit,
-        })
+        Ok(())
     }
 
     fn quarantine(&mut self, row: usize, reason: QuarantineReason, detail: Map<String, Value>) {
@@ -759,28 +800,41 @@ impl<'w, 'a> Walker<'w, 'a> {
         Ok(())
     }
 
-    /// Runs the constructor on `input` with the book's names and keeps the
-    /// entry with its text. An argument that stands in for `Infinity` always
-    /// fails the constructor; one that did not would be a defect.
-    fn build(&mut self, mut input: EntryInput, row: usize, infinite: bool) -> EngineResult<()> {
-        let mut entry = Entry::from_input(&input, Some(self.config))?;
-        if infinite {
-            return Err(EngineError::runtime(
-                "Internal error: an entry was built from an infinite value",
-            ));
-        }
-        input.text = entry_text(&entry)?;
-        // The lot engine's constructor would store the text it is given.
-        entry.text.clone_from(&input.text);
-        let kind = entry.kind;
-        let built = (BuiltEntry { input, row }, entry);
-        match kind {
-            EntryKind::In => self.ins.push(built),
-            EntryKind::Out => self.outs.push(built),
-            EntryKind::Intra => self.moves.push(built),
-        }
+    /// Calls the constructor on `input` for the entry of `row`. The calls
+    /// run once the walk ends ([`construct`]), in order of their failures.
+    fn build(&mut self, input: EntryInput, row: usize, infinite: bool) -> EngineResult<()> {
+        self.calls.push(Call {
+            input,
+            row,
+            infinite,
+        });
         Ok(())
     }
+}
+
+/// A constructor call: the entry's input, the row whose time it has, and
+/// whether an argument stands in for `Infinity`.
+struct Call {
+    input: EntryInput,
+    row: usize,
+    infinite: bool,
+}
+
+/// Runs the constructor of `call` with the book's names, and renders the
+/// entry's text, which the entry keeps too. An argument that stands in for
+/// `Infinity` always fails the constructor; one that did not would be a
+/// defect.
+fn construct(call: &Call, config: &ConfigSpec) -> EngineResult<(Entry, String)> {
+    let mut entry = Entry::from_input(&call.input, Some(config))?;
+    if call.infinite {
+        return Err(EngineError::runtime(
+            "Internal error: an entry was built from an infinite value",
+        ));
+    }
+    let text = entry_text(&entry)?;
+    // The lot engine's constructor would store the text it is given.
+    entry.text.clone_from(&text);
+    Ok((entry, text))
 }
 
 /// A move's atomic group, when it has one (`if transfer.group_id:`).

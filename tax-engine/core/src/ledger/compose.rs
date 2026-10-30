@@ -499,7 +499,8 @@ impl<'c, 'a> Composer<'c, 'a> {
 mod tests {
     use serde_json::{json, Value};
 
-    use crate::ledger::request::LedgerRequest;
+    use crate::ledger::request::{LedgerRequest, Wallet};
+    use crate::ledger::response::Stage;
     use crate::ledger::run::ledger;
     use crate::time::CivilDate;
 
@@ -709,6 +710,46 @@ mod tests {
         assert_eq!(
             response.to_json().expect("serializes"),
             serde_json::to_string(&response).expect("serializes")
+        );
+    }
+
+    #[test]
+    fn the_first_failing_constructor_in_walk_order_fails_the_pass() {
+        // Hundreds of entries, so the constructors run in several chunks;
+        // two of them name wallets the book's names do not list.
+        let day = |offset: i64| {
+            let date =
+                CivilDate::from_days(CivilDate::parse("2020-01-01").unwrap().to_days() + offset);
+            format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+        };
+        let mut rows = Vec::new();
+        for i in 0..600 {
+            let wallet = match i {
+                250 => "X",
+                450 => "Y",
+                _ => "A",
+            };
+            rows.push(row(
+                &format!("buy{i}"),
+                wallet,
+                "inbound",
+                &day(i),
+                100_000_000,
+                json!({}),
+            ));
+        }
+        let mut book = request(json!("fifo"), "FIFO", rows, Vec::new());
+        for (id, label) in [("X", "Unlisted one"), ("Y", "Unlisted two")] {
+            book.wallets.push(Wallet {
+                id: id.to_owned(),
+                label: Some(label.to_owned()),
+            });
+        }
+        let error = ledger(&book).expect_err("an unlisted wallet");
+        assert_eq!(error.stage, Stage::Prepare);
+        assert_eq!(
+            error.inner.message,
+            "Parameter 'exchange' value is not known: Unlisted one"
         );
     }
 
