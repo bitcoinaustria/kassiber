@@ -2,7 +2,6 @@ import { CheckCircle2, Clock, RotateCcw, XCircle } from "lucide-react";
 import type * as React from "react";
 
 import {
-  fiatFormatter,
   formatBtc,
   MISSING_FIAT_LABEL,
   type Currency,
@@ -154,60 +153,6 @@ export type DraftPricingOption = {
   quality: PricingQuality;
   label: string;
   description?: string;
-  external?: boolean;
-};
-
-export type NewTransactionDraft = {
-  // Presenter/demo state only. Durable saves should map to core contract fields:
-  // direction, pricing_source_kind/pricing_quality, at_regime, and at_category.
-  sourceKind: "onchain" | "offchain" | "exchange" | "manual" | "internal";
-  flow: TransactionFlow;
-  occurredAt: string;
-  confirmedAt: string;
-  wallet: string;
-  counterparty: string;
-  transactionId: string;
-  fromWallet: string;
-  toWallet: string;
-  fromExternal: string;
-  toExternal: string;
-  swapService: string;
-  asset: string;
-  amountSats: string;
-  sendAsset: string;
-  receiveAsset: string;
-  sendAmountSats: string;
-  receiveAmountSats: string;
-  feeSats: string;
-  network:
-    | "Bitcoin"
-    | "Lightning"
-    | "Liquid"
-    | "Ecash"
-    | "Exchange"
-    | "Other";
-  pricingSourceKind: PricingSourceKind | null;
-  pricingQuality: PricingQuality;
-  fiatCurrency: string;
-  pricePerBtc: string;
-  totalValue: string;
-  movementId: string;
-  label: string;
-  atRegime: AustrianDraftRegime;
-  atCategory: AustrianDraftCategory;
-  tags: string;
-  note: string;
-  reviewStatus: TransactionStatus;
-  taxable: boolean;
-  evidence: NewTransactionEvidence;
-};
-
-export type NewTransactionEvidence = {
-  btcpayInvoiceId: string;
-  exchangeCsvRow: string;
-  swapId: string;
-  txidOrPermalink: string;
-  preimage: string;
 };
 
 export const SATS_PER_BTC = 100_000_000;
@@ -265,11 +210,6 @@ export function shouldShowSourceExternalId(
   if (!sourceId) return false;
   const displayedId = txn.explorerId?.trim() || sourceId;
   return sourceId !== displayedId;
-}
-
-function localDatetimeInputValue(date = new Date()) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
 }
 
 export function transactionBtc(txn: Transaction) {
@@ -498,52 +438,6 @@ export const pricingSourceStyles: Record<PricingSelectionValue, string> = {
     "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
 };
 
-// `label` holds an i18n key (resolved with t() at the call site).
-export const newTransactionPricingOptions: DraftPricingOption[] = [
-  {
-    value: "manual_override",
-    sourceKind: "manual_override",
-    quality: "exact",
-    label: "transactions:newPricingOption.manualEntry",
-    external: false,
-  },
-  {
-    value: "fmv_provider",
-    sourceKind: "fmv_provider",
-    quality: "provider_sample",
-    label: "transactions:newPricingOption.fmvProviderSample",
-    external: true,
-  },
-  {
-    value: "exchange_execution",
-    sourceKind: "exchange_execution",
-    quality: "exact",
-    label: "transactions:newPricingOption.exchangeExecution",
-    external: true,
-  },
-  {
-    value: "btcpay_invoice",
-    sourceKind: "btcpay_invoice",
-    quality: "exact",
-    label: "transactions:newPricingOption.btcpayInvoice",
-    external: true,
-  },
-  {
-    value: "wallet_export",
-    sourceKind: "wallet_export",
-    quality: "exact",
-    label: "transactions:newPricingOption.walletExport",
-    external: true,
-  },
-  {
-    value: "missing",
-    sourceKind: null,
-    quality: "missing",
-    label: "transactions:newPricingOption.needsPricing",
-    external: false,
-  },
-];
-
 export const austrianTaxClassificationOptions: Array<{
   value: string;
   label: string;
@@ -608,56 +502,6 @@ export const austrianTaxClassificationOptions: Array<{
     atRegime: "alt",
     atCategory: "alt_taxfree",
     taxable: false,
-  },
-];
-
-export const newTransactionNetworkOptions: NewTransactionDraft["network"][] = [
-  "Bitcoin",
-  "Lightning",
-  "Liquid",
-  "Ecash",
-  "Exchange",
-  "Other",
-];
-
-export function sourceKindForNetwork(
-  network: NewTransactionDraft["network"],
-): NewTransactionDraft["sourceKind"] {
-  if (network === "Bitcoin") return "onchain";
-  if (network === "Exchange") return "exchange";
-  if (network === "Other") return "manual";
-  return "offchain";
-}
-
-// `label` holds an i18n key (resolved with t() at the call site).
-export const newTransactionFlowOptions: Array<{
-  value: TransactionFlow;
-  label: string;
-}> = [
-  { value: "incoming", label: "transactions:flowOption.incoming" },
-  { value: "outgoing", label: "transactions:flowOption.outgoing" },
-  { value: "transfer", label: "transactions:flowOption.transfer" },
-  { value: "swap", label: "transactions:flowOption.swap" },
-  { value: "layer-transition", label: "transactions:flowOption.layerTransition" },
-];
-
-// `labelKey`/`detailKey` hold i18n keys (resolved with t() at the call site);
-// `id` stays a stable lookup key.
-export const newTransactionMovementCandidates = [
-  {
-    id: "movement-ln-channel-open",
-    labelKey: "transactions:movementCandidate.channelOpen.label",
-    detailKey: "transactions:movementCandidate.channelOpen.detail",
-  },
-  {
-    id: "movement-liquid-peg",
-    labelKey: "transactions:movementCandidate.liquidPeg.label",
-    detailKey: "transactions:movementCandidate.liquidPeg.detail",
-  },
-  {
-    id: "movement-boltz-swap",
-    labelKey: "transactions:movementCandidate.boltzSwap.label",
-    detailKey: "transactions:movementCandidate.boltzSwap.detail",
   },
 ];
 
@@ -793,13 +637,59 @@ export function pricingSelectionValue(
   return quality === "missing" || !sourceKind ? "missing" : sourceKind;
 }
 
+// Which of the four pricing choices a source kind falls under, grouped as the
+// core groups them (`legacy_source_for`): the rate cache, the manual override,
+// and every source-provided price, so an exchange trade reads as a source price.
+export function pricingChoiceValue(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+): PricingSelectionValue {
+  const value = pricingSelectionValue(sourceKind, quality);
+  if (value === "missing" || value === "manual_override" || value === "fmv_provider") {
+    return value;
+  }
+  return value === "manual_rate_cache" ? "fmv_provider" : "generic_import";
+}
+
+const PRICING_SOURCE_KINDS: ReadonlySet<string> = new Set<PricingSourceKind>([
+  "generic_import",
+  "wallet_export",
+  "exchange_execution",
+  "btcpay_wallet_export",
+  "btcpay_invoice",
+  "btcpay_payment",
+  "btcpay_payout",
+  "manual_override",
+  "manual_rate_cache",
+  "fmv_provider",
+]);
+
+// Returns an i18n key: the selectable option's label, else the kind's own,
+// so a source no option offers (an exchange's trade price) never shows as
+// its raw code.
 export function pricingSourceLabel(
   sourceKind: PricingSourceKind | null,
   quality: PricingQuality,
   options = transactionPricingOptions,
 ) {
   const value = pricingSelectionValue(sourceKind, quality);
-  return options.find((option) => option.value === value)?.label ?? value;
+  const option = options.find((candidate) => candidate.value === value);
+  if (option) return option.label;
+  return PRICING_SOURCE_KINDS.has(value)
+    ? `transactions:pricingSourceKind.${value}.label`
+    : value;
+}
+
+// The same source as words inside a sentence ("Priced via the exchange's
+// trade price"); an i18n key, or null when no price is set.
+export function pricingSourcePhrase(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+) {
+  const value = pricingSelectionValue(sourceKind, quality);
+  return PRICING_SOURCE_KINDS.has(value)
+    ? `transactions:pricingSourceKind.${value}.phrase`
+    : null;
 }
 
 // Provider proper names stay as-is; only the ordinary "Manual" word is
@@ -871,24 +761,6 @@ export function pricingPriceMoment(txn: Transaction): {
   return { label: "transactions:pricePoint.timestamp", value: formatShortDate(ts) };
 }
 
-export function pricingOptionForValue(
-  value: PricingSelectionValue,
-  options = transactionPricingOptions,
-) {
-  return options.find((option) => option.value === value) ?? options[0];
-}
-
-export function isExternalPricingSource(
-  sourceKind: PricingSourceKind | null,
-  quality: PricingQuality,
-  options = newTransactionPricingOptions,
-) {
-  const value = pricingSelectionValue(sourceKind, quality);
-  return Boolean(
-    options.find((option) => option.value === value && option.external),
-  );
-}
-
 export function austrianSelectionValue(
   atRegime: AustrianDraftRegime,
   atCategory: AustrianDraftCategory,
@@ -927,13 +799,6 @@ export function formatManualFiat(value: number) {
   return value.toFixed(2);
 }
 
-export function formatDraftFiat(value: number, currencyCode: NewTransactionDraft["fiatCurrency"]) {
-  if (!Number.isFinite(value)) return "-";
-  // Manual entry can be in any chosen fiat, so format with that currency's
-  // own symbol + locale rather than the EUR-only display formatter.
-  return fiatFormatter(currencyCode).format(value);
-}
-
 export function formatManualPrice(value: number) {
   if (!Number.isFinite(value)) return "";
   return value.toFixed(2);
@@ -947,64 +812,11 @@ export function formatAssetAmount(value: number, asset: string, precision = 8) {
   return `${value.toFixed(precision)} ${asset || "BTC"}`;
 }
 
-export function createNewTransactionDraft(): NewTransactionDraft {
-  return {
-    sourceKind: "onchain",
-    flow: "incoming",
-    occurredAt: localDatetimeInputValue(),
-    confirmedAt: "",
-    wallet: "Cold Storage",
-    counterparty: "",
-    transactionId: "",
-    fromWallet: "Cold Storage",
-    toWallet: "Cold Storage",
-    fromExternal: "",
-    toExternal: "",
-    swapService: "",
-    asset: "BTC",
-    amountSats: "",
-    sendAsset: "BTC",
-    receiveAsset: "BTC",
-    sendAmountSats: "",
-    receiveAmountSats: "",
-    feeSats: "",
-    network: "Bitcoin",
-    pricingSourceKind: "manual_override",
-    pricingQuality: "exact",
-    fiatCurrency: "EUR",
-    pricePerBtc: "",
-    totalValue: "",
-    movementId: "",
-    // Derived, not literal: the dialog opens on `incoming` and only calls
-    // `nextLabelForFlow` when the user *changes* the flow, so a literal here
-    // silently outlives any fix to that function.
-    label: nextLabelForFlow("incoming"),
-    atRegime: "neu",
-    atCategory: "income_general",
-    tags: "",
-    note: "",
-    reviewStatus: "review",
-    taxable: true,
-    evidence: {
-      btcpayInvoiceId: "",
-      exchangeCsvRow: "",
-      swapId: "",
-      txidOrPermalink: "",
-      preimage: "",
-    },
-  };
-}
-
 export function parseSatsInput(value: string) {
   const normalized = value.trim().replace(/[,_\s]/g, "");
   if (!normalized) return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? Math.trunc(Math.abs(parsed)) : null;
-}
-
-export function btcFromSatsInput(value: string) {
-  const sats = parseSatsInput(value);
-  return sats === null ? null : sats / SATS_PER_BTC;
 }
 
 export function nextTaxClassificationForFlow(flow: TransactionFlow) {
@@ -1018,110 +830,6 @@ export function nextTaxClassificationForFlow(flow: TransactionFlow) {
     return austrianTaxClassificationFor("neu", "neu_swap");
   }
   return austrianTaxClassificationFor("neu", "neu_gain");
-}
-
-export function nextLabelForFlow(flow: TransactionFlow) {
-  // Not "Income": this label persists as a tag, and a tag outranks the derived
-  // type on the chip (`display_tags` in core/ui_snapshot.py). Auto-applying it
-  // would make a manually added receipt read "Income" while the engine books a
-  // plain acquisition — the contradiction the kind-derived label exists to end.
-  // Declaring income is the Tax tab's "Recorded as", which the engine reads.
-  if (flow === "incoming") return "Unlabeled";
-  if (flow === "transfer") return "Transfer";
-  if (flow === "swap") return "Swap";
-  if (flow === "layer-transition") return "Transfer";
-  return "Expense";
-}
-
-export function isTwoLegNewTransactionFlow(flow: TransactionFlow) {
-  return flow === "swap" || flow === "layer-transition";
-}
-
-export function showConfirmedAtForDraft(draft: NewTransactionDraft) {
-  return draft.network === "Bitcoin" || draft.network === "Liquid";
-}
-
-export function showSingleAssetForDraft(draft: NewTransactionDraft) {
-  return (
-    !isTwoLegNewTransactionFlow(draft.flow) &&
-    (draft.network === "Exchange" || draft.network === "Other")
-  );
-}
-
-export function inferredAssetForDraft(draft: NewTransactionDraft) {
-  if (showSingleAssetForDraft(draft)) return draft.asset || "BTC";
-  if (draft.network === "Liquid") return "LBTC";
-  return "BTC";
-}
-
-export type PricingDraftField =
-  | "amountSats"
-  | "sendAmountSats"
-  | "receiveAmountSats"
-  | "pricePerBtc"
-  | "totalValue";
-
-export function pricingAmountSatsForDraft(
-  draft: NewTransactionDraft,
-  preferredAmountField?: Extract<
-    PricingDraftField,
-    "amountSats" | "sendAmountSats" | "receiveAmountSats"
-  >,
-): string {
-  if (preferredAmountField) {
-    return draft[preferredAmountField] || pricingAmountSatsForDraft(draft);
-  }
-  if (isTwoLegNewTransactionFlow(draft.flow)) {
-    return draft.receiveAmountSats || draft.sendAmountSats || draft.amountSats;
-  }
-  return draft.amountSats;
-}
-
-export function calculateNewTransactionPricing(
-  draft: NewTransactionDraft,
-  changed: PricingDraftField,
-): NewTransactionDraft {
-  const preferredAmountField =
-    changed === "amountSats" ||
-    changed === "sendAmountSats" ||
-    changed === "receiveAmountSats"
-      ? changed
-      : undefined;
-  const btc = btcFromSatsInput(pricingAmountSatsForDraft(draft, preferredAmountField));
-  const price = parseManualDecimal(draft.pricePerBtc);
-  const total = parseManualDecimal(draft.totalValue);
-  const amountChanged =
-    changed === "amountSats" ||
-    changed === "sendAmountSats" ||
-    changed === "receiveAmountSats";
-
-  if (!btc || btc <= 0) return draft;
-
-  if ((amountChanged || changed === "pricePerBtc") && price !== null) {
-    return {
-      ...draft,
-      totalValue: formatManualFiat(btc * price),
-    };
-  }
-  if ((amountChanged || changed === "totalValue") && total !== null) {
-    return {
-      ...draft,
-      pricePerBtc: formatManualPrice(total / btc),
-    };
-  }
-  return draft;
-}
-
-export function signedNewTransactionBtc(draft: NewTransactionDraft) {
-  if (isTwoLegNewTransactionFlow(draft.flow)) {
-    const received = btcFromSatsInput(draft.receiveAmountSats) ?? 0;
-    const sent = btcFromSatsInput(draft.sendAmountSats) ?? 0;
-    return received - sent;
-  }
-  const btc = btcFromSatsInput(draft.amountSats) ?? 0;
-  if (draft.flow === "outgoing") return -btc;
-  if (draft.flow === "transfer") return 0;
-  return btc;
 }
 
 export function copyText(value: string | undefined) {

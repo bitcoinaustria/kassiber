@@ -92,6 +92,9 @@ export function TransactionDetailHeader({
   const showReviewStatusChip =
     reviewStatus !== "completed" &&
     !(reviewStatus === "pending" && confirmations <= 0);
+  const walletRepeatsCounterparty =
+    Boolean(transaction.wallet && transaction.counterparty) &&
+    transaction.wallet?.trim().toLowerCase() === transaction.counterparty?.trim().toLowerCase();
   // The headline amount follows the app's bitcoin/fiat switch, and clicking
   // either amount flips it, as in the transaction list.
   const currency = useCurrency();
@@ -203,7 +206,9 @@ export function TransactionDetailHeader({
                 <span className="text-muted-foreground">·</span>
               </>
             ) : null}
-            {!pair ? (
+            {/* An exchange's export names the wallet after the exchange;
+                say it once. */}
+            {!pair && !walletRepeatsCounterparty ? (
               <>
                 <span className="text-muted-foreground">
                   {transaction.wallet ?? t("detailHeader.unassignedWallet")}
