@@ -260,8 +260,10 @@ the measured phase profile, the typed architecture, the performance budget
 and the owner decisions it needs.
 
 - [ ] Get the owner's decisions on the design's six open questions.
-- [ ] R4-0: restack `t3code/r2g-fusion-6` on `t3code/r2-custody-perf`, then
-  onto the R5 stack tip, with every custody gate green.
+- [x] R4-0: integrate custody, projection fixes, performance, fusion and the
+  service/reference fixes on the R5 stack; see the
+  [R6 integration audit](docs/reference/rust-backend-r6-integration.md) for the
+  linear replay and completed custody, parity and mutation gates.
 - [ ] R4-1: commit the Rust end-to-end bench, bench-book generators and the
   regression record; record the baseline.
 - [ ] R4-2 to R4-8: typed rows, custody stages and fusion, one step per run,

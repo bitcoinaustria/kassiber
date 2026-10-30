@@ -1808,8 +1808,10 @@ The [fusion campaign evidence](../reference/custody-engine.md#fusion-generated-c
 now covers all 24,000 raw books, 1,030 permutations, 159 retained requests and
 both fresh 50-request recording sets with zero differences. All ten fusion
 mutation recipes and 25 inherited boundary recipes were freshly killed;
-**2,211 inherited recipes still need rerunning**. This bounded mutation result
-does not complete the full inherited-campaign gate or the R4 authority switch.
+**2,211 inherited recipes still needed rerunning at that checkpoint**. The
+[R6 integration audit](../reference/rust-backend-r6-integration.md) now records
+the full R4-0 catalog rerun. The bounded source-branch result did not complete
+that gate; the R4 production authority switch still remains future work.
 
 ### R5 diagnostics service slice
 
@@ -1830,10 +1832,11 @@ separately for unhandled diagnostics export failures, `error.debug`; tests pin
 the normalization scope. All other bytes retain Python parity.
 See the [slice acceptance](../reference/rust-diagnostics-r5-status.md) and
 [implementation contract](../reference/rust-shell.md#diagnostics-service-slice-r5).
+
 ### R4 journal pipeline design
 
-The [R4 design](../reference/r4-journal-pipeline.md) (2026-10-30, design only)
-profiles Python's `journals process` by phase and plans the Rust binary's
+The [R4 design](../reference/r4-journal-pipeline.md) (2026-10-30; R4-1 onward
+remains design) profiles Python's `journals process` by phase and plans the Rust binary's
 in-process pipeline: typed SQLite loading, typed custody stages, typed fusion
 into the tax engine's own request and response types, rendering and atomic
 persistence, with the JSON snapshot and stage interface kept as the
@@ -1852,3 +1855,12 @@ and a ratio gate in CI and a local 20,000-transaction gate. Its open owner
 decisions cover an early PyO3 production path, the targets and a tax-engine
 performance slice, automatic pairing, persisted-shape changes beyond parity,
 the book-open cost and the allocator.
+
+### R4-0 integrated stack
+
+The local `t3code/rust-backend-r6` stack integrates the R2 custody, projection
+review, performance and fusion lines with R5 reads, diagnostics and the shipped
+Python corrections. The [integration audit](../reference/rust-backend-r6-integration.md)
+records the linear picks, skips, conflict resolutions, custody campaigns,
+hybrid parity and full mutation rerun. R4-0 is complete; R4-1 onward and the
+production journal authority switch remain planned.

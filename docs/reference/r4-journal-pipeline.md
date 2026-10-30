@@ -1,8 +1,10 @@
 # R4 journal pipeline design
 
-**Status:** design, 2026-10-30. Nothing here is implemented. It plans stage R4
-of [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the
-Rust binary, byte-identical to Python and much faster. It builds on the
+**Status:** R4-0 integrated, 2026-10-30; R4-1 onward remains design. The
+[R6 integration audit](rust-backend-r6-integration.md) records the linear restack
+and its verification. This document plans stage R4 of
+[plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
+binary, byte-identical to Python and much faster. It builds on the
 [custody engine](custody-engine.md) (R2, including the R2g fusion boundary and
 the performance checkpoint) and on the storage and service-slice work of the
 R3/R5 stack.
