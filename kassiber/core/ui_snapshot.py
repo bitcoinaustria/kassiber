@@ -26,7 +26,7 @@ from .journal_markers import (
     parse_marker,
     parse_marker_int,
 )
-from ..time_utils import _iso_z, _parse_iso_datetime, now_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -5326,34 +5326,42 @@ def _accounting_calendar(conn: sqlite3.Connection, profile_id: str) -> dict[str,
 
 def _dashboard_years(
     conn: sqlite3.Connection,
-    profile_id: str,
     filters: list[str],
     params: list[Any],
+    tz: ZoneInfo,
 ) -> list[dict[str, Any]]:
-    """The book's calendar years that hold activity, newest first.
+    """The calendar years that hold activity, newest first.
 
-    Each carries the exact bounds the page's year choice scopes to, counted in
-    the book's own calendar like the exports, so the renderer never has to
-    guess where an Austrian year starts.
+    Counted in the page's display calendar, the one its bars and row dates
+    use, so a yearly bar, the year it opens and the menu's count hold the same
+    transactions. Exports keep the book's calendar. An undated transaction is
+    stored at 1970-01-01 and is not a year of its own.
     """
-    from .export_range import book_timezone
-    from .year_handoff import accounting_years
-
-    profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
-    if profile is None:
+    dated = [*filters, "t.occurred_at NOT IN ('', ?)"]
+    dated_params = [*params, UNKNOWN_OCCURRED_AT]
+    row = conn.execute(
+        f"""
+        SELECT MIN(t.occurred_at) AS first, MAX(t.occurred_at) AS last
+        FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(dated)}
+        """,
+        dated_params,
+    ).fetchone()
+    if row is None or not row["first"] or not row["last"]:
         return []
-    tz = book_timezone(profile)
+    first = _parse_iso_datetime(str(row["first"]), "first").astimezone(tz).year
+    last = _parse_iso_datetime(str(row["last"]), "last").astimezone(tz).year
     years: list[dict[str, Any]] = []
-    for year in accounting_years(conn, profile):
+    for year in range(last, first - 1, -1):
         start = datetime(year, 1, 1, tzinfo=tz).astimezone(timezone.utc)
         end = datetime(year + 1, 1, 1, tzinfo=tz).astimezone(timezone.utc)
         count = conn.execute(
             f"""
             SELECT COUNT(*) FROM transactions t JOIN wallets w ON w.id = t.wallet_id
-            WHERE {' AND '.join(filters)}
+            WHERE {' AND '.join(dated)}
               AND t.occurred_at >= ? AND t.occurred_at < ?
             """,
-            [*params, _iso_z(start), _iso_z(end)],
+            [*dated_params, _iso_z(start), _iso_z(end)],
         ).fetchone()[0]
         if count:
             years.append(
@@ -5692,7 +5700,9 @@ def build_transactions_dashboard_snapshot(
             "earliest": history["earliest"],
             "latest": history["latest"],
             **_accounting_calendar(conn, profile_id),
-            "years": _dashboard_years(conn, profile_id, base_filters, base_params),
+            "years": _dashboard_years(
+                conn, base_filters, base_params, display_timezone
+            ),
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
             **({"autoPeriod": auto_period} if auto_period else {}),

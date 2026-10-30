@@ -86,10 +86,12 @@ period does not block a platform export; an undated one (no known time) still
 does, and undated transactions left out of a period are counted in `warnings`.
 `ui.transactions.dashboard` reports
 the calendar as `history.accountingTimezone` next to
-`history.accountingYears` (undated transactions are not a year), and
-`history.years`: the years holding activity, newest first, each with its
-`count` and inclusive `since`/`until` bounds in that calendar, which the
-page's year choice scopes to. `bucketSize` names how `buckets` are grouped
+`history.accountingYears` (undated transactions are not a year).
+`history.years` lists the years holding activity, newest first, each with its
+`count` and inclusive `since`/`until` bounds, which the page's year choice
+scopes to. They are counted in the request's display `timezone`, like
+`buckets`, so a yearly bar and the year it opens hold the same transactions;
+exports keep the book's calendar. `bucketSize` names how `buckets` are grouped
 (`day`, `week`, `month`, `quarter`, or `year`); `all` over a decade or more
 groups by year.
 

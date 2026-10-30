@@ -11311,7 +11311,7 @@ class ReviewRegressionTest(unittest.TestCase):
         # August 2022 rows that only the full-history bounds know about.
         self.assertEqual(dashboard["history"]["autoPeriod"], "4years")
 
-    def test_ui_transactions_dashboard_years_follow_the_book_calendar(self):
+    def test_ui_transactions_dashboard_years_hold_what_their_bars_hold(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
         conn.execute(
@@ -11334,8 +11334,8 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         set_setting(conn, "context_workspace", "ws")
         set_setting(conn, "context_profile", "profile")
-        # 23:30Z on 31 December is already New Year in Vienna; 2016-2023 hold
-        # nothing, so they are not years to choose.
+        # 23:30Z on 31 December is still New Year's Eve in UTC and already New
+        # Year in Vienna; 2016-2023 hold nothing, so they are not years to choose.
         dates = [
             "2012-05-01T12:00:00Z",
             "2013-12-31T23:30:00Z",
@@ -11378,8 +11378,7 @@ class ReviewRegressionTest(unittest.TestCase):
             [str(year) for year in range(2012, 2025)],
         )
 
-        # A chosen year is its bounds, in months; the halving-cycle range
-        # is accepted alongside the older ranges.
+        # A chosen year is its bounds, in its twelve months.
         year = dashboard["history"]["years"][2]
         in_year = build_transactions_dashboard_snapshot(
             conn,
@@ -11392,6 +11391,39 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self.assertEqual(in_year["counts"]["all"], 1)
         self.assertEqual(in_year["bucketSize"], "month")
+        self.assertEqual(
+            [bucket["bucketKey"] for bucket in in_year["buckets"]],
+            [f"2014-{month:02d}" for month in range(1, 13)],
+        )
+
+        # Viewed from UTC the same transaction is 2013's: its yearly bar, the
+        # year that bar opens and the menu's count all hold it.
+        from_utc = build_transactions_dashboard_snapshot(
+            conn, {"period": "all", "timezone": "UTC"}
+        )
+        utc_years = {entry["year"]: entry for entry in from_utc["history"]["years"]}
+        self.assertEqual(sorted(utc_years), [2012, 2013, 2015, 2024])
+        bar = next(
+            bucket for bucket in from_utc["buckets"] if bucket["bucketKey"] == "2013"
+        )
+        self.assertEqual(sum(stats["count"] for stats in bar["stats"].values()), 1)
+        self.assertEqual(utc_years[2013]["count"], 1)
+        opened = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "1year",
+                "since": utc_years[2013]["since"],
+                "until": utc_years[2013]["until"],
+                "timezone": "UTC",
+            },
+        )
+        self.assertEqual(opened["counts"]["all"], 1)
+        self.assertEqual(
+            [bucket["bucketKey"] for bucket in opened["buckets"]],
+            [f"2013-{month:02d}" for month in range(1, 13)],
+        )
+
+        # The halving-cycle range is accepted alongside the older ranges.
         four_years = build_transactions_dashboard_snapshot(
             conn,
             {

@@ -173,8 +173,8 @@ const TransactionsDashboard = ({
       ),
     [daemonAutoPeriod, daemonHistoryYears, period, records],
   );
-  // The book's years as the daemon last named them: a chosen year scopes to
-  // their exact bounds in the book's calendar, the local calendar until then.
+  // The book's years as the daemon last named them, counted in this page's
+  // timezone like its bars: a chosen year scopes to their exact bounds.
   const [bookYears, setBookYears] = React.useState<DashboardYear[]>([]);
   const dashboardWindow = React.useMemo(
     () => transactionPeriodDateWindow(resolvedPeriod, undefined, bookYears),

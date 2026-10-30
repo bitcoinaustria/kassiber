@@ -83,7 +83,7 @@ type TransactionDashboardSnapshot = {
     /** IANA timezone of the book's calendar (Europe/Vienna for Austrian books). */
     accountingTimezone?: string;
     latest: string | null;
-    /** Years holding activity, newest first, bounded in the book's calendar. */
+    /** Years holding activity, newest first, in the request's timezone like `buckets`. */
     years?: DashboardYear[];
     walletOptions: string[];
     paymentMethods?: string[];
@@ -726,8 +726,8 @@ function transactionPeriodDateWindow(
 ): { since: string; until: string } | null {
   if (period === "all") return null;
   if (isYearPeriod(period)) {
-    // The book's own calendar once the daemon has named the year; the local
-    // one until then.
+    // The daemon's bounds once it has named the year, counted in the timezone
+    // the page sends; the same local calendar until then.
     const exact = years?.find((entry) => String(entry.year) === period);
     if (exact) return { since: exact.since, until: exact.until };
     const { start, end } = calendarYearRange(Number(period));

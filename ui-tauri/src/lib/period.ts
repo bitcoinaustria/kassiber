@@ -5,7 +5,7 @@
 // drifted. A key is either a range (30 days up to the whole history) or one
 // calendar year of the book. Date arithmetic stays per screen: the treasury
 // chart windows in UTC against the book's latest data point, the table in local
-// days against today and a year in the book's own calendar.
+// days against today, a year included. Exports keep the book's own calendar.
 
 /** A window counted back from the end of the data. */
 export type RangePeriodKey = "30days" | "1year" | "4years" | "10years" | "all";
