@@ -31,7 +31,7 @@ import {
   closeSettings,
   openSettingsSection,
   settingsSectionForLocation,
-} from "./settingsModal";
+} from "./settingsModalNavigation";
 
 export function SettingsModal({ daemonEnabled }: { daemonEnabled: boolean }) {
   const { t } = useTranslation("settings");

@@ -45,7 +45,7 @@ import {
   openSettingsSection,
   settingsSectionForLocation,
   useSettingsModalNavigation,
-} from "./settingsModal";
+} from "./settingsModalNavigation";
 
 function Shell({ unlocked }: { unlocked: boolean }) {
   useSettingsModalNavigation(unlocked);

@@ -17,7 +17,7 @@ import {
   hintSegments,
   runtimeSummary,
 } from "@/components/kb/settings/aiProviderStatus";
-import { openSettingsSection } from "@/components/kb/settings/settingsModal";
+import { openSettingsSection } from "@/components/kb/settings/settingsModalNavigation";
 import { useAiProviderChecks } from "@/components/kb/settings/useAiProviderChecks";
 import { Button } from "@/components/ui/button";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";

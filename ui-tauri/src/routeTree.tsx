@@ -23,7 +23,7 @@ import { RootIntentListener } from "./components/kb/RootIntentListener";
 import {
   openSettingsSection,
   settingsSectionForLocation,
-} from "./components/kb/settings/settingsModal";
+} from "./components/kb/settings/settingsModalNavigation";
 import type { SettingsSectionId } from "./components/kb/settingsSections";
 import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
