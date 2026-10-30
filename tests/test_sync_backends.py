@@ -416,6 +416,14 @@ class _DummySocket:
 
 
 class SyncBackendsTest(unittest.TestCase):
+    def setUp(self):
+        # These protocol fixtures model an unchanged chain unless a test
+        # explicitly exercises the real tip readers.
+        for name in ("_esplora_tip_hash", "_electrum_tip_fingerprint"):
+            anchor = patch.object(sb, name, return_value="ab" * 32)
+            anchor.start()
+            self.addCleanup(anchor.stop)
+
     def test_bitcoinrpc_http500_preserves_typed_rpc_error_without_payload(self):
         secret = "private-core-error-secret"
         body = json.dumps({"id": "kassiber-gettransaction", "result": None,
@@ -2027,6 +2035,7 @@ class SyncBackendsTest(unittest.TestCase):
             checkpoint={
                 "electrum_stored_graph_version": 1,
                 "electrum_history_entries": {scripthash: {old_txid: old_history}},
+                "electrum_tip_fingerprint": "ab" * 32,
                 "electrum_scripthash_statuses": {scripthash: "status-1"},
                 "electrum_headers": {"123": 1_700_000_000},
             },
@@ -5900,7 +5909,7 @@ class EsploraHistoryRetractionTest(unittest.TestCase):
 
         with patch.object(sb, "esplora_scripthash_stats", side_effect=read_stats), patch.object(
             sb, "fetch_esplora_scripthash_transactions", side_effect=lambda _url, script, **_kwargs: by_script[script],
-        ) as history:
+        ) as history, patch.object(sb, "_esplora_tip_hash", return_value="ab" * 32):
             records, meta = sb.compatibility_esplora_records_for_wallet(
                 {"name": "node", "kind": "esplora", "url": "https://node.example", **(backend or {})},
                 WalletSyncState(chain="bitcoin", network=network, descriptor_plan=None,

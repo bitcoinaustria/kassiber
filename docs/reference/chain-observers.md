@@ -54,6 +54,15 @@ caches while preserving these observation candidates. The configured backend
 remains the source of this evidence; counter checks are not a cryptographic or
 atomic snapshot guarantee against a malicious server.
 
+Compatibility Esplora and Electrum history caches are bound to the observed
+chain tip, including block identity rather than height alone. An identical tip
+permits the existing counter/status cache checks. A changed, missing or invalid
+tip (including legacy checkpoints without an anchor) refreshes histories and
+Electrum confirmation timestamps, so unchanged statistics cannot hide a reorg
+from transaction evidence or saved-report impacts. This conservatively refreshes
+on ordinary block advances too; validated Electrum transaction graphs remain
+reusable. Tip reads occur only within the requested wallet sync.
+
 Widened discovery runs only for a provable inventory deficit. Missing occurrence
 times and equal-time movements cannot acquire an order from row IDs or import
 timing. The shared rescan check preserves their uncertainty and still detects

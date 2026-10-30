@@ -16,6 +16,12 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
+Compatibility wallet sync reads Esplora's `blocks/tip/hash` or Electrum's
+`blockchain.headers.subscribe` to bind local history caches to block identity.
+These reads use the selected backend's existing authenticated transport and
+proxy policy during that sync; configuration, launch and display do not trigger
+them.
+
 When **Built-in Bitcoin servers** is selected during desktop setup, Kassiber
 enables two Bitcoin mainchain backends:
 
