@@ -79,7 +79,19 @@ pub(super) fn snapshot(c: &Connection, scope: &Scope<'_>) -> Result<Snapshot> {
             )
         })
         .collect();
-    Ok(Snapshot {schema_version:1,operation:"custody".into(),as_of:"2025-01-01T00:00:00Z".into(),profile,book_network:None,wallets:wallets.clone(),transactions,rate_rows:vec![],owned_index:None,ownership_warnings:vec![],components,anchors,anchor_wallets:wallets,revision_headers:headers,receipt_sources:vec![],channel_records:records(c,"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'",[scope.profile_id])?,loan_legs:vec![],evidence_snapshots:vec![],migration_issues:vec![],gap_reviews:vec![],pair_dismissals:vec![],gap_worklist:kassiber_custody::snapshot::GapWorklist {large_book:false,rows:vec![]}})
+    let mut snapshot = Snapshot::default();
+    snapshot.schema_version = 1;
+    snapshot.operation = "custody".into();
+    snapshot.as_of = "2025-01-01T00:00:00Z".into();
+    snapshot.profile = profile;
+    snapshot.wallets = wallets.clone();
+    snapshot.transactions = transactions;
+    snapshot.components = components;
+    snapshot.anchors = anchors;
+    snapshot.anchor_wallets = wallets;
+    snapshot.revision_headers = headers;
+    snapshot.channel_records = records(c,"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'",[scope.profile_id])?;
+    Ok(snapshot)
 }
 pub(super) fn invalidate(c: &Connection, profile: &str) -> Result<()> {
     c.execute("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?",[profile]).map_err(error)?;

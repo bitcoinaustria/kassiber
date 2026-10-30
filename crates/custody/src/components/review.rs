@@ -70,8 +70,9 @@ pub fn component_evidence_status(
     snapshot: &Snapshot,
     component: &Component,
 ) -> Result<Value, Error> {
+    let shared = Shared::new(snapshot);
     commitments::evidence_status(
-        snapshot,
+        &shared,
         &Value::Object(component.header.clone()),
         &legs(component)?,
         &component
@@ -85,12 +86,12 @@ pub fn component_evidence_status(
 /// Shared imported-boundary arithmetic for guided review plans.
 pub fn boundary_amounts(row: &Value) -> Result<Value, Error> {
     let principal = anchors::principal(row)?;
-    let fee = wide(&codec::integer_or_zero(&row["fee"])?);
+    let fee = exact(&codec::integer_or_zero(&row["fee"])?)?;
     let outbound = text(&row["direction"]).py_strip().py_lower() == "outbound";
     Ok(json!({
-        "principal_msat": principal,
-        "fee_msat": fee,
-        "wallet_movement_msat": if outbound { principal + fee } else { principal },
+        "principal_msat": number(&principal),
+        "fee_msat": number(&fee),
+        "wallet_movement_msat": number(&if outbound { principal + fee } else { principal }),
     }))
 }
 
@@ -419,7 +420,9 @@ pub fn materialize_component(snapshot: &Snapshot, component: &Component) -> Resu
     } else {
         Vec::new()
     };
-    let mut result = materialize(snapshot, component, &routes, &native)?;
+    let shared = Shared::new(snapshot);
+    let native = commitments::Native::new(native);
+    let mut result = materialize(snapshot, &shared, component, &routes, &native)?;
     if h["state"] == "superseded" {
         result["effective_state"] = json!("superseded");
     } else if h["state"] != "active" {

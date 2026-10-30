@@ -59,7 +59,6 @@ REVIEWS = {
     "tests/test_report_csv_atomic.py": {"*": {"disposition": "rust-test", "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior"}},
 
 
-    "tests/test_rust_bdk_execution.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native in-memory BDK execution/restart aggregates and compatibility protocol cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity"}},
 
 
     "tests/test_rust_wallet_publication.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares atomic Rust publication of Python-prepared Bitcoin fetches against unchanged Python full books across fixtures, restarts, reviewed journals and saved reports; retains rollback and refusal witnesses without claiming end-to-end native sync or product-route acceptance"}},

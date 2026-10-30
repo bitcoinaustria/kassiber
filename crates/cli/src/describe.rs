@@ -137,7 +137,6 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.austrian-e1kv",
     "reports.austrian-tax-summary",
     "reports.balance-history",
-
     "transfers.list",
     "transfers.pair",
     "transfers.unpair",
@@ -157,7 +156,6 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.components.plan",
     "transfers.components.apply",
     "review.receipt",
-
     "reports.export-csv",
     "reports.export-austrian-e1kv-csv",
     "transactions.export",

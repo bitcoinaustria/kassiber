@@ -41,7 +41,6 @@ kassiber-chain = { path = "../chain" }
 kassiber-net = { path = "../net" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
-kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-custody = { path = "../custody" }

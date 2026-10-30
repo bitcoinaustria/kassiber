@@ -70,6 +70,12 @@ pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
     kinds.extend(services::kinds().filter(|k| offline::KINDS.contains(k)));
     kinds.extend(transactions::KINDS);
+    kinds.extend(
+        reports::KINDS
+            .iter()
+            .copied()
+            .filter(|k| *k == "ui.transactions.export_csv"),
+    );
     kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
         [
             "ui.transactions.metadata.update",
@@ -88,7 +94,6 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .filter(|k| ["ui.wallets.list"].contains(k)),
     );
     kinds.extend(loans::KINDS);
-    kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| {
         backends::KINDS.contains(k)
             && [
@@ -107,8 +112,14 @@ pub fn supported_kinds() -> Vec<&'static str> {
             ]
             .contains(k)
     }));
-    kinds.extend(reports::KINDS);
+    kinds.extend(
+        reports::KINDS
+            .iter()
+            .copied()
+            .filter(|k| *k != "ui.transactions.export_csv"),
+    );
     kinds.extend(documents::KINDS);
+    kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
     kinds.extend(services::kinds().filter(|k| networks::KINDS.contains(k)));
     kinds.extend(services::kinds().filter(|k| {
