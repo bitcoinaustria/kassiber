@@ -379,19 +379,36 @@ manual/AI-consented Coinjoin links, can show the spent and received legs; the
 desktop preloads both safe graph payloads once the route is known so switching
 between legs is UI-only when the daemon data is already available.
 
-The Connections detail page includes a read-only UTXOs table for chain-backed
+The Connections detail page for a wallet is the wallet's own record, not a
+scoped Overview. Under the header row (refresh and edit/rescan/remove), one
+panel holds its balance, a short fact list (UTXOs, transactions with their
+date span, last sync and backend) and its monthly booked balance from
+`ui.reports.balance_history` (month-end market value when the app shows fiat;
+months the wallet held nothing in show as zero, and the line stays in bitcoin
+for a range with an unpriced month). When the on-chain inventory and the books
+disagree, a card compares the two. A notice appears only when the wallet has
+transactions in the review queue or without a price, counted by the
+wallet-scoped `ui.transactions.dashboard` read the Transactions page uses, and
+links into that page filtered to the wallet. Tabs carry the rest. Transactions is
+a table of the wallet's transactions (date, type, description, amount, value,
+status) whose rows open in the docked transaction detail; its footer opens the
+full list on the Transactions page. Coins groups the unspent outputs by size
+and by age since confirmation, with the largest, median and smallest coin;
+these are chain facts, not tax lots, so a coin's age says nothing about its
+holding period. With values hidden, the size bands show nothing, since their
+counts bound the balance; a capped inventory says how many coins it covers. Details holds the connection settings, import runs, and the
+Samourai and BTCPay provenance panels. All of these are local display reads;
+none starts a sync.
+
+The Coins tab includes a read-only UTXOs table for chain-backed
 wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
-output inventory, and the detail page shows current unspent transaction outputs with
+output inventory, and the table shows current unspent transaction outputs with
 outpoint, amount, confirmation state, receive/change branch/index when known,
-address or safe label, and source freshness. It shows all rows returned by the
-daemon payload, reports when that payload is capped, offers sorting by size,
-chain date, confirmations, or outpoint, and can open the UTXO's transaction in a
-configured/public explorer after the same privacy warning used by transaction
-detail explorer links. Above the table, the wallet's coins of its main asset
-show as glass blocks in the transaction graph's style, one per coin and as tall
-as its amount relative to the wallet's largest, unconfirmed coins frosted;
-hidden values give every block the same height in outpoint order. Without
-WebGL only the table shows. The table is
+address or safe label, and source freshness. It shows the rows returned by the
+daemon payload a page at a time, reports when that payload is capped, offers
+sorting by size, chain date, confirmations, or outpoint, and can open the UTXO's
+transaction in a configured/public explorer after the same privacy warning used
+by transaction detail explorer links. The table is
 inventory-only: there is no spend, PSBT, signing, broadcast, coin-selection, or
 freeze action.
 Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
@@ -423,8 +440,7 @@ under the deferred reporting-language policy in [i18n.md](i18n.md).
 Privacy Mirror is the dedicated desktop page for local privacy linkage. It
 reads `ui.reports.privacy_mirror` and shows exposure summary, adversary cards,
 wallet/transaction/UTXO rows, timeline, coverage, unknowns, evidence
-drilldowns, and a PSBT/what-if panel. Wallet detail and transaction detail
-include compact Privacy Mirror panels from the same redacted payload. The page
+drilldowns, and a PSBT/what-if panel. The page
 is local-only, read-only, advisory-only, shows degraded states instead of
 standing reassurance badges, and uses the normal desktop daemon allowlist; it
 does not sync, sign, broadcast, select coins, or mutate accounting data.
