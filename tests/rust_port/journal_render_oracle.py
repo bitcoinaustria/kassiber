@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import dataclasses
 from contextlib import nullcontext
+from contextvars import ContextVar
 import json
 from pathlib import Path
 import time
@@ -22,6 +23,7 @@ from kassiber.core.engines import ledger
 from tests.custody_snapshot import to_jsonable
 
 CLOCK = '2026-10-30T12:00:00Z'
+_ACTIVE_CAPTURE = ContextVar('journal_render_capture', default=False)
 
 
 def canonical(value):
@@ -72,9 +74,13 @@ def capture_build(builder):
         record['uuid_mapping'].append({'python': text, 'rust': text})
         return generated
 
-    with patch.object(builder, 'build_custody_projection', projection), \
-         patch.object(ledger, 'read_ledger', reader):
-        yield record, elapsed
+    token = _ACTIVE_CAPTURE.set(True)
+    try:
+        with patch.object(builder, 'build_custody_projection', projection), \
+             patch.object(ledger, 'read_ledger', reader):
+            yield record, elapsed
+    finally:
+        _ACTIVE_CAPTURE.reset(token)
 
 
 def capture(snapshot):
@@ -134,6 +140,8 @@ def install_from_environment():
 
     @functools.wraps(_ORIGINAL_BUILD)
     def observed(builder):
+        if _ACTIVE_CAPTURE.get():
+            return _ORIGINAL_BUILD(builder)
         with capture_build(builder) as (record, elapsed):
             try:
                 state = _ORIGINAL_BUILD(builder)

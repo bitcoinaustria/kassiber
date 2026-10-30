@@ -1,12 +1,18 @@
 """The R4-11 oracle retains every byte and each generated identity."""
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
-from tests.rust_port.journal_render_vectors import PATH, vectors
+import pytest
+
+from tests.rust_port.journal_render_vectors import PATH, vectors, machine_msat_vectors
 
 
 def test_render_vectors_rebuild_from_python_build():
     assert json.loads(PATH.read_text()) == vectors()
+    assert json.loads(PATH.with_name('msat-machine.json').read_text()) == [list(v) for v in machine_msat_vectors()]
 
 
 def test_uuid_tapes_are_bijections_and_cover_every_rendered_identity():
@@ -20,3 +26,39 @@ def test_uuid_tapes_are_bijections_and_cover_every_rendered_identity():
             assert [e['id'] for e in state['entries']] == case['entry_ids']
             assert 'created_at' not in state  # Created only by R4-12 persistence.
             assert case['clock'] is not None
+
+
+@pytest.mark.parametrize('mode', ['census', 'shadow'])
+@pytest.mark.parametrize('first_import', [
+    'tests.rust_port.journal_render_oracle', 'kassiber.core.custody_journal',
+])
+def test_render_capture_child_import_orders(tmp_path, mode, first_import):
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ, KASSIBER_TEST_CUSTODY_ENGINE=mode,
+               KASSIBER_TEST_JOURNAL_RENDER_DIR=str(tmp_path),
+               PYTHONPATH=os.pathsep.join([str(root / 'tests/_child_hooks'), str(root)]))
+    script = f'''
+import importlib
+import json
+importlib.import_module({first_import!r})
+from kassiber.core.custody_journal import CustodyJournalBuilder
+from kassiber.core.custody_compute import compute_custody_projection
+from tests.custody_snapshot_generator import snapshot
+book = snapshot(0)
+custody = compute_custody_projection(book)
+from tests.rust_port.journal_render_oracle import capture_projection
+captured = capture_projection(book['profile'], custody)
+assert len(captured['entry_ids']) == len(json.loads(captured['expected']['state'])['entries'])
+builder = CustodyJournalBuilder(None, book['profile'], as_of=custody.as_of)
+builder.build_custody_projection = lambda: custody
+builder.build()
+'''
+    child = subprocess.run([sys.executable, '-c', script], env=env, cwd=root,
+                           capture_output=True, text=True, timeout=60)
+    assert child.returncode == 0, child.stderr
+    records = list(tmp_path.glob('*.json'))
+    assert len(records) == 1
+    record = json.loads(records[0].read_text())
+    assert record['response'] is not None
+    assert record['entry_ids']
+    assert 'state' in record['expected']

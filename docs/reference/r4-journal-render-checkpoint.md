@@ -6,6 +6,10 @@ journal. The Rust crate is available only as a library and a local test probe.
 There is no CLI/daemon registration, persistence, SQL, network access, clock
 read or entropy source in the crate.
 
+A [local performance follow-up](r4-journal-render-performance-checkpoint.md)
+reaches both 20k render budgets and records expanded verification. The
+lossless boundary and full branch mutation requirements remain open.
+
 ## Implemented boundary
 
 `kassiber_journals::boundary::build` accepts the profile, today's serialized
@@ -170,8 +174,9 @@ removed after their summaries are saved.
 
 ## Remaining acceptance work
 
-1. Reach the 0.15 s generic-20k render/join budget, then repeat the four-book
-   alternating benchmark with per-run one-minute loads.
+1. The [performance follow-up](r4-journal-render-performance-checkpoint.md)
+   reaches the generic-20k and multi-wallet-20k render budgets. Recheck them
+   when integrating the typed custody and loader outputs.
 2. Close the lossless boundary gaps: actual lone-surrogate string scalars,
    legacy nonfinite float projections/details, and malformed transitional
    operands. Some malformed integer/row paths still default or panic rather
@@ -212,7 +217,7 @@ machine measurements, not an end-to-end journal benchmark:
 | Multi-wallet 2k | 0.078482 | 0.026433 | 2.97× | 7.180–7.180 |
 | Multi-wallet 20k | 1.113527 | 0.680659 | 1.64× | 7.039–7.773 |
 
-**The generic-20k 0.15 s target fails.** The measured Rust minimum is 1.92×
+**At this original checkpoint, the generic-20k 0.15 s target fails.** The measured Rust minimum is 1.92×
 the budget. The multi-wallet case also needs substantial optimization.
 
 | Book | Trial | Python (s) | Python load 1m | Rust (s) | Rust load 1m |

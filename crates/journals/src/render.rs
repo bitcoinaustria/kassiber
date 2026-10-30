@@ -5,7 +5,7 @@ use kassiber_tax_core::{
     manifest::{DetailKind, EntryType},
 };
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 const CTX: Context = Context::RP2;
 const REVIEW: [&str; 7] = [
     "pricing_quality",
@@ -32,8 +32,23 @@ pub(crate) fn msat(d: &Decimal) -> Result<Value, Refusal> {
     if d.is_zero() {
         return Ok(json!(0));
     }
-    let digits = d.coefficient().to_str_radix(10);
     let shift = d.exponent() + 11;
+    // Common BTC amounts fit machine integers. The <=20-digit coefficient
+    // cannot round in Python's 32-digit power-of-ten multiply. Keep exotic
+    // exponents and wide results on the arbitrary-precision path below.
+    if d.coefficient().bits() <= 64 && (-19..=19).contains(&shift) {
+        let n = u128::from(d.coefficient().iter_u64_digits().next().unwrap_or(0));
+        let magnitude = if shift >= 0 {
+            n * 10u128.pow(shift as u32)
+        } else {
+            let divisor = 10u128.pow((-shift) as u32);
+            n / divisor + u128::from(n % divisor >= divisor / 2)
+        };
+        if let Ok(n) = i64::try_from(magnitude) {
+            return Ok(json!(if d.is_sign_negative() { -n } else { n }));
+        }
+    }
+    let digits = d.coefficient().to_str_radix(10);
     // A power-of-ten multiply cannot change a <=32-digit coefficient's value.
     // Avoid Decimal allocation for ordinary exact amounts; wide/exotic values
     // still use the context-rounded Python operation below.
@@ -72,7 +87,13 @@ fn required<'a>(row: &'a Value, key: &str) -> Result<&'a Value, Refusal> {
     row.get(key)
         .ok_or_else(|| Refusal::new("KeyError", format!("'{key}'")))
 }
-fn lookup<'a>(map: &'a HashMap<String, &Value>, id: &str) -> Result<&'a Value, Refusal> {
+fn row_key(value: &Value) -> Cow<'_, str> {
+    value
+        .as_str()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(|| Cow::Owned(string(value)))
+}
+fn lookup<'a>(map: &'a HashMap<Cow<'_, str>, &Value>, id: &str) -> Result<&'a Value, Refusal> {
     map.get(id)
         .copied()
         .ok_or_else(|| Refusal::new("KeyError", format!("'{id}'")))
@@ -90,7 +111,7 @@ pub struct LedgerState {
     pub wallet_holdings: Holdings,
     pub direct_swap_payouts: Value,
 }
-/// Operands shared with the future typed finalized stage. Raw row values stay lossless.
+/// Operands shared with the future typed finalized stage. Raw rows use transitional JSON.
 pub struct LedgerInputs<'a> {
     pub profile: &'a Value,
     pub projection: &'a Value,
@@ -99,12 +120,65 @@ pub struct LedgerInputs<'a> {
 }
 struct Reader<'a> {
     inputs: &'a LedgerInputs<'a>,
-    rows: HashMap<String, &'a Value>,
-    labels: HashMap<String, &'a Value>,
+    rows: HashMap<Cow<'a, str>, usize>,
+    row_values: Vec<&'a Value>,
+    labels: HashMap<Cow<'a, str>, &'a Value>,
     iso: HashMap<String, String>,
-    sources: HashMap<String, std::sync::Arc<SourceProvenance>>,
+    utc_dates: HashMap<String, bool>,
+    sources: Vec<Option<std::sync::Arc<SourceProvenance>>>,
 }
 impl Reader<'_> {
+    fn iso(&mut self, raw: &Value) -> Result<String, Refusal> {
+        if raw.is_array() || raw.is_object() {
+            let kind = if raw.is_array() { "list" } else { "dict" };
+            return Err(Refusal::new(
+                "TypeError",
+                format!("unhashable type: '{kind}'"),
+            ));
+        }
+        // The usual UTC seconds spelling needs no timezone/calendar projections.
+        // Validate each date with the shared parser once, then only its clock.
+        // Every other spelling and every invalid value uses that same parser.
+        if let Some(s) = raw.as_str() {
+            let b = s.as_bytes();
+            if b.len() == 20
+                && b[4] == b'-'
+                && b[7] == b'-'
+                && b[10] == b'T'
+                && b[13] == b':'
+                && b[16] == b':'
+                && b[19] == b'Z'
+                && b.iter()
+                    .enumerate()
+                    .all(|(i, c)| matches!(i, 4 | 7 | 10 | 13 | 16 | 19) || c.is_ascii_digit())
+                && &s[11..13] < "24"
+                && &s[14..16] < "60"
+                && &s[17..19] < "60"
+            {
+                let valid = *self.utc_dates.entry(s[..10].into()).or_insert_with(|| {
+                    kassiber_custody::ledger_request::timestamp_fields(&json!(format!(
+                        "{}T00:00:00Z",
+                        &s[..10]
+                    )))["iso"]
+                        .is_string()
+                });
+                if valid {
+                    return Ok(format!("{}+00:00", &s[..19]));
+                }
+            }
+        }
+        let key = string(raw);
+        if let Some(s) = self.iso.get(&key) {
+            return Ok(s.clone());
+        }
+        let ts = kassiber_custody::ledger_request::timestamp_fields(raw);
+        let iso = ts["iso"]
+            .as_str()
+            .ok_or_else(|| Refusal::new("KeyError", "'iso'"))?
+            .to_owned();
+        self.iso.insert(key, iso.clone());
+        Ok(iso)
+    }
     fn source(
         &mut self,
         asset: &str,
@@ -113,23 +187,14 @@ impl Reader<'_> {
         fee: &Decimal,
         crypto: &Decimal,
     ) -> Result<Source, Refusal> {
-        let provenance = if let Some(p) = self.sources.get(id) {
+        let slot = self.rows.get(id).copied();
+        let provenance = if let Some(p) = slot.and_then(|slot| self.sources[slot].as_ref()) {
             p.clone()
         } else {
-            let row = self.rows.get(id).copied().unwrap_or(&Value::Null);
-            let raw = row["occurred_at"].clone();
-            let key = string(&raw);
-            let iso = if let Some(s) = self.iso.get(&key) {
-                s.clone()
-            } else {
-                let ts = kassiber_custody::ledger_request::timestamp_fields(&raw);
-                let iso = ts["iso"]
-                    .as_str()
-                    .ok_or_else(|| Refusal::new("KeyError", "'iso'"))?
-                    .to_owned();
-                self.iso.insert(key, iso.clone());
-                iso
-            };
+            let row = slot
+                .map(|slot| self.row_values[slot])
+                .unwrap_or(&Value::Null);
+            let iso = self.iso(&row["occurred_at"])?;
             let provenance = std::sync::Arc::new(SourceProvenance {
                 transaction_id: fallback(&row["journal_transaction_id"], &row["id"]).clone(),
                 engine_event_id: id.into(),
@@ -138,7 +203,9 @@ impl Reader<'_> {
                     row[FRAGMENT_PRICING_FIELDS[i]].clone()
                 })),
             });
-            self.sources.insert(id.into(), provenance.clone());
+            if let Some(slot) = slot {
+                self.sources[slot] = Some(provenance.clone());
+            }
             provenance
         };
         let amount = msat(crypto)?;
@@ -231,6 +298,13 @@ impl Reader<'_> {
             calculation: None,
         })
     }
+    fn row(&self, id: &str) -> Option<&Value> {
+        self.rows.get(id).map(|slot| self.row_values[*slot])
+    }
+    fn required_row(&self, id: &str) -> Result<&Value, Refusal> {
+        self.row(id)
+            .ok_or_else(|| Refusal::new("KeyError", format!("'{id}'")))
+    }
     fn wallet(&self, label: &str) -> Result<&Value, Refusal> {
         self.labels.get(label).copied().ok_or_else(|| {
             let mut e = Refusal::new(
@@ -250,7 +324,7 @@ impl Reader<'_> {
     ) -> Result<JournalEntryRow, Refusal> {
         match item {
             EntryOut::Acquisition(a) => {
-                let row = lookup(&self.rows, &a.row)?;
+                let row = self.required_row(&a.row)?;
                 let mut e = self.head(
                     self.wallet(&a.wallet)?,
                     row,
@@ -266,7 +340,7 @@ impl Reader<'_> {
                 Ok(e)
             }
             EntryOut::Realized(a) => {
-                let row = lookup(&self.rows, &a.row)?;
+                let row = self.required_row(&a.row)?;
                 let mut e = self.head(
                     self.wallet(&a.wallet)?,
                     row,
@@ -322,7 +396,7 @@ impl Reader<'_> {
                 );
                 let wallet = lookup(&self.labels, &label)?;
                 let row_id = string(&audit[if outbound { "out_id" } else { "in_id" }]);
-                let row = self.rows.get(&row_id).copied().unwrap_or(&Value::Null);
+                let row = self.row(&row_id).unwrap_or(&Value::Null);
                 let mut e = self.head(wallet, row, &row_id, audit["occurred_at"].clone(), ids())?;
                 let qty = decimal_text(&kassiber_pyjson::float_repr(
                     audit[if outbound {
@@ -349,16 +423,18 @@ pub fn render_ledger(
     response: &LedgerResponse,
     mut ids: impl FnMut() -> String,
 ) -> Result<LedgerState, Refusal> {
+    let span = kassiber_custody::timing::span("render.inputs");
     let mut carried = HashMap::new();
-    let original: HashMap<_, _> = array(&inputs.projection["rows"])
+    let mut row_values: Vec<_> = array(&inputs.projection["rows"]).iter().collect();
+    let rows: HashMap<_, _> = row_values
         .iter()
-        .map(|r| (string(&r["id"]), r))
+        .enumerate()
+        .map(|(slot, row)| (row_key(&row["id"]), slot))
         .collect();
     for carry in &response.carried_rows {
         let row = carried.entry(carry.row.clone()).or_insert_with(|| {
-            original
-                .get(&carry.row)
-                .copied()
+            rows.get(carry.row.as_str())
+                .map(|slot| row_values[*slot])
                 .unwrap_or(&Value::Null)
                 .clone()
         });
@@ -387,23 +463,26 @@ pub fn render_ledger(
             row[k] = v;
         }
     }
-    let mut rows = original;
     for (id, row) in &carried {
-        rows.insert(id.clone(), row);
+        row_values[rows[id.as_str()]] = row;
     }
+    let sources = vec![None; row_values.len()];
     let labels = inputs
         .wallets
         .iter()
         .filter(|w| !w["label"].is_null() && w["label"] != "")
-        .map(|w| (string(&w["label"]), w))
+        .map(|w| (row_key(&w["label"]), w))
         .collect();
     let mut reader = Reader {
         inputs,
         rows,
+        row_values,
         labels,
         iso: HashMap::new(),
-        sources: HashMap::new(),
+        utc_dates: HashMap::new(),
+        sources,
     };
+    drop(span);
     let span = kassiber_custody::timing::span("render.audit");
     let audits = response
         .intra_audit
@@ -426,11 +505,7 @@ pub fn render_ledger(
         })
         .collect::<Result<Vec<_>, _>>()?;
     for q in &response.quarantines {
-        quarantines.push(quarantine(
-            inputs.profile,
-            lookup(&reader.rows, &q.row)?,
-            q,
-        )?);
+        quarantines.push(quarantine(inputs.profile, reader.required_row(&q.row)?, q)?);
     }
     let (account_holdings, wallet_holdings) = holdings(&response.holdings, &reader.labels)?;
     drop(span);
@@ -453,6 +528,10 @@ pub fn render_ledger(
         })
         .collect::<Result<_, Refusal>>()?;
     drop(span);
+    let span = kassiber_custody::timing::span("render.finish");
+    let direct_swap_payouts = direct_payouts(inputs)?;
+    drop(reader);
+    drop(span);
     Ok(LedgerState {
         entries,
         quarantines,
@@ -460,7 +539,7 @@ pub fn render_ledger(
         tax_summary,
         account_holdings,
         wallet_holdings,
-        direct_swap_payouts: direct_payouts(inputs)?,
+        direct_swap_payouts,
     })
 }
 fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<Value, Refusal> {
@@ -581,7 +660,7 @@ fn boolish(v: &Value) -> bool {
 }
 fn holdings(
     items: &[HoldingOut],
-    labels: &HashMap<String, &Value>,
+    labels: &HashMap<Cow<'_, str>, &Value>,
 ) -> Result<(Holdings, Holdings), Refusal> {
     // The asset is part of each key, so distinct assets cannot round one another.
     let mut accounts = Holdings { pairs: vec![] };
@@ -623,7 +702,7 @@ fn holdings(
         assets[slot].push(item);
     }
     for item in assets.into_iter().flatten() {
-        if let Some(w) = labels.get(&item.wallet) {
+        if let Some(w) = labels.get(item.wallet.as_str()) {
             add(
                 &mut accounts,
                 &mut account_slots,
@@ -658,6 +737,9 @@ fn holdings(
     Ok((accounts, wallets))
 }
 fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
+    if inputs.direct_payout_records.is_empty() {
+        return Ok(json!([]));
+    }
     let mut rows: HashMap<String, Vec<&Value>> = HashMap::new();
     for r in array(&inputs.projection["rows"]) {
         if truth(&r["journal_transaction_id"]) && r["direction"] == "outbound" {
@@ -734,8 +816,14 @@ mod tests {
     use super::*;
     #[test]
     fn msat_conversion_matches_python_at_rounding_and_width_boundaries() {
-        let vectors: Vec<(String, Value)> =
+        let mut vectors: Vec<(String, Value)> =
             serde_json::from_str(include_str!("../tests/data/msat.json")).unwrap();
+        vectors.extend(
+            serde_json::from_str::<Vec<(String, Value)>>(include_str!(
+                "../tests/data/msat-machine.json"
+            ))
+            .unwrap(),
+        );
         for (input, expected) in vectors {
             assert_eq!(
                 msat(&input.parse::<Decimal>().unwrap()).unwrap(),

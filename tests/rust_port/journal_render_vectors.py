@@ -128,6 +128,32 @@ def vectors():
         add(f'method-stringification-{method}',
             dict(snapshot(0)['profile'], gains_algorithm=method), base, normal_response)
 
+    # UTC fast rendering shares calendar validation with the existing parser.
+    for name, timestamp in [
+        ('leap', '2024-02-29T23:59:59Z'),
+        ('century', '2000-02-29T00:00:00Z'),
+        ('invalid-leap', '2023-02-29T00:00:00Z'),
+        ('invalid-century', '1900-02-29T00:00:00Z'),
+        ('invalid-day', '2024-04-31T00:00:00Z'),
+        ('invalid-year', '0000-01-01T00:00:00Z'),
+        ('invalid-month', '2024-13-01T00:00:00Z'),
+        ('hour', '2024-01-01T24:00:00Z'),
+        ('minute', '2024-01-01T00:60:00Z'),
+        ('second', '2024-01-01T00:00:60Z'),
+        ('clock-text', '2024-01-01T00:!0:00Z'),
+        ('fraction', '2024-02-29T12:34:56.123Z'),
+        ('offset', '2024-02-29T12:34:56+01:30'),
+        ('lowercase', '2024-02-29t12:34:56z'),
+        ('missing-zone', '2024-02-29T12:34:56'),
+        ('unicode', '２０２４-０２-２９T１２:３４:５６Z'),
+        ('numeric', 123), ('null', None), ('list', []),
+    ]:
+        rows = tuple(dict(row, occurred_at=timestamp)
+                     for row in base.finalized_tax_projection.rows)
+        add(f'source-timestamp-{name}', snapshot(0)['profile'],
+            replace(base, finalized_tax_projection=replace(base.finalized_tax_projection, rows=rows)),
+            normal_response)
+
     # Independently injected engine results cover refusals before row rendering.
     for stage in ('prepare', 'validate', 'compute_multi', 'compute', 'classify', 'request', 'unsupported', 'unknown'):
         for error_class in ('ValueError', 'TypeError', 'RuntimeError', 'AppError', 'InvalidOperation', 'DivisionByZero', 'Overflow', 'BuiltinValueError', 'Unsupported'):
@@ -138,12 +164,28 @@ def vectors():
     return cases
 
 
+def machine_msat_vectors():
+    from decimal import Decimal, localcontext
+    from kassiber.msat import btc_to_msat
+    coefficients = (1, 5, 49, 50, 51, 2**63 - 1, 2**63, 2**64 - 1, 2**64, 2**64 + 1, 5 * 10**19)
+    with localcontext() as context:
+        context.prec = 32
+        return [(text, btc_to_msat(Decimal(text)))
+                for coefficient in coefficients
+                for exponent in (-31, -30, -20, -12, -11, -1, 0, 8)
+                for text in (f'{coefficient}E{exponent}', f'-{coefficient}E{exponent}')]
+
+
 def main():
     result = json.dumps(vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
+    machine = json.dumps(machine_msat_vectors(), separators=(',', ':')) + '\n'
+    machine_path = PATH.with_name('msat-machine.json')
     if '--accept' in sys.argv:
         PATH.write_text(result)
+        machine_path.write_text(machine)
     else:
         assert PATH.read_text() == result, 'render vectors changed; review then use --accept'
+        assert machine_path.read_text() == machine, 'msat machine vectors changed'
     print(f'{len(json.loads(result))} synthetic journal render vectors')
 
 

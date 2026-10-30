@@ -2161,7 +2161,8 @@
     },
     "tests/test_rust_journal_render.py": {
       "test_render_vectors_rebuild_from_python_build": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "regenerates complete pre-persistence build-state vectors from unchanged Python and proves every rendered UUID has a declared bijection; native journal tests compare all state and refusal bytes", "reviewed": true, "tests": 1},
-      "test_uuid_tapes_are_bijections_and_cover_every_rendered_identity": {"disposition": "oracle", "flags": [], "group": "journals", "reason": "regenerates complete pre-persistence build-state vectors from unchanged Python and proves every rendered UUID has a declared bijection; native journal tests compare all state and refusal bytes", "reviewed": true, "tests": 1}
+      "test_uuid_tapes_are_bijections_and_cover_every_rendered_identity": {"disposition": "oracle", "flags": [], "group": "journals", "reason": "regenerates complete pre-persistence build-state vectors from unchanged Python and proves every rendered UUID has a declared bijection; native journal tests compare all state and refusal bytes", "reviewed": true, "tests": 1},
+      "test_render_capture_child_import_orders": {"disposition": "oracle", "flags": ["subprocess"], "group": "journals", "reason": "regenerates complete pre-persistence build-state vectors from unchanged Python and proves every rendered UUID has a declared bijection; native journal tests compare all state and refusal bytes", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 7}

@@ -369,9 +369,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
-  reach 0.15 s at generic 20k, close legacy-value/refusal gaps, and complete
-  exhaustive branch mutations and the inherited campaign gates. The crate
-  and sampled oracle exist; Python retains production authority.
+  close legacy-value/refusal gaps and complete exhaustive branch mutations
+  and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
+  reaches the generic and multi-wallet 20k budgets; recheck them during typed
+  integration. Python retains production authority.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 

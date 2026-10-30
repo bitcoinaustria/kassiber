@@ -54,7 +54,9 @@ def main():
             original_reader = ledger.read_ledger
             with subprocess.Popen([str(args.probe), '--timing-only'], stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, text=True, bufsize=1) as child:
-                trials = 5 if os.getloadavg()[0] > 8 else 3
+                # Keep five trials even if the shared-host load rises only
+                # after this book starts. Record the actual load on every run.
+                trials = 5
                 for trial in range(trials):
                     load = os.getloadavg()[0]
                     with patch.object(ledger.KassiberTaxEngine, 'build_ledger_state',

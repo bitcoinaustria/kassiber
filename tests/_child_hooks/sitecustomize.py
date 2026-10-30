@@ -135,7 +135,9 @@ def _install_custody_mode(module=None):
     global _CUSTODY_INSTALLING
     if _CUSTODY_INSTALLING:
         return
-    for name, ready in (("tests.custody_snapshot", "install_from_environment"), ("tests.custody_engine_compare", "install_custody_mode")):
+    for name, ready in (("tests.custody_snapshot", "install_from_environment"),
+                        ("tests.custody_engine_compare", "install_custody_mode"),
+                        ("tests.rust_port.journal_render_oracle", "install_from_environment")):
         loaded = sys.modules.get(name)
         if loaded is not None and not hasattr(loaded, ready):
             # Its after-import callback will finish installation.
@@ -167,5 +169,6 @@ if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTOD
             "kassiber.core.custody_journal": _custody_loaded,
             "tests.custody_engine_compare": _install_custody_mode,
             "tests.custody_snapshot": _install_custody_mode,
+            "tests.rust_port.journal_render_oracle": _install_custody_mode,
         }
     sys.meta_path.insert(0, _InstallCustodyModeAfterImport())

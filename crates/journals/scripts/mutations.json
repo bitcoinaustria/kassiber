@@ -388,5 +388,213 @@
       "refusal_mapping_matches_python"
     ],
     "rule": "Wrapped failures keep the Python prefix and cause message order."
+  },
+  {
+    "id": "JR-machine-coefficient",
+    "file": "crates/journals/src/render.rs",
+    "find": "d.coefficient().bits() <= 64",
+    "replace": "d.coefficient().bits() <= 65",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "The machine path must not truncate a coefficient wider than u64."
+  },
+  {
+    "id": "JR-machine-rounding",
+    "file": "crates/journals/src/render.rs",
+    "find": "n % divisor >= divisor / 2",
+    "replace": "n % divisor > divisor / 2",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "Machine integer rounding retains half-up ties."
+  },
+  {
+    "id": "JR-machine-sign",
+    "file": "crates/journals/src/render.rs",
+    "find": "if d.is_sign_negative() { -n } else { n }",
+    "replace": "if d.is_sign_negative() { n } else { n }",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "The machine path preserves negative msat signs."
+  },
+  {
+    "id": "JR-machine-scale",
+    "file": "crates/journals/src/render.rs",
+    "find": "n * 10u128.pow(shift as u32)",
+    "replace": "n * 10u128.pow(shift as u32) + 1",
+    "expect_failing": [
+      "msat_conversion_matches_python_at_rounding_and_width_boundaries"
+    ],
+    "rule": "Scaling an exact machine coefficient does not add a msat."
+  },
+  {
+    "id": "JR-utc-hour",
+    "file": "crates/journals/src/render.rs",
+    "find": "&s[11..13] < \"24\"",
+    "replace": "&s[11..13] < \"25\"",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Hour 24 must take the shared parser refusal path."
+  },
+  {
+    "id": "JR-utc-minute",
+    "file": "crates/journals/src/render.rs",
+    "find": "&s[14..16] < \"60\"",
+    "replace": "&s[14..16] < \"61\"",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Minute 60 must refuse."
+  },
+  {
+    "id": "JR-utc-second",
+    "file": "crates/journals/src/render.rs",
+    "find": "&s[17..19] < \"60\"",
+    "replace": "&s[17..19] < \"61\"",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Second 60 must refuse."
+  },
+  {
+    "id": "JR-utc-date",
+    "file": "crates/journals/src/render.rs",
+    "find": "if valid {",
+    "replace": "if true {",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "The cached date must be accepted by the shared calendar parser."
+  },
+  {
+    "id": "JR-utc-zone",
+    "file": "crates/journals/src/render.rs",
+    "find": "format!(\"{}+00:00\", &s[..19])",
+    "replace": "format!(\"{}+01:00\", &s[..19])",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "UTC source timestamps retain the zero offset."
+  },
+  {
+    "id": "JR-iso-unhashable",
+    "file": "crates/journals/src/render.rs",
+    "find": "if raw.is_array() || raw.is_object() {",
+    "replace": "if false && (raw.is_array() || raw.is_object()) {",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Python refuses unhashable timestamp cache keys before parsing."
+  },
+  {
+    "id": "JR-source-slot",
+    "file": "crates/journals/src/render.rs",
+    "find": "self.sources[slot] = Some(provenance.clone());",
+    "replace": "self.sources[0] = Some(provenance.clone());",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Each source provenance cache slot belongs to its own row."
+  },
+  {
+    "id": "JR-carry-slot",
+    "file": "crates/journals/src/render.rs",
+    "find": "row_values[rows[id.as_str()]] = row;",
+    "replace": "row_values[rows[id.as_str()]] = &Value::Null;",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Carried pricing overrides replace the corresponding original source row."
+  },
+  {
+    "id": "JR-balance-small-add",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "self.small.checked_add(n)",
+    "replace": "self.small.checked_sub(n)",
+    "expect_failing": [
+      "balance_join_matches_existing_comparator_and_promotes_before_overflow"
+    ],
+    "rule": "Small wallet totals add postings with their original sign."
+  },
+  {
+    "id": "JR-balance-wide-add",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "*self.wide.get_or_insert_with(|| BigInt::from(self.small)) += amount;",
+    "replace": "*self.wide.get_or_insert_with(|| BigInt::from(self.small)) -= amount;",
+    "expect_failing": [
+      "balance_join_matches_existing_comparator_and_promotes_before_overflow"
+    ],
+    "rule": "Promoted totals continue exact signed addition."
+  },
+  {
+    "id": "JR-balance-wallet-kind",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if posting[\"location_kind\"] != \"wallet\" {",
+    "replace": "if posting[\"location_kind\"] == \"wallet\" {",
+    "expect_failing": [
+      "balance_join_matches_existing_comparator_and_promotes_before_overflow"
+    ],
+    "rule": "Only wallet postings enter diagnostic wallet balances."
+  },
+  {
+    "id": "JR-balance-reason",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if truth(reason) {",
+    "replace": "if false && truth(reason) {",
+    "expect_failing": [
+      "balance_join_matches_existing_comparator_and_promotes_before_overflow"
+    ],
+    "rule": "Known non-event reasons join through the observation hash."
+  },
+  {
+    "id": "JR-review-pairable-early",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if !blocked.values().any(|reason| pairable(reason)) {",
+    "replace": "if blocked.values().any(|reason| pairable(reason)) {",
+    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "rule": "The lazy ownership shortcut may not discard pairable quarantine reasons."
+  },
+  {
+    "id": "JR-review-pairable-filter",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if !pairable(&reason) {",
+    "replace": "if pairable(&reason) {",
+    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "rule": "Ownership sources are selected from the pairable reason allowlist."
+  },
+  {
+    "id": "JR-review-physical-group",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if scope.is_some() && !physical_groups_built {",
+    "replace": "if false && scope.is_some() && !physical_groups_built {",
+    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "rule": "Scoped fallback sources need the physical group index before destination selection."
+  },
+  {
+    "id": "JR-review-legacy-group",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if scope.is_none() && !legacy_groups_built {",
+    "replace": "if false && scope.is_none() && !legacy_groups_built {",
+    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "rule": "Unscoped fallback sources retain their literal legacy transaction groups."
+  },
+  {
+    "id": "JR-review-prefer-exact",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if exact.is_empty() {",
+    "replace": "if !exact.is_empty() {",
+    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "rule": "Exact ownership matches take precedence; compatible candidates remain the fallback."
+  },
+  {
+    "id": "JR-balance-current-key",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "(current_text(&key[0]), current_text(&key[3]))",
+    "replace": "(text(&key[0]), text(&key[3]))",
+    "expect_failing": ["balance_current_keys_preserve_python_stringification"],
+    "rule": "Current balance keys preserve str() for falsey legacy wallet identities."
   }
 ]

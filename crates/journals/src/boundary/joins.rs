@@ -1,9 +1,18 @@
 use crate::*;
-use kassiber_custody::{journal_support as graph, quantity::balances};
+use kassiber_custody::journal_support as graph;
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashMap},
+};
 fn int(v: &Value) -> BigInt {
+    if let Some(n) = v.as_i64() {
+        return BigInt::from(n);
+    }
+    if let Some(n) = v.as_u64() {
+        return BigInt::from(n);
+    }
     kassiber_custody::codec::integer_or_zero(v)
         .ok()
         .and_then(|v| v.to_string().parse().ok())
@@ -18,17 +27,25 @@ fn legacy_txid(v: &Value) -> String {
     }
 }
 pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refusal> {
-    let current = holdings
-        .pairs
-        .iter()
-        .map(|(k, v)| {
-            Ok(json!([
-                string(&k[0]),
-                string(&k[3]),
-                crate::render::msat(&v.quantity.0)?
-            ]))
-        })
-        .collect::<Result<Vec<_>, Refusal>>()?;
+    fn text(v: &Value) -> Cow<'_, str> {
+        v.as_str()
+            .map(Cow::Borrowed)
+            .unwrap_or_else(|| Cow::Owned(kassiber_custody::codec::text(v)))
+    }
+    fn current_text(v: &Value) -> Cow<'_, str> {
+        v.as_str()
+            .map(Cow::Borrowed)
+            .unwrap_or_else(|| Cow::Owned(string(v)))
+    }
+    let mut current = BTreeMap::new();
+    for (key, value) in &holdings.pairs {
+        let amount = crate::render::msat(&value.quantity.0)?;
+        let amount = amount
+            .to_string()
+            .parse::<BigInt>()
+            .map_err(|_| Refusal::from("ValueError".to_owned()))?;
+        current.insert((current_text(&key[0]), current_text(&key[3])), amount);
+    }
     let mut reasons = json!({});
     for leg in array(&c["loan_legs"]) {
         if !leg["transaction_id"].is_null() {
@@ -52,11 +69,97 @@ pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refus
             }
         }
     }
-    Ok(balances::compare_wallet_balances(
-        &c["quantity_state"]["projection"],
-        &current,
-        &reasons,
-    )?)
+    // Borrow identities rather than building an intermediate JSON current-balance
+    // table and cloning every observation hash. Only named non-event reasons
+    // need the observation join; postings remain authoritative for quantities.
+    let projection = &c["quantity_state"]["projection"];
+    let observations: HashMap<_, _> = if reasons.as_object().is_some_and(|m| !m.is_empty()) {
+        array(&projection["observations"])
+            .iter()
+            .map(|o| (text(&o["quantity_hash"]), o))
+            .collect()
+    } else {
+        HashMap::new()
+    };
+    let mut canonical = BTreeMap::<_, BalanceSum>::new();
+    let mut named = BTreeMap::<_, BTreeSet<String>>::new();
+    for posting in array(&projection["postings"]) {
+        if posting["location_kind"] != "wallet" {
+            continue;
+        }
+        let key = (text(&posting["location_id"]), text(&posting["asset"]));
+        canonical
+            .entry(key.clone())
+            .or_default()
+            .add(&posting["amount_msat"])?;
+        if let Some(observation) = observations.get(&text(&posting["observation_hash"])) {
+            let reason = &reasons[text(&observation["transaction_id"]).as_ref()];
+            if truth(reason) {
+                named.entry(key).or_default().insert(string(reason));
+            }
+        }
+    }
+    let keys: BTreeSet<_> = canonical.keys().chain(current.keys()).cloned().collect();
+    let mut differences = vec![];
+    for (wallet, asset) in keys {
+        let key = (wallet.clone(), asset.clone());
+        let a = canonical
+            .get(&key)
+            .map(BalanceSum::value)
+            .unwrap_or_default();
+        let b = current.get(&key).cloned().unwrap_or_default();
+        if a == b {
+            continue;
+        }
+        let reason = named
+            .get(&key)
+            .filter(|r| r.len() == 1)
+            .and_then(|r| r.first());
+        differences.push(
+            json!({"$type":"WalletBalanceDifference", "wallet_id":wallet,
+            "asset":asset, "canonical_msat":number(&a.to_string())?,
+            "current_msat":number(&b.to_string())?, "reason":reason}),
+        );
+    }
+    Ok(json!(differences))
+}
+// Most wallet totals fit i128. Promote before overflow, retaining arbitrary
+// precision for historical quantities without allocating a BigInt per posting.
+#[derive(Default)]
+struct BalanceSum {
+    small: i128,
+    wide: Option<BigInt>,
+}
+impl BalanceSum {
+    fn add(&mut self, value: &Value) -> Result<(), Refusal> {
+        let small = value
+            .as_i64()
+            .map(i128::from)
+            .or_else(|| value.as_u64().map(i128::from));
+        if self.wide.is_none() {
+            if let Some(n) = small.and_then(|n| self.small.checked_add(n)) {
+                self.small = n;
+                return Ok(());
+            }
+        }
+        let amount = if let Some(n) = small {
+            BigInt::from(n)
+        } else {
+            let s = value.to_string();
+            if !value.is_number() || s.contains(['.', 'e', 'E']) {
+                return Err(Refusal::from("ValueError".to_owned()));
+            }
+            s.parse::<BigInt>()
+                .map_err(|_| Refusal::from("ValueError".to_owned()))?
+        };
+        *self.wide.get_or_insert_with(|| BigInt::from(self.small)) += amount;
+        Ok(())
+    }
+    fn value(&self) -> BigInt {
+        self.wide
+            .clone()
+            .unwrap_or_else(|| BigInt::from(self.small))
+    }
 }
 fn downstream(reason: &str) -> bool {
     matches!(
@@ -69,7 +172,22 @@ fn downstream(reason: &str) -> bool {
             | "bitcoin_rail_carry_basis_unresolved"
     )
 }
+fn pairable(reason: &str) -> bool {
+    matches!(
+        reason,
+        "owned_fanout_unresolved"
+            | "ownership_transfer_destination_ambiguous"
+            | "ownership_transfer_source_ambiguous"
+    )
+}
 pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value, Value), Refusal> {
+    struct Memos;
+    impl Drop for Memos {
+        fn drop(&mut self) {
+            graph::clear_memos();
+        }
+    }
+    let _memos = Memos;
     let mut blocked = BTreeMap::new();
     for q in qs {
         let entry = blocked
@@ -83,6 +201,16 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
         return Ok((json!({"total":0,"by_reason":{}}), json!([])));
     }
     let rows = array(&c["rows"]);
+    if !blocked.values().any(|reason| pairable(reason)) {
+        // Python still converts every inbound amount before selecting sources.
+        // Retain those conversions even when no quarantine can produce a card.
+        for row in rows {
+            if row["direction"] == "inbound" {
+                let _ = int(&row["amount"]);
+            }
+        }
+        return Ok((json!({"total":0,"by_reason":{}}), json!([])));
+    }
     let by_id: HashMap<_, _> = rows.iter().map(|r| (string(&r["id"]), r)).collect();
     let mut active = BTreeSet::new();
     let mut unavailable = BTreeSet::new();
@@ -139,37 +267,29 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
     }
     let mut inbounds: HashMap<String, Vec<&Value>> = HashMap::new();
     let mut groups: HashMap<String, Vec<&Value>> = HashMap::new();
-    let scopes: HashMap<_, _> = rows
-        .iter()
-        .map(|r| (string(&r["id"]), graph::onchain_scope(r)))
-        .collect();
+    // Scopes inspect and decode raw provider payloads. Most quarantines cannot
+    // offer ownership cards, so compute scopes only for rows a card examines.
+    let mut scopes = HashMap::<usize, Option<graph::Scope>>::new();
+    fn row_scope(
+        scopes: &mut HashMap<usize, Option<graph::Scope>>,
+        row: &Value,
+    ) -> Option<graph::Scope> {
+        scopes
+            .entry(row as *const Value as usize)
+            .or_insert_with(|| graph::onchain_scope(row))
+            .clone()
+    }
+    let mut physical_groups_built = false;
+    let mut legacy_groups_built = false;
     for r in rows {
         if r["direction"] == "inbound" && int(&r["amount"]) > BigInt::from(0) {
             inbounds.entry(string(&r["wallet_id"])).or_default().push(r);
-        }
-        let legacy = legacy_txid(&r["external_id"]);
-        if !legacy.is_empty() {
-            groups
-                .entry(format!(
-                    "legacy:{legacy}:{}",
-                    string(&r["asset"]).to_uppercase()
-                ))
-                .or_default()
-                .push(r);
-        }
-        if let Some(s) = &scopes[&string(&r["id"])] {
-            groups.entry(format!("physical:{s:?}")).or_default().push(r);
         }
     }
     let mut candidates = vec![];
     let mut counts = BTreeMap::<String, usize>::new();
     for (id, reason) in blocked {
-        if !matches!(
-            reason.as_str(),
-            "owned_fanout_unresolved"
-                | "ownership_transfer_destination_ambiguous"
-                | "ownership_transfer_source_ambiguous"
-        ) {
+        if !pairable(&reason) {
             continue;
         }
         let Some(source) = by_id.get(&id).copied() else {
@@ -212,10 +332,36 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                 continue;
             }
         } else if reason == "owned_fanout_unresolved" {
-            scope = scopes[&id].clone();
+            scope = row_scope(&mut scopes, source);
+            if scope.is_some() && !physical_groups_built {
+                for row in rows {
+                    if let Some(s) = row_scope(&mut scopes, row) {
+                        groups
+                            .entry(format!("physical:{s:?}"))
+                            .or_default()
+                            .push(row);
+                    }
+                }
+                physical_groups_built = true;
+            }
             let legacy = legacy_txid(&source["external_id"]);
             if scope.is_none() && legacy.is_empty() {
                 continue;
+            }
+            if scope.is_none() && !legacy_groups_built {
+                for row in rows {
+                    let legacy = legacy_txid(&row["external_id"]);
+                    if !legacy.is_empty() {
+                        groups
+                            .entry(format!(
+                                "legacy:{legacy}:{}",
+                                string(&row["asset"]).to_uppercase()
+                            ))
+                            .or_default()
+                            .push(row);
+                    }
+                }
+                legacy_groups_built = true;
             }
             let key = scope
                 .as_ref()
@@ -250,7 +396,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
             .map(|p| fallback(&p["txid"], &source["external_id"]))
             .unwrap_or(&source["external_id"]);
         let txid = string(txid).trim().to_lowercase();
-        let scope = scope.or_else(|| scopes[&id].clone());
+        let scope = scope.or_else(|| row_scope(&mut scopes, source));
         for (wallet, amount) in destinations {
             let mut exact = vec![];
             let mut compatible = vec![];
@@ -275,8 +421,8 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                 if abs > tolerance {
                     continue;
                 }
-                let iscope = &scopes[&iid];
-                if scope.is_some() && iscope.is_some() && scope != *iscope {
+                let iscope = row_scope(&mut scopes, inbound);
+                if scope.is_some() && iscope.is_some() && scope != iscope {
                     continue;
                 }
                 if txid.len() == 64
@@ -288,7 +434,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                 if parsed.is_some()
                     && reason != "ownership_transfer_source_ambiguous"
                     && scope.is_some()
-                    && *iscope == scope
+                    && iscope == scope
                     && int(&source["amount"]) == amount
                     && received == amount
                 {
@@ -317,7 +463,6 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
             }
         }
     }
-    graph::clear_memos();
     Ok((
         json!({"total":candidates.len(),"by_reason":counts}),
         json!(candidates),
@@ -359,4 +504,86 @@ fn candidate(
         v[k] = json!("");
     }
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn balance_current_keys_preserve_python_stringification() {
+        for wallet in [Value::Null, json!(false), json!(0), json!(""), json!("w")] {
+            let quantity = "1".parse().unwrap();
+            let holdings = Holdings {
+                pairs: vec![(
+                    vec![wallet.clone(), json!("label"), json!("code"), json!("BTC")],
+                    Holding {
+                        quantity: JournalDecimal(quantity),
+                        cost_basis: JournalDecimal("0".parse().unwrap()),
+                    },
+                )],
+            };
+            let c = json!({"quantity_state":{"projection":{"postings":[
+                {"location_kind":"wallet", "location_id":wallet, "asset":"BTC", "amount_msat":1}
+            ]}}});
+            let expected = kassiber_custody::quantity::balances::compare_wallet_balances(
+                &c["quantity_state"]["projection"],
+                &[json!([string(&wallet), "BTC", 100_000_000_000i64])],
+                &json!({}),
+            )
+            .unwrap();
+            assert_eq!(differences(&c, &holdings).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn balance_join_matches_existing_comparator_and_promotes_before_overflow() {
+        let mut sum = BalanceSum {
+            small: i128::MAX,
+            wide: None,
+        };
+        sum.add(&json!(1)).unwrap();
+        assert_eq!(sum.value(), BigInt::from(i128::MAX) + BigInt::from(1));
+        sum.add(&number("-340282366920938463463374607431768211456").unwrap())
+            .unwrap();
+        assert_eq!(sum.value(), -(BigInt::from(i128::MAX) + BigInt::from(1)));
+        let mut negative = BalanceSum {
+            small: i128::MIN,
+            wide: None,
+        };
+        negative.add(&json!(-1)).unwrap();
+        assert_eq!(negative.value(), BigInt::from(i128::MIN) - BigInt::from(1));
+        let mut unsigned = BalanceSum::default();
+        unsigned.add(&json!(u64::MAX)).unwrap();
+        assert_eq!(unsigned.value(), BigInt::from(u64::MAX));
+        for invalid in [json!(true), json!("12"), json!(1.5), Value::Null] {
+            assert_eq!(
+                BalanceSum::default().add(&invalid).unwrap_err().message,
+                "ValueError"
+            );
+        }
+        let holdings = Holdings { pairs: vec![] };
+        for with_reasons in [false, true] {
+            let mut c = json!({"quantity_state":{"projection":{"observations":[],"postings":[]}},"loan_legs":[]});
+            let projection = &mut c["quantity_state"]["projection"];
+            for n in 0..100 {
+                projection["observations"].as_array_mut().unwrap().push(
+                    json!({"quantity_hash":format!("h{n}"),"transaction_id":format!("t{n}")}),
+                );
+                projection["postings"].as_array_mut().unwrap().push(json!({"location_kind":if n % 9 == 0 {"outside"} else {"wallet"}, "location_id":format!("w{}", n%3),"asset":"BTC","amount_msat":if n%2==0 {n*999} else {-n*111},"observation_hash":format!("h{n}")}));
+            }
+            let mut reasons = json!({});
+            if with_reasons {
+                c["loan_legs"] = json!([{"transaction_id":"t1","role":"principal"},{"transaction_id":"t4","role":"collateral"},{"transaction_id":"t2","role":"interest"}]);
+                reasons = json!({"t1":"loan_principal_non_event","t4":"loan_collateral_non_event","t2":"loan_interest_non_event"});
+            }
+            let expected = kassiber_custody::quantity::balances::compare_wallet_balances(
+                &c["quantity_state"]["projection"],
+                &[],
+                &reasons,
+            )
+            .unwrap();
+            assert_eq!(differences(&c, &holdings).unwrap(), expected);
+        }
+    }
 }
