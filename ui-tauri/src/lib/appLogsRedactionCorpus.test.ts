@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import corpus from "../../../tests/fixtures/operational_redaction_cases.json";
+import secrets from "../../../tests/fixtures/secret_redaction_cases.json";
 
 let logs: typeof import("./appLogs");
 
@@ -22,4 +23,13 @@ it.each(corpus.cases)("matches Python exactly for $input", (testCase) => {
     });
     expect(logs.redactLogRecord(record!, { redacted: true, maskAmounts: true, mode }).msg).toBe(testCase.expected);
   }
+});
+
+it.each(secrets)("floors the same secret as Python for $input", (testCase) => {
+  const record = logs.emitAppLog({
+    level: "info", module: "test", file: "test", line: 1, msg: testCase.input,
+    fields: { detail: { type: "text", value: testCase.input } },
+  });
+  expect(record!.msg).toBe(testCase.expected);
+  expect(record!.fields.detail.value).toBe(testCase.expected);
 });
