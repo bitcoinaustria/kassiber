@@ -160,8 +160,8 @@ fn document_registration_preserves_exact_values_refusals_scope_and_order() {
     for (key, input, code) in [
         ("document_type", "no", "validation"),
         ("issued_at", "invalid", "validation"),
-        ("fiat_value", "no", "app_error"),
-        ("fiat_value", "--Infinity", "app_error"),
+        ("fiat_value", "no", "validation"),
+        ("fiat_value", "--Infinity", "validation"),
         ("issued_at", "0001-01-01T00:00:00+01:00", "internal_error"),
     ] {
         let mut args = dict([("document_type", s("invoice")), ("label", s("Invalid"))]);
@@ -190,6 +190,71 @@ fn document_registration_preserves_exact_values_refusals_scope_and_order() {
         3
     );
 }
+#[test]
+fn document_prices_are_bounded_finite_and_canonicalize_zero() {
+    let (_dir, book) = book();
+    let conn = book.connection();
+    for (raw, message) in [
+        ("bad", "commercial price must be a decimal number"),
+        ("NaN", "commercial price must be a finite decimal number"),
+        (
+            "Infinity",
+            "commercial price must be a finite decimal number",
+        ),
+        ("1e309", "commercial price must be a finite decimal number"),
+        (
+            "1e-14",
+            "commercial price is outside the supported decimal range",
+        ),
+    ] {
+        let err = documents::execute(
+            conn,
+            &scope(),
+            Path::new("unused"),
+            &Command::Create(dict([
+                ("document_type", s("invoice")),
+                ("label", s("Invalid")),
+                ("fiat_value", s(raw)),
+            ])),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "validation");
+        assert_eq!(err.message, message);
+    }
+    let malformed = Value::Str(kassiber_pyjson::PyStr::from_code_points([49, 0xd800]).unwrap());
+    let err = documents::execute(
+        conn,
+        &scope(),
+        Path::new("unused"),
+        &Command::Create(dict([
+            ("document_type", s("invoice")),
+            ("label", s("Invalid")),
+            ("fiat_value", malformed),
+        ])),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "validation");
+    assert_eq!(err.message, "commercial price must be a decimal number");
+    for (raw, expected) in [
+        ("-0e-999", "0"),
+        ("12.500", "12.500"),
+        ("1e-13", "0.0000000000001"),
+    ] {
+        let doc = documents::execute(
+            conn,
+            &scope(),
+            Path::new("unused"),
+            &Command::Create(dict([
+                ("document_type", s("invoice")),
+                ("label", s("Bounded")),
+                ("fiat_value", s(raw)),
+            ])),
+        )
+        .unwrap();
+        assert_eq!(text(&doc, "fiat_value_exact"), expected);
+    }
+}
+
 #[test]
 fn document_evidence_is_literal_transactionless_hashed_and_atomic() {
     let (dir, book) = book();

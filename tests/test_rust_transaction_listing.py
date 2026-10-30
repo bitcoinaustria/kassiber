@@ -179,7 +179,7 @@ class RustTransactionListingTest(unittest.TestCase):
 
     def test_exports_and_unported_desktop_surfaces_remain_explicit_refusals(self):
         absent = self.base / "uncreated"
-        for fmt in ("csv", "xlsx", "cointracking-csv", "blockpit-csv"):
+        for fmt in ("xlsx", "cointracking-csv", "blockpit-csv"):
             output = self.base / ("unwritten." + fmt)
             result = subprocess.run([RUST_BIN, "--machine", "--data-root", str(absent), "transactions", "export", "--export-format", fmt, "--file", str(output)], env=self.env, capture_output=True, timeout=120)
             self.assertEqual(json.loads(result.stdout)["error"]["code"], "not_implemented")
@@ -187,7 +187,7 @@ class RustTransactionListingTest(unittest.TestCase):
             self.assertFalse(output.exists())
         kinds = ["ui.transactions." + suffix for suffix in (
             "dashboard", "resolve", "graph", "review_context", "ledger_template",
-            "export_csv", "export_xlsx", "export_platform_csv")]
+            "export_xlsx", "export_platform_csv")]
         kinds += ["ui.btcpay.provenance.sync", "ui.btcpay.provenance.review"]
         wire = "".join(json.dumps({"request_id": str(i), "kind": kind}) + "\n" for i, kind in enumerate([*kinds, "daemon.shutdown"]))
         result = subprocess.run([RUST_BIN, "--machine", "--data-root", str(self.root), "daemon"], env=self.env, input=wire, text=True, capture_output=True, timeout=120)

@@ -170,7 +170,8 @@ class RustDocumentServicesTest(unittest.TestCase):
             {"kind": "ui.documents.create", "args": args} for args in (
                 {}, {"label": []}, {"label": "x"}, {"label": "x", "type": "wrong"},
                 {"label": "x", "type": "invoice", "issued_at": "bad"},
-                {"label": "x", "type": "invoice", "fiat_value": "bad"},
+                *({"label": "x", "type": "invoice", "fiat_value": raw}
+                  for raw in ("bad", "NaN", "Infinity", "1e309", "1e-14")),
                 {"label": "x", "type": "invoice", "external_ref": "report"},
             )
         ] + [

@@ -2258,5 +2258,15 @@
       "document_evidence_is_literal_transactionless_hashed_and_atomic"
     ],
     "rule": "Unencodable URL evidence is refused rather than silently dropping Unicode code points from its literal provenance."
+  },
+  {
+    "id": "R7-commercial-price-boundary",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "kassiber_pydecimal::finite_price(&py_str(v))",
+    "replace": "kassiber_pydecimal::finite_price(\"1\")",
+    "expect_failing": [
+      "document_prices_are_bounded_finite_and_canonicalize_zero"
+    ],
+    "rule": "Commercial document prices use the same finite bounded decimal boundary as Python."
   }
 ]

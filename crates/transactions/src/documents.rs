@@ -126,41 +126,21 @@ pub(crate) fn exact(v: &Value) -> Result<Option<String>> {
         return Ok(None);
     }
     if surrogate(v) {
-        return decimal(v).map(|_| None);
+        return Err(AppError::new(
+            "validation",
+            "commercial price must be a decimal number",
+        ));
     }
-    // Decimal construction allows non-finite source strings; registration
-    // preserves them, without promoting them to a usable transaction price.
-    let raw = py_str(v);
-    let raw = strip(&raw).replace('_', "");
-    let unsigned = raw
-        .strip_prefix('+')
-        .or_else(|| raw.strip_prefix('-'))
-        .unwrap_or(&raw);
-    let sign = if raw.starts_with('-') { "-" } else { "" };
-    let low = lower(unsigned);
-    if matches!(low.as_str(), "inf" | "infinity") {
-        return Ok(Some(format!("{sign}Infinity")));
-    }
-    for (prefix, name) in [("snan", "sNaN"), ("nan", "NaN")] {
-        if let Some(digits) = low.strip_prefix(prefix) {
-            let digits: Option<String> = digits
-                .chars()
-                .map(|c| {
-                    kassiber_pytext::decimal_value(c as u32).map(|n| char::from(b'0' + n as u8))
-                })
-                .collect();
-            if let Some(digits) = digits {
-                return Ok(Some(format!(
-                    "{sign}{name}{}",
-                    digits.trim_start_matches('0')
-                )));
-            }
-        }
-    }
-    decimal(v)?
+    kassiber_pydecimal::finite_price(&py_str(v))
+        .map_err(|e| AppError::new("validation", e.message("commercial price")))?
         .to_fixed_string()
         .map(Some)
-        .map_err(|_| AppError::new("validation", "Decimal value is out of range"))
+        .map_err(|_| {
+            AppError::new(
+                "validation",
+                "commercial price is outside the supported decimal range",
+            )
+        })
 }
 fn timestamp(v: &Value) -> Result<Option<String>> {
     if !present(v) {
