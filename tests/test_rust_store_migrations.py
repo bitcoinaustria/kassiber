@@ -118,6 +118,10 @@ def normalized_dump(conn):
 
 
 HISTORICAL_FIXTURES = sorted((ROOT / "tests/fixtures/historical").glob("*.sqlite3.gz.b64"))
+LEGACY_PAIR_FIXTURES = [
+    ROOT / "tests/fixtures/historical" / name
+    for name in ("pre_432_5d232097.sqlite3.gz.b64", "pre_435_16b7bdc1.sqlite3.gz.b64")
+]
 
 
 def decode_historical(root, fixture, encrypted, *, without_legacy_pair=False):
@@ -161,7 +165,7 @@ def test_ordered_historical_migration_exact_dump_and_python_reopen(
     """
     python, rust = tmp_path / "python/data", tmp_path / "rust/data"
     for root in (python, rust):
-        decode_historical(root, fixture, encrypted, without_legacy_pair=True)
+        decode_historical(root, fixture, encrypted, without_legacy_pair=fixture in LEGACY_PAIR_FIXTURES)
     expected_conn = reference_open(python, encrypted)
     expected = normalized_dump(expected_conn)
     expected_conn.close()
@@ -181,7 +185,7 @@ def test_ordered_historical_migration_exact_dump_and_python_reopen(
     reopened.close()
 
 
-@pytest.mark.parametrize("fixture", HISTORICAL_FIXTURES, ids=lambda path: path.name)
+@pytest.mark.parametrize("fixture", LEGACY_PAIR_FIXTURES, ids=lambda path: path.name)
 @pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
 def test_ordered_historical_original_refuses_at_r2_with_exact_prefix(
     storage_probe, tmp_path, fixture, encrypted,
@@ -257,7 +261,8 @@ def test_creation_transcript_cannot_drift_from_python():
 
 @pytest.mark.parametrize("migration", [
     "wages-acquisition-semantics-v1", "rp2-pool-basis-semantics-v1",
-    "custody-fail-closed-holds-v1", "kassiber-tax-engine-v1", "at-acquisition-valuation-support-v1", "all",
+    "custody-fail-closed-holds-v1", "kassiber-tax-engine-v1", "at-acquisition-valuation-support-v1",
+    "custody-partial-payout-pricing-v1", "all",
 ])
 def test_semantic_audits_profile_changes_and_idempotency_match_python(storage_probe, tmp_path, migration):
     source = tmp_path / "source/data"
@@ -291,6 +296,47 @@ def test_semantic_audits_profile_changes_and_idempotency_match_python(storage_pr
     actual.close()
     assert invoke(storage_probe, rust, op="semantics")["ok"]
     actual = reference_open(rust)
+    assert normalized_dump(actual) == before
+    actual.close()
+    expected.close()
+
+
+@pytest.mark.parametrize("partial,deleted,included_fee", [
+    (True, False, False), (False, False, False), (True, True, False), (False, False, True),
+])
+def test_partial_payout_semantic_migration_matches_python(storage_probe, tmp_path, partial, deleted, included_fee):
+    from kassiber.cli.handlers import create_direct_swap_payout
+    from kassiber.core.custody_review_terms import delete_payout_review
+    from tests.test_custody_authored_migration import _scope, _tx, NOW
+
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    _scope(conn)
+    _tx(conn, "out", "btc", "outbound", "BTC", 100000, NOW)
+    if included_fee:
+        conn.execute("UPDATE transactions SET amount=110000,fee=10000,amount_includes_fee=1 WHERE id='out'")
+    conn.commit()
+    payout = create_direct_swap_payout(conn, "Books", "Book", "out", payout_asset="EUR",
+                                      payout_amount="1", payout_fiat_value="10",
+                                      out_amount="0.0000004" if partial else None)
+    if deleted:
+        delete_payout_review(conn, "profile", payout["id"])
+    conn.execute("UPDATE profiles SET last_processed_at=? WHERE id='profile'", (NOW,))
+    conn.execute("DELETE FROM schema_migration_audits WHERE migration_name='custody-partial-payout-pricing-v1'")
+    conn.commit()
+    conn.close()
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = reference_open(python)
+    result = invoke(storage_probe, rust, op="semantics")
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    before = normalized_dump(actual)
+    actual.close()
+    assert invoke(storage_probe, rust, op="semantics")["ok"]
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
     assert normalized_dump(actual) == before
     actual.close()
     expected.close()

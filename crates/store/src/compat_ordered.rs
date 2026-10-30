@@ -209,6 +209,7 @@ fn ensure_schema_compat(
     repairs::freshness(conn)?;
     repairs::step(conn, "graph-cache", observer)?;
     crate::retired::retire_ledger_with_observer(conn, observer)?;
+    crate::semantics::partial_payout(conn, observer)?;
     transaction_page_index(conn, observer)?;
     Ok(())
 }

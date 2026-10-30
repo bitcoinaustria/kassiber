@@ -79,5 +79,15 @@
       "explanation": "Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier."
     },
     "source_sha256": "83e7abfbc90c27b2372b5431862d22650dae2d9bc7b2450397353e2b914d19a3"
+  },
+  {
+    "name": "custody-partial-payout-pricing-v1",
+    "affected": null,
+    "impact": {
+      "affected_profile_count": 0,
+      "migration": "custody-partial-payout-pricing-v1",
+      "schema_version": 1
+    },
+    "source_sha256": "c44878241b5abdf459f40fe9b93270151f9e9474e970c0412d7bc0d693e22cbd"
   }
 ]

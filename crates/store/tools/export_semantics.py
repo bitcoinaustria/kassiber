@@ -18,6 +18,7 @@ MIGRATIONS = (
     (db.CUSTODY_HOLD_SEMANTICS_MIGRATION, db._migrate_custody_hold_semantics),
     (db.TAX_ENGINE_SEMANTICS_MIGRATION, db._migrate_tax_engine_semantics),
     (acquisition_review.VALUATION_MIGRATION, acquisition_review.migrate_valuation_support),
+    (db.PARTIAL_PAYOUT_SEMANTICS_MIGRATION, db._migrate_partial_payout_semantics),
 )
 
 
@@ -31,6 +32,7 @@ def payload():
         source = inspect.getsource(function)
         tree = ast.parse(source)
         predicates = [node.value.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                      and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
                       and any(isinstance(t, ast.Name) and t.id == "affected" for t in node.targets)]
         results.append(dict(name=name, affected=predicates[0] if predicates else None,
                             impact=json.loads(audits[name]),
