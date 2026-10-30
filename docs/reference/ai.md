@@ -1730,8 +1730,10 @@ message first sends. What the model sees depends on its
   in a separate message just before the user's: the broker replays only the
   user's message when it does resume, and the whole conversation, those files
   included, when it starts a fresh thread instead (the session is gone or the
-  advertised tools changed). A stateless provider is shown every file on the
-  user's message on every turn. A restricted provider is told an
+  advertised tools changed). The note naming the chat's files rides on the
+  user's message then, so a resumed session still learns which file is
+  which. A stateless provider is shown every file on the user's message on
+  every turn. A restricted provider is told an
   image or PDF is attached, by its extension only, and is shown none of it.
 - **Any file** can be kept as evidence on a transaction with the consented
   `ui_attachments_add_from_chat` (`transaction`, `file`, optional `label`):

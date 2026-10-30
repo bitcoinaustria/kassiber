@@ -10039,7 +10039,8 @@ def _attach_chat_files_to_turn(
     or the advertised tools changed. So the files of earlier turns go in a
     message of their own just before the user's, which a provider that does
     resume skips (it replays only the user's message and already saw them)
-    and a fresh one reads. A stateless provider is shown every file on the
+    and a fresh one reads. The note naming the files rides on the user's
+    message then, so a resumed session still learns this turn's files. A stateless provider is shown every file on the
     user's message on every turn. A restricted provider is told the files
     exist and is shown none of them.
     """
@@ -10082,7 +10083,14 @@ def _attach_chat_files_to_turn(
                 target = earlier_parts if resumed and not entry.get("new") else parts
                 target.append({"type": "text", "text": f"{file_id}:"})
                 target.extend(view.parts)
-    _insert_auto_tool_context_message(messages, _chat_files_note(state, views))
+    note = _chat_files_note(state, views)
+    lead: list[dict[str, Any]] = []
+    if resumed:
+        # A resuming provider replays only the user's message, so the note
+        # (which file is which, and how to read it) rides on that message.
+        lead.append({"type": "text", "text": note})
+    else:
+        _insert_auto_tool_context_message(messages, note)
     if earlier_parts:
         _insert_auto_tool_context_message(
             messages,
@@ -10094,7 +10102,7 @@ def _attach_chat_files_to_turn(
                 *earlier_parts,
             ],
         )
-    if not parts:
+    if not lead and not parts:
         return
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
@@ -10103,7 +10111,10 @@ def _attach_chat_files_to_turn(
         content = message.get("content")
         text = content if isinstance(content, str) else ""
         # A new dict: the conversation itself stays text and is stored as such.
-        messages[index] = {**message, "content": [{"type": "text", "text": text}, *parts]}
+        messages[index] = {
+            **message,
+            "content": [*lead, {"type": "text", "text": text}, *parts],
+        }
         return
 
 
