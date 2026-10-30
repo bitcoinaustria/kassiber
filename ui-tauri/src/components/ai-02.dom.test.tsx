@@ -83,10 +83,16 @@ describe("Ai02 composer (mounted)", () => {
     expect(field().value).toBe("my draft");
   });
 
-  it("does not recall into a composer holding an attachment", () => {
-    render(<Harness attachedFilename="export.csv" />);
+  it("does not recall into a composer holding a new attachment", () => {
+    render(<Harness attachments={[{ key: "a", filename: "export.csv", state: "ready" }]} />);
     fireEvent.keyDown(field(), { key: "ArrowUp" });
     expect(field().value).toBe("");
+  });
+
+  it("recalls while the chat's file was already sent", () => {
+    render(<Harness attachments={[{ key: "a", filename: "export.csv", state: "sent" }]} />);
+    fireEvent.keyDown(field(), { key: "ArrowUp" });
+    expect(field().value).toBe("second question");
   });
 
   it("ends recall once the recalled prompt is edited", () => {
@@ -211,5 +217,58 @@ describe("Ai02 composer (mounted)", () => {
     expect(onAbort).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
     expect(onSubmit).toHaveBeenCalledWith("follow up");
+  });
+});
+
+describe("Ai02 attachments (mounted)", () => {
+  afterEach(cleanup);
+
+  const csv = () => new File(["date,amount\n"], "export.csv", { type: "text/csv" });
+
+  it("attaches a pasted file instead of pasting it as text", () => {
+    const onAttachFiles = vi.fn();
+    render(<Harness onAttachFiles={onAttachFiles} />);
+    const file = csv();
+    const pasted = fireEvent.paste(field(), { clipboardData: { files: [file], getData: () => "" } });
+    expect(onAttachFiles).toHaveBeenCalledWith([file]);
+    expect(pasted).toBe(false);
+  });
+
+  it("leaves a text paste alone", () => {
+    const onAttachFiles = vi.fn();
+    render(<Harness onAttachFiles={onAttachFiles} />);
+    const pasted = fireEvent.paste(field(), { clipboardData: { files: [], getData: () => "text" } });
+    expect(onAttachFiles).not.toHaveBeenCalled();
+    expect(pasted).toBe(true);
+  });
+
+  it("takes a file dropped on the drop target and hints while it is dragged over", () => {
+    const onAttachFiles = vi.fn();
+    function Target() {
+      const ref = React.useRef<HTMLDivElement>(null);
+      return (
+        <div ref={ref} data-testid="target">
+          <Harness onAttachFiles={onAttachFiles} dropTargetRef={ref} />
+        </div>
+      );
+    }
+    const view = render(<Target />);
+    const target = screen.getByTestId("target");
+    const file = csv();
+    const dataTransfer = { files: [file], types: ["Files"], dropEffect: "none" };
+    fireEvent.dragEnter(target, { dataTransfer });
+    expect(view.container.querySelector("[data-composer-drop-hint]")).not.toBeNull();
+    expect(screen.getByText("Drop to attach")).toBeTruthy();
+    fireEvent.drop(target, { dataTransfer });
+    expect(onAttachFiles).toHaveBeenCalledWith([file]);
+    expect(view.container.querySelector("[data-composer-drop-hint]")).toBeNull();
+  });
+
+  it("ignores a drag that carries no files", () => {
+    const onAttachFiles = vi.fn();
+    const view = render(<Harness onAttachFiles={onAttachFiles} />);
+    const surface = view.container.querySelector(".kb-composer-glass") as HTMLElement;
+    fireEvent.dragEnter(surface, { dataTransfer: { files: [], types: ["text/plain"] } });
+    expect(view.container.querySelector("[data-composer-drop-hint]")).toBeNull();
   });
 });

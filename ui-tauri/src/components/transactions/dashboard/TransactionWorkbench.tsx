@@ -23,10 +23,17 @@ import {
   YAxis,
 } from "recharts";
 
+import { PeriodYearMenu } from "@/components/kb/PeriodYearMenu";
 import { ChartContainer } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { formatBtc, type Currency } from "@/lib/currency";
+import {
+  isYearPeriod,
+  yearPeriod,
+  type PeriodYear,
+  type RangePeriodKey,
+} from "@/lib/period";
 import { cn } from "@/lib/utils";
 import {
   blurClass,
@@ -41,10 +48,11 @@ import {
 import { usePublishAssistantScreenMetrics } from "@/store/assistantScreenMetrics";
 import {
   buildCandidateFlowOverrides,
+  bucketSizeForKey,
   buildFlowChartRows,
   dashboardFlowChartRows,
   flowAxisDomain,
-  flowBucketLabel,
+  flowBucketSize,
   flowChartConfig,
   flowChartMetricLabels,
   flowChartModeLabels,
@@ -58,6 +66,7 @@ import {
   formatCountBarLabel,
   formatFlowTooltipValue,
   periodKeys,
+  periodLabel,
   periodLabels,
   sumByFlow,
   type BreakdownSelection,
@@ -87,41 +96,67 @@ function formatMetricValue(
   );
 }
 
-const PeriodTabs = ({
+/**
+ * A short row of ranges and, beside it, one calendar year. "Auto" has no chip
+ * of its own: the range it settled on shows as chosen until the user picks.
+ */
+const PeriodPicker = ({
   activePeriod,
-  onPeriodChange,
-  periodOptions = periodKeys,
   resolvedPeriod,
+  onPeriodChange,
+  ranges = periodKeys,
+  emptyRanges,
+  years = [],
 }: {
   activePeriod: PeriodKey;
+  resolvedPeriod: ResolvedPeriodKey;
   onPeriodChange: (period: PeriodKey) => void;
-  periodOptions?: PeriodKey[];
-  resolvedPeriod?: ResolvedPeriodKey | null;
+  ranges?: RangePeriodKey[];
+  /** Ranges holding no transactions: shown, but not offered. */
+  emptyRanges?: ReadonlySet<RangePeriodKey>;
+  years?: readonly PeriodYear[];
 }) => {
   const { t } = useTranslation("transactions");
-  const translatePeriod = (key: PeriodKey) =>
-    (t as (key: string) => string)(periodLabels[key]);
+  const shown = activePeriod === "auto" ? resolvedPeriod : activePeriod;
+  const chipClass = (active: boolean) =>
+    cn(
+      "h-7 shrink-0 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-all @4xl/page:px-3 @4xl/page:text-sm",
+      active
+        ? "bg-card text-foreground shadow-sm"
+        : "text-muted-foreground hover:text-foreground",
+    );
   return (
-    <div className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5">
-      {periodOptions.map((key) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onPeriodChange(key)}
-          className={cn(
-            "h-7 rounded-md px-2.5 text-xs font-medium transition-all sm:px-3 sm:text-sm",
-            activePeriod === key
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {key === "auto" && activePeriod === "auto" && resolvedPeriod
-            ? t("period.autoResolved", {
-                period: translatePeriod(resolvedPeriod),
-              })
-            : translatePeriod(key)}
-        </button>
-      ))}
+    <div className="flex h-8 max-w-full items-center gap-1 rounded-lg bg-muted p-0.5">
+      {/* One line at any width: beside a docked panel the ranges scroll
+          sideways instead of breaking "30 Days" over two lines. */}
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {ranges.map((key) => {
+          const empty = emptyRanges?.has(key) === true && shown !== key;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={shown === key}
+              aria-disabled={empty || undefined}
+              title={empty ? t("period.emptyRange") : undefined}
+              onClick={() => {
+                if (!empty) onPeriodChange(key);
+              }}
+              className={cn(chipClass(shown === key), empty && "cursor-default opacity-40 hover:text-muted-foreground")}
+            >
+              {/* loose translator */}
+              {(t as (key: string) => string)(periodLabels[key])}
+            </button>
+          );
+        })}
+      </div>
+      <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+      <PeriodYearMenu
+        years={years}
+        value={isYearPeriod(shown) ? shown : null}
+        onSelect={onPeriodChange}
+        className={chipClass(isYearPeriod(shown))}
+      />
     </div>
   );
 };
@@ -184,6 +219,7 @@ function FlowBucketClickAreas({
 
 const TransactionWorkbench = ({
   period,
+  onPeriodChange,
   records,
   hideSensitive,
   currency,
@@ -199,6 +235,8 @@ const TransactionWorkbench = ({
   isRefreshing,
 }: {
   period: ResolvedPeriodKey;
+  /** A yearly bar opens its year. */
+  onPeriodChange?: (period: PeriodKey) => void;
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
@@ -334,14 +372,30 @@ const TransactionWorkbench = ({
   const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
   const visibleChartRows = activeChartRows.length ? activeChartRows : chartRows;
   const yDomain = flowAxisDomain(visibleChartRows, chartMetric);
+  const bucketSize =
+    dashboardSnapshot?.bucketSize ??
+    bucketSizeForKey(chartRows[0]?.bucketKey ?? "") ??
+    flowBucketSize(period);
   const bucketTitleSuffix = (
     {
       day: "Day",
-      week: "Week",
       month: "Month",
       quarter: "Quarter",
+      year: "Year",
     } as const
-  )[flowBucketLabel(period)];
+  )[bucketSize];
+  // A year's bar is a door into that year, not a filter on the decade.
+  const openBucketYear = React.useCallback(
+    (point: FlowChartPoint) => {
+      if (!onPeriodChange || bucketSizeForKey(point.bucketKey) !== "year") {
+        return false;
+      }
+      onFlowSelectionChange(null);
+      onPeriodChange(yearPeriod(Number(point.bucketKey)));
+      return true;
+    },
+    [onFlowSelectionChange, onPeriodChange],
+  );
   const flowChartCellProps = React.useCallback(
     (row: FlowChartPoint, segment: FlowChartSegment) => {
       const sameBucket =
@@ -365,6 +419,7 @@ const TransactionWorkbench = ({
   const selectFlowBucket = React.useCallback(
     (point: FlowChartPoint) => {
       if (flowPointTotal(point) === 0) return;
+      if (openBucketYear(point)) return;
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
       onTableFiltersReset();
@@ -383,6 +438,7 @@ const TransactionWorkbench = ({
       onFlowSelectionChange,
       onQuickFilterChange,
       onTableFiltersReset,
+      openBucketYear,
       period,
     ],
   );
@@ -390,6 +446,7 @@ const TransactionWorkbench = ({
     (data: FlowChartClickData, segment: FlowChartSegment) => {
       const point = data.payload ?? data.activePayload?.[0]?.payload;
       if (!point || flowPointSegmentValue(point, segment) === 0) return;
+      if (openBucketYear(point)) return;
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
       onTableFiltersReset();
@@ -408,6 +465,7 @@ const TransactionWorkbench = ({
       onFlowSelectionChange,
       onQuickFilterChange,
       onTableFiltersReset,
+      openBucketYear,
       period,
     ],
   );
@@ -421,7 +479,7 @@ const TransactionWorkbench = ({
         period,
         bucketKey: null,
         // loose translator
-        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
+        bucketLabel: periodLabel(period, t as (key: string) => string),
         segment,
         mode: chartMode,
       });
@@ -446,7 +504,7 @@ const TransactionWorkbench = ({
         period,
         bucketKey: null,
         // loose translator
-        bucketLabel: (t as (key: string) => string)(periodLabels[period]),
+        bucketLabel: periodLabel(period, t as (key: string) => string),
         segment,
         mode: "all",
       });
@@ -601,17 +659,19 @@ const TransactionWorkbench = ({
   return (
     <>
       <section
-        className="kb-surface relative z-20 grid grid-cols-2 overflow-visible md:grid-cols-3 xl:grid-cols-6"
+        // Columns by the page's own width, not the window's: a docked panel
+        // can leave the page half the window.
+        className="kb-surface relative z-20 grid grid-cols-2 overflow-visible @2xl/page:grid-cols-3 @6xl/page:grid-cols-6"
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
         {metricCards.map((metric, index) => {
           const Icon = metric.icon;
           const className = cn(
-            "min-w-0 space-y-2 border-b p-3 text-left sm:p-4",
+            "min-w-0 space-y-2 border-b p-3 text-left @2xl/page:p-4",
             index % 2 === 1 && "border-l",
-            index % 3 === 0 ? "md:border-l-0" : "md:border-l",
-            index > 0 ? "xl:border-l" : "xl:border-l-0",
+            index % 3 === 0 ? "@2xl/page:border-l-0" : "@2xl/page:border-l",
+            index > 0 ? "@6xl/page:border-l" : "@6xl/page:border-l-0",
             metric.onClick &&
               !isRefreshing &&
               "relative isolate w-full cursor-pointer overflow-hidden transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:before:scale-x-100 [&>*]:relative [&>*]:z-10",
@@ -673,8 +733,8 @@ const TransactionWorkbench = ({
           );
         })}
 
-        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 sm:p-4 md:col-span-3 xl:col-span-6">
-          <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
+        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 @2xl/page:col-span-3 @2xl/page:p-4 @6xl/page:col-span-6">
+          <div className="mb-3 flex shrink-0 flex-col gap-2 @xl/page:flex-row @xl/page:items-start @xl/page:justify-between @xl/page:gap-3">
             <div>
               <h2 className="text-sm font-semibold">
                 {t(`workbench.chart.title${bucketTitleSuffix}`)}
@@ -690,8 +750,8 @@ const TransactionWorkbench = ({
                 </p>
               )}
             </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-2xs text-muted-foreground sm:text-xs">
+            <div className="flex flex-col items-start gap-2 @xl/page:items-end">
+              <div className="flex flex-wrap gap-x-2 gap-y-1 text-2xs text-muted-foreground @xl/page:justify-end @2xl/page:text-xs">
                 {[
                   ["incoming", t("chartSegment.incoming")],
                   ["outgoing", t("chartSegment.outgoing")],
@@ -731,7 +791,7 @@ const TransactionWorkbench = ({
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap justify-end gap-1">
+              <div className="flex flex-wrap gap-1 @xl/page:justify-end">
                 {(["amount", "count"] satisfies FlowChartMetric[]).map(
                   (metric) => (
                     <button
@@ -740,7 +800,7 @@ const TransactionWorkbench = ({
                       aria-pressed={chartMetric === metric}
                       onClick={() => setChartMetric(metric)}
                       className={cn(
-                        "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
+                        "h-7 rounded-md border px-2 text-2xs font-medium transition-colors @2xl/page:text-xs",
                         chartMetric === metric
                           ? "border-input bg-accent text-foreground"
                           : "border-border bg-background text-muted-foreground hover:text-foreground",
@@ -758,7 +818,7 @@ const TransactionWorkbench = ({
                     aria-pressed={chartMode === mode}
                     onClick={() => setChartMode(mode)}
                     className={cn(
-                      "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
+                      "h-7 rounded-md border px-2 text-2xs font-medium transition-colors @2xl/page:text-xs",
                       chartMode === mode
                         ? "border-input bg-accent text-foreground"
                         : "border-border bg-background text-muted-foreground hover:text-foreground",
@@ -1074,4 +1134,4 @@ function FlowTooltip({
   );
 }
 
-export { PeriodTabs, TransactionWorkbench };
+export { PeriodPicker, TransactionWorkbench };

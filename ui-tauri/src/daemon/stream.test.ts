@@ -15,6 +15,7 @@ import {
   completedAiMutationKind,
   terminalAiChatStatus,
   type AiChatMessage,
+  storedChatEntries,
 } from "./stream";
 import { ThinkParser } from "@/lib/thinkParser";
 
@@ -467,17 +468,17 @@ describe("buildAiChatStreamArgs", () => {
     });
   });
 
-  it("forwards a file attachment as a token, never a path or contents", () => {
+  it("forwards attached files as tokens, never a path or contents", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "What is in this export?" }],
-      attachment: { token: "stage-token-1" },
+      attachments: [{ token: "stage-token-1" }, { token: "stage-token-2", new: true }],
     });
 
-    expect(args.attachment).toEqual({
-      token: "stage-token-1",
-      label: undefined,
-    });
+    expect(args.attachments).toEqual([
+      { token: "stage-token-1", label: undefined, new: undefined },
+      { token: "stage-token-2", label: undefined, new: true },
+    ]);
     // The daemon reads the file itself; the renderer must not ship bytes or a
     // filesystem path through the chat request.
     const serialized = JSON.stringify(args);
@@ -485,13 +486,13 @@ describe("buildAiChatStreamArgs", () => {
     expect(serialized).not.toContain("source_file");
   });
 
-  it("omits the attachment field when nothing is attached", () => {
+  it("omits the attachments field when nothing is attached", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "hi" }],
     });
 
-    expect(args.attachment).toBeUndefined();
+    expect(args.attachments).toBeUndefined();
   });
 
   it("names the chat's permission mode and tool set", () => {
@@ -724,5 +725,33 @@ describe("completedAiMutationKind", () => {
     );
     expect(rounds).toHaveLength(1);
     expect(rounds[0]!.toolCalls.map((call) => call.callId)).toEqual(["legacy"]);
+  });
+});
+
+describe("storedChatEntries attachments", () => {
+  it("restores the files a stored user message sent, and nothing else", () => {
+    expect(
+      storedChatEntries([
+        {
+          role: "user",
+          content: "What is on it?",
+          provenance: {
+            attachments: [
+              { filename: "receipt.png", kind: "image", size_bytes: 812 },
+              { filename: "", kind: "image" },
+              { path: "/home/user/x.png" },
+            ],
+          },
+        },
+        { role: "assistant", content: "A receipt.", provenance: { attachments: [{ filename: "no.png" }] } },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: "What is on it?",
+        attachments: [{ filename: "receipt.png", kind: "image", sizeBytes: 812 }],
+      },
+      { role: "assistant", content: "A receipt." },
+    ]);
   });
 });

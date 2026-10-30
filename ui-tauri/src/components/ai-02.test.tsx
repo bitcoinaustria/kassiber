@@ -41,24 +41,45 @@ describe("Ai02 file attachment", () => {
     );
   });
 
-  it("shows the attached filename as a removable chip", () => {
+  it("shows the attached file as a card with its type and size", () => {
     const html = render({
       onAttach: () => {},
-      attachedFilename: "xyz-export-2024.csv",
-      onClearAttachment: () => {},
+      attachments: [
+        { key: "a", filename: "xyz-export-2024.csv", kind: "delimited", sizeBytes: 12_400, state: "ready" },
+        { key: "b", filename: "receipt.png", kind: "image", sizeBytes: 800, state: "ready" },
+      ],
+      onRemoveAttachment: () => {},
     });
     expect(html).toContain("xyz-export-2024.csv");
-    expect(html).toContain('aria-label="Remove attachment"');
+    expect(html).toContain("CSV · 12 kB");
+    expect(html).toContain('aria-label="Remove xyz-export-2024.csv"');
+    // Several files, each its own card.
+    expect(html).toContain('aria-label="Remove receipt.png"');
+    expect(html.match(/data-chat-attachment/g)).toHaveLength(2);
   });
 
-  it("shows no chip when nothing is attached", () => {
-    const html = render({ onAttach: () => {}, attachedFilename: null });
-    expect(html).not.toContain('aria-label="Remove attachment"');
+  it("shows no card when nothing is attached", () => {
+    const html = render({ onAttach: () => {}, attachments: [] });
+    expect(html).not.toContain("data-chat-attachment");
   });
 
   it("omits the remove control when clearing is not offered", () => {
-    const html = render({ attachedFilename: "export.csv" });
+    const html = render({ attachments: [{ key: "a", filename: "export.csv", state: "ready" }] });
     expect(html).toContain("export.csv");
-    expect(html).not.toContain('aria-label="Remove attachment"');
+    expect(html).not.toContain('aria-label="Remove export.csv"');
+  });
+
+  it("says a sent file stays with the chat, and holds removal while uploading", () => {
+    const sent = render({
+      attachments: [{ key: "a", filename: "export.csv", state: "sent" }],
+      onRemoveAttachment: () => {},
+    });
+    expect(sent).toContain("Stays with this chat");
+    const uploading = render({
+      attachments: [{ key: "b", filename: "screenshot.png", state: "uploading" }],
+      onRemoveAttachment: () => {},
+    });
+    expect(uploading).toContain("Attaching…");
+    expect(uploading).not.toContain('aria-label="Remove screenshot.png"');
   });
 });

@@ -58,12 +58,12 @@ export function useAssistantComposer(): ComposerProps {
     onFastModeChange: session.setFastMode,
     permissionMode: session.permissionMode,
     onPermissionModeChange: session.setPermissionMode,
-    toolProfile: session.toolProfile,
-    onToolProfileChange: session.setToolProfile,
     modelPickerEnabled: true,
     onAttach: session.attachFile,
-    attachedFilename: session.attachment?.filename ?? null,
-    onClearAttachment: session.clearAttachment,
+    attachments: session.attachments,
+    onRemoveAttachment: session.removeAttachment,
+    onAttachFiles: session.attachFiles,
+    onNativeFileDrop: session.attachDroppedFiles,
     historyMessages: session.messages,
   };
 }

@@ -52,6 +52,23 @@
     "queueMessage": "Queue message",
     "attach": "Attach a file",
     "removeAttachment": "Remove attachment",
+    "removeAttachmentNamed": "Remove {{filename}}",
+    "dropToAttach": "Drop to attach",
+    "attachmentUploading": "Attaching…",
+    "attachmentInChat": "Stays with this chat",
+    "attachmentLimit": {
+      "title": "A chat holds up to {{max}} files",
+      "body": "Some files weren't attached. Remove one, or start a new chat for more."
+    },
+    "attachmentUnsupported": {
+      "title": "This file can't be attached",
+      "body": "Attach a CSV, TSV, XLSX, PDF or image file."
+    },
+    "attachmentTooLarge": {
+      "title": "{{filename}} is too large to paste",
+      "body": "Pasted files can be up to 25 MB. Attach larger ones with the + button."
+    },
+    "attachmentFailed": "The file couldn't be attached",
     "modelContext": "Model context",
     "thinking": "Thinking",
     "reasoningEffort": "Reasoning effort",
@@ -95,7 +112,6 @@
       }
     },
     "toolProfile": {
-      "label": "Tools",
       "full": {
         "label": "All tools",
         "description": "Offers every Kassiber tool with each question."
@@ -108,6 +124,12 @@
         "label": "Minimal",
         "description": "Only the core tools, for the smallest context windows."
       }
+    },
+    "attachmentExpired": {
+      "title_one": "An attached file expired",
+      "title_other": "{{count}} attached files expired",
+      "body_one": "{{filenames}} was attached too long ago and the assistant could no longer read it, so it left this chat. Attach it again if it is still needed.",
+      "body_other": "{{filenames}} were attached too long ago and the assistant could no longer read them, so they left this chat. Attach them again if they are still needed."
     }
   },
   "prompts": {
@@ -372,7 +394,18 @@
       "full_access": "Approved automatically (Full access)",
       "session": "Approved automatically (allowed for this chat)"
     },
-    "undoHint": "Can be undone — ask the assistant"
+    "undoHint": "Can be undone — ask the assistant",
+    "readDocument": {
+      "summary_one": "Read {{count}} row from the document: {{ready}} ready, {{held}} for review",
+      "summary_other": "Read {{count}} rows from the document: {{ready}} ready, {{held}} for review"
+    },
+    "importDocument": {
+      "ready_one": "Ready: {{count}} new transaction from the document into {{wallet}}",
+      "ready_other": "Ready: {{count}} new transactions from the document into {{wallet}}",
+      "blocked": "Not ready to import the document into {{wallet}}",
+      "applied_one": "Imported {{count}} transaction from the document into {{wallet}}",
+      "applied_other": "Imported {{count}} transactions from the document into {{wallet}}"
+    }
   },
   "history": {
     "trigger": "History",
@@ -548,7 +581,8 @@
         "updates_existing_rows_not_rolled_back": "Existing transactions get the file's prices. A rollback does not undo that.",
         "overlaps_existing_history": "This connection already has transactions in the same period.",
         "external_ids_in_other_wallets": "Some transaction ids are also in other connections. Check this is the right connection.",
-        "history_starts_after_first_funding": "Afterwards the connection spends more than it received: earlier history is missing."
+        "history_starts_after_first_funding": "Afterwards the connection spends more than it received: earlier history is missing.",
+        "rows_held_for_review": "Rows the reader was unsure of are left out. Review them with OCR (Import from photo or PDF) on the Transactions page."
       },
       "blockers": "Cannot be approved",
       "blocker": {
@@ -562,7 +596,8 @@
         "header_is_preamble": "The first row is not the header. Remove the lines above it.",
         "attachment_not_tabular": "Photos and PDFs use the on-device document import.",
         "rollback_removes_reviewed_work": "Rolling back would also delete reviewed work on these transactions.",
-        "nothing_to_roll_back": "This import has no transactions left."
+        "nothing_to_roll_back": "This import has no transactions left.",
+        "nothing_ready": "The reader was not sure of any row. Review the document with OCR (Import from photo or PDF) on the Transactions page."
       },
       "desktopOnly": "Do this yourself in the desktop or CLI.",
       "rowsToDelete": "Transactions deleted",
@@ -631,8 +666,10 @@
       "received": "The local setup or import finished; verify what data is now available.",
       "partial": "Some local changes were saved, but setup or sync did not finish. Inspect current data and the remaining blockers.",
       "attached": "The selected file was saved as evidence for this transaction and is available for analysis. No transaction history was imported; the case is not necessarily resolved.",
-      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence."
+      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence.",
+      "attachedNotInChat": "The selected file was saved as evidence for this transaction, but this chat already holds as many files as it can, so the file is not available for analysis here. No transaction history was imported; the case is not necessarily resolved."
     },
+    "attachedNotInChat": "The file was saved as evidence on the transaction but not added to this chat. Remove a file, or start a new chat, to analyze it here.",
     "continuePrompt": "Continue the evidence review. {{outcome}} Inspect the current cases again before making a proposal. Cases: {{cases}}",
     "sourceFundsContinuePrompt": "Continue the source-of-funds review for the same target, amount and purpose. {{outcome}} Read the current source-of-funds review context and evidence again. Keep recorded provenance separate from accounting and request consent before changes. Cases: {{cases}}",
     "importTarget": "Import into connection",
@@ -1028,5 +1065,14 @@
       "coinbase": "A Coinbase API connection is needed.",
       "binance": "A Binance API connection is needed."
     }
+  },
+  "modelSetup": {
+    "title": "Choose a model to start",
+    "body": "A coding agent you're already signed into works best. Nothing is contacted until you choose one.",
+    "use": "Use",
+    "retry": "Check again",
+    "useAria": "Use {{name}}",
+    "other": "Local models, servers and API keys are set up in Settings.",
+    "openSettings": "Open Settings"
   }
 }

@@ -163,7 +163,7 @@ The desktop's effort menu offers an HTTP model only the levels in its
 none when its listing does not say it takes one (as OpenAI's never does) or
 before **Check models** has listed it. Levels a listing names elsewhere, such
 as `capabilities.reasoning_efforts: ["xhigh"]`, are not offered, and an HTTP
-provider's default effort on its Settings card is bounded to low, medium and
+provider's default effort in its Settings row is bounded to low, medium and
 high the same way. A stored default the model does not offer moves to the
 nearest offered level, as for CLI agents.
 
@@ -325,7 +325,8 @@ file's cell values and name. `restricted` keeps an off-device provider to the
 projected surface: those tools are denied with `agent_access_restricted`,
 chain-analysis results are projected, and an attachment is reduced to headers,
 counts and the column plan (its import plan likewise drops dates, amounts and
-the filename). A provider on this device (kind `local` at a
+the filename). Attached images and PDFs are not shown to a restricted
+provider at all. A provider on this device (kind `local` at a
 loopback URL) always has full access.
 
 Set it in the provider form (**Restrict what the assistant can use**) or with
@@ -425,7 +426,7 @@ Completions work through the detected or chosen format.
 
 ### Adding a provider in the desktop
 
-**Add provider** in Settings → AI providers opens a wizard, laid out after
+**Add provider** in Settings → Assistant opens a wizard, laid out after
 T3 Code's add-provider wizard, with a step track: **Provider**, **Connection**,
 **Privacy** (only for a provider whose prompts leave this device) and
 **Model**. Nothing contacts the provider until **Test connection** on the last
@@ -512,25 +513,35 @@ checkbox ("Testing sends a short prompt to this provider. Acknowledge that
 prompts may leave this device first.") unless the saved provider is already
 acknowledged as off-device, and sends `acknowledged: true` once it is ticked.
 
-### Settings → AI providers
+### Settings → Assistant
 
-Each provider is a card with its brand mark, privacy posture, kind (HTTP or
-CLI agent), and default badge. CLI agents sign in through their own CLI, so
-their cards show a runtime status instead of key storage: installed version
-and signed in, not installed, sign-in needed, or an error, with the broker's
-sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
-when it was checked. HTTP cards show the base URL with the API format the next
-chat speaks (the pinned format, the detected one, or that auto has detected
-nothing yet), key storage, and whether the last check reached the endpoint and
-how many models it listed. A provider set to `omit_store_field` says on its
-card that it sends requests without Kassiber's no-retention flag and that the
-provider's own retention applies.
+The page has three lists built from the same few controls (a switch for
+on/off, one dropdown for a choice, plain buttons for actions). The first holds
+the **Use the assistant** switch (AI features), the permission mode new chats start
+in, whether chats are kept, and deleting saved ones; then come **Models** and
+**External agents** (see [MCP](mcp.md)).
+
+Each provider in Models is one row: its brand mark, name, "Default" on the
+default, where it runs (on this computer, a subscription app, a remote or
+confidential server), its default model, the last check's status and its
+on/off switch. Opening the row shows the rest and the actions (**Check**,
+**Set as default**, **Edit**, moving the key, **Remove**).
+CLI agents sign in through their own CLI, so their rows show a runtime status
+instead of key storage: installed version and signed in, not installed,
+sign-in needed, or an error, with the broker's sanitized hint (for example
+``Run `copilot login` outside Kassiber.``) and when it was checked. HTTP rows
+show the base URL with the API format the next chat speaks (the pinned
+format, the detected one, or that auto has detected nothing yet), key
+storage, and whether the last check reached the endpoint and how many models
+it listed. A provider set to `omit_store_field` says in its details that it
+sends requests without Kassiber's no-retention flag and that the provider's
+own retention applies.
 
 Opening the page contacts no provider. Cards read the daemon's last result
 with `cached_only: true`, which never starts a probe, even on a cold cache:
 `ai.provider_runtime.status` for a CLI agent, `ai.list_models` for an HTTP
 provider. The daemon keeps each provider's last check in the book
-(`ai_provider_checks`), so after a restart a card still shows what it found
+(`ai_provider_checks`), so after a restart a row still shows what it found
 and when ("checked 3 days ago") instead of "Not checked yet". Only a check the
 user started writes it: **Check**, **Check all**, **Set up**, or the picker's
 **Check models**. It is read back only while the provider has the base URL it
@@ -540,20 +551,20 @@ with `refresh` is refused. `ai.providers.list` also reports each provider's
 `last_checked_at` and `set_up`.
 
 Built-in providers the user has not used yet are folded into a collapsed
-**Not set up** group: a built-in row still at its built-in address and name
+**N more providers** line at the end of the list: a built-in row still at its built-in address and name
 that is not the default, was never checked, and (off-device) was never
 acknowledged. Each row has **Set up**, which switches it on if needed and runs
 its check, asking for the acknowledgement first as any check does, and a
-remove button. The group is display only; it never decides whether a provider
+remove button that shows on hover or keyboard focus. The group is display only; it never decides whether a provider
 may be contacted, and the model picker still lists every enabled provider.
-Providers the user added are always shown as cards. CLI cards
+Providers the user added are always shown as rows. CLI rows
 also show a **Check models** result from the picker: when it is newer than
-the last runtime check, the card lists its models (and fast mode where one
+the last runtime check, the row lists its models (and fast mode where one
 offers it) as "Models listed", keeping a ready runtime's version line. A
 newer runtime check that is not ready shows no models. Results
 belong to the base URL that was checked (for a CLI agent, the runtime its
 locator names), in the desktop and in the daemon's discovery cache, so after
-the URL is edited the card reads "not checked", or shows the new runtime's
+the URL is edited the row reads "not checked", or shows the new runtime's
 last cached result, until the user checks it again; nothing probes the new
 endpoint on its own. A check is bound to the endpoint the user chose: the
 desktop sends that `base_url` with `ai.list_models` and the scoped
@@ -571,14 +582,14 @@ for it, so models and capabilities such as fast mode are no longer offered
 from an earlier check. **Check all** does the same
 for every enabled provider, one request per provider. Off-device providers
 need the acknowledgement first (one confirmation for all of them); if it
-cannot be recorded, each of those cards shows why and none of them is
+cannot be recorded, each of those rows shows why and none of them is
 checked, while the other providers still are. Offline
 mode refuses them before anything is asked, and the checks are unavailable
 while AI features are off. A failed check is reported once rather than
 retried, and its error belongs to that book and endpoint like the results
 do. A check sends no prompt.
 
-Each card also carries:
+Each row also carries:
 
 - **An enable switch.** A disabled provider is hidden from the model picker
   (a remembered selection on it falls back to the default provider) and is
@@ -815,6 +826,16 @@ discovers only the selected provider through `ai.list_models`; checking one
 native CLI must not refresh global runtime status or start other providers.
 Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
+
+Until a model is chosen, the empty chat (the Assistant page and the panel)
+shows **Choose a model to start**: the coding agents (Claude, Codex, GitHub
+Copilot, OpenCode) as rows with **Use**, and a link to Settings for local
+models, servers and API keys. Showing it reads only the provider list and
+cached check results. **Use** switches the agent on if needed and runs the
+same check as Settings, after the off-device confirmation and refused in
+offline mode; a ready agent becomes the default provider and the chat's
+model, and one that is not ready says why in its row (not installed,
+sign-in needed with the CLI's hint).
 
 Typing in the picker ranks every provider's already-known models (configured
 defaults and earlier check results) at once; it never contacts a provider.
@@ -1192,7 +1213,7 @@ call) opens a fresh reasoning segment, so Ollama/oMLX traces stay
 per-round instead of one continuous blob. Models that don't emit either
 channel pass through unchanged.
 
-Settings → AI providers exposes a **Test connection** action. It calls the
+Settings → Assistant exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
 and reports the model count. It also passes the form's privacy kind (`kind`),
@@ -1349,8 +1370,8 @@ Each desktop chat sends its permission mode as `permission_mode` with every
 `ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
 approve changes that can be undone and stay on this device, and asks before
 network access and anything permanent. **Full access** never asks, syncs and
-other network actions included. New chats start in Settings → AI → **Default
-permission mode** (Auto unless changed). A saved chat reopens in the mode it
+other network actions included. New chats start in the mode set at Settings →
+Assistant → **New chats start in** (Auto unless changed). A saved chat reopens in the mode it
 last used, which the UI preferences keep by session id. Switching the mode in
 the composer while an answer streams sends `ai.chat.permission_mode` for that
 turn, and the daemon releases waiting approvals the new mode covers.
@@ -1366,12 +1387,12 @@ tool. The full catalog is about 154 KB of schemas (172 tools); CLI agents get
 it through the broker's 0600 manifest file or Codex's JSON-RPC, well under the
 2 MB tool-bridge message cap.
 
-The desktop sends `tool_profile` with every turn from the composer's **Tools**
-picker: **All tools** (`full`), **Focused** (`scoped`) or **Minimal**
-(`core`). Every provider starts with all tools; Kassiber does not judge a
-model's strength. Settings → AI providers sets a provider's own tool set, kept
-with the UI preferences by provider name, and the composer overrides it for
-the current chat.
+The desktop sends `tool_profile` with every turn: the provider's tool set
+from Settings → Assistant, **All tools** (`full`), **Focused** (`scoped`)
+or **Minimal** (`core`), kept with the UI preferences by provider name. Every
+provider starts with all tools; Kassiber does not judge a model's strength.
+The set follows the provider, not the chat, so the composer offers only the
+permission mode.
 
 Small local models are the reason `scoped` and `core` exist: every schema
 together is about 36k tokens, more than many local context windows. Instead,
@@ -1683,6 +1704,71 @@ custody-gap actions and declare acquisition kinds; a restricted provider keeps
 prices, exclusions, unpairs and component creation. Conversion components
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
+
+A chat holds up to eight files, which reach it three ways. The **+** button
+opens the native picker. Files dropped on the desktop window over the
+assistant are staged by the shell, which records the paths of that drop and
+stages them only when the window asks right after it; the webview never names
+a path. A pasted file (or, in the browser preview, a dropped one) goes to the
+daemon as bytes in chunks of at most 512 KiB through
+`ui.chat.attachments.upload`, up to 25 MB. All three return the same opaque
+token and are staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
+JPEG, WebP and GIF. The composer shows each file as a card with its type and
+size, and an image as a small thumbnail: for a pasted one the renderer draws
+it from the bytes it already holds, for a picked or dropped one the daemon
+returns a 96 px PNG made on this device (`source.thumbnail`) with the staging
+grant. The message that first carries a file shows the same card, and a
+saved chat keeps it (name, type and size in the user row's provenance, never
+a path or token); the files stay with the chat for later turns until removed. Sending waits
+while a pasted file is still on its way.
+
+`ai.chat` takes the chat's files as `attachments: [{token, label?, new?}]`, in
+order; the daemon names them `file-1` … `file-8` and adds a note to the turn
+listing each one and how the model can read it. `new` marks the files the
+message first sends. A file whose staging grant ended (30 minutes unused)
+or belongs to another book is left out instead of failing the turn: the note
+says that id is no longer available, the result's `expired_attachments`
+returns its token, and the chat drops the file with a notice. What the model
+sees depends on its [agent access](#agent-access):
+
+- **Spreadsheets** (CSV, TSV, XLSX) are read through `ui_wallets_analyze_file`
+  and imported through the plan and apply below, naming the file by id
+  (`file`, optional when only one export is attached). A restricted provider
+  gets headers, counts and the column plan.
+- **Images and PDFs** are shown to a provider with full access on the user's
+  message: an image as an image (reduced to 1568 px on the long edge when it is
+  larger and Pillow is available), a PDF as its text layer via Poppler's
+  `pdftotext` (up to 30 pages and 40,000 characters, framed as data rather
+  than instructions), or as images of its first three pages when it has no
+  text (a scan). One message carries at most eight images and 12 MB, the
+  files a message first sends taking that budget first. When the chat has a
+  saved native session (Claude, Codex, Copilot), the files of earlier turns go
+  in a separate message just before the user's: the broker replays only the
+  user's message when it does resume, and the whole conversation, those files
+  included, when it starts a fresh thread instead (the session is gone or the
+  advertised tools changed). The note naming the chat's files rides on the
+  user's message then, so a resumed session still learns which file is
+  which. A stateless provider is shown every file on the user's message on
+  every turn. A restricted provider is told an
+  image or PDF is attached, by its extension only, and is shown none of it.
+- **Rows from an image or PDF** come only through the on-device reader:
+  `ui_wallets_read_document` (a local vision model; consent, as it starts a
+  model) drafts rows, and `ui_wallets_import_document_plan` / `_apply` import
+  the ready ones as a bound plan; a restricted provider sees counts only. These
+  tools are offered only on a turn whose chat holds an image or PDF; see
+  [imports](imports.md#from-the-assistant).
+- **Any file** can be kept as evidence on a transaction with the consented
+  `ui_attachments_add_from_chat` (`transaction`, `file`, optional `label`):
+  the same managed copy as attaching it in the transaction's evidence. It
+  documents the row and changes no accounting.
+
+The note tells the model that what a file shows is evidence for the user to
+confirm, not an established fact, and that amounts and dates never go from a
+file into an import by hand. CLI agents get the images through the broker:
+Claude as a stream-json image block, Codex and OpenCode as inline data URLs,
+and an ACP agent only when it advertises image prompts (otherwise the prompt
+says the image was left out). In the CLI, `kassiber chat --file PATH` repeats
+for several files, and the nth `--file-context` describes the nth file.
 
 A chat attachment can be imported, not only analyzed.
 `ui_wallets_import_attachment_plan` runs the desktop's generic-ledger import of

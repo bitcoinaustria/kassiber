@@ -14,7 +14,7 @@ import {
   writeEvent,
 } from "./protocol.js";
 import { providerEnvironment, resolveExecutable } from "./executables.js";
-import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages, systemInstructions } from "./prompt.js";
+import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages, promptImages, systemInstructions } from "./prompt.js";
 
 export const SENSITIVE_CODEX_PROFILE = "kassiber-selected-context";
 export function sensitiveCodexConfig() {
@@ -623,7 +623,14 @@ export async function codexChat(
     );
     await startTurn(connection, {
       threadId,
-      input: [{ type: "text", text: prompt }],
+      input: [
+        { type: "text", text: prompt },
+        // Inline data URLs only: never a path Codex would read itself.
+        ...promptImages(request.messages, resumed).map((image) => ({
+          type: "image",
+          url: `data:${image.media_type};base64,${image.data}`,
+        })),
+      ],
       approvalPolicy: "untrusted",
       approvalsReviewer: "user",
       ...(sensitive ? { permissions: SENSITIVE_CODEX_PROFILE } : {

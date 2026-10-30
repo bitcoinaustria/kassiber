@@ -105,33 +105,18 @@ describe("AssistantSessionProvider permission mode and tool set", () => {
   });
   afterEach(cleanup);
 
-  it("sends all tools by default and the tool set the chat picks", async () => {
+  it("sends the provider's tool set with every turn, all tools by default", async () => {
     answerImmediately();
     mount();
-    expect(session.toolProfile).toBe("full");
     await ask();
     expect(streamCall().args).toMatchObject({ tool_profile: "full", permission_mode: "auto" });
 
-    act(() => session.setToolProfile?.("core"));
-    expect(session.toolProfile).toBe("core");
-    await ask();
-    expect(streamCall().args.tool_profile).toBe("core");
-    // The chat's pick leaves the provider's own setting alone.
-    expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
-  });
-
-  it("starts each chat in its provider's tool set", async () => {
-    answerImmediately();
-    useUiStore.setState({ assistantProviderToolProfiles: { ollama: "scoped" } });
-    mount();
+    // Settings → AI sets the provider's tool set, from the next turn on.
+    act(() => useUiStore.getState().setAssistantProviderToolProfile("ollama", "scoped"));
     await ask();
     expect(streamCall().args.tool_profile).toBe("scoped");
 
-    act(() => session.setToolProfile?.("full"));
-    await ask();
-    expect(streamCall().args.tool_profile).toBe("full");
-
-    // A new chat drops the chat's pick.
+    // It follows the provider, not the chat.
     act(() => session.reset());
     await ask();
     expect(streamCall().args.tool_profile).toBe("scoped");

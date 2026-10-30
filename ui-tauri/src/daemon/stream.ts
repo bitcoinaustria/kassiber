@@ -55,6 +55,16 @@ export interface AiChatMessage {
   provider?: string;
   model?: string;
   provenance?: AiAnswerProvenance;
+  /** The files a user message first sent to the chat; display only. */
+  attachments?: AiChatMessageAttachment[];
+}
+
+/** What a sent message shows about its file: never a path or a token. */
+export interface AiChatMessageAttachment {
+  filename: string;
+  kind?: string;
+  sizeBytes?: number;
+  previewUrl?: string;
 }
 
 export interface AiAnswerProvenance {
@@ -159,6 +169,7 @@ const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.transfers.components.apply",
   "ui.review.apply",
   "ui.wallets.import_attachment.apply",
+  "ui.wallets.import_document.apply",
   "ui.imports.rollback",
 ]);
 
@@ -218,13 +229,13 @@ export interface AiChatRequest {
    */
   seedNotices?: { index: number; notices: AiChatNotice[] }[];
   /**
-   * One file the user attached to this chat, as an opaque staging grant minted
-   * by the native picker. A token and never a path: the renderer does not learn
-   * where the file is, and the model cannot point the analysis tool elsewhere.
-   * File contents are not sent here — the daemon reads the file locally, and
-   * only sends an off-device model the column headers.
+   * The files attached to this chat, in order, as opaque staging grants. A
+   * token and never a path: the renderer does not learn where a file is, and
+   * the model cannot point a tool elsewhere. File contents are not sent here;
+   * the daemon reads the files locally. `new` marks the files this message
+   * first sends.
    */
-  attachment?: { token: string; label?: string | null };
+  attachments?: { token: string; label?: string | null; new?: boolean }[];
   /** Typed, ephemeral UI state. Never includes descriptors, file content, or secrets. */
   screenContext?: {
     route?: string;
@@ -258,13 +269,31 @@ export interface StoredChatEntry {
   content: string;
   /** Notices kept with an assistant answer, so they survive a reload. */
   notices?: AiChatNotice[];
+  /** The files a user message first sent, as it showed them. */
+  attachments?: AiChatMessageAttachment[];
 }
 
 /** A message row as `ui.chat.sessions.get` returns it. */
 export interface StoredChatMessageShape {
   role?: string;
   content?: string;
-  provenance?: { notices?: unknown } | null;
+  provenance?: { notices?: unknown; attachments?: unknown } | null;
+}
+
+function storedAttachments(raw: unknown): AiChatMessageAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const { filename, kind, size_bytes: sizeBytes } = item as Record<string, unknown>;
+    if (typeof filename !== "string" || !filename) return [];
+    return [
+      {
+        filename,
+        ...(typeof kind === "string" && kind ? { kind } : {}),
+        ...(typeof sizeBytes === "number" ? { sizeBytes } : {}),
+      },
+    ];
+  });
 }
 
 /**
@@ -281,7 +310,14 @@ export function storedChatEntries(
     if (typeof content !== "string" || content.length === 0) continue;
     const notices =
       role === "assistant" ? aiChatNotices(message.provenance?.notices) : [];
-    entries.push(notices.length ? { role, content, notices } : { role, content });
+    const attachments =
+      role === "user" ? storedAttachments(message.provenance?.attachments) : [];
+    entries.push({
+      role,
+      content,
+      ...(notices.length ? { notices } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    });
   }
   return entries;
 }
@@ -306,11 +342,12 @@ export function buildAiChatStreamArgs(
     seed_history: request.seedHistory ? true : undefined,
     seed_notices:
       request.seedHistory && request.seedNotices?.length ? request.seedNotices : undefined,
-    attachment: request.attachment
-      ? {
-          token: request.attachment.token,
-          label: request.attachment.label ?? undefined,
-        }
+    attachments: request.attachments?.length
+      ? request.attachments.map((attachment) => ({
+          token: attachment.token,
+          label: attachment.label ?? undefined,
+          new: attachment.new ? true : undefined,
+        }))
       : undefined,
     screen_context: request.screenContext
       ? {
@@ -380,6 +417,16 @@ interface AiChatTerminalShape {
   finish_reason?: string | null;
   provenance?: AiAnswerProvenance;
   session_id?: string | null;
+  /** Tokens of attached files this turn could no longer read (expired grants). */
+  expired_attachments?: string[];
+}
+
+/** How a sent turn ended, for the caller that sent it. */
+export interface AiChatSendOutcome {
+  /** Refused before it started because another book is open. */
+  refused: boolean;
+  /** Attached files the daemon could no longer read, by their tokens. */
+  expiredAttachments?: string[];
 }
 
 export interface AiChatToolCallShape {
@@ -514,7 +561,8 @@ export interface UseAiChatStreamResult {
   send: (
     request: AiChatRequest,
     userMessageContent: string,
-  ) => Promise<{ refused: boolean }>;
+    userAttachments?: AiChatMessageAttachment[],
+  ) => Promise<AiChatSendOutcome>;
   sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
   /**
    * Switch the running turn to `mode` (`ai.chat.permission_mode`). Nothing
@@ -1086,8 +1134,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
     async (
       request: AiChatRequest,
       userMessageContent: string,
-    ): Promise<{ refused: boolean }> => {
+      userAttachments?: AiChatMessageAttachment[],
+    ): Promise<AiChatSendOutcome> => {
       if (isStreaming) return { refused: false };
+      let expiredAttachments: string[] | undefined;
       setError(null);
       setIsStreaming(true);
       setPendingConsents([]);
@@ -1103,6 +1153,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: "user",
           content: userMessageContent,
           status: "done",
+          ...(userAttachments?.length ? { attachments: userAttachments } : {}),
         },
         {
           id: assistantId,
@@ -1182,6 +1233,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
         }
 
         const finishReason = envelope.data?.finish_reason ?? null;
+        const expired = envelope.data?.expired_attachments;
+        if (Array.isArray(expired) && expired.length) {
+          expiredAttachments = expired.filter((token): token is string => typeof token === "string");
+        }
         // Flush any pending tag-prefix bytes still in the parser.
         const parser = parserRef.current;
         if (parser && !controller.signal.aborted) {
@@ -1260,7 +1315,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           requestIdRef.current = null;
         }
       }
-      return { refused: false };
+      return expiredAttachments ? { refused: false, expiredAttachments } : { refused: false };
     },
     [flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );
@@ -1450,6 +1505,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           content: entry.content,
           status: "done" as const,
           ...(entry.notices?.length ? { notices: entry.notices } : {}),
+          ...(entry.attachments?.length ? { attachments: entry.attachments } : {}),
         })),
       );
       setIsStreaming(false);

@@ -112,7 +112,7 @@ configurable.
 | Explicit exchange API import/sync after configuring that exchange connection | the configured Kraken, Coinbase, or Binance API | authenticated HTTPS | IP, account/API-key identity, request timing, and the account-history range requested |
 | Explicit BTCPay, Lightning, or other configured service sync; or background freshness after its matching source class is enabled in Settings | the configured service | its configured HTTP(S), RPC, or proxy transport | IP, request timing, and the service/account identifiers required by that integration |
 | Explicit BTCPay **Check key and stores** during setup, or CLI `btcpay inspect` / `btcpay setup` | the BTCPay server of that instance | Greenfield HTTP(S) GET through the instance's proxy setting | IP, request timing, the API key, and that Kassiber read the server version, the key's own permissions, the store list, each store's enabled payment methods, and the first receive addresses BTCPay previews for on-chain store wallets. Kassiber never requests payment-method configuration (derivation schemes, Lightning connection strings); preview addresses stay in memory for local wallet recognition. BTCPay wallet and payment-ledger syncs also read that store's invoices, payment requests, and payouts. `btcpay key-url` and the desktop key link make no request; the user's browser opens BTCPay |
-| `ai models`, `chat`, or **Check** / **Check all** in Settings → AI providers against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) (the Responses API or Chat Completions, per the provider's API format) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider. A Settings check sends no prompt; it starts that one provider's CLI (version, sign-in state, models) or lists an HTTP provider's models. An `auto` provider whose server has no `/responses` gets the same turn once at `/chat/completions` of the same base URL. The model picker and Settings do not auto-poll providers or run a timer; opening Settings reads only the daemon's cached results. Remote model discovery and checks fail closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
+| `ai models`, `chat`, or **Check** / **Check all** in Settings → Assistant against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) (the Responses API or Chat Completions, per the provider's API format) or the configured local CLI's own transport | prompt/tool context (with full agent access, the attached images and PDF text or page images of the chat), model request metadata, IP/provider account context according to that provider. A Settings check sends no prompt; it starts that one provider's CLI (version, sign-in state, models) or lists an HTTP provider's models. An `auto` provider whose server has no `/responses` gets the same turn once at `/chat/completions` of the same base URL. The model picker and Settings do not auto-poll providers or run a timer; opening Settings reads only the daemon's cached results. Remote model discovery and checks fail closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
 | Clicking **Test connection** in a Settings provider form (`ai.test_connection`, for the values in the form), or `kassiber ai providers test <name>` for a saved provider after acknowledgement | the base URL being tested, or the CLI provider | the provider's model listing, then, for an HTTP provider with a model to ask, one fixed request to `/responses` and, if the server does not speak that format, `/chat/completions`, each repeated once without the tool if the tool is refused | IP, the API key, request timing, the model listing request, and one fixed prompt, `Reply with OK`, with at most 16 output tokens, one trivial `connection_check` tool definition and no book data, which the provider bills as a tiny generation. A CLI provider gets only its status and model probe. Nothing is sent on its own: the click or command is the trigger, a switched-off saved provider is refused, and offline mode refuses every provider not marked local. A target off this device (anything but a provider marked local at a loopback URL, CLI agents included) is refused before any request until it is acknowledged: the form's checkbox, sent as `acknowledged: true`, or the saved remote or TEE provider's own acknowledgement. A Chat Completions endpoint that refuses `store: false` gets the fixed prompt once more without it, reported as `store_accepted: false`; no chat is sent that way unless the user chooses `omit_store_field` |
 | A Claude chat turn the user sends with **Fast** on (the `opus` alias, Claude Code 2.1.205 or later), in the desktop or with `kassiber chat --fast` | `api.anthropic.com`, Claude Code's own fast-mode availability check, in addition to the CLI's normal inference destination; the check does not follow `ANTHROPIC_BASE_URL`, so it leaves even when inference goes through a gateway | HTTPS from the Claude CLI process, through the CLI's configured HTTP proxy, with the CLI's credential | IP, request timing, the Claude account or key, and that fast mode was requested. Kassiber passes `fastMode: true` only on such a turn; status checks and model listing pass no fast setting, and every other turn passes `fastMode: false`, so none of them turns fast mode on in the CLI |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
@@ -388,6 +388,15 @@ until that process stops. `kassiber status` reports the effective root.
   protects the project directory with OS or volume encryption.
 - `<state-root>/projects/<project>/exports/` — generated reports and handoff
   artifacts. These are plaintext user outputs and are outside SQLCipher.
+- A file pasted into the chat has no path of its own, so the daemon writes it
+  to an owner-only file in a private `kassiber-chat-uploads-*` directory under
+  the OS temporary directory. It is deleted when the daemon drops its staging
+  grant: after 30 minutes unused, when more than sixteen files are staged, when
+  another project or profile opens, on a restore or lock, and when the daemon
+  exits. Removing the card or starting a new chat stops the chat using it at
+  once; the file itself goes by those rules. An unfinished upload is deleted
+  after five idle minutes. A picked or dropped file is read where it is and
+  never copied there. Attaching either fetches and sends nothing.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.
@@ -488,8 +497,8 @@ prompt again after rebuilds or identity changes. On Windows and Linux, another
 process running as the same user can read the user-scoped item. This matches the
 existing boundary above: a compromised process running as the user is out of
 scope. Revoke only the CLI copy with `kassiber secrets forget-unlock`, revoke
-only the desktop copy in Settings, or use **Forget all unlock methods** to remove
-both plus the migration-only legacy item. The current credential names are
+only the desktop copy in Settings, or use **Saved unlock methods → Forget all**
+in Settings → Lock & encryption to remove both plus the migration-only legacy item. The current credential names are
 `Kassiber CLI Database Passphrase` and `Kassiber Desktop Biometric Passphrase`;
 `Kassiber Database Passphrase` is legacy migration input only. Revocation does not
 change the SQLCipher key or recover a lost passphrase.
@@ -685,7 +694,7 @@ The desktop app and `kassiber ai` CLI surface use `POST /v1/responses` or
 `POST /v1/chat/completions` against HTTP providers, per each provider's API
 format (see [the AI reference](ai.md#choosing-the-format)). The default seeded
 entry points at local Ollama (`http://localhost:11434/v1`); add remote providers
-through Settings → AI providers or `kassiber ai providers create`. OpenAI
+through Settings → Assistant or `kassiber ai providers create`. OpenAI
 stores Responses by default, so Kassiber explicitly sends `store: false` there,
 and asks for encrypted reasoning so a tool round can carry reasoning forward
 without provider storage. OpenAI also stores Chat Completions by default for
@@ -710,7 +719,12 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   is built for people who want the assistant to work their books, so every
   provider starts with `agent_access: full`: all tools, including custody-gap,
   lineage, chain-analysis source and dataset tools, unprojected chain-analysis
-  results, and an attached file's cell values and name. The user can restrict
+  results, and an attached file's cell values and name. Attached images and
+  PDFs are shown to such a provider on the user's message: an image as itself,
+  a PDF as its text (extracted on this device) or, for a scan, as page images.
+  A restricted provider is shown none of them. Turning a photo or PDF into
+  rows (`ui_wallets_read_document`) uses only a local provider on a loopback
+  address, after consent, whatever provider serves the chat. The user can restrict
   any off-device provider in its form or with
   `kassiber ai providers update <name> --agent-access restricted`, which keeps
   it to the projected surface those tools used to be limited to. A provider on
@@ -727,7 +741,7 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   See [permission modes](ai.md#permission-modes).
 - **Remote chat only after explicit acknowledgement.** Remote providers
   start unacknowledged unless they are created or updated with
-  `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
+  `--acknowledge`, or confirmed in Settings → Assistant. `ai.chat`
   refuses to send prompts to an unacknowledged off-device provider with
   `ai_remote_ack_required`.
 - **AI provider API keys have a narrow desktop native-store path.** CLI

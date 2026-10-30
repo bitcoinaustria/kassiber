@@ -11,10 +11,12 @@ import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
 import {
   PermissionModePicker,
-  ToolProfilePicker,
 } from "@/components/ai/ComposerModePickers";
 import { ComposerControlSeparator } from "@/components/ai/ComposerControl";
-import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
+import { ChatAttachmentCard } from "@/components/ai/ChatAttachmentCard";
+import type { ChatAttachmentView } from "@/components/ai/chatAttachments";
+import { useChatFileDrop } from "@/components/ai/useChatFileDrop";
+import type { AiPermissionMode } from "@/daemon/stream";
 import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import {
@@ -31,7 +33,6 @@ import {
   ListPlus,
   Paperclip,
   Plus,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -41,6 +42,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -48,6 +50,12 @@ interface PromptOption {
   icon: LucideIcon;
   text: string;
   prompt: string;
+}
+
+/** A file card in the composer; `key` is what removing it names. */
+export interface ComposerAttachment extends ChatAttachmentView {
+  key: string;
+  state: "uploading" | "ready" | "sent";
 }
 
 interface Ai02Props {
@@ -94,18 +102,22 @@ interface Ai02Props {
    */
   permissionMode?: AiPermissionMode;
   onPermissionModeChange?: (mode: AiPermissionMode) => void;
-  /**
-   * The tools the next turn offers the model; the picker appears with its
-   * change handler. A choice applies from the next message.
-   */
-  toolProfile?: AiToolProfile;
-  onToolProfileChange?: (profile: AiToolProfile) => void;
   modelPickerEnabled?: boolean;
   /** Open the native picker to attach a file. Omit to disable the button. */
   onAttach?: () => void;
-  /** Filename of the currently attached file, shown as a removable chip. */
-  attachedFilename?: string | null;
-  onClearAttachment?: () => void;
+  /**
+   * The chat's files, shown as removable cards above the text: `uploading`
+   * while a pasted file is handed over, `sent` once a message carried it
+   * (it stays with the chat until removed).
+   */
+  attachments?: ComposerAttachment[];
+  onRemoveAttachment?: (key: string) => void;
+  /** Files pasted into the text, or dropped in the browser preview. */
+  onAttachFiles?: (files: File[]) => void;
+  /** A file dropped on the desktop window over the drop target. */
+  onNativeFileDrop?: () => void;
+  /** Where a file can be dropped; defaults to the composer itself. */
+  dropTargetRef?: RefObject<HTMLElement | null>;
   /**
    * The visible conversation, for terminal-style ArrowUp/ArrowDown recall of
    * earlier prompts. Only `user` messages are used; omit to disable recall.
@@ -179,12 +191,13 @@ export default function Ai02({
   onFastModeChange,
   permissionMode = "approval",
   onPermissionModeChange,
-  toolProfile = "full",
-  onToolProfileChange,
   modelPickerEnabled = true,
   onAttach,
-  attachedFilename,
-  onClearAttachment,
+  attachments = [],
+  onRemoveAttachment,
+  onAttachFiles,
+  onNativeFileDrop,
+  dropTargetRef,
   historyMessages,
 }: Ai02Props) {
   const { t } = useTranslation("assistant");
@@ -285,9 +298,10 @@ export default function Ai02({
     if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) {
       return false;
     }
-    // An attached file makes the composer non-empty: recalling an old prompt
-    // into it would send that prompt with a new file, which ArrowUp never meant.
-    if (attachedFilename) return false;
+    // A newly attached file makes the composer non-empty: recalling an old
+    // prompt into it would send that prompt with a new file, which ArrowUp
+    // never meant. A file the chat already has is not new.
+    if (attachments.some((file) => file.state !== "sent")) return false;
     // A typed draft with no active recall can never step.
     if (historyPositionRef.current === null && inputValue.length > 0) {
       return false;
@@ -423,6 +437,12 @@ export default function Ai02({
     </Tooltip>
   );
 
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const dropActive = useChatFileDrop(dropTargetRef ?? surfaceRef, {
+    onFiles: onAttachFiles,
+    onNativeDrop: onNativeFileDrop,
+  });
+
   return (
     <TooltipProvider delayDuration={300}>
       <div
@@ -437,8 +457,9 @@ export default function Ai02({
         onKeyDown={handleComposerKeyDown}
       >
         <div
+          ref={surfaceRef}
           className={cn(
-            "flex cursor-text flex-col rounded-2xl transition-all duration-200 ease-out",
+            "relative flex cursor-text flex-col rounded-2xl transition-all duration-200 ease-out",
             // Focus lives on this whole surface (textarea + toolbar), not the
             // Textarea's own ring — otherwise the outline cuts off above the
             // model/send row. Uses `outline` (not `ring`) because the glass
@@ -474,23 +495,30 @@ export default function Ai02({
             inputRef.current?.focus();
           }}
         >
-          {attachedFilename ? (
-            <div className="relative z-10 flex items-center gap-1.5 px-4 pt-3">
-              <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span className="truncate">{attachedFilename}</span>
-                {onClearAttachment ? (
-                  <button
-                    type="button"
-                    onClick={onClearAttachment}
-                    aria-label={t("composer.removeAttachment")}
-                    title={t("composer.removeAttachment")}
-                    className="shrink-0 rounded-full p-0.5 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <X className="h-3 w-3" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </span>
+          {dropActive ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ring/60 bg-background/85 text-sm font-medium text-foreground"
+              data-composer-drop-hint=""
+            >
+              <Paperclip className="h-4 w-4" aria-hidden="true" />
+              {t("composer.dropToAttach")}
+            </div>
+          ) : null}
+          {attachments.length ? (
+            <div className="relative z-10 flex flex-wrap items-center gap-1.5 px-3 pt-3">
+              {attachments.map((file) => (
+                <ChatAttachmentCard
+                  key={file.key}
+                  attachment={file}
+                  uploading={file.state === "uploading"}
+                  note={file.state === "sent" ? t("composer.attachmentInChat") : undefined}
+                  onRemove={
+                    file.state === "uploading" || !onRemoveAttachment
+                      ? undefined
+                      : () => onRemoveAttachment(file.key)
+                  }
+                />
+              ))}
             </div>
           ) : null}
           <div className="relative z-10 min-h-0 flex-1">
@@ -505,6 +533,13 @@ export default function Ai02({
                 setInputValue(event.target.value);
               }}
               onKeyDown={handleKeyDown}
+              onPaste={(event) => {
+                // A copied file or screenshot attaches; text pastes as usual.
+                const files = Array.from(event.clipboardData?.files ?? []);
+                if (!files.length || !onAttachFiles) return;
+                event.preventDefault();
+                onAttachFiles(files);
+              }}
               placeholder={resolvedPlaceholder}
               className={cn(
                 "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-base leading-relaxed text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/45 focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
@@ -575,14 +610,6 @@ export default function Ai02({
                     labelClassName="hidden @sm/composer-toolbar:inline"
                   />
                 </>
-              ) : null}
-              {onToolProfileChange ? (
-                <ToolProfilePicker
-                  value={toolProfile}
-                  onChange={onToolProfileChange}
-                  onOpenChange={handleOverlayOpenChange}
-                  labelClassName="hidden @md/composer-toolbar:inline"
-                />
               ) : null}
             </div>
 

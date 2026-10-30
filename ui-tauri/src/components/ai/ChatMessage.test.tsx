@@ -6,6 +6,21 @@ import { ChatToolCall } from "./ChatToolCall";
 import type { AiChatMessage } from "@/daemon/stream";
 
 describe("ChatMessage", () => {
+  it("shows the file a user message sent, with no remove control", () => {
+    const message: AiChatMessage = {
+      id: "user-file",
+      role: "user",
+      content: "Import this",
+      status: "done",
+      attachments: [{ filename: "Umsatzliste.xlsx", kind: "spreadsheet", sizeBytes: 48_000 }],
+    };
+    const html = renderToStaticMarkup(<ChatMessage message={message} />);
+    expect(html).toContain("Umsatzliste.xlsx");
+    expect(html).toContain("XLSX · 48 kB");
+    expect(html).not.toContain("Remove Umsatzliste.xlsx");
+    expect(html.indexOf("Umsatzliste.xlsx")).toBeLessThan(html.indexOf("Import this"));
+  });
+
   it("keeps tool usage details collapsed by default", () => {
     const message: AiChatMessage = {
       id: "assistant-1",

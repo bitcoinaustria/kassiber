@@ -7,6 +7,7 @@ import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
 import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { ModelSetupCard } from "@/components/ai/ModelSetupCard";
 import { useIncognitoScope } from "@/components/ai/incognitoScope";
 import { RecentChats } from "@/components/ai/RecentChats";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
@@ -39,8 +40,6 @@ export function Assistant() {
     sendBlockedReason,
     permissionMode,
     setPermissionMode,
-    toolProfile,
-    setToolProfile,
     abort,
     reset,
     branchFromMessage,
@@ -48,10 +47,14 @@ export function Assistant() {
     incognito,
     setIncognito,
     sessionId,
-    attachment,
+    attachments,
     attachFile,
-    clearAttachment,
+    attachFiles,
+    attachDroppedFiles,
+    removeAttachment,
   } = useAssistantSession();
+  // A file can be dropped anywhere on the page, not only on the composer.
+  const pageRef = React.useRef<HTMLDivElement>(null);
   const assistantDraft = useAssistantDraftStore((s) => s.draft);
   const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
   const replaceAssistantDraft = useAssistantDraftStore((s) => s.replaceDraft);
@@ -119,18 +122,22 @@ export function Assistant() {
       onFastModeChange={setFastMode}
       permissionMode={permissionMode}
       onPermissionModeChange={setPermissionMode}
-      toolProfile={toolProfile}
-      onToolProfileChange={setToolProfile}
       onAttach={attachFile}
-      attachedFilename={attachment?.filename ?? null}
-      onClearAttachment={clearAttachment}
+      attachments={attachments}
+      onRemoveAttachment={removeAttachment}
+      onAttachFiles={attachFiles}
+      onNativeFileDrop={attachDroppedFiles}
+      dropTargetRef={pageRef}
       historyMessages={messages}
-      {...(hasMessages ? { prompts: [] } : {})}
+      // Starter questions need a model to go to; until one is chosen the
+      // setup card above stands in for them.
+      {...(hasMessages || !selection?.model ? { prompts: [] } : {})}
     />
   );
 
   return (
     <div
+      ref={pageRef}
       data-assistant-surface="page"
       className={cn(
         "flex w-full flex-col bg-background",
@@ -250,6 +257,7 @@ export function Assistant() {
               <h2 className="text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
                 {t("page.heading")}
               </h2>
+              {selection?.model ? null : <ModelSetupCard />}
               <div className="w-full">
                 <AssistantFocusChip className="mb-2 justify-center" />
                 {composer}

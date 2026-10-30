@@ -42,13 +42,15 @@ import {
   formatManualPrice,
   parseManualDecimal,
   pricingPriceMoment,
-  pricingSelectionValue,
+  pricingChoiceValue,
   pricingSourceLabel,
+  pricingSourcePhrase,
   shouldShowSourceExternalId,
   tagSuggestions,
   transactionBtc,
   transactionFlow,
   transactionStatusLabels,
+  type DraftPricingOption,
   type LoanMarkTarget,
   type LoanMark,
   type Transaction,
@@ -475,10 +477,21 @@ function TransactionDetailBody({
     localDraft.atRegime,
     localDraft.atCategory,
   );
-  const pricingValue = pricingSelectionValue(
+  const pricingValue = pricingChoiceValue(
     localDraft.pricingSourceKind,
     localDraft.pricingQuality,
   );
+  // A choice sets its plain kind, unless the row came priced within it: then
+  // the kind it came with returns, so an exchange trade picked again is not
+  // saved as a plain import price.
+  const choosePricingOption = (option: DraftPricingOption) => {
+    const restore =
+      originalDraft &&
+      pricingChoiceValue(originalDraft.pricingSourceKind, originalDraft.pricingQuality) ===
+        option.value;
+    updateDraft("pricingSourceKind", restore ? originalDraft.pricingSourceKind : option.sourceKind);
+    updateDraft("pricingQuality", restore ? originalDraft.pricingQuality : option.quality);
+  };
   const hasCacheProvenance = Boolean(
     transaction.pricingProvider || transaction.pricingPair,
   );
@@ -640,10 +653,11 @@ function TransactionDetailBody({
         : t("sheet.checklist.pricedVia", {
             // dynamic key
             label: t(
-              pricingSourceLabel(
-                localDraft.pricingSourceKind,
-                localDraft.pricingQuality,
-              ) as ParseKeys<["transactions", "common"]>,
+              (pricingSourcePhrase(localDraft.pricingSourceKind, localDraft.pricingQuality) ??
+                pricingSourceLabel(
+                  localDraft.pricingSourceKind,
+                  localDraft.pricingQuality,
+                )) as ParseKeys<["transactions", "common"]>,
             ),
           }),
       done: !isPricingMissing,
@@ -902,6 +916,7 @@ function TransactionDetailBody({
     availableTagSuggestions,
     amountBtc,
     pricingValue,
+    choosePricingOption,
     updateManualPrice,
     updateManualValue,
     manualPriceRef,
@@ -956,45 +971,53 @@ function TransactionDetailBody({
         : null,
   };
 
+  const header = (
+    <TransactionDetailHeader
+      transaction={transaction}
+      flow={flow}
+      reviewStatus={displayedTransactionStatus(transaction, localDraft)}
+      pair={pair}
+      signedPrefix={signedPrefix}
+      hideSensitive={hideSensitive}
+      amountBtc={amountBtc}
+      valueAtTimeEur={valueAtTimeEur}
+      valueNowEur={valueNowEur}
+      pricedChange={pricedChange}
+      timelineSteps={timelineSteps}
+      checklist={<ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} />}
+      explorer={explorer}
+      onOpenExplorer={onOpenExplorer}
+      onClose={inRightPanel ? undefined : () => onOpenChange(false)}
+      onAskAssistant={
+        askAssistantAbout
+          ? () => {
+              // In the right panel the detail stays a tab beside the
+              // assistant, which comes to the front. As its own modal sheet
+              // it closes so the panel is reachable; the pinned context
+              // keeps the record either way.
+              if (!inRightPanel) onOpenChange(false);
+              askAssistantAbout({
+                kind: transaction.quarantineReason ? "quarantine" : "transaction",
+                transactionId: transaction.id,
+                date: transaction.date,
+              });
+            }
+          : undefined
+      }
+      onBack={onBack}
+      backLabel={backLabel}
+    />
+  );
+
   return (
     <>
-      <TransactionDetailHeader
-        transaction={transaction}
-        flow={flow}
-        reviewStatus={displayedTransactionStatus(transaction, localDraft)}
-        pair={pair}
-        signedPrefix={signedPrefix}
-        hideSensitive={hideSensitive}
-        amountBtc={amountBtc}
-        valueAtTimeEur={valueAtTimeEur}
-        valueNowEur={valueNowEur}
-        pricedChange={pricedChange}
-        timelineSteps={timelineSteps}
-        checklist={<ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} />}
-        explorer={explorer}
-        onOpenExplorer={onOpenExplorer}
-        onClose={inRightPanel ? undefined : () => onOpenChange(false)}
-        onAskAssistant={
-          askAssistantAbout
-            ? () => {
-                // In the right panel the detail stays a tab beside the
-                // assistant, which comes to the front. As its own modal sheet
-                // it closes so the panel is reachable; the pinned context
-                // keeps the record either way.
-                if (!inRightPanel) onOpenChange(false);
-                askAssistantAbout({
-                  kind: transaction.quarantineReason ? "quarantine" : "transaction",
-                  transactionId: transaction.id,
-                  date: transaction.date,
-                });
-              }
-            : undefined
-        }
-        onBack={onBack}
-        backLabel={backLabel}
-      />
+      {/* As a sheet the record stays named above its tabs. Docked in the right
+          panel, whose tab names it, the header scrolls away with the content
+          so a short panel is not mostly header. */}
+      {inRightPanel ? null : header}
 
       <div className="@container/detail min-h-0 flex-1 overflow-y-auto overscroll-none">
+        {inRightPanel ? header : null}
         {/* Wide: the coins on the left, the record's tabs and rail on the right.
             Narrow: the same blocks stacked. The width is the detail's own, not
             the window's: docked in the right panel it is narrow on any screen. */}
@@ -1036,8 +1059,10 @@ function TransactionDetailBody({
           <div className="@container min-w-0 space-y-4 @min-[72rem]/detail:sticky @min-[72rem]/detail:top-0">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               {/* Tabs size to their labels, so a long German label takes the
-                  room a short one leaves; the strip scrolls before it clips. */}
-              <TabsList className="flex w-full justify-start overflow-x-auto [scrollbar-width:none] [&>[role=tab]]:flex-auto [&>[role=tab]]:px-2">
+                  room a short one leaves; the strip scrolls before it clips.
+                  Stacked, it stays pinned while its tab scrolls; the ring
+                  masks content passing under it. */}
+              <TabsList className="sticky top-2 z-10 flex w-full justify-start overflow-x-auto shadow-[0_0_0_8px_var(--background)] [scrollbar-width:none] @min-[72rem]/detail:static @min-[72rem]/detail:shadow-none [&>[role=tab]]:flex-auto [&>[role=tab]]:px-2">
                 <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
                 <TabsTrigger value="classify">
                   {t("sheet.tab.classify")}

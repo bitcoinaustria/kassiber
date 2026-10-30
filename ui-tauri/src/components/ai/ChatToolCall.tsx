@@ -249,6 +249,27 @@ function summarizeToolResult(
       }
       return t(data.ready ? "tool.importAttachment.ready" : "tool.importAttachment.blocked", values);
     }
+    case "ui.wallets.read_document": {
+      const summary = asRecord(data.summary);
+      return t("tool.readDocument.summary", {
+        count: Number(summary?.rows ?? 0),
+        ready: Number(summary?.ready ?? 0),
+        held: Number(summary?.quarantined ?? 0),
+      });
+    }
+    case "ui.wallets.import_document.plan":
+    case "ui.wallets.import_document.apply": {
+      const rows = asRecord(data.rows);
+      const target = asRecord(data.target) ?? asRecord(data.wallet);
+      const values = {
+        count: Number((kind === "ui.wallets.import_document.apply" ? rows?.imported : rows?.to_import) ?? 0),
+        wallet: typeof target?.label === "string" ? target.label : "—",
+      };
+      if (kind === "ui.wallets.import_document.apply") {
+        return t("tool.importDocument.applied", values);
+      }
+      return t(data.ready ? "tool.importDocument.ready" : "tool.importDocument.blocked", values);
+    }
     case "ui.imports.rollback":
       return t("tool.importRollback.done", {
         count: Number(data.transactions_deleted ?? 0),

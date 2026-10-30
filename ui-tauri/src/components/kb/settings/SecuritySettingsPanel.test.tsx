@@ -53,7 +53,8 @@ describe("SecuritySettingsPanel biometric protection", () => {
   it("offers independent cleanup of every unlock enrollment", () => {
     const html = renderPanel("legacy_shared");
     expect(html).toContain("Legacy shared enrollment detected");
-    expect(html).toContain("Forget all unlock methods");
+    expect(html).toContain("Saved unlock methods");
+    expect(html).toContain("Forget all");
     expect(html).toContain("CLI remembered-unlock entry");
   });
 

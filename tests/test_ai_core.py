@@ -296,6 +296,10 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_metadata_update",
             "ui_transactions_history_revert",
             "ui_attachments_copy",
+            "ui_attachments_add_from_chat",
+            "ui_wallets_read_document",
+            "ui_wallets_import_document_plan",
+            "ui_wallets_import_document_apply",
             "ui_source_funds_evidence_list",
             "ui_source_funds_sources_attach",
             "ui_source_funds_links_attach",
@@ -2908,6 +2912,36 @@ class ChatHistorySeedTest(unittest.TestCase):
                         ("assistant", "reply"),
                     ],
                 )
+            finally:
+                conn.close()
+
+
+    def test_a_user_message_keeps_the_files_it_sent(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-files-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                workspace = core_accounts.create_workspace(conn, "Demo", commit=False)
+                profile = core_accounts.create_profile(
+                    conn, workspace["id"], "Main", "EUR", None, "generic", 365, commit=False
+                )
+                session = core_chat_history.create_session(
+                    conn, workspace["id"], profile["id"], title="files", commit=False
+                )
+                shown = [{"filename": "receipt.png", "kind": "image", "size_bytes": 812}]
+                core_chat_history.append_exchange(
+                    conn,
+                    profile["id"],
+                    session["id"],
+                    user_content="What is on it?",
+                    assistant_content="A receipt.",
+                    user_attachments=shown,
+                    commit=True,
+                )
+                user, assistant = core_chat_history.get_session(
+                    conn, profile["id"], session["id"]
+                )["messages"]
+                self.assertEqual(user["provenance"], {"attachments": shown})
+                self.assertIsNone(assistant["provenance"])
             finally:
                 conn.close()
 

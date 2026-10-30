@@ -15,10 +15,9 @@
     },
     "scale": {
       "title": "Interface scale",
-      "description": "Kassiber fits the interface to your screen automatically. Use −/+ to fine-tune the density — it applies across the whole app.",
-      "decrease": "Decrease interface scale",
-      "increase": "Increase interface scale",
-      "value": "{{percent}}%"
+      "description": "Kassiber fits the interface to your screen. Pick a size to make everything denser or larger.",
+      "value": "{{percent}}%",
+      "defaultValue": "{{percent}}% (default)"
     },
     "assistantDock": {
       "title": "Assistant",
@@ -46,7 +45,8 @@
       "resume": "Resume connection setup",
       "dismiss": "Dismiss"
     },
-    "close": "Close settings"
+    "close": "Close settings",
+    "copy": "Copy {{label}}"
   },
   "nav": {
     "ariaLabel": "Settings sections",
@@ -88,8 +88,8 @@
         "description": "App lock, biometric unlock, and the database passphrase."
       },
       "ai": {
-        "label": "AI providers",
-        "description": "Local and remote assistant endpoints and their data posture."
+        "label": "Assistant",
+        "description": "Models, chats and external agents."
       },
       "storage": {
         "label": "Data & storage",
@@ -213,7 +213,8 @@
     "removedBodyFallback": "The command",
     "removeError": "Could not remove terminal command.",
     "inspectError": "Could not inspect terminal command.",
-    "intro": "Installs a user-local launcher for the bundled desktop CLI and configures your shell PATH when needed, so you can run <0>kassiber</0> from a new terminal. Nothing starts automatically and no administrator privileges are required.",
+    "intro": "Installs a user-local launcher for the bundled CLI and adds it to your shell PATH when needed, so <0>kassiber</0> runs in a new terminal. Nothing starts automatically; no administrator rights needed.",
+    "statusLabel": "Terminal command",
     "repairAction": "Repair command",
     "reinstallAction": "Reinstall command",
     "installAction": "Install command",
@@ -228,35 +229,31 @@
     "bookFallback": "current book"
   },
   "marketData": {
-    "intro": "Fiat reference rates are sourced independently of wallet sync. Kassiber keeps a local price cache so reports never have to query an exchange for every transaction. These lookups reveal pricing interest, not your wallet addresses.",
+    "intro": "Kassiber keeps prices in a local cache, apart from wallet sync (which Connections controls), so reports never query an exchange per transaction. Bundled hourly candles and Kraken imports stay offline.",
+    "liveHeading": "Live prices",
+    "policyHeading": "Pricing policy",
     "priceSourceLabel": "Price source",
     "priceSourceHint": "Used only after live market-rate lookups are enabled for this book.",
     "autoRefreshLabel": "Allow live minute-rate lookups",
     "autoRefreshHint": "Lets Kassiber contact {{provider}} for latest BTC prices and missing transaction-time minute windows. The provider sees pair and time-window requests, not wallet addresses or txids.",
-    "autoRefreshFootnote": "Bundled hourly candles and local Kraken imports stay offline. Wallet/source refresh remains controlled from Connections.",
     "providersHeading": "Rate providers",
     "primary": "Primary",
     "fallback": "Fallback",
     "rebuildHeading": "Rebuild pricing cache",
     "rebuildDescription": "Clear selected provider samples, checked-empty minutes, and cached provider-generated transaction prices, then fetch fresh live market rates for {{pair}}.",
     "rebuildButton": "Rebuild cache",
-    "rebuildFootnote": "Manual overrides and imported exchange execution prices are kept. Large wallets can take a while because Kassiber refetches missing minute windows and reprocesses journals afterward.",
     "rebuildingTitle": "Rebuilding provider rates",
     "rebuildingCounting": "Counting transaction rates…",
-    "rebuildProgressAria": "Pricing cache rebuild progress",
-    "rebuildProgressValue": "Rebuilding pricing cache",
     "rebuildingFootnote": "Kassiber is fetching missing one-minute rates and will report how many transactions have provider rates when journals finish.",
     "resultBlocked": "Pricing refreshed; journals still blocked",
     "resultProgress": "{{refreshed}} / {{total}} transaction rates refreshed",
     "resultRebuilt": "Pricing cache rebuilt",
     "resultRowsFetched": "{{pair}} · {{rows}} rate rows fetched",
-    "txRefreshAria": "Transaction rate refresh progress",
     "resultRemoved": "Removed {{rates}} rate rows, {{minutes}} checked minutes, and {{prices}} cached transaction prices.",
     "krakenHeading": "Kraken offline history",
-    "krakenDescription": "Bitcoin EUR/USD minute candles from a local Kraken CSV/ZIP archive, plus bundled hourly values for fallback coverage.",
     "krakenGetArchive": "Get Kraken archive",
     "krakenBlog": "Kraken market data blog",
-    "krakenMinuteHeading": "Kraken offline history: minute data",
+    "krakenMinuteHeading": "Minute data",
     "krakenMinuteDescription": "Import local Kraken BTC-EUR and BTC-USD one-minute candles for exact transaction pricing windows.",
     "krakenPathPlaceholder": "~/Downloads/Kraken_OHLCVT.zip, CSV, or extracted folder",
     "krakenPathAria": "Kraken CSV, ZIP, or folder path",
@@ -265,11 +262,12 @@
     "chooseFileTitle": "Choose CSV or ZIP",
     "chooseFolderTitle": "Choose extracted folder",
     "filePickerUnavailable": "Use the path field in browser mode",
-    "fullMinuteHistory": "Full minute history",
-    "incrementalMinuteUpdate": "Incremental minute update",
+    "fullMinuteHistory": "Import full history",
+    "incrementalMinuteUpdate": "Import update",
     "bundledHeading": "Bundled hourly values",
     "bundledDescription": "Import bundled Kraken BTC-EUR and BTC-USD hourly values backdated to 2011. The pre-Kraken section is daily-derived and stays local.",
     "importDailyValues": "Import hourly values",
+    "importing": "Importing…",
     "importedTotals": "{{rows}} rows across {{pairs}} pairs",
     "importedTotals_one": "{{rows}} rows across {{pairs}} pair",
     "noRowsImported": "No Bitcoin rows imported",
@@ -307,7 +305,7 @@
     "rebuildDialogDescription": "Kassiber will delete {{provider}} provider cache rows and refetch market rates for {{pair}}.",
     "rebuildDialogWarningTitle": "Large wallets can take a while.",
     "rebuildDialogWarningBody": "The rebuild also clears provider-generated transaction prices and reprocesses journals. Manual overrides and imported execution prices are preserved.",
-    "rebuildOptInRequired": "Enable live minute-rate lookups above before rebuilding from a provider. Bundled hourly values and local Kraken imports stay available without this opt-in.",
+    "rebuildOptInRequired": "Turn on live minute-rate lookups to rebuild from a provider. Bundled hourly values and Kraken imports work without it.",
     "rebuildDialogPending": "Rebuilding…",
     "rebuildDialogSubmit": "Rebuild",
     "coarse": {
@@ -336,17 +334,22 @@
   },
   "security": {
     "encryptionHeading": "Database encryption",
+    "encryptionStatus": "Books on this device",
     "encrypted": "Encrypted · SQLCipher",
     "notEncrypted": "Not encrypted",
     "encryptedDetail": "Locking closes the daemon's database handle; unlocking reopens the local SQLCipher database with your passphrase.",
     "notEncryptedDetail": "These books are stored unencrypted on this device. Lock still returns to the lock screen, but the data on disk is not protected by a passphrase.",
     "lockNow": "Lock now",
     "changePassphrase": "Change passphrase",
+    "passphraseLabel": "Passphrase",
+    "passphraseDescription": "Change the passphrase that unlocks these books.",
+    "passphraseNeedsEncryption": "Available once these books are encrypted.",
     "appLockHeading": "App lock",
     "autoLockLabel": "Auto-lock when idle",
     "autoLockDescription": "Require the passphrase again after a period of inactivity.",
     "lockAfter": "Lock after",
-    "minutes": "{{count}}m",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
     "requireOnLaunchLabel": "Require passphrase on launch",
     "requireOnLaunchEncrypted": "Encrypted books always unlock before the dashboard opens.",
     "requireOnLaunchPlaintext": "Prompt every time Kassiber opens.",
@@ -356,7 +359,7 @@
     "biometricChecking": "Checking enrollment…",
     "biometricEnrolled": "Enrolled",
     "biometricNotEnrolled": "Not enrolled",
-    "biometricTitle": "Touch ID · {{status}}",
+    "biometricLabel": "Touch ID",
     "biometricSavedProtected": "The desktop passphrase is protected by the current Touch ID enrollment. Changing enrolled fingerprints invalidates it.",
     "biometricSavedAppGated": "Preview build: Kassiber checks Touch ID before reading its desktop-only Keychain entry. The entry itself uses the app's Keychain access policy.",
     "biometricSavedLegacy": "Legacy shared enrollment detected. The next successful Touch ID unlock migrates it to the desktop-only store.",
@@ -369,7 +372,8 @@
     "setUp": "Set up",
     "offerBiometricLabel": "Offer biometric unlock on the lock screen",
     "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions.",
-    "forgetAll": "Forget all unlock methods",
+    "savedUnlockLabel": "Saved unlock methods",
+    "forgetAll": "Forget all",
     "forgetAllDescription": "Remove the desktop biometric entry, CLI remembered-unlock entry, and any legacy shared entry for these books."
   },
   "privacy": {
@@ -389,7 +393,6 @@
       "marketTitle": "Market prices",
       "marketSubtitle": "Offline history stays local. Live providers see the pair and coarse transaction-time blocks."
     },
-    "postureBarAria": "{{first}} first-party, {{shielded}} Tor or proxy, {{remote}} third-party network surfaces",
     "editEndpoint": "Edit {{name}}",
     "offlineHeading": "Network access",
     "offlineLabel": "Work offline",
@@ -412,31 +415,30 @@
     "updatesSaveFailedBody": "Kassiber left the previous app-wide permission unchanged.",
     "updatesTrust": "Release metadata is currently unsigned. Kassiber trusts HTTPS and the project’s GitHub repository to show this notice; downloads remain manual.",
     "leavesHeading": "Outgoing connections",
-    "leavesDescription": "Kassiber is local-first. Network endpoints are grouped by what each one can see; assistant prompt exposure is shown separately below.",
+    "leavesDescription": "Kassiber is local-first. Endpoints are grouped below by what each one can see.",
     "thirdPartyWarning": "{{count}} third-party endpoints can see your queries. Mark your own nodes as yours, or route over Tor.",
     "thirdPartyWarning_one": "{{count}} third-party endpoint can see your queries. Mark your own nodes as yours, or route over Tor.",
     "noThirdPartyWithAi": "No third-party network endpoints can see your queries. Review assistant providers below for prompt exposure.",
     "noThirdParty": "No third-party endpoints can see your queries.",
-    "showingFilter": "Showing {{label}} surfaces only.",
-    "clearFilter": "Clear filter",
+    "filterLabel": "Show",
+    "filterAllHint": "Every endpoint Kassiber is set up to contact.",
+    "filterAll": "All endpoints ({{count}})",
+    "filterOption": "{{label}} ({{count}})",
     "noneMatchFilter": "None match the {{label}} filter.",
     "assistantHeading": "Assistant prompts",
-    "assistantDescription": "Prompt content — which can include book data — leaves only if you enable a remote or CLI provider.",
-    "assistantEnabled": "Enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content.",
-    "assistantDisabled": "Disabled. Provider settings stay saved without sending prompts.",
-    "reviewAi": "Review AI providers"
+    "assistantEnabled": "Local providers keep prompts on this machine. Remote and CLI providers see prompt content, which can include book data.",
+    "assistantDisabled": "Off. Nothing is sent to a provider; provider settings stay saved.",
+    "reviewAi": "Assistant settings"
   },
   "data": {
     "importHeading": "Import data",
     "importDescription": "Bring in exchange CSV exports, on-chain history, and BIP-329 labels from the import tools.",
     "openImportTools": "Open import tools",
     "backupHeading": "Backup & restore",
-    "backupDescription": "Encrypted <0>tar | age</0> backups are created from the CLI. Run these in a terminal that has the kassiber command installed:",
     "localDatabaseHeading": "Local database",
     "dataRootLabel": "Data root",
     "databaseLabel": "Database",
     "dangerHeading": "Danger zone",
-    "dangerDescription": "Reset the Welcome gate, clear testing data, or delete the current local books set.",
     "resetWelcomeTitle": "Reset Welcome state",
     "resetWelcomeDescription": "Clear only the local UI identity and return to onboarding. Encrypted data on disk is untouched.",
     "resetWelcomeButton": "Reset Welcome",
@@ -457,11 +459,11 @@
     "resetRegtestErrorBody": "The regtest environment could not be rebuilt. Check that Docker is running."
   },
   "ai": {
-    "featuresLabel": "AI features",
-    "featuresDescription": "Show the Assistant screen and floating chat. Turning this off keeps provider settings saved.",
-    "featuresAria": "Enable AI features",
-    "agentsLabel": "External agents (MCP)",
-    "agentsDescription": "Let agents you connect, such as Claude Code or Codex, use this book within the access you choose. What they read goes to their AI provider.",
+    "featuresLabel": "Use the assistant",
+    "featuresDescription": "Chat about your books in the side panel and on the Assistant page. Off hides it and keeps these settings.",
+    "featuresAria": "Turn the assistant on",
+    "agentsLabel": "External agents",
+    "agentsDescription": "Claude Code, Codex and other MCP agents can use this book. What they read goes to their AI provider.",
     "agentsAria": "Allow external agents",
     "agentsCopyJson": "Copy config for other agents",
     "agentsError": "Could not change external agent access.",
@@ -470,10 +472,10 @@
     "agentsGrantOperator": "Read and operate",
     "agentsGrantDecisions": "Accounting decisions",
     "agentsGrantReadHint": "Agents can read this book. They change nothing and contact no service.",
-    "agentsGrantOperatorHint": "Agents can also process journals, export, record source-of-funds evidence, documents and analysis cases, and sync wallets and rates, which contacts your configured backends and rate sources.",
-    "agentsGrantDecisionsHint": "Agents can do everything Read and operate allows and make accounting decisions: resolve quarantine, pair or dismiss transfers, record custody, loan and source-of-funds decisions, and edit transaction notes, tags, exclusions and classification.",
-    "agentsRestrictLabel": "Restrict what agents can use",
-    "agentsRestrictHint": "Off: agents get full results, including transaction IDs, outpoints and labels, and the custody-gap, lineage and chain-analysis source tools. On: projected results only. Descriptors, xpubs, secrets and file paths are never sent either way.",
+    "agentsGrantOperatorHint": "Agents can also process journals, export, record source-of-funds evidence and documents, and sync wallets and rates, which contacts your configured backends and rate sources.",
+    "agentsGrantDecisionsHint": "Agents can also make accounting decisions: resolve quarantine, pair or dismiss transfers, record custody, loan and source-of-funds decisions, and edit notes, tags, exclusions and classifications.",
+    "agentsRestrictLabel": "Restrict results",
+    "agentsRestrictHint": "Projected results only: no transaction IDs, outpoints or labels, and no custody-gap, lineage or chain-analysis source tools. Descriptors, xpubs, secrets and file paths are never sent either way.",
     "agentsAdminNever": "Admin work (secrets, backups, deletions, passphrases) is never available to agents.",
     "agentsHostApproval": "Your agent's own tool approval is the only prompt before a change. Admin work (secrets, backups, deletions, passphrases) is never available to agents. A running agent may need a restart to show changed tools.",
     "agentsSessionLocked": "This book is encrypted. Agents can use it only while you unlock it for them.",
@@ -489,9 +491,7 @@
     "agentsPairingAllow": "Allow",
     "agentsPairingDeny": "Deny",
     "agentsPairingRemove": "Remove",
-    "providerConfigHeading": "Provider configuration",
-    "providerConfigDescription": "Configure OpenAI-compatible endpoints (Responses API or Chat Completions) or CLI agents (Codex, Claude, OpenCode, GitHub Copilot) for the in-app assistant. Local providers such as Ollama and oMLX usually run without a key; remote providers and CLI agents may see prompt content.",
-    "checkPrivacy": "Opening this page contacts no provider. Check asks one provider now, and off-device providers ask for your confirmation first.",
+    "checkPrivacy": "Nothing is contacted until you press Check, and off-device providers ask first.",
     "check": "Check",
     "checkProvider": "Check {{name}}",
     "checkHint": "Ask {{name}} now whether it is installed, signed in and reachable.",
@@ -503,17 +503,15 @@
     "loadingProviders": "Loading providers…",
     "loadError": "Could not load AI providers.",
     "notSetUp": {
-      "title": "Not set up",
-      "hint": "Built-in providers you haven't used yet. Set up checks one now; nothing is contacted before that.",
       "setUp": "Set up",
       "setUpAria": "Set up {{name}}",
-      "remove": "Remove {{name}}"
+      "remove": "Remove {{name}}",
+      "title_one": "{{count}} more provider",
+      "title_other": "{{count}} more providers"
     },
     "noProviders": "No providers configured yet.",
     "loadingModels": "Loading…",
     "default": "Default",
-    "kindCli": "CLI agent",
-    "kindHttp": "HTTP",
     "apiFormatTitle": "API format the next chat speaks",
     "apiFormat": {
       "set": "{{format}}",
@@ -522,7 +520,6 @@
     },
     "restrictedAccessNote": "Restricted agent access: the assistant gets projected results and no custody-gap, lineage or source-acquisition tools.",
     "omitStoreNote": "Sends requests without Kassiber's no-retention flag (store: false); the provider's own retention applies.",
-    "disabledBadge": "Disabled",
     "enableProvider": "Offer {{name}} in chat",
     "defaultCannotDisable": "The default provider stays on. Set another default first.",
     "editProvider": "Edit {{name}}",
@@ -559,11 +556,22 @@
       "switchedOff": "Disabled. Turn it on to check it."
     },
     "permissionMode": {
-      "heading": "Assistant permissions",
-      "label": "Default permission mode",
-      "description": "New chats start in this mode. Each chat can switch it in the composer."
+      "label": "New chats start in"
     },
-    "toolProfile": "Tools"
+    "toolProfile": "Tools",
+    "modelsHeading": "Models",
+    "where": {
+      "local": "On this computer",
+      "remote": "Remote server",
+      "tee": "Confidential server (TEE)",
+      "cli": "Subscription app"
+    },
+    "showDetails": "{{name}} details",
+    "address": "Address",
+    "edit": "Edit",
+    "remove": "Remove",
+    "agentsAllowLabel": "Allow agents",
+    "agentsSessionLabel": "Access to this book"
   },
   "chatHistory": {
     "mode": {
@@ -572,33 +580,32 @@
       "off": "Never store chats."
     },
     "modeLabel": {
-      "auto": "Auto",
-      "on": "On",
-      "off": "Off"
+      "auto": "While encrypted",
+      "on": "Always",
+      "off": "Never"
     },
-    "heading": "Chat history",
-    "description": "Stored chats live inside the database, never as plaintext files. Diagnostics and audit exports do not include them. Resuming a chat replays that conversation as model context; otherwise past chats are not exposed as an assistant tool.",
-    "storeLabel": "Store conversations",
+    "description": "Kept inside the database, never as files, and left out of diagnostics and audit exports.",
+    "storeLabel": "Keep chats",
     "effectiveEncrypted": "Chats are currently stored inside the encrypted database.",
     "effectiveOnUnencrypted": "Chats are currently stored inside the unencrypted database because history is set to on.",
     "effectiveNotStoredEncrypted": "Chats are not stored.",
     "effectiveNotStoredAuto": "Chats are not stored: the database is not encrypted yet. Encrypting it (secrets init) turns history on.",
     "effectiveNotStored": "Chats are not stored.",
-    "storedCount": "{{count}} stored chats",
-    "storedCount_one": "{{count}} stored chat",
+    "storedCount": "{{count}} saved chats",
+    "storedCount_one": "{{count}} saved chat",
     "deleteAll": "Delete all stored chats",
-    "clearStored": "Clear stored chats"
+    "clearStored": "Delete all"
   },
   "developer": {
-    "intro": "Kassiber ships with features that are still being built. They stay out of the way until you ask for them, and your choice is remembered across updates. Logs are local-only, kept in RAM, and written to disk only when you export them.",
+    "intro": "Features still being built stay out of the way until you turn them on. Your choice is kept across updates.",
     "enableLabel": "Show early-stage features",
     "enableOn": "Early-stage pages are visible in the side nav, in Settings, and in search.",
     "enableOff": "Early-stage pages are hidden or greyed out, and opening one anyway lands you back on Overview.",
     "alphaBannerLabel": "Show the alpha warning",
     "alphaBannerDescription": "The red Alpha chip in the window's title bar. Hiding it does not make the software any less alpha.",
     "openLogs": "Open Logs",
-    "bufferHeading": "In-memory log buffer",
-    "bufferDescription": "{{retained}} retained in this GUI session. Kassiber keeps at most {{records}} records or {{bytes}}, whichever is reached first. Refreshing or closing the app clears the buffer unless you export it first."
+    "bufferHeading": "Logs",
+    "bufferDescription": "Logs stay in memory on this device: {{retained}} now, at most {{records}} records or {{bytes}}. Closing or refreshing the app clears them unless you export them first."
   },
   "aiProvider": {
     "kindHint": {
@@ -694,7 +701,7 @@
     "errorUrlScheme": "Use http(s):// or a built-in CLI locator: codex-cli://default, claude-cli://default, opencode-cli://default, or copilot-cli://default",
     "errorSaveBeforeTest": "Save the provider before testing a new API key.",
     "errorTestFailed": "Connection test failed",
-    "errorTestDisabled": "This provider is disabled. Turn it on in Settings → AI providers to test it.",
+    "errorTestDisabled": "This provider is disabled. Turn it on in Settings → Assistant to test it.",
     "errorCliLocalPosture": "CLI agents (Codex, Claude, OpenCode, GitHub Copilot) may send prompts off-device. Choose remote or TEE.",
     "errorAckRequired": "Acknowledge that prompts may leave this device before saving.",
     "errorAckRequiredTest": "Testing sends a short prompt to this provider. Acknowledge that prompts may leave this device first.",
@@ -868,6 +875,8 @@
     "usernameLabel": "Username",
     "passwordLabel": "Password",
     "testLogAria": "Backend test connection log",
+    "testLabel": "Connection",
+    "testHint": "Contacts the endpoint once, before you save.",
     "testing": "Testing",
     "testConnection": "Test connection",
     "connected": "Connected",
@@ -890,8 +899,40 @@
     "help": "Used when an imported file has no network context. Existing inspections and connection networks stay unchanged.",
     "effective": "Network: {{network}}"
   },
+  "networkLayer": {
+    "bitcoin": {
+      "heading": "Backends",
+      "add": "Add Bitcoin backend",
+      "blurb": "Explorer API (Esplora / mempool.space REST), Electrum / Fulcrum, or Bitcoin Core RPC endpoints serve on-chain history to your watch-only wallets. Silent Payments needs a backend or local scanner you mark as BIP352 capable.",
+      "empty": "No Bitcoin backends yet. Add one so on-chain wallets can refresh their balances."
+    },
+    "lightning": {
+      "heading": "Nodes",
+      "add": "Add Lightning node",
+      "blurb": "Read-only connections to your LND or Core Lightning node for channel accounting and profitability reports.",
+      "empty": "No Lightning nodes connected. Add a read-only LND or Core Lightning connection."
+    },
+    "liquid": {
+      "heading": "Backends",
+      "add": "Add Liquid backend",
+      "blurb": "Explorer API (Esplora REST) or Electrum / Fulcrum endpoints serve Liquid (L-BTC) history to your watch-only wallets.",
+      "empty": "No Liquid backends yet. Add one so L-BTC wallets can refresh their balances."
+    },
+    "readOnly": "Node identity details (operator pubkey, channel points, peer aliases and short channel ids) stay on this machine.",
+    "explorerLinks": "Transaction links open on {{host}}, from the Explorer API backend.",
+    "publicLinks": "Transaction links use the public {{host}} default until you add an Explorer API backend. Electrum / Fulcrum backends are sync-only.",
+    "noPublicLinks": "No public explorer links are enabled. Add an Explorer API backend to create transaction links.",
+    "default": "Default",
+    "noEndpoint": "No endpoint",
+    "links": "Links: {{host}}",
+    "silentPayments": "Silent Payments",
+    "setDefault": "Set as default",
+    "settingDefault": "Setting default…",
+    "editAria": "Edit {{name}}"
+  },
   "bookNetwork": {
     "title": "Book network",
+    "loadError": "The book's network could not be read.",
     "environment": "Environment",
     "environments": {
       "main": "Production",
@@ -951,8 +992,11 @@
       "failedLocked": "Restore failed after the database was closed. Check the container and recovery copy before unlocking."
     },
     "recoverySaved": "Your pre-restore recovery copy is at {{path}}.",
-    "description": "Export an encrypted backup or restore one using local file pickers. You need both the backup passphrase and the database passphrase from the time of export to restore.",
     "scope": "A backup contains this entire container: all book sets and books, attachments and retained data, plus local configuration. Exported report files and operating-system credentials are not included.",
+    "exportLabel": "Encrypted backup",
+    "exportDescription": "Save an encrypted copy of this container, protected by a backup passphrase.",
+    "restoreLabel": "Restore from a backup",
+    "restoreDescription": "Replaces this container. You need the backup passphrase and the database passphrase from the time of export.",
     "export": "Export encrypted backup",
     "restore": "Restore backup",
     "choose": "Choose a Kassiber backup",

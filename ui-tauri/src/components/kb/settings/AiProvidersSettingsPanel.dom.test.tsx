@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Mounted against a fake daemon: Settings → AI providers must contact no
+// Mounted against a fake daemon: Settings → Assistant must contact no
 // provider on its own. Its only automatic reads are the provider list, the
 // offline switch, and cached runtime snapshots (`cached_only`, never a probe);
 // a provider is checked only by an explicit click, only that provider, and
@@ -52,8 +52,8 @@ vi.mock("@/lib/confirmAction", () => ({
   confirmAction: (message: string) => Promise.resolve(mocks.confirm(message)),
 }));
 // Separate settings surfaces with their own daemon reads.
-vi.mock("@/components/kb/settings/ChatHistorySettingsCard", () => ({
-  ChatHistorySettingsCard: () => null,
+vi.mock("@/components/kb/settings/ChatHistorySettings", () => ({
+  ChatHistorySettings: () => null,
 }));
 vi.mock("@/components/kb/settings/ExternalAgentsSettings", () => ({
   ExternalAgentsSettings: () => null,
@@ -241,9 +241,12 @@ function probes(): Request[] {
   );
 }
 
+/** A provider's row, opened so its details and actions are in reach. */
 function card(name: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(`[data-ai-provider-card="${name}"]`);
   if (!element) throw new Error(`no card for ${name}`);
+  const toggle = element.querySelector<HTMLElement>("button[aria-expanded]");
+  if (toggle?.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
   return element;
 }
 
@@ -264,6 +267,10 @@ async function mount(aiFeaturesEnabled = true, seed?: (client: QueryClient) => v
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  // Open every row, so its details and actions are in reach.
+  for (const element of document.querySelectorAll<HTMLElement>("[data-ai-provider-card]")) {
+    card(element.dataset.aiProviderCard!);
+  }
   return client;
 }
 
@@ -326,7 +333,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(card("ollama")).toBeTruthy();
     expect(document.querySelector('[data-ai-provider-card="copilot"]')).toBeNull();
     const group = document.querySelector<HTMLElement>("[data-not-set-up]")!;
-    const toggle = within(group).getByRole("button", { name: /Not set up/ });
+    const toggle = within(group).getByRole("button", { name: /more provider/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
     expect(within(group).getByText("GitHub Copilot")).toBeTruthy();
@@ -341,7 +348,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.confirm.mockResolvedValue(true);
     await mount();
     const group = document.querySelector<HTMLElement>("[data-not-set-up]")!;
-    fireEvent.click(within(group).getByRole("button", { name: /Not set up/ }));
+    fireEvent.click(within(group).getByRole("button", { name: /more provider/ }));
     await act(async () => {
       fireEvent.click(within(group).getByRole("button", { name: "Set up GitHub Copilot" }));
     });

@@ -52,6 +52,23 @@
     "queueMessage": "Nachricht in Warteschlange stellen",
     "attach": "Datei anhängen",
     "removeAttachment": "Anhang entfernen",
+    "removeAttachmentNamed": "{{filename}} entfernen",
+    "dropToAttach": "Zum Anhängen loslassen",
+    "attachmentUploading": "Wird angehängt…",
+    "attachmentInChat": "Bleibt in diesem Chat",
+    "attachmentLimit": {
+      "title": "Ein Chat fasst bis zu {{max}} Dateien",
+      "body": "Einige Dateien wurden nicht angehängt. Entferne eine oder starte einen neuen Chat."
+    },
+    "attachmentUnsupported": {
+      "title": "Diese Datei kann nicht angehängt werden",
+      "body": "Hänge eine CSV-, TSV-, XLSX-, PDF- oder Bilddatei an."
+    },
+    "attachmentTooLarge": {
+      "title": "{{filename}} ist zu groß zum Einfügen",
+      "body": "Eingefügte Dateien dürfen bis zu 25 MB groß sein. Größere hängst du über die +-Schaltfläche an."
+    },
+    "attachmentFailed": "Die Datei konnte nicht angehängt werden",
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
     "reasoningEffort": "Denkaufwand",
@@ -95,7 +112,6 @@
       }
     },
     "toolProfile": {
-      "label": "Werkzeuge",
       "full": {
         "label": "Alle Werkzeuge",
         "description": "Bietet bei jeder Frage alle Kassiber-Werkzeuge an."
@@ -108,6 +124,12 @@
         "label": "Minimal",
         "description": "Nur die Kernwerkzeuge, für die kleinsten Kontextfenster."
       }
+    },
+    "attachmentExpired": {
+      "title_one": "Eine angehängte Datei ist abgelaufen",
+      "title_other": "{{count}} angehängte Dateien sind abgelaufen",
+      "body_one": "{{filenames}} wurde vor zu langer Zeit angehängt und war für den Assistenten nicht mehr lesbar, deshalb ist sie nicht mehr in diesem Chat. Hänge sie erneut an, falls sie noch gebraucht wird.",
+      "body_other": "{{filenames}} wurden vor zu langer Zeit angehängt und waren für den Assistenten nicht mehr lesbar, deshalb sind sie nicht mehr in diesem Chat. Hänge sie erneut an, falls sie noch gebraucht werden."
     }
   },
   "prompts": {
@@ -372,7 +394,18 @@
       "full_access": "Automatisch freigegeben (Vollzugriff)",
       "session": "Automatisch freigegeben (für diesen Chat erlaubt)"
     },
-    "undoHint": "Lässt sich rückgängig machen – frag den Assistenten"
+    "undoHint": "Lässt sich rückgängig machen – frag den Assistenten",
+    "readDocument": {
+      "summary_one": "{{count}} Zeile aus dem Dokument gelesen: {{ready}} bereit, {{held}} zur Prüfung",
+      "summary_other": "{{count}} Zeilen aus dem Dokument gelesen: {{ready}} bereit, {{held}} zur Prüfung"
+    },
+    "importDocument": {
+      "ready_one": "Bereit: {{count}} neue Transaktion aus dem Dokument in {{wallet}}",
+      "ready_other": "Bereit: {{count}} neue Transaktionen aus dem Dokument in {{wallet}}",
+      "blocked": "Das Dokument kann noch nicht in {{wallet}} importiert werden",
+      "applied_one": "{{count}} Transaktion aus dem Dokument in {{wallet}} importiert",
+      "applied_other": "{{count}} Transaktionen aus dem Dokument in {{wallet}} importiert"
+    }
   },
   "history": {
     "trigger": "Verlauf",
@@ -548,7 +581,8 @@
         "updates_existing_rows_not_rolled_back": "Bestehende Transaktionen erhalten die Preise aus der Datei. Ein Zurücknehmen macht das nicht rückgängig.",
         "overlaps_existing_history": "Diese Verbindung hat im selben Zeitraum bereits Transaktionen.",
         "external_ids_in_other_wallets": "Einige Transaktions-IDs gibt es auch in anderen Verbindungen. Prüfe, ob die Verbindung stimmt.",
-        "history_starts_after_first_funding": "Danach gibt die Verbindung mehr aus, als sie erhalten hat: Frühere Historie fehlt."
+        "history_starts_after_first_funding": "Danach gibt die Verbindung mehr aus, als sie erhalten hat: Frühere Historie fehlt.",
+        "rows_held_for_review": "Zeilen, bei denen sich die Erkennung unsicher war, werden ausgelassen. Prüfe sie mit OCR (Aus Foto oder PDF importieren) auf der Transaktionsseite."
       },
       "blockers": "Kann nicht freigegeben werden",
       "blocker": {
@@ -562,7 +596,8 @@
         "header_is_preamble": "Die erste Zeile ist nicht die Kopfzeile. Entferne die Zeilen darüber.",
         "attachment_not_tabular": "Fotos und PDFs laufen über den Dokumentimport auf diesem Gerät.",
         "rollback_removes_reviewed_work": "Das Zurücknehmen würde auch geprüfte Arbeit an diesen Transaktionen löschen.",
-        "nothing_to_roll_back": "Dieser Import hat keine Transaktionen mehr."
+        "nothing_to_roll_back": "Dieser Import hat keine Transaktionen mehr.",
+        "nothing_ready": "Die Erkennung war sich bei keiner Zeile sicher. Prüfe das Dokument mit OCR (Aus Foto oder PDF importieren) auf der Transaktionsseite."
       },
       "desktopOnly": "Erledige das selbst in der Desktop-App oder der CLI.",
       "rowsToDelete": "Gelöschte Transaktionen",
@@ -631,8 +666,10 @@
       "received": "Die lokale Einrichtung oder der Import ist abgeschlossen; prüfe, welche Daten jetzt vorliegen.",
       "partial": "Einige lokale Änderungen wurden gespeichert, aber Einrichtung oder Synchronisierung sind nicht abgeschlossen. Prüfe die vorhandenen Daten und verbleibenden Hindernisse.",
       "attached": "Die ausgewählte Datei wurde als Nachweis zu dieser Transaktion gespeichert und steht zur Analyse bereit. Es wurde kein Transaktionsverlauf importiert; der Fall ist damit noch nicht zwingend geklärt.",
-      "unavailable": "Ich habe den angefragten Nachweis nicht. Halte die Lücke offen und prüfe alternative Nachweise."
+      "unavailable": "Ich habe den angefragten Nachweis nicht. Halte die Lücke offen und prüfe alternative Nachweise.",
+      "attachedNotInChat": "Die ausgewählte Datei wurde als Nachweis zu dieser Transaktion gespeichert, aber dieser Chat hat bereits die maximale Anzahl an Dateien, daher steht sie hier nicht zur Analyse bereit. Es wurde kein Transaktionsverlauf importiert; der Fall ist damit noch nicht zwingend geklärt."
     },
+    "attachedNotInChat": "Die Datei wurde als Nachweis zur Transaktion gespeichert, aber nicht zu diesem Chat hinzugefügt. Entferne eine Datei oder starte einen neuen Chat, um sie hier zu analysieren.",
     "continuePrompt": "Setze die Prüfung der Nachweise fort. {{outcome}} Prüfe die aktuellen Fälle erneut, bevor du eine Änderung vorschlägst. Fälle: {{cases}}",
     "sourceFundsContinuePrompt": "Setze die Mittelherkunftsprüfung für dasselbe Ziel, denselben Betrag und Zweck fort. {{outcome}} Lies den aktuellen Mittelherkunftsfall und die Nachweise erneut. Trenne dokumentierte Herkunft von Buchhaltung und hole vor Änderungen die Freigabe ein. Fälle: {{cases}}",
     "importTarget": "In Verbindung importieren",
@@ -1028,5 +1065,14 @@
       "coinbase": "Eine Coinbase-API-Verbindung wird benötigt.",
       "binance": "Eine Binance-API-Verbindung wird benötigt."
     }
+  },
+  "modelSetup": {
+    "title": "Wähle ein Modell aus",
+    "body": "Am besten ein Coding-Agent, bei dem du schon angemeldet bist. Kontaktiert wird erst, wenn du einen auswählst.",
+    "use": "Verwenden",
+    "retry": "Erneut prüfen",
+    "useAria": "{{name}} verwenden",
+    "other": "Lokale Modelle, Server und API-Schlüssel richtest du in den Einstellungen ein.",
+    "openSettings": "Einstellungen öffnen"
   }
 }

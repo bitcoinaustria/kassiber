@@ -87,6 +87,13 @@ does, and undated transactions left out of a period are counted in `warnings`.
 `ui.transactions.dashboard` reports
 the calendar as `history.accountingTimezone` next to
 `history.accountingYears` (undated transactions are not a year).
+`history.years` lists the years holding activity, newest first, each with its
+`count` and inclusive `since`/`until` bounds, which the page's year choice
+scopes to. They are counted in the request's display `timezone`, like
+`buckets`, so a yearly bar and the year it opens hold the same transactions;
+exports keep the book's calendar. `bucketSize` names how `buckets` are grouped
+(`day`, `week`, `month`, `quarter`, or `year`); `all` over a decade or more
+groups by year.
 
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
@@ -114,8 +121,9 @@ such as `incomplete_by_construction`, `never_synced` and
 
 The assistant's attachment import uses AI-only kinds that are not in
 `supported_kinds` and cannot be invoked by the renderer:
-`ui.wallets.import_attachment.plan` / `.apply`, `ui.imports.rollback.plan`
-and `ui.wallets.request_input`. Its `ui.imports.list` and `ui.imports.rollback`
+`ui.wallets.import_attachment.plan` / `.apply`, `ui.imports.rollback.plan`,
+`ui.attachments.add_from_chat` and `ui.wallets.request_input`. Each names a
+chat file by its id (`file-1` …), never a path. Its `ui.imports.list` and `ui.imports.rollback`
 calls go through the AI executor with plan-digest binding, not the desktop's
 `dry_run` / `confirm` arguments. See
 [onboarding with the assistant](imports.md#onboarding-an-unsupported-exchange-with-the-assistant).
@@ -511,11 +519,33 @@ The result also includes `matched`, `skipped_unmatched`, and
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
 mode.
 
-The desktop first uses the privileged native picker to invoke
+No desktop screen starts this flow since the Transactions page's photo/PDF
+dialog was removed; the picker, staging, and kinds below remain for the next
+entry point. The desktop first uses the privileged native picker to invoke
 `internal.document_import.stage`. That kind is supported by the Python daemon
 but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
 the canonical source path in a bounded, expiring, process-local daemon session
 and returns only an opaque `document_token` plus safe filename/type metadata.
+`source.kind` is `spreadsheet`, `delimited`, `pdf` or `image`. The chat's picker
+and a file dropped on the window pass `purpose: "chat_attachment"`, which
+accepts exports as well as images and PDFs; without it only images and PDFs
+are staged. Files dropped on the window are staged by the shell's
+`stage_dropped_chat_attachment` command, which takes no path: it uses the
+paths the native window reported for the drop, once and within ten seconds,
+stages each chat file type among them (up to eight) and returns
+`{staged: [...], dropped_count, unsupported_count}`. The daemon keeps at most
+sixteen staging grants, enough for a chat's eight files and a document
+import.
+
+`ui.chat.attachments.upload` stages a pasted file without a path. The first
+chunk names the file (`filename`, `total_bytes`) at `offset` 0; later chunks
+send the returned `upload_id` and the next `offset`. Each `chunk_base64` holds
+at most 512 KiB, and the whole file at most 25 MB of a chat file type.
+Partial replies are `{complete: false, upload_id, received_bytes}`; the last
+one returns `{complete: true, document_token, source}` like the picker. The
+bytes go to an owner-only temporary file the daemon deletes with the grant.
+Out-of-order, oversized or abandoned uploads are refused and removed. It is an
+AI runtime kind, so the AI switch refuses it.
 
 `ui.wallets.document_import.preview` accepts that `document_token`, optional
 `provider`, optional `model`, `confidence_threshold`, `max_pages`, and an

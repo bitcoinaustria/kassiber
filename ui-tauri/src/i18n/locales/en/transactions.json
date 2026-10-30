@@ -45,13 +45,6 @@
     "open": "Open explorer",
     "openError": "Could not open explorer in the default browser."
   },
-  "flowOption": {
-    "incoming": "Receive",
-    "outgoing": "Send",
-    "transfer": "Internal transfer",
-    "swap": "Swap",
-    "layerTransition": "Bitcoin swap"
-  },
   "classification": {
     "unlabeled": "Unlabeled",
     "income": "Income",
@@ -108,14 +101,6 @@
       "label": "Missing / review",
       "description": "Keep in review queue"
     }
-  },
-  "newPricingOption": {
-    "manualEntry": "Manual entry",
-    "fmvProviderSample": "FMV provider sample",
-    "exchangeExecution": "Exchange execution",
-    "btcpayInvoice": "BTCPay invoice fiat",
-    "walletExport": "Wallet import exact fiat",
-    "needsPricing": "Needs pricing"
   },
   "pricingQuality": {
     "coarseFallback": "Coarse fallback",
@@ -177,20 +162,6 @@
     "manualReview": "manual review",
     "accountant": "accountant"
   },
-  "movementCandidate": {
-    "channelOpen": {
-      "label": "Join channel open · Home Node",
-      "detail": "tx8 · same wallet · 96% confidence"
-    },
-    "liquidPeg": {
-      "label": "Join Liquid peg transition",
-      "detail": "LBTC leg 8 min apart · 89% confidence"
-    },
-    "boltzSwap": {
-      "label": "Join Boltz swap pair",
-      "detail": "payment hash overlap · 82% confidence"
-    }
-  },
   "fallback": {
     "unassigned": "Unassigned",
     "unassignedWallet": "Unassigned wallet"
@@ -202,16 +173,12 @@
   },
   "period": {
     "auto": "Auto",
-    "autoResolved": "Auto: {{period}}",
-    "ytd": "YTD",
-    "1year": "1 Year",
-    "3months": "3 Months",
-    "6months": "6 Months",
     "30days": "30 Days",
-    "5years": "5 Years",
+    "1year": "1 Year",
+    "4years": "4 Years",
     "10years": "10 Years",
-    "15years": "15 Years",
-    "all": "All"
+    "all": "All",
+    "emptyRange": "No transactions in this range"
   },
   "chartMetric": {
     "amount": "Amount",
@@ -353,59 +320,6 @@
       }
     }
   },
-  "documentImport": {
-    "trigger": "OCR",
-    "triggerAria": "Import from photo or PDF",
-    "title": "Photo/PDF Import",
-    "description": "Draft rows with a loopback-only local vision model; review before import.",
-    "source": "Source",
-    "sourcePlaceholder": "Choose a local image or PDF",
-    "pick": "Pick",
-    "pickTitle": "Choose photo or PDF",
-    "fileFilter": "Images and PDFs",
-    "pickFailed": "File picker failed",
-    "wallet": "Wallet",
-    "walletPlaceholder": "Choose wallet",
-    "provider": "Local provider",
-    "providerPlaceholder": "Choose local provider",
-    "noLocalProvider": "Configure a loopback local AI provider in Settings first.",
-    "model": "Model",
-    "modelPlaceholder": "Auto, glm-ocr, qwen3-vl:8b",
-    "pages": "PDF pages (optional)",
-    "pagesPlaceholder": "All, or 2-6",
-    "recommendations": "Recommended local models: glm-ocr · qwen3-vl:8b · llama3.2-vision:11b",
-    "preview": "Preview",
-    "previewFailed": "OCR preview failed",
-    "ready": "{{count}} ready",
-    "quarantined": "{{count}} quarantined",
-    "pdfComplete": "All {{count}} PDF pages scanned",
-    "pdfPartial": "PDF pages {{selection}} of {{total}} scanned",
-    "row": "Row",
-    "date": "Date",
-    "direction": "Side",
-    "asset": "Asset",
-    "amount": "Amount",
-    "fee": "Fee (BTC)",
-    "feeNotProvided": "not provided; 0 will be recorded",
-    "fiatValue": "Fiat value",
-    "fiatRate": "Fiat rate",
-    "counterparty": "Counterparty",
-    "confidence": "Confidence",
-    "status": "Status",
-    "statusReady": "Ready",
-    "statusQuarantined": "Quarantined",
-    "selectAll": "Select all ready rows",
-    "selectRow": "Select {{row}}",
-    "descriptionField": "Description",
-    "sourcePage": "Source page",
-    "evidence": "Evidence",
-    "cellConfidences": "Cell confidence",
-    "flags": "Review flags",
-    "importSelected": "Import {{count}}",
-    "importDone": "Document rows imported",
-    "importSummary": "{{count}} rows · {{attachments}} evidence files",
-    "importFailed": "Document import failed"
-  },
   "workbench": {
     "metric": {
       "incoming": "Incoming",
@@ -437,17 +351,17 @@
     },
     "chart": {
       "titleDay": "Flow by active day",
-      "titleWeek": "Flow by active week",
       "titleMonth": "Flow by active month",
       "titleQuarter": "Flow by active quarter",
       "subtitleDay_one": "{{count}} tx across {{buckets}} active day",
       "subtitleDay_other": "{{count}} tx across {{buckets}} active days",
-      "subtitleWeek_one": "{{count}} tx across {{buckets}} active week",
-      "subtitleWeek_other": "{{count}} tx across {{buckets}} active weeks",
       "subtitleMonth_one": "{{count}} tx across {{buckets}} active month",
       "subtitleMonth_other": "{{count}} tx across {{buckets}} active months",
       "subtitleQuarter_one": "{{count}} tx across {{buckets}} active quarter",
-      "subtitleQuarter_other": "{{count}} tx across {{buckets}} active quarters"
+      "subtitleQuarter_other": "{{count}} tx across {{buckets}} active quarters",
+      "titleYear": "Flow by active year",
+      "subtitleYear_one": "{{count}} tx across {{buckets}} active year",
+      "subtitleYear_other": "{{count}} tx across {{buckets}} active years"
     },
     "tooltip": {
       "txCount": "{{count}} tx",
@@ -648,88 +562,6 @@
   },
   "save": {
     "couldNotSaveMetadata": "Could not save metadata."
-  },
-  "newDialog": {
-    "triggerAria": "New transaction",
-    "trigger": "New transaction",
-    "title": "New transaction",
-    "description": "Manual draft",
-    "section": {
-      "networkTiming": "Network and timing",
-      "partiesRoute": "Parties and route",
-      "amountPricing": "Amount and pricing",
-      "partOfMovement": "Part of movement",
-      "classification": "Classification",
-      "evidence": "Evidence"
-    },
-    "field": {
-      "network": "Network",
-      "flow": "Flow",
-      "occurredAt": "Occurred at",
-      "confirmedAt": "Confirmed at",
-      "from": "From",
-      "to": "To",
-      "swapService": "Swap service",
-      "swapServicePlaceholder": "Boltz, exchange, channel peer",
-      "fromExternalPlaceholder": "External party, payer, or source",
-      "toExternalPlaceholder": "External party or destination",
-      "leg1Out": "Leg 1 out",
-      "leg2In": "Leg 2 in",
-      "sendSats": "Send sats",
-      "sendAsset": "Send asset",
-      "receiveSats": "Receive sats",
-      "receiveAsset": "Receive asset",
-      "amountSats": "Amount sats",
-      "asset": "Asset",
-      "feeSats": "Fee sats",
-      "pricePerBtc": "Price / BTC ({{currency}})",
-      "totalValue": "Total value ({{currency}})",
-      "pricingMethod": "Pricing method",
-      "label": "Label",
-      "taxTreatment": "Tax treatment",
-      "tags": "Tags",
-      "tagsPlaceholder": "Revenue, BTCPay, client ACME",
-      "note": "Note",
-      "notePlaceholder": "Freeform review commentary",
-      "movementPlaceholder": "Search movement, swap, channel, or peg",
-      "evidenceTxid": "Txid or permalink",
-      "evidenceTxidPlaceholder": "txid, payment hash, or URL",
-      "evidenceBtcpay": "BTCPay invoice ID",
-      "evidenceBtcpayPlaceholder": "invoice id",
-      "evidenceExchange": "Exchange CSV row",
-      "evidenceExchangePlaceholder": "file.csv:42",
-      "evidenceSwap": "Boltz swap ID",
-      "evidenceSwapPlaceholder": "swap id",
-      "evidencePreimage": "Preimage",
-      "evidencePreimagePlaceholder": "payment preimage"
-    },
-    "newMovement": "New movement",
-    "standalone": "Standalone",
-    "preview": {
-      "live": "Live preview",
-      "out": "Out",
-      "in": "In",
-      "net": "Net {{value}}",
-      "noFiatValue": "No {{currency}} value",
-      "network": "Network",
-      "from": "From",
-      "to": "To",
-      "service": "Service",
-      "movement": "Movement",
-      "asset": "Asset",
-      "fee": "Fee",
-      "value": "Value ({{currency}})",
-      "price": "Price ({{currency}}/BTC)",
-      "pricePerBtc": "{{value}} / BTC",
-      "pricing": "Pricing",
-      "tax": "Tax",
-      "evidence": "Evidence"
-    },
-    "status": "Status",
-    "footer": {
-      "demoNote": "Demo only: kept in this UI session, not written to the database.",
-      "save": "Save local demo draft"
-    }
   },
   "details": {
     "explorer": "Explorer",
@@ -1022,6 +854,7 @@
     "spotNowUnknown": "Unknown",
     "perBtc": "{{value}} / BTC",
     "rateCacheSource": "Rate cache source",
+    "priceSource": "Price source",
     "provider": "Provider",
     "providerUnknown": "Unknown",
     "pairGranularity": "Pair / granularity",
@@ -1340,5 +1173,47 @@
     "chainRecord": "Blockchain transaction below",
     "fee": "Reported exchange fee",
     "reference": "Exchange reference"
+  },
+  "pricingSourceKind": {
+    "generic_import": {
+      "label": "Source price",
+      "phrase": "the source's own price"
+    },
+    "wallet_export": {
+      "label": "Wallet export",
+      "phrase": "the wallet export"
+    },
+    "exchange_execution": {
+      "label": "Exchange trade price",
+      "phrase": "the exchange's trade price"
+    },
+    "btcpay_wallet_export": {
+      "label": "BTCPay wallet export",
+      "phrase": "the BTCPay wallet export"
+    },
+    "btcpay_invoice": {
+      "label": "BTCPay invoice",
+      "phrase": "the BTCPay invoice"
+    },
+    "btcpay_payment": {
+      "label": "BTCPay payment",
+      "phrase": "the BTCPay payment"
+    },
+    "btcpay_payout": {
+      "label": "BTCPay payout",
+      "phrase": "the BTCPay payout"
+    },
+    "manual_override": {
+      "label": "Manual price",
+      "phrase": "a manual price"
+    },
+    "manual_rate_cache": {
+      "label": "Manual rate",
+      "phrase": "a manual rate"
+    },
+    "fmv_provider": {
+      "label": "Market rate",
+      "phrase": "a market rate"
+    }
   }
 }

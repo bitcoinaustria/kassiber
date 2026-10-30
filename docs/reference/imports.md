@@ -670,6 +670,26 @@ Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
 the logged-in browser, download the PDF/image, and import the local file.
 
+### From the assistant
+
+A photo or PDF attached to a chat can go the same way. `ui_wallets_read_document`
+reads it with the first enabled local provider (or one named), runs the model
+off the daemon's main thread, and keeps the draft like the desktop preview. The
+model gets each row's values, status, flags and confidence with full agent
+access, counts only when restricted, and never the path, evidence text or
+source regions. `ui_wallets_import_document_plan` then plans importing the
+draft's **ready** rows into a file or exchange wallet or a new `custom` one,
+without changing the book, and `ui_wallets_import_document_apply` imports
+exactly that plan after once-only consent: it is bound to the draft's rows
+(a second read of the page is a new plan, even if only a fiat value moved),
+the document's SHA-256, the book's input version and the plan digest. Rows held
+for review are never imported from chat; the plan says how many and points to
+the desktop's OCR import. An import whose evidence copies would exceed the
+storage budget is blocked in the plan, before consent is asked. The document
+is kept as evidence on each imported row, and the rows, their evidence and the
+import run are written together or not at all; because rolling the run back
+would also delete that evidence, the rollback is done in the desktop.
+
 ## Wallet completeness and scan bounds
 
 Kassiber cannot prove that a book holds every wallet you own, and most sources
@@ -759,8 +779,12 @@ importer. Attach the export to a chat and say what it is:
 kassiber chat --file export.csv --file-context "2024 export from exchange XYZ, custodial account"
 ```
 
-In the desktop Assistant, use the composer's attach button (**+**) and describe
-the file in your message. The assistant then calls the read-only
+Repeat `--file` to attach several files (up to eight); the nth
+`--file-context` describes the nth file, and the assistant names them
+`file-1`, `file-2`, ... when it calls a tool.
+
+In the desktop Assistant, use the composer's attach button (**+**), drop the
+files on the assistant or paste them, and describe them in your message. The assistant then calls the read-only
 `ui.wallets.analyze_file` tool, proposes a `column_map` (and a `type_map` when
 the labels are not English), previews it against the real normalizer, and asks
 about anything genuinely ambiguous.

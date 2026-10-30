@@ -51,7 +51,8 @@ executors, and result redaction, within the access the user grants.
   acquisition tools; `restricted` hides those tools and projects
   chain-analysis results. The agent's model counts as off-device either way.
 - **Not chat-only tools.** Tools that need a chat attachment
-  (`wallets_analyze_file`, attachment import), a desktop handoff card (the
+  (`wallets_analyze_file`, attachment import, keeping a chat file as
+  evidence), a desktop handoff card (the
   `request_input` tools), a chat visual, a cross-book view, a PSBT or dataset
   the desktop staged, the desktop daemon's background jobs, or its per-process
   egress ledger are not exposed. Book pinning still applies: one call reads or
@@ -100,9 +101,9 @@ External agents are off by default. Until the user turns them on, the server
 still lists the tools of the recorded grant but every call returns
 `mcp_disabled`. Two ways turn them on:
 
-- the desktop app: **Settings → AI → External agents (MCP)**, which shows the
-  grant (**Read**, **Read and operate**, **Accounting decisions**), a
-  **Restrict what agents can use** checkbox, what the selected grant allows,
+- the desktop app: **Settings → Assistant → External agents**, which shows
+  **Allow agents**, the grant (**Read**, **Read and operate**, **Accounting
+  decisions**), a **Restrict results** switch, what the selected grant allows,
   and then the command for the current book. A first enable preselects
   **Accounting decisions** with full access; a recorded choice is kept.
   Changing the grant while agents are on applies to the next call;

@@ -13156,7 +13156,7 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             "tool_profile": "scoped",
             "tool_loop_max_iterations": 2,
             "screen_context": None,
-            "attachment": None,
+            "attachments": [],
         }
 
     def _run(self, active_ai_chats, client, seen_options):

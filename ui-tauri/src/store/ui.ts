@@ -8,7 +8,7 @@ import {
 } from "@/lib/explorer";
 import type { SettingsSectionId } from "@/components/kb/settingsSections";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
-import type { PeriodKey } from "@/lib/period";
+import { normalizePeriodParam, type PeriodKey } from "@/lib/period";
 import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
@@ -543,29 +543,17 @@ function stripNotificationProgress(
   });
 }
 
-const BOOK_CHART_PERIODS = new Set<BookChartPeriod>([
-  "auto",
-  "30days",
-  "3months",
-  "6months",
-  "ytd",
-  "1year",
-  "5years",
-  "10years",
-  "15years",
-  "all",
-]);
-
-function normalizeBookChartPeriods(
+// A range the picker no longer offers lands on the closest one it does,
+// rather than the book forgetting its choice.
+export function normalizeBookChartPeriods(
   periods: unknown,
 ): Record<string, BookChartPeriod> {
   if (!periods || typeof periods !== "object") return {};
   return Object.fromEntries(
-    Object.entries(periods as Record<string, unknown>).filter(
-      (entry): entry is [string, BookChartPeriod] =>
-        typeof entry[1] === "string" &&
-        BOOK_CHART_PERIODS.has(entry[1] as BookChartPeriod),
-    ),
+    Object.entries(periods as Record<string, unknown>).flatMap(([book, value]) => {
+      const period = typeof value === "string" ? normalizePeriodParam(value) : null;
+      return period ? [[book, period]] : [];
+    }),
   );
 }
 

@@ -106,7 +106,7 @@ class ChatLoopPermissionModeTest(unittest.TestCase):
             "permission_mode": mode,
             "tool_loop_max_iterations": 2,
             "screen_context": None,
-            "attachment": None,
+            "attachments": [],
         }
 
     def _start(self, mode, tool_name, arguments):
