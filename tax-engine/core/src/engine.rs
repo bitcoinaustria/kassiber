@@ -70,22 +70,31 @@ impl ParsedAsset {
             .iter()
             .map(|entry| Entry::from_input(entry, None))
             .collect::<EngineResult<Vec<_>>>()?;
-        for entry in &entries {
-            if entry.asset != input.asset {
+        let parsed = ParsedAsset {
+            asset: input.asset.clone(),
+            entries,
+        };
+        parsed.check()?;
+        Ok(parsed)
+    }
+
+    /// The checks building RP2's transaction sets runs once every
+    /// constructor has: each entry is of the set's asset, and no set gets a
+    /// row twice.
+    pub fn check(&self) -> EngineResult<()> {
+        for entry in &self.entries {
+            if entry.asset != self.asset {
                 return Err(EngineError::value(format!(
                     "Attempting to add a {} entry to a {} set",
-                    entry.asset, input.asset
+                    entry.asset, self.asset
                 )));
             }
         }
         // Each TransactionSet rejects a repeated row as it is added.
         for kind in [EntryKind::In, EntryKind::Out, EntryKind::Intra] {
-            reject_duplicates(entries.iter().filter(|e| e.kind == kind))?;
+            reject_duplicates(self.entries.iter().filter(|e| e.kind == kind))?;
         }
-        Ok(ParsedAsset {
-            asset: input.asset.clone(),
-            entries,
-        })
+        Ok(())
     }
 
     /// Indices of the entries of `kind` RP2's set iteration yields, in its
@@ -134,14 +143,9 @@ fn reject_duplicates<'a>(entries: impl IntoIterator<Item = &'a Entry>) -> Engine
 }
 
 impl PreparedAsset {
-    /// Validates `input`'s entries and builds the sets RP2 iterates. Fails
-    /// as RP2 does before the first taxable event: on an invalid entry, a
-    /// duplicate row, or no visible lot.
-    pub fn new(input: &AssetInput) -> EngineResult<Self> {
-        Self::from_parsed(ParsedAsset::new(input)?)
-    }
-
     /// Builds the views `compute_tax` iterates from constructed entries.
+    /// Fails as RP2 does before the first taxable event: on a duplicate
+    /// row or no visible lot.
     pub fn from_parsed(parsed: ParsedAsset) -> EngineResult<Self> {
         let ParsedAsset { asset, entries } = parsed;
         let ins = visible_sorted(&entries, EntryKind::In);
@@ -205,7 +209,17 @@ pub(crate) fn compute_asset(
     country: Country,
     method: MethodName,
 ) -> EngineResult<AssetOutput> {
-    let prepared = PreparedAsset::new(input)?;
+    compute_parsed(ParsedAsset::new(input)?, country, method)
+}
+
+/// RP2's `compute_tax` for one asset whose entries are constructed and
+/// checked.
+pub(crate) fn compute_parsed(
+    parsed: ParsedAsset,
+    country: Country,
+    method: MethodName,
+) -> EngineResult<AssetOutput> {
+    let prepared = PreparedAsset::from_parsed(parsed)?;
     let mut cursor = Cursor::new(
         &prepared.entries,
         &prepared.lots,

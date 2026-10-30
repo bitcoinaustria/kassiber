@@ -64,8 +64,9 @@ use super::text::entry_text;
 
 /// An entry the walk built: the lot engine's input, with its text, the
 /// constructed entry (its stored and derived values, which composition
-/// reads; it keeps no text), and the row whose time the entry has (an
-/// event's row, a move's out leg).
+/// reads, and the same text, so the lot engine computes on it as built),
+/// and the row whose time the entry has (an event's row, a move's out
+/// leg).
 #[derive(Clone, Debug)]
 pub(crate) struct BuiltEntry {
     pub input: EntryInput,
@@ -751,13 +752,15 @@ impl<'w, 'a> Walker<'w, 'a> {
     /// entry with its text. An argument that stands in for `Infinity` always
     /// fails the constructor; one that did not would be a defect.
     fn build(&mut self, mut input: EntryInput, row: usize, infinite: bool) -> EngineResult<()> {
-        let entry = Entry::from_input(&input, Some(self.config))?;
+        let mut entry = Entry::from_input(&input, Some(self.config))?;
         if infinite {
             return Err(EngineError::runtime(
                 "Internal error: an entry was built from an infinite value",
             ));
         }
         input.text = entry_text(&entry)?;
+        // The lot engine's constructor would store the text it is given.
+        entry.text.clone_from(&input.text);
         let kind = entry.kind;
         let built = BuiltEntry { input, entry, row };
         match kind {

@@ -640,8 +640,8 @@
   {
     "id": "walk-infinite-values-checked-first",
     "file": "tax-engine/core/src/ledger/walk.rs",
-    "find": "        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
-    "replace": "        if infinite {\n            return Err(DecimalError::InvalidOperation.into());\n        }\n        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "find": "        let mut entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "replace": "        if infinite {\n            return Err(DecimalError::InvalidOperation.into());\n        }\n        let mut entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
     "expect_failing": [
       "ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them"
     ],
@@ -1019,7 +1019,7 @@
   {
     "id": "run-method-gate-without-computation",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "    if inputs.is_empty() {\n        return Ok(Vec::new());\n    }\n    let method",
+    "find": "    if assets.is_empty() {\n        return Ok(Vec::new());\n    }\n    let method",
     "replace": "    let method",
     "expect_failing": [
       "ledger::compose::tests::the_method_gate_fails_the_multi_asset_stage_once_an_asset_is_computed",
@@ -1030,7 +1030,7 @@
   {
     "id": "run-compute-failure-names-no-asset",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "                asset: Some(input.asset.clone()),",
+    "find": "                asset: Some(asset),",
     "replace": "                asset: None,",
     "expect_failing": [
       "ledger::compose::tests::a_failing_computation_names_its_asset"

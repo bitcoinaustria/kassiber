@@ -55,7 +55,7 @@ use crate::num;
 use super::normalize::{btc, Quarantine};
 use super::request::{Country, CrossAssetPair, DecimalText, LedgerRequest, Row};
 use super::response::{Stage, StagedError};
-use super::run::{compute, lot_inputs, prepare_assets, Book, Pass, Stages};
+use super::run::{compute, lot_assets, prepare_assets, Book, Pass, Stages};
 use super::swaplinks::{blocked_rows, link_id, or_else, LegReasons, CARRYING_VALUE};
 
 /// The reason code of a blocked pair whose out leg has no basis and no
@@ -223,8 +223,7 @@ pub(crate) fn carry(book: &Book, config: &ConfigSpec) -> Result<Carry, CarryFail
 /// (`_computed_cost_basis_by_transaction_id`).
 fn computed_basis(book: &Book, stages: &[Stages]) -> Result<HashMap<String, Decimal>, StagedError> {
     let span = crate::timing::span("carry_compute");
-    let inputs = lot_inputs(book, stages);
-    let outputs = compute(book, &inputs)?;
+    let outputs = compute(book, lot_assets(book, stages))?;
     drop(span);
     let bare = |error| StagedError::new(Stage::Prepare, error);
     let mut basis: HashMap<String, Decimal> = HashMap::new();

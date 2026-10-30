@@ -45,9 +45,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::engine::{self, compute_asset};
+use crate::engine::{self, compute_parsed, ParsedAsset};
 use crate::error::{EngineError, EngineResult};
-use crate::model::{AssetInput, AssetOutput, ConfigSpec, CountrySpec};
+use crate::model::{AssetOutput, ConfigSpec, CountrySpec};
 use crate::swaps;
 use crate::ENGINE_VERSION;
 
@@ -429,14 +429,14 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
     let selection = selection.unwrap_or_default();
     // The assets the lot engine computes, in order.
     let span = crate::timing::span("lot_inputs");
-    let inputs = lot_inputs(&book, &stages);
+    let assets = lot_assets(&book, &stages);
     drop(span);
     let span = crate::timing::span("validate");
-    swaps::validate(&inputs, engine_country(&request.policy.country))
+    swaps::validate_parsed(&assets, engine_country(&request.policy.country))
         .map_err(|error| StagedError::new(Stage::Validate, error))?;
     drop(span);
     let span = crate::timing::span("compute");
-    let mut outputs = compute(&book, &inputs)?.into_iter();
+    let mut outputs = compute(&book, assets)?.into_iter();
     drop(span);
     let _compose = crate::timing::span("compose");
     let mut response = LedgerResponse {
@@ -523,63 +523,74 @@ fn method_gate(policy: &Policy) -> StagedError {
     }
 }
 
-/// The lot engine's inputs: each walked asset with an inbound entry, in
-/// order.
-pub(crate) fn lot_inputs(book: &Book, stages: &[Stages]) -> Vec<AssetInput> {
+/// The lot engine's assets: each walked asset with an inbound entry, in
+/// order, with the entries the walk constructed. Their constructors ran
+/// with the book's names, which only adds membership checks, so the lot
+/// engine's own constructors would build the same entries; the sets'
+/// checks run where the lot engine builds its sets.
+pub(crate) fn lot_assets(book: &Book, stages: &[Stages]) -> Vec<ParsedAsset> {
     book.assets
         .iter()
         .zip(stages)
         .filter_map(|(part, stages)| {
             let entries = stages.walked.as_ref()?.entries.as_ref()?;
-            Some(AssetInput {
+            Some(ParsedAsset {
                 asset: part.asset.to_owned(),
-                entries: entries.iter().map(|built| built.input.clone()).collect(),
+                entries: entries.iter().map(|built| built.entry.clone()).collect(),
             })
         })
         .collect()
 }
 
-/// The lot engine over `inputs`, the assets with an inbound entry, in
+/// The lot engine over `assets`, the assets with an inbound entry, in
 /// order (`_rp2_asset_states_from_prepared`, `adapter.py:1321-1379`): the
 /// method gate and the multi-asset hook (Austria's swap runner, when the
 /// entries' notes pair swap markers), else each asset on its own. One
-/// result per input, in order.
-pub(crate) fn compute(book: &Book, inputs: &[AssetInput]) -> Result<Vec<AssetOutput>, StagedError> {
+/// result per asset, in order.
+pub(crate) fn compute(
+    book: &Book,
+    assets: Vec<ParsedAsset>,
+) -> Result<Vec<AssetOutput>, StagedError> {
     let policy = &book.request.policy;
     let country = engine_country(&policy.country);
-    if inputs.is_empty() {
+    if assets.is_empty() {
         return Ok(Vec::new());
     }
     let method = policy
         .method
         .ok_or_else(|| method_gate(policy))?
         .method_name();
-    let multi = swaps::compute_multi(inputs, country, method)
+    let names: Vec<String> = assets.iter().map(|asset| asset.asset.clone()).collect();
+    let multi = swaps::compute_multi_parsed(assets, country, method)
         .map_err(|error| StagedError::new(Stage::ComputeMulti, error))?;
-    if let Some(outputs) = multi {
-        // The adapter takes each asset's result from the hook's mapping
-        // (`:1355-1371`). The runner returns one per input, in order, so no
-        // asset can be missing from it.
-        let complete = outputs.len() == inputs.len()
-            && outputs
-                .iter()
-                .zip(inputs)
-                .all(|(output, input)| output.asset == input.asset);
-        if !complete {
-            return Err(StagedError::new(
-                Stage::Classify,
-                EngineError::runtime(
-                    "Internal error: the multi-asset runner did not compute every asset",
-                ),
-            ));
+    let assets = match multi {
+        Ok(outputs) => {
+            // The adapter takes each asset's result from the hook's mapping
+            // (`:1355-1371`). The runner returns one per asset, in order, so
+            // no asset can be missing from it.
+            let complete = outputs.len() == names.len()
+                && outputs
+                    .iter()
+                    .zip(&names)
+                    .all(|(output, name)| output.asset == *name);
+            if !complete {
+                return Err(StagedError::new(
+                    Stage::Classify,
+                    EngineError::runtime(
+                        "Internal error: the multi-asset runner did not compute every asset",
+                    ),
+                ));
+            }
+            return Ok(outputs);
         }
-        return Ok(outputs);
-    }
-    inputs
-        .iter()
-        .map(|input| {
-            compute_asset(input, country, method).map_err(|error| StagedError {
-                asset: Some(input.asset.clone()),
+        Err(assets) => assets,
+    };
+    assets
+        .into_iter()
+        .map(|parsed| {
+            let asset = parsed.asset.clone();
+            compute_parsed(parsed, country, method).map_err(|error| StagedError {
+                asset: Some(asset),
                 ..StagedError::new(Stage::Compute, error)
             })
         })
