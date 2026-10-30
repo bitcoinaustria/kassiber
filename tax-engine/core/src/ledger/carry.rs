@@ -264,8 +264,9 @@ fn computed_basis(
         .filter_map(|stages| stages.walked.as_ref()?.entries.as_ref());
     for (entries, output) in computed.zip(&outputs) {
         let events: HashMap<i64, &str> = entries
+            .entries
             .iter()
-            .map(|built| (built.entry.row, built.entry.unique_id.as_str()))
+            .map(|entry| (entry.row, entry.unique_id.as_str()))
             .collect();
         for gain_loss in &output.gain_losses {
             let unique_id = events.get(&gain_loss.event.row).ok_or_else(|| {

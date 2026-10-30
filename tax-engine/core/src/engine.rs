@@ -4,6 +4,7 @@
 //! runs the taxable-event pass and derives the outputs in the order RP2's
 //! `ComputedData` does, so the first failure is RP2's first failure.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 use crate::austria;
@@ -55,13 +56,14 @@ impl Country {
 
 /// One asset's constructed entries: what the adapter holds after building
 /// its transaction sets, before any computation.
-pub(crate) struct ParsedAsset {
+pub(crate) struct ParsedAsset<'e> {
     pub asset: String,
-    /// Every entry, in insertion order.
-    pub entries: Vec<Entry>,
+    /// Every entry, in insertion order: constructed here, or borrowed from
+    /// the ledger's walk, which constructed them.
+    pub entries: Cow<'e, [Entry]>,
 }
 
-impl ParsedAsset {
+impl ParsedAsset<'static> {
     /// Runs every constructor and the per-set duplicate-row check, failing
     /// as building RP2's transaction sets does.
     pub fn new(input: &AssetInput) -> EngineResult<Self> {
@@ -72,17 +74,19 @@ impl ParsedAsset {
             .collect::<EngineResult<Vec<_>>>()?;
         let parsed = ParsedAsset {
             asset: input.asset.clone(),
-            entries,
+            entries: Cow::Owned(entries),
         };
         parsed.check()?;
         Ok(parsed)
     }
+}
 
+impl ParsedAsset<'_> {
     /// The checks building RP2's transaction sets runs once every
     /// constructor has: each entry is of the set's asset, and no set gets a
     /// row twice.
     pub fn check(&self) -> EngineResult<()> {
-        for entry in &self.entries {
+        for entry in self.entries.iter() {
             if entry.asset != self.asset {
                 return Err(EngineError::value(format!(
                     "Attempting to add a {} entry to a {} set",
@@ -105,10 +109,10 @@ impl ParsedAsset {
 }
 
 /// One asset's validated entries and RP2's views of them.
-pub(crate) struct PreparedAsset {
+pub(crate) struct PreparedAsset<'e> {
     pub asset: String,
     /// Every entry, in insertion order.
-    pub entries: Vec<Entry>,
+    pub entries: Cow<'e, [Entry]>,
     /// Visible IN, OUT, and INTRA entries, each stably sorted by instant.
     pub ins: Vec<usize>,
     pub outs: Vec<usize>,
@@ -142,11 +146,11 @@ fn reject_duplicates<'a>(entries: impl IntoIterator<Item = &'a Entry>) -> Engine
     Ok(())
 }
 
-impl PreparedAsset {
+impl<'e> PreparedAsset<'e> {
     /// Builds the views `compute_tax` iterates from constructed entries.
     /// Fails as RP2 does before the first taxable event: on a duplicate
     /// row or no visible lot.
-    pub fn from_parsed(parsed: ParsedAsset) -> EngineResult<Self> {
+    pub fn from_parsed(parsed: ParsedAsset<'e>) -> EngineResult<Self> {
         let ParsedAsset { asset, entries } = parsed;
         let ins = visible_sorted(&entries, EntryKind::In);
         let outs = visible_sorted(&entries, EntryKind::Out);
@@ -215,7 +219,7 @@ pub(crate) fn compute_asset(
 /// RP2's `compute_tax` for one asset whose entries are constructed and
 /// checked.
 pub(crate) fn compute_parsed(
-    parsed: ParsedAsset,
+    parsed: ParsedAsset<'_>,
     country: Country,
     method: MethodName,
 ) -> EngineResult<AssetOutput> {

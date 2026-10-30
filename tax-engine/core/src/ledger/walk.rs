@@ -62,16 +62,21 @@ use super::response::{AuditOut, Fiat};
 use super::run::{AssetRows, Book};
 use super::text::entry_text;
 
-/// An entry the walk built: the lot engine's input, with its text, the
-/// constructed entry (its stored and derived values, which composition
-/// reads, and the same text, so the lot engine computes on it as built),
-/// and the row whose time the entry has (an event's row, a move's out
-/// leg).
+/// An entry the walk built: the lot engine's input, with its text, and
+/// the row whose time the entry has (an event's row, a move's out leg).
 #[derive(Clone, Debug)]
 pub(crate) struct BuiltEntry {
     pub input: EntryInput,
-    pub entry: Entry,
     pub row: usize,
+}
+
+/// The entries the walk built, in order: their inputs, and the constructed
+/// entries (their stored and derived values, which composition reads, and
+/// the same text), which the lot engine computes on as built.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BuiltEntries {
+    pub built: Vec<BuiltEntry>,
+    pub entries: Vec<Entry>,
 }
 
 /// One asset, walked (the adapter's `_RP2PreparedInput`).
@@ -79,7 +84,7 @@ pub(crate) struct BuiltEntry {
 pub(crate) struct Walked {
     /// The inbound, then the outbound, then the move entries, each in walk
     /// order; `None` when the asset has no inbound entry.
-    pub entries: Option<Vec<BuiltEntry>>,
+    pub entries: Option<BuiltEntries>,
     /// The gates' quarantines, in walk order. Normalize's are not repeated.
     pub quarantines: Vec<Quarantine>,
     /// One row per booked move, in walk order.
@@ -254,9 +259,9 @@ struct Walker<'w, 'a> {
     first_drop_at: Option<String>,
     /// The next entry's row number (`row_index`).
     row_index: i64,
-    ins: Vec<BuiltEntry>,
-    outs: Vec<BuiltEntry>,
-    moves: Vec<BuiltEntry>,
+    ins: Vec<(BuiltEntry, Entry)>,
+    outs: Vec<(BuiltEntry, Entry)>,
+    moves: Vec<(BuiltEntry, Entry)>,
     quarantines: Vec<Quarantine>,
     audit: Vec<AuditOut>,
 }
@@ -324,9 +329,15 @@ impl<'w, 'a> Walker<'w, 'a> {
             }
         }
         let entries = (!self.ins.is_empty()).then(|| {
-            let mut entries = self.ins;
-            entries.append(&mut self.outs);
-            entries.append(&mut self.moves);
+            let count = self.ins.len() + self.outs.len() + self.moves.len();
+            let mut entries = BuiltEntries {
+                built: Vec::with_capacity(count),
+                entries: Vec::with_capacity(count),
+            };
+            for (built, entry) in self.ins.into_iter().chain(self.outs).chain(self.moves) {
+                entries.built.push(built);
+                entries.entries.push(entry);
+            }
             entries
         });
         Ok(Walked {
@@ -762,7 +773,7 @@ impl<'w, 'a> Walker<'w, 'a> {
         // The lot engine's constructor would store the text it is given.
         entry.text.clone_from(&input.text);
         let kind = entry.kind;
-        let built = BuiltEntry { input, entry, row };
+        let built = (BuiltEntry { input, row }, entry);
         match kind {
             EntryKind::In => self.ins.push(built),
             EntryKind::Out => self.outs.push(built),
@@ -962,6 +973,7 @@ mod tests {
             .entries
             .as_ref()
             .expect("entries")
+            .built
             .iter()
             .map(|entry| {
                 let input = &entry.input;
@@ -1073,7 +1085,7 @@ mod tests {
                 ),
             ]
         );
-        let built = walked.entries.as_ref().unwrap();
+        let built = &walked.entries.as_ref().unwrap().built;
         let buy = &built[0].input;
         assert_eq!(
             (
@@ -1191,7 +1203,7 @@ mod tests {
             vec![pair("move-out", "move-in", Some("g"))],
         );
         let walked = walk_book(&request).unwrap();
-        let moved = &walked.entries.as_ref().unwrap()[1].input;
+        let moved = &walked.entries.as_ref().unwrap().built[1].input;
         assert_eq!(canonical(&moved.spot_price).as_deref(), Some("0E0"));
         assert!(walked.audit[0].spot_price.is_none());
     }
@@ -1708,7 +1720,7 @@ mod tests {
         // The tracker gives the move its fee's regime and its flows: Neu
         // only, all of it carried but the fee.
         let walked = walk_book(&request).unwrap();
-        let moved = &walked.entries.as_ref().unwrap()[1].input;
+        let moved = &walked.entries.as_ref().unwrap().built[1].input;
         assert_eq!(
             moved.notes.as_deref(),
             Some("at_regime=neu at_pool=default move-out")

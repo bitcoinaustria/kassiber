@@ -620,8 +620,8 @@
   {
     "id": "walk-entries-in-insertion-order",
     "file": "tax-engine/core/src/ledger/walk.rs",
-    "find": "            entries.append(&mut self.outs);\n            entries.append(&mut self.moves);",
-    "replace": "            entries.append(&mut self.moves);\n            entries.append(&mut self.outs);",
+    "find": "self.ins.into_iter().chain(self.outs).chain(self.moves)",
+    "replace": "self.ins.into_iter().chain(self.moves).chain(self.outs)",
     "expect_failing": [
       "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
     ],

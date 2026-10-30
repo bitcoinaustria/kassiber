@@ -37,7 +37,7 @@ struct SwapPair {
 
 /// Parses every asset in request order; the first constructor failure
 /// wins, as it does while the adapter builds its transaction sets.
-fn parse_assets(inputs: &[AssetInput]) -> EngineResult<Vec<ParsedAsset>> {
+fn parse_assets(inputs: &[AssetInput]) -> EngineResult<Vec<ParsedAsset<'static>>> {
     unique_names(inputs.iter().map(|input| input.asset.as_str()))?;
     inputs.iter().map(ParsedAsset::new).collect()
 }
@@ -165,20 +165,20 @@ pub(crate) fn compute_multi(
 
 /// [`compute_multi`] on constructed entries; the assets come back, checked,
 /// when the runner does not take them.
-pub(crate) fn compute_multi_parsed(
-    assets: Vec<ParsedAsset>,
+pub(crate) fn compute_multi_parsed<'e>(
+    assets: Vec<ParsedAsset<'e>>,
     country: Country,
     method: MethodName,
-) -> EngineResult<Result<Vec<AssetOutput>, Vec<ParsedAsset>>> {
+) -> EngineResult<Result<Vec<AssetOutput>, Vec<ParsedAsset<'e>>>> {
     check_assets(&assets)?;
     compute_multi_checked(assets, country, method)
 }
 
-fn compute_multi_checked(
-    assets: Vec<ParsedAsset>,
+fn compute_multi_checked<'e>(
+    assets: Vec<ParsedAsset<'e>>,
     country: Country,
     method: MethodName,
-) -> EngineResult<Result<Vec<AssetOutput>, Vec<ParsedAsset>>> {
+) -> EngineResult<Result<Vec<AssetOutput>, Vec<ParsedAsset<'e>>>> {
     if country != Country::Austria {
         return Ok(Err(assets));
     }
@@ -298,15 +298,15 @@ fn reject_cycles(
 }
 
 /// The runner's view of the pairs and assets while cursors advance.
-struct Runner<'a> {
-    prepared: &'a [PreparedAsset],
+struct Runner<'a, 'e> {
+    prepared: &'a [PreparedAsset<'e>],
     pairs: &'a [SwapPair],
     /// Per destination asset, its pairs ordered by incoming leg then id.
     incoming: &'a [Vec<usize>],
     resolved: Vec<bool>,
 }
 
-impl Runner<'_> {
+impl Runner<'_, '_> {
     fn entry(&self, asset: usize, index: usize) -> &Entry {
         &self.prepared[asset].entries[index]
     }
@@ -343,7 +343,7 @@ impl Runner<'_> {
 
 /// `compute_native_at_tax`.
 fn run(
-    assets: Vec<ParsedAsset>,
+    assets: Vec<ParsedAsset<'_>>,
     pairs: Vec<SwapPair>,
     method: MethodName,
 ) -> EngineResult<Vec<AssetOutput>> {
@@ -500,7 +500,7 @@ fn run(
 /// carried unit basis` onto the destination lot, then marks the pair
 /// resolved (also when nothing is carried).
 fn resolve(
-    runner: &mut Runner<'_>,
+    runner: &mut Runner<'_, '_>,
     cursors: &mut [Cursor<'_>],
     destination: &[Option<usize>],
     pair: usize,

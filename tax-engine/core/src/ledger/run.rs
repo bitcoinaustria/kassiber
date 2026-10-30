@@ -572,7 +572,7 @@ fn method_gate(policy: &Policy) -> StagedError {
 /// with the book's names, which only adds membership checks, so the lot
 /// engine's own constructors would build the same entries; the sets'
 /// checks run where the lot engine builds its sets.
-pub(crate) fn lot_assets(book: &Book, stages: &[Stages]) -> Vec<ParsedAsset> {
+pub(crate) fn lot_assets<'s>(book: &Book, stages: &'s [Stages]) -> Vec<ParsedAsset<'s>> {
     book.assets
         .iter()
         .zip(stages)
@@ -580,7 +580,7 @@ pub(crate) fn lot_assets(book: &Book, stages: &[Stages]) -> Vec<ParsedAsset> {
             let entries = stages.walked.as_ref()?.entries.as_ref()?;
             Some(ParsedAsset {
                 asset: part.asset.to_owned(),
-                entries: entries.iter().map(|built| built.entry.clone()).collect(),
+                entries: Cow::Borrowed(&entries.entries),
             })
         })
         .collect()
@@ -593,7 +593,7 @@ pub(crate) fn lot_assets(book: &Book, stages: &[Stages]) -> Vec<ParsedAsset> {
 /// result per asset, in order.
 pub(crate) fn compute(
     book: &Book,
-    assets: Vec<ParsedAsset>,
+    assets: Vec<ParsedAsset<'_>>,
 ) -> Result<Vec<AssetOutput>, StagedError> {
     let policy = &book.request.policy;
     let country = engine_country(&policy.country);
@@ -703,6 +703,7 @@ fn prepared_out(book: &Book, walked: Walked) -> PreparedOut {
     PreparedOut {
         entries: walked.entries.map(|entries| {
             entries
+                .built
                 .into_iter()
                 .map(|entry| EntryInputOut {
                     ts: book.rows[entry.row].ts.clone(),

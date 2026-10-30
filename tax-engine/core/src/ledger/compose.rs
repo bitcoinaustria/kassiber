@@ -46,7 +46,7 @@ use super::response::{
     RealizedOut, SummaryOut, TransferLegOut,
 };
 use super::run::Book;
-use super::walk::BuiltEntry;
+use super::walk::BuiltEntries;
 
 /// One asset's journal entries, holdings, and tax-summary rows.
 #[derive(Clone, Debug, Default)]
@@ -59,7 +59,7 @@ pub(crate) struct Composed {
 /// One computed asset: the walk's entries, the lot engine's results, and
 /// the asset's audit rows, which start at `first_audit` in the response.
 pub(crate) struct ComputedAsset<'c> {
-    pub entries: &'c [BuiltEntry],
+    pub entries: &'c BuiltEntries,
     pub output: &'c AssetOutput,
     pub audit: &'c [AuditOut],
     pub first_audit: usize,
@@ -140,11 +140,18 @@ struct Realized {
     fragments: Vec<FragmentOut>,
 }
 
+/// An entry the walk built, and the row whose time it has.
+#[derive(Clone, Copy)]
+struct Built<'c> {
+    entry: &'c Entry,
+    row: usize,
+}
+
 struct Composer<'c, 'a> {
     book: &'c Book<'a>,
     asset: &'c ComputedAsset<'c>,
     /// The walk's entries by row number (unique within an asset).
-    by_number: HashMap<i64, &'c BuiltEntry>,
+    by_number: HashMap<i64, Built<'c>>,
     /// Each visible lot's effective basis, by row number.
     basis: HashMap<i64, &'c Decimal>,
 }
@@ -153,8 +160,16 @@ impl<'c, 'a> Composer<'c, 'a> {
     fn new(book: &'c Book<'a>, asset: &'c ComputedAsset<'c>) -> Self {
         let by_number = asset
             .entries
+            .entries
             .iter()
-            .map(|built| (built.entry.row, built))
+            .zip(&asset.entries.built)
+            .map(|(entry, built)| {
+                let built = Built {
+                    entry,
+                    row: built.row,
+                };
+                (entry.row, built)
+            })
             .collect();
         let output = asset.output;
         let basis = output
@@ -171,14 +186,14 @@ impl<'c, 'a> Composer<'c, 'a> {
         }
     }
 
-    fn entry(&self, number: i64, kind: EntryKind) -> EngineResult<&'c BuiltEntry> {
+    fn entry(&self, number: i64, kind: EntryKind) -> EngineResult<Built<'c>> {
         match self.by_number.get(&number) {
-            Some(built) if built.entry.kind == kind => Ok(built),
+            Some(&built) if built.entry.kind == kind => Ok(built),
             _ => Err(internal("the lot engine returned an unknown entry")),
         }
     }
 
-    fn row_id(&self, built: &BuiltEntry) -> String {
+    fn row_id(&self, built: Built) -> String {
         self.book.rows[built.row].id.clone()
     }
 
@@ -243,7 +258,7 @@ impl<'c, 'a> Composer<'c, 'a> {
             .zip(&output.in_fiat_in_with_fee)
         {
             let built = self.entry(*number, EntryKind::In)?;
-            let lot = &built.entry;
+            let lot = built.entry;
             let quantity = Self::crypto_in(lot)?;
             let unit_cost = num::div(&basis.0, quantity)?;
             entries.push(EntryOut::Acquisition(AcquisitionOut {
@@ -261,27 +276,23 @@ impl<'c, 'a> Composer<'c, 'a> {
     }
 
     /// The fragment's values and the facts of its event and lot.
-    fn fragment(
-        &self,
-        gain_loss: &GainLossOut,
-        event: &'c BuiltEntry,
-    ) -> EngineResult<FragmentOut> {
+    fn fragment(&self, gain_loss: &GainLossOut, event: Built<'c>) -> EngineResult<FragmentOut> {
         let lot = match gain_loss.lot {
             None => None,
             Some(number) => {
                 let built = self.entry(number, EntryKind::In)?;
-                let (crypto_fee, fiat_fee) = Self::fees(&built.entry);
+                let (crypto_fee, fiat_fee) = Self::fees(built.entry);
                 Some(FragmentLot {
                     row: self.row_id(built),
                     spot_price: Dec(built.entry.spot_price.clone()),
                     fiat_fee: Dec(fiat_fee.clone()),
                     crypto_fee: Dec(crypto_fee.clone()),
-                    basis: Dec(self.lot_basis(&built.entry)?.clone()),
-                    crypto_in: Dec(Self::crypto_in(&built.entry)?.clone()),
+                    basis: Dec(self.lot_basis(built.entry)?.clone()),
+                    crypto_in: Dec(Self::crypto_in(built.entry)?.clone()),
                 })
             }
         };
-        let (crypto_fee, fiat_fee) = Self::fees(&event.entry);
+        let (crypto_fee, fiat_fee) = Self::fees(event.entry);
         Ok(FragmentOut {
             crypto_amount: gain_loss.crypto_amount.clone(),
             cost_basis: gain_loss.fiat_cost_basis.clone(),
@@ -314,7 +325,7 @@ impl<'c, 'a> Composer<'c, 'a> {
         let mut positions: HashMap<(i64, bool, Option<String>), usize> = HashMap::new();
         for gain_loss in &self.asset.output.gain_losses {
             let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
-            let entry = &event.entry;
+            let entry = event.entry;
             let kind = entry.transaction_type;
             let booked_move = audited.contains(entry.unique_id.as_str());
             let entry_type = if kind.is_earn() {
@@ -421,7 +432,7 @@ impl<'c, 'a> Composer<'c, 'a> {
             if remaining <= num::zero() {
                 continue;
             }
-            let lot = &self.entry(position.row, EntryKind::In)?.entry;
+            let lot = self.entry(position.row, EntryKind::In)?.entry;
             let quantity = num::mul(Self::crypto_in(lot)?, &remaining)?;
             total_quantity = num::add(&total_quantity, &quantity)?;
             let cost_basis = num::mul(&position.fiat_in_with_fee.0, &remaining)?;
