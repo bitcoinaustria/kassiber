@@ -493,6 +493,8 @@ def apply_component_batch(
             component_ids=already_persisted,
         )
     savepoint = f"custody_component_apply_{uuid.uuid4().hex}"
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
         for planned_wallet in plan["planned_wallets"]:
@@ -903,6 +905,8 @@ def apply_component_revision(
         authored_source=authored_source,
     )
     savepoint = f"custody_component_revision_apply_{uuid.uuid4().hex}"
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
         for planned_wallet in plan["planned_wallets"]:
@@ -1025,6 +1029,8 @@ def apply_component_state_change(
         reason=reason,
     )
     savepoint = f"custody_component_state_apply_{uuid.uuid4().hex}"
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
         if action == "activate":

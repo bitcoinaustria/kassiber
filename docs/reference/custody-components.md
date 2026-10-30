@@ -22,6 +22,32 @@ confirm draft creation or activation. Changes to the form or active book require
 a fresh preview. Existing unsupported component shapes remain readable but cannot
 be silently converted by this editor; the CLI retains the full typed contract.
 
+## Authoring transactions and recovery
+
+Custody helpers never commit a caller's transaction. Their nested savepoints
+start an enclosing transaction when needed, so releasing a savepoint cannot
+persist only part of a review. The authoring boundary commits after the review,
+activation/supersession, memberships, audit/impact records and journal invalidation
+have succeeded; a failure remains rollbackable. Component and gap apply with
+`commit=False` leave successful writes pending for their caller as well.
+
+This covers pair create/revise/delete, payout create/delete and component-based
+payout revision, bulk/rule pairing, component create/revise/undo/state changes,
+and guided gap create/revise/reopen/residual classification/dismissal. Transfer
+candidate dismissals and rule CRUD each use one SQLite write followed by an
+explicit commit; they do not change authored custody or journal inputs.
+
+Older versions could commit a custody helper before the authoring operation
+finished. An error response therefore did not guarantee that the review was
+unchanged. Existing books can retain such partially completed authoring; this
+fix does not replay failed requests or infer the owner's intended review. Inspect
+the current reviews/components, correct them through the normal review commands,
+and run `kassiber journals process` for the affected book to rebuild retained
+journals before using reports. In the payout-delete failure where only the final
+facade invalidation fails, active-component supersession already invalidates
+journals inside its savepoint: the review can be partially committed, but the
+journal freshness markers are stale rather than falsely current.
+
 ## Country-neutral ownership boundary
 
 Bitcoin evidence determines the graph. Country never does.
