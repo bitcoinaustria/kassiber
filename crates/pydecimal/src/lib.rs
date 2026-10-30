@@ -219,14 +219,34 @@ pub struct Decimal {
 /// [`Coeff::Big`] never holds a value that fits `u128`.
 #[derive(Clone, PartialEq, Eq)]
 enum Coeff {
-    Small(u128),
+    Small(Packed),
     Big(BigUint),
 }
 
+/// A `u128` at 8-byte alignment, so that a coefficient takes no more room
+/// than a `BigUint` and a decimal stays 40 bytes, as before the fixed-width
+/// paths: types that hold decimals inline do not grow.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(C, packed(8))]
+struct Packed(u128);
+
+impl Packed {
+    fn get(self) -> u128 {
+        self.0
+    }
+}
+
 impl Coeff {
+    fn small(&self) -> Option<u128> {
+        match self {
+            Coeff::Small(value) => Some(value.get()),
+            Coeff::Big(_) => None,
+        }
+    }
+
     fn from_big(value: BigUint) -> Self {
         match value.to_u128() {
-            Some(small) => Coeff::Small(small),
+            Some(small) => Coeff::Small(Packed(small)),
             None => Coeff::Big(value),
         }
     }
@@ -238,25 +258,25 @@ impl Coeff {
             let value = values
                 .iter()
                 .fold(0u128, |acc, &digit| acc * 10 + u128::from(digit));
-            return Some(Coeff::Small(value));
+            return Some(Coeff::Small(Packed(value)));
         }
         BigUint::from_radix_be(values, 10).map(Coeff::from_big)
     }
 
     fn big(&self) -> Cow<'_, BigUint> {
         match self {
-            Coeff::Small(value) => Cow::Owned(BigUint::from(*value)),
+            Coeff::Small(value) => Cow::Owned(BigUint::from(value.get())),
             Coeff::Big(value) => Cow::Borrowed(value),
         }
     }
 
     fn is_zero(&self) -> bool {
-        matches!(self, Coeff::Small(0))
+        matches!(self, Coeff::Small(value) if value.get() == 0)
     }
 
     fn ndigits(&self) -> usize {
         match self {
-            Coeff::Small(value) => wide::ndigits(*value),
+            Coeff::Small(value) => wide::ndigits(value.get()),
             Coeff::Big(value) => ndigits(value),
         }
     }
@@ -264,7 +284,7 @@ impl Coeff {
     /// The decimal digits.
     fn digits(&self) -> String {
         match self {
-            Coeff::Small(value) => value.to_string(),
+            Coeff::Small(value) => value.get().to_string(),
             Coeff::Big(value) => value.to_str_radix(10),
         }
     }
@@ -416,7 +436,7 @@ fn finish(
         let exp = narrow_exponent(exp.clamp(etiny, emax))?;
         return Ok(Decimal {
             negative,
-            coeff: Coeff::Small(0),
+            coeff: Coeff::Small(Packed(0)),
             exp,
         });
     }
@@ -459,7 +479,7 @@ fn finish_small(
         let exp = narrow_exponent(exp.clamp(etiny, emax))?;
         return Ok(Decimal {
             negative,
-            coeff: Coeff::Small(0),
+            coeff: Coeff::Small(Packed(0)),
             exp,
         });
     }
@@ -484,7 +504,7 @@ fn finish_small(
     }
     Ok(Decimal {
         negative,
-        coeff: Coeff::Small(q),
+        coeff: Coeff::Small(Packed(q)),
         exp: narrow_exponent(rounded_exp)?,
     })
 }
@@ -527,7 +547,7 @@ fn finish_wide(
     }
     Ok(Decimal {
         negative,
-        coeff: Coeff::Small(q),
+        coeff: Coeff::Small(Packed(q)),
         exp: narrow_exponent(exp)?,
     })
 }
@@ -540,7 +560,7 @@ fn finish_coeff(
     ctx: &Context,
 ) -> Result<Decimal, DecimalError> {
     match coeff {
-        Coeff::Small(value) => finish_small(negative, *value, i128::from(exp), false, ctx),
+        Coeff::Small(value) => finish_small(negative, value.get(), i128::from(exp), false, ctx),
         Coeff::Big(value) => finish(negative, value.clone(), i128::from(exp), false, ctx),
     }
 }
@@ -719,7 +739,7 @@ impl Decimal {
     pub fn zero() -> Self {
         Decimal {
             negative: false,
-            coeff: Coeff::Small(0),
+            coeff: Coeff::Small(Packed(0)),
             exp: 0,
         }
     }
@@ -848,7 +868,7 @@ impl Decimal {
             }
         }
         let coeff = if values.is_empty() {
-            Coeff::Small(0)
+            Coeff::Small(Packed(0))
         } else {
             Coeff::from_digits(&values).ok_or(DecimalError::ConversionSyntax)?
         };
@@ -961,7 +981,7 @@ impl Decimal {
         if rounded.is_zero() {
             return Ok(Decimal {
                 negative: self.negative,
-                coeff: Coeff::Small(0),
+                coeff: Coeff::Small(Packed(0)),
                 exp: 0,
             });
         }
@@ -970,12 +990,13 @@ impl Decimal {
         // bound is only a guard.
         let mut exp = rounded.exp;
         let coeff = match rounded.coeff {
-            Coeff::Small(mut coeff) => {
+            Coeff::Small(coeff) => {
+                let mut coeff = coeff.get();
                 while exp < EMAX && coeff % 10 == 0 {
                     coeff /= 10;
                     exp += 1;
                 }
-                Coeff::Small(coeff)
+                Coeff::Small(Packed(coeff))
             }
             Coeff::Big(mut coeff) => {
                 let ten = BigUint::from(10u32);
@@ -1015,9 +1036,9 @@ impl Decimal {
         ctx: &Context,
     ) -> Result<Decimal, DecimalError> {
         ctx.check()?;
-        if let (Coeff::Small(a), Coeff::Small(b)) = (&self.coeff, &other.coeff) {
-            let a = (self.negative, *a, i128::from(self.exp));
-            let b = (other_negative, *b, i128::from(other.exp));
+        if let (Some(a), Some(b)) = (self.coeff.small(), other.coeff.small()) {
+            let a = (self.negative, a, i128::from(self.exp));
+            let b = (other_negative, b, i128::from(other.exp));
             if let Some(result) = add_small(a, b, ctx) {
                 return result;
             }
@@ -1082,10 +1103,10 @@ impl Decimal {
         ctx.check()?;
         let negative = self.negative != other.negative;
         let exp = i128::from(self.exp) + i128::from(other.exp);
-        if let (Coeff::Small(a), Coeff::Small(b)) = (&self.coeff, &other.coeff) {
-            return match a.checked_mul(*b) {
+        if let (Some(a), Some(b)) = (self.coeff.small(), other.coeff.small()) {
+            return match a.checked_mul(b) {
                 Some(product) => finish_small(negative, product, exp, false, ctx),
-                None => finish_wide(negative, wide::mul(*a, *b), exp, false, ctx),
+                None => finish_wide(negative, wide::mul(a, b), exp, false, ctx),
             };
         }
         finish(
@@ -1115,8 +1136,8 @@ impl Decimal {
         if self.is_zero() {
             return finish_small(negative, 0, ideal, false, ctx);
         }
-        if let (Coeff::Small(a), Coeff::Small(b)) = (&self.coeff, &other.coeff) {
-            if let Some(result) = div_small(*a, *b, negative, ideal, ctx) {
+        if let (Some(a), Some(b)) = (self.coeff.small(), other.coeff.small()) {
+            if let Some(result) = div_small(a, b, negative, ideal, ctx) {
                 return result;
             }
         }
@@ -1158,7 +1179,7 @@ impl Decimal {
         if self.is_zero() {
             return Ok(Decimal {
                 negative: self.negative,
-                coeff: Coeff::Small(0),
+                coeff: Coeff::Small(Packed(0)),
                 exp,
             });
         }
@@ -1170,13 +1191,13 @@ impl Decimal {
                 if nd as i128 - drop > prec {
                     return Err(DecimalError::InvalidOperation);
                 }
-                match wide::scale(*c, -drop) {
-                    Some(scaled) => Coeff::Small(scaled),
-                    None => Coeff::from_big(BigUint::from(*c) * pow10_wide(-drop)?),
+                match wide::scale(c.get(), -drop) {
+                    Some(scaled) => Coeff::Small(Packed(scaled)),
+                    None => Coeff::from_big(BigUint::from(c.get()) * pow10_wide(-drop)?),
                 }
             }
             Coeff::Small(c) => {
-                let (mut q, d) = wide::shift_right(*c, nd, drop, false);
+                let (mut q, d) = wide::shift_right(c.get(), nd, drop, false);
                 if rounds_away(ctx.rounding, d, self.negative, move || (q % 10) as u32) {
                     // drop > 0, so q <= c / 10.
                     q += 1;
@@ -1184,7 +1205,7 @@ impl Decimal {
                 if wide::ndigits(q) as i128 > prec {
                     return Err(DecimalError::InvalidOperation);
                 }
-                Coeff::Small(q)
+                Coeff::Small(Packed(q))
             }
             Coeff::Big(c) if drop <= 0 => {
                 if nd as i128 - drop > prec {
@@ -1265,7 +1286,7 @@ impl Decimal {
             out.write_char('-')?;
         }
         match &self.coeff {
-            Coeff::Small(value) => write!(out, "{value}")?,
+            Coeff::Small(value) => write!(out, "{}", value.get())?,
             Coeff::Big(value) => out.write_str(&value.to_str_radix(10))?,
         }
         write!(out, "E{}", self.exp)
@@ -1381,12 +1402,13 @@ impl Decimal {
         }
         let coeff = match &self.coeff {
             Coeff::Small(c) => {
-                let (mut q, d) = wide::shift_right(*c, wide::ndigits(*c), target - exp, false);
+                let (mut q, d) =
+                    wide::shift_right(c.get(), wide::ndigits(c.get()), target - exp, false);
                 if rounds_away(rounding, d, self.negative, move || (q % 10) as u32) {
                     // At least one digit was dropped, so q <= c / 10.
                     q += 1;
                 }
-                Coeff::Small(q)
+                Coeff::Small(Packed(q))
             }
             Coeff::Big(c) => {
                 let (mut q, d) = shift_right(c, ndigits(c), target - exp, false);
@@ -1414,13 +1436,13 @@ impl Decimal {
         // Equal adjusted exponents: the exponent gap equals the digit-count
         // gap, so aligning is cheap and the scale always fits in usize.
         let gap = i128::from(self.exp) - i128::from(other.exp);
-        if let (Coeff::Small(a), Coeff::Small(b)) = (&self.coeff, &other.coeff) {
+        if let (Some(a), Some(b)) = (self.coeff.small(), other.coeff.small()) {
             // The gap is at most 38 digits; a scaled value that overflows
             // exceeds the other, which fits u128.
             return if gap >= 0 {
-                wide::scale(*a, gap).map_or(Ordering::Greater, |a| a.cmp(b))
+                wide::scale(a, gap).map_or(Ordering::Greater, |a| a.cmp(&b))
             } else {
-                wide::scale(*b, -gap).map_or(Ordering::Less, |b| a.cmp(&b))
+                wide::scale(b, -gap).map_or(Ordering::Less, |b| a.cmp(&b))
             };
         }
         let (a, b) = (self.coeff.big(), other.coeff.big());
@@ -1440,7 +1462,7 @@ macro_rules! from_signed {
             fn from(v: $t) -> Self {
                 Decimal {
                     negative: v < 0,
-                    coeff: Coeff::Small(v.unsigned_abs() as u128),
+                    coeff: Coeff::Small(Packed(v.unsigned_abs() as u128)),
                     exp: 0,
                 }
             }
@@ -1455,7 +1477,7 @@ macro_rules! from_unsigned {
             fn from(v: $t) -> Self {
                 Decimal {
                     negative: false,
-                    coeff: Coeff::Small(v as u128),
+                    coeff: Coeff::Small(Packed(v as u128)),
                     exp: 0,
                 }
             }
@@ -2111,6 +2133,15 @@ mod tests {
             Decimal::from_parts(false, BigUint::zero(), i64::MAX).map(|_| ()),
             Err(DecimalError::InvalidOperation)
         );
+    }
+
+    #[test]
+    fn a_decimal_is_as_large_as_with_bignum_coefficients_only() {
+        // A coefficient that fits u128 shares the BigUint's room, so types
+        // that hold decimals inline (pyjson's values, the envelope's errors)
+        // keep their size.
+        assert_eq!(std::mem::size_of::<Coeff>(), std::mem::size_of::<BigUint>());
+        assert_eq!(std::mem::size_of::<Decimal>(), 40);
     }
 
     #[test]

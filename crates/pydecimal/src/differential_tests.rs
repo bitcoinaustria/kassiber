@@ -106,7 +106,7 @@ fn operand(rng: &mut Rng) -> Decimal {
 
 /// The same value with its coefficient stored as `Coeff::Big`, so every
 /// operation on it takes the `BigUint` path. Zero stays canonical: the
-/// zero checks read `Coeff::Small(0)`.
+/// zero checks read a zero `Coeff::Small`.
 fn forced(value: &Decimal) -> Decimal {
     if value.is_zero() {
         return value.clone();
