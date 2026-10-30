@@ -381,7 +381,7 @@
       "kassiber/operator/runner.py:18"
     ],
     "KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR": [
-      "kassiber/core/custody_journal.py:421"
+      "kassiber/core/custody_journal.py:422"
     ],
     "KASSIBER_TEST_NO_EGRESS": [
       "kassiber/egress_ledger.py:17"

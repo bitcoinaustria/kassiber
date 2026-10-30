@@ -588,7 +588,9 @@
       "test_single_phase_migration_rolls_back_components_terms_and_links_together": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1},
       "test_component_aggregate_accepts_multiple_leg_bound_economic_terms": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1},
       "test_leg_role_rebuild_preserves_existing_economic_term_foreign_keys": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1},
-      "test_review_notes_schema_migration_backfills_and_refreezes_terms": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1}
+      "test_review_notes_schema_migration_backfills_and_refreezes_terms": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1},
+      "test_native_review_activation_failure_leaves_no_committed_draft": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "crates/transfers/tests/pairs.rs pins complete-row refusal parity without retaining a draft", "reviewed": true, "tests": 1},
+      "test_pair_invalidation_failure_keeps_complete_database_unchanged": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "transactions", "reason": "pair_final_invalidation_refusals_are_atomic pins rollback after create, update and unpair invalidation failures", "reviewed": true, "tests": 1}
     },
     "tests/test_custody_authoring_atomicity.py": {
       "test_late_review_invalidation_rolls_back_every_table": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
@@ -887,6 +889,7 @@
       "test_custody_child_compares_and_records_differences": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_custody_difference_cannot_be_swallowed_by_a_test": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_unknown_custody_modes_fail_closed": {"disposition": "oracle", "flags": ["sql"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_policy_builder_patch_skips_only_fusion": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_every_implemented_stage_is_compared": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_child_import_order_installs_both_recorder_and_comparison": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_stale_binding_cannot_pass_with_no_stages": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
@@ -1334,6 +1337,15 @@
     "tests/test_integration_harness_safety.py": {
       "IntegrationHarnessSafetyTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 8}
     },
+    "tests/test_journal_storage_format.py": {
+      "test_realized_entries_store_compact_calculations_that_restore_legacy_bytes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
+      "test_explanations_and_event_reads_are_identical_for_compact_and_legacy_rows": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},
+      "test_opening_a_pre_compact_book_adds_the_column_and_reads_legacy_rows": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},
+      "test_compact_encoding_round_trips_and_shares_equal_sources": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
+      "test_calculations_outside_the_encoding_keep_legacy_bytes": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
+      "test_malformed_compact_text_is_rejected": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
+      "test_corrupt_compact_detail_does_not_claim_reconciliation": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_ledger_preview_security.py": {
       "LedgerPreviewSecurityTests": {"disposition": "subprocess-scenario", "flags": [], "group": "imports", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 3}
     },
@@ -1422,7 +1434,7 @@
       "RequestIdTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.log_ring.current_request_id, kassiber.log_ring directly", "reviewed": false, "tests": 3},
       "RingHandlerTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.log_ring directly", "reviewed": false, "tests": 6},
       "SanitizeTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.log_ring directly", "reviewed": false, "tests": 4},
-      "OperationalRedactionTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 13},
+      "OperationalRedactionTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 15},
       "OperationalValueTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 2},
       "RelativizePathTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.log_ring directly", "reviewed": false, "tests": 12},
       "InstallTest": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.log_ring directly", "reviewed": false, "tests": 2},
@@ -1618,6 +1630,11 @@
     "tests/test_pair_swap_fee_display.py": {
       "PairSwapFeeDisplayTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.reports directly", "reviewed": false, "tests": 3}
     },
+    "tests/test_partial_payout_compatibility.py": {
+      "test_partial_payout_migration_is_targeted_once": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_review_terms directly", "reviewed": false, "tests": 1},
+      "test_pre_fix_historical_book_requires_rebuild": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.db", "reviewed": false, "tests": 1},
+      "test_whole_principal_payout_with_included_fee_stays_current": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_payment_hash_promotion.py": {
       "PhoenixNormalizerTests": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "frozen Python Phoenix CSV vectors pin promoted, normalized, missing and malformed payment hashes", "replacement": "crates/wallets/src/file_import/tests.rs::python_file_import_vectors", "reviewed": true, "tests": 6},
       "NormalizeImportRecordTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.imports directly", "reviewed": false, "tests": 5},
@@ -1670,6 +1687,17 @@
       "test_https_proxy_is_rejected_before_ledger_dns_or_socket": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "network-egress", "reason": "calls kassiber.proxy directly", "reviewed": false, "tests": 1},
       "test_explicit_http_connect_keeps_target_tls_and_auth_separate": {"disposition": "rust-test", "flags": ["mock"], "group": "network-egress", "reason": "calls kassiber.proxy directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_pyfix_review.py": {
+      "test_price_writes_reject_unsupported_values": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.commercial, kassiber.core.rates directly", "reviewed": false, "tests": 1},
+      "test_btcpay_rejects_nonfinite_fiat": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.commercial, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_import_validates_value_derived_rate": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.imports directly", "reviewed": false, "tests": 1},
+      "test_decimal_text_normalizes_exactly": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_invalid_legacy_payout_list_and_delete": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (daemon) but also calls kassiber.core.custody_review_terms, kassiber.cli.handlers", "reviewed": false, "tests": 1},
+      "test_split_payout_fails_closed": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.custody_journal, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
+      "test_legacy_price_error_identifies_transaction": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_export_survives_legacy_nonfinite_price": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 1},
+      "test_daemon_metadata_rejects_price_without_writes": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1}
+    },
     "tests/test_pyinstaller_entry.py": {
       "test_frozen_ca_prefers_existing_linux_system_bundle": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "PyInstaller CA bootstrap disappears with the Python launcher", "replacement": "Rust TLS trust-selection and packaged host/explicit/bundled CA tests", "reviewed": true, "tests": 1},
       "test_frozen_ca_preserves_explicit_linux_override": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "PyInstaller CA bootstrap disappears with the Python launcher", "replacement": "Rust TLS trust-selection and packaged host/explicit/bundled CA tests", "reviewed": true, "tests": 1},
@@ -1685,7 +1713,8 @@
       "QuarantineChainedRootTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.db, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1}
     },
     "tests/test_rates_csv_validation.py": {
-      "test_kraken_ohlc_prices_must_be_positive": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.rates directly", "reviewed": false, "tests": 1}
+      "test_kraken_ohlc_prices_must_be_positive": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.rates directly", "reviewed": false, "tests": 1},
+      "test_kraken_prices_and_volume_are_bounded_before_comparison": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.rates directly", "reviewed": false, "tests": 1}
     },
     "tests/test_rates_incremental.py": {
       "RatesIncrementalTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 1}
@@ -2083,6 +2112,14 @@
       "test_tar_names_preserve_surrogateescape_and_extended_paths": {"disposition": "oracle", "flags": ["subprocess"], "group": "secrets-backup", "reason": "compares native backup export and staging import with Python using exact logical SQLCipher/plaintext dumps, manifest and archive refusals; installation has its own killed-child oracle", "reviewed": true, "tests": 1},
       "test_recipient_child_discovery_invocation_and_format_match_python": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "secrets-backup", "reason": "compares native backup export and staging import with Python using exact logical SQLCipher/plaintext dumps, manifest and archive refusals; installation has its own killed-child oracle", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_bdk_execution.py": {
+      "test_native_bdk_aggregate_and_restart_match_python_wallet": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity", "reviewed": true, "tests": 1},
+      "test_compatibility_checkpoint_and_cache_reuse_match_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity", "reviewed": true, "tests": 1},
+      "test_cached_acquisition_and_native_bdk_require_consent_and_online": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity", "reviewed": true, "tests": 1},
+      "test_native_canonical_and_retraction_sequences_match_python_prepare": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity", "reviewed": true, "tests": 1},
+      "test_native_rebuild_preflight_and_consent_fences_match_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity", "reviewed": true, "tests": 1},
+      "test_esplora_absence_sequences_match_python_source_bound_completeness": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares native BDK aggregates/canonical/reorg/retraction sequences and source-bound Esplora absence/cache checkpoints to Python over disposable loopback fixtures; does not claim persisted product-sync dump parity", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_bip329_services.py": {
       "RustBip329ServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares Rust CLI/daemon envelopes, persisted label/audit state and exact BIP329 file bytes against Python on disposable books", "reviewed": true, "tests": 3}
     },
@@ -2111,6 +2148,9 @@
     "tests/test_rust_document_services.py": {
       "RustDocumentServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares document CLI and daemon refusals, evidence storage and prior-report archives, stored matching and commercial context against Python on disposable books", "reviewed": true, "tests": 4}
     },
+    "tests/test_rust_gap_services.py": {
+      "RustGapServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "Compares gap CLI and daemon bytes and complete normalized rows against Python; native fixed-source sequences pin exact identities and hybrid logs require Rust execution", "reviewed": true, "tests": 2}
+    },
     "tests/test_rust_grouped_metadata_services.py": {
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },
@@ -2135,7 +2175,8 @@
     "tests/test_rust_rates_candidate.py": {
       "test_all_six_cli_leaves_are_served_by_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
       "test_native_daemon_reads_and_validation_match_python_bytes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
-      "test_native_daemon_failed_import_rolls_back_before_next_request": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1}
+      "test_native_daemon_failed_import_rolls_back_before_next_request": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
+      "test_bounded_price_errors_match_python": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_report_exports.py": {
       "test_cli_csv_export_sequences_and_rust_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares complete native CLI/daemon CSV export sequences, literal artifact bytes and normalized whole-database state with Python; declares generated identity mappings and proves Rust-only hybrid routing", "reviewed": true, "tests": 1},
@@ -2229,6 +2270,7 @@
       "test_new_book_exact_schema_rows_and_python_reopen": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
       "test_creation_transcript_cannot_drift_from_python": {"disposition": "oracle", "flags": ["mock", "mock-internal", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
       "test_semantic_audits_profile_changes_and_idempotency_match_python": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
+      "test_partial_payout_semantic_migration_matches_python": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
       "test_killed_creation_resumes_without_partial_schema": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
       "test_plaintext_encryption_and_rekey_cross_language": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
       "test_python_backup_api_restores_a_rust_written_book": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons", "reviewed": true, "tests": 1},
@@ -2298,7 +2340,16 @@
       "RustTransactionServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 4}
     },
     "tests/test_rust_transfer_services.py": {
-      "RustTransferServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution", "reviewed": true, "tests": 5}
+      "RustTransferServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "Compares CLI/desktop bytes and normalized authoring outputs against Python; native vectors pin complete authoring rows and hybrid routing proves Rust execution", "reviewed": true, "tests": 11}
+    },
+    "tests/test_rust_wallet_acquisition.py": {
+      "test_acquisition_matches_python_protocol_facts": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed", "reviewed": true, "tests": 1},
+      "test_acquisition_no_traffic_before_consent_or_while_offline": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed", "reviewed": true, "tests": 1},
+      "test_acquisition_checkpoint_keeps_product_sync_unimplemented": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_wallet_discovery.py": {
+      "test_compatibility_discovery_matches_python_targets_progress_and_queries": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares compatibility descriptor discovery targets, progress and queries with Python on owned loopback fakes; this preparation helper does not establish product sync or book persistence parity", "reviewed": true, "tests": 1},
+      "test_discovery_driver_refuses_without_consent_offline_and_after_cancellation": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares compatibility descriptor discovery targets, progress and queries with Python on owned loopback fakes; this preparation helper does not establish product sync or book persistence parity", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_wallet_publication.py": {
       "test_publication_fixture_books_match_python": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares atomic Rust publication of Python-prepared Bitcoin fetches against unchanged Python full books across fixtures, restarts, reviewed journals and saved reports; retains rollback and refusal witnesses without claiming end-to-end native sync or product-route acceptance", "reviewed": true, "tests": 1},
