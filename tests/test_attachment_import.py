@@ -404,6 +404,21 @@ class ChatFileEvidenceTests(AttachmentImportFixture):
         label = self.conn.execute("SELECT label FROM attachments").fetchone()["label"]
         self.assertEqual(label, "Rechnung_Mustermann.png")
 
+    def test_a_restricted_provider_naming_the_evidence_still_gets_no_filename(self):
+        transaction = self.imported_transaction()
+        runtime = self.runtime(full_access=False, extra_files=[self.receipt()])
+        result = self.write(
+            "ui.attachments.add_from_chat",
+            {"transaction": transaction, "file": "file-2", "label": "Receipt"},
+            runtime,
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertNotIn("Mustermann", json.dumps(result))
+        self.assertIn("Receipt", json.dumps(result))
+        row = self.conn.execute("SELECT label, original_filename FROM attachments").fetchone()
+        self.assertEqual(row["label"], "Receipt")
+        self.assertEqual(row["original_filename"], "Rechnung_Mustermann.png")
+
     def test_refuses_a_path_and_unknown_fields(self):
         transaction = self.imported_transaction()
         runtime = self.runtime(extra_files=[self.receipt()])

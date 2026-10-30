@@ -6,7 +6,7 @@ import { evidenceRequest, evidenceRevalidationRequest, evidenceAttachmentOptions
   type EvidenceRequest, type EvidenceRequestState, type HandoffStamp } from "./evidenceRequest";
 import type { ConnectionSetupOutcome } from "@/components/kb/connectionSetupOutcome";
 const AddConnectionDialog = React.lazy(() => import("@/components/kb/AddConnectionDialog").then((module) => ({ default: module.AddConnectionDialog })));
-type EvidenceOutcome = "received" | "partial" | "attached" | "unavailable";
+type EvidenceOutcome = "received" | "partial" | "attached" | "attachedNotInChat" | "unavailable";
 interface PendingEvidence { request: EvidenceRequest; origin: HandoffStamp; outcome?: EvidenceOutcome; attachment?: StagedAttachment }
 
 
@@ -674,9 +674,19 @@ export function AssistantSessionProvider({
         scope: { workspace_id: pending.request.workspace_id, profile_id: pending.request.profile_id },
       },
     };
-    if (staged && !stageAttachment(staged)) return;
-    pending.outcome = outcome;
-    pending.attachment = staged;
+    // The picker already saved the file on the transaction. A chat at its file
+    // limit only leaves it out of the chat; the review still continues.
+    const kept = staged && stageAttachment(staged) ? staged : undefined;
+    if (staged && !kept) {
+      useUiStore.getState().addNotification({
+        title: tRef.current("composer.attachmentLimit.title", { max: MAX_CHAT_ATTACHMENTS }),
+        body: tRef.current("evidence.attachedNotInChat"),
+        tone: "info",
+        dedupeKey: "assistant-attachmentLimit",
+      });
+    }
+    pending.outcome = staged && !kept ? "attachedNotInChat" : outcome;
+    pending.attachment = kept;
     setEvidenceDialog(null);
     setEvidenceRequests((old) => ({ ...old, [pending.request.request_id]: { status: outcome === "partial" ? "partial" : "received" } }));
     const latest = latestRef.current;
