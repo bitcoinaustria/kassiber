@@ -65,6 +65,46 @@ def test_a_final_symlink_is_written_through(tmp_path):
     assert target.read_bytes() == b"new\r\n"
 
 
+@pytest.mark.parametrize("timing", ["existing-directory", "new-directory", "replaced-file"])
+@pytest.mark.parametrize("symlink", [False, True])
+def test_csv_directory_error_names_only_the_requested_destination(tmp_path, timing, symlink):
+    target = tmp_path / "report.csv"
+    requested = target
+    if symlink:
+        requested = tmp_path / "link.csv"
+        requested.symlink_to(target)
+    messages = []
+    for _ in range(2):
+        if timing == "existing-directory":
+            target.mkdir()
+        elif timing == "replaced-file":
+            target.write_bytes(b"old")
+
+        def rows():
+            if timing != "existing-directory":
+                target.unlink(missing_ok=True)
+                target.mkdir()
+            yield ["header"]
+            yield ["value"]
+
+        with pytest.raises(OSError) as raised:
+            _write_csv_rows(requested, rows())
+        error = raised.value
+        # Windows reports a directory open as PermissionError, while POSIX
+        # reports IsADirectoryError. Keep the native category on both.
+        with pytest.raises(OSError) as direct:
+            requested.open("w").close()
+        assert type(error) is type(direct.value)
+        assert error.errno == direct.value.errno
+        assert error.filename == str(requested)
+        assert error.filename2 is None
+        messages.append(str(error))
+        assert list(target.iterdir()) == []
+        assert set(tmp_path.iterdir()) == {target, requested}
+        target.rmdir()
+    assert messages[0] == messages[1]
+
+
 @pytest.mark.skipif(os.name != 'posix', reason='POSIX devices and pipes')
 def test_csv_character_devices_and_stdout_pipe():
     _write_csv_rows('/dev/null', [['discarded']])
