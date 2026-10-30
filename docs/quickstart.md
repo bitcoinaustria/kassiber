@@ -255,8 +255,9 @@ provider is configured.
 The repository also ships a BTC-only Kraken offline history bundle for EUR and
 USD hourly values under `kassiber/data/rates/kraken/btc_hourly`, which
 freshness/rate-coverage jobs seed automatically when missing. It can also be
-imported with the same `kraken-csv` path flow, and Desktop Settings exposes it
-as `Kraken offline history: hourly values` for offline fallback coverage. The
+imported with the same `kraken-csv` path flow, and Desktop Settings → Market
+data exposes it as Kraken offline history → `Bundled hourly values` for offline
+fallback coverage. The
 earliest rows are daily-derived from the existing bundled daily cache, which
 uses Coin Metrics BTC-USD history and official ECB USD/EUR FX so cached
 BTC-EUR/BTC-USD coverage starts at `2011-01-01`.

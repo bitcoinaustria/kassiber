@@ -178,8 +178,8 @@ Existing `Kassiber Database Passphrase` entries migrate conservatively. With a
 CLI marker, the CLI claims and removes the old shared entry; without that marker,
 the desktop claims it after a successful Touch ID unlock. Users who previously
 enabled both against the ambiguous shared entry may need to re-enroll the other
-surface once. Settings exposes **Forget all unlock methods** to delete both
-current entries and any remaining legacy item.
+surface once. Settings exposes **Saved unlock methods → Forget all** to delete
+both current entries and any remaining legacy item.
 If deletion of a CLI-owned legacy item cannot be verified, managed settings
 atomically clear `cli_remembered_unlock` and set
 `cli_legacy_unlock_quarantined`. That marker preserves CLI ownership for the

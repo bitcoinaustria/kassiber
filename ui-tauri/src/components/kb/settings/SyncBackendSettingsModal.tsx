@@ -1,19 +1,10 @@
 import * as React from "react";
-import {
-  CheckCircle2,
-  ChevronRight,
-  RefreshCw,
-  Server,
-  Trash2,
-  XCircle,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
 import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
 import liquidIcon from "@/assets/integrations/liquid.svg";
-import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,15 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
@@ -47,13 +30,20 @@ import {
   inferredInfrastructureOwnership,
   isOnionEndpoint,
   type InfrastructureOwnership,
+  type TrustPosture,
 } from "@/lib/backendTrust";
 import {
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
 } from "@/components/kb/Onboarding/constants";
 import { cn } from "@/lib/utils";
-import { SecretField } from "./SettingsControls";
+import {
+  SecretField,
+  SettingsDisclosure,
+  SettingsGroup,
+  SettingsRow,
+  SettingsSelect,
+} from "./SettingsControls";
 import {
   brandLogoFrame,
   type Backend,
@@ -63,6 +53,14 @@ import {
   backendTypeIdForSettingsBackend,
   type SyncBackendTypeId,
 } from "./SyncBackendSettingsModel";
+
+/** The endpoint's privacy posture as text: OK, neutral, or a warning. */
+const POSTURE_TONE: Record<TrustPosture, string> = {
+  "on-device": "text-emerald-600 dark:text-emerald-400",
+  "self-hosted": "text-emerald-600 dark:text-emerald-400",
+  shielded: "text-foreground",
+  remote: "text-amber-600 dark:text-amber-400",
+};
 
 export function NetworkBadge({ net }: { net: Net }) {
   const classes: Record<Net, string> = {
@@ -100,60 +98,6 @@ export function NetworkMark({ type }: { type: SyncBackendNetwork }) {
         alt=""
         className={cn("size-6 object-contain", type.iconClassName)}
       />
-    </span>
-  );
-}
-
-export function PresetMark({
-  preset,
-  net,
-}: {
-  preset: SyncBackendPreset;
-  net: Net;
-}) {
-  const image =
-    preset.id === "mempool"
-      ? mempoolIcon
-      : preset.protocol === "coreln"
-        ? coreLightningIcon
-        : preset.protocol === "lnd"
-          ? lightningLabsIcon
-          : net === "LIQUID"
-            ? liquidIcon
-            : preset.protocol === "esplora"
-              ? bitcoinIcon
-              : null;
-  if (image) {
-    return (
-      <span
-        className={cn(
-          "flex size-8 shrink-0 items-center justify-center rounded-md border p-1.5",
-          preset.protocol === "coreln"
-            ? "border-neutral-600 bg-[#494120]"
-            : preset.protocol === "lnd"
-              ? "border-neutral-700 bg-neutral-950"
-              : brandLogoFrame,
-        )}
-        aria-hidden="true"
-      >
-        <img
-          src={image}
-          alt=""
-          className={cn(
-            "size-5 object-contain",
-            preset.protocol === "coreln" && "scale-150",
-            net === "LIQUID" && "scale-150",
-          )}
-        />
-      </span>
-    );
-  }
-  return (
-    <span
-      className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
-      aria-hidden="true"
-    >
-      <Server className="size-4" />
     </span>
   );
 }
@@ -623,7 +567,6 @@ export function SyncBackendSettingsModal({
     selectedBackendKind,
     effectiveInfrastructureOwner,
   );
-  const ConnectionTrustIcon = connectionTrust.icon;
   const showAdvancedConnectionSettings =
     (showElectrumEndpointParts && backendSource === "custom") ||
     showHttpTlsSettings ||
@@ -1121,107 +1064,85 @@ export function SyncBackendSettingsModal({
               </section>
             ) : null}
 
-            {isEditing ? (
-              <section className="flex items-center gap-3 rounded-lg border bg-muted/10 p-3">
-                <NetworkMark type={type} />
-                <div className="min-w-0">
-                  <Label>{t("backendModal.connectionType")}</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {type.label} · {preset?.label ?? selectedBackendKind}
-                  </p>
-                </div>
-              </section>
-            ) : null}
-
-            {showSourcePicker ? (
-              <section className="space-y-3">
-                <div>
-                  <Label>{t("backendModal.backendSourceLabel")}</Label>
-                  {networkBlocked && <p role="status" className="text-xs text-muted-foreground">{t("bookNetwork.customBackend", {network})}</p>}
-                  <p className="text-xs text-muted-foreground">
-                    {t("backendModal.backendSourceHint")}
-                  </p>
-                </div>
-                <Tabs
-                  value={backendSource}
-                  onValueChange={(value) =>
-                    setBackendSource(value as BackendSourceMode)
-                  }
-                >
-                  <TabsList className="w-full justify-start sm:w-fit">
-                    <TabsTrigger value="preset">
-                      {t("backendModal.presetTab")}
-                    </TabsTrigger>
-                    <TabsTrigger value="custom">
-                      {t("backendModal.customTab")}
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </section>
-            ) : null}
-
-            {showPresetPicker ? (
-              <section className="space-y-3">
-                <div>
-                  <Label>{t("backendModal.presetEndpointLabel")}</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("backendModal.presetEndpointHint")}
-                  </p>
-                </div>
-                <Select value={presetId} onValueChange={setPresetId}>
-                  <SelectTrigger className="h-auto min-h-12 w-full py-2 text-left *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:justify-start">
-                    <SelectValue placeholder={t("backendModal.presetPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {publicPresets.map((backendPreset) => {
-                      const disabled = Boolean(backendPreset.disabled);
-                      return (
-                        <SelectItem
-                          key={backendPreset.id}
-                          value={backendPreset.id}
-                          disabled={disabled}
-                        >
-                          <span className="flex min-w-0 items-center justify-start gap-2 text-left">
-                            <PresetMark preset={backendPreset} net={type.net} />
-                            <span className="min-w-0 space-y-0.5 text-left">
-                              <span className="block truncate font-medium">
-                                {presetDisplayName(backendPreset)}
-                              </span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {backendPreset.status ?? backendPreset.label}
-                              </span>
-                            </span>
+            {isEditing || showSourcePicker || showPresetPicker || showCustomProtocolPicker ? (
+              <SettingsGroup>
+                {isEditing ? (
+                  <SettingsRow label={t("backendModal.connectionType")}>
+                    <span className="text-sm text-muted-foreground">
+                      {type.label} · {preset?.label ?? selectedBackendKind}
+                    </span>
+                  </SettingsRow>
+                ) : null}
+                {showSourcePicker ? (
+                  <SettingsRow
+                    label={t("backendModal.backendSourceLabel")}
+                    description={
+                      <>
+                        {networkBlocked ? (
+                          <span role="status" className="block">
+                            {t("bookNetwork.customBackend", { network })}
                           </span>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </section>
-            ) : null}
-
-            {showCustomProtocolPicker ? (
-              <section className="space-y-3">
-                <div>
-                  <Label>{t("backendModal.endpointTypeLabel")}</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("backendModal.endpointTypeHint")}
-                  </p>
-                </div>
-                <Tabs value={presetId} onValueChange={setPresetId}>
-                  <TabsList className="w-full flex-wrap justify-start sm:w-fit">
-                    {type.presets.map((backendPreset) => (
-                      <TabsTrigger
-                        key={backendPreset.id}
-                        value={backendPreset.id}
-                        disabled={backendPreset.disabled}
-                      >
-                        {backendPreset.label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </section>
+                        ) : null}
+                        <span className="block">{t("backendModal.backendSourceHint")}</span>
+                      </>
+                    }
+                    htmlFor="backend-source"
+                  >
+                    <SettingsSelect<BackendSourceMode>
+                      value={backendSource}
+                      onValueChange={setBackendSource}
+                      options={[
+                        { value: "preset", label: t("backendModal.presetTab") },
+                        { value: "custom", label: t("backendModal.customTab") },
+                      ]}
+                      triggerProps={{ id: "backend-source" }}
+                    />
+                  </SettingsRow>
+                ) : null}
+                {showPresetPicker ? (
+                  <SettingsRow
+                    label={t("backendModal.presetEndpointLabel")}
+                    description={
+                      <>
+                        <span className="block">{t("backendModal.presetEndpointHint")}</span>
+                        {preset ? <span className="block">{preset.label}</span> : null}
+                      </>
+                    }
+                    htmlFor="backend-preset"
+                  >
+                    <SettingsSelect
+                      value={presetId}
+                      onValueChange={setPresetId}
+                      placeholder={t("backendModal.presetPlaceholder")}
+                      options={publicPresets.map((backendPreset) => ({
+                        value: backendPreset.id,
+                        label: presetDisplayName(backendPreset),
+                        title: backendPreset.status ?? backendPreset.label,
+                        disabled: Boolean(backendPreset.disabled),
+                      }))}
+                      triggerProps={{ id: "backend-preset" }}
+                    />
+                  </SettingsRow>
+                ) : null}
+                {showCustomProtocolPicker ? (
+                  <SettingsRow
+                    label={t("backendModal.endpointTypeLabel")}
+                    description={t("backendModal.endpointTypeHint")}
+                    htmlFor="backend-endpoint-type"
+                  >
+                    <SettingsSelect
+                      value={presetId}
+                      onValueChange={setPresetId}
+                      options={type.presets.map((backendPreset) => ({
+                        value: backendPreset.id,
+                        label: backendPreset.label,
+                        disabled: backendPreset.disabled,
+                      }))}
+                      triggerProps={{ id: "backend-endpoint-type" }}
+                    />
+                  </SettingsRow>
+                ) : null}
+              </SettingsGroup>
             ) : null}
 
             <section className="grid gap-4 sm:grid-cols-2">
@@ -1236,7 +1157,7 @@ export function SyncBackendSettingsModal({
                   placeholder={t("backendModal.displayNamePlaceholder")}
                 />
                 {isEditing ? (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {t("backendModal.displayNameStableHint", {
                       id: initial?.id,
                     })}
@@ -1303,126 +1224,100 @@ export function SyncBackendSettingsModal({
             </section>
 
             {type.net !== "LN" && selectedKindIsExplorerApi ? (
-              <div className="rounded-lg border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {t("backendModal.explorerApiNote")}
-              </div>
-            ) : null}
-
-            {type.net === "BTC" ? (
-              <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                <span>
-                  <span className="block font-medium">
-                    {t("backendModal.silentPaymentsLabel")}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {t("backendModal.silentPaymentsHint")}
-                  </span>
-                </span>
-                <Switch
-                  checked={silentPayments}
-                  onCheckedChange={(checked) => {
-                    setSilentPayments(checked);
-                    setTestState("idle");
-                    setTestLog("");
-                  }}
-                />
-              </label>
-            ) : null}
-
-            {type.net === "BTC" && silentPayments ? (
-              <section className="space-y-3 rounded-lg border p-3">
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("backendModal.silentPaymentsScannerConfigHint")}
-                </p>
-                <div className="space-y-2">
-                  <Label htmlFor="backend-silent-payment-scan-file">
-                    {t("backendModal.silentPaymentsScanFileLabel")}
-                  </Label>
-                  <Input
-                    id="backend-silent-payment-scan-file"
-                    value={silentPaymentScanFile}
-                    onChange={(event) => {
-                      setSilentPaymentScanFile(event.target.value);
-                      setTestState("idle");
-                      setTestLog("");
-                    }}
-                    placeholder={t(
-                      "backendModal.silentPaymentsScanFilePlaceholder",
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="backend-silent-payment-scan-path">
-                    {t("backendModal.silentPaymentsScanPathLabel")}
-                  </Label>
-                  <Input
-                    id="backend-silent-payment-scan-path"
-                    value={silentPaymentScanPath}
-                    onChange={(event) => {
-                      setSilentPaymentScanPath(event.target.value);
-                      setTestState("idle");
-                      setTestLog("");
-                    }}
-                    placeholder={t(
-                      "backendModal.silentPaymentsScanPathPlaceholder",
-                    )}
-                  />
-                </div>
-              </section>
+              </p>
             ) : null}
 
             {type.net !== "LN" ? (
-              <section className="space-y-3 rounded-lg border p-3">
-                <div
-                  className={cn(
-                    "flex items-start gap-2 rounded-lg border p-3 text-xs",
-                    connectionTrust.className,
-                  )}
-                >
-                  <ConnectionTrustIcon
-                    className="mt-0.5 size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <div className="text-sm font-medium">
-                      {connectionTrust.label}
-                    </div>
-                    <p className="mt-0.5 leading-relaxed">
-                      {connectionTrust.note}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <Label>{t("backendModal.infraOwnerLabel")}</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {t("backendModal.infraOwnerHint")}
-                    </p>
-                  </div>
-                  <Tabs
-                    value={infrastructureOwner}
-                    onValueChange={(value) =>
-                      setInfrastructureOwner(value as InfrastructureOwnership)
-                    }
+              <SettingsGroup>
+                {type.net === "BTC" ? (
+                  <SettingsRow
+                    label={t("backendModal.silentPaymentsLabel")}
+                    description={t("backendModal.silentPaymentsHint")}
+                    htmlFor="backend-silent-payments"
                   >
-                    <TabsList className="w-full sm:w-fit">
-                      <TabsTrigger value="self">
-                        {t("backendModal.infraOwnerMine")}
-                      </TabsTrigger>
-                      <TabsTrigger value="third_party">
-                        {t("backendModal.infraOwnerThirdParty")}
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
-              </section>
+                    <Switch
+                      id="backend-silent-payments"
+                      checked={silentPayments}
+                      onCheckedChange={(checked) => {
+                        setSilentPayments(checked);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                    />
+                  </SettingsRow>
+                ) : null}
+                {type.net === "BTC" && silentPayments ? (
+                  <div className="space-y-3 px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                      {t("backendModal.silentPaymentsScannerConfigHint")}
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="backend-silent-payment-scan-file">
+                        {t("backendModal.silentPaymentsScanFileLabel")}
+                      </Label>
+                      <Input
+                        id="backend-silent-payment-scan-file"
+                        value={silentPaymentScanFile}
+                        onChange={(event) => {
+                          setSilentPaymentScanFile(event.target.value);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                        placeholder={t(
+                          "backendModal.silentPaymentsScanFilePlaceholder",
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="backend-silent-payment-scan-path">
+                        {t("backendModal.silentPaymentsScanPathLabel")}
+                      </Label>
+                      <Input
+                        id="backend-silent-payment-scan-path"
+                        value={silentPaymentScanPath}
+                        onChange={(event) => {
+                          setSilentPaymentScanPath(event.target.value);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                        placeholder={t(
+                          "backendModal.silentPaymentsScanPathPlaceholder",
+                        )}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                <p className="px-4 py-3 text-sm">
+                  <span className={cn("block font-medium", POSTURE_TONE[connectionTrust.posture])}>
+                    {connectionTrust.label}
+                  </span>
+                  <span className="block text-muted-foreground">{connectionTrust.note}</span>
+                </p>
+                <SettingsRow
+                  label={t("backendModal.infraOwnerLabel")}
+                  description={t("backendModal.infraOwnerHint")}
+                  htmlFor="backend-infra-owner"
+                >
+                  <SettingsSelect<InfrastructureOwnership>
+                    value={infrastructureOwner}
+                    onValueChange={setInfrastructureOwner}
+                    options={[
+                      { value: "self", label: t("backendModal.infraOwnerMine") },
+                      { value: "third_party", label: t("backendModal.infraOwnerThirdParty") },
+                    ]}
+                    triggerProps={{ id: "backend-infra-owner" }}
+                  />
+                </SettingsRow>
+              </SettingsGroup>
             ) : null}
 
             {isCoreLightning && (
               <section className="space-y-3">
                 <div>
                   <Label>{t("backendModal.corelnAccessLabel")}</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {t("backendModal.corelnAccessHint")}
                   </p>
                 </div>
@@ -1497,7 +1392,7 @@ export function SyncBackendSettingsModal({
                       }}
                       placeholder="lightning-rpc"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {t("backendModal.rpcFileHint")}
                     </p>
                   </div>
@@ -1506,229 +1401,199 @@ export function SyncBackendSettingsModal({
             )}
 
             {showAdvancedConnectionSettings && (
-              <details
-                className="group rounded-lg border bg-muted/10"
-                open={
-                  trustSsl ||
-                  Boolean(certificate) ||
-                  useProxy ||
-                  onionEndpoint ||
-                  undefined
-                }
-              >
-                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <ChevronRight
-                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium">
-                      {t("backendModal.advancedLabel")}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
+              <SettingsDisclosure
+                open={trustSsl || Boolean(certificate) || useProxy || onionEndpoint}
+                title={
+                  <span className="min-w-0">
+                    <span className="block">{t("backendModal.advancedLabel")}</span>
+                    <span className="block font-normal text-muted-foreground">
                       {t("backendModal.advancedHint")}
                     </span>
                   </span>
-                </summary>
-                <section className="grid gap-3 border-t p-3 sm:grid-cols-2">
-                  {showElectrumEndpointParts && backendSource === "custom" && (
-                    <>
-                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm">
-                        <span>
-                          <span className="block font-medium">
-                            {t("backendModal.useSslLabel")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {t("backendModal.useSslHint")}
-                          </span>
-                        </span>
-                        <Switch
-                          checked={electrumUseSsl}
-                          onCheckedChange={(checked) => {
-                            setElectrumUseSsl(checked);
-                            if (!checked) {
-                              setTrustSsl(false);
-                              setCertificate("");
-                            }
-                            setElectrumPort((current) =>
-                              current === "50002" || current === "50001"
-                                ? checked
-                                  ? "50002"
-                                  : "50001"
-                                : current,
-                            );
-                            setTestState("idle");
-                            setTestLog("");
-                          }}
-                        />
-                      </label>
-                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm">
-                        <span>
-                          <span className="block font-medium">
-                            {t("backendModal.trustSelfSignedLabel")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {t("backendModal.trustSelfSignedHint")}
-                          </span>
-                        </span>
-                        <Switch
-                          checked={trustSsl}
-                          disabled={!electrumUseSsl}
-                          onCheckedChange={(checked) => {
-                            setTrustSsl(checked);
-                            setTestState("idle");
-                            setTestLog("");
-                          }}
-                        />
-                      </label>
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="backend-certificate">
-                          {t("backendModal.certificateLabel")}
-                        </Label>
-                        <Input
-                          id="backend-certificate"
-                          value={certificate}
-                          onChange={(event) => {
-                            setCertificate(event.target.value);
-                            setTestState("idle");
-                            setTestLog("");
-                          }}
-                          placeholder={t("backendModal.certificatePlaceholder")}
-                          disabled={!electrumUseSsl || trustSsl}
-                        />
-                        {electrumUseSsl && trustSsl ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("backendModal.certificateIgnored")}
-                          </p>
-                        ) : null}
-                      </div>
-                    </>
-                  )}
-                  {showHttpTlsSettings && (
-                    <>
-                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm sm:col-span-2">
-                        <span>
-                          <span className="block font-medium">
-                            {t("backendModal.trustSelfSignedLabel")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {t("backendModal.trustSelfSignedHint")}
-                          </span>
-                        </span>
-                        <Switch
-                          checked={trustSsl}
-                          onCheckedChange={(checked) => {
-                            setTrustSsl(checked);
-                            setTestState("idle");
-                            setTestLog("");
-                          }}
-                        />
-                      </label>
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="backend-http-certificate">
-                          {t("backendModal.certificateLabel")}
-                        </Label>
-                        <Input
-                          id="backend-http-certificate"
-                          value={certificate}
-                          onChange={(event) => {
-                            setCertificate(event.target.value);
-                            setTestState("idle");
-                            setTestLog("");
-                          }}
-                          placeholder={t("backendModal.certificatePlaceholder")}
-                          disabled={trustSsl}
-                        />
-                        {trustSsl ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("backendModal.certificateIgnored")}
-                          </p>
-                        ) : null}
-                      </div>
-                    </>
-                  )}
-                  {proxyCapable && (
-                    <>
-                      {onionEndpoint ? (
-                        <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 sm:col-span-2 dark:text-sky-200">
-                          <div className="text-sm font-medium">
-                            {t("backendModal.onionDetectedTitle")}
-                          </div>
-                          <p className="mt-1">
-                            {t("backendModal.onionDetectedBody")}
-                          </p>
-                        </div>
+                }
+              >
+                {showElectrumEndpointParts && backendSource === "custom" && (
+                  <>
+                    <SettingsRow
+                      label={t("backendModal.useSslLabel")}
+                      description={t("backendModal.useSslHint")}
+                      htmlFor="backend-use-ssl"
+                    >
+                      <Switch
+                        id="backend-use-ssl"
+                        checked={electrumUseSsl}
+                        onCheckedChange={(checked) => {
+                          setElectrumUseSsl(checked);
+                          if (!checked) {
+                            setTrustSsl(false);
+                            setCertificate("");
+                          }
+                          setElectrumPort((current) =>
+                            current === "50002" || current === "50001"
+                              ? checked
+                                ? "50002"
+                                : "50001"
+                              : current,
+                          );
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                      />
+                    </SettingsRow>
+                    <SettingsRow
+                      label={t("backendModal.trustSelfSignedLabel")}
+                      description={t("backendModal.trustSelfSignedHint")}
+                      htmlFor="backend-trust-ssl"
+                    >
+                      <Switch
+                        id="backend-trust-ssl"
+                        checked={trustSsl}
+                        disabled={!electrumUseSsl}
+                        onCheckedChange={(checked) => {
+                          setTrustSsl(checked);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                      />
+                    </SettingsRow>
+                    <div className="space-y-2 px-4 py-3">
+                      <Label htmlFor="backend-certificate">
+                        {t("backendModal.certificateLabel")}
+                      </Label>
+                      <Input
+                        id="backend-certificate"
+                        value={certificate}
+                        onChange={(event) => {
+                          setCertificate(event.target.value);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                        placeholder={t("backendModal.certificatePlaceholder")}
+                        disabled={!electrumUseSsl || trustSsl}
+                      />
+                      {electrumUseSsl && trustSsl ? (
+                        <p className="text-sm text-muted-foreground">
+                          {t("backendModal.certificateIgnored")}
+                        </p>
                       ) : null}
-                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm sm:col-span-2">
-                        <span>
-                          <span className="block font-medium">
-                            {t("backendModal.useProxyLabel")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {t("backendModal.useProxyHint")}
-                          </span>
+                    </div>
+                  </>
+                )}
+                {showHttpTlsSettings && (
+                  <>
+                    <SettingsRow
+                      label={t("backendModal.trustSelfSignedLabel")}
+                      description={t("backendModal.trustSelfSignedHint")}
+                      htmlFor="backend-http-trust-ssl"
+                    >
+                      <Switch
+                        id="backend-http-trust-ssl"
+                        checked={trustSsl}
+                        onCheckedChange={(checked) => {
+                          setTrustSsl(checked);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                      />
+                    </SettingsRow>
+                    <div className="space-y-2 px-4 py-3">
+                      <Label htmlFor="backend-http-certificate">
+                        {t("backendModal.certificateLabel")}
+                      </Label>
+                      <Input
+                        id="backend-http-certificate"
+                        value={certificate}
+                        onChange={(event) => {
+                          setCertificate(event.target.value);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                        placeholder={t("backendModal.certificatePlaceholder")}
+                        disabled={trustSsl}
+                      />
+                      {trustSsl ? (
+                        <p className="text-sm text-muted-foreground">
+                          {t("backendModal.certificateIgnored")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+                {proxyCapable && (
+                  <>
+                    {onionEndpoint ? (
+                      <p className="px-4 py-3 text-sm">
+                        <span className="block font-medium">
+                          {t("backendModal.onionDetectedTitle")}
                         </span>
-                        <Switch
-                          checked={useProxy}
-                          onCheckedChange={(checked) => {
-                            setUseProxy(checked);
-                            setTestState("idle");
-                            setTestLog("");
-                          }}
-                        />
-                      </label>
-                      {useProxy && (
-                        <>
-                          <div className="space-y-2">
-                            <Label htmlFor="backend-proxy-host">
-                              {t("backendModal.proxyHostLabel")}
-                            </Label>
-                            <Input
-                              id="backend-proxy-host"
-                              value={proxyHost}
-                              onChange={(event) => {
-                                setProxyHost(event.target.value);
-                                setTestState("idle");
-                                setTestLog("");
-                              }}
-                              placeholder="127.0.0.1"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="backend-proxy-port">
-                              {t("backendModal.proxyPortLabel")}
-                            </Label>
-                            <Input
-                              id="backend-proxy-port"
-                              value={proxyPort}
-                              onChange={(event) => {
-                                setProxyPort(event.target.value);
-                                setTestState("idle");
-                                setTestLog("");
-                              }}
-                              placeholder="9050"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-                </section>
-              </details>
+                        <span className="block text-muted-foreground">
+                          {t("backendModal.onionDetectedBody")}
+                        </span>
+                      </p>
+                    ) : null}
+                    <SettingsRow
+                      label={t("backendModal.useProxyLabel")}
+                      description={t("backendModal.useProxyHint")}
+                      htmlFor="backend-use-proxy"
+                    >
+                      <Switch
+                        id="backend-use-proxy"
+                        checked={useProxy}
+                        onCheckedChange={(checked) => {
+                          setUseProxy(checked);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                      />
+                    </SettingsRow>
+                    {useProxy && (
+                      <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="backend-proxy-host">
+                            {t("backendModal.proxyHostLabel")}
+                          </Label>
+                          <Input
+                            id="backend-proxy-host"
+                            value={proxyHost}
+                            onChange={(event) => {
+                              setProxyHost(event.target.value);
+                              setTestState("idle");
+                              setTestLog("");
+                            }}
+                            placeholder="127.0.0.1"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="backend-proxy-port">
+                            {t("backendModal.proxyPortLabel")}
+                          </Label>
+                          <Input
+                            id="backend-proxy-port"
+                            value={proxyPort}
+                            onChange={(event) => {
+                              setProxyPort(event.target.value);
+                              setTestState("idle");
+                              setTestLog("");
+                            }}
+                            placeholder="9050"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </SettingsDisclosure>
             )}
 
             {isLnd && (
-              <section className="grid gap-3 sm:grid-cols-2">
-                <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm sm:col-span-2">
-                  <span>
-                    <span className="block font-medium">
-                      {t("backendModal.trustTlsLabel")}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {t("backendModal.trustTlsHint")}
-                    </span>
-                  </span>
+              <SettingsGroup>
+                <SettingsRow
+                  label={t("backendModal.trustTlsLabel")}
+                  description={t("backendModal.trustTlsHint")}
+                  htmlFor="backend-lnd-trust-tls"
+                >
                   <Switch
+                    id="backend-lnd-trust-tls"
                     checked={trustSsl}
                     onCheckedChange={(checked) => {
                       setTrustSsl(checked);
@@ -1736,8 +1601,8 @@ export function SyncBackendSettingsModal({
                       setTestLog("");
                     }}
                   />
-                </label>
-                <div className="space-y-2 sm:col-span-2">
+                </SettingsRow>
+                <div className="space-y-2 px-4 py-3">
                   <Label htmlFor="backend-lnd-certificate">
                     {t("backendModal.tlsCertLabel")}
                   </Label>
@@ -1753,28 +1618,25 @@ export function SyncBackendSettingsModal({
                     disabled={trustSsl}
                   />
                 </div>
-              </section>
+              </SettingsGroup>
             )}
 
             {showAuth && (
-              <section className="space-y-3">
-                <Label>{t("backendModal.rpcAuthLabel")}</Label>
-                <div className="flex flex-wrap gap-2">
-                  {AUTH_MODES.map((mode) => (
-                    <Button
-                      key={mode.id}
-                      type="button"
-                      variant={auth === mode.id ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setAuth(mode.id)}
-                    >
-                      {/* dynamic key */}
-                      {t(mode.labelKey as never)}
-                    </Button>
-                  ))}
-                </div>
+              <SettingsGroup>
+                <SettingsRow label={t("backendModal.rpcAuthLabel")} htmlFor="backend-auth">
+                  <SettingsSelect
+                    value={auth}
+                    onValueChange={setAuth}
+                    options={AUTH_MODES.map((mode) => ({
+                      value: mode.id,
+                      // dynamic key
+                      label: t(mode.labelKey as never),
+                    }))}
+                    triggerProps={{ id: "backend-auth" }}
+                  />
+                </SettingsRow>
                 {auth === "apikey" && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 px-4 py-3">
                     <SecretField
                       id="backend-api-key"
                       label={
@@ -1797,23 +1659,25 @@ export function SyncBackendSettingsModal({
                       }
                     />
                     {isEditing && initial?.auth === "apikey" ? (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         {t("backendModal.apiKeyKeepHint")}
                       </p>
                     ) : null}
                   </div>
                 )}
                 {auth === "bearer" && (
-                  <SecretField
-                    id="backend-bearer"
-                    label={t("backendModal.bearerLabel")}
-                    value={authVal}
-                    onChange={setAuthVal}
-                    placeholder="eyJ..."
-                  />
+                  <div className="px-4 py-3">
+                    <SecretField
+                      id="backend-bearer"
+                      label={t("backendModal.bearerLabel")}
+                      value={authVal}
+                      onChange={setAuthVal}
+                      placeholder="eyJ..."
+                    />
+                  </div>
                 )}
                 {auth === "basic" && (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="backend-username">
                         {t("backendModal.usernameLabel")}
@@ -1832,11 +1696,26 @@ export function SyncBackendSettingsModal({
                     />
                   </div>
                 )}
-              </section>
+              </SettingsGroup>
             )}
 
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
+            <SettingsGroup>
+              <SettingsRow
+                label={t("backendModal.testLabel")}
+                description={
+                  testState === "ok" ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      {t("backendModal.connected")}
+                    </span>
+                  ) : testState === "fail" ? (
+                    <span className="text-destructive">
+                      {t("backendModal.couldNotReach")}
+                    </span>
+                  ) : (
+                    t("backendModal.testHint")
+                  )
+                }
+              >
                 <Button
                   type="button"
                   variant="outline"
@@ -1848,37 +1727,20 @@ export function SyncBackendSettingsModal({
                     networkBlocked || !effectiveUrl || testState === "testing" || isSavingBackend
                   }
                 >
-                  <RefreshCw
-                    className={cn(
-                      "size-4",
-                      testState === "testing" && "animate-spin",
-                    )}
-                    aria-hidden="true"
-                  />
                   {testState === "testing"
                     ? t("backendModal.testing")
                     : t("backendModal.testConnection")}
                 </Button>
-                {testState === "ok" && (
-                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="size-4" />
-                    {t("backendModal.connected")}
-                  </span>
-                )}
-                {testState === "fail" && (
-                  <span className="inline-flex items-center gap-1 text-destructive">
-                    <XCircle className="size-4" />
-                    {t("backendModal.couldNotReach")}
-                  </span>
-                )}
+              </SettingsRow>
+              <div className="px-4 py-3">
+                <textarea
+                  readOnly
+                  aria-label={t("backendModal.testLogAria")}
+                  value={testLog}
+                  className="min-h-32 w-full resize-none rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
+                />
               </div>
-              <textarea
-                readOnly
-                aria-label={t("backendModal.testLogAria")}
-                value={testLog}
-                className="mt-3 min-h-32 w-full resize-none rounded-lg border bg-background p-3 font-mono text-xs leading-5"
-              />
-            </div>
+            </SettingsGroup>
           </div>
         </ScrollArea>
 
@@ -1887,9 +1749,8 @@ export function SyncBackendSettingsModal({
             {initial && onDelete ? (
               <Button
                 type="button"
-                size="icon-sm"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive"
+                variant="outline"
+                className="hover:text-destructive"
                 aria-label={t("backendModal.deleteBackend", {
                   name: initial.name,
                 })}
@@ -1898,7 +1759,7 @@ export function SyncBackendSettingsModal({
                   void onDelete(initial);
                 }}
               >
-                <Trash2 className="size-3.5" aria-hidden="true" />
+                {t("common:actions.delete")}
               </Button>
             ) : null}
           </div>
@@ -1913,9 +1774,6 @@ export function SyncBackendSettingsModal({
                 void save();
               }}
             >
-              {isSavingBackend ? (
-                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-              ) : null}
               {isSavingBackend
                 ? t("backendModal.connecting")
                 : testState === "ok"
