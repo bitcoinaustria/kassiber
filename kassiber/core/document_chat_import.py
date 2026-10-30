@@ -28,6 +28,7 @@ from typing import Any, Mapping
 
 from ..errors import AppError
 from . import attachment_import as core_attachment_import
+from . import attachments as core_attachments
 from . import document_import as core_document_import
 from . import import_batches as core_import_batches
 from . import wallet_completeness as core_wallet_completeness
@@ -37,6 +38,7 @@ PLAN_SCHEMA_VERSION = 1
 SOURCE_FORMAT = core_document_import.DOCUMENT_IMPORT_FORMAT
 NEW_WALLET_KIND = "custom"
 _SAVEPOINT = "document_chat_import_plan"
+_APPLY_SAVEPOINT = "document_chat_import_apply"
 _PLAN_TOOL = "ui_wallets_import_document_plan"
 # What the model may see of a row it read: values, never the page text.
 _ROW_FIELDS = ("id", "status", "flags", "confidence", "record")
@@ -135,15 +137,29 @@ def _import(
     )
     # Records-based imports record no run of their own; this one is a file
     # import like any other, so it gets one.
-    batch_id = core_import_batches.record_batch(
-        conn,
-        profile,
-        wallet_id=str(wallet["id"]),
-        source_format=SOURCE_FORMAT,
-        source_filename=os.path.basename(str(source.get("filename") or source_file)),
-        column_map=None,
-        outcome=outcome,
-    )
+    try:
+        batch_id = core_import_batches.record_batch(
+            conn,
+            profile,
+            wallet_id=str(wallet["id"]),
+            source_format=SOURCE_FORMAT,
+            source_filename=os.path.basename(str(source.get("filename") or source_file)),
+            column_map=None,
+            outcome=outcome,
+        )
+    except Exception:
+        # The caller rolls the rows back; the evidence copies are files.
+        attachments_root = core_attachments._attachments_root(data_root)
+        for attached in outcome.get("attached_evidence") or ():
+            path, valid = core_attachments._resolve_stored_path(
+                attachments_root, attached.get("stored_relpath")
+            )
+            if path is not None and valid:
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+        raise
     if batch_id:
         outcome["import_batch_id"] = batch_id
     return outcome
@@ -310,14 +326,24 @@ def plan_or_apply(
             details={"remediation": {"action": "replan", "tool": _PLAN_TOOL, "target": {}, "desktop_only": False}},
             retryable=False,
         )
+    # One savepoint holds the wallet, the rows, their evidence and the import
+    # run: the import's own savepoint would otherwise commit the rows before
+    # the run is recorded.
+    conn.execute(f"SAVEPOINT {_APPLY_SAVEPOINT}")
+    savepoint_active = True
     try:
         target_wallet = wallet if wallet is not None else _create_target_wallet(conn, described_target)
         outcome = _import(
             conn, profile, target_wallet, source_file=source_file, draft=draft,
             hooks=hooks, data_root=data_root, attach_evidence=True,
         )
+        conn.execute(f"RELEASE SAVEPOINT {_APPLY_SAVEPOINT}")
+        savepoint_active = False
         conn.commit()
     except Exception:
+        if savepoint_active:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {_APPLY_SAVEPOINT}")
+            conn.execute(f"RELEASE SAVEPOINT {_APPLY_SAVEPOINT}")
         conn.rollback()
         raise
     return {

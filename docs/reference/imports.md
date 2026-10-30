@@ -686,9 +686,9 @@ the document's SHA-256, the book's input version and the plan digest. Rows held
 for review are never imported from chat; the plan says how many and points to
 the desktop's OCR import. An import whose evidence copies would exceed the
 storage budget is blocked in the plan, before consent is asked. The document
-is kept as evidence on each imported row, and the run is recorded in the
-import history; because rolling it back would also delete that evidence, the
-rollback is done in the desktop.
+is kept as evidence on each imported row, and the rows, their evidence and the
+import run are written together or not at all; because rolling the run back
+would also delete that evidence, the rollback is done in the desktop.
 
 ## Wallet completeness and scan bounds
 
