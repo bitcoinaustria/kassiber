@@ -24,13 +24,9 @@ verification, including per-command Rust routing counts.
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
-| `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
-| `crates/journals` | unregistered R4-11 rendering and join checkpoint over typed engine results; [remaining gates and persistence handoff](r4-journal-render-checkpoint.md) |
-| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
-| `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
-| `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
-| `crates/reports` | read-only stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, and saved/filed snapshot listing |
-| `crates/transfers` | stored effective pairs/payouts, gap history, historical receipts, local matching-rule configuration and advisory dismissals |
+| `crates/wallets` | local public descriptor parsing, derivation and preview |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
+| `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
 | `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV artifacts, and append-only saved/filed snapshot markers |
@@ -106,7 +102,7 @@ dependencies.
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
-Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactions list`, all six
+The initial shell checkpoint implemented `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
@@ -114,8 +110,10 @@ inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix` and `import-river`,
 the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 122 recognized leaves total). Each family registers through its own
-CLI module. Every other leaf parses exactly as in Python and then fails
+and `offline` (26 setup leaves; 71 total at that checkpoint). The service
+checkpoints below extend that subset; `describe.rs::IMPLEMENTED` records current
+execution support. Each family registers through its own CLI module. An
+unimplemented leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -5710,3 +5708,84 @@ and all-target clippy with `-D warnings` pass for this boundary.
 Five CLI leaves remain disabled here: gaps list/review and review cases/plan/apply.
 The current-state ledger composition dependency for the latter remains as
 recorded above.
+
+### Gap read checkpoint (R5 transfers-8)
+
+The continuation adds `transfers gaps list|review` and
+`ui.custody.gaps.list|review_context`. The supported total is **26/29 CLI leaves
+(all 25 transfers and one historical review receipt) and 25 desktop kinds**.
+The snapshot service reuses the existing pure gap search, shared authored
+component materializer and current stored gap inputs. It preserves historical
+reviews, reopened bridges, concurrent review conflicts, stale dismissals,
+resolution/native-support validation and evidence drift. Canonical quantity
+issues take precedence over advisory residuals; conflict clusters contribute
+their maximum residual once. Missing canonical issue storage fails closed.
+
+The compact `cgr3.` cursor binds the active observation count, journal input
+version, candidate ordinal and gap identity. Cursor validation precedes candidate
+search, including malformed-evidence failures. Desktop arguments retain the
+200-row cap, allowlisted fields, scope/validation order, safe projection and
+decimal strings beyond JavaScript's exact integer range.
+
+| Parity boundary | Named evidence | Comparison |
+| --- | --- | --- |
+| Gap states, freshness, canonical blockers, pagination, historical reviews and bounded worklists | `gap_snapshots_match_python_ordered_pages_history_and_complete_unchanged_database_rows` | 94 fixed-source books, 1,351 operations (652 successes, 699 refusals); ordered results and complete unchanged application rows |
+| Focused lifecycle and cursor behavior | `gap_snapshot_states_freshness_and_cursor_validation_match_python`, `gap_display_cursor_codec_matches_python_compact_payload_and_refusals` | Version, ordinal, identity and surrogate refusals; authored/dismissal fingerprints, canonical precedence and conflict residual deduplication |
+| Component reference encoding refusals | `component_reads_match_python_ordered_views_filters_and_complete_unchanged_database_rows` | Existing 51-book oracle expands to 1,394 operations (633 successes, 761 refusals); invalid identifiers cannot alias a stored ID |
+| Desktop bounds, privacy and exact quantities | `desktop_gap_reads_bound_arguments_and_project_safe_exact_integers`, `desktop_component_reads_bound_pages_and_keep_local_evidence_private` | Local/correction/native details excluded; every identifier code point preserved |
+| CLI and daemon wire bytes | `tests/test_rust_transfer_reads.py` | 86 component and 74 gap CLI calls; 114 component requests in six daemon sessions and 144 gap requests in eight sessions; complete unchanged pre/post DB dumps |
+
+The read fixtures regenerate byte-identically from Python, freezing the clock
+before schema initialization. No identity, timestamp, hash or serialized field
+is masked. Python-only internal-error traceback debug follows the established
+shell comparison contract. The component encoding refusal text matches Python;
+gap and cursor comparisons preserve non-scalar JSON strings without dropping
+code points. Product Python and AI projections are unchanged.
+
+The **29 final gap/Unicode mutations** are killed by the focused witnesses in
+the table, including the component filter/privacy witness
+`component_read_filters_privacy_and_paging_match_python`. Together with the
+19 pairing and 17 component mutations, this continuation adds **65 killed
+entries**. The main transfer catalog has **280 applicable entries**; the
+separate 35-entry imported pairing catalog remains applicable. Mutation scratch
+builds are removed after their summaries.
+
+Final continuation gates pass on locked Python 3.11 and Rust 1.99.1 with offline
+Cargo: workspace fmt, workspace/all-target clippy and harness-feature clippy
+with `-D warnings`, **991 workspace Rust tests**, **62 network-observer tests**,
+and **14 harness-feature tests**. The required inventory update and preflight
+pass (**57 checks**, including inventory and source/wire contracts). All four
+final read-process tests pass; every candidate invocation is served by Rust,
+with zero Python fallbacks. The first sandboxed workspace attempt refused 16
+owned-loopback network listeners; the authorized local-socket rerun passes all
+tests. No test remains blocked by that sandbox restriction.
+
+The existing swap CLI, component surfaces, gap acceptance/lifecycle and gap/AI
+surface suites also pass against the hybrid candidate: **81 tests and two
+subtests**. Python children and the Rust test harness share a disposable owner
+namespace; `HOME` is inherited unchanged. Their transfer routing is:
+
+| CLI route | Rust calls | Python fallbacks |
+| --- | ---: | ---: |
+| `transfers.suggest` | 12 | 0 |
+| `transfers.bulk-pair` | 6 | 0 |
+| `transfers.rules.apply` | 4 | 0 |
+| `transfers.gaps.list` | 2 | 0 |
+| `transfers.gaps.review` | 1 | 0 |
+| Other already ported transfer routes | 29 | 0 |
+| **Transfer total** | **54** | **0** |
+
+That supplemental run also serves 46 non-transfer setup calls in Rust and
+40 calls through Python for unported wallet creation/imports, journal processing,
+tax summary and mixed daemon sessions. These are outside the supported transfer
+routes. The isolated CLI/daemon comparisons above require zero fallback for
+every invocation, including their supporting reads and native daemon sessions.
+
+Only `review cases|plan|apply` and `ui.review.cases|plan|apply` remain disabled.
+`review_workflow._inspect_cases` invokes `_build` even with stale stored journals;
+planning clones the book and computes live before/after ledger effects; apply
+revalidates under its write lock before storing the receipt. This base's Rust
+custody product API still explicitly skips interpretation, quantity and finalized
+projection. That current-ledger dependency must be ported before these routes
+can satisfy parity. AI projections remain Python. The full transfers/review
+service slice is incomplete.

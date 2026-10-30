@@ -5,7 +5,7 @@ use kassiber_envelope::{s, set, truthy};
 use kassiber_store::rusqlite::{params, params_from_iter};
 
 fn transaction(c: &Connection, scope: &Scope<'_>, reference: &Value) -> Result<Value> {
-    let raw = sql::bind(reference, 2)?;
+    let raw = reference_bind(reference, 2)?;
     if let Some(row) = rows(
         c,
         "SELECT id FROM transactions WHERE profile_id=? AND id=?",
@@ -26,6 +26,25 @@ fn transaction(c: &Connection, scope: &Scope<'_>, reference: &Value) -> Result<V
             format!("Transaction '{}' not found", py_str(reference)),
         )
     })
+}
+
+fn reference_bind(v: &Value, index: usize) -> Result<kassiber_store::rusqlite::types::Value> {
+    if let Value::Str(text) = v {
+        let points: Vec<_> = text.code_points().collect();
+        if let Some(start) = points.iter().position(|p| (0xd800..=0xdfff).contains(p)) {
+            let count = points[start..]
+                .iter()
+                .take_while(|p| (0xd800..=0xdfff).contains(*p))
+                .count();
+            let message = if count == 1 {
+                format!("'utf-8' codec can't encode character '\\u{:04x}' in position {start}: surrogates not allowed",points[start])
+            } else {
+                format!("'utf-8' codec can't encode characters in position {start}-{}: surrogates not allowed",start+count-1)
+            };
+            return Err(AppError::new("internal_error", message));
+        }
+    }
+    sql::bind(v, index)
 }
 
 fn component(c: &Connection, scope: &Scope<'_>, id: &str, local: bool) -> Result<Value> {
@@ -90,6 +109,9 @@ pub(super) fn execute(
 ) -> Result<Value> {
     let local = get(args, "include_local_evidence").is_some_and(truthy);
     if operation == "transfers.components.show" {
+        if let Some(id) = get(args, "component_id") {
+            reference_bind(id, 1)?;
+        }
         return component(c, scope, &text(args, "component_id"), local);
     }
     // CLI and desktop resolve transaction references before the core list checks.

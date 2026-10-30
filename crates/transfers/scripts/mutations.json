@@ -2511,5 +2511,295 @@
       "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
     ],
     "rule": "The probe row never leaks into the page."
+  },
+  {
+    "id": "component-read-surrogate-show",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "reference_bind(id, 1)?",
+    "replace": "sql::bind(id, 1)?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component identifiers preserve Python UTF-8 binding refusals and never alias a scalar identifier."
+  },
+  {
+    "id": "component-read-surrogate-transaction",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "reference_bind(reference, 2)?",
+    "replace": "sql::bind(reference, 2)?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Transaction reference encoding refusals preserve the original code point positions."
+  },
+  {
+    "id": "gap-read-scalar-id",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": ".find(|g| value(g, \"gap_id\") == id)",
+    "replace": ".find(|g| text(g, \"gap_id\") == py_str(&id))",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A non-scalar JSON identifier must never alias an existing gap."
+  },
+  {
+    "id": "gap-read-cursor-surrogate",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if matches!(cursor,Some(Value::Str(text)) if text.as_str().is_none()) {",
+    "replace": "if false && matches!(cursor,Some(Value::Str(text)) if text.as_str().is_none()) {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Non-scalar cursor strings are malformed, not a neutral first page."
+  },
+  {
+    "id": "gap-read-review-conflicts",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "signature(old) != signature(&row)",
+    "replace": "signature(old) == signature(&row)",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Concurrent review conflicts require distinct signatures at the same revision."
+  },
+  {
+    "id": "gap-read-fallback-conflict",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "number(candidate, \"conflict_size\")? > 1.into()",
+    "replace": "number(candidate, \"conflict_size\")? > 2.into()",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Two competing candidates remain conflicting."
+  },
+  {
+    "id": "gap-read-reopen",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if text(r, \"event_kind\") == \"bridge_reopened\" {",
+    "replace": "if false && text(r, \"event_kind\") == \"bridge_reopened\" {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A reopened bridge remains in needs_review."
+  },
+  {
+    "id": "gap-read-authored-fingerprint",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "gaps::authored_claim_fingerprint(&codec::to_json(candidate))",
+    "replace": "gaps::candidate_fingerprint(&codec::to_json(candidate))",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Resolved review displays bind the authored claim fingerprint."
+  },
+  {
+    "id": "gap-read-dismissal-fingerprint",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if !matches && !resolved {",
+    "replace": "if false && !matches && !resolved {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Evidence drift reopens a stale dismissal."
+  },
+  {
+    "id": "gap-read-resolution-admission",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if matches || (usable && [\"partial\", \"corroborated\"].contains(&native.as_str())) {",
+    "replace": "if usable && [\"partial\", \"corroborated\"].contains(&native.as_str()) {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A matching usable reviewed claim remains resolved without native corroboration."
+  },
+  {
+    "id": "gap-read-historical",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "historical(c, scope, r)",
+    "replace": "None",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A historical reviewed gap remains available by its original id."
+  },
+  {
+    "id": "gap-read-component-effective",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if text(&component, \"effective_state\") != \"active\" {",
+    "replace": "if text(&component, \"effective_state\") == \"active\" {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Only an effective component makes a resolved historical claim usable."
+  },
+  {
+    "id": "gap-read-residual-dedup",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "entry.clone().max(amount)",
+    "replace": "entry.clone() + amount",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Competing residuals count once per conflict cluster."
+  },
+  {
+    "id": "gap-read-canonical-priority",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if issues.is_empty() {",
+    "replace": "if !issues.is_empty() {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Canonical quantity issues take priority over advisory residual totals."
+  },
+  {
+    "id": "gap-read-quantified-count",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "quantified += 1;",
+    "replace": "quantified += 0;",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Null-amount issues remain separately unquantified."
+  },
+  {
+    "id": "gap-read-canonical-fresh",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "\"current\" if issues.is_empty() =>",
+    "replace": "\"current\" if !issues.is_empty() =>",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Only a current projection with no canonical issues is described as clear."
+  },
+  {
+    "id": "gap-read-fail-closed",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "rows(c, issue_query, [scope.profile_id]).map_err",
+    "replace": "rows(c, issue_query, [scope.profile_id]).or_else(|_| Ok::<_, AppError>(Vec::new())).map_err",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "An unavailable quantity blocker table cannot turn into report clearance."
+  },
+  {
+    "id": "gap-read-limit",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "n>=&1.into()&&n<=&500.into()",
+    "replace": "n>=&1.into()&&n<=&501.into()",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Core display page limits preserve the Python 500 bound."
+  },
+  {
+    "id": "gap-read-page-start",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "        n + 1\n",
+    "replace": "        n\n",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A continuation starts after its bound ordinal."
+  },
+  {
+    "id": "gap-read-cursor-scalar",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "Ok((n.clone(), parts[2].clone()))",
+    "replace": "Ok((n.clone(), s(py_str(&parts[2]))))",
+    "expect_failing": [
+      "gap_display_cursor_codec_matches_python_compact_payload_and_refusals"
+    ],
+    "rule": "Encoded cursor identities retain all Python string code points."
+  },
+  {
+    "id": "gap-read-cursor-key",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "value(&candidates[n], \"gap_id\") == id",
+    "replace": "true",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A cursor binds both candidate ordinal and gap identity."
+  },
+  {
+    "id": "gap-read-cursor-ordinal",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "start + page.len() - 1",
+    "replace": "start + page.len()",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "The next cursor binds the last returned candidate ordinal."
+  },
+  {
+    "id": "gap-read-cursor-version",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if &parts[0] != version {",
+    "replace": "if false && &parts[0] != version {",
+    "expect_failing": [
+      "gap_display_cursor_codec_matches_python_compact_payload_and_refusals"
+    ],
+    "rule": "Projection cursors expire when the input version changes."
+  },
+  {
+    "id": "desktop-gap-read-cap",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "n>=&1.into()&&n<=&200.into()",
+    "replace": "n>=&1.into()&&n<=&201.into()",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Desktop gap pages retain their narrower 200-row cap."
+  },
+  {
+    "id": "desktop-gap-read-unknown",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".filter(|k| !allowed.contains(&k.as_str()))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Unknown gap display fields cannot expand the authority or projection."
+  },
+  {
+    "id": "desktop-gap-read-projection",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "let downstream = field(gap, \"downstream\");",
+    "replace": "kassiber_envelope::set(&mut projected,\"correction\",field(gap,\"correction\")); let downstream = field(gap, \"downstream\");",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Desktop gap views exclude correction and native component details."
+  },
+  {
+    "id": "desktop-gap-read-exact",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "exact_integers(dict([\n        (\"summary\", summary),",
+    "replace": "std::convert::identity(dict([\n        (\"summary\", summary),",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Desktop display quantities beyond the exact JavaScript range stay strings."
+  },
+  {
+    "id": "desktop-gap-read-scalar",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(&mut payload, \"gap_id\", Value::Str(gap));",
+    "replace": "set(&mut payload,\"gap_id\",s(kassiber_envelope::py_str(&Value::Str(gap))));",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "JSON gap identifiers retain every code point through the adapter."
+  },
+  {
+    "id": "desktop-component-read-scalar",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(&mut payload, \"component_id\", Value::Str(id));",
+    "replace": "set(&mut payload,\"component_id\",s(kassiber_envelope::py_str(&Value::Str(id))));",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "JSON component identifiers must not lose surrogate code points."
   }
 ]

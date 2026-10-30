@@ -25,6 +25,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.rules.apply",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
@@ -34,6 +36,12 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if matches!(
+        kind,
+        "ui.custody.gaps.list" | "ui.custody.gaps.review_context"
+    ) {
+        return gap_reads(book, kind, args);
+    }
     if matches!(
         kind,
         "ui.transfers.components.list" | "ui.transfers.components.get"
@@ -301,15 +309,14 @@ fn component_read_payload(
         let id = get(args, "component_id")
             .and_then(|v| {
                 if let Value::Str(t) = v {
-                    t.as_str()
+                    Some(kassiber_pytext::strip_py(t))
                 } else {
                     None
                 }
             })
-            .map(kassiber_pytext::strip)
-            .filter(|s| !s.is_empty())
+            .filter(|s| s.code_points().next().is_some())
             .ok_or_else(|| AppError::new("validation", format!("{kind} requires component_id")))?;
-        set(&mut payload, "component_id", s(id));
+        set(&mut payload, "component_id", Value::Str(id));
         Ok(("transfers.components.show", payload))
     } else {
         for name in ["state", "component_type", "transaction", "effective_only"] {
@@ -583,7 +590,77 @@ mod tests {
     use super::*;
 
     #[test]
+    fn desktop_gap_reads_bound_arguments_and_project_safe_exact_integers() {
+        let kind = "ui.custody.gaps.list";
+        for limit in [0.into(), 201.into(), Value::Bool(true)] {
+            assert_eq!(
+                gap_read_args(kind, &dict([("limit", limit)]))
+                    .unwrap_err()
+                    .code,
+                "validation"
+            );
+        }
+        let (operation, payload) = gap_read_args(kind, &dict::<&str>([])).unwrap();
+        assert_eq!(operation, "transfers.gaps.list");
+        assert_eq!(get(&payload, "limit"), Some(&100.into()));
+        assert!(gap_read_args(kind, &dict([("cursor", 1.into())])).is_err());
+        for key in ["authored_source", "include_local_evidence", "z"] {
+            let error = gap_read_args(kind, &dict([(key, s("forged"))])).unwrap_err();
+            assert_eq!(
+                error.details,
+                Some(dict([("unknown", Value::List(vec![s(key)]))]))
+            );
+        }
+        let kind = "ui.custody.gaps.review_context";
+        assert!(gap_read_args(kind, &dict([("gap_id", Value::Bool(true))])).is_err());
+        let (operation, payload) = gap_read_args(kind, &dict([("gap_id", s("  gap  "))])).unwrap();
+        assert_eq!(operation, "transfers.gaps.review");
+        assert_eq!(get(&payload, "gap_id"), Some(&s("gap")));
+        let lone = kassiber_pytext::loads("\"gap\\ud800\"").unwrap();
+        let (_, payload) = gap_read_args(kind, &dict([("gap_id", lone.clone())])).unwrap();
+        assert_eq!(get(&payload, "gap_id"), Some(&lone));
+        let raw = dict([
+            ("summary", dict([("total", 1.into())])),
+            (
+                "gaps",
+                Value::List(vec![dict([
+                    ("gap_id", s("gap")),
+                    (
+                        "source_total_msat",
+                        Value::Int(9_007_199_254_740_993_i64.into()),
+                    ),
+                    ("correction", dict([("component_id", s("private"))])),
+                    ("native_support_status", s("corroborated")),
+                    ("retained_msat", 1.into()),
+                ])]),
+            ),
+            ("next_cursor", s("opaque")),
+        ]);
+        let projected = gap_read_projection(raw);
+        let Some(Value::List(gaps)) = get(&projected, "gaps") else {
+            panic!()
+        };
+        assert_eq!(
+            get(&gaps[0], "source_total_msat"),
+            Some(&s("9007199254740993"))
+        );
+        for key in ["correction", "native_support_status", "retained_msat"] {
+            assert!(get(&gaps[0], key).is_none());
+        }
+        assert_eq!(get(&gaps[0], "status_reason"), Some(&Value::Null));
+        assert_eq!(get(&projected, "next_cursor"), Some(&s("opaque")));
+    }
+
+    #[test]
     fn desktop_component_reads_bound_pages_and_keep_local_evidence_private() {
+        let lone = kassiber_pytext::loads("\"id\\ud800\"").unwrap();
+        let (_, payload) = component_read_payload(
+            "ui.transfers.components.get",
+            &dict([("component_id", lone.clone())]),
+            0,
+        )
+        .unwrap();
+        assert_eq!(get(&payload, "component_id"), Some(&lone));
         let page = component_read_page(Value::List(vec![s("a"), s("b"), s("c")]), 2).unwrap();
         assert_eq!(
             page,
@@ -1061,4 +1138,152 @@ mod gap_tests {
             );
         }
     }
+}
+
+fn gap_read_args(kind: &str, args: &Value) -> Result<(&'static str, Value), AppError> {
+    use kassiber_envelope::set;
+    let listing = kind == "ui.custody.gaps.list";
+    let allowed = if listing {
+        vec!["workspace", "profile", "limit", "cursor"]
+    } else {
+        vec!["workspace", "profile", "gap_id"]
+    };
+    let Value::Dict(fields) = args else {
+        unreachable!()
+    };
+    let mut unknown: Vec<_> = fields
+        .iter()
+        .map(|(k, _)| key_text(k))
+        .filter(|k| !allowed.contains(&k.as_str()))
+        .collect();
+    unknown.sort();
+    if !unknown.is_empty() {
+        let error = AppError::new("validation", format!("{kind} received unsupported fields"))
+            .with_details(dict([(
+                "unknown",
+                Value::List(unknown.into_iter().map(s).collect()),
+            )]));
+        return Err(error);
+    }
+    let mut payload = args.clone();
+    if listing {
+        let limit = get(args, "limit").cloned().unwrap_or(100.into());
+        if !matches!(&limit,Value::Int(n)if n>=&1.into()&&n<=&200.into()) {
+            return Err(AppError::new(
+                "validation",
+                format!("{kind} limit must be an integer between 1 and 200"),
+            ));
+        }
+        if !matches!(
+            get(args, "cursor"),
+            None | Some(Value::Null) | Some(Value::Str(_))
+        ) {
+            return Err(AppError::new(
+                "validation",
+                format!("{kind} cursor is invalid"),
+            ));
+        }
+        set(&mut payload, "limit", limit);
+        Ok(("transfers.gaps.list", payload))
+    } else {
+        let gap = get(args, "gap_id")
+            .and_then(|v| {
+                if let Value::Str(t) = v {
+                    Some(kassiber_pytext::strip_py(t))
+                } else {
+                    None
+                }
+            })
+            .filter(|s| s.code_points().next().is_some())
+            .ok_or_else(|| AppError::new("validation", format!("{kind} requires gap_id")))?;
+        set(&mut payload, "gap_id", Value::Str(gap));
+        Ok(("transfers.gaps.review", payload))
+    }
+}
+
+fn gap_read_projection(raw: Value) -> Value {
+    let field = |v: &Value, key: &str| get(v, key).cloned().unwrap_or(Value::Null);
+    let raw_summary = field(&raw, "summary");
+    let summary = dict(
+        [
+            "total",
+            "needs_review",
+            "conflicting",
+            "resolved",
+            "dismissed",
+            "unresolved_msat",
+            "candidate_residual_msat",
+            "candidate_residual_by_asset",
+            "canonical_unresolved_msat",
+            "canonical_issue_count",
+            "canonical_unresolved_by_asset",
+            "canonical_unquantified_issue_count",
+            "canonical_status",
+            "canonical_status_text",
+            "derived_state_current",
+            "qualification",
+            "search_complete",
+            "search_status",
+            "search_limit_kind",
+            "search_candidate_count",
+        ]
+        .into_iter()
+        .map(|key| (key, get(&raw_summary, key).cloned().unwrap_or(0.into()))),
+    );
+    let gaps = if let Some(Value::List(gaps)) = get(&raw, "gaps") {
+        gaps.as_slice()
+    } else {
+        &[]
+    };
+    let gaps = gaps
+        .iter()
+        .filter(|v| matches!(v, Value::Dict(_)))
+        .map(|gap| {
+            let mut projected = dict(
+                [
+                    "gap_id",
+                    "candidate_fingerprint",
+                    "status",
+                    "status_reason",
+                    "asset",
+                    "source_wallet_label",
+                    "destination_wallet_labels",
+                    "source_total_msat",
+                    "source_fee_msat",
+                    "source_debit_msat",
+                    "return_total_msat",
+                    "residual_msat",
+                    "started_at",
+                    "ended_at",
+                    "confidence",
+                    "promotion_eligible",
+                    "competitor_score_margin",
+                    "reason_codes",
+                ]
+                .into_iter()
+                .map(|key| (key, field(gap, key))),
+            );
+            let downstream = field(gap, "downstream");
+            kassiber_envelope::set(
+                &mut projected,
+                "downstream",
+                dict(
+                    ["affected_disposals", "affected_years"]
+                        .into_iter()
+                        .map(|key| (key, field(&downstream, key))),
+                ),
+            );
+            projected
+        })
+        .collect();
+    exact_integers(dict([
+        ("summary", summary),
+        ("gaps", Value::List(gaps)),
+        ("next_cursor", field(&raw, "next_cursor")),
+    ]))
+}
+
+fn gap_reads(book: &mut dyn Book, kind: &str, args: &Value) -> Result<Value, AppError> {
+    let (operation, payload) = gap_read_args(kind, args)?;
+    book.transfers(operation, &payload).map(gap_read_projection)
 }

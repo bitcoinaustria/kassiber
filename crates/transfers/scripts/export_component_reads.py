@@ -82,6 +82,8 @@ def main():
                     {},dict(limit=1),dict(effective_only=True,limit=1),dict(state='draft'),dict(state='active'),dict(state='superseded'),dict(component_type='swap'),dict(transaction='d-ext'),dict(transaction='j-ext'),dict(transaction='absent'),dict(limit=0),dict(limit=True),dict(limit=1002),dict(state='bad'),dict(state=' ACTIVE '),dict(component_type='bad'),dict(include_local_evidence=True),
                 )]
                 operations += [('transfers.components.show',dict(component_id=id,include_local_evidence=local)) for id in [*ids,'absent'] for local in (False,True)]
+                operations += [('transfers.components.show',dict(component_id=id)) for id in ('\ud800','x\ud800\ud801',ids[0]+'\ud800' if ids else 'absent\ud800')]
+                operations += [('transfers.components.list',dict(transaction='d\ud800-ext'))]
                 if ids:operations.append(('transfers.components.show',dict(component_id=ids[0],profile='other')))
                 before=dump(c);cases=[]
                 for operation,options in operations:

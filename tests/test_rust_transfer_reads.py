@@ -136,6 +136,7 @@ class RustTransferReadsTest(unittest.TestCase):
             requests += [dict(kind='ui.transfers.components.get', args=args) for args in (
                 dict(component_id=ids[0]), dict(component_id=' '+ids[0]+' ', include_local_evidence=True),
                 dict(component_id='absent'), dict(component_id=True), dict(component_id=' ', profile='missing'),
+                dict(component_id='\ud800'), dict(component_id=ids[0]+'\ud800'),
             )]
             results = []
             for rust in (False, True):
@@ -148,3 +149,51 @@ class RustTransferReadsTest(unittest.TestCase):
             self.assertEqual(results[0], results[1], scenario['name'])
         observed = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(observed, [dict(command='daemon', served_by='rust')]*6)
+
+    def gap_scenarios(self):
+        fixture=json.loads((ROOT/'crates/transfers/tests/gap_reads.json').read_text())
+        names=('lifecycle--1-base','lifecycle--1-issues','lifecycle-1-base','lifecycle-3-base','lifecycle-1-review-conflict','lifecycle--1-competing','split-large--1-base','evidence-changed-3-base')
+        return [next(s for s in fixture['scenarios'] if s['name']==name) for name in names]
+
+    def test_gap_cli_bytes_pages_history_refusals_and_unchanged_rows(self):
+        for scenario in self.gap_scenarios():
+            roots=[self.book(f'gap-cli-{scenario["name"]}-{rust}',scenario) for rust in (False,True)]
+            gap=next(c['args']['gap_id'] for c in scenario['cases'] if c['operation'].endswith('review') and c['args']['gap_id'] not in ('','absent'))
+            commands=[['list'],['list','--limit','1'],['list','--cursor','0'],['list','--limit','0'],['list','--cursor','bad'],['review','--gap-id',gap],['review','--gap-id','absent'],['review','--gap-id','']]
+            commands += [['list','--limit','1','--cursor',c['args']['cursor']] for c in scenario['cases'] if isinstance(c['args'].get('cursor'),str) and c['args']['cursor'].startswith('cgr3.')]
+            for args in commands:
+                results=[]
+                for rust,root in zip((False,True),roots):
+                    before=self.dump(root)
+                    result=self.run_cli(root,['transfers','gaps',*args],rust)
+                    if args==['list']:
+                        self.assertEqual(result.returncode,0,(scenario['name'],result.stdout,result.stderr))
+                    results.append((result.returncode,result.stdout,result.stderr))
+                    self.assertEqual(self.dump(root),before)
+                self.assertEqual(results[0],results[1],(scenario['name'],args))
+        observed=[json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertTrue(all(r['served_by']=='rust' for r in observed),observed)
+        self.assertEqual({r['command'] for r in observed},{'transfers.gaps.list','transfers.gaps.review'})
+
+    def test_gap_daemon_bytes_projection_pages_and_validation_order(self):
+        for scenario in self.gap_scenarios():
+            gap=next(c['args']['gap_id'] for c in scenario['cases'] if c['operation'].endswith('review') and c['args']['gap_id'] not in ('','absent'))
+            requests=[dict(kind='ui.custody.gaps.list',args=args) for args in (
+                {},dict(limit=1),dict(limit=201),dict(limit=True),dict(cursor=0),dict(include_local_evidence=True),dict(limit=0,profile='missing'),dict(cursor='bad',profile='missing'),
+            )]
+            requests += [dict(kind='ui.custody.gaps.review_context',args=args) for args in (
+                dict(gap_id=gap),dict(gap_id=' '+gap+' '),dict(gap_id='absent'),dict(gap_id=True),dict(gap_id=''),dict(gap_id=gap,limit=1),dict(gap_id=None,profile='missing'),
+                dict(gap_id='\ud800'),dict(gap_id=gap+'\ud800'),
+            )]
+            requests.append(dict(kind='ui.custody.gaps.list',args=dict(cursor='0\ud800')))
+            results=[]
+            for rust in (False,True):
+                root=self.book(f'gap-daemon-{scenario["name"]}-{rust}',scenario)
+                before=self.dump(root)
+                results.append(self.run_daemon(root,requests,rust))
+                self.assertEqual(self.dump(root),before)
+                for index in (0,1,8,9,10):
+                    self.assertNotIn('error',json.loads(results[-1][index]),results[-1][index])
+            self.assertEqual(results[0],results[1],scenario['name'])
+        observed=[json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertEqual(observed,[dict(command='daemon',served_by='rust')]*8)

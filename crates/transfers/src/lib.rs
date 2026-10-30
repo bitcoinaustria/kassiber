@@ -7,6 +7,7 @@ mod dismissals;
 mod gap_candidates;
 mod gap_review;
 mod gap_review_store;
+mod gap_snapshot;
 mod history;
 mod pair_authoring;
 mod pair_spec;
@@ -66,6 +67,9 @@ pub fn execute_with_sources(
         "transfers.payouts.create" => payout_create::execute(conn, scope, args, sources),
         "transfers.gaps.plan" | "transfers.gaps.apply" => {
             gap_review::execute(conn, scope, operation, args, sources)
+        }
+        "transfers.gaps.list" | "transfers.gaps.review" => {
+            gap_snapshot::execute(conn, scope, operation, args)
         }
         "transfers.components.plan" | "transfers.components.apply" => {
             component_review::execute(conn, scope, operation, args, sources)

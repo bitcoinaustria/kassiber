@@ -150,6 +150,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.gaps.history",
     "transfers.gaps.plan",
     "transfers.gaps.apply",
+    "transfers.gaps.list",
+    "transfers.gaps.review",
     "transfers.rules.list",
     "transfers.rules.create",
     "transfers.rules.delete",

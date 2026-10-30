@@ -80,8 +80,18 @@ fn worklist(c: &Connection, profile: &str, count: i64) -> Result<(Vec<serde_json
     Ok((selected.iter().map(codec::to_json).collect(), large))
 }
 
-pub(super) fn find(c: &Connection, scope: &Scope<'_>, gap: &str) -> Result<Value> {
-    let profile = rows(c,"SELECT p.*,(SELECT COUNT(*) FROM transactions t WHERE t.profile_id=p.id AND t.excluded=0) AS active_count FROM profiles p WHERE p.id=?",[scope.profile_id])?.remove(0);
+pub(super) fn profile(c: &Connection, scope: &Scope<'_>) -> Result<Value> {
+    Ok(rows(c,"SELECT p.*,(SELECT COUNT(*) FROM transactions t WHERE t.profile_id=p.id AND t.excluded=0) AS active_count FROM profiles p WHERE p.id=?",[scope.profile_id])?.remove(0))
+}
+
+pub(super) struct Loaded {
+    pub result: Value,
+    pub display_rows: Vec<serde_json::Value>,
+    pub journal_status: String,
+}
+
+pub(super) fn load(c: &Connection, scope: &Scope<'_>) -> Result<Loaded> {
+    let profile = profile(c, scope)?;
     let count = integer(&value(&profile, "active_count"))?;
     let count = i64::try_from(count).map_err(|_| internal("transaction count overflow"))?;
     let version = |key| {
@@ -141,14 +151,38 @@ pub(super) fn find(c: &Connection, scope: &Scope<'_>, gap: &str) -> Result<Value
     }
     let result = gaps::compute(&worklist, large, &ignored, &accounting, 250)
         .map_err(|message| search_error(&worklist, message))?;
-    result["candidates"]
-        .as_array()
+    let journal_status = if count == 0 {
+        "no_transactions"
+    } else if !truthy(&value(&profile, "last_processed_at")) {
+        "not_processed"
+    } else if current {
+        "current"
+    } else {
+        "stale"
+    }
+    .into();
+    let display_rows = worklist
         .into_iter()
-        .flatten()
-        .find(|v| v["gap_id"] == gap)
-        .map(codec::from_json)
-        .transpose()
-        .map_err(internal)?
+        .filter(|r| !ignored.contains(kassiber_pytext::strip(r["id"].as_str().unwrap_or_default())))
+        .collect();
+    Ok(Loaded {
+        result: codec::from_json(&result).map_err(internal)?,
+        display_rows,
+        journal_status,
+    })
+}
+
+pub(super) fn find(c: &Connection, scope: &Scope<'_>, gap: &str) -> Result<Value> {
+    let loaded = load(c, scope)?;
+    let candidates = get(&loaded.result, "candidates");
+    let list = if let Some(Value::List(v)) = candidates {
+        v.as_slice()
+    } else {
+        &[]
+    };
+    list.iter()
+        .find(|v| text(v, "gap_id") == gap)
+        .cloned()
         .ok_or_else(|| {
             AppError::new(
                 "custody_gap_not_found",

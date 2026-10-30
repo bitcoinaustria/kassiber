@@ -1628,6 +1628,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "70b6f628-0219-5ca7-897f-87f54eac087c\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "70b6f628-0219-5ca7-897f-87f54eac087c",
             "profile": "other"
           },
@@ -3085,6 +3137,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "70b6f628-0219-5ca7-897f-87f54eac087c\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -5505,6 +5609,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "0aae4f91-1cde-5b1f-9175-03101805886d\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -8116,6 +8272,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "0aae4f91-1cde-5b1f-9175-03101805886d\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "0aae4f91-1cde-5b1f-9175-03101805886d",
             "profile": "other"
           },
@@ -9569,6 +9777,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -11218,6 +11478,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce",
             "profile": "other"
           },
@@ -12675,6 +12987,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -14319,6 +14683,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -16918,6 +17334,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -19524,6 +19992,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -23091,6 +23611,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -27635,6 +28207,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -33325,6 +33949,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -40236,6 +40912,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "03ceb708-c178-5917-aa12-82d67fa63450\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "03ceb708-c178-5917-aa12-82d67fa63450",
             "profile": "other"
           },
@@ -43275,6 +44003,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "761f5fe2-d003-5ef6-9e1e-978b94f839ac\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -48039,6 +48819,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "761f5fe2-d003-5ef6-9e1e-978b94f839ac\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "761f5fe2-d003-5ef6-9e1e-978b94f839ac",
             "profile": "other"
           },
@@ -49678,6 +50510,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -52127,6 +53011,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "9e3a7021-b377-50c9-bdd0-7a2bc33fcde9\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "9e3a7021-b377-50c9-bdd0-7a2bc33fcde9",
             "profile": "other"
           },
@@ -54387,6 +55323,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "9e3a7021-b377-50c9-bdd0-7a2bc33fcde9\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -56840,6 +57828,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "9e3a7021-b377-50c9-bdd0-7a2bc33fcde9\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "9e3a7021-b377-50c9-bdd0-7a2bc33fcde9",
             "profile": "other"
           },
@@ -58414,6 +59454,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "28cb1cef-98dc-5535-b841-94bc2e83334c\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -60773,6 +61865,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "28cb1cef-98dc-5535-b841-94bc2e83334c\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -64281,6 +65425,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "28cb1cef-98dc-5535-b841-94bc2e83334c\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "28cb1cef-98dc-5535-b841-94bc2e83334c",
             "profile": "other"
           },
@@ -65855,6 +67051,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "3a978f48-ac8d-595f-8833-476403c40eab\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -67499,6 +68747,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -70110,6 +71410,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "7563730c-cacc-548e-8c41-e1d1d4285ad6\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "7563730c-cacc-548e-8c41-e1d1d4285ad6",
             "profile": "other"
           },
@@ -72713,6 +74065,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "7563730c-cacc-548e-8c41-e1d1d4285ad6\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "7563730c-cacc-548e-8c41-e1d1d4285ad6",
             "profile": "other"
           },
@@ -74204,6 +75608,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "97bb8024-99c4-5be5-a242-9585c9acb7ea\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "97bb8024-99c4-5be5-a242-9585c9acb7ea",
             "profile": "other"
           },
@@ -74540,6 +75996,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "absent\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 6: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         }
       ]
@@ -76106,6 +77614,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "28cb1cef-98dc-5535-b841-94bc2e83334c\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "28cb1cef-98dc-5535-b841-94bc2e83334c",
             "profile": "other"
           },
@@ -77367,6 +78927,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "85b8543d-81cd-5516-972f-dc0582026035\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "85b8543d-81cd-5516-972f-dc0582026035",
             "profile": "other"
           },
@@ -77704,6 +79316,58 @@
               "component_id": "absent"
             }
           }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "absent\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 6: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
         }
       ]
     },
@@ -78027,6 +79691,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "absent\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 6: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         }
       ]
@@ -79654,6 +81370,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "fixed\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 5: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -82106,6 +83874,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "d600751a-85c6-5261-862a-8af4dea55bc1\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "d600751a-85c6-5261-862a-8af4dea55bc1",
             "profile": "other"
           },
@@ -83745,6 +85565,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "a9f375f2-4177-527c-86bf-555ce3990dff\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -86351,6 +88223,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "18fa5452-8843-559e-ae7f-c0b0ea61a96f\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -89923,6 +91847,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "063f86ee-2d54-574f-bf0f-2c146cd80a6d\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "063f86ee-2d54-574f-bf0f-2c146cd80a6d",
             "profile": "other"
           },
@@ -92036,6 +94012,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "8f5b1aac-b589-5990-aabd-c695a3a000c5\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -95554,6 +97582,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "8f5b1aac-b589-5990-aabd-c695a3a000c5\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "8f5b1aac-b589-5990-aabd-c695a3a000c5",
             "profile": "other"
           },
@@ -97305,6 +99385,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "5005722e-32da-5350-81b8-237e52fee160\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "5005722e-32da-5350-81b8-237e52fee160",
             "profile": "other"
           },
@@ -98944,6 +101076,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -100593,6 +102777,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "29d757b5-6a5a-55ab-9aa7-3de0b3e4ab2b\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "29d757b5-6a5a-55ab-9aa7-3de0b3e4ab2b",
             "profile": "other"
           },
@@ -102050,6 +104286,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "29d757b5-6a5a-55ab-9aa7-3de0b3e4ab2b\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -103694,6 +105982,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "df87b1e4-dd4e-5ccf-b2dc-0f65aad153e3\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -106298,6 +108638,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405",
             "profile": "other"
           },
@@ -108892,6 +111284,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -112454,6 +114898,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "4fd09001-6c17-575c-897f-ee6c5228e405",
             "profile": "other"
           },
@@ -113907,6 +116403,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         },
         {
@@ -116328,6 +118876,58 @@
         {
           "operation": "transfers.components.show",
           "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 36: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
             "component_id": "eb853f0b-9158-5f6c-8c7b-b570b9716bce",
             "profile": "other"
           },
@@ -116664,6 +119264,58 @@
             "details": {
               "component_id": "absent"
             }
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "x\ud800\ud801"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.show",
+          "args": {
+            "component_id": "absent\ud800"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 6: surrogates not allowed",
+            "hint": null,
+            "details": null
+          }
+        },
+        {
+          "operation": "transfers.components.list",
+          "args": {
+            "transaction": "d\ud800-ext"
+          },
+          "profile": "p",
+          "error": {
+            "code": "internal_error",
+            "message": "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed",
+            "hint": null,
+            "details": null
           }
         }
       ]

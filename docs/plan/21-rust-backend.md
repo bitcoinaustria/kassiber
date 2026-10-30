@@ -2433,3 +2433,29 @@ across 51 books and 1,190 reads. Real CLI/daemon comparisons require zero hybrid
 fallbacks. The [shell checkpoint](../reference/rust-shell.md#component-read-checkpoint-r5-transfers-8)
 records counts and mutation witnesses. Gap snapshots and the three current-ledger
 review operations remain disabled at this boundary; AI projections stay Python.
+
+### R5 gap read checkpoint
+
+The transfers-8 continuation adds gap list/review and
+`ui.custody.gaps.list|review_context`: **26/29 CLI leaves (all 25 transfers,
+one historical review receipt) and 25 desktop kinds**. The existing pure gap
+search and authored component materializer supply candidate and reviewed state.
+Snapshots preserve historical, reopened, conflicting and evidence-drift states,
+canonical quantity blocker precedence, journal freshness, conflict-deduplicated
+residual totals and version/ordinal/identity-bound cursor pages. Desktop reads
+retain their narrower page cap, safe fields and exact integer strings.
+
+The fixed-source oracle covers 94 books and 1,351 reads, comparing ordered
+results/refusals and complete unchanged application rows. The component oracle
+expands to 1,394 reads over its existing 51 books to cover surrogate identifiers:
+invalid component references retain Python's encoding refusal; gap and cursor
+identifiers cannot alias a real ID after code point loss. Product Python and AI
+projections remain unchanged. The [shell checkpoint](../reference/rust-shell.md#gap-read-checkpoint-r5-transfers-8)
+records process, mutation and final gate evidence.
+
+This is a verified partial boundary, not completion of the service slice.
+`review cases|plan|apply` and `ui.review.cases|plan|apply` remain disabled. Each
+requires `review_workflow._build` and a fresh `custody_journal.build_ledger_state`,
+including live before/after simulation and locked apply revalidation. This
+base's Rust custody API explicitly skips interpretation, quantity and finalized
+projection; reading stored journals would violate the current-state contract.
