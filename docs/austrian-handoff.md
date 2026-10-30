@@ -216,8 +216,9 @@ For split source transactions, the row can store an `out_amount` that covers
 only the payout portion of the source spend; journal processing derives the
 remaining same-asset self-transfer from the imported owned inbound leg.
 The model is country-neutral: the reviewed `payout_fiat_value`, when
-present, becomes the taxable source-row proceeds for ordinary direct
-payout reviews. Cross-asset carrying-value treatment is available for
+present, becomes the taxable proceeds for only the reviewed source allocation
+in ordinary direct payout reviews. A partial payout never prices the unreviewed
+residual; that part uses normal transaction pricing or remains quarantined. Cross-asset carrying-value treatment is available for
 Austrian profiles and for BTC/LBTC Bitcoin-rail moves in generic profiles.
 
 For cross-asset `policy=carrying-value` payouts, Kassiber

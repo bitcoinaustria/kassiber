@@ -19,6 +19,7 @@ from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
 from ..proxy import urlopen_with_proxy
 from ..redaction import request_credentials
+from .custody_pricing import finite_decimal
 from . import pricing
 from ..time_utils import _iso_z, _parse_iso_datetime
 
@@ -225,10 +226,8 @@ def http_get_json(
 def _float_from_exact(value):
     if value in (None, ""):
         return None, None
-    exact = pricing.exact_decimal(value)
-    if exact is None:
-        return None, None
-    return float(pricing.decimal_from_exact(exact)), exact
+    number = finite_decimal(value, "rate cache value")
+    return float(number), format(number, "f")
 
 
 def _rate_insert_params(
@@ -1750,11 +1749,11 @@ def _parse_kraken_csv_row(row, member_name, line_number, interval_minutes):
                 tz=timezone.utc,
             )
         )
-        open_value = pricing.decimal_from_exact(open_raw)
-        high_value = pricing.decimal_from_exact(high_raw)
-        low_value = pricing.decimal_from_exact(low_raw)
-        close_value = pricing.decimal_from_exact(close_raw)
-        volume_value = pricing.decimal_from_exact(volume_raw)
+        open_value = finite_decimal(open_raw, "open")
+        high_value = finite_decimal(high_raw, "high")
+        low_value = finite_decimal(low_raw, "low")
+        close_value = finite_decimal(close_raw, "close")
+        volume_value = finite_decimal(volume_raw, "volume")
         trades = int(trades_raw)
     except Exception as exc:
         raise AppError(f"{member_name}:{line_number}: invalid row values", code="validation") from exc
@@ -2110,12 +2109,7 @@ def sync_rates(
 
 def set_manual_rate(conn, pair, timestamp, rate, source="manual", granularity=None, method=None):
     normalized = _normalize_rate_pair(pair)
-    try:
-        value = pricing.decimal_from_exact(rate)
-    except Exception as exc:
-        raise AppError(f"Invalid rate '{rate}'", code="validation") from exc
-    if value is None:
-        raise AppError(f"Invalid rate '{rate}'", code="validation")
+    value = finite_decimal(rate, "rate")
     if value <= 0:
         raise AppError("Rate must be positive", code="validation")
     effective_granularity = granularity or ("exact" if source == "manual" else "unknown")

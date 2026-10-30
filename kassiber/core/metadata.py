@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ..errors import AppError
 from ..importers import GENERIC_LEDGER_KIND_DIRECTIONS, load_bip329_file
 from ..msat import dec, msat_to_btc
+from .custody_pricing import finite_decimal
 from . import pricing
 from . import ownership
 from . import transaction_history
@@ -286,13 +287,7 @@ def _clean_fiat_currency(value, fallback):
 def _clean_decimal_or_none(value, field):
     if value in (None, ""):
         return None
-    try:
-        number = dec(value)
-    except Exception as exc:
-        raise AppError(f"{field} must be a decimal number", code="validation", retryable=False) from exc
-    if not number.is_finite():
-        raise AppError(f"{field} must be a finite decimal number", code="validation", retryable=False)
-    return number
+    return finite_decimal(value, field)
 
 
 def _clean_optional_choice(value, field, choices):

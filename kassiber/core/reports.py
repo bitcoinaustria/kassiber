@@ -5925,6 +5925,13 @@ def _optional_decimal_pref(row, exact_key, legacy_key):
     value = _optional_decimal(row.get(exact_key))
     if value is None:
         value = _optional_decimal(row.get(legacy_key))
+    # Raw transaction exports remain available for recovery of legacy bad prices.
+    if value is not None:
+        from .custody_pricing import finite_decimal
+        try:
+            return finite_decimal(value, exact_key)
+        except AppError:
+            return None
     return value
 
 

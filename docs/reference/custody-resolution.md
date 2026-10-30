@@ -8,12 +8,6 @@ wallets.
 
 ## One path from observation to report
 
-When an explicit blocker holds a connected selected custody path, every
-dependent quarantine names the complete set of explicit roots in that path
-in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
-another root to a dependent; propagation continues through it until no origin
-set grows. Unconnected blockers are excluded.
-
 1. Wallet adapters observe transactions and outputs. Native chain sync records
    closed provenance bound to the normalized graph and exact wallet quantity.
 2. `CustodyJournalBuilder` combines the current observations, ownership index,
@@ -23,6 +17,12 @@ set grows. Unconnected blockers are excluded.
 4. The finalized projection supplies selected movements and external events to
    the [tax engine](tax-engine.md). Reports, graphs and AI read the resulting
    stored projection.
+
+When an explicit blocker holds a connected selected custody path, every
+dependent quarantine names the complete set of explicit roots in that path
+in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
+another root to a dependent; propagation continues through it until no origin
+set grows. Unconnected blockers are excluded.
 
 An export's transaction hash can identify an event, but graph-shaped imported
 JSON cannot impersonate a native observer, and a supporting import cannot erase
@@ -405,11 +405,16 @@ owner's explicit choice for that pair, and its reason records that choice.
 The Review screen uses it for the pairs the owner picked, one or several,
 so the recalculated journals are stored in the same transaction.
 
-Prices are decimal strings. Custody payout values and imported fiat values/rates
-must be finite and representable in numeric output; NaN, infinity, malformed
-decimals, and numeric overflow return a typed `validation` error before review
-writes. Finalized custody tax projection also refuses invalid stored pricing
-(including legacy rows) rather than emitting nonfinite journal inputs. A price
+Prices are decimal strings. Payouts, overrides, imports, manual/cached rates,
+commercial/document prices and source-of-funds values share finite decimal
+validation. NaN, infinity, malformed decimals, float overflow, exponents outside
+-308…308 and nonzero magnitudes below 1e-13 return typed `validation` errors
+before storage or fixed-point formatting. The lower bound prevents prices
+comparing as zero in the tax engine. Negative zero normalizes to zero.
+Finalized custody projection names the transaction when refusing invalid stored
+pricing. Raw transaction exports leave invalid legacy prices blank. Invalid
+legacy payout rows remain listed with `invalid=true` and can be deleted and
+recreated. Split payout allocations fail closed until reviewed. A price
 assertion still needs evidence: the module
 checks arithmetic and records the reviewed assertion, rather than proving an
 invoice's contents. An exclusion is never a substitute for explaining an owned
@@ -421,8 +426,9 @@ policy only to the selected reviewed source allocation. An unmatched external
 residual uses normal transaction pricing; without an admissible price it is
 quarantined. The existing basis-provenance barrier can also hold subsequent
 allocations of the same source. Payout terms never price that residual.
-New payout reviews retain the authored decimal text without conversion through
-a float. Historical float-derived terms retain their stored value; correcting
+New payout reviews retain the exact decimal value without conversion through
+a float; its text form may normalize (for example `0.0000001` may be stored as `1E-7`).
+Historical float-derived terms retain their stored value; correcting
 one requires an explicit replacement review, not an inferred rounding repair.
 
 The chat's bounded review capability pack is selected by English/German review

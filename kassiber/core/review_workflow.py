@@ -5,6 +5,7 @@ operations and ledger builder on an isolated memory snapshot. Application
 revalidates that result under SQLite's writer lock and stores one durable
 receipt alongside existing domain history. A digest binds content, not authority.
 """
+
 from __future__ import annotations
 
 import base64
@@ -21,6 +22,7 @@ from ..errors import AppError
 from ..msat import dec, msat_to_btc
 from ..secrets import sqlcipher
 from ..time_utils import now_iso
+from .custody_pricing import finite_decimal
 from .custody_quantity import CUSTODY_SUSPENSE
 from . import (
     custody_component_planner, custody_components, custody_gap_reviews, custody_gaps,
@@ -417,7 +419,7 @@ def _operations(operations):
             if not isinstance(operation[key], str) or len(operation[key]) > 512:
                 raise _error("Review prices must be exact decimal strings of at most 512 characters")
             try:
-                value = Decimal(operation[key])
+                value = finite_decimal(operation[key], key)
                 if (not value.is_finite() or abs(value.as_tuple().exponent) > 512
                         or value < 0 or (key == "fiat_rate" and value == 0)):
                     raise ValueError()
