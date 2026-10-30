@@ -300,9 +300,14 @@ def test_daemon_metadata_rejects_price_without_writes(book, value):
     book.commit()
     before = book.total_changes
     with pytest.raises(AppError) as error:
-        _transaction_metadata_update_payload(book, dict(transaction='out', fiat_rate=value), default_source='user')
+        _transaction_metadata_update_payload(book, dict(transaction='out', fiat_rate=value,
+            pricing_source_kind='manual_override', pricing_quality='exact'), default_source='gui')
     assert error.value.code == 'validation'
+    assert 'fiat_rate' in str(error.value)
     assert book.total_changes == before
+    _transaction_metadata_update_payload(book, dict(transaction='out', fiat_rate='50000',
+        pricing_source_kind='manual_override', pricing_quality='exact'), default_source='gui')
+    assert book.execute("SELECT fiat_rate_exact FROM transactions WHERE id='out'").fetchone()[0] == '50000'
 
 
 @pytest.mark.parametrize('rate', ['1e18', '9999999999999997952'])
