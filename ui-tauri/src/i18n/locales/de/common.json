@@ -60,5 +60,13 @@
   "answer": {
     "yes": "Ja",
     "no": "Nein"
+  },
+  "period": {
+    "year": "Jahr",
+    "yearMenuAria": "Ein Kalenderjahr zeigen",
+    "yearCount_one": "{{count}} Tx",
+    "yearCount_other": "{{count}} Tx",
+    "yearCountSoFar_one": "bis heute · {{count}} Tx",
+    "yearCountSoFar_other": "bis heute · {{count}} Tx"
   }
 }

@@ -119,9 +119,7 @@ export function SettingsScreen({
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
   const appScale = useUiStore((s) => s.appScale);
-  const increaseAppScale = useUiStore((s) => s.increaseAppScale);
-  const decreaseAppScale = useUiStore((s) => s.decreaseAppScale);
-  const resetAppScale = useUiStore((s) => s.resetAppScale);
+  const setAppScale = useUiStore((s) => s.setAppScale);
   const setExplorerSettings = useUiStore((s) => s.setExplorerSettings);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
@@ -1022,9 +1020,7 @@ export function SettingsScreen({
             theme={theme}
             setTheme={setTheme}
             appScale={appScale}
-            increaseAppScale={increaseAppScale}
-            decreaseAppScale={decreaseAppScale}
-            resetAppScale={resetAppScale}
+            setAppScale={setAppScale}
             currency={currency}
             setCurrency={setCurrency}
             lang={lang}

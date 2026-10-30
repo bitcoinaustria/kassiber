@@ -32,7 +32,7 @@ and process again.
 
 If provider-derived rates were cached from an older or approximate source, use
 `kassiber rates rebuild --source coinbase-exchange --reprice-transactions` or
-the desktop Settings → Rate providers rebuild action. Warn users with large
+the desktop Settings → Market data rebuild action. Warn users with large
 wallets that a rebuild can be slow because Kassiber refetches one-minute
 Coinbase windows and reprocesses journals. Manual overrides and imported
 exchange execution prices are not cleared.
