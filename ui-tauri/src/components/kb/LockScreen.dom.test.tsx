@@ -212,32 +212,112 @@ describe("LockScreen", () => {
 
   it("falls back to the passphrase when the native Touch ID sheet is cancelled", async () => {
     // Tauri rejects the call instead of answering with an envelope.
-    renderLock({
+    let cancel!: (reason: unknown) => void;
+    const prompt = new Promise<{ ok: boolean }>((_, reject) => {
+      cancel = reject;
+    });
+    const props = renderLock({
+      reason: "daemon-auth",
       touchIdEnabled: true,
       touchIdPlatformSupported: true,
       touchIdStatus: configuredTouchId,
-      onTouchIdUnlock: vi.fn(async () => {
-        dropFocusLikeABrowser();
-        throw "macOS protected Keychain rejected the operation (-128).";
-      }),
+      onTouchIdUnlock: vi.fn(() => prompt),
     });
-    const touchId = screen.getByRole("button", {
-      name: "Unlock with Touch ID",
-    }) as HTMLButtonElement;
+    fireEvent.change(screen.getByLabelText("Passphrase"), {
+      target: { value: "correct horse" },
+    });
 
     await act(async () => {
-      fireEvent.click(touchId);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Unlock with Touch ID" }),
+      );
+    });
+
+    expect(screen.queryByLabelText("Passphrase")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Touch ID/ })).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe(
+      "Waiting for Touch ID...",
+    );
+    expect(
+      screen.getByText("Confirm with Touch ID in the macOS prompt."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Kassiber needs the passphrase again before it can show them.",
+      ),
+    ).toBeNull();
+    expect(props.onUnlock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      cancel("macOS protected Keychain rejected the operation (-128).");
     });
 
     expect(screen.getByRole("alert").textContent).toBe(
       "Touch ID did not unlock these books.",
     );
-    expect(touchId.disabled).toBe(false);
-    expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    const field = screen.getByLabelText("Passphrase") as HTMLInputElement;
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe("correct horse");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(
+      screen.getByText(
+        "Kassiber needs the passphrase again before it can show them.",
+      ),
+    ).toBeTruthy();
     expect(getAppLogRecords().map((record) => record.msg)).toContain(
       "touch-id unlock rejected: macOS protected Keychain rejected the operation (-128).",
     );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Unlock" }));
+    });
+    expect(props.onUnlock).toHaveBeenCalledWith("correct horse", {
+      rememberWithTouchId: undefined,
+    });
   });
+
+  it.each([true, false])(
+    "shows only Touch ID while an automatic prompt runs (ok=%s)",
+    async (ok) => {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      vi.spyOn(document, "hasFocus").mockReturnValue(true);
+      let finish!: (result: { ok: boolean; error?: string }) => void;
+      const prompt = new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        finish = resolve;
+      });
+      const props = renderLock({
+        touchIdEnabled: true,
+        touchIdPlatformSupported: true,
+        touchIdStatus: configuredTouchId,
+        autoTouchIdPrompt: true,
+        onTouchIdUnlock: vi.fn(() => prompt),
+      });
+
+      expect(props.onTouchIdUnlock).toHaveBeenCalledTimes(1);
+      expect(screen.queryByLabelText("Passphrase")).toBeNull();
+      expect(screen.getByRole("status").textContent).toBe(
+        "Waiting for Touch ID...",
+      );
+
+      await act(async () => {
+        finish({ ok, error: ok ? undefined : "The saved passphrase is stale." });
+      });
+
+      if (ok) {
+        // Keep the waiting view until AppShell removes the lock screen.
+        expect(screen.queryByLabelText("Passphrase")).toBeNull();
+        expect(screen.getByRole("status")).toBeTruthy();
+      } else {
+        expect(screen.getByRole("alert").textContent).toBe(
+          "The saved passphrase is stale.",
+        );
+        expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+      }
+      expect(props.onTouchIdUnlock).toHaveBeenCalledTimes(1);
+      expect(props.onUnlock).not.toHaveBeenCalled();
+    },
+  );
 
   it("asks to save the passphrase for Touch ID when the switch is on", async () => {
     const props = renderLock({

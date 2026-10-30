@@ -148,6 +148,9 @@ the same outline: the title bar row on the chrome and an inset page panel.
 Inside it the lock screen centres the wordmark over the welcome screen's type
 (title and lead, no eyebrow) and a passphrase field exactly the wordmark's width,
 with Back to setup set apart at the foot of the panel.
+While the native Touch ID prompt is open, the form gives way to a single
+waiting status and Touch ID guidance. Cancelling or failing that prompt restores
+the passphrase field and keyboard focus.
 
 Setup opens on one primary action, creating books, beside its chain artwork:
 three-dimensional blocks rasterized onto a coarse pixel grid, in the wordmark's
