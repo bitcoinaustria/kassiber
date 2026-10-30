@@ -3427,3 +3427,14 @@ Component plan/apply, gap plan/apply and their daemon kinds remain unported.
 The supported command subset is still 15/29 CLI leaves and 14 desktop kinds.
 Automatic pairing remains with R4. This checkpoint does not complete the
 requested component/gap authoring continuation. No push or PR was performed.
+
+A separate reference behavior issue surfaced in one generated daemon parity
+run: operational amount redaction can replace part of a valid component UUID.
+For example, `00000000-cad1-4000-8000-000000000000` becomes
+`00000000-amount#<runtime-salted-hash>-4000-8000-000000000000` because `cad1`
+is interpreted as a CAD amount. Independent generated UUIDs can therefore
+cause a stochastic transcript mismatch even after UUID normalization. The
+final rerun passed, but that does not resolve the flake. Reproduce without any
+book or network using
+`.venv/bin/python crates/transfers/scripts/repro_component_id_redaction.py`.
+Python is left unchanged; the repro records this issue for separate review.
