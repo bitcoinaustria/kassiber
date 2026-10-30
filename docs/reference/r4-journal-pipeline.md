@@ -328,7 +328,7 @@ misses it stops for re-planning before the next step starts.
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
-| R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path, or hand it to the R5 transfers slice (decision 3) | Python 3.44 / 4.74 | 10× Python |
+| R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path (decision 3: ported in R4) | Python 3.44 / 4.74 | 10× Python |
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 
@@ -366,7 +366,8 @@ above. The other lines are targets.
   budget is the plaintext budget plus that difference.
 - With custody at 10×, the tax engine is the largest compute line at 20,000.
   Halving it would bring multi-wallet 20k to about 4.4 s (4.9×), but only an
-  engine performance slice can tell whether that is achievable (decision 2).
+  engine performance slice can tell whether that is achievable. Decision 2
+  makes that slice part of R4.
 - End-to-end 10× is out of reach under parity. Even with zero compute, the
   floors for generic 20k (open 0.14 + reads 0.11 + writes 1.25) give at most
   about 8.5×.
@@ -420,9 +421,8 @@ above. The other lines are targets.
   refusal is the command's answer. The daemon kinds and the freshness journal
   job switch with it (R4-13 to R4-15).
 - The Python product is not changed. The desktop keeps the Python sidecar
-  until the R7 cutover, so users get the speed-up at cutover. An optional
-  early path (decision 1) would let the Python product call the Rust pipeline
-  through PyO3 before then.
+  until the R7 cutover, so users get the speed-up at cutover. Decision 1
+  rules out an early path through PyO3.
 
 ### Coexistence with Python on one book
 
@@ -498,7 +498,10 @@ Within the owner's scope (R4 and R5 now, R6 and R7 untouched):
 - **Engine cost.** At 28–75 µs per entry, the engine is the largest compute
   line once custody is typed, and it is outside custody's typed rewrite.
 
-## Decisions for the owner
+## Decisions
+
+The owner answered decisions 1 to 4 on 2026-10-30. Decisions 5 and 6 remain
+open.
 
 1. **Early production path.** R4 makes the Rust binary authoritative.
    Desktop users get the speed-up at the R7 cutover, because the Python
@@ -508,16 +511,25 @@ Within the owner's scope (R4 and R5 now, R6 and R7 untouched):
    serialize the snapshot plus Rust's parse at 20,000, with a compact result
    instead of today's 270 MB stage dump. Recommendation: no; spend the
    effort on R4-9 to R4-15.
+
+   **Decided: no early PyO3 production path.** The recommendation stands.
 2. **Targets.** Accept 10× for custody and ≥ 4× end to end (the budget
    above) as R4's performance acceptance? Separately, should R4 include a tax
    engine performance slice (0.55–1.5 s of compute at 20,000)? It must keep
    engine output byte-identical; whether its cost can be halved is unmeasured.
+
+   **Decided: both targets are accepted** as R4's performance acceptance:
+   custody at least 10× Python, end to end at least 4×. A tax-engine speed
+   pass is part of R4. It runs separately, on `t3code/ledger-perf`.
 3. **Automatic pairing.** The desktop button and the freshness journal job
    run the transfer matcher four times (3.4–4.7 s at 20,000). Port it in R4
    (R4-14), or route only plain `journals process` to Rust in R4 and switch
    `--auto-pair`, `ui.journals.process` and the freshness job when the R5
    transfers slice lands? Recommendation: port it in R4, because the daemon
    journal path is R4's scope and otherwise stays Python.
+
+   **Decided: port automatic pairing in R4 now** (R4-14), in a separate
+   worker run.
 4. **Beyond parity.** Going past about 4–5× end to end needs persisted-shape
    changes, each a semantic change outside this programme's parity rule:
    - `calculation_json` is 72% of `journal_entries` bytes;
@@ -527,8 +539,17 @@ Within the owner's scope (R4 and R5 now, R6 and R7 untouched):
      WAL-reset fix.
 
    Defer them all until after R7?
+
+   **Decided: do the storage-format speed-ups now, not after R7:** a slimmer
+   `calculation_json`, deterministic entry ids with incremental rewrites, and
+   a faster SQLCipher write mode. A separate worker designs them and
+   implements the Python reference first; Rust then matches that reference.
 5. **Book open cost.** The R5 binary spends 0.10 s opening a 2,000-transaction
    book. That is a fifth of the 2,000-transaction budget. Should R4 trim the
-   open path, or should R3/R5 own it?
+   open path, or should R3/R5 own it? **Open.**
 6. **Allocator.** Allow measuring an alternative allocator, which is a
-   dependency change, if contention is still visible after R4-7?
+   dependency change, if contention is still visible after R4-7? **Open.**
+
+Separately, the owner approved one new index, on
+`transactions(profile_id, occurred_at, created_at, id, wallet_id)` (the
+transaction page index). No other index was approved.
