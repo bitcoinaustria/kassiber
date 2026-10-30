@@ -1,7 +1,5 @@
 """Regression coverage for the Python pricing and partial-payout review."""
 import json
-import subprocess
-import sys
 from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
@@ -18,6 +16,7 @@ from kassiber.core.rates import set_manual_rate, upsert_rate
 from kassiber.core.source_funds import create_source
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests import cli_runner
 from tests.test_btcpay_commercial_provenance import _hooks
 from tests.test_custody_authored_migration import _scope, _tx, NOW
 
@@ -103,14 +102,14 @@ def test_invalid_legacy_payout_list_and_delete(tmp_path, surface):
     try:
         from kassiber.daemon import _ui_swap_matching_payload_from_conn
         scope = dict(workspace='Books', profile='Book')
-        command = [sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(tmp_path),
+        command = ['--machine', '--data-root', str(tmp_path),
                    'transfers', 'payouts']
         if surface == 'core':
             rows = list_payout_reviews(conn, 'profile')
         elif surface == 'daemon':
             rows = _ui_swap_matching_payload_from_conn(conn, 'ui.transfers.payouts.list', scope)['payouts']
         else:
-            result = subprocess.run(command + ['list', '--workspace', 'Books', '--profile', 'Book'], capture_output=True, text=True)
+            result = cli_runner.run(command + ['list', '--workspace', 'Books', '--profile', 'Book'], capture_output=True, text=True)
             assert result.returncode == 0, result.stdout + result.stderr
             rows = json.loads(result.stdout)['data']
         bad = next(row for row in rows if row['id'] == payout_id)
@@ -120,7 +119,7 @@ def test_invalid_legacy_payout_list_and_delete(tmp_path, surface):
         elif surface == 'daemon':
             deleted = _ui_swap_matching_payload_from_conn(conn, 'ui.transfers.payouts.delete', dict(**scope, payout_id=payout_id))
         else:
-            result = subprocess.run(command + ['delete', '--workspace', 'Books', '--profile', 'Book', '--payout-id', payout_id], capture_output=True, text=True)
+            result = cli_runner.run(command + ['delete', '--workspace', 'Books', '--profile', 'Book', '--payout-id', payout_id], capture_output=True, text=True)
             assert result.returncode == 0, result.stdout + result.stderr
             deleted = json.loads(result.stdout)['data']
         assert deleted['deleted_at']
@@ -165,9 +164,10 @@ def test_export_survives_legacy_nonfinite_price(book, tmp_path, export_format):
     book.execute("UPDATE transactions SET fiat_rate='inf', fiat_rate_exact='Infinity' WHERE id='out'")
     book.commit()
     output = tmp_path / ('transactions.' + export_format)
-    result = subprocess.run([sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(tmp_path),
+    # XLSX remains a Python reference boundary; CSV is a registered Rust slice.
+    result = cli_runner.run(['--machine', '--data-root', str(tmp_path),
                              'transactions', 'export', '--export-format', export_format, '--workspace', 'Books', '--profile', 'Book',
-                             '--file', str(output)], capture_output=True, text=True)
+                             '--file', str(output)], reference=export_format != 'csv', capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert output.stat().st_size > 0
     if export_format == 'csv':

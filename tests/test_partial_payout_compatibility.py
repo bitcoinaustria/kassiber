@@ -1,7 +1,5 @@
 """Partial-payout semantic upgrade and exact historical journal regression."""
 import json
-import subprocess
-import sys
 from decimal import Decimal
 
 import pytest
@@ -9,6 +7,7 @@ import pytest
 from kassiber.cli.handlers import create_direct_swap_payout, process_journals
 from kassiber.core.custody_review_terms import delete_payout_review
 from kassiber.db import open_db, PARTIAL_PAYOUT_SEMANTICS_MIGRATION
+from tests import cli_runner
 from tests.test_custody_authored_migration import _scope, _tx, NOW
 
 
@@ -65,13 +64,13 @@ def test_pre_fix_historical_book_requires_rebuild(tmp_path):
     conn = open_db(tmp_path)
     try:
         assert conn.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0] is None
-        command = [sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(tmp_path),
+        command = ['--machine', '--data-root', str(tmp_path),
                    'reports', 'capital-gains', '--workspace', 'Books', '--profile', 'Book']
-        stale = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        stale = json.loads(cli_runner.run(command, capture_output=True, text=True).stdout)
         assert stale['kind'] == 'error'
         assert 'fresh journals' in stale['error']['message']
         process_journals(conn, 'Books', 'Book')
-        report = json.loads(subprocess.run(command, capture_output=True, text=True).stdout)
+        report = json.loads(cli_runner.run(command, capture_output=True, text=True).stdout)
         assert report['kind'] != 'error'
         assert sum(Decimal(str(row['proceeds'])) for row in report['data']) == Decimal('11.2')
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == 'ok'
