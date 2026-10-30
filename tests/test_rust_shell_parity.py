@@ -1503,8 +1503,8 @@ class RustRealStoreParityTest(_Roots):
 
     def test_historical_pair_free_fixture_matches_python_full_dump(self):
         from tests.test_rust_store_migrations import (
-            HISTORICAL_FIXTURES, IDENTITY, TIMESTAMP, decode_historical,
-            normalized_dump, reference_open,
+            HISTORICAL_FIXTURES, LEGACY_PAIR_FIXTURES, IDENTITY, TIMESTAMP,
+            decode_historical, normalized_dump, reference_open,
         )
         import sqlite3
         self.env["KASSIBER_RUST_TEST_MIGRATION_IDENTITY"] = IDENTITY
@@ -1514,7 +1514,10 @@ class RustRealStoreParityTest(_Roots):
                 python_root = self.home / fixture.stem / "reference" / "data"
                 rust_root = self.home / fixture.stem / "candidate" / "data"
                 for root in (python_root, rust_root):
-                    decode_historical(root, fixture, False, without_legacy_pair=True)
+                    decode_historical(
+                        root, fixture, False,
+                        without_legacy_pair=fixture in LEGACY_PAIR_FIXTURES,
+                    )
                 conn = reference_open(python_root)
                 expected = normalized_dump(conn)
                 conn.close()
@@ -1530,8 +1533,8 @@ class RustRealStoreParityTest(_Roots):
                 conn.close()
 
     def test_historical_authored_consolidation_refuses_with_python_hint(self):
-        from tests.test_rust_store_migrations import HISTORICAL_FIXTURES, decode_historical
-        for fixture in HISTORICAL_FIXTURES:
+        from tests.test_rust_store_migrations import LEGACY_PAIR_FIXTURES, decode_historical
+        for fixture in LEGACY_PAIR_FIXTURES:
             with self.subTest(fixture=fixture.name):
                 root = self.home / fixture.stem / "data"
                 decode_historical(root, fixture, False)
