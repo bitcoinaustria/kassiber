@@ -18,6 +18,7 @@ use crate::num::{lt13, zero};
 use crate::outputs::{
     balances, fragment_values, gain_loss_out, open_positions, sold_percentages, yearly,
 };
+use crate::par;
 
 /// The country rules the lot engine consults.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -257,10 +258,14 @@ pub(crate) fn finish(
 ) -> EngineResult<AssetOutput> {
     let entries = &prepared.entries;
     let lots = &prepared.lots;
-    let values = fragments
-        .iter()
-        .map(|fragment| fragment_values(fragment, entries, lots, country.long_term_days()))
-        .collect::<EngineResult<Vec<_>>>()?;
+    // Each fragment's values are its own, so they are derived concurrently
+    // and taken in order, up to the first failure.
+    let values = par::map(fragments, 256, |fragment| {
+        fragment_values(fragment, entries, lots, country.long_term_days())
+    })
+    .into_iter()
+    .map(par::unwrap)
+    .collect::<EngineResult<Vec<_>>>()?;
     let yearly = yearly(&prepared.asset, fragments, &values, entries)?;
     for basis in open_basis {
         if lt13(basis, &zero())? {
