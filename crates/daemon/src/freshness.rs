@@ -31,6 +31,17 @@ struct Finished {
     graph_grants: Vec<Grant>,
 }
 
+struct GraphActive {
+    id: String,
+    cancel: Cancellation,
+    worker: JoinHandle<GraphFinished>,
+}
+
+struct GraphFinished {
+    closing: Option<Box<dyn Book>>,
+    output_closed: bool,
+}
+
 #[derive(Default)]
 pub(crate) struct Requests {
     closing: Option<Box<dyn Book>>,
@@ -38,6 +49,9 @@ pub(crate) struct Requests {
     used: HashSet<String>,
     pending: HashMap<String, Instant>,
     published: Pending,
+    graph: Option<GraphActive>,
+    graph_closing: Option<Box<dyn Book>>,
+    graph_enabled: bool,
 }
 
 fn busy() -> AppError {
@@ -67,6 +81,10 @@ impl Requests {
 
     pub(crate) fn running(&self) -> bool {
         self.active.is_some()
+    }
+
+    pub(crate) fn polling(&self) -> bool {
+        self.running() || self.graph.is_some() || self.graph_enabled && !self.published.is_empty()
     }
 
     fn take(&mut self, stop: bool) -> Option<Active> {
@@ -104,6 +122,13 @@ impl Requests {
                 ("queued", Value::Bool(false)),
             ]));
         }
+        if let Some(active) = self.graph.as_ref().filter(|v| v.id == target) {
+            active.cancel.cancel();
+            return Ok(dict([
+                ("cancelled", Value::Bool(true)),
+                ("queued", Value::Bool(false)),
+            ]));
+        }
         if self.published.revoke_request(target) {
             return Ok(dict([
                 ("cancelled", Value::Bool(true)),
@@ -126,10 +151,152 @@ impl Requests {
 }
 
 impl Daemon {
-    pub(crate) fn reap_freshness(&mut self, stop: bool) -> Result<(), AppError> {
+    pub(crate) fn start_graph(&mut self) -> Result<(), AppError> {
+        self.freshness_requests.graph_enabled = true;
+        self.reap_graph(false)
+    }
+
+    fn reap_graph(&mut self, stop: bool) -> Result<(), AppError> {
         if stop {
+            self.freshness_requests.graph_enabled = false;
             self.freshness_requests.published.clear();
+            if let Some(active) = &self.freshness_requests.graph {
+                active.cancel.cancel();
+            }
         }
+        if let Some(book) = self.freshness_requests.graph_closing.as_mut() {
+            book.close()?;
+            self.freshness_requests.graph_closing = None;
+        }
+        if self
+            .freshness_requests
+            .graph
+            .as_ref()
+            .is_some_and(|v| stop || v.worker.is_finished())
+        {
+            let active = self.freshness_requests.graph.take().expect("graph worker");
+            let finished = active
+                .worker
+                .join()
+                .map_err(|_| AppError::new("internal_error", "Graph worker panicked"))?;
+            self.freshness_requests.graph_closing = finished.closing;
+            if finished.output_closed {
+                self.freshness_requests.published.clear();
+                return Err(AppError::new("cancelled", "Graph output closed"));
+            }
+            if self.freshness_requests.graph_closing.is_some() {
+                return Err(
+                    AppError::new("project_in_use", "Graph connection could not close")
+                        .retryable(true),
+                );
+            }
+        }
+        if stop || !self.freshness_requests.graph_enabled || self.freshness_requests.graph.is_some()
+        {
+            return Ok(());
+        }
+        let Some((id, grant)) = self.freshness_requests.published.take() else {
+            return Ok(());
+        };
+        let cancel = grant.cancellation();
+        let worker_cancel = cancel.clone();
+        let owner = self.owner.as_ref().ok_or_else(|| {
+            AppError::new("project_in_use", "Graph worker requires project ownership")
+        })?;
+        let identity = owner.project().identity.clone();
+        let store = self.store.clone();
+        let root = self.data_root.clone();
+        let mut config = self.runtime_config.clone();
+        let passphrase = self
+            .unlocked_passphrase
+            .as_ref()
+            .map(|v| kassiber_runtime::store::Secret::new(v.expose().to_owned()));
+        let output = self.output.clone();
+        let worker = std::thread::Builder::new()
+            .name("kassiber-graph-references".into())
+            .spawn(move || {
+                let opened = store.open_book(
+                    &root,
+                    Unlock::Daemon {
+                        passphrase: passphrase.as_ref(),
+                        require_existing_schema: true,
+                        expected_project_identity: &identity,
+                    },
+                    &mut config,
+                );
+                drop(passphrase);
+                let mut book = match opened {
+                    Ok(book) => book,
+                    Err(_) => {
+                        let output_closed = output
+                            .event(
+                                "ui.freshness.worker",
+                                dict([
+                                    ("status", kassiber_envelope::s("error")),
+                                    (
+                                        "code",
+                                        kassiber_envelope::s("freshness_background_open_failed"),
+                                    ),
+                                    (
+                                        "message",
+                                        kassiber_envelope::s(
+                                            "Graph worker could not open its book",
+                                        ),
+                                    ),
+                                    ("retryable", Value::Bool(true)),
+                                ]),
+                            )
+                            .is_err();
+                        return GraphFinished {
+                            closing: None,
+                            output_closed,
+                        };
+                    }
+                };
+                let result = catch_unwind(AssertUnwindSafe(|| {
+                    book.graph_followup(grant, &worker_cancel)
+                }))
+                .unwrap_or_else(|_| Err(AppError::new("internal_error", "Graph worker panicked")));
+                let output_closed = match result {
+                    Ok(Some(value)) => output.event("ui.freshness.background", value).is_err(),
+                    Ok(None) => false,
+                    Err(_) => {
+                        let _ = book.rollback();
+                        output
+                            .event(
+                                "ui.freshness.worker",
+                                dict([
+                                    ("status", kassiber_envelope::s("error")),
+                                    ("code", kassiber_envelope::s("freshness_background_error")),
+                                    (
+                                        "message",
+                                        kassiber_envelope::s("Graph reference worker failed"),
+                                    ),
+                                    ("retryable", Value::Bool(true)),
+                                ]),
+                            )
+                            .is_err()
+                    }
+                };
+                if output_closed {
+                    worker_cancel.cancel();
+                }
+                GraphFinished {
+                    closing: if book.close().is_err() {
+                        Some(book)
+                    } else {
+                        None
+                    },
+                    output_closed,
+                }
+            })
+            .map_err(|_| AppError::new("internal_error", "Could not start graph worker"))?;
+        self.freshness_requests.graph = Some(GraphActive { id, cancel, worker });
+        Ok(())
+    }
+
+    pub(crate) fn reap_freshness(&mut self, stop: bool) -> Result<(), AppError> {
+        self.reap_graph(stop)?;
         if let Some(book) = self.freshness_requests.closing.as_mut() {
             book.close()?;
             self.freshness_requests.closing = None;

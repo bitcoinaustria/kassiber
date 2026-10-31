@@ -26,8 +26,8 @@
   {
     "id": "freshness-lifecycle-foreign-target",
     "file": "crates/daemon/src/freshness.rs",
-    "find": ".filter(|v| v.id == target)",
-    "replace": ".filter(|_| true)",
+    "find": "self.active.as_ref().filter(|v| v.id == target)",
+    "replace": "self.active.as_ref().filter(|_| true)",
     "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_refuses_replay_and_foreign_request_cancellation"],
     "rule": "A cancellation for a different request must not revoke the running request."
   },
@@ -138,8 +138,8 @@
   {
     "id": "freshness-graph-lock-discard",
     "file": "crates/daemon/src/freshness.rs",
-    "find": "self.freshness_requests.published.clear();",
-    "replace": "let _ = &self.freshness_requests.published;",
+    "find": "self.freshness_requests.graph_enabled = false;\n            self.freshness_requests.published.clear();",
+    "replace": "self.freshness_requests.graph_enabled = false;\n            let _ = &self.freshness_requests.published;",
     "expect_failing": [
       "tests/test_rust_freshness_lifecycle.py::test_live_freshness_encrypted_graph_handoff_drops_on_lock[esplora]"
     ],

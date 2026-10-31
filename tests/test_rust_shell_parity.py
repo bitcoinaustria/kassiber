@@ -327,6 +327,7 @@ class RustDaemonParityTest(_Roots):
             "test.freshness.cancel", "test.freshness.pause", "test.freshness.resume",
             "test.freshness.request.cancel", "test.freshness.request.revoke",
             "test.freshness.graph.pending",
+            "test.freshness.graph.start",
         ]
         self.assertEqual(rust[0], (json.dumps(python_ready, separators=(",", ":")) + "\n").encode())
         for index, (expected, actual) in enumerate(zip(python[1:], rust[1:]), 1):

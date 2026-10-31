@@ -44,6 +44,16 @@ impl HttpClient {
         let response = self.get(path, "application/json", consent, deadline)?;
         decode_json(&response.body)
     }
+    pub fn get_json_checked(
+        &self,
+        path: &str,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<Value> {
+        let response = self.get_checked(path, "application/json", consent, deadline, check)?;
+        decode_json(&response.body)
+    }
     pub fn get_text(
         &self,
         path: &str,
@@ -60,8 +70,18 @@ impl HttpClient {
         consent: Option<&Consent>,
         deadline: Instant,
     ) -> Result<HttpResponse> {
+        self.get_checked(path, accept, consent, deadline, &|| Ok(()))
+    }
+    fn get_checked(
+        &self,
+        path: &str,
+        accept: &str,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<HttpResponse> {
         let url = config::append_path(&self.backend.url, path)?;
-        self.retry(
+        self.retry_checked(
             &url,
             consent,
             deadline,
@@ -91,6 +111,7 @@ impl HttpClient {
                 Ok(request)
             },
             RESPONSE_LIMIT,
+            check,
         )
     }
     /// One explicit HTTP probe: no retry, no follow-up, no redirect authority.
@@ -136,6 +157,20 @@ impl HttpClient {
         build: impl Fn() -> Result<HttpRequest>,
         cap: usize,
     ) -> Result<HttpResponse> {
+        self.retry_checked(url, consent, deadline, policy, build, cap, &|| Ok(()))
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn retry_checked(
+        &self,
+        url: &str,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        policy: StatusPolicy,
+        build: impl Fn() -> Result<HttpRequest>,
+        cap: usize,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<HttpResponse> {
+        check()?;
         // Check before waiting for a host slot, building auth, or sleeping.
         self.gate
             .authorize(self.backend.request.clone(), consent.cloned())
@@ -143,7 +178,9 @@ impl HttpClient {
         let limiter = host_limiter(url)?;
         let mut cumulative = Duration::ZERO;
         for attempt in 0..3 {
+            check()?;
             let slot = limiter.acquire(deadline)?;
+            check()?;
             let response = self.send(build()?, consent, deadline, cap)?;
             drop(slot);
             if !matches!(response.status, 429 | 503) {
@@ -191,6 +228,7 @@ impl HttpClient {
             if delay >= remaining(deadline)? {
                 return Err(kassiber_net::Error::InvalidTimeout.app_error());
             }
+            check()?;
             self.gate
                 .authorize(self.backend.request.clone(), consent.cloned())
                 .map_err(|e| e.app_error())?;

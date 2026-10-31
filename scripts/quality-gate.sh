@@ -69,6 +69,7 @@ export KASSIBER_TEST_CUSTODY_LOADER_BIN="$ROOT/target/release/examples/custody-l
 export KASSIBER_TEST_JOURNAL_PROCESS_BIN="$ROOT/target/release/examples/journal-process"
 run cargo build -p kassiber-wallets --example freshness_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example freshness_sync_fixture --features test-harness --offline --locked
+run cargo build -p kassiber-wallets --example graph_fixture --features test-harness --offline --locked
 run py crates/wallets/scripts/discovery_mutation_check.py --check
 run py crates/wallets/scripts/acquisition_mutation_check.py --check
 run py crates/wallets/scripts/observer_mutation_check.py --check
@@ -81,6 +82,7 @@ run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wal
 run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_execution_mutations.json --check
 run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_progress_mutations.json --check
 run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_lifecycle_mutations.json --check
+run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_graph_mutations.json --check
 export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate

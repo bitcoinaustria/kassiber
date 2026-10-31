@@ -364,7 +364,7 @@ impl Daemon {
             self.backup_sessions.expire();
             let timeout = self.backup_sessions.remaining();
             #[cfg(feature = "test-kinds")]
-            let timeout = if self.freshness_requests.running() {
+            let timeout = if self.freshness_requests.polling() {
                 Some(
                     timeout
                         .unwrap_or(std::time::Duration::from_millis(25))

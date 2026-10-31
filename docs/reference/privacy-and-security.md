@@ -166,12 +166,23 @@ from the response and publishes them into a bounded in-memory mailbox only
 after the terminal record is written and flushed. Request cancellation or
 revocation and book/lock/shutdown/EOF boundaries discard that authority. Grant
 checks bind the successful job, database, active book and network binding,
-wallet configuration and selected backend. This mailbox has no consumer yet:
-the connection-owning graph worker and reference lookup remain unimplemented,
-so publishing a grant initiates no traffic or graph-cache writes. Execution
-test kinds exist only in guarded builds, with no new renderer or AI allowlist
-entry. Disposable-loopback regressions verify empty attempt and egress buffers
-before consent and under pretransport fences.
+wallet configuration and selected backend. A guarded, explicitly started worker
+can now consume the mailbox. It opens and closes its own connection, receives
+one temporary SQLCipher session secret and drops that secret immediately after
+opening. It rechecks the grant and current offline/no-egress permission between
+Electrum batches, around HTTP retries and before cache writes. Lookup is limited
+to Bitcoin Esplora/Electrum references through `kassiber-net`, with no alternate
+backend fallback. Product routes and automatic worker startup remain on Python.
+Execution test kinds exist only in guarded builds, with no new renderer or AI
+allowlist entry. Disposable-loopback regressions verify empty attempt and egress
+buffers before consent and under pretransport fences. Worker failure events
+expose fixed error categories rather than database or backend error details.
+
+Native Electrum graph decoding also checks the computed transaction ID before
+using a response or caching a parent. A disposable reference repro demonstrates
+that Python currently accepts different transaction bytes under the requested
+ID. That correctness difference is separate from the two recorded privacy
+differences; the Python implementation remains unchanged.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview

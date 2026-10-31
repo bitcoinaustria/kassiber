@@ -1324,6 +1324,40 @@ impl Book for RealBook {
         let (mut sources, _) = sync_sources();
         kassiber_wallets::freshness::control(self.conn()?, sources.as_mut(), action, args)
     }
+    fn graph_followup(
+        &mut self,
+        grant: kassiber_wallets::freshness::graph::Grant,
+        stop: &kassiber_wallets::scan::Cancellation,
+    ) -> Result<Option<Value>, AppError> {
+        use kassiber_net::{Gate, Ledger, Offline};
+        let gate = Gate::new(
+            || match Context::from_env()
+                .ok()
+                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            {
+                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                Some(_) => Offline::Online,
+                None => Offline::Unavailable,
+            },
+            Ledger::default(),
+        );
+        let backends = &self.backends;
+        let conn = self
+            .book
+            .as_mut()
+            .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+            .connection_mut();
+        let (mut sources, _) = sync_sources();
+        kassiber_wallets::freshness::graph::followup(
+            conn,
+            grant,
+            &gate,
+            stop,
+            sources.as_mut(),
+            env!("CARGO_PKG_VERSION"),
+            |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
+        )
+    }
     fn wallet_sync(
         &mut self,
         profile_id: &str,

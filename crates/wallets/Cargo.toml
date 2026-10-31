@@ -21,6 +21,10 @@ name = "freshness_sync_fixture"
 required-features = ["test-harness"]
 
 [[example]]
+name = "graph_fixture"
+required-features = ["test-harness"]
+
+[[example]]
 name = "discovery_fixture"
 required-features = ["test-harness"]
 

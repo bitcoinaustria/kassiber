@@ -15,6 +15,19 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod lookup;
+mod references;
+mod worker;
+
+#[cfg(feature = "test-harness")]
+pub use worker::fixture_followup;
+pub use worker::followup;
+
+pub const MAX_ROWS: usize = 1_000;
+pub const MAX_TRANSACTIONS: usize = 50;
+pub const MAX_PREVOUTS: usize = 250;
+pub const MAX_RUN_SECONDS: u64 = 30;
+
 pub const MAX_PENDING: usize = 128;
 
 pub struct Grant {
@@ -82,6 +95,15 @@ impl Pending {
         }
         self.entries.clear();
     }
+
+    pub fn take(&mut self) -> Option<(String, Grant)> {
+        if self.entries.is_empty() {
+            None
+        } else {
+            let entry = self.entries.remove(0);
+            Some((entry.request_id, entry.grant))
+        }
+    }
 }
 
 fn ended() -> AppError {
@@ -118,6 +140,31 @@ fn stored_backend(conn: &Connection, backend: &Json) -> Result<Option<Value>> {
 }
 
 impl Grant {
+    pub fn cancellation(&self) -> Cancellation {
+        self.cancel.clone()
+    }
+
+    #[cfg(feature = "test-harness")]
+    pub fn fixture(
+        conn: &Connection,
+        job_id: &str,
+        wallet_id: &str,
+        backend: &Json,
+    ) -> Result<Self> {
+        let job =
+            first(conn, "SELECT * FROM freshness_jobs WHERE id=?", [job_id])?.ok_or_else(ended)?;
+        let wallet =
+            first(conn, "SELECT * FROM wallets WHERE id=?", [wallet_id])?.ok_or_else(ended)?;
+        Self::capture(
+            conn,
+            &job,
+            &wallet,
+            backend,
+            Arc::new(AtomicBool::new(false)),
+            Cancellation::default(),
+        )
+    }
+
     pub fn revoke(&self) {
         self.revoked.store(true, Ordering::SeqCst);
         self.cancel.cancel();

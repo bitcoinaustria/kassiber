@@ -317,6 +317,25 @@ handlers for deterministic retry, cancellation, removal, checkpoint and
 redaction cases in `tests/test_rust_freshness_execution.py`. Both fixtures
 require `--features test-harness` and preserve account HOME.
 
+The guarded `graph_fixture` drives native post-sync graph completion.
+`tests/test_rust_freshness_graph.py` compares count-only completion payloads and
+every normalized table against Python on disposable Electrum/Esplora servers.
+The differential driver freezes the pass-admission clock in both implementations
+so shared-host load cannot change cursor/budget expectations. Production uses
+the real monotonic clock; lookup deadlines and backend timeouts remain real in
+the driver too.
+It also exercises the explicitly started daemon worker, unsolicited events,
+request/lifecycle cancellation and SQLCipher session cleanup. Graph grants still
+require a flushed successful-sync response; passive paths and recovered jobs
+cannot start lookup. The graph mutation catalogue is
+`crates/wallets/scripts/freshness_graph_mutations.json`, run through the same
+`freshness_mutation_check.py` driver with `--mutations`. The driver rejects skips,
+empty selections and build failures, and removes its scratch/build trees.
+The reference mismatch repro in that module deliberately records Python's
+acceptance of incorrect Electrum transaction bytes; native decoding refuses it.
+This suite runs in the Rust-enabled serial daemon shard and does not establish
+product routing or served-by counts.
+
 For plaintext file-import scenarios, `KASSIBER_HYBRID_IMPORT_ORACLE=1` also
 replays each native CSV/Phoenix call through Python's core on an in-memory
 backup. Test-only identity/clock inputs keep generated rows comparable. Every

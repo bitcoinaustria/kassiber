@@ -15,7 +15,7 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 12] = [
+pub const KINDS: [&str; 13] = [
     "test.stream",
     "test.emit_event",
     "test.late",
@@ -28,6 +28,7 @@ pub const KINDS: [&str; 12] = [
     "test.freshness.request.cancel",
     "test.freshness.request.revoke",
     "test.freshness.graph.pending",
+    "test.freshness.graph.start",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -106,6 +107,13 @@ pub(crate) fn handle(
                 .specifications();
             Ok((
                 Some(with_request_id(success(kind, payload), request_id)),
+                false,
+            ))
+        })(),
+        "test.freshness.graph.start" => (|| {
+            daemon.start_graph()?;
+            Ok((
+                Some(with_request_id(success(kind, dict::<&str>([])), request_id)),
                 false,
             ))
         })(),

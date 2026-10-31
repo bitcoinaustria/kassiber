@@ -169,8 +169,8 @@ through the shared setup crate.
   saved capabilities in an inert admitted-book preflight before consent. Daemon
   freshness execution now has an unregistered admitted-book implementation;
   fetch progress and batch controls now reach the guarded daemon seam. Product
-  routes still need the bounded graph worker, product validation/selection and
-  complete no-refresh daemon parity; default requests remain on Python.
+  routes still need automatic graph-worker startup, product validation/selection
+  and complete no-refresh daemon parity; default requests remain on Python.
   The unregistered pre-dispatch queue now covers policy, state, recovery,
   single-flight/forced enqueue, cancellation controls, selected dispatch and
   workspace ordering. It grants no transport authority. See the queue checkpoint
@@ -183,23 +183,34 @@ through the shared setup crate.
 - [x] Execute admitted Bitcoin freshness jobs with retries/backoff, SQLite-busy
   rollback, private checkpoints, active-book/workspace aggregation and UI
   redaction. Verify terminal envelopes and complete logical books against
-  Python with gated Electrum/Esplora fixtures. Live request progress, controls,
-  graph handoff and product route registration remain open.
+  Python with gated Electrum/Esplora fixtures. The guarded runner now supplies
+  request progress, controls and graph handoff; product acceptance remains open.
 - [x] Connect native fetch progress and synchronous authority checks through
   discovery, BDK and compatibility acquisition. Match Python's active-book
   prefetch/workspace event ordering; check persisted cancellation, book and
   wallet/backend inputs between batches. The guarded daemon streams these
-  events; product lifecycle controls and the graph worker remain open.
+  events; product lifecycle integration and automatic graph startup remain open.
 - [x] Add the guarded daemon request runner with a dedicated connection,
   early/active cancellation, source controls, offline/revocation/replay fences
   and switch/lock/shutdown/EOF quiescence. Keep product registration gated on
-  graph handoff, product validation/selection and full served-shape parity.
+  automatic graph startup, product validation/selection and full served-shape parity.
 - [x] Carry private successful-job graph grants through the guarded runner and
   publish them into a bounded mailbox after the terminal response is flushed.
   Preserve request cancellation, configuration checks and lifecycle discard.
-- [ ] Add the connection-owning, stoppable graph worker and bounded native
+- [x] Add the guarded connection-owning, stoppable graph worker and bounded native
   reference lookup, with grant revalidation, SQLCipher cleanup, unsolicited
   events and graph/lifecycle parity and mutation acceptance.
+  It starts explicitly in guarded builds; no product route is registered.
+- [ ] Integrate automatic graph-worker startup with the eventual native product
+  request lifecycle, retaining the flushed-response barrier, source controls and
+  complete product graph/event/restart/reviewed-book acceptance.
+- [ ] Validate complete product argument shapes and protocol request IDs, add
+  inert whole-invocation selection for explicit no-refresh variants, then
+  register only shapes passing full envelope/event/table parity with zero
+  served-shape fallbacks. All three daemon product served-by counts remain zero.
+- [ ] Reject mismatched Electrum raw-transaction IDs in Python graph lookup.
+  `test_reference_electrum_mismatched_transaction_repro_and_native_refusal`
+  demonstrates the reference bug; native decoding already refuses the response.
 - [ ] Redact private checkpoints from Python freshness pause/resume results.
   The disposable `test_reference_source_control_checkpoint_repro_and_native_parity`
   repro pins the disclosure; Rust already applies the shared UI projection.

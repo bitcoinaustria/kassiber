@@ -8104,3 +8104,126 @@ left running. The full quality gate, tax/custody shadow overlays, Docker regtest
 and packaged/platform gates were not run. This run stops at the verified
 private-handoff boundary; the worker, product validation/selection and product
 daemon acceptance remain open as listed above.
+
+### Bitcoin wallet-sync native graph worker (R5, partial)
+
+Local branch `t3code/r5-sync-21` starts at `821b481a3`. Native graph lookup now
+consumes private successful-sync grants through a guarded, explicitly started
+daemon worker. This checkpoint does not register product routes or enable
+automatic worker startup.
+
+The lookup service reuses local transaction and acquired-observation references
+only when their physical facts and network scope agree. Inspection is capped at
+256 matching transaction rows. Complete/local/cached graphs, conflicting or
+over-limit references, incompatible book scope, Liquid and confidential graphs
+cannot initiate Bitcoin lookup. Cache reads bind schema, chain, network and
+transaction identity; legacy entries with missing coinbase identity are ignored.
+Malformed explicit row transaction IDs cannot fall back to another row identity.
+
+Esplora and Electrum use only `kassiber-chain` and `kassiber-net`, with the synced
+wallet's captured backend and proxy configuration. Esplora graph URLs receive
+Python's `/api` normalization. There is no alternate-backend fallback. Each
+lookup has a ten-second transport deadline and five-second backend timeout cap.
+A pass scans at most 1,000 rows, attempts at most 50 graphs, reserves at most 250
+uncached prevouts and stops admitting rows after 30 seconds. Electrum prevouts
+are deduplicated and fetched in bounded batches; authority is rechecked between
+batches, around HTTP retries and before every cache write. Only sanitized public
+references enter the existing cache. The private cursor advances failed rows
+and leaves a budget-refused row first for the next pass. Job results expose
+counts, without the cursor or transport checkpoints.
+
+Prevout inspection checks cancellation and the deadline within its local walk,
+deduplicates with a set and stops at the per-transaction missing-parent cap
+before reserving the pass-wide budget or fetching parents.
+
+The guarded differential driver fixes only the pass-admission clock in both
+implementations. This isolates row/transaction/prevout cursor tests from shared
+host load and debug-build cache-write speed. Production retains the real
+monotonic clock, and driver transport deadlines and timeouts remain real.
+
+The worker consumes only the receipt-backed mailbox. It opens its own book
+inside its thread, takes one temporary SQLCipher session secret and drops that
+secret immediately after open. Graph work has its own execution slot; foreground
+recovery cannot steal its running job. Request cancellation/revocation and
+offline changes remain live; switch, lock, shutdown and EOF cancel and join the
+connection owner before acknowledgement or ownership release. Failed connection
+close retains the book for retry. Completion emits unsolicited
+`ui.freshness.background`; open/run failures emit fixed, redacted
+`ui.freshness.worker` categories. A failed event write returns to the request
+loop, discards queued authority and terminates after worker cleanup.
+
+The guarded start kind is absent from production and renderer/AI allowlists.
+Starting it with no live grant, including after restart with a saved running
+graph job, performs no lookup or recovery. The existing handoff inspection
+tests retain their inert mailbox until the worker is explicitly enabled. No
+dependency or Python product code changes.
+
+The two recorded Python privacy deviations remain unchanged. A separate
+correctness deviation has a disposable repro:
+`test_reference_electrum_mismatched_transaction_repro_and_native_refusal` shows
+that Python assigns the requested transaction ID to different Electrum bytes
+and caches the unrelated graph. Native decoding verifies the computed ID and
+refuses both mismatched current transactions and parents. Python is unchanged.
+
+The exact remaining handoff is:
+
+1. Integrate automatic mailbox consumption with the eventual native product
+   request lifecycle, retaining the terminal-flush barrier and all graph/source
+   controls. The current explicitly started guarded worker is the tested seam;
+   product startup, complete product envelopes/events and the broader
+   restart/reviewed-book corpus remain unaccepted. Do not call the original
+   graph step or R5 complete on this evidence alone.
+2. Implement product argument validation and inert whole-invocation hybrid
+   selection for explicit no-refresh variants, including protocol request-ID
+   shapes. Defaults stay on Python. No Python journal bridge or native journal
+   refresh is introduced; native refresh still requires R4-13.
+3. Prove full product daemon envelopes, event streams and every normalized table
+   over disposable Electrum/Esplora fixture, restart and reviewed-book scenarios.
+   Require zero served-shape fallbacks and the remaining mutations, then register
+   only passing no-refresh shapes and record served-by counts.
+
+Successful native product calls added here remain zero for `ui.wallets.sync`,
+`ui.freshness.run` and `ui.workspace.freshness.run`. All three product routes,
+including explicit no-refresh variants, remain on Python.
+
+Verification passes the 368-case inherited freshness/lifecycle/protocol run and
+a final rebuilt 56-case graph selection (51 overlap), with two subtests. All 373
+distinct cases pass without skips, including all 74 expanded graph cases. They
+cover complete logical books, both disposable protocols, terminal ordering,
+live cancellation and lifecycle controls, encrypted completion/lock cleanup,
+passive/restart authority, closed output and redacted worker failures. The final
+graph selection enables tax/custody census and records zero engine calls; it
+does not establish shadow-overlay coverage.
+
+All 248 distinct affected Rust tests pass: 184 wallet, 23 chain, 16 daemon,
+six binary, eight supervisor and 11 protocol tests. They retain encrypted
+rollback and the inherited 102-round sync corpus. The final daemon/binary
+harness rerun passes all 41 cases. Formatting and affected production/harness
+clippy pass with warnings denied.
+
+All 19 new graph mutations and the two adjusted inherited lifecycle recipes
+are killed after 18 unmutated named selections pass. They pin wallet binding,
+network consent, row/transaction/time/prevout bounds, cursor retention, local
+conflicts, cache scope/sanitization, current and parent transaction identity,
+request cancellation and identity, lifecycle stop/session handoff, batch
+authority, malformed row identity and output closure. Build failures, skips and
+empty selections do not count as kills. Queue, admission, execution, progress,
+lifecycle and graph catalogues pass static checks (29, 12, 19, 16, 18 and 19
+entries), as do combined sync and routing (547 and 14). Other inherited
+mutation campaigns were not rerun.
+
+The required `classify_tests update` records 5,803 definitions, and
+`python_test_shards.py run preflight --ci` passes all 57 tests. A manual second
+pass reviewed grant revalidation, retry and batch fences, bounds/cursor/cache
+semantics, connection and SQLCipher-secret ownership, lifecycle joins, error
+redaction and output closure, guarded routing, classification and documentation.
+No verification remains sandbox-blocked.
+
+Command logs, scripts and the summary remain under
+`target/r5-sync-21-artifacts/`. Mutation and verification build trees and
+disposable books are removed after summarizing their results. Account HOME is
+preserved, and no background job is left running. The full quality gate,
+tax/custody shadow overlays, Docker regtest and packaged/platform gates were
+not run. This checkpoint stops at the guarded graph-worker boundary; automatic
+product integration, validation/selection and full product acceptance remain
+open as listed above.

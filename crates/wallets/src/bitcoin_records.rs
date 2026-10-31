@@ -36,7 +36,7 @@ pub(crate) fn script(v: &Value) -> &str {
         text(&nested["scriptpubkey"])
     }
 }
-fn value_sats(v: &Value) -> Result<Option<i128>> {
+pub(crate) fn value_sats(v: &Value) -> Result<Option<i128>> {
     let explicit = !v["value_sats"].is_null();
     let v = if explicit {
         &v["value_sats"]

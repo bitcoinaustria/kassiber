@@ -302,6 +302,40 @@ fn retry_status_attempt_limit_and_nonretryable_errors_match_python() {
     }
 }
 #[test]
+fn checked_http_refuses_before_transport_and_rechecks_before_retry() {
+    for stop_before_request in [true, false] {
+        let server = FakeProvider::script(vec![(
+            503,
+            vec![("Retry-After".into(), "0".into())],
+            "retry".into(),
+        )])
+        .unwrap();
+        let config = backend(server.base(), false);
+        let proof = Consent::explicit_trigger(config.request());
+        let gate = gate(Offline::Online);
+        let client = HttpClient::new(config, gate.clone(), "fixture");
+        let check = || {
+            if stop_before_request || !server.requests().is_empty() {
+                Err(AppError::new("cancelled", "Request ended"))
+            } else {
+                Ok(())
+            }
+        };
+        assert_eq!(
+            client
+                .get_json_checked("tx/reference", Some(&proof), deadline(), &check)
+                .unwrap_err()
+                .code,
+            "cancelled"
+        );
+        assert_eq!(server.requests().len(), usize::from(!stop_before_request));
+        if stop_before_request {
+            assert!(gate.attempts().records.is_empty());
+            assert!(gate.ledger().snapshot(0, 100).records.is_empty());
+        }
+    }
+}
+#[test]
 fn socket_forms_and_proxy_trust_scope_are_inert() {
     assert_eq!(
         config::socket_endpoint("example.com").unwrap(),

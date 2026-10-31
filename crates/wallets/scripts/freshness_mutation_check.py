@@ -19,14 +19,15 @@ BaseRunner = checker._Runner
 class Runner(BaseRunner):
     def outcome(self, runner, test):
         lifecycle = "test_rust_freshness_lifecycle.py" in test
+        graph = "test_rust_freshness_graph.py" in test
         if not lifecycle:
             build = checker._run(
                 ["cargo", "build", "--offline", "--locked", "-p", "kassiber-wallets", "--features", "test-harness",
-                 "--example", "freshness_fixture", "--example", "freshness_sync_fixture"], self.scratch, self.cargo_env,
+                 "--example", "freshness_fixture", "--example", "freshness_sync_fixture", "--example", "graph_fixture"], self.scratch, self.cargo_env,
             )
             if build.returncode:
                 return "error", build.stderr[-4000:]
-        if lifecycle or "test_native_freshness_live_stream_matches_python" in test:
+        if lifecycle or graph or "test_native_freshness_live_stream_matches_python" in test:
             build = checker._run(
                 ["cargo", "build", "--offline", "--locked", "-p", "kassiber", "--features", "test-harness"],
                 self.scratch, self.cargo_env,
@@ -36,6 +37,7 @@ class Runner(BaseRunner):
             self.env["KASSIBER_RUST_BIN"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/kassiber")
         self.env["KASSIBER_RUST_FRESHNESS_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/freshness_fixture")
         self.env["KASSIBER_RUST_FRESHNESS_SYNC_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/freshness_sync_fixture")
+        self.env["KASSIBER_RUST_GRAPH_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/graph_fixture")
         status, output = super().outcome("pytest", test)
         if re.search(r"\b\d+ skipped\b", output):
             return "error", output

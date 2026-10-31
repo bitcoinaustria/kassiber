@@ -248,6 +248,8 @@ def serve(chain: Chain, protocol: str, port: int = 0):
             with chain.lock:
                 chain.hits.append(self.path)
                 parts = self.path.strip("/").split("/")
+                if parts[0] == "api":
+                    parts = parts[1:]
                 status, result = 200, None
                 if parts == ["blocks", "tip", "height"]:
                     result = chain.tip

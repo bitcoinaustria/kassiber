@@ -312,6 +312,13 @@ pub trait Book: Send {
     fn freshness_control(&mut self, _action: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "freshness control"))
     }
+    fn graph_followup(
+        &mut self,
+        _grant: kassiber_wallets::freshness::graph::Grant,
+        _stop: &kassiber_wallets::scan::Cancellation,
+    ) -> Result<Option<Value>, AppError> {
+        Err(not_implemented("wallets", "graph reference followup"))
+    }
     fn wallet_sync(
         &mut self,
         _profile_id: &str,

@@ -47,6 +47,10 @@ REVIEWS = {
             "reason": "Direct coordinator regression against seeded legacy flags; native replacement is twentyone_legacy_reactivation_invalidates_ready_journals_once in crates/wallets/src/file_import/tests.rs, with full-book CLI parity in test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump.",
         },
     },
+    "tests/test_rust_freshness_graph.py": {
+        "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded connection-owning graph worker on disposable loopback books to pin grant, request, lifecycle, output and SQLCipher fences and unsolicited redacted events; preserves subprocess witnesses without claiming automatic startup or product registration"},
+        "test_reference_electrum_mismatched_transaction_repro_and_native_refusal": {"disposition": "oracle", "group": "daemon-runtime", "reason": "reproduces Python caching different Electrum transaction bytes under the requested ID and pins native computed-ID refusal; retains the reference bug without changing Python or claiming product parity"},
+    },
     "tests/test_rust_freshness_lifecycle.py": {
         "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded native request loop against blocked disposable backends to pin cancellation, source controls, quiescence, exact-request authority and private after-response graph-grant handoff/discard; retains subprocess and complete-book witnesses until product registration, without claiming graph-worker execution"},
         "test_reference_source_control_checkpoint_repro_and_native_parity": {"disposition": "oracle", "group": "daemon-runtime", "reason": "reproduces Python pause/resume checkpoint disclosure; compares complete source-control envelopes after explicitly removing that private result container, and every unchanged logical table"},
@@ -244,6 +248,22 @@ REVIEWS["tests/test_wallet_descriptors.py"] = {
         "replacement": "crates/wallets/src/descriptors.rs::python_descriptor_vectors; python_normalization_and_branch_vectors; crates/wallets/src/material.rs::python_material_vectors",
     },
 }
+for _graph_oracle in (
+    "test_native_graph_reference_full_book_parity",
+    "test_native_graph_transaction_limit_cursor_and_cache_parity",
+    "test_native_graph_sanitizes_legacy_reference_fields",
+    "test_native_graph_shared_prevout_budget_leaves_refused_row_first",
+    "test_native_graph_refuses_transaction_over_prevout_limit",
+    "test_native_graph_row_limit_and_private_cursor_parity",
+    "test_native_graph_local_inspection_limit_fails_closed",
+    "test_native_graph_failures_advance_cursor_without_backend_fallback",
+    "test_native_graph_local_scope_and_cache_guards",
+):
+    REVIEWS["tests/test_rust_freshness_graph.py"][_graph_oracle] = {
+        "disposition": "oracle", "group": "daemon-runtime",
+        "reason": "compares bounded native graph completion payloads and every normalized table with Python over disposable Electrum/Esplora backends, including local conflicts, network scope, sanitized caches and private cursor budgets; freezes only admission time and does not claim product daemon registration",
+    }
+
 REVIEWS["tests/test_wallet_config_multi_script.py"].update({
     "XpubWalletIsSyncableTests::test_has_descriptor_sync_material": {
         "disposition": "rust-test", "group": "chain-sync",
