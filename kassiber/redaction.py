@@ -6,6 +6,8 @@ import re
 import secrets
 from typing import Any
 
+from kassiber.redaction_scanner import redact_keyed_secrets, redact_url_credentials
+
 
 SENSITIVE_KEY_PARTS = (
     "api_key",
@@ -41,76 +43,15 @@ SENSITIVE_KEY_PARTS = (
     "xprv",
 )
 
-_PRIVATE_KEY_RE = re.compile(r"\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b")
-_EXTENDED_KEY_RE = re.compile(r"\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b")
+_PRIVATE_KEY_RE = re.compile(r"\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}\b", re.IGNORECASE)
+_EXTENDED_KEY_RE = re.compile(r"\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b", re.IGNORECASE)
 _DESCRIPTOR_RE = re.compile(r"\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re.IGNORECASE)
 _SP_DESCRIPTOR_RE = re.compile(r"\bsp\([^)\n]{8,}\)", re.IGNORECASE)
 _SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}\b", re.IGNORECASE)
 _SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
+_WIF_RE = re.compile(r"\b(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})\b")
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
-# A numeric port followed by a record/query delimiter ends the authority. Do
-# not consume a later assignment's key before its @. Bracketed IPv6 hosts also
-# end at their optional port. Nonnumeric passwords may
-# still contain quotes, commas, ? and # before the userinfo terminator.
-_URL_CREDENTIALS_RE = re.compile(
-    r'''\b((?:https?|tcp|ssl|socks5h?|wss?)://)(?!(?:\[[0-9A-Za-z:.%_~-]+\](?::[0-9]+)?|[^/:\s@\\"'<>?#,;]*:[0-9]+)(?:[\\"',;?#\s]|$))'''
-    r'''((?:[^/:\s@\\"'<>?#,;]*:[^/\s@]*|[^/\s@\\"'<>?#,;]+))@''',
-    re.IGNORECASE,
-)
-_AUTHORIZATION_RE = re.compile(r"(\bAuthorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)", re.IGNORECASE)
-_SECRET_KEY_NAME = (
-    r"(?:[A-Za-z0-9]*[_.-])*[0-9]*(?:api[_-]?key|auth[_-]?header|authorization|"
-    r"blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|"
-    r"rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|"
-    r"rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|"
-    r"silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|"
-    r"sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*"
-)
-# A glued suffix makes the quote boundary ambiguous (e.g. a nested assignment's
-# opening quote). Fail closed through this line rather than exposing its tail.
-_AMBIGUOUS_QUOTED_TAIL = r'''(?:[^\s,;}\])][^\r\n]*)?'''
-_QUOTED_SECRET_VALUE = r'''(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')'''
-# A truncated quoted value may contain spaces. Fail closed through end of line.
-_UNTERMINATED_SECRET_VALUE = r'''["'][^\r\n]*'''
-_ASSIGNED_SECRET_VALUE = (
-    rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE}{_AMBIGUOUS_QUOTED_TAIL})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))"
-)
-_ASSIGNED_SECRET_RE = re.compile(
-    rf"(?<![A-Za-z0-9_.-])(?P<key>['\"]?{_SECRET_KEY_NAME}\b['\"]?)"
-    r"(?P<sep>\s*[:=]\s*)" + _ASSIGNED_SECRET_VALUE,
-    re.IGNORECASE,
-)
-_FLAG_SECRET_RE = re.compile(
-    rf"(?<![A-Za-z0-9_.-])(?P<key>-{{1,2}}{_SECRET_KEY_NAME}\b)"
-    # Preserve assignment separators already handled by the preceding pass.
-    r"(?P<sep>[ \t]+)(?![:=])" + _ASSIGNED_SECRET_VALUE,
-    re.IGNORECASE,
-)
-
-def _escaped_secret_pattern(depth: int) -> re.Pattern[str]:
-    quote = re.escape("\\" * (2 ** depth - 1) + '"')
-    unit = re.escape("\\" * (2 ** depth))
-    content = rf'(?:{unit}{unit}|{unit}{quote}|{unit}[^\\]|[^\\]|\\(?!["\\]))*'
-    return re.compile(
-        rf'(?<![A-Za-z0-9_.-])(?P<key>{quote}{_SECRET_KEY_NAME}\b{quote})(?P<sep>\s*[:=]\s*)'
-        rf'(?:(?P<quoted>{quote}{content}{quote})|(?P<unterminated>{quote}[^\r\n]*))',
-        re.IGNORECASE,
-    )
-
-
-# Fixed passes, deepest first: ordinary JSON plus two enclosing string layers.
-_ESCAPED_ASSIGNED_SECRET_RES = [(depth, _escaped_secret_pattern(depth)) for depth in (2, 1)]
-
-_RECOVERY_ASSIGNMENT_RE = re.compile(
-    r"(?<![A-Za-z0-9_.-])(?P<key>(?:[A-Za-z0-9]*[_.-])*[0-9]*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
-    r"(?P<sep>\s*[:=]\s*)"
-    # Quoted values belong to the escape-aware assignment parser below.
-    r"(?=[^'\"\s])(?P<value>[^,;}{\r\n]*?)"
-    r"(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'\"\r\n]|$)",
-    re.IGNORECASE,
-)
-
 # --- Operational pseudonymization (txids + amounts) -------------------------
 # Unlike the secret floor above (credentials), txids and amounts are not
 # secrets but ARE the wallet fingerprint: a single txid/amount lets an AI
@@ -244,28 +185,15 @@ def is_sensitive_key(key: str) -> bool:
 def redact_secret_text(value: str) -> str:
     """Redact secret-shaped material from text that may cross a trust boundary."""
 
-    text = value
-    for depth, pattern in _ESCAPED_ASSIGNED_SECRET_RES:
-        quote = "\\" * (2 ** depth - 1) + '"'
-        text = pattern.sub(
-            lambda m: f"{m['key']}{m['sep']}{quote}[redacted]" + (quote if m['quoted'] else ''), text,
-        )
-    text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>[redacted]", text)
-    text = _URL_CREDENTIALS_RE.sub(r"\1[redacted-credentials]@", text)
-    text = _AUTHORIZATION_RE.sub(r"\1[redacted]", text)
+    text = redact_url_credentials(redact_keyed_secrets(value))
     text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)
+    text = _WIF_RE.sub("[redacted-private-key]", text)
     text = _EXTENDED_KEY_RE.sub("[redacted-extended-key]", text)
     text = _SP_DESCRIPTOR_RE.sub("[redacted-silent-payment-descriptor]", text)
     text = _SP_KEY_RE.sub("[redacted-silent-payment-key]", text)
     text = _SP_ADDRESS_RE.sub("[redacted-silent-payment-address]", text)
     text = _DESCRIPTOR_RE.sub("[redacted-descriptor]", text)
     text = _BEARER_RE.sub("Bearer [redacted]", text)
-
-    def redact_assignment(match: re.Match[str]) -> str:
-        return f"{match['key']}{match['sep']}{(match['quoted'] or match['unterminated'] or '')[:1]}[redacted]{(match['quoted'] or '')[:1]}"
-
-    text = _ASSIGNED_SECRET_RE.sub(redact_assignment, text)
-    text = _FLAG_SECRET_RE.sub(redact_assignment, text)
     text = _SK_SECRET_RE.sub("[redacted-secret]", text)
     return text
 

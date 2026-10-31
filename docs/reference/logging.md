@@ -85,42 +85,17 @@ before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
 
 The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
-`macaroon`, and `cookie` assignments, including quoted values with spaces or
-escaped quotes. The Rust redactors must adopt the shared credential corpus
-during Rust integration.
+`macaroon`, `cookie`, `secret_key` and `private_key` assignments. Their shared
+scanners handle key-based secrets before URL userinfo, including escaped and
+truncated diagnostics. Exact examples live in
+`tests/fixtures/secret_redaction_cases.json`; the shared seeded generator adds
+100,000 compositions with secret-fragment and non-secret preservation checks.
+See [the scanner design and limits](#free-text-credential-scanner-and-limits)
+for encoding support, ambiguous URL text and prose-safe flag handling.
 
-Complete quoted values are scrubbed across line breaks. If the closing quote
-is missing, the floor scrubs the entire remaining line, including spaces. Python
-and the webview share exact expected outputs in
-`tests/fixtures/secret_redaction_cases.json`, including truncated diagnostics.
-The corpus also covers URL userinfo, Silent Payments scan keys, prefixed
-credential names, Basic authorization, Core Lightning runes, and escaped quotes
-in recovery material. Quoted recovery values use the same escape-aware parser
-as passwords; repeated underscore/dot/dash prefixes and versioned or trailing
-underscore suffixes do not hide a credential name. URL userinfo is scrubbed for
-HTTP(S), TCP/TLS, SOCKS5(H), and WS(S), including empty usernames and token-only
-userinfo. Token and Digest authorization and two JSON-escaped assignment layers
-are covered by the same Python/webview corpus. A normal JSON object and up to
-two enclosing JSON strings (triple encoding)
-retain their representation while redacting assigned values. This is a fixed
-pass limit to keep work linear in the diagnostic's length. Four-layer JSON
-and Python `repr()` of double-encoded JSON are outside this textual backstop:
-their different or deeper escape sequences can leave secret values readable.
-Emit structured secret fields instead of repeatedly serializing or applying
-`repr()` to credential-bearing objects. This limit applies to Python and the
-webview; it does not limit structured secret-key scrubbing.
-Credential matching starts only at full identifier boundaries, including
-leading dash/dot runs and digit prefixes, to keep long diagnostic lines linear.
-Explicit CLI flags also scrub space-separated values (`--rpcpassword VALUE`),
-including quoted or truncated values. Ordinary prose about password settings
-is left readable.
-
-URL credential detection stops at record, query and fragment boundaries after
-an explicit numeric port, so it cannot consume a later secret assignment's key.
-Bracketed IPv6 hosts have the same boundary with or without a port.
-Passwords with quotes, commas, `?` or `#` remain covered when those characters
-belong to userinfo rather than following a host and numeric port. Python and
-the webview share exact-output regression vectors for these boundaries.
+The native Rust floor still uses its legacy token scanner. It must adopt the
+same scanner, aliases, exact corpus and generator during Rust integration;
+native-only stderr does not yet have Python/webview parity.
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
@@ -247,3 +222,58 @@ RP2's import-time file log from a scratch temp directory (see
 An always-on log file is a rejected design. If session recording to disk
 is ever added, it must be opt-in, visibly active, tier-redacted at write
 time, and deleted on toggle-off by default.
+
+## Free-text credential scanner and limits
+
+Python and the shipped webview run the same forward scanners before the remaining
+key/descriptor backstops. Key assignments, JSON keys, authorization headers and
+command flags run first. URL scanning therefore cannot swallow a later secret
+key and expose the part of its value after `@`. Identifier tokenization and a
+finite alias table cover prefixed, dotted, dashed, underscored and versioned
+keys, including `secret_key` and `private_key`. Colon-separated URL userinfo is
+left for the URL scanner, even when its username is itself a secret-key alias.
+Unquoted assignments recognize `&` and `|` record separators.
+
+Quoted values use escape-run counting rather than a backtracking expression.
+The supported envelope is ordinary JSON, up to three enclosing JSON string
+layers, and their Python `repr()` forms. Complete quoted values may span lines;
+truncated values are masked through their line, and ambiguous glued quote tails
+fail closed through the line. Deeper or arbitrary encodings are best-effort.
+Do not emit raw secret-bearing argv, payloads or configuration and rely on this
+scanner to recover their schema.
+
+Space-separated flags never consume a following option beginning with `-`.
+Outside recognized command lines they also leave common help words and tokens
+ending in sentence punctuation readable. Command lines beginning with `cmd`,
+`kassiber`, `bitcoind`, `bitcoin-cli`, `electrs`, `lncli`, `lightning-cli`, `curl`,
+`python`, `node`, `env`, `sudo` or `docker` establish value context, including a
+leading `$` or `>` prompt. `--seed-words` followed by a standard mnemonic word
+count remains help/count metadata. A bare value that collides with help prose
+is inherently ambiguous; producers must use a typed secret field, an explicit
+assignment, or a quoted value. Colon status literals `none`, `expired` and
+`(not set)` remain readable; `=` assignments are always secret-bearing.
+
+The URL scanner recognizes HTTP(S), TCP, SSL, SOCKS5/H, WS(S), FTP, Postgres and
+Electrum schemes. A userinfo candidate is bounded by whitespace, quotes, angle
+brackets, square brackets and `/`. Commas, semicolons, colons, `#`, `?`, backslashes
+and percent escapes are supported within userinfo. It removes through the last
+`@`, covering raw `@` inside passwords. Malformed candidates crossing an in-token
+record delimiter are masked through the remaining token rather than preserving
+a possible password tail as a hostname. Numeric ports are never used to rule out
+userinfo: ambiguous `http://h:8080#frag@x` is masked. Credential-free IPv6 hosts
+and paths remain readable. A raw `@` in a query-like token (for example
+`http://h?email=a@b`) is indistinguishable from the permitted `?`/`=` userinfo
+characters and is masked too; structured URL producers should percent-encode
+query values. Untyped URL text can be ambiguous, so this is a disclosure
+backstop, not URL validation.
+
+All scanner cursors move forward, failed candidates are skipped as a unit, and
+quote decoding uses a fixed set of escape layers. The seeded shared generator
+runs 100,000 compositions in Python and through the webview insert path. Both
+assert that no four-character planted secret fragment survives, that planted
+identifiers/prose/help remain readable, and that the complete output streams
+have the same SHA-256 digest. The existing webview bare-mnemonic heuristic
+retains its three documented corpus differences from Python. The native Rust
+secret floor and supervisor need the same scanner and generator before they can
+claim this free-text contract; forwarding already-redacted Python records does
+not cover arbitrary native stderr.

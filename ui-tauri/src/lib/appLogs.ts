@@ -1,3 +1,4 @@
+import { redactKeyedSecrets, redactUrlCredentials } from "./secretScanner";
 export type AppLogLevel = "trace" | "debug" | "info" | "warning" | "error";
 
 export type AppLogFieldType =
@@ -103,65 +104,15 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
     "[redacted-seed-phrase]",
   ]);
 
-// Keep assignment names aligned with Python and the shared exact-output corpus.
-const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]*[_.-])*[0-9]*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*`;
-const SECRET_ASSIGNMENT = String.raw`(?<![A-Za-z0-9_.-])(["']?${SECRET_KEY_NAME}\b["']?)(\s*[:=]\s*)`;
-
-// Assignment separators belong to the preceding assignment pass.
-const SECRET_FLAG = String.raw`(?<![A-Za-z0-9_.-])(-{1,2}${SECRET_KEY_NAME}\b)([ \t]+)(?![:=])`;
-
-// A fixed number of deterministic passes keeps nested JSON handling linear.
-function escapedSecretPatterns(depth: number): Array<[RegExp, TextBackstopReplacement]> {
-  const slash = String.raw`\\`;
-  const delimiter = `${slash.repeat(2 ** depth - 1)}"`;
-  const unit = slash.repeat(2 ** depth);
-  const quote = `${"\\".repeat(2 ** depth - 1)}"`;
-  const assignment = String.raw`(?<![A-Za-z0-9_.-])(${delimiter}${SECRET_KEY_NAME}\b${delimiter})(\s*[:=]\s*)`;
-  const content = String.raw`(?:${unit}${unit}|${unit}${delimiter}|${unit}[^\\]|[^\\]|\\(?!["\\]))*`;
-  return [
-    [new RegExp(`${assignment}${delimiter}${content}${delimiter}`, "gi"),
-      (_match, key, sep) => `${key}${sep}${quote}[redacted]${quote}`],
-    [new RegExp(String.raw`${assignment}${delimiter}(?!\[redacted\])[^\r\n]*`, "gi"),
-      (_match, key, sep) => `${key}${sep}${quote}[redacted]`],
-  ];
-}
-
-function assignedSecretPatterns(prefix: string): Array<[RegExp, TextBackstopReplacement]> {
-  return [
-    [
-      new RegExp(String.raw`${prefix}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3(?:[^\s,;}\])][^\r\n]*)?`, "gi"),
-      "$1$2$3[redacted]$3",
-    ],
-    [
-      new RegExp(String.raw`${prefix}([^\s,;}"']+)`, "gi"),
-      "$1$2[redacted]",
-    ],
-    // Complete quotes run first. Never reprocess their redacted output here.
-    [
-      new RegExp(String.raw`${prefix}(["'])(?!\[redacted\])[^\r\n]*`, "gi"),
-      "$1$2$3[redacted]",
-    ],
-  ];
-}
-
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
-  ...escapedSecretPatterns(2),
-  ...escapedSecretPatterns(1),
-  [
-    /(?<![A-Za-z0-9_.-])((?:[A-Za-z0-9]*[_.-])*[0-9]*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
-    "$1$2[redacted]",
-  ],
-  [
-    /\b((?:https?|tcp|ssl|socks5h?|wss?):\/\/)(?!(?:\[[0-9A-Za-z:.%_~-]+\](?::[0-9]+)?|[^/:\s@\\"'<>?#,;]*:[0-9]+)(?:[\\"',;?#\s]|$))((?:[^/:\s@\\"'<>?#,;]*:[^/\s@]*|[^/\s@\\"'<>?#,;]+))@/gi,
-    "$1[redacted-credentials]@",
-  ],
   ...BARE_BIP39_WORD_RUN_PATTERNS,
+  [/\b(?:5[1-9A-HJ-NP-Za-km-z]{49,50}|[KL][1-9A-HJ-NP-Za-km-z]{50,51})\b/g, "[redacted-private-key]"],
   [
-    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[A-Za-z0-9]{16,}\b/gi,
     "[redacted-private-key]",
   ],
   [
-    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/gi,
     "[redacted-extended-key]",
   ],
   [
@@ -180,10 +131,8 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     /\b(wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,400}\)/gi,
     "[redacted-descriptor]",
   ],
-  [/\b(Authorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)/gi, "$1[redacted]"],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
-  ...assignedSecretPatterns(SECRET_ASSIGNMENT),
-  ...assignedSecretPatterns(SECRET_FLAG),
+  [/\bsk-[A-Za-z0-9._~+/-]{6,}\b/g, "[redacted-secret]"],
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =
@@ -710,7 +659,7 @@ function redactTextForMode(value: string, options: AppLogRenderOptions): string 
 }
 
 function redactSecretFloorText(value: string): string {
-  return applyTextBackstop(value, SECRET_FLOOR_TEXT_PATTERNS);
+  return applyTextBackstop(redactUrlCredentials(redactKeyedSecrets(value)), SECRET_FLOOR_TEXT_PATTERNS);
 }
 
 // high_signal keeps operational data (addresses, paths, URLs, labels) readable
