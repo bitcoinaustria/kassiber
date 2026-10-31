@@ -14,9 +14,10 @@ pub fn storage_error(error: kassiber_paths::Error) -> AppError {
     AppError {
         code: error.code.into(),
         message: error.message.into(),
-        hint: error.hint.map(str::to_owned),
+        hint: error.hint.map(Box::from),
         details: kassiber_pytext::loads(&error.details.to_string()).ok(),
         retryable: error.retryable,
+        message_codepoints: None,
     }
 }
 

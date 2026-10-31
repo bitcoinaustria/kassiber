@@ -2237,6 +2237,33 @@ socket denials, with no other failures; exact names are in the shell checkpoint.
 Python production code, dependencies, egress, sync routes and AI projections
 are unchanged. Remaining core/CLI importers are generic ledger, Wasabi,
 Samourai and document ingestion, each requiring its own verified commit.
+### R5 file-import continuation: Wasabi core/CLI checkpoint
+
+Native `wallets import-wasabi` ingests sanitized history/RPC bundles, safe wallet
+metadata, key-state/payment counts and output inventory. Shared transaction
+normalization keeps exact quantities, source provenance, wallet-scoped matching,
+classification promotion, authored notes and privacy review barriers. Empty coin
+snapshots and omitted sections remain distinct; late failures roll back every
+write, including journal invalidation.
+
+There are 354 frozen Python-derived files, complete native bundle/transaction
+vectors, hybrid full-book comparisons and CLI raw-wire/full typed dump parity on
+SQLite and SQLCipher. Reference quirks, including representation-based quantity
+units and the missing Wasabi import run, are retained with an offline repro.
+The [Wasabi checkpoint](../reference/rust-shell.md#wasabi-core-and-cli-ingestion-r5-continuation)
+records routing counts, named mutation killers and final verification.
+
+The final hybrid run records 369 native imports and zero importer fallbacks.
+All 72 native file-import tests, 14 harness tests and 57 CI preflight tests pass.
+The catalog contains 698 entries; all 50 new rules and two affected shared rules
+have verified named killers, without survivors or build errors. Formatting and
+strict workspace/harness Clippy pass, and the inventory records 5,728 Python
+tests. The earlier workspace audit records 1,502 passes and the 58 known
+sandbox loopback denials; final shared-error, inventory and refusal-order changes
+have focused verification recorded in the shell checkpoint.
+
+Samourai and document ingestion remain unimplemented on this branch. BTCPay
+files and generic ledger remain assigned to the parallel importer worker.
 
 ## Risks
 

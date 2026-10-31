@@ -29,9 +29,10 @@ pub const RESERVED_ENVELOPE_KEYS: [&str; 4] = ["kind", "schema_version", "data",
 pub struct AppError {
     pub code: String,
     pub message: String,
-    pub hint: Option<String>,
+    pub hint: Option<Box<str>>,
     pub details: Option<Value>,
     pub retryable: bool,
+    pub message_codepoints: Option<Box<PyStr>>,
 }
 
 impl AppError {
@@ -43,11 +44,23 @@ impl AppError {
             hint: None,
             details: None,
             retryable: false,
+            message_codepoints: None,
         }
     }
 
+    /// Retain Python string code points in machine output, with stderr's
+    /// backslash replacement for the UTF-8 display/diagnostic message.
+    pub fn with_python_message(mut self, message: PyStr) -> Self {
+        self.message = message
+            .code_points()
+            .map(|p| char::from_u32(p).map_or_else(|| format!("\\u{p:04x}"), |c| c.to_string()))
+            .collect();
+        self.message_codepoints = Some(Box::new(message));
+        self
+    }
+
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
-        self.hint = Some(hint.into());
+        self.hint = Some(hint.into().into_boxed_str());
         self
     }
 
@@ -63,14 +76,25 @@ impl AppError {
 
     /// The error envelope `emit_error` writes for this error.
     pub fn envelope(&self, debug: Option<&str>) -> Value {
-        build_error_envelope(
+        let mut envelope = build_error_envelope(
             &self.code,
             &self.message,
             self.details.clone(),
             self.hint.as_deref(),
             self.retryable,
             debug,
-        )
+        );
+        if let Some(message) = &self.message_codepoints {
+            if let Value::Dict(fields) = &mut envelope {
+                if let Some((_, error)) = fields
+                    .iter_mut()
+                    .find(|(key, _)| *key == Key::from("error"))
+                {
+                    set(error, "message", Value::Str(message.as_ref().clone()));
+                }
+            }
+        }
+        envelope
     }
 }
 

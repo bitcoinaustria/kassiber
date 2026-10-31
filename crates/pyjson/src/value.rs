@@ -154,6 +154,12 @@ impl From<String> for PyStr {
     }
 }
 
+impl From<Box<str>> for PyStr {
+    fn from(text: Box<str>) -> Self {
+        String::from(text).into()
+    }
+}
+
 impl From<char> for PyStr {
     fn from(c: char) -> Self {
         PyStr(c.to_string().into_bytes())
@@ -288,6 +294,7 @@ from_scalar!(
     f64 => Float,
     &str => Str,
     String => Str,
+    Box<str> => Str,
     PyStr => Str
 );
 

@@ -104,10 +104,10 @@ dependencies.
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
-The native catalog includes
-`wallets import-btcpay`. `commands describe` lists the supported
-leaves from `crates/cli/src/describe.rs`; each family registers through its own
-CLI module. Every other leaf parses exactly as in Python and then fails
+The native catalog includes `wallets import-btcpay`, `wallets import-ledger`
+and `wallets import-wasabi`. `commands describe` lists the supported leaves
+from `crates/cli/src/describe.rs`; each family registers through its own CLI
+module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -2853,6 +2853,175 @@ Transport scope follows the [shared file-import
 follow-up](#shared-file-import-daemon-parity-pending). No dependency, schema,
 egress, sync route or AI projection is added. Generic ledger, Wasabi, Samourai
 and document ingestion remain separate core/CLI commits.
+## Wasabi core and CLI ingestion (R5 continuation)
+
+Native `wallets import-wasabi` reads sanitized JSON/RPC bundles through the
+local file coordinator. It retains nested/aliased sections, JSON-RPC result
+wrappers, signed wallet movement, exact satoshi/BTC coercions, labels and
+CoinJoin provenance. Safe wallet/account hints, key-state counts, CoinJoin
+payment states and anonymity history retain Python's field selection. Public
+keys, full paths, secrets and raw wallet blobs are discarded at the same
+boundaries as the reference. No source establishes ownership or tax facts,
+and this service performs no provider contact.
+
+The coordinator preserves authored notes, completed reviews and authored
+privacy boundaries; a corrected non-CoinJoin reimport retracts only the import's
+privacy tags and review state. Present coin sections refresh the shared native
+output inventory, including explicit empty snapshots; omitted sections retain
+its prior state. Overlap remains wallet scoped. A legacy same-id row can acquire
+its chain-id classification, while an idless history row remains a separate
+observation when a later row supplies a chain id.
+
+The corpus contains 354 Python-derived files. Native tests compare every
+normalized transaction field/fingerprint and complete sanitized bundle facts.
+Hybrid scenarios compare complete typed books after each invocation, assert
+native routing and cover overlap, classification promotion, enrichment,
+reimports and refusals. Every frozen file also compares raw CLI wire bytes and
+full typed dumps on SQLite and SQLCipher. Native triggers inject late failures
+at tag, wallet-config and inventory-refresh writes on both codecs, proving that
+transactions, metadata, inventory and journal readiness roll back together.
+Wire sequences use distinct deterministic UUID streams per command, so insertion
+steps cannot collide with a prior command's test identities.
+The corpus includes fourteen separately frozen Unicode code point cases.
+Malformed numeric strings are refused before writes, and a malformed boolean
+cannot become true by erasing a code point. Paths retain their code points,
+so malformed tails cannot become branch numbers; safe account hints and lowercased source ids retain
+the reference text. The shared error type retains Python message code
+points for CLI JSON while using backslash replacement in UTF-8 display text;
+existing error constructors retain their original output. Inventory interpretation
+cannot erase a malformed txid into a valid one. The shared writer defers refusals
+for Wasabi coin strings Python cannot bind until the corresponding write,
+preserving normalization order. Those cases compare Python-derived coordinator
+errors and prove complete rollback on both codecs.
+Combined invalid-field cases retain Python's refusal order: coin vout and amount
+precede confirmations, and account paths precede wallet numeric settings.
+Optional hints use compact storage to keep the extended error below Clippy's
+large-error threshold.
+
+The following Python reference quirks remain, with an offline reproduction in
+`tests/rust_port/repro_wasabi_reference.py`:
+
+- Numeric representation selects the unit: integer `1` is one satoshi, while
+  floating `1.0` is one BTC.
+- History ids are lowercased without requiring a valid chain txid; such ids do
+  not acquire chain identity classification.
+- Superscript account-path digits pass `isdigit()` and then raise an uncaught
+  integer-coercion error. Rust preserves the exact refusal.
+- A missing Wasabi file raises an uncaught `FileNotFoundError`, exposed as
+  `internal_error`; the shared CSV reader uses a typed `not_found` refusal.
+- Wasabi returns before import-run recording. Successful imports create no
+  `import_batches` row and have no batch rollback token. This continuation
+  preserves that bug.
+
+Run `uv run --locked python -m tests.rust_port.repro_wasabi_reference` offline.
+The new mutation mappings are appended to
+`crates/wallets/scripts/mutations.json`; the table below names their killers.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-wasabi-section-normalization` | `python_wasabi_import_vectors` |
+| `W-wasabi-rpc-result` | `python_wasabi_import_vectors` |
+| `W-wasabi-nested-section` | `python_wasabi_import_vectors` |
+| `W-wasabi-list-null` | `python_wasabi_import_vectors` |
+| `W-wasabi-list-records` | `python_wasabi_import_vectors` |
+| `W-wasabi-amount-units` | `python_wasabi_import_vectors` |
+| `W-wasabi-amount-rounding` | `python_wasabi_import_vectors` |
+| `W-wasabi-integer-truncation` | `python_wasabi_import_vectors` |
+| `W-wasabi-signed-direction` | `python_wasabi_import_vectors` |
+| `W-wasabi-zero-coinjoin` | `python_wasabi_import_vectors` |
+| `W-wasabi-kind` | `python_wasabi_import_vectors` |
+| `W-wasabi-raw-source` | `python_wasabi_import_vectors` |
+| `W-wasabi-raw-label` | `python_wasabi_import_vectors` |
+| `W-wasabi-coin-identity` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-coin-last-wins` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-coin-confirmed` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-coin-path` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-coin-branch` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-coin-anon` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-metadata-empty` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-metadata-wallet-precedence` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-metadata-fold-order` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-metadata-count` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-metadata-path-hint` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-payment-amount` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-note-preservation` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-completed-review` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-review-clear` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-privacy-tags` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-coin-presence` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-metadata-config` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-no-run` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-account-digits` | `python_wasabi_import_vectors` |
+| `W-wasabi-alias-false` | `python_wasabi_import_vectors` |
+| `W-wasabi-authored-boundary` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-metadata-invalidation` | `wasabi_coordinator_preserves_review_notes_inventory_and_identities` |
+| `W-wasabi-key-state-codepoints` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-float-integer-bits` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-secret-sanitization` | `wasabi_bundle_metadata_vectors` |
+| `W-wasabi-boolean-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-numeric-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-error-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-envelope-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-path-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-txid-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-inventory-identity-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-inventory-binding-codepoints` | `wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags` |
+| `W-wasabi-coin-refusal-order` | `python_wasabi_import_vectors` |
+| `W-wasabi-account-refusal-order` | `python_wasabi_import_vectors` |
+| `W-wasabi-file-open` | `wasabi_missing_file_refusal_is_atomic` |
+
+The shared `W-import-atomic` mapping also names the Wasabi late-failure test;
+`W-import-empty-batch` retains its CSV witness after the Wasabi exception.
+
+| CLI importer | Rust-served calls | Python importer fallbacks |
+| --- | ---: | ---: |
+| Wasabi | 369 | 0 |
+
+The final hybrid acceptance records 369 native calls: 340 regular files, nine
+coordinator calls and twenty coercion/code-point calls. Every in-scope fallback
+is zero. The raw-wire/full-book evidence covers the original 335 files and the
+subsequent large-float, fourteen code-point and four combined-refusal files on
+both codecs. The guarded regular-file replay passes all 340 subtests; the final
+coordinator, coercion and wire run passes three tests and 30 subtests, including
+missing-file refusals on both codecs. Every hybrid result must contain a valid CLI JSON
+object, so an oracle assertion cannot pass as an expected importer refusal.
+All 72 native file-import tests, the shared inventory oracle, eight envelope
+tests and the offline reference repro pass. Shared hint changes also pass the
+pyjson, setup-network, report-range and backup suites.
+
+All 698 mutation recipes apply. The initial audit passes fourteen named
+baselines and kills 43 of 45 selected entries. Two incomplete witnesses were
+corrected: integer truncation now mutates to floor rounding to exercise the
+negative decimal reference, and the coordinator assertion requires the proper
+`wasabi_metadata` key. A fresh two-baseline rerun kills both corrected entries.
+The six representation/inventory rechecks pass two baselines and kill every
+selected mutation; the final refusal-order audit passes its baseline and kills
+both new entries. The file-open audit also kills its new entry after a passing
+baseline. All 50 new entries and the two affected shared entries have
+verified named killers, without survivors or build errors. The other 646
+entries retain their earlier kill evidence.
+
+Formatting and strict workspace/harness Clippy pass offline. All 14 binary and
+supervisor harness tests and all 57 required CI preflight tests pass. The
+classification inventory records 5,728 Python tests. The earlier full workspace
+audit records 1,502 passes and exactly the 58 known sandbox loopback denials
+(12 chain, 16 network, 11 rates, 19 wallets); no other test is sandbox-blocked.
+The later shared error representation, inventory and refusal-order corrections
+are covered by the focused checks above rather than a second full workspace run.
+
+Two initial Python encryption-fixture exports exceeded their 120/300-second
+timeouts inside `sqlcipher_export`, before encrypted importer comparisons. The
+restored source passes SQLite integrity checking; isolated and full diagnostic
+sequences, followed by the standard-timeout acceptance, pass without a fixture
+or Python production change. Local logs and the exact sandbox-denied test names
+remain under `target/r5-importers-b-artifacts/`, including
+`workspace-results.json`, `parity-results.json` and `mutation-results.json`.
+Scratch mutation sources and mutation/verification build trees are removed after
+summarizing their results.
+
+Python production code, dependencies, schema, egress and AI projections are
+unchanged. Samourai and document ingestion remain separate core/CLI slices;
+BTCPay files and generic ledger are assigned to the parallel importer branch.
 
 ## Daemon
 

@@ -164,3 +164,24 @@ fn python_golden_vectors() {
         );
     }
 }
+
+#[test]
+fn python_error_messages_preserve_codepoints_and_display_backslash_replacement() {
+    let message = kassiber_pyjson::PyStr::from_code_points([0x31, 0xd800]).unwrap();
+    let error = kassiber_envelope::AppError::new("validation", "unused")
+        .with_python_message(message.clone());
+    assert_eq!(error.message, "1\\ud800");
+    let envelope = error.envelope(None);
+    assert_eq!(
+        get(get(&envelope, "error").unwrap(), "message"),
+        Some(&Value::Str(message))
+    );
+    assert!(cli_text(&envelope)
+        .unwrap()
+        .contains(r#""message": "1\ud800""#));
+    let plain = kassiber_envelope::AppError::new("validation", "ordinary");
+    assert_eq!(
+        plain.envelope(None),
+        build_error_envelope("validation", "ordinary", None, None, false, None)
+    );
+}

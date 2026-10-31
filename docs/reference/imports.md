@@ -686,8 +686,14 @@ the logged-in browser, download the PDF/image, and import the local file.
 
 ## Import runs and rolling one back
 
-Every file import is recorded as a run (`import_batches`), so an import that
-mapped columns wrongly can be undone without deleting the connection:
+File imports normally record a run (`import_batches`), so an import that
+mapped columns wrongly can be undone without deleting the connection.
+Wasabi bundle imports currently return before recording a run and therefore
+have no batch rollback token; the
+[Rust parity checkpoint](rust-shell.md#wasabi-core-and-cli-ingestion-r5-continuation)
+records that retained reference bug.
+
+For importers that record a run:
 
 ```bash
 kassiber imports list --workspace W --profile P

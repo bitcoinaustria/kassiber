@@ -472,6 +472,7 @@ fn assert_import_vectors(cases: &Json) {
             "cointracking_csv" => Format::CoinTracking,
             "blockpit_csv" => Format::Blockpit,
             "binance_supplemental_csv" => Format::Binance,
+            "wasabi_bundle" => Format::Wasabi,
             "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
@@ -3901,3 +3902,276 @@ fn btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback() {
         }
     }
 }
+
+#[test]
+fn python_wasabi_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_wasabi_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+#[test]
+fn wasabi_coordinator_preserves_review_notes_inventory_and_identities() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        let result = import_kind(&conn, WASABI_HISTORY, Format::Wasabi).unwrap();
+        assert!(kassiber_envelope::get(&result, "import_batch_id").is_none());
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 0);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='coinjoin' AND review_status='review' AND note='receipt' AND amount=12345000"),1);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 3);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM wallet_utxos WHERE amount=12345000 AND branch_index=1 AND address_index=5 AND anonymity_score=12 AND spent_at IS NULL"),1);
+        let config: String = conn
+            .query_row("SELECT config_json FROM wallets", [], |r| r.get(0))
+            .unwrap();
+        assert!(config.contains("84'/0'/*'"));
+        assert!(!config.contains("secret"));
+        let config: Json = serde_json::from_str(&config).unwrap();
+        assert_eq!(
+            config["wasabi_metadata"]["segwitAccountPathHint"],
+            "84'/0'/*'"
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            1
+        );
+        let repeated = import_kind(&conn, WASABI_HISTORY, Format::Wasabi).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "journal_invalidated"),
+            Some(&Py::Bool(false))
+        );
+        conn.execute_batch("UPDATE transactions SET note='authored',review_status='completed'")
+            .unwrap();
+        import_kind(&conn, WASABI_HISTORY, Format::Wasabi).unwrap();
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE note='authored' AND review_status='completed'"),1);
+        conn.execute_batch("UPDATE transactions SET review_status='review'")
+            .unwrap();
+        let plain = WASABI_HISTORY.replace("true", "false");
+        conn.execute_batch("UPDATE transactions SET privacy_boundary='payjoin'")
+            .unwrap();
+        import_kind(&conn, &plain, Format::Wasabi).unwrap();
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE privacy_boundary='payjoin' AND review_status='review'"),1);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 3);
+        conn.execute_batch("UPDATE transactions SET privacy_boundary=NULL")
+            .unwrap();
+        let metadata_only = import_kind(&conn, &plain, Format::Wasabi).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&metadata_only, "journal_invalidated"),
+            Some(&Py::Bool(true))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE review_status IS NULL AND kind='deposit'"
+            ),
+            1
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+        import_kind(&conn, "{\"listcoins\":[]}", Format::Wasabi).unwrap();
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM wallet_utxos WHERE spent_at IS NOT NULL"
+            ),
+            1
+        );
+        assert_eq!(
+            scalar(&conn, "SELECT observed_count FROM wallet_utxo_refreshes"),
+            0
+        );
+        import_kind(&conn, "{}", Format::Wasabi).unwrap();
+        assert_eq!(
+            scalar(&conn, "SELECT observed_count FROM wallet_utxo_refreshes"),
+            0
+        );
+    }
+}
+
+#[test]
+fn wasabi_late_failure_rolls_back_transactions_metadata_inventory_and_readiness() {
+    for encrypted in [false, true] {
+        for sql in ["CREATE TRIGGER refuse_wasabi BEFORE INSERT ON tags BEGIN SELECT RAISE(ABORT,'denied');END;", "CREATE TRIGGER refuse_wasabi BEFORE UPDATE OF config_json ON wallets BEGIN SELECT RAISE(ABORT,'denied');END;", "CREATE TRIGGER refuse_wasabi BEFORE INSERT ON wallet_utxo_refreshes BEGIN SELECT RAISE(ABORT,'denied');END;", ""] {
+            let conn=fixture_codec(encrypted);conn.execute_batch(sql).unwrap();
+            let bad=if sql.is_empty() {WASABI_HISTORY.replace("\"vout\":0","\"vout\":-1")} else {WASABI_HISTORY.into()};
+            assert!(import_kind(&conn,&bad,Format::Wasabi).is_err());
+            for table in ["transactions","tags","transaction_tags","wallet_utxos","wallet_utxo_refreshes","import_batches"] {assert_eq!(scalar(&conn,&format!("SELECT count(*) FROM {table}")),0,"{table}");}
+            assert_eq!(scalar(&conn,"SELECT journal_input_version FROM profiles WHERE id='p'"),0);
+            let config:String=conn.query_row("SELECT config_json FROM wallets",[],|r|r.get(0)).unwrap();assert_eq!(config,"{}");
+        }
+    }
+}
+
+#[test]
+fn wasabi_bundle_metadata_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_wasabi_imports.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap() {
+        let Some(expected) = case.get("bundle") else {
+            continue;
+        };
+        let file = std::env::temp_dir().join(format!("wasabi-bundle-{}.json", std::process::id()));
+        std::fs::write(&file, case["text"].as_str().unwrap()).unwrap();
+        let bundle = wasabi::load(file.to_str().unwrap()).unwrap();
+        std::fs::remove_file(file).unwrap();
+        let actual = dict([
+            ("coins", Py::List(bundle.coins)),
+            ("metadata", bundle.metadata),
+            ("coin_sections_present", Py::Bool(bundle.coin_sections)),
+            ("wallet_json_present", Py::Bool(bundle.wallet_json)),
+            ("listkeys_count", Py::from(bundle.keys as i64)),
+            ("payments_in_coinjoin", Py::List(bundle.payment_rows)),
+        ]);
+        assert_eq!(
+            kassiber_pytext::loads(&wasabi::dump(&actual).unwrap()).unwrap(),
+            kassiber_pytext::loads(&expected.to_string()).unwrap(),
+            "{}",
+            case["name"]
+        );
+    }
+    let file = std::env::temp_dir().join(format!("wasabi-surrogate-{}.json", std::process::id()));
+    std::fs::write(
+        &file,
+        r#"{"listkeys":[{"keyState":"\ud800"},{"keyState":"\ud800"},{"keyState":""}]}"#,
+    )
+    .unwrap();
+    let bundle = wasabi::load(file.to_str().unwrap()).unwrap();
+    std::fs::remove_file(file).unwrap();
+    assert_eq!(
+        bundle.metadata,
+        kassiber_pytext::loads(r#"{"keyStateCounts":{"\ud800":2}}"#).unwrap()
+    );
+}
+
+#[test]
+fn wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_wasabi_codepoints.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap() {
+        let file =
+            std::env::temp_dir().join(format!("wasabi-codepoints-{}.json", std::process::id()));
+        std::fs::write(&file, case["text"].as_str().unwrap()).unwrap();
+        let result = wasabi::load(file.to_str().unwrap());
+        std::fs::remove_file(file).unwrap();
+        let (actual, expected) = if let Some(expected) = case.get("error_json") {
+            let error = result.err().expect("invalid code points must be refused");
+            let envelope = error.envelope(None);
+            let fields = kassiber_envelope::get(&envelope, "error").unwrap();
+            (
+                dict(
+                    ["code", "message", "hint"]
+                        .map(|key| (key, kassiber_envelope::get(fields, key).unwrap().clone())),
+                ),
+                expected.as_str().unwrap(),
+            )
+        } else {
+            let bundle = result.unwrap();
+            (
+                dict([
+                    ("records", Py::List(bundle.records)),
+                    ("coins", Py::List(bundle.coins)),
+                    ("metadata", bundle.metadata),
+                    ("coin_sections_present", Py::Bool(bundle.coin_sections)),
+                    ("wallet_json_present", Py::Bool(bundle.wallet_json)),
+                    ("listkeys_count", Py::from(bundle.keys as i64)),
+                    ("payments_in_coinjoin", Py::List(bundle.payment_rows)),
+                ]),
+                case["bundle_json"].as_str().unwrap(),
+            )
+        };
+        assert_eq!(wasabi::dump(&actual).unwrap(), expected, "{}", case["name"]);
+        if let Some(expected) = case.get("coordinator_error_json") {
+            for encrypted in [false, true] {
+                let conn = fixture_codec(encrypted);
+                let error = import_kind(&conn, case["text"].as_str().unwrap(), Format::Wasabi)
+                    .expect_err("reference refusal must leave no writes");
+                let envelope = error.envelope(None);
+                let fields = kassiber_envelope::get(&envelope, "error").unwrap();
+                let actual = dict(
+                    ["code", "message", "hint"]
+                        .map(|key| (key, kassiber_envelope::get(fields, key).unwrap().clone())),
+                );
+                assert_eq!(
+                    wasabi::dump(&actual).unwrap(),
+                    expected.as_str().unwrap(),
+                    "{}",
+                    case["name"]
+                );
+                for table in [
+                    "transactions",
+                    "tags",
+                    "transaction_tags",
+                    "wallet_utxos",
+                    "wallet_utxo_refreshes",
+                    "import_batches",
+                ] {
+                    assert_eq!(scalar(&conn, &format!("SELECT count(*) FROM {table}")), 0);
+                }
+                assert_eq!(
+                    scalar(
+                        &conn,
+                        "SELECT journal_input_version FROM profiles WHERE id='p'"
+                    ),
+                    0
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn wasabi_missing_file_refusal_is_atomic() {
+    let file = std::env::temp_dir().join(format!("wasabi-missing-{}.json", std::process::id()));
+    assert!(!file.exists());
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        let error = execute(
+            &conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Source".into(),
+                file: file.to_string_lossy().into_owned(),
+                format: Format::Wasabi,
+                mode: None,
+            },
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "internal_error");
+        assert_eq!(
+            error.message,
+            format!(
+                "[Errno 2] No such file or directory: {}",
+                kassiber_pytext::repr_str(file.to_str().unwrap())
+            )
+        );
+        assert!(error.hint.is_none());
+        for table in [
+            "transactions",
+            "tags",
+            "transaction_tags",
+            "wallet_utxos",
+            "wallet_utxo_refreshes",
+            "import_batches",
+        ] {
+            assert_eq!(scalar(&conn, &format!("SELECT count(*) FROM {table}")), 0);
+        }
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            0
+        );
+        assert!(conn.is_autocommit());
+    }
+}
+
+const WASABI_HISTORY: &str = r#"{"gethistory":[{"tx":"abababababababababababababababababababababababababababababababab","datetime":"2025-01-02","amount":12345,"label":"receipt","islikelycoinjoin":true}],"listcoins":[{"txid":"abababababababababababababababababababababababababababababababab","vout":0,"amount":12345,"keyPath":"m/84'/0'/0'/1/5","anonymityScore":12}],"wallet_json":{"EncryptedSecret":"secret","SegWitAccountKeyPath":"m/84'/0'/7'"}}"#;

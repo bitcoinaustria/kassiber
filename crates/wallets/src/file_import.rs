@@ -15,6 +15,7 @@ mod river;
 mod strike;
 mod tax_platform;
 mod twentyone;
+mod wasabi;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pydecimal::{Context, Decimal, DecimalError, Rounding};
@@ -57,10 +58,12 @@ pub enum Format {
     BtcpayCsv,
     BtcpayJson,
     Ledger,
+    Wasabi,
 }
 impl Format {
     fn name(self) -> &'static str {
         match self {
+            Self::Wasabi => "wasabi_bundle",
             Self::Csv => "csv",
             Self::BtcpayCsv => "btcpay_csv",
             Self::BtcpayJson => "btcpay_json",
@@ -82,6 +85,7 @@ impl Format {
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
             Self::CoinTracking | Self::Blockpit => tax_platform::load(file, self),
+            Self::Wasabi => wasabi::load(file).and_then(|b| wasabi::rows(&b.records)),
             Self::Json => generic_json::load(file),
             Self::BtcpayCsv | Self::BtcpayJson => btcpay::load(file, self == Self::BtcpayJson),
             Self::Csv => csv::load(file),
@@ -1235,7 +1239,14 @@ pub fn execute_with_ledger_map(
                 .with_details(dict([("wallet",s(wallet.label.as_str())),("wallet_kind",s(kind.as_str()))])));
         }
     }
-    let rows = if request.format == Format::Ledger {
+    let bundle = if request.format == Format::Wasabi {
+        Some(wasabi::load(&request.file)?)
+    } else {
+        None
+    };
+    let rows = if let Some(bundle) = &bundle {
+        wasabi::rows(&bundle.records)?
+    } else if request.format == Format::Ledger {
         ledger::load(&request.file, column_map)?
     } else {
         request.format.load(&request.file)?
@@ -1261,6 +1272,20 @@ pub fn execute_with_ledger_map(
             &mut ids,
             column_map,
         )
+        .and_then(|result| {
+            if let Some(bundle) = &bundle {
+                wasabi::apply(
+                    conn,
+                    &request,
+                    wallet.as_ref().expect("wallet import"),
+                    bundle,
+                    &mut ids,
+                    result,
+                )
+            } else {
+                Ok(result)
+            }
+        })
     };
     if result.is_ok() {
         conn.execute_batch("RELEASE wallet_file_import")
@@ -1549,7 +1574,7 @@ fn apply(
             invalidated,
         )?;
     }
-    if !inserted_ids.is_empty() {
+    if !inserted_ids.is_empty() && request.format != Format::Wasabi {
         let batch = ids.next(conn)?;
         conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         for id in inserted_ids {

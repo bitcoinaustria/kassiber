@@ -100,7 +100,7 @@ fn network_reference_vectors_match_python() {
                     let expected = member(case, "error");
                     assert_eq!(error.code, text(expected, "code"));
                     assert_eq!(error.message, text(expected, "message"));
-                    assert_eq!(error.hint, Some(text(expected, "hint")));
+                    assert_eq!(error.hint.as_deref(), Some(text(expected, "hint").as_str()));
                     assert_eq!(
                         canonical(&error.details.unwrap_or(Value::Null)),
                         canonical(member(expected, "details"))

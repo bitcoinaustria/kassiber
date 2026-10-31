@@ -149,6 +149,7 @@ class _Roots(unittest.TestCase):
         return python, rust
 
 
+
 @unittest.skipUnless(RUST_BIN, RUST_SKIP)
 class RustCliParityTest(_Roots):
     def test_saved_json_matches_stdout_bytes(self):
@@ -284,6 +285,7 @@ class RustCliParityTest(_Roots):
             self.assert_same(["--machine", "commands", "describe", *path], json_stdout=True)
 
 
+
 def _daemon(args: list[str], env: dict[str, str], lines: list[str], *, reference=False) -> tuple[int, list[bytes]]:
     options = dict(cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     process = (cli_runner.popen(args, reference=True, **options) if reference
@@ -402,6 +404,7 @@ class RustDaemonParityTest(_Roots):
         self.assertEqual([json.loads(r)["kind"] for r in python], ["daemon.ready"])
         self.assertEqual([json.loads(r)["kind"] for r in rust], ["daemon.ready"])
         self.assert_daemon_same(python, rust)
+
 
 
 @unittest.skipUnless(RUST_BIN, RUST_SKIP)
@@ -1037,7 +1040,6 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
-        response = self.call(True, ["wallets", "import-wasabi", "--wallet", "unused", "--file", "unused.json"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
@@ -1281,7 +1283,7 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source", fresh_ids=False, raw_key=False):
+    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source", fresh_ids=False, raw_key=False, distinct_id_steps=False):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
@@ -1308,9 +1310,9 @@ class RustRealStoreParityTest(_Roots):
             "import sys; from pathlib import Path; from types import SimpleNamespace; "
             "from kassiber.operator import project; "
             "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
-            "from kassiber.core import imports,import_batches,metadata,wallets; from kassiber.cli import handlers; "
+            "from kassiber.core import imports,import_batches,metadata,wallets,output_inventory; from kassiber.cli import handlers; "
             "ids=iter(__import__('os').environ['KASSIBER_RUST_TEST_IMPORT_IDS'].split(',')); wallets.uuid=imports.uuid=import_batches.uuid=metadata.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
-            f"wallets.now_iso=imports.now_iso=import_batches.now_iso=handlers.now_iso=lambda:{fixed_time!r}; "
+            f"output_inventory.now_iso=wallets.now_iso=imports.now_iso=import_batches.now_iso=handlers.now_iso=lambda:{fixed_time!r}; "
             "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
         )
 
@@ -1327,7 +1329,9 @@ class RustRealStoreParityTest(_Roots):
                     wires, dumps = [], []
                     batches = []
                     for step_index, step in enumerate(steps):
-                        if fresh_ids:
+                        if distinct_id_steps:
+                            self.env["KASSIBER_RUST_TEST_IMPORT_IDS"] = ",".join(f"00000000-0000-4000-8000-{step_index * 100 + i:012}" for i in range(1, 21))
+                        elif fresh_ids:
                             self.env["KASSIBER_RUST_TEST_IMPORT_IDS"] = ",".join(f"00000000-0000-4000-8000-{step_index * 20 + i:012}" for i in range(1, 21))
                         content, edits = step if isinstance(step, tuple) else (step, [])
                         step_extra = extra
@@ -1340,7 +1344,10 @@ class RustRealStoreParityTest(_Roots):
                                 for sql in edits:
                                     conn.execute(sql)
                                 conn.commit()
-                        file.write_bytes(content.encode() if isinstance(content, str) else content)
+                        if content is None:
+                            file.unlink(missing_ok=True)
+                        else:
+                            file.write_bytes(content.encode() if isinstance(content, str) else content)
                         args = ["wallets", command, *(["--wallet", wallet_ref] if wallet_ref else []), "--file", str(file), *step_extra]
                         if rust:
                             result = self.call(True, args, secret=secret)
@@ -1829,6 +1836,32 @@ class RustRealStoreParityTest(_Roots):
                 self.assertIn("Python", error["hint"])
                 self.assertEqual(error["details"]["reason"], "legacy_authored_custody")
 
+    def test_wasabi_reference_files_wire_bytes_full_state_and_rollback(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_wasabi_imports.json").read_text())
+        self._file_import_parity("import-wasabi", [bytes(case["bytes"]) if "bytes" in case else case["text"] for case in cases])
+
+
+    def test_wasabi_coordinator_wire_bytes_full_state_and_rollback(self):
+        from crates.wallets.scripts.generate_wasabi_vectors import HISTORY, COIN, inputs
+        def body(history, **sections):
+            return json.dumps({"gethistory": history, **sections})
+        self._file_import_parity("import-wasabi", [[
+            inputs()["full"], inputs()["full"],
+            (body([{**HISTORY, "islikelycoinjoin": True}], listcoins=[COIN]), ["UPDATE transactions SET note='authored',review_status='completed',fee=10"]),
+            body([HISTORY], listcoins=[]),
+            body([HISTORY]),
+            body([{**HISTORY, "tx": "cd"*32}]),
+        ], [
+            body([{**HISTORY, "tx": None}]), body([HISTORY]), body([HISTORY]),
+        ], [
+            body([HISTORY]), body([HISTORY], listcoins=[{**COIN, "txid": "bad"}]),
+        ], [
+            *[case['text'] for case in json.loads((ROOT / 'crates/wallets/tests/vectors/python_wasabi_codepoints.json').read_text())],
+            inputs()["metadata-large-float"],
+            *[inputs()[name] for name in ("coin-vout-refusal-order", "coin-amount-refusal-order", "account-score-refusal-order", "account-gap-refusal-order")],
+        ], None], distinct_id_steps=True)
+
+
 
 class RustShellDriftTest(unittest.TestCase):
     """Python changes that the Rust copies must follow (no binary needed)."""
@@ -1886,6 +1919,10 @@ class RustShellDriftTest(unittest.TestCase):
             "rerun crates/runtime/scripts/gen_capabilities.py and update "
             "crates/runtime/src/capabilities.rs",
         )
+
+    def test_wasabi_import_vectors_match_reference(self):
+        self.check("crates/wallets/scripts/generate_wasabi_vectors.py")
+
 
 
 if __name__ == "__main__":

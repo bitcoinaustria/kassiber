@@ -183,6 +183,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "transactions.export",
     "wallets.import-btcpay",
     "wallets.import-ledger",
+    "wallets.import-wasabi",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

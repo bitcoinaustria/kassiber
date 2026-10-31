@@ -2,7 +2,7 @@
 //! `output_inventory.update_wallet_output_inventory(..., commit=False)`.
 use super::row::{blank, field, Result};
 use crate::database_error;
-use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
+use kassiber_envelope::{dict, get, s, truthy, AppError};
 use kassiber_pyjson::{Key, Value};
 use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql, Connection};
 use sha2::{Digest, Sha256};
@@ -54,6 +54,16 @@ const NON_NEGATIVE: [&str; 8] = [
 
 fn validation(message: &str) -> AppError {
     AppError::new("validation", message)
+}
+
+fn py_str(value: &Value) -> String {
+    match value {
+        Value::Str(text) => text
+            .code_points()
+            .map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER))
+            .collect(),
+        other => kassiber_envelope::py_str(other),
+    }
 }
 
 fn str_or_none(value: &Value) -> Option<String> {
@@ -351,6 +361,7 @@ struct Row {
     values: Vec<Sql>,
     outpoint: String,
     spent: bool,
+    binding_error: Option<Box<AppError>>,
 }
 
 fn normalize(output: &Value, source: &Source<'_>, seen_at: &str) -> Result<Row> {
@@ -416,6 +427,22 @@ fn normalize(output: &Value, source: &Source<'_>, seen_at: &str) -> Result<Row> 
     Ok(Row {
         outpoint: outpoint.clone(),
         spent,
+        binding_error: [
+            field(output, "block_time"),
+            field(output, "address"),
+            field(output, "address_label"),
+            field(output, "branch_label"),
+            either(output, "spent_by", "spentBy"),
+            either(output, "key_state", "keyState"),
+            field(output, "spent_at"),
+        ]
+        .into_iter()
+        .find_map(|value| match value {
+            Value::Str(text) if text.has_surrogates() => Some(Box::new(
+                crate::unicode_binding_error(&kassiber_pytext::strip_py(text)),
+            )),
+            _ => None,
+        }),
         values: vec![
             Sql::Text(id),
             Sql::Text(source.workspace_id.into()),
@@ -530,6 +557,9 @@ pub fn update(
         )
         .map_err(database_error)?;
     for row in &rows {
+        if let Some(error) = &row.binding_error {
+            return Err(error.as_ref().clone());
+        }
         statement
             .execute(params_from_iter(row.values.iter()))
             .map_err(database_error)?;

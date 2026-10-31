@@ -2,6 +2,7 @@
 //! Keep the original Python-shaped row until normalization: JSON numbers are
 //! Python floats/ints, and raw evidence must retain their Python spelling.
 use super::*;
+use crate::unicode_binding_error as unicode_error;
 use kassiber_envelope::{get, truthy as py_truthy, type_name};
 use kassiber_pyjson::{Key, Options};
 
@@ -17,26 +18,6 @@ fn py_str(value: &Py) -> String {
             .collect(),
         other => kassiber_envelope::py_str(other),
     }
-}
-fn unicode_error(value: &kassiber_pyjson::PyStr) -> AppError {
-    let points = value.code_points().collect::<Vec<_>>();
-    let start = points
-        .iter()
-        .position(|p| (0xd800..=0xdfff).contains(p))
-        .unwrap();
-    let count = points[start..]
-        .iter()
-        .take_while(|p| (0xd800..=0xdfff).contains(*p))
-        .count();
-    let position = if count == 1 {
-        format!("character '\\u{:04x}' in position {start}", points[start])
-    } else {
-        format!("characters in position {start}-{}", start + count - 1)
-    };
-    AppError::new(
-        "internal_error",
-        format!("'utf-8' codec can't encode {position}: surrogates not allowed"),
-    )
 }
 pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
     // open(..., encoding="utf-8") uses universal newlines, unlike csv's newline="".

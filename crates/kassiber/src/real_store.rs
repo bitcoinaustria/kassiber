@@ -97,9 +97,10 @@ fn error(error: kassiber_paths::Error) -> AppError {
     AppError {
         code: error.code.to_owned(),
         message: error.message.to_owned(),
-        hint: error.hint.map(str::to_owned),
+        hint: error.hint.map(Box::from),
         details,
         retryable: error.retryable,
+        message_codepoints: None,
     }
 }
 

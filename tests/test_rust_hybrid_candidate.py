@@ -842,6 +842,95 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-binance-supplemental"]
         self.assertEqual(calls, [{"command": "wallets.import-binance-supplemental", "served_by": "rust"}] * 8)
 
+    def _checked_wasabi(self, *args):
+        result = self.cli("wallets", "import-wasabi", *args)
+        self.assertTrue(result.stdout, result.stderr)
+        self.assertIsInstance(json.loads(result.stdout), dict)
+        return result
+
+
+    def test_wasabi_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "Wasabi source", "--kind", "wasabi"))
+        source = self.data_root.parent / "wasabi.json"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_wasabi_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self._checked_wasabi("--wallet", "Wasabi source", "--file", str(source))
+                    self.assertIn(result.returncode, (0, 1), (result.stdout, result.stderr))
+        calls = [item for item in self.served() if item["command"] == "wallets.import-wasabi"]
+        self.assertEqual(calls, [{"command": "wallets.import-wasabi", "served_by": "rust"}] * len(cases))
+
+
+    def test_wasabi_coercion_edges_have_no_fallback_and_match_book_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "Wasabi source", "--kind", "wasabi"))
+        source = self.data_root.parent / "wasabi.json"
+        names = {"coin-distinct-outpoints", "account-digit-refusal", "account-nondigit", "last-alias-false", "surrogate-section", "metadata-large-float"}
+        from crates.wallets.scripts.generate_wasabi_vectors import inputs
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            for name in sorted(names):
+                with self.subTest(case=name):
+                    source.write_text(inputs()[name])
+                    self.assertIn(self._checked_wasabi("--wallet", "Wasabi source", "--file", str(source)).returncode, (0, 1))
+            edges = json.loads((ROOT / 'crates/wallets/tests/vectors/python_wasabi_codepoints.json').read_text())
+            for case in edges:
+                with self.subTest(case=case['name']):
+                    source.write_text(case['text'])
+                    self.assertIn(self._checked_wasabi("--wallet", "Wasabi source", "--file", str(source)).returncode, (0, 1))
+        calls = [item for item in self.served() if item["command"] == "wallets.import-wasabi"]
+        self.assertEqual(calls, [{"command": "wallets.import-wasabi", "served_by": "rust"}] * (len(names) + len(edges)))
+
+
+    def test_wasabi_coordinator_promotion_enrichment_reimports_refusals_and_rollback_match_dump(self):
+        from contextlib import closing
+        import sqlite3
+        from crates.wallets.scripts.generate_wasabi_vectors import HISTORY, COIN
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        for label in ("Wasabi source", "Overlap"):
+            self.ok(self.cli("wallets", "create", "--label", label, "--kind", "custom"))
+        source = self.data_root.parent / "wasabi.json"
+        args = ("--wallet", "Wasabi source", "--file", str(source))
+        database = next(self.data_root.rglob("kassiber.sqlite3"))
+        def run(value):
+            source.write_text(json.dumps(value))
+            return self.ok(self._checked_wasabi(*args))["data"]
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            first = run([{**HISTORY, "tx": None}])
+            self.assertNotIn("import_batch_id", first)
+            promoted = run([HISTORY])
+            self.assertEqual((promoted["imported"], len(promoted["updated_records"])), (1, 0))
+            with closing(sqlite3.connect(database)) as conn:
+                conn.execute("UPDATE transactions SET external_id_kind=NULL WHERE external_id=?", (HISTORY["tx"],))
+                conn.commit()
+            identity = run([HISTORY])
+            self.assertEqual(len(identity["updated_records"]), 1)
+            with closing(sqlite3.connect(database)) as conn:
+                conn.execute("UPDATE transactions SET description=NULL,note='authored',review_status='completed'")
+                conn.commit()
+            run({"gethistory": [{**HISTORY, "islikelycoinjoin": True}], "listcoins": [COIN]})
+            run({"gethistory": [HISTORY], "listcoins": []})
+            source.write_text(json.dumps([HISTORY]))
+            self.ok(self._checked_wasabi("--wallet", "Overlap", "--file", str(source)))
+            self.assertEqual(self._checked_wasabi("--wallet", "missing", "--file", str(source)).returncode, 1)
+            self.assertEqual(self._checked_wasabi("--wallet", "Wasabi source", "--file", str(source.parent / "missing.json")).returncode, 1)
+            source.write_text(json.dumps({"gethistory": [HISTORY], "listcoins": [{**COIN, "txid": "bad"}]}))
+            self.assertEqual(self._checked_wasabi(*args).returncode, 1)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-wasabi"]
+        self.assertEqual(calls, [{"command": "wallets.import-wasabi", "served_by": "rust"}] * 9)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -616,7 +616,7 @@
   {
     "id": "W-import-empty-batch",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() {",
+    "find": "if !inserted_ids.is_empty() && request.format != Format::Wasabi {",
     "replace": "if true {",
     "expect_failing": [
       "csv_import_dedupe_batch_membership_and_journal_invalidation"
@@ -638,7 +638,8 @@
       "blockpit_admission_and_late_failure_leave_every_write_uncommitted",
       "binance_late_failure_rolls_back_records_flags_runs_and_readiness",
       "btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness",
-      "ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches"
+      "ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches",
+      "wasabi_late_failure_rolls_back_transactions_metadata_inventory_and_readiness"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -1175,8 +1176,8 @@
   {
     "id": "W-river-casefold",
     "file": "crates/wallets/src/file_import/river.rs",
-    "find": ".replace('ſ', \"s\")",
-    "replace": ".replace('ſ', \"z\")",
+    "find": ".replace('\u017f', \"s\")",
+    "replace": ".replace('\u017f', \"z\")",
     "expect_failing": [
       "python_river_import_vectors"
     ],
@@ -4054,8 +4055,8 @@
   {
     "id": "W-strike-dash",
     "file": "crates/wallets/src/file_import/strike.rs",
-    "find": "[\"-\", \"–\", \"—\"]",
-    "replace": "[\"missing\", \"–\", \"—\"]",
+    "find": "[\"-\", \"\u2013\", \"\u2014\"]",
+    "replace": "[\"missing\", \"\u2013\", \"\u2014\"]",
     "expect_failing": [
       "python_strike_import_vectors"
     ],
@@ -4485,7 +4486,7 @@
     "id": "W-strike-date-month-case",
     "file": "crates/wallets/src/file_import/strike.rs",
     "find": ".map(|ch| ch.to_ascii_lowercase())",
-    "replace": ".map(|ch| if ch == 'ı' { 'i' } else { ch.to_ascii_lowercase() })",
+    "replace": ".map(|ch| if ch == '\u0131' { 'i' } else { ch.to_ascii_lowercase() })",
     "expect_failing": [
       "python_strike_import_vectors"
     ],
@@ -6094,8 +6095,8 @@
   {
     "id": "W-blockpit-label-payment",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "\"payment\" | \"zahlung\" | \"fee\" | \"gebühr\" => \"spend\",",
-    "replace": "\"payment\" | \"zahlung\" | \"fee\" | \"gebühr\" => \"unsupported\",",
+    "find": "\"payment\" | \"zahlung\" | \"fee\" | \"geb\u00fchr\" => \"spend\",",
+    "replace": "\"payment\" | \"zahlung\" | \"fee\" | \"geb\u00fchr\" => \"unsupported\",",
     "expect_failing": [
       "python_blockpit_import_vectors"
     ],
@@ -7320,5 +7321,505 @@
       "ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles"
     ],
     "rule": "Accumulate rectangular cells across every worksheet in a workbook."
+  },
+  {
+    "id": "W-wasabi-section-normalization",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "v.replace(['-', '_', '.'], \"\")",
+    "replace": "v.to_owned()",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Fold Wasabi RPC section punctuation and case."
+  },
+  {
+    "id": "W-wasabi-rpc-result",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "return get(v, \"result\").unwrap_or(v).clone();",
+    "replace": "return v.clone();",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Unwrap JSON-RPC result bodies."
+  },
+  {
+    "id": "W-wasabi-nested-section",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "let found = section(field(v, container), names);",
+    "replace": "let found = section(&Py::Null, names);",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Find recognized sections in nested RPC containers."
+  },
+  {
+    "id": "W-wasabi-list-null",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if value == Py::Null {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Null sections are empty lists."
+  },
+  {
+    "id": "W-wasabi-list-records",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "\"items\",\n            \"records\",",
+    "replace": "\"items\",\n            \"wrong-records\",",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Unwrap records lists inside RPC responses."
+  },
+  {
+    "id": "W-wasabi-amount-units",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "n = n.mul(&dec(\"100000000\")?, &CTX).map_err(decimal_error)?;",
+    "replace": "n = n.mul(&dec(\"1000\")?, &CTX).map_err(decimal_error)?;",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Dotted numeric spellings select BTC units."
+  },
+  {
+    "id": "W-wasabi-amount-rounding",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "                    Rounding::HalfEven",
+    "replace": "                    Rounding::Down",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Round satoshi conversion half even."
+  },
+  {
+    "id": "W-wasabi-integer-truncation",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "                    Rounding::Down",
+    "replace": "                    Rounding::Floor",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Truncate optional decimal integers toward zero."
+  },
+  {
+    "id": "W-wasabi-signed-direction",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "n.is_negative() || n.is_zero() && cj",
+    "replace": "n.is_positive() || n.is_zero() && cj",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Negative history amounts are outbound."
+  },
+  {
+    "id": "W-wasabi-zero-coinjoin",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "n.is_negative() || n.is_zero() && cj",
+    "replace": "n.is_negative()",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Zero-amount CoinJoins remain outbound."
+  },
+  {
+    "id": "W-wasabi-kind",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "let kind = if cj {",
+    "replace": "let kind = if false {",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "CoinJoin flags select the privacy kind."
+  },
+  {
+    "id": "W-wasabi-raw-source",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "(\"source\", s(\"wasabi_gethistory\"))",
+    "replace": "(\"source\", s(\"wasabi_wrong\"))",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Retain the sanitized history provenance source."
+  },
+  {
+    "id": "W-wasabi-raw-label",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "(\"label\", label.clone())",
+    "replace": "(\"label\", Py::Null)",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Preserve labels in safe raw history."
+  },
+  {
+    "id": "W-wasabi-coin-identity",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "field(c, \"txid\") == field(&row, \"txid\") && field(c, \"vout\") == field(&row, \"vout\")",
+    "replace": "field(c, \"txid\") == field(&row, \"txid\")",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Deduplicate coins by complete outpoint."
+  },
+  {
+    "id": "W-wasabi-coin-last-wins",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "coins[i] = row;",
+    "replace": "let _ = row;",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "The last matching coin section replaces earlier data."
+  },
+  {
+    "id": "W-wasabi-coin-confirmed",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if boolean(field(v, \"confirmed\"))",
+    "replace": "if false",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Keep the coin confirmation status."
+  },
+  {
+    "id": "W-wasabi-coin-path",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "Py::Bool(!p.is_empty())",
+    "replace": "Py::Bool(false)",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Record safe key-path presence without the path."
+  },
+  {
+    "id": "W-wasabi-coin-branch",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "\"1\" => \"change\".into(),",
+    "replace": "\"1\" => \"receive\".into(),",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Recognize the change branch."
+  },
+  {
+    "id": "W-wasabi-coin-anon",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "sanitize(&anon)",
+    "replace": "anon.clone()",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Remove nested secret fields from anonymity history."
+  },
+  {
+    "id": "W-wasabi-metadata-empty",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if !truthy(&merged) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "An absent wallet section stays absent."
+  },
+  {
+    "id": "W-wasabi-metadata-wallet-precedence",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "set(&mut merged, k, v.clone());",
+    "replace": "if get(&merged,k).is_none() { set(&mut merged, k, v.clone()); }",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "RPC wallet information overrides wallet JSON."
+  },
+  {
+    "id": "W-wasabi-metadata-fold-order",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "items.iter().rev().find",
+    "replace": "items.iter().find",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "The last folded key wins."
+  },
+  {
+    "id": "W-wasabi-metadata-count",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "Py::from(n + 1)",
+    "replace": "Py::from(n + 2)",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Count every supplied key state once."
+  },
+  {
+    "id": "W-wasabi-metadata-path-hint",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "let suffix = \"/*'\";",
+    "replace": "let suffix = \"/7'\";",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Account path hints conceal the account index."
+  },
+  {
+    "id": "W-wasabi-payment-amount",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "\"payment amount\", false",
+    "replace": "\"payment amount\", true",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Payment-in-CoinJoin amounts use integer coercion."
+  },
+  {
+    "id": "W-wasabi-note-preservation",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "!blank(&label) && note.as_deref().is_none_or(str::is_empty)",
+    "replace": "!blank(&label)",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Preserve existing authored notes."
+  },
+  {
+    "id": "W-wasabi-completed-review",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "Some(\"review\" | \"completed\")",
+    "replace": "Some(\"review\")",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Do not replace completed review status."
+  },
+  {
+    "id": "W-wasabi-review-clear",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if had && review.as_deref() == Some(\"review\")",
+    "replace": "if false && had && review.as_deref() == Some(\"review\")",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Clear only the import-authored review when evidence is retracted."
+  },
+  {
+    "id": "W-wasabi-privacy-tags",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "tags.iter().take(if cj { 3 } else { 1 })",
+    "replace": "tags.iter().take(1)",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "CoinJoin observations receive all three review tags."
+  },
+  {
+    "id": "W-wasabi-coin-presence",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if bundle.coin_sections {",
+    "replace": "if false {",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Refresh inventory only when the bundle supplies a coin section."
+  },
+  {
+    "id": "W-wasabi-metadata-config",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "set(&mut config, \"wasabi_metadata\", bundle.metadata.clone());",
+    "replace": "set(&mut config, \"wrong_metadata\", bundle.metadata.clone());",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Persist sanitized Wasabi metadata under its established key."
+  },
+  {
+    "id": "W-wasabi-no-run",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if !inserted_ids.is_empty() && request.format != Format::Wasabi {",
+    "replace": "if !inserted_ids.is_empty() {",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Preserve the reference Wasabi early return without creating an import run."
+  },
+  {
+    "id": "W-wasabi-account-digits",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "p.chars().all(digit)",
+    "replace": "p.chars().all(|c|c.is_ascii_digit())",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Preserve Python numeric and alias coercion at the Wasabi boundary."
+  },
+  {
+    "id": "W-wasabi-alias-false",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "names.last().map_or(Py::Null, |key| field(v, key).clone())",
+    "replace": "Py::Null",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Preserve Python numeric and alias coercion at the Wasabi boundary."
+  },
+  {
+    "id": "W-wasabi-authored-boundary",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "else if boundary.as_deref().is_none_or(str::is_empty)",
+    "replace": "else if true",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Retain review flags when an authored privacy boundary remains."
+  },
+  {
+    "id": "W-wasabi-metadata-invalidation",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "notes + added + marked + cleared > 0",
+    "replace": "notes + added + marked + cleared > 999",
+    "expect_failing": [
+      "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
+    ],
+    "rule": "Metadata-only review changes invalidate current journals."
+  },
+  {
+    "id": "W-wasabi-key-state-codepoints",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "let key = Key::Str(state);",
+    "replace": "let key = Key::from(py_str(&Py::Str(state)).as_str());",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Preserve all Python string code points in key-state count identities."
+  },
+  {
+    "id": "W-wasabi-float-integer-bits",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "format!(\"{:.0}\", value.trunc())",
+    "replace": "value.to_string()",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Python float-to-int uses the exact binary float, not its rounded display spelling."
+  },
+  {
+    "id": "W-wasabi-secret-sanitization",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "!matches!(k,Key::Str(k) if [\"accountkeypath\"",
+    "replace": "matches!(k,Key::Str(k) if [\"accountkeypath\"",
+    "expect_failing": [
+      "wasabi_bundle_metadata_vectors"
+    ],
+    "rule": "Recursively discard sensitive key/path/credential fields from anonymity history."
+  },
+  {
+    "id": "W-wasabi-boolean-codepoints",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if matches!(v, Py::Str(s) if s.has_surrogates()) {\n        return false;",
+    "replace": "if false {\n        return false;",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "A malformed Unicode boolean cannot become true by deleting code points."
+  },
+  {
+    "id": "W-wasabi-numeric-codepoints",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "let number = if matches!(v, Py::Str(s) if s.has_surrogates()) {",
+    "replace": "let number = if false {",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Refuse malformed Unicode quantities and integer fields without guessing."
+  },
+  {
+    "id": "W-wasabi-error-codepoints",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "if value.has_surrogates() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Keep the original invalid quantity code points in Python-compatible refusal text."
+  },
+  {
+    "id": "W-wasabi-envelope-codepoints",
+    "file": "crates/envelope/src/lib.rs",
+    "find": "set(error, \"message\", Value::Str(message.as_ref().clone()));",
+    "replace": "set(error, \"message\", s(\"discarded\"));",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Machine errors retain all Python message code points."
+  },
+  {
+    "id": "W-wasabi-path-codepoints",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "let points = value.code_points().collect::<Vec<_>>();",
+    "replace": "let points = value.code_points().filter_map(char::from_u32).map(u32::from).collect::<Vec<_>>();",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Malformed path code points must not become valid branch numbers or alter safe account hints."
+  },
+  {
+    "id": "W-wasabi-txid-codepoints",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "kassiber_pytext::lower(plain)",
+    "replace": "plain.to_owned()",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Lowercase source IDs without discarding Python code points."
+  },
+  {
+    "id": "W-wasabi-inventory-identity-codepoints",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": ".map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER))",
+    "replace": ".filter_map(char::from_u32)",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Inventory interpretation must not erase malformed source identity code points."
+  },
+  {
+    "id": "W-wasabi-inventory-binding-codepoints",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "return Err(error.as_ref().clone());",
+    "replace": "let _ = error;",
+    "expect_failing": [
+      "wasabi_surrogate_inputs_cannot_become_valid_quantities_or_flags"
+    ],
+    "rule": "Refuse source strings Python cannot bind and roll back the complete import."
+  },
+  {
+    "id": "W-wasabi-coin-refusal-order",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "    let vout = integral(",
+    "replace": "    let _ = integral(field(v, \"confirmations\"), \"confirmations\", false)?;\n    let vout = integral(",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Validate coin vout and amount before confirmations, in Python refusal order."
+  },
+  {
+    "id": "W-wasabi-account-refusal-order",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "    let accounts = match choose(",
+    "replace": "    let _ = integral(&choose(&[\"anonScoreTarget\", \"AnonScoreTarget\"]), \"anonScoreTarget\", false)?;\n    let accounts = match choose(",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Validate account paths before wallet numeric settings, in Python refusal order."
+  },
+  {
+    "id": "W-wasabi-file-open",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "csv::read_text_direct(file)?",
+    "replace": "csv::read_text(file)?",
+    "expect_failing": [
+      "wasabi_missing_file_refusal_is_atomic"
+    ],
+    "rule": "Preserve the uncaught Python file-open refusal without borrowing the CSV missing-file contract."
   }
 ]

@@ -29,9 +29,12 @@ pub fn restore_error(failure: kassiber_paths::Error) -> AppError {
             .and_then(|d| get(d, "recovery_path"))
             .map(py_str)
             .unwrap_or_else(|| "None".into());
-        error.hint = Some(format!(
-            "Keep the recovery copy at {recovery}; restore it before reopening this container."
-        ));
+        error.hint = Some(
+            format!(
+                "Keep the recovery copy at {recovery}; restore it before reopening this container."
+            )
+            .into_boxed_str(),
+        );
     }
     error
 }

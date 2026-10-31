@@ -39,10 +39,32 @@ pub fn database_error(error: rusqlite::Error) -> AppError {
     AppError {
         code: error.code.to_owned(),
         message: error.message.to_owned(),
-        hint: error.hint.map(str::to_owned),
+        hint: error.hint.map(Box::from),
         details: kassiber_pytext::loads(&error.details.to_string()).ok(),
         retryable: error.retryable,
+        message_codepoints: None,
     }
+}
+
+pub(crate) fn unicode_binding_error(value: &kassiber_pyjson::PyStr) -> AppError {
+    let points = value.code_points().collect::<Vec<_>>();
+    let start = points
+        .iter()
+        .position(|p| (0xd800..=0xdfff).contains(p))
+        .unwrap();
+    let count = points[start..]
+        .iter()
+        .take_while(|p| (0xd800..=0xdfff).contains(*p))
+        .count();
+    let position = if count == 1 {
+        format!("character '\\u{:04x}' in position {start}", points[start])
+    } else {
+        format!("characters in position {start}-{}", start + count - 1)
+    };
+    AppError::new(
+        "internal_error",
+        format!("'utf-8' codec can't encode {position}: surrogates not allowed"),
+    )
 }
 
 /// The deliberately small projection needed by import filters and deletion.

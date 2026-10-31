@@ -58,13 +58,15 @@ pub fn execute(
         | "import-cointracking"
         | "import-blockpit"
         | "import-binance-supplemental"
-        | "import-btcpay" => {
+        | "import-btcpay"
+        | "import-wasabi" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,
                 wallet,
                 mode: namespace.text("mode").map(str::to_owned),
                 file: namespace.text("file").unwrap_or_default().into(),
                 format: match namespace.text("wallets_command") {
+                    Some("import-wasabi") => kassiber_wallets::file_import::Format::Wasabi,
                     Some("import-json") => kassiber_wallets::file_import::Format::Json,
                     Some("import-bull" | "import-bullbitcoin") => {
                         kassiber_wallets::file_import::Format::Bull

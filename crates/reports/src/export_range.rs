@@ -404,7 +404,7 @@ mod tests {
                         (
                             error.code.as_str(),
                             error.message.as_str(),
-                            error.hint.clone()
+                            error.hint.as_deref().map(str::to_owned)
                         ),
                         (
                             text(e, "code").as_str(),

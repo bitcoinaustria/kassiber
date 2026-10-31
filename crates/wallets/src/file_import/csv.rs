@@ -111,6 +111,14 @@ fn read_encoded(file: &str, sig: bool) -> Result<String, AppError> {
                 .with_hint("Check the wallet source_file or pass an existing --file path."),
         );
     }
+    read_encoded_direct(file, sig)
+}
+
+pub(super) fn read_text_direct(file: &str) -> Result<String, AppError> {
+    read_encoded_direct(file, false)
+}
+
+fn read_encoded_direct(file: &str, sig: bool) -> Result<String, AppError> {
     let bytes = std::fs::read(file).map_err(|e| {
         let reason = e
             .raw_os_error()

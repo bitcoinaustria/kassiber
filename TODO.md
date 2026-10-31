@@ -370,8 +370,12 @@ projections stay Python. Progress and remaining work for this slice:
   Python CSV/TSV/XLSX files, SQLite/SQLCipher wire/full-book parity, bounded
   ZIP/XML reads, reference-bug repros and named mutation killers. See the
   generic-ledger checkpoint in plan 21.
-- [ ] Port Wasabi, Samourai and document ingestion at core/CLI
-  level, one verified commit per importer.
+- [x] Port Wasabi sanitized bundle core/CLI ingestion with frozen Python files,
+  safe metadata/inventory, SQLite/SQLCipher full-book/wire parity, transactional
+  privacy review, retained reference-bug repros and named mutation killers.
+  See the Wasabi checkpoint in plan 21.
+- [ ] Port Samourai and document ingestion at core/CLI level, one verified
+  commit per importer.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
