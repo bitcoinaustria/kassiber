@@ -1,4 +1,4 @@
-use super::ownership::{addresses, has_descriptor, integer, normalized_script};
+use super::ownership::{addresses, has_descriptor, legacy_integer, normalized_script};
 use super::*;
 use kassiber_wallets::{config::bitcoin_address_script, descriptors};
 
@@ -185,7 +185,11 @@ pub(super) fn load<'a>(
     }
     let mut maxes = HashMap::<String, HashMap<u32, kassiber_pyjson::BigInt>>::new();
     for row in query(conn,"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index",[profile_id])? {
-        if let (Some(branch),Some(index))=(integer(get(&row,"branch_index")).and_then(|i|u32::try_from(i).ok()),integer(get(&row,"max_index"))) { maxes.entry(text(get(&row,"wallet_id"))).or_default().insert(branch,index); }
+        let branch=legacy_integer(get(&row,"branch_index"))?;
+        if let Some(branch)=branch {
+            let index=legacy_integer(get(&row,"max_index"))?;
+            if let (Ok(branch),Some(index))=(u32::try_from(branch),index) { maxes.entry(text(get(&row,"wallet_id"))).or_default().insert(branch,index); }
+        }
     }
     let mut checkpoints = HashMap::<String, HashMap<u32, kassiber_pyjson::BigInt>>::new();
     for row in query(conn,"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_key LIKE ?",[profile_id,"onchain_wallet:%"])? {
@@ -196,10 +200,13 @@ pub(super) fn load<'a>(
             let mut branches = HashMap::new();
             for (key,value) in values {
                 let Key::Str(key) = key else { continue; };
-                if let (Some(branch),Some(index)) = (key.as_str().and_then(|s|kassiber_pytext::parse_int(s).ok()).and_then(|i|u32::try_from(i).ok()),integer(value)) {
+                if let Some(branch) = key.as_str().and_then(|s|kassiber_pytext::parse_int(s).ok()) {
+                    let index=legacy_integer(value)?;
+                    if let (Ok(branch),Some(index)) = (u32::try_from(branch),index) {
                     // Python's int-normalized aliases and duplicate source
                     // rows use the last value before merging source classes.
                     branches.insert(branch,index);
+                    }
                 }
             }
             if !branches.is_empty() { checkpoints.insert(id,branches); }

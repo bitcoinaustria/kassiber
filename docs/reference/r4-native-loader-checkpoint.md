@@ -1,11 +1,11 @@
 # R4-9 native custody loader checkpoint
 
-This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-5
-continues `05b0d32d4` (loader-4), compares corruption refusals at the CLI/daemon
-envelope boundary, fixes UTF-8 messages and confirmation-quantity refusals,
-and closes newly discovered numeric revision-reference admissions. Its expanded
-storage audit still blocks acceptance. Python retains every production load
-and journal route. The loader-3/4 sections below are historical evidence.
+This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-6
+continues `c60e0cb9f` (loader-5), preserves SQLite infinities and numeric revision
+bindings, and audits native finalized projection separately from v1 transport.
+Its storage and downstream refusal gaps still block acceptance. Python retains
+every production load and journal route. The loader-3/4/5 sections below retain
+their historical evidence.
 
 Final loader-4 measurements retain the 0.30 s target at **0.290 s process CPU /
 0.293 s wall**, including admission. Multi-wallet 20k measures **0.439 / 0.444 s**.
@@ -445,15 +445,163 @@ tree and disposable test scratch are removed after summarizing, preserving the
 synthetic books, audit JSON/JSONL and verification logs. No background job remains
 at handoff.
 
+## Loader-6 boundary continuation (unaccepted)
+
+SQLite infinities now retain their sign through the shared record type as
+arbitrary-precision JSON numbers with overflowing exponents. The existing
+custody codec restores the original float, and the test-only v1 encoder writes
+Python's `Infinity`/`-Infinity` constants. This preserves the value rather than
+inventing a rate or an earlier finite-decimal message. A one-BTC buy with an
+infinite rate round-trips exactly and retains Python's downstream
+`validation: transaction nonfinite-rate: fiat_rate must be a finite decimal number`
+refusal when replayed through the reference projection. Native finalized
+projection still reports only `AppError` for this case; its exact downstream
+code/message parity remains open.
+
+The initial infinity probe exposed 36 load-time admissions in authority-version
+and receipt scan-index conversions. Those paths now preserve `OverflowError`
+while catching only the `TypeError`/`ValueError` cases Python catches. The same
+rule applies to embedded current/historic scan depths and checkpoint horizons.
+These refusals are owned by the converting stage, not synthesized from the
+finite-decimal validation message.
+
+Numeric revision references keep their original SQLite INTEGER/REAL binding,
+numeric ordering, and Python set equality. Comparisons preserve integers above
+2^53, signed zero, fractions, i64 endpoints and infinities; equal numeric
+references retain their first binding type. Mixed text/numeric populations
+remain fail closed under the existing guard pending exact Python sort-refusal
+parity. BLOBs still need a lossless raw value representation, including values
+Python discards before projection.
+
+The `custody-load` probe's `project` mode uses the directly loaded records,
+retains native snapshot admission, runs custody through finalized projection,
+and proves no writes or caller-transaction completion before rollback. It
+reports the native stage's own refusal and CLI/daemon code/message projections.
+Successful projections use the existing test serializer's nonfinite tags and
+ASCII text to preserve surrogate code points. The v1 result is a separate
+transport gate. Neither a matching snapshot nor a later unrelated refusal can
+substitute for a matching projection outcome.
+
+`audit_loader_storage.py` now defaults to this composed comparison, including
+Python projections for snapshots that cannot be JSON-serialized. It retains
+the same 23-table, 360-column, all-row, two-affinity inventory, records zero
+writes per case, and compares successful projection hashes with numeric types
+preserved. `--snapshot-only` reproduces the historical transport-only audit.
+This is a loader-through-finalized-projection gate, not evidence for the
+unrouted journal command, ledger output or persistence.
+
+The frozen corpus contains 66 byte fixtures and 43 load refusals. The loader
+catalogue has 123 applicable entries. New witnesses cover infinity transport,
+numeric revision ordering/binding, overflow propagation and the separate
+projection/transport comparison. This remains a partial branch inventory.
+
+| Added or changed contract | Mutation IDs | Named witness |
+| --- | --- | --- |
+| Positive/negative infinity and impossible SQL NaN | `JL-direct-nonfinite`, `JL-negative-nonfinite`, `JL-nan-storage` | `native_loader_preserves_nonfinite_real_until_downstream` |
+| Integer, REAL and mixed numeric ordering | `JL-revision-integer-order`, `JL-revision-real-order`, `JL-revision-mixed-integer-real`, `JL-revision-mixed-real-integer` | `native_loader_revision_order_preserves_python_numeric_identity` |
+| Numeric endpoints, fractions and identity above 2^53 | `JL-revision-upper-range`, `JL-revision-lower-range`, `JL-revision-fraction`, `JL-revision-exact-integer` | `native_loader_revision_order_preserves_python_numeric_identity` |
+| Text identity, order and unsupported shapes | `JL-revision-text-order`, `JL-revision-is-text`, `JL-revision-unsupported` | `native_loader_revision_order_preserves_python_numeric_identity` |
+| Original SQLite revision binding | `JL-revision-bind` | `native_loader_revision_queries_keep_sqlite_binding_types` |
+| Mixed text/numeric guard | `JL-revision-reference-storage` | `native_loader_refuses_mixed_revision_references_before_output` |
+| Catch only TypeError/ValueError, propagate infinity overflow | `JL-integer-overflow` | `native_loader_caught_integer_errors_still_propagate_overflow` |
+| Authority, receipt branch and receipt MAX overflow | `JL-confirmation-overflow`, `JL-receipt-branch-overflow`, `JL-receipt-index-overflow` | `native_loader_integer_overflow_refusals_match_python` |
+| Current/historic scan floor and checkpoint overflow | `JL-current-scan-overflow`, `JL-historic-scan-overflow`, `JL-checkpoint-overflow` | `native_loader_preserves_receipt_error_precedence` |
+
+### Loader-6 composed storage audit
+
+The [current summary](r4-native-loader-6-storage-audit.json) records all
+**22,528 cases**, all 360 physical columns of the same 23 tables, every
+synthetic row and both affinity modes. Every case proves zero writes. The
+acceptance gate now uses the composed projection outcome; the v1 transport
+comparison remains diagnostic and cannot override that outcome.
+
+| Loader plus finalized projection | Cases |
+| --- | ---: |
+| Equal successful projection, preserving numeric types | 6,000 |
+| Equal CLI/daemon refusal code and rendered message | 11,850 |
+| Different refusal | 3,230 |
+| Native refusal of a Python-accepted projection | 1,448 |
+| Native admission of a Python-refused projection | 0 |
+| Different successful projection | 0 |
+
+**4,678 composed outcomes remain unresolved.** Of these, 4,446 involve BLOBs
+(1,482 each for opaque, integer-content and JSON-content bytes). The other
+232 comprise 168 component integer-refusal messages, 36 earlier strict
+amount/fee admission refusals, 12 component creation-time sort refusals and
+16 mixed revision-reference sort refusals. Sixteen of the strict amount/fee
+cases have a successful Python projection. None is waived, and none is
+resolved by manufacturing a downstream message in the loader.
+
+For comparison with loader-5's historical transport measure, v1 results are
+16,540 equal values, 1,526 equal refusals, 3,362 different refusals and
+1,100 native refusals of Python-serializable values: **4,462 transport gaps**,
+down from 5,746. There are zero native admissions of Python-refused v1 values
+and zero different successful v1 values. Transport and projection totals have
+different meanings and must not be combined. Under the original audit scope,
+351 transport gaps and 402 composed gaps remain across 3,609 cases.
+
+Detailed cases append to `target/r4-loader-6/storage-audit.jsonl`; the complete
+result and summary are beside it. The audit exits unsuccessfully for the
+remaining composed gaps. Its successful projections do not establish parity
+for ledger output, journal persistence or the unrouted product command.
+
+### Loader-6 verification
+
+The [paired timing record](r4-native-loader-6-bench.json) covers disposable
+seed-1 generic and seed-7 multi-wallet 20k books, five alternating Python/native
+pairs per book and five SQL-floor repetitions. Native timing includes admission
+and excludes open/BEGIN and v1 serialization, as before.
+
+| Book | Python CPU / wall | Native load CPU / wall | Admission CPU / wall | Native total CPU / wall |
+| --- | ---: | ---: | ---: | ---: |
+| generic 20,000 | 1.175 / 1.188 | 0.279 / 0.283 | 0.009 / 0.009 | **0.288 / 0.291** |
+| multi-wallet 20,000 | 1.454 / 1.479 | 0.413 / 0.416 | 0.024 / 0.024 | **0.437 / 0.440** |
+
+Unrounded native totals are **0.288152 s CPU / 0.291321532 s wall** and
+**0.436581 / 0.440290602 s**. Relative to the supplied 0.290/0.442 s CPU
+baselines, changes are **-0.64% / -1.23%**, within 5%; generic retains the
+0.30 s target. The one-minute host load is 74.84–91.49 across these pairs.
+Both books pass the complete Python/native v1 byte gate. Their generator CSV
+hashes and v1 byte lengths match loader-5; their snapshot hashes differ, so
+this run does not claim identical persisted facts to the historical books.
+A separate run of the rebuilt parent probe on these same copies produces
+identical v1 bytes and CPU totals of 0.277136 / 0.429969 s. Current CPU is
+**+3.97% / +1.54%** against that run, also within 5%. All parent samples and
+its binary hash are retained under `rebuilt_parent` in the timing record.
+
+All **123 loader catalogue entries build and are killed**, with zero survivors
+and zero runner errors. All 20 unmutated witness filters pass first. The run
+records each entry incrementally in `target/r4-loader-6/loader-mutations.log`;
+`loader-mutations-summary.json` beside it retains each named witness and kill.
+The dedicated build tree and disposable mutation checkout are removed after
+summarizing. This is the partial loader catalogue, not the full 2,292-entry
+custody campaign or an exhaustive loader branch map.
+
+The final Rust source passes **624 custody/journals tests**. The live Python
+loader oracle passes **121 tests**, and the final composed-audit gate assertions
+pass their focused recheck. All **66 byte fixtures and 43 load refusals**
+regenerate under `PYTHONHASHSEED=1` and `2`. All-target offline clippy with
+`test-harness` and `-D warnings`, Rust formatting, manual second review and
+`git diff --check` pass. The required inventory update and CI preflight run
+before the checkpoint commit; all **57 preflight tests** pass. Logs remain
+under `target/r4-loader-6/`.
+
+The standalone probe is retained at `target/r4-loader-6/custody-load`; its
+SHA-256 matches the current timing and storage-audit records. Verification and
+mutation build trees and disposable test scratch are removed after summarizing;
+logs, synthetic benchmark books and standalone probes remain. No background job
+remains at handoff. The generated/replay/census/shadow counts in earlier
+sections remain historical: those full campaigns have not run for loader-6.
+
 ## Remaining acceptance work
 
 1. Finish lossless legacy `SqlValue` storage and product-boundary refusal
-   code/message parity, including BLOB, nonfinite REAL and numeric revision
-   identities, ignored/overwritten fields and competing invalid rows. Match
-   Python-accepted values' downstream outcomes; document a Python reference bug
+   code/message parity, including BLOB, nonfinite downstream errors, mixed
+   revision references, ignored/overwritten fields and competing invalid rows.
+   Match Python-accepted values' downstream outcomes; document a Python reference bug
    with a repro only when unsafe output is demonstrated. The expanded audit
    remains an executable inventory of open gaps, not an acceptance result.
-2. Finish an explicit branch-to-named-mutation map; 102 applicable entries are
+2. Finish an explicit branch-to-named-mutation map; 123 applicable entries are
    still a partial catalogue. Run the full 2,292-entry custody campaign after
    behavior is settled, in resumable shards with incremental per-entry logs and
    fresh build trees, deleting each shard's build tree after summarizing.

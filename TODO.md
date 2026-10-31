@@ -414,17 +414,19 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
   R4-9's test-only loader now shares column layouts across native custody rows;
-  generic 20k meets 0.30 s at 0.290 s CPU / 0.292 s wall. Multi-wallet 20k takes
-  0.442 / 0.449 s, both within 5% of loader-4. The physical safe-row omission,
-  selected scalar refusals and inventory labels are fixed. Loader-5 adds
-  product-envelope UTF-8 parity, early confirmation-quantity refusals and a
-  fail-closed numeric revision-reference guard; frozen coverage is now 61 byte
-  fixtures/31 refusals. Its expanded audit covers 22,528 cases across all 360
-  physical columns of 23 tables, every synthetic row and both affinity modes.
-  It retains 5,746 unresolved cases and zero admissions of Python-refused values.
-  All 102 loader catalogue entries are killed; the branch map remains partial.
-  Complete BLOB/nonfinite downstream and revision identity/refusal parity, the lossless
-  boundary, exhaustive branch mutation map and full custody/parity campaigns
+  loader-6 generic 20k meets 0.30 s at 0.288 s CPU / 0.291 s wall. Multi-wallet
+  20k takes 0.437 / 0.440 s, both within 5% of loader-5. The physical safe-row
+  omission,
+  selected scalar refusals and inventory labels are fixed. Loader-6 adds lossless
+  infinity transport, numeric revision binding/order and integer-overflow
+  refusals, with 66 byte fixtures/43 load refusals and 123 killed mutations.
+  Its 23-table/360-column audit now separately compares native finalized
+  projection with Python, including exact refusal envelopes and zero writes.
+  All 22,528 cases prove zero writes; 4,678 composed outcomes remain unresolved,
+  with zero native admissions of Python-refused projections. Transport equality
+  alone cannot establish acceptance; the branch map remains partial.
+  Complete the lossless BLOB/raw boundary, downstream messages and mixed
+  revision refusals, exhaustive branch mutation map and full custody/parity campaigns
   ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations

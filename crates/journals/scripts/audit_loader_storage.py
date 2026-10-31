@@ -56,18 +56,30 @@ STORAGE = {
 }
 
 
-def expected(conn, profile):
+def projection_outcome(snapshot):
+    from kassiber.core.custody_compute import compute_custody_projection
+    from tests.custody_snapshot import to_jsonable
+    try:
+        projection = compute_custody_projection(snapshot).finalized_tax_projection
+    except Exception as error:
+        return {"boundaries": exception_boundaries(error)}
+    return {"value": to_jsonable(projection, redact_config=False)}
+
+
+def expected(conn, profile, *, project=False):
     try:
         snapshot = load_custody_snapshot(conn, profile, as_of=cases.AS_OF)
     except Exception as error:
         return {"phase": "load", "refusal": {"family": type(error).__name__, "code": getattr(error, "code", None),
                             "message": str(error)}, "boundaries": exception_boundaries(error)}
+    projection = {"projection": projection_outcome(snapshot)} if project else {}
     try:
         return {"phase": "v1", "v1": json.dumps(snapshot, ensure_ascii=True, allow_nan=True),
-                "snapshot": snapshot}
+                "snapshot": snapshot, **projection}
     except Exception as error:
         return {"phase": "v1", "refusal": {"family": type(error).__name__, "code": getattr(error, "code", None),
-                            "message": str(error)}, "boundaries": exception_boundaries(error)}
+                            "message": str(error)}, "boundaries": exception_boundaries(error),
+                **projection}
 
 
 def classify(reference, actual):
@@ -80,24 +92,61 @@ def classify(reference, actual):
     return "native_refused_value" if "error" in actual else "different_value"
 
 
+def classify_projection(reference, actual):
+    """No snapshot acceptance or later unrelated refusal substitutes for parity."""
+    reference = reference.get("projection", reference)
+    actual = actual.get("projection", actual)
+    if "value" in reference:
+        if "value" not in actual:
+            return "native_refused_projection"
+        return ("equal_projection" if projection_text(reference["value"]) == projection_text(actual["value"])
+                else "different_projection")
+    if "value" in actual:
+        return "native_admitted_refused_projection"
+    return ("equal_projection_refusal" if actual.get("boundaries") == reference.get("boundaries")
+            else "different_projection_refusal")
+
+
+def projection_text(value):
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, allow_nan=False)
+
+
+def outcome_record(outcome):
+    if "value" in outcome:
+        text = projection_text(outcome["value"])
+        return {"sha256": hashlib.sha256(text.encode("ascii")).hexdigest()}
+    return {key: outcome[key] for key in ("boundaries", "stage", "error") if key in outcome}
+
+
 def summarize(result):
     summary = {key: value for key, value in result.items() if key != "cases"}
-    summary["schema"] = "kassiber.custody-loader-storage-audit-summary.v2"
+    summary["schema"] = "kassiber.custody-loader-storage-audit-summary.v3"
     summary["total_cases"] = len(result["cases"])
+    gate = "projection_status" if result.get("projection") else "status"
+    summary["gate"] = gate
+    summary["unresolved"] = sum(not record[gate].startswith("equal_") for record in result["cases"])
+    summary["unresolved_by_storage"] = dict(sorted(Counter(
+        record["storage"] for record in result["cases"] if not record[gate].startswith("equal_")
+    ).items()))
+    if result.get("projection"):
+        summary["zero_write_cases"] = sum(record.get("writes") == 0 for record in result["cases"])
     summary["limitations"] = [
         "A predicate/join mutation can exclude the changed row; equality then proves filtering, not downstream scalar handling.",
         "Both declared-affinity and no-affinity variants record actual typeof(); requested classes are never counted as stored classes.",
         "All physical columns of the explicit loader-table manifest are audited; authorizer reads must be a subset.",
         "Every physical row of the small synthetic fixtures is audited, including inactive/foreign rows; this does not exhaust combinations of corrupted cells.",
         "Load and v1 serialization phases are distinguished; native custody admission is recorded separately.",
+        "Projection mode compares the native in-process custody stages with Python through finalized projection, including exact CLI/daemon refusal code/message and zero writes. It does not run the unrouted R4 journal command or ledger persistence.",
     ]
     failures = {}
     for record in result["cases"]:
-        if record["status"].startswith("equal_"):
+        if record[gate].startswith("equal_"):
             continue
         key = (record["fixture"], record["table"], record["column"])
         statuses = failures.setdefault(key, {})
-        statuses.setdefault(record["status"], set()).add(record["storage"])
+        for field in ("status", "projection_status"):
+            if field in record and not record[field].startswith("equal_"):
+                statuses.setdefault(record[field], set()).add(record["storage"])
     summary["failures_by_column"] = [
         {"fixture": fixture, "table": table, "column": column,
          **{status: sorted(storage) for status, storage in statuses.items()}}
@@ -118,7 +167,7 @@ def without_affinity(source):
     return conn
 
 
-def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
+def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, project=True):
     records = []
     inventories = {}
     with tempfile.TemporaryDirectory(prefix="loader-storage-audit-") as directory:
@@ -193,17 +242,23 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
                                                 stored_type = conn.execute(
                                                     f'SELECT typeof("{column}") FROM "{table}" WHERE rowid=?', (rowid,)
                                                 ).fetchone()[0]
-                                                reference = expected(conn, profile)
+                                                before = conn.total_changes
+                                                reference = expected(conn, profile, project=project)
+                                                if before != conn.total_changes:
+                                                    raise RuntimeError("Python loader/projection wrote rows")
                                             finally:
                                                 conn.execute("ROLLBACK TO storage_audit")
                                                 conn.execute("RELEASE storage_audit")
-                                            request = {"sql": sql + ";\n" + update + ";", "profile": profile, "as_of": cases.AS_OF}
+                                            request = {"sql": sql + ";\n" + update + ";", "profile": profile,
+                                                       "as_of": cases.AS_OF, "project": project}
                                             native.stdin.write(json.dumps(request, ensure_ascii=True) + "\n")
                                             native.stdin.flush()
                                             response = native.stdout.readline()
                                             if not response:
                                                 raise RuntimeError("native storage audit probe stopped")
                                             actual = json.loads(response)
+                                            if "text" in actual.get("projection", {}):
+                                                actual["projection"] = {"value": json.loads(actual["projection"]["text"])}
                                             status = classify(reference, actual)
                                             record = {"fixture": fixture, "affinity": affinity,
                                                       "table": table, "column": column, "rowid": rowid,
@@ -211,6 +266,13 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
                                                       "changed_rows": changed_rows, "python_phase": reference["phase"],
                                                       "read_in_baseline": (table, column) in columns,
                                                       "status": status}
+                                            if project:
+                                                record["projection_status"] = classify_projection(reference, actual)
+                                                record["python_projection"] = outcome_record(reference.get("projection", reference))
+                                                record["native_projection"] = outcome_record(actual.get("projection", actual))
+                                                record["writes"] = actual.get("writes")
+                                                if record["writes"] != 0:
+                                                    raise RuntimeError("native loader/projection did not prove zero writes")
                                             if "refusal" in reference:
                                                 record["python"] = reference["refusal"]
                                                 record["python_boundaries"] = reference["boundaries"]
@@ -225,7 +287,7 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
                                                 record["native_v1_sha256"] = hashlib.sha256(actual["v1"].encode("ascii")).hexdigest()
                                             if "adapter_error" in actual:
                                                 record["native_admission_error"] = actual["adapter_error"]
-                                            if status == "native_refused_value":
+                                            if status == "native_refused_value" and not project:
                                                 from kassiber.core.custody_compute import compute_custody_projection
                                                 try:
                                                     compute_custody_projection(reference["snapshot"])
@@ -251,7 +313,8 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
                     book.close()
         finally:
             source.close()
-    result = {"schema": "kassiber.custody-loader-storage-audit.v2", "as_of": cases.AS_OF,
+    result = {"schema": "kassiber.custody-loader-storage-audit.v3", "as_of": cases.AS_OF,
+              "projection": project,
               "python_hash_seed": os.environ.get("PYTHONHASHSEED"),
               "row_selection": "first physical row" if first_row else "every physical row in the synthetic fixtures",
               "affinities": ["declared"] if declared_only else ["declared", "none"],
@@ -262,6 +325,8 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
               "populated_summary": dict(sorted(Counter(record["status"] for record in records if record["changed_rows"]).items())),
               "empty_table_cases": sum(not record["changed_rows"] for record in records),
               "cases": records}
+    if project:
+        result["projection_summary"] = dict(sorted(Counter(record["projection_status"] for record in records).items()))
     inventoried = {tuple(column) for fixture in inventories.values() for column in fixture["physical_columns"]}
     populated = {(record["table"], record["column"]) for record in records}
     result["physical_column_coverage"] = {
@@ -273,7 +338,10 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False):
     if summary_out is not None:
         summary_out.write_text(json.dumps(summarize(result), ensure_ascii=True, indent=2) + "\n")
     print(json.dumps(result["summary"], sort_keys=True))
-    return 0 if not inventoried - populated and all(record["status"].startswith("equal_") for record in records) else 1
+    if project:
+        print(json.dumps(result["projection_summary"], sort_keys=True))
+    gate = "projection_status" if project else "status"
+    return 0 if not inventoried - populated and all(record[gate].startswith("equal_") for record in records) else 1
 
 
 def main():
@@ -283,10 +351,11 @@ def main():
     parser.add_argument("--summary-out", type=Path)
     parser.add_argument("--first-row", action="store_true", help="reproduce the historical read-column/first-row audit")
     parser.add_argument("--declared-only", action="store_true", help="skip the no-affinity storage variant")
+    parser.add_argument("--snapshot-only", action="store_true", help="historical v1 transport audit without native projection")
     args = parser.parse_args()
     args.out.with_suffix(".jsonl").write_text("")
     return run(args.binary.resolve(), args.out, args.summary_out,
-               first_row=args.first_row, declared_only=args.declared_only)
+               first_row=args.first_row, declared_only=args.declared_only, project=not args.snapshot_only)
 
 
 if __name__ == "__main__":

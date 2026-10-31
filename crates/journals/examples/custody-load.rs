@@ -83,13 +83,74 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let snapshot = match loader::load(conn, field("profile").clone(), &py_str(field("as_of"))) {
         Ok(snapshot) => snapshot,
         Err(loader::Error::Reference(refusal)) => {
+            assert_eq!(before, conn.total_changes(), "loader refusal wrote rows");
+            assert!(
+                !conn.is_autocommit(),
+                "loader refusal ended caller transaction"
+            );
             conn.execute_batch("ROLLBACK")?;
-            return Ok(reference_refusal(refusal));
+            let mut output = reference_refusal(refusal);
+            output["writes"] = json!(0);
+            return Ok(output);
         }
-        Err(error) => return Err(error.to_string().into()),
+        Err(error) => {
+            assert_eq!(before, conn.total_changes(), "loader refusal wrote rows");
+            assert!(
+                !conn.is_autocommit(),
+                "loader refusal ended caller transaction"
+            );
+            conn.execute_batch("ROLLBACK")?;
+            return Ok(json!({"error":error.to_string(),"writes":0}));
+        }
     };
     let seconds = start.elapsed().as_secs_f64();
     let load_cpu = cpu();
+    if field("project") == &Value::Bool(true) {
+        let projection = snapshot.project();
+        assert_eq!(before, conn.total_changes(), "projection wrote rows");
+        assert!(!conn.is_autocommit(), "projection ended caller transaction");
+        conn.execute_batch("ROLLBACK")?;
+        let projection = match projection {
+            Ok(stages) => {
+                let projection = stages.finalized_projection.expect("requested projection");
+                let text = kassiber_pyjson::dumps(
+                    &projection_diagnostics(&projection),
+                    &kassiber_pyjson::Options::new().ensure_ascii(true),
+                )?;
+                json!({"text":text})
+            }
+            Err(refusal) => {
+                // Preserve the downstream stage's own message, including its
+                // existing diagnostic gaps. The loader must not invent one.
+                let mut error: kassiber_journals::Refusal = refusal.message.clone().into();
+                error.family = refusal.code.clone();
+                if ![
+                    "ValueError",
+                    "TypeError",
+                    "KeyError",
+                    "OverflowError",
+                    "AppError",
+                ]
+                .contains(&refusal.code.as_str())
+                {
+                    error.code = Some(refusal.code.clone());
+                } else if refusal.code == "AppError" {
+                    error.code = Some("app_error".into());
+                }
+                let mut output = reference_refusal(error);
+                output["stage"] = json!(refusal.stage);
+                output
+            }
+        };
+        let mut output = json!({"projection":projection,"writes":conn.total_changes()-before});
+        // Snapshot bytes remain a distinct transport gate. A serialization
+        // refusal cannot replace the projection's actual outcome.
+        match snapshot.v1() {
+            Ok(v1) => output["v1"] = json!(v1),
+            Err(_) => output["v1_error"] = json!("custody snapshot v1 serialization failed"),
+        }
+        return Ok(output);
+    }
     let v1 = if field("timing_only") == &Value::Bool(true) {
         None
     } else {
@@ -111,6 +172,26 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
             json!({"v1":v1,"seconds":seconds,"adapter_seconds":adapter_seconds,"adapter_error":"custody snapshot admission refused"})
         }
     })
+}
+
+// Match the existing Python test serializer without coercing nonfinite values
+// through serde. ASCII text also retains surrogate code points losslessly.
+fn projection_diagnostics(value: &Value) -> Value {
+    use kassiber_pyjson::Key;
+    match value {
+        Value::Float(value) if !value.is_finite() => Value::Dict(vec![(
+            Key::from("$float"),
+            Value::from(kassiber_pyjson::float_repr(*value)),
+        )]),
+        Value::List(values) => Value::List(values.iter().map(projection_diagnostics).collect()),
+        Value::Dict(values) => Value::Dict(
+            values
+                .iter()
+                .map(|(key, value)| (key.clone(), projection_diagnostics(value)))
+                .collect(),
+        ),
+        value => value.clone(),
+    }
 }
 
 fn reference_refusal(refusal: kassiber_journals::Refusal) -> serde_json::Value {

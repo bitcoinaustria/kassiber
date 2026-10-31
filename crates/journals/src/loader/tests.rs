@@ -90,7 +90,7 @@ fn native_loader_utf8_optional_reviews_preserve_python_fallback() {
 }
 
 #[test]
-fn native_loader_refuses_nontext_revision_references_before_output() {
+fn native_loader_refuses_mixed_revision_references_before_output() {
     let Value::List(cases) =
         kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
     else {
@@ -126,6 +126,58 @@ fn native_loader_refuses_nontext_revision_references_before_output() {
 }
 
 #[test]
+fn native_loader_revision_queries_keep_sqlite_binding_types() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    let mut sql = text(get(case, "sql"));
+    for column in [
+        "id",
+        "supersedes_component_id",
+        "superseded_by_component_id",
+    ] {
+        sql = sql.replace(&format!("\"{column}\" TEXT"), &format!("\"{column}\""));
+    }
+    for number in ["7", "7.0", "1.5", "9007199254740993", "1e999", "-1e999"] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&sql).unwrap();
+        conn.execute_batch(&format!("BEGIN IMMEDIATE;
+            UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL;
+            UPDATE custody_components SET id={number} WHERE state='superseded';
+            UPDATE custody_components SET supersedes_component_id={number} WHERE id='active-a';
+            UPDATE custody_components SET superseded_by_component_id={number} WHERE id='active-b';")).unwrap();
+        let changes = conn.total_changes();
+        let snapshot = load(
+            &conn,
+            get(case, "profile").clone(),
+            &text(get(case, "as_of")),
+        )
+        .unwrap();
+        let actual = kassiber_pytext::loads(&snapshot.v1().unwrap()).unwrap();
+        let Value::List(headers) = get(&actual, "revision_headers") else {
+            panic!("headers")
+        };
+        assert_eq!(headers.len(), 1, "{number}");
+        let expected = query(
+            &conn,
+            "SELECT id FROM custody_components WHERE state='superseded'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(get(&headers[0], "id"), get(&expected[0], "id"));
+        assert_eq!(conn.total_changes(), changes);
+        assert!(!conn.is_autocommit());
+        conn.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
 fn native_loader_matches_python_database_bytes() {
     let Value::List(cases) =
         kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
@@ -152,7 +204,15 @@ fn native_loader_matches_python_database_bytes() {
         );
         // The same in-memory structure as the text adapter, with no wire text.
         let adapter = snapshot.into_custody();
-        let reference = kassiber_custody::parse(&text(get(&case, "expected")));
+        // Python's v1 uses Infinity constants, while serde's text grammar
+        // accepts only JSON numbers. Preserve their float value as overflowing
+        // exponents for this separate admission/record comparison. The exact
+        // Python v1 bytes have already been checked above.
+        let reference_text = serde_json::to_string(
+            &convert(kassiber_pytext::loads(&text(get(&case, "expected"))).unwrap()).unwrap(),
+        )
+        .unwrap();
+        let reference = kassiber_custody::parse(&reference_text);
         // Typed rows serialize REALs from f64; the native compatibility rows
         // retain Python's exponent spelling. Compare the exact Python scalar
         // model (including integer/float distinctions and signed zero), while
@@ -225,10 +285,85 @@ fn native_loader_keeps_sql_values_and_refuses_blob_coercion() {
         query(&conn, "SELECT x'ff' AS blob", []),
         Err(Error::Unsupported(_))
     ));
-    assert!(matches!(
-        super::direct::scalar(ValueRef::Real(f64::INFINITY)),
-        Err(Error::Unsupported(_))
-    ));
+}
+
+#[test]
+fn native_loader_preserves_nonfinite_real_until_downstream() {
+    for number in [f64::INFINITY, f64::NEG_INFINITY, -0.0, 1.0, 1.234e-7] {
+        let stored = super::direct::scalar(ValueRef::Real(number)).unwrap();
+        let expected = Value::Float(number);
+        assert_eq!(convert(expected.clone()).unwrap(), stored);
+        // Gate::encode first crosses serde's Value serializer. The overflowing
+        // exponent must survive that round trip too, never becoming null.
+        let serialized = serde_json::to_value(&stored).unwrap();
+        let restored = kassiber_custody::codec::from_json(&serialized).unwrap();
+        assert_eq!(restored, expected);
+        assert_eq!(
+            kassiber_pyjson::dumps(&restored, &Options::new().allow_nan(true)).unwrap(),
+            kassiber_pyjson::dumps(&expected, &Options::new().allow_nan(true)).unwrap()
+        );
+    }
+    assert!(float_storage(f64::NAN).is_err());
+}
+
+#[test]
+fn native_loader_caught_integer_errors_still_propagate_overflow() {
+    assert_eq!(
+        ownership::legacy_integer(&Value::from("invalid")).unwrap(),
+        None
+    );
+    assert_eq!(ownership::legacy_integer(&Value::Null).unwrap(), None);
+    assert_eq!(
+        ownership::legacy_integer(&Value::Float(1.9)).unwrap(),
+        Some(1.into())
+    );
+    for real in [f64::INFINITY, f64::NEG_INFINITY] {
+        let Err(Error::Reference(error)) = ownership::legacy_integer(&Value::Float(real)) else {
+            panic!("int(inf) must refuse")
+        };
+        assert_eq!(error.family, "OverflowError");
+        assert_eq!(error.message, "cannot convert float infinity to integer");
+    }
+}
+
+#[test]
+fn native_loader_integer_overflow_refusals_match_python() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "receipts-counts-0")
+        .unwrap();
+    for (table, column) in [
+        ("chain_observation_provenance", "authority_version"),
+        ("wallet_utxos", "branch_index"),
+        ("wallet_utxos", "address_index"),
+    ] {
+        for number in ["1e999", "-1e999"] {
+            let conn = Connection::open_in_memory().unwrap();
+            conn.execute_batch(&text(get(case, "sql"))).unwrap();
+            conn.execute_batch(&format!(
+                "BEGIN IMMEDIATE; UPDATE {table} SET {column}={number}"
+            ))
+            .unwrap();
+            let changes = conn.total_changes();
+            let Err(Error::Reference(error)) = load(
+                &conn,
+                get(case, "profile").clone(),
+                &text(get(case, "as_of")),
+            ) else {
+                panic!("{table}.{column} {number} must refuse")
+            };
+            assert_eq!(error.family, "OverflowError");
+            assert_eq!(error.message, "cannot convert float infinity to integer");
+            assert_eq!(conn.total_changes(), changes);
+            assert!(!conn.is_autocommit());
+            conn.execute_batch("ROLLBACK").unwrap();
+        }
+    }
 }
 
 #[test]

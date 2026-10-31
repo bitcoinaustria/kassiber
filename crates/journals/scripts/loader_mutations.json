@@ -272,7 +272,7 @@
   {
     "id": "JL-direct-real",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "kassiber_pyjson::float_repr(value)\n                .parse()",
+    "find": "float_storage(value)?\n                .parse()",
     "replace": "value.to_string()\n                .parse()",
     "expect_failing": [
       "native_loader_reads_direct_columns_without_conversion"
@@ -291,13 +291,13 @@
   },
   {
     "id": "JL-direct-nonfinite",
-    "file": "crates/journals/src/loader/direct.rs",
-    "find": "ValueRef::Real(_) => {\n            return Err(Error::Unsupported(\n                \"custody adapter cannot represent nonfinite SQLite REAL\",\n            ))\n        }",
-    "replace": "ValueRef::Real(_) => J::Null,",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"1e999\".into()",
+    "replace": "\"0.0\".into()",
     "expect_failing": [
-      "native_loader_reads_direct_columns_without_conversion"
+      "native_loader_preserves_nonfinite_real_until_downstream"
     ],
-    "rule": "Refuse nonfinite REAL coercion at the current adapter seam."
+    "rule": "Carry positive SQLite infinity losslessly to downstream validation."
   },
   {
     "id": "JL-direct-duplicate",
@@ -972,7 +972,7 @@
   {
     "id": "JL-confirmation-version",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "ownership::integer(&version) != Some(1.into())",
+    "find": "ownership::legacy_integer(&version)? != Some(1.into())",
     "replace": "ownership::integer(&version) != Some(2.into())",
     "expect_failing": [
       "native_loader_preserves_receipt_error_precedence"
@@ -1012,11 +1012,221 @@
   {
     "id": "JL-revision-reference-storage",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "if nontext_revision_reference {",
+    "find": "if revision_ids.iter().any(revisions::Reference::is_text)\n        && revision_ids.iter().any(|id| !id.is_text())",
+    "replace": "if false",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Keep mixed text/numeric revision references fail closed pending exact Python sort refusal parity."
+  },
+  {
+    "id": "JL-negative-nonfinite",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"-1e999\".into()",
+    "replace": "\"1e999\".into()",
+    "expect_failing": [
+      "native_loader_preserves_nonfinite_real_until_downstream"
+    ],
+    "rule": "Preserve the sign of SQLite infinity."
+  },
+  {
+    "id": "JL-nan-storage",
+    "file": "crates/journals/src/loader.rs",
+    "find": "if value.is_nan() {",
     "replace": "if false {",
     "expect_failing": [
-      "native_loader_refuses_nontext_revision_references_before_output"
+      "native_loader_preserves_nonfinite_real_until_downstream"
     ],
-    "rule": "Fail closed before snapshot output instead of stringifying numeric revision references that Python may refuse."
+    "rule": "Reject impossible SQLite REAL NaN rather than manufacture a transport value."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-integer-order",
+    "find": "(SqlValue::Integer(a), SqlValue::Integer(b)) => a.cmp(b),",
+    "replace": "(SqlValue::Integer(a), SqlValue::Integer(b)) => b.cmp(a),",
+    "rule": "Sort SQLite integer identities in Python numeric order."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-real-order",
+    "find": "a.partial_cmp(b).expect(\"SQLite REAL\")",
+    "replace": "b.partial_cmp(a).expect(\"SQLite REAL\")",
+    "rule": "Sort SQLite REAL identities in Python numeric order."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-mixed-integer-real",
+    "find": "int_float(*a, *b),",
+    "replace": "int_float(*a, *b).reverse(),",
+    "rule": "Compare INTEGER and REAL without losing identity."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-mixed-real-integer",
+    "find": "int_float(*b, *a).reverse(),",
+    "replace": "int_float(*b, *a),",
+    "rule": "Reverse mixed numeric comparisons exactly."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-upper-range",
+    "find": "real >= -(i64::MIN as f64)",
+    "replace": "real > -(i64::MIN as f64)",
+    "rule": "Handle float 2^63 before a saturating integer cast."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-lower-range",
+    "find": "real < i64::MIN as f64",
+    "replace": "false",
+    "rule": "Handle floats below i64::MIN before a saturating integer cast."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-fraction",
+    "find": "0.0_f64.partial_cmp(&real.fract())",
+    "replace": "real.fract().partial_cmp(&0.0_f64)",
+    "rule": "Retain fractional numeric order on either side of zero."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-exact-integer",
+    "find": "integer.cmp(&(real as i64))",
+    "replace": "(integer as f64).partial_cmp(&real).unwrap()",
+    "rule": "Keep distinct integer identities above 2^53."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-text-order",
+    "find": "(SqlValue::Text(a), SqlValue::Text(b)) => a.cmp(b),",
+    "replace": "(SqlValue::Text(a), SqlValue::Text(b)) => b.cmp(a),",
+    "rule": "Keep Python text ordering for revision references."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-is-text",
+    "find": "matches!(self.0, SqlValue::Text(_))",
+    "replace": "!matches!(self.0, SqlValue::Text(_))",
+    "rule": "Distinguish text identities from numeric identities."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-unsupported",
+    "find": "return Err(Error::Unsupported(\n                    \"custody revision reference is not a SQLite scalar\",\n                ))",
+    "replace": "return Ok(Self(SqlValue::Integer(0)))",
+    "rule": "Refuse non-SQL revision identity shapes."
+  },
+  {
+    "id": "JL-revision-bind",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "self.0.to_sql()",
+    "replace": "Ok(ToSqlOutput::Owned(SqlValue::Text(format!(\"{:?}\", self.0))))",
+    "expect_failing": [
+      "native_loader_revision_queries_keep_sqlite_binding_types"
+    ],
+    "rule": "Bind revision identities with their original SQLite storage class."
+  },
+  {
+    "id": "JL-integer-overflow",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "outpoint_integer(value)?;",
+    "replace": "let _ = value;",
+    "expect_failing": [
+      "native_loader_caught_integer_errors_still_propagate_overflow"
+    ],
+    "rule": "Do not swallow OverflowError in callers that catch only TypeError and ValueError."
+  },
+  {
+    "id": "JL-confirmation-overflow",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ownership::legacy_integer(&version)? != Some(1.into())",
+    "replace": "ownership::integer(&version) != Some(1.into())",
+    "expect_failing": [
+      "native_loader_integer_overflow_refusals_match_python"
+    ],
+    "rule": "Authority-version int conversion propagates infinity overflow before checking stale authority."
+  },
+  {
+    "id": "JL-receipt-branch-overflow",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "legacy_integer(get(&row,\"branch_index\"))?",
+    "replace": "ownership::integer(get(&row,\"branch_index\"))",
+    "expect_failing": [
+      "native_loader_integer_overflow_refusals_match_python"
+    ],
+    "rule": "Receipt branch MAX conversion preserves Python OverflowError."
+  },
+  {
+    "id": "JL-receipt-index-overflow",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "legacy_integer(get(&row,\"max_index\"))?",
+    "replace": "ownership::integer(get(&row,\"max_index\"))",
+    "expect_failing": [
+      "native_loader_integer_overflow_refusals_match_python"
+    ],
+    "rule": "Receipt address MAX conversion preserves Python OverflowError."
+  },
+  {
+    "id": "JL-current-scan-overflow",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "legacy_integer(get(&config, \"ownership_scan_to_index\"))?",
+    "replace": "integer(get(&config, \"ownership_scan_to_index\"))",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
+  },
+  {
+    "id": "JL-historic-scan-overflow",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "legacy_integer(get(&config, \"scan_to_index\"))?",
+    "replace": "integer(get(&config, \"scan_to_index\"))",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
+  },
+  {
+    "id": "JL-checkpoint-overflow",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "legacy_integer(value)?",
+    "replace": "ownership::integer(value)",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
   }
 ]

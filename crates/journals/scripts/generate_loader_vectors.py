@@ -48,6 +48,8 @@ def vectors():
             helper = OwnershipDeriverHandlerTest()
             helper._seed(source)
             selected = [
+                *[("numeric-revision-" + str(i), cases.test_loader_preserves_numeric_revision_bindings, (value,))
+                  for i, value in enumerate((7, 1.5, 9007199254740993, float("inf"), float("-inf")))],
                 *[("stale-confirmation-" + stale, cases.test_loader_skips_confirmation_quantity_when_authority_is_stale, (stale,))
                   for stale in ("version", "graph")],
                 ("structural-columns", cases.test_loader_covers_every_structural_table_column_and_filter, ()),
@@ -125,6 +127,15 @@ def error_vectors():
         helper = OwnershipDeriverHandlerTest()
         helper._seed(source)
         selected = [
+            *[("embedded-scan-overflow-" + str(i), cases.test_loader_propagates_embedded_scan_overflow_before_output, args)
+              for i, args in enumerate((place, value) for place in ("current", "historic", "checkpoint")
+                                       for value in (float("inf"), float("-inf")))],
+            *[("integer-overflow-" + str(i), cases.test_loader_propagates_integer_overflow_before_output, args)
+              for i, args in enumerate(
+                  (table, column, value)
+                  for table, column in (("chain_observation_provenance", "authority_version"),
+                                        ("wallet_utxos", "branch_index"), ("wallet_utxos", "address_index"))
+                  for value in (float("inf"), float("-inf")))],
             *[("confirmation-quantity-" + str(i), cases.test_loader_refuses_confirmation_quantity_before_output, args)
               for i, args in enumerate((("legacy scalar", 0), (100000000, "legacy scalar"),
                                        ("bad amount", "bad fee"), ("", "bad fee")))],

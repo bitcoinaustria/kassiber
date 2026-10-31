@@ -2287,16 +2287,19 @@ remain open.
 
 The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) now compares
 corruption refusals at the CLI/daemon code and rendered-message boundary.
-Loader-5 fixes UTF-8 rendering/order and confirmation-quantity refusals and
-closes numeric revision-reference admissions. Its 61 byte fixtures and 31
-refusals supplement a 22,528-case audit of all 360 physical columns in the
-23-table manifest, every synthetic row and both declared/no-affinity schemas.
-All 102 loader catalogue entries are killed; the branch map remains partial.
-Loader-5's 20k paired CPU totals including admission are 0.289819 s generic /
-0.442404 s multi-wallet, both within 5% of loader-4. The expanded audit retains
-5,746 unresolved cases, with zero admissions of Python-refused values.
-BLOB/nonfinite downstream outcomes, numeric revision identity/refusal parity,
-complete branch-to-mutation coverage, the full
+Loader-6 carries SQLite infinities through the record boundary, preserves
+numeric revision bindings/order, and propagates integer overflow in authority
+and scan-depth conversions. Its 66 byte fixtures and 43 refusals supplement the
+23-table/360-column storage audit. The audit now separately compares native
+finalized projection with Python, including outcomes for snapshots that cannot
+be serialized; transport equality alone cannot establish acceptance. The 123
+loader catalogue entries are killed but remain a partial branch inventory.
+The expanded audit covers 22,528 cases with zero writes and zero native
+admissions of Python-refused projections; 4,678 composed outcomes remain open.
+Loader-6's 20k paired CPU totals including admission are 0.288152 s generic /
+0.436581 s multi-wallet, within 5% of the supplied loader-5 baselines.
+BLOB/raw storage, exact downstream refusal messages, mixed revision
+identity/refusal parity, complete branch-to-mutation coverage, the full
 2,292-entry custody campaign and final corpus/replay/census/shadow gates still
 block R4-9 acceptance. Infinite transaction rates are refused by Python's
 downstream finite-decimal barrier; no Python reference-bug waiver is claimed.

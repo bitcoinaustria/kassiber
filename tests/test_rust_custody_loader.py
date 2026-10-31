@@ -22,6 +22,28 @@ pytestmark = pytest.mark.skipif(not Path(BINARY).is_file(), reason="requires cus
 AS_OF = "2026-10-31T12:00:00Z"
 
 
+def test_loader_projection_audit_keeps_transport_and_product_outcomes_distinct():
+    from crates.journals.scripts.audit_loader_storage import classify_projection, summarize
+    refusal = exception_boundaries(ValueError("synthetic downstream refusal"))
+    reference = {"v1": "transport", "projection": {"boundaries": refusal}}
+    assert classify_projection(reference, {"v1": "transport", "projection": {"value": {}}}) == "native_admitted_refused_projection"
+    assert classify_projection(reference, {"v1": "different", "projection": {"boundaries": refusal}}) == "equal_projection_refusal"
+    assert classify_projection({"projection": {"value": {"amount": 1}}},
+                               {"projection": {"value": {"amount": 1.0}}}) == "different_projection"
+    assert classify_projection({"projection": {"value": {}}}, {"error": "refused"}) == "native_refused_projection"
+    records = [
+        {"fixture": "synthetic", "table": "transactions", "column": "fiat_rate", "storage": "real",
+         "status": "equal_value", "projection_status": "native_admitted_refused_projection"},
+        {"fixture": "synthetic", "table": "transactions", "column": "raw_json", "storage": "blob",
+         "status": "different_refusal", "projection_status": "equal_projection_refusal"},
+    ]
+    summary = summarize({"projection": True, "cases": records})
+    assert summary["gate"] == "projection_status"
+    assert summary["unresolved"] == 1
+    assert summary["unresolved_by_storage"] == {"real": 1}
+    assert [failure["column"] for failure in summary["failures_by_column"]] == ["fiat_rate"]
+
+
 @pytest.mark.parametrize("error", [
     ValueError("invalid literal for int() with base 10: 'legacy scalar'"),
     TypeError("Object of type bytes is not JSON serializable"),
@@ -134,6 +156,135 @@ def check(conn):
     profile = _profile(conn)
     expected = load_custody_snapshot(conn, profile, as_of=AS_OF)
     return compare(conn, profile, expected, binary=BINARY)
+
+
+@pytest.mark.parametrize("value", [7, 1.5, 9007199254740993, float("inf"), float("-inf")])
+def test_loader_preserves_numeric_revision_bindings(loose_book, value):
+    conn, helper = loose_book
+    from unittest.mock import patch
+    with patch(__name__ + ".check", lambda _conn: None):
+        test_loader_covers_every_structural_table_column_and_filter((conn, helper))
+    sql = "\n".join(conn.iterdump())
+    for column in ("id", "supersedes_component_id", "superseded_by_component_id"):
+        sql = sql.replace(f'"{column}" TEXT', f'"{column}"')
+    with sqlite3.connect(":memory:") as legacy:
+        legacy.row_factory = sqlite3.Row
+        legacy.executescript(sql)
+        legacy.execute("UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL")
+        legacy.execute("UPDATE custody_components SET id=? WHERE state='superseded'", (value,))
+        legacy.execute("UPDATE custody_components SET supersedes_component_id=? WHERE id='active-a'", (value,))
+        legacy.execute("UPDATE custody_components SET superseded_by_component_id=? WHERE id='active-b'", (value,))
+        snapshot = load_custody_snapshot(legacy, _profile(legacy), as_of=AS_OF)
+        assert len(snapshot["revision_headers"]) == 1
+        assert snapshot["revision_headers"][0]["id"] == value
+        check(legacy)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf")])
+def test_loader_preserves_infinite_rate_for_downstream_validation(loose_book, value):
+    from kassiber.core.custody_compute import compute_custody_projection
+    from kassiber.errors import AppError
+    conn, helper = loose_book
+    helper._tx(conn, tx_id="nonfinite-rate", wallet_id="wallet-a", direction="inbound",
+               amount=100000000000, external_id="acq", raw_json="{}")
+    conn.execute("UPDATE transactions SET kind='buy',fiat_rate=?", (value,))
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert snapshot["transactions"][0]["fiat_rate"] == value
+    actual = check(conn)
+    with pytest.raises(AppError) as expected:
+        compute_custody_projection(snapshot)
+    restored = json.loads(actual["v1"])
+    with pytest.raises(AppError) as replayed:
+        compute_custody_projection(restored)
+    assert exception_boundaries(replayed.value) == exception_boundaries(expected.value)
+    assert expected.value.code == "validation"
+    assert str(expected.value) == "transaction nonfinite-rate: fiat_rate must be a finite decimal number"
+
+
+def test_loader_probe_compares_native_projection_without_snapshot_text(loose_book):
+    from kassiber.core.custody_compute import compute_custody_projection
+    from tests.custody_snapshot import to_jsonable
+    conn, helper = loose_book
+    helper._tx(conn, tx_id="buy", wallet_id="wallet-a", direction="inbound",
+               amount=100000000000, external_id="acq", raw_json="{}")
+    conn.execute("UPDATE transactions SET kind='buy',fiat_rate=10000")
+    request = {"sql": "\n".join(conn.iterdump()), "profile": dict(_profile(conn)),
+               "as_of": AS_OF, "project": True}
+    response = subprocess.run([BINARY], input=json.dumps(request).encode(),
+                              capture_output=True, check=True, timeout=120)
+    assert not response.stderr
+    actual = json.loads(response.stdout)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    expected = compute_custody_projection(snapshot).finalized_tax_projection
+    assert json.loads(actual["projection"]["text"]) == to_jsonable(expected, redact_config=False)
+    assert actual["writes"] == 0
+    request["sql"] += ";\nUPDATE transactions SET amount_includes_fee=1e999;"
+    response = subprocess.run([BINARY], input=json.dumps(request).encode(),
+                              capture_output=True, check=True, timeout=120)
+    assert not response.stderr
+    actual = json.loads(response.stdout)
+    conn.execute("UPDATE transactions SET amount_includes_fee=1e999")
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    expected = compute_custody_projection(snapshot).finalized_tax_projection
+    assert json.loads(actual["projection"]["text"]) == to_jsonable(expected, redact_config=False)
+    assert actual["writes"] == 0
+    request["sql"] += ";\nUPDATE transactions SET amount_includes_fee=0,fiat_rate=1e999;"
+    response = subprocess.run([BINARY], input=json.dumps(request).encode(),
+                              capture_output=True, check=True, timeout=120)
+    assert not response.stderr
+    actual = json.loads(response.stdout)
+    assert actual["projection"]["stage"] == "finalized_projection"
+    assert "value" not in actual["projection"]
+    assert actual["writes"] == 0
+    assert json.loads(actual["v1"])["transactions"][0]["fiat_rate"] == float("inf")
+    request["sql"] += ";\nUPDATE transactions SET amount=1.5;"
+    response = subprocess.run([BINARY], input=json.dumps(request).encode(),
+                              capture_output=True, check=True, timeout=120)
+    assert not response.stderr
+    actual = json.loads(response.stdout)
+    assert actual["projection"]["stage"] == "snapshot"
+    assert actual["projection"]["boundaries"]["cli"]["code"] == "custody_snapshot_invalid"
+    assert "value" not in actual["projection"]
+    assert actual["writes"] == 0
+
+
+@pytest.mark.parametrize("table,column", [
+    ("chain_observation_provenance", "authority_version"),
+    ("wallet_utxos", "branch_index"),
+    ("wallet_utxos", "address_index"),
+])
+@pytest.mark.parametrize("value", [float("inf"), float("-inf")])
+def test_loader_propagates_integer_overflow_before_output(loose_book, table, column, value):
+    from unittest.mock import patch
+    conn, helper = loose_book
+    with patch(__name__ + ".check", lambda _conn: None):
+        test_loader_receipt_index_preserves_sources_counts_and_profile_scope((conn, helper), False)
+    conn.execute(f'UPDATE "{table}" SET "{column}"=?', (value,))
+    _check_refusal(conn)
+
+
+@pytest.mark.parametrize("place", ["current", "historic", "checkpoint"])
+@pytest.mark.parametrize("value", [float("inf"), float("-inf")])
+def test_loader_propagates_embedded_scan_overflow_before_output(loose_book, place, value):
+    from unittest.mock import patch
+    conn, helper = loose_book
+    if place == "checkpoint":
+        with patch(__name__ + ".check", lambda _conn: None):
+            test_loader_receipt_index_preserves_sources_counts_and_profile_scope((conn, helper), False)
+        insert(conn, "freshness_source_states", "checkpoint", source_key="onchain_wallet:wallet-a",
+               checkpoint_json=json.dumps({"highest_used": {"0": value}}))
+    else:
+        graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                       outputs=[(SCRIPT_B, 100000)], fee=10)
+        _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+        if place == "current":
+            conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'",
+                         (json.dumps({"ownership_scan_to_index": value}),))
+        else:
+            insert(conn, "wallet_policy_epochs", "historic", wallet_id="wallet-a", status="retired",
+                   chain="bitcoin", network="main", created_at="2025-01-01",
+                   private_material_json=json.dumps({**_descriptor_config(2), "scan_to_index": value}))
+    _check_refusal(conn)
 
 
 CONFIGS = [

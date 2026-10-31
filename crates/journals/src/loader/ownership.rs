@@ -74,6 +74,14 @@ pub(super) fn integer(value: &Value) -> Option<BigInt> {
         _ => None,
     }
 }
+/// Python callers catching TypeError/ValueError still propagate int(inf)'s
+/// OverflowError. Do not treat that refusal as missing or stale evidence.
+pub(super) fn legacy_integer(value: &Value) -> Result<Option<BigInt>> {
+    if matches!(value, Value::Float(value) if value.is_infinite()) {
+        outpoint_integer(value)?;
+    }
+    Ok(integer(value))
+}
 pub(super) fn outpoint_integer(value: &Value) -> Result<BigInt> {
     if let Value::Str(value) = value {
         let raw = value
@@ -402,7 +410,7 @@ pub(super) fn load(
             .map(text)
             .unwrap_or_default();
         let configured = if truth(get(&config, "ownership_scan_to_index")) {
-            integer(get(&config, "ownership_scan_to_index"))
+            legacy_integer(get(&config, "ownership_scan_to_index"))?
         } else {
             Some(0.into())
         };
@@ -442,7 +450,7 @@ pub(super) fn load(
                 continue;
             }
             let floor = if truth(get(&config, "scan_to_index")) {
-                integer(get(&config, "scan_to_index"))
+                legacy_integer(get(&config, "scan_to_index"))?
             } else {
                 Some(0.into())
             };

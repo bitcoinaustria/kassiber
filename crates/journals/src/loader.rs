@@ -5,6 +5,7 @@
 //! retain Python's insertion order exclusively for the test-only v1 byte gate.
 mod ownership;
 mod receipts;
+mod revisions;
 #[cfg(test)]
 mod tests;
 mod worklist;
@@ -72,15 +73,12 @@ pub(super) fn convert(value: Value) -> Result<serde_json::Value> {
                 .map_err(|_| Error::Invalid("integer".into()))?,
         ),
         Value::Float(value) => {
-            if !value.is_finite() {
-                return Err(Error::Unsupported(
-                    "custody adapter cannot represent nonfinite SQLite REAL",
-                ));
-            }
             // The existing adapter keeps arbitrary-precision number
-            // spellings, including Python's exponent padding.
+            // spellings, including Python's exponent padding. Overflowing
+            // exponents retain SQLite infinities until a consumer validates
+            // them; codec::from_json restores the original Python float.
             J::Number(
-                kassiber_pyjson::float_repr(value)
+                float_storage(value)?
                     .parse()
                     .map_err(|_| Error::Invalid("float".into()))?,
             )
@@ -113,6 +111,20 @@ pub(super) fn convert(value: Value) -> Result<serde_json::Value> {
                 .collect::<Result<_>>()?,
         ),
         Value::Decimal(_) => return Err(Error::Invalid("unexpected Decimal".into())),
+    })
+}
+
+fn float_storage(value: f64) -> Result<String> {
+    if value.is_nan() {
+        // SQLite stores a bound NaN as NULL. No SQL REAL can take this path.
+        return Err(Error::Invalid("SQLite REAL is NaN".into()));
+    }
+    Ok(if value == f64::INFINITY {
+        "1e999".into()
+    } else if value == f64::NEG_INFINITY {
+        "-1e999".into()
+    } else {
+        kassiber_pyjson::float_repr(value)
     })
 }
 

@@ -15,6 +15,22 @@ pub struct LoadedSnapshot {
     gate: Gate,
 }
 impl LoadedSnapshot {
+    /// Compare the native composition without a v1/text admission round trip.
+    /// This seam is test-only until the native journal orchestrator is routed.
+    #[cfg(feature = "test-harness")]
+    pub fn project(
+        &self,
+    ) -> std::result::Result<kassiber_custody::Stages, kassiber_custody::Refusal> {
+        self.snapshot
+            .validate()
+            .map_err(|message| kassiber_custody::Refusal {
+                stage: "snapshot",
+                code: "custody_snapshot_invalid".into(),
+                message,
+            })?;
+        kassiber_custody::run(&self.snapshot, true)
+    }
+
     pub fn into_custody(self) -> Result<Snapshot> {
         self.snapshot.validate().map_err(Error::Invalid)?;
         Ok(self.snapshot)
@@ -114,16 +130,11 @@ pub(super) fn scalar(value: ValueRef<'_>) -> Result<J> {
     Ok(match value {
         ValueRef::Null => J::Null,
         ValueRef::Integer(value) => J::Number(value.into()),
-        ValueRef::Real(value) if value.is_finite() => J::Number(
-            kassiber_pyjson::float_repr(value)
+        ValueRef::Real(value) => J::Number(
+            float_storage(value)?
                 .parse()
                 .map_err(|_| Error::Invalid("SQLite REAL".into()))?,
         ),
-        ValueRef::Real(_) => {
-            return Err(Error::Unsupported(
-                "custody adapter cannot represent nonfinite SQLite REAL",
-            ))
-        }
         ValueRef::Text(value) => J::String(
             std::str::from_utf8(value)
                 .map_err(|_| Error::Unsupported("SQLite TEXT is not UTF-8"))?
@@ -283,7 +294,7 @@ fn confirmation_quantity_refusals(rows: &[Record]) -> Result<()> {
             continue;
         }
         let version = kassiber_custody::codec::from_json(version).map_err(Error::Invalid)?;
-        if ownership::integer(&version) != Some(1.into()) {
+        if ownership::legacy_integer(&version)? != Some(1.into()) {
             continue;
         }
         let raw = row.get("raw_json").unwrap_or(&J::Null);
@@ -342,7 +353,6 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     let mut anchor_ids = BTreeSet::new();
     let mut wallet_ids = BTreeSet::new();
     let mut revision_ids = BTreeSet::new();
-    let mut nontext_revision_reference = false;
     for header in reader.rows(conn,"components[].header","SELECT * FROM custody_components WHERE profile_id=? AND state='active' ORDER BY created_at,revision,id",[&profile_id],false)? {
         let id = string(&header,"id");
         let legs = reader.rows(conn,"components[].legs[]","SELECT * FROM custody_component_legs WHERE component_id=? ORDER BY ordinal,id",[&id],false)?;
@@ -350,7 +360,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
             for key in ["transaction_id","anchor_transaction_id"] { if leg.get(key).is_some_and(|v| !v.is_null()) { anchor_ids.insert(string(leg,key)); } }
             if leg.get("wallet_id").is_some_and(|v| !v.is_null()) { wallet_ids.insert(string(leg,"wallet_id")); }
         }
-        for key in ["supersedes_component_id","superseded_by_component_id"] { if let Some(value) = header.get(key).filter(|v| !v.is_null()) { nontext_revision_reference |= !value.is_string(); revision_ids.insert(string(&header,key)); } }
+        for key in ["supersedes_component_id","superseded_by_component_id"] { if let Some(value) = header.get(key).filter(|v| !v.is_null()) { revision_ids.insert(revisions::Reference::from_json(value)?); } }
         components.push(Component {
             header, legs,
             allocations: reader.rows(conn,"components[].allocations[]","SELECT * FROM custody_component_allocations WHERE component_id=? ORDER BY ordinal,id",[&id],false)?,
@@ -374,7 +384,9 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
         )?);
     }
     let mut revision_headers = vec![];
-    if nontext_revision_reference {
+    if revision_ids.iter().any(revisions::Reference::is_text)
+        && revision_ids.iter().any(|id| !id.is_text())
+    {
         return Err(Error::Unsupported(
             "custody revision reference is not SQLite TEXT",
         ));
@@ -652,12 +664,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(kassiber_pyjson::dumps(&value,&Options::new()).unwrap(),"[{\"n\": null, \"i\": 9223372036854775807, \"f\": 1.0, \"s\": \"\\u94b1\", \"duplicate\": 1}]");
-        for sql in ["SELECT x'ff' AS b", "SELECT 1e999 AS f"] {
-            assert!(matches!(
-                reader.rows(&conn, "rows[]", sql, [], false),
-                Err(Error::Unsupported(_))
-            ));
-        }
+        assert!(matches!(
+            reader.rows(&conn, "rows[]", "SELECT x'ff' AS b", [], false),
+            Err(Error::Unsupported(_))
+        ));
+        let rows = reader
+            .rows(&conn, "rows[]", "SELECT 1e999 AS f", [], false)
+            .unwrap();
+        assert_eq!(
+            kassiber_custody::codec::from_json(&rows[0]["f"]).unwrap(),
+            Value::Float(f64::INFINITY)
+        );
         assert!(matches!(
             reader.rows(
                 &conn,
