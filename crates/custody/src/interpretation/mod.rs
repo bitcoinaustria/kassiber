@@ -95,10 +95,20 @@ pub(crate) fn gap_ignored_ids(
             }
         }
     }
-    ignored.extend(Context::from_stages(components, evidence).excluded);
+    ignored.extend(excluded(components));
+    let needed: BTreeSet<_> = stored::list(stored::get(interpretation, "claims"))
+        .iter()
+        .filter(|claim| !matches!(stored::get(claim, "target"), Py::Null))
+        .flat_map(|claim| {
+            ["source", "target"].map(|side| {
+                python_value_string(stored::get(stored::get(claim, side), "observation_hash"))
+            })
+        })
+        .collect();
     let observations: BTreeMap<_, _> = array(&evidence["canonical_input"]["events"])
         .iter()
         .flat_map(|event| array(&event["legs"]))
+        .filter(|leg| !needed.is_empty() && needed.contains(&text(&leg["quantity_hash"])))
         .map(|leg| (text(&leg["quantity_hash"]), text(&leg["transaction_id"])))
         .collect();
     for claim in stored::list(stored::get(interpretation, "claims")) {
@@ -167,18 +177,27 @@ pub(super) fn anchor(row: &Value) -> String {
 /// Keep the canonical event alias iteration: an alias may resolve to a keeper
 /// whose transaction id differs from the original row's id.
 fn observations(canonical: &Value) -> BTreeMap<String, Cow<'_, Value>> {
-    let by_hash: BTreeMap<_, _> = array(&canonical["events"])
-        .iter()
-        .flat_map(|event| array(&event["legs"]))
-        .map(|item| (text(&item["quantity_hash"]), item))
-        .collect();
-    let mut result = BTreeMap::new();
-    for event in array(&canonical["events"]) {
-        for alias in array(&event["observation_aliases"]) {
-            result.insert(text(&alias[0]), Cow::Borrowed(by_hash[&text(&alias[1])]));
+    fn identity(value: &Value) -> Cow<'_, str> {
+        match value.as_str() {
+            Some(value) => Cow::Borrowed(value),
+            None => Cow::Owned(text(value)),
         }
     }
-    result
+    let by_hash: std::collections::HashMap<_, _> = array(&canonical["events"])
+        .iter()
+        .flat_map(|event| array(&event["legs"]))
+        .map(|item| (identity(&item["quantity_hash"]), item))
+        .collect();
+    array(&canonical["events"])
+        .iter()
+        .flat_map(|event| array(&event["observation_aliases"]))
+        .map(|alias| {
+            (
+                text(&alias[0]),
+                Cow::Borrowed(by_hash[&identity(&alias[1])]),
+            )
+        })
+        .collect()
 }
 
 /// Canonical evidence and its observations are borrowed from the evidence
@@ -209,24 +228,28 @@ impl Context<'_> {
 }
 impl<'a> Context<'a> {
     fn from_stages(components: &Value, evidence: &'a Value) -> Self {
-        let excluded = array(&components["components"])
-            .iter()
-            .flat_map(|item| array(&item["legs"]))
-            .filter_map(|leg| {
-                let value = if truth(&leg["anchor_transaction_id"]) {
-                    &leg["anchor_transaction_id"]
-                } else {
-                    &leg["transaction_id"]
-                };
-                truth(value).then(|| text(value))
-            })
-            .collect();
+        let excluded = excluded(components);
         Self {
             observations: observations(&evidence["canonical_input"]),
             canonical: Cow::Borrowed(&evidence["canonical_input"]),
             excluded,
         }
     }
+}
+
+fn excluded(components: &Value) -> BTreeSet<String> {
+    array(&components["components"])
+        .iter()
+        .flat_map(|item| array(&item["legs"]))
+        .filter_map(|leg| {
+            let value = if truth(&leg["anchor_transaction_id"]) {
+                &leg["anchor_transaction_id"]
+            } else {
+                &leg["transaction_id"]
+            };
+            truth(value).then(|| text(value))
+        })
+        .collect()
 }
 
 /// Complete interpreter compilation over the already computed raw-fact stages.

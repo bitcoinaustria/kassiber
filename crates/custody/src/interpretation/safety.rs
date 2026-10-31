@@ -20,13 +20,22 @@ fn blocked(items: &[Value]) -> Ids {
 }
 
 pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
-    Ok(compose(snapshot, context, &[]).unwrap_or_else(|error| json!({"error":error})))
+    Ok(compose_impl(snapshot, context, &[], true).unwrap_or_else(|error| json!({"error":error})))
 }
 
 pub(super) fn compose(
     snapshot: &Snapshot,
     context: &Context,
     components: &[Value],
+) -> Result<Value, String> {
+    compose_impl(snapshot, context, components, false)
+}
+
+fn compose_impl(
+    snapshot: &Snapshot,
+    context: &Context,
+    components: &[Value],
+    diagnostics: bool,
 ) -> Result<Value, String> {
     let run = || {
         let channel = channels::compute(snapshot)?;
@@ -72,7 +81,7 @@ pub(super) fn compose(
                 .map(codec::pystr),
         );
         let native = native::compute(snapshot, context, &occupied)?;
-        let native_trace = json!({"occupied_ids":occupied,"pairs":native.pairs,"proofs":native.proof_values,"quarantines":native.quarantines});
+        let native_trace = diagnostics.then(|| json!({"occupied_ids":occupied,"pairs":native.pairs,"proofs":native.proof_values,"quarantines":native.quarantines}));
         let native_ids: Ids = native
             .proofs
             .keys()
@@ -158,7 +167,7 @@ pub(super) fn compose(
         })?;
         let kept = holds::without_held(&candidates, &holds.blocked_ids);
         let derived = holds::without_held(derived, &holds.blocked_ids);
-        let mut released_context = context.clone();
+        let mut released_context = None;
         let mut native_reconciliations = Vec::new();
         if components.iter().any(|c| {
             c["effective_state"] == "active"
@@ -173,8 +182,21 @@ pub(super) fn compose(
             blocked.extend(ids(&candidates["blocked_transaction_ids"]));
             blocked.extend(holds.pending_ids.iter().cloned());
             blocked.extend(holds.blocked_ids.iter().cloned());
+            let source_hashes: Ids = array(&candidates["claims"])
+                .iter()
+                .map(|claim| codec::text(&claim["source"]["observation_hash"]))
+                .collect();
+            let anchors: Ids = context
+                .observations
+                .values()
+                .filter(|observation| {
+                    source_hashes.contains(&codec::text(&observation["quantity_hash"]))
+                })
+                .map(|observation| codec::text(&observation["anchor_transaction_id"]))
+                .collect();
             let rows = rows
                 .iter()
+                .filter(|row| anchors.contains(&codec::text(&row["id"])))
                 .map(|row| (codec::text(&row["id"]), row.clone()))
                 .collect();
             native_reconciliations = reconciliation::reconcile(
@@ -194,12 +216,13 @@ pub(super) fn compose(
             {
                 for leg in array(&component["legs"]) {
                     released_context
+                        .get_or_insert_with(|| context.clone())
                         .excluded
                         .remove(&super::reviewed::anchor(leg));
                 }
             }
         }
-        let context = &released_context;
+        let context = released_context.as_ref().unwrap_or(context);
         let compiled = pairs::compile_with_proofs(&kept, context, snapshot, &native.proofs)?;
         let mut claims = array(&compiled["claims"]).to_vec();
         claims.extend(array(&samourai["fee_claims"]).iter().cloned());
@@ -220,7 +243,13 @@ pub(super) fn compose(
         quarantines.extend(array(&samourai["quarantines"]).iter().cloned());
         quarantines.extend(native.quarantines);
         quarantines.extend(holds.quarantines.iter().cloned());
-        let mut result = json!({"native_transitions":native_trace,"handled_ids":prepared.handled,"non_event_transaction_ids":non_events,"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient});
+        let mut result = json!({"non_event_transaction_ids":non_events,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient});
+        if diagnostics {
+            result.as_object_mut().unwrap().extend(
+                json!({"native_transitions":native_trace,"handled_ids":prepared.handled,"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived})
+                    .as_object_mut().unwrap().iter_mut().map(|(key, value)| (key.clone(), value.take()))
+            );
+        }
         if !components.is_empty() {
             result["native_component_reconciliations"] = json!(native_reconciliations);
         }

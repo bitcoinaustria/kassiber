@@ -9,9 +9,47 @@ use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, str::FromStr};
 
+pub(super) enum Row<'a> {
+    Value(&'a Value),
+    Fields(&'a serde_json::Map<String, Value>),
+}
+impl<'a> From<&'a Value> for Row<'a> {
+    fn from(row: &'a Value) -> Self {
+        Self::Value(row)
+    }
+}
+impl<'a> From<&'a serde_json::Map<String, Value>> for Row<'a> {
+    fn from(row: &'a serde_json::Map<String, Value>) -> Self {
+        Self::Fields(row)
+    }
+}
+impl Row<'_> {
+    fn get(&self, key: &str) -> Option<&Value> {
+        match self {
+            Self::Value(row) => row.get(key),
+            Self::Fields(row) => row.get(key),
+        }
+    }
+    fn scope(&self) -> Result<(String, String), crate::components::Error> {
+        evidence::scope_fields(|key| &self[key])
+    }
+}
+impl std::ops::Index<&str> for Row<'_> {
+    type Output = Value;
+    fn index(&self, key: &str) -> &Value {
+        self.get(key).unwrap_or(&Value::Null)
+    }
+}
+
 pub(super) fn exact(v: &Value) -> Result<Option<BigInt>, String> {
     if v.is_number() && !v.to_string().contains(['.', 'e', 'E']) {
-        let n = BigInt::from_str(&v.to_string()).expect("JSON integer");
+        let n = if let Some(n) = v.as_i64() {
+            BigInt::from(n)
+        } else if let Some(n) = v.as_u64() {
+            BigInt::from(n)
+        } else {
+            BigInt::from_str(&v.to_string()).expect("JSON integer")
+        };
         return Ok((n >= zero()).then_some(n));
     }
     if let Some(s) = v.as_str().filter(|s| !s.is_empty()) {
@@ -52,7 +90,7 @@ fn policy(role: &Value, section: &Value) -> bool {
         && ["deposit", "badbank", "premix", "postmix", "ricochet"]
             .contains(&lower(section).as_str())
 }
-fn codes(row: &Value) -> (BTreeSet<String>, BTreeSet<String>) {
+fn codes(row: &Row<'_>) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut signals = BTreeSet::new();
     let mut disqualifiers = BTreeSet::new();
     if ["coinjoin", "payjoin", "whirlpool"].contains(&lower(&row["privacy_boundary"]).as_str()) {
@@ -113,7 +151,11 @@ fn codes(row: &Value) -> (BTreeSet<String>, BTreeSet<String>) {
     (signals, disqualifiers)
 }
 
-pub(super) fn leg(row: &Value, ignored: &BTreeSet<String>) -> Result<Option<Leg>, String> {
+pub(super) fn leg<'a>(
+    row: impl Into<Row<'a>>,
+    ignored: &BTreeSet<String>,
+) -> Result<Option<Leg>, String> {
+    let row = row.into();
     let id = text(&row["id"]).py_strip().to_owned();
     if id.is_empty() || ignored.contains(&id) || truthy(&row["excluded"]) {
         return Ok(None);
@@ -154,10 +196,10 @@ pub(super) fn leg(row: &Value, ignored: &BTreeSet<String>) -> Result<Option<Leg>
     if principal <= zero() {
         return Ok(None);
     }
-    let Ok((chain, network)) = evidence::scope(row) else {
+    let Ok((chain, network)) = row.scope() else {
         return Ok(None);
     };
-    let (signals, disqualifiers) = codes(row);
+    let (signals, disqualifiers) = codes(&row);
     Ok(Some(Leg {
         id,
         profile_id,

@@ -3,7 +3,9 @@
 **Status:** R4-0 round 4 integrated, 2026-10-31; the R4-1 bench harness and
 four recovered baseline records are committed. The typed row and admission
 continuation is an **R4-2 checkpoint**, with acceptance still open; R4-3's
-components/evidence rewrite is not implemented. The R4-11 renderer has a
+components/evidence rewrite is not implemented. The subsequent
+[interpretation and gap kernel checkpoint](custody-engine.md#interpretation-and-gap-kernel-checkpoint-r4)
+meets both stage CPU targets while retaining the existing representations. The R4-11 renderer has a
 [partial checkpoint](r4-journal-render-checkpoint.md); production acceptance
 remains open. [Storage-format speedups](#storage-format-speedups) run Python
 first; compact calculations are implemented with the Rust schema mirror.
@@ -18,12 +20,18 @@ binary, byte-identical to Python and much faster. It builds on the
 the performance checkpoint) and on the storage and service-slice work of the
 R3/R5 stack.
 
-Two measurements shape the whole design:
+Two initial measurements shaped the design; the later probes refine the
+implementation approach:
 
 - Python spends most of its time in custody and in the Python halves of the
   ledger path. Rust custody behind the JSON binding is barely faster than
-  Python on generic books, so the in-process path needs typed data, not
-  another round of tuning on `serde_json::Value`.
+  Python on generic books. The initial assumption that typed stage records
+  alone would supply the speedup did not survive three probes: local gains
+  of 10–30% were consumed by conversions to untyped neighboring stages.
+  Profile-driven kernels now keep each stage's existing boundaries and use
+  borrowed or indexed internal structures where measurements justify them.
+  The R4-4/R4-5 kernel pass reduces interpretation CPU by 3.05–4.12× and
+  gaps by 2.02–2.16×; broader custody acceptance remains open.
 - SQLite writes have a floor of about 1.25–1.7 s for a 20,000-transaction
   plaintext book and about 3 s for a SQLCipher one, whatever language issues
   them. Under byte parity, end-to-end `journals process` therefore cannot
@@ -315,13 +323,18 @@ vectors and the mutation catalog. A typed rewrite moves mutation anchors.
 Each step therefore re-anchors every recipe in the code it rewrites to an
 equivalent mutant, as the performance checkpoint did, reruns the **whole**
 catalog (currently 2,309 recipes), and reports kill set equals catalog. The catalog may
-not shrink without a reviewed equivalence note. Each step also records
+not shrink without a reviewed equivalence note. The separate kernel branch ran its
+391 touched-file recipes from a 2,301-recipe catalog; untouched recipes are
+not claimed as freshly killed there. This integration reruns the whole catalog.
+Each step also records
 before and after timings from the bench books, back to back.
 
 "Measured cost replaced" is what the code a step rewrites costs today, at
 generic / multi-wallet 20,000 transactions. It bounds the step's gain; it is
-not a prediction. Each step's target is an acceptance criterion. A step that
-misses it stops for re-planning before the next step starts.
+not a prediction. Each step's target is an acceptance criterion. The initial
+typed sequence stopped failed probes for re-planning. The subsequent kernel
+run drops that stop rule and retains every measured optimization that keeps
+byte parity; its CPU ceilings remain the stage acceptance targets.
 
 | Step | Work | Measured cost replaced (20k) | Step target |
 | --- | --- | --- | --- |
@@ -329,8 +342,8 @@ misses it stops for re-planning before the next step starts.
 | R4-1 | Bench harness in the Rust workspace: an end-to-end `journals-bench` example with spans, committed bench-book generators, the Python profiler, a regression record format | — | Baseline recorded |
 | R4-2 | Typed `TxRow`, `WalletRef`, `RateRow`, worklist rows and `SqlValue`; drop the shared `Value` row view; admission over fields | parse 0.70 / 0.66; admission 0.27 / 0.36 | parse + admission ≤ 0.25 s at generic 20k |
 | R4-3 | Typed components and evidence | 0.33 / 1.15 | ≤ 1/3 of today |
-| R4-4 | Typed interpretation (inputs, claims, quarantines, audits) | 0.46 / 1.42 | ≤ 1/3 |
-| R4-5 | Typed gap search | 0.36 / 0.38 | ≤ 1/2 |
+| R4-4 | Interpretation kernels, unchanged stage boundaries; local shared facts and lazy indexes | 0.46 / 1.42 | ≤ 1/3 CPU; met by the kernel checkpoint |
+| R4-5 | Gap normalization and beam-search kernels, unchanged stage boundaries | 0.36 / 0.38 | ≤ 1/2 CPU; met by the kernel checkpoint |
 | R4-6 | Typed quantity state; remove the Python-model conversion | 1.58 / 1.82 | ≤ 1/4 |
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
@@ -345,9 +358,12 @@ misses it stops for re-planning before the next step starts.
 
 R4-2 to R4-8 change no product behavior. Python still owns production until
 R4-16. Order follows the data flow, because every stage reads the rows. A
-stage whose neighbor is not typed yet converts at its boundary. That costs
-time until the neighbor lands, so intermediate steps can be slower on one
-book. The step record says so, and the next step must recover it.
+stage whose neighbor is not typed yet would convert at its boundary. The
+probes show that this can consume its gains. The R4-4/R4-5 kernel continuation
+therefore retains both boundaries, introduces no such conversions, and
+accepts optimizations by process CPU time across five alternating pairs.
+See the checkpoint for its bounded touched-file mutation rerun and the
+remaining whole-pipeline budget.
 
 ## Performance budget
 

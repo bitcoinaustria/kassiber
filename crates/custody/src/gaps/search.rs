@@ -88,6 +88,11 @@ fn ranked(rows: &[Value], ignored: &BTreeSet<String>) -> Result<Vec<Leg>, String
             legs.push(leg);
         }
     }
+    rank(&mut legs);
+    Ok(legs)
+}
+
+fn rank(legs: &mut [Leg]) {
     let mut sorted_ids: Vec<&str> = legs.iter().map(|leg: &Leg| leg.id.as_str()).collect();
     sorted_ids.sort_unstable();
     sorted_ids.dedup();
@@ -102,7 +107,6 @@ fn ranked(rows: &[Value], ignored: &BTreeSet<String>) -> Result<Vec<Leg>, String
     for (leg, rank) in legs.iter_mut().zip(ranks) {
         leg.rank = rank;
     }
-    Ok(legs)
 }
 
 pub fn search(
@@ -110,6 +114,11 @@ pub fn search(
     ignored: &BTreeSet<String>,
     limits: &Limits,
 ) -> Result<SearchResult, String> {
+    validate_limits(limits)?;
+    search_ranked(ranked(rows, ignored)?, limits)
+}
+
+fn validate_limits(limits: &Limits) -> Result<(), String> {
     if !(1..=1_000_000).contains(&limits.min_coverage_ppm)
         || limits.return_era_gap_seconds < 1
         || limits.promotion_score_margin < 0
@@ -128,7 +137,16 @@ pub fn search(
     {
         return Err("ValueError".into());
     }
-    let mut legs = ranked(rows, ignored)?;
+    Ok(())
+}
+
+pub(super) fn normalized(mut legs: Vec<Leg>, limits: &Limits) -> Result<SearchResult, String> {
+    validate_limits(limits)?;
+    rank(&mut legs);
+    search_ranked(legs, limits)
+}
+
+fn search_ranked(mut legs: Vec<Leg>, limits: &Limits) -> Result<SearchResult, String> {
     let bound = BigInt::from(i64::MAX);
     if legs.len() < 1 << 20 && legs.iter().all(|leg| leg.principal <= bound) {
         for leg in &mut legs {
@@ -462,6 +480,9 @@ fn rank_groups<N: Amount>(groups: &mut Vec<Group>, legs: &[Leg], target: &N, max
     groups.sort_by_cached_key(|g| candidate::group_key(g, legs, target));
     groups.truncate(maximum);
 }
+fn beam_priority(group: &[usize]) -> usize {
+    usize::from(!group.is_empty())
+}
 fn return_groups<N: Amount>(
     rows: &[usize],
     legs: &[Leg],
@@ -474,41 +495,60 @@ fn return_groups<N: Amount>(
     // Each state carries its identity key, so keys are computed once.
     let mut states: Vec<(Group, N, Vec<u32>)> = vec![(Vec::new(), N::zero(), Vec::new())];
     let mut qualifying = BTreeMap::new();
+    let mut seen = BTreeSet::new();
     for row in ordered {
-        let mut additions = Vec::new();
-        for (group, total, _) in &states {
+        let previous_states = states.len();
+        let rank = legs[row].rank;
+        let amount = N::of(&legs[row]);
+        for index in 0..previous_states {
+            let (group, total, parent_key) = &states[index];
             if group.len() >= limits.max_return_legs {
                 continue;
             }
-            let next_total = total.plus(&N::of(&legs[row]));
+            let next_total = total.plus(&amount);
             if next_total > maximum {
                 continue;
             }
             let mut next = group.clone();
             next.push(row);
-            let next_key = key(&next, legs);
+            let mut next_key = Vec::with_capacity(parent_key.len() + 1);
+            next_key.extend_from_slice(parent_key);
+            let at = next_key.partition_point(|old| *old <= rank);
+            next_key.insert(at, rank);
             if next_total >= minimum {
                 qualifying.insert(next_key.clone(), next.clone());
             }
-            additions.push((next, next_total, next_key));
+            states.push((next, next_total, next_key));
         }
-        states.extend(additions);
-        let mut deduped = BTreeMap::new();
-        for (group, total, key) in states {
-            deduped.insert(key, (group, total));
+        if !seen.insert(legs[row].rank) {
+            let mut deduped = BTreeMap::new();
+            for (group, total, key) in states {
+                deduped.insert(key, (group, total));
+            }
+            states = deduped
+                .into_iter()
+                .map(|(key, (group, total))| (group, total, key))
+                .collect();
         }
-        states = deduped
-            .into_iter()
-            .map(|(key, (group, total))| (group, total, key))
-            .collect();
-        states.sort_by_cached_key(|(group, total, key)| {
-            (
-                usize::from(!group.is_empty()),
-                distance(target, total),
-                group.len(),
-                key.clone(),
-            )
-        });
+        if N::SMALL {
+            states.sort_by(|(a, total_a, key_a), (b, total_b, key_b)| {
+                (beam_priority(a), distance(target, total_a), a.len(), key_a).cmp(&(
+                    beam_priority(b),
+                    distance(target, total_b),
+                    b.len(),
+                    key_b,
+                ))
+            });
+        } else {
+            states.sort_by_cached_key(|(group, total, key)| {
+                (
+                    beam_priority(group),
+                    distance(target, total),
+                    group.len(),
+                    key.clone(),
+                )
+            });
+        }
         states.truncate(limits.beam_width);
     }
     let mut groups: Vec<_> = qualifying.into_values().collect();
@@ -525,6 +565,82 @@ fn return_groups<N: Amount>(
 mod amount_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn gap_beam_unique_and_duplicate_id_python_hashes() {
+        for (duplicate, expected) in [
+            (
+                false,
+                "4d8f5ed323911b4550c336a17d498f01e3269d78ead7ef3de5e516ddc18e7508",
+            ),
+            (
+                true,
+                "6a759a7d7907b648b27449a17f31a40056baaa471e4541f4026b1222fc11285d",
+            ),
+        ] {
+            let mut rows = vec![
+                json!({"id":"out","profile_id":"p","wallet_id":"old","wallet_label":"Old","wallet_kind":"descriptor","direction":"outbound","asset":"BTC","occurred_at":"2020-01-01T00:00:00Z","amount":1_000_000,"fee":0,"raw_json":"{}","privacy_boundary":"coinjoin"}),
+            ];
+            for (i, amount) in [300_000, 350_000, 400_000, 450_000, 500_000, 550_000]
+                .into_iter()
+                .enumerate()
+            {
+                rows.push(json!({"id":format!("return-{}", if duplicate { i % 3 } else { i }),"profile_id":"p","wallet_id":"new","wallet_label":"New","wallet_kind":"descriptor","direction":"inbound","asset":"BTC","occurred_at":"2021-01-01T00:00:00Z","amount":amount,"fee":0,"raw_json":"{}"}));
+            }
+            let result = search(
+                &rows,
+                &BTreeSet::new(),
+                &Limits {
+                    beam_width: 3,
+                    ..Limits::default()
+                },
+            )
+            .unwrap()
+            .value();
+            assert_eq!(crate::codec::sha256(&result.to_string()), expected);
+        }
+
+        let rows: Vec<_> = [
+            1_400_000, 700_000, 1_300_000, 1_500_000, 700_000, 100_000, 500_000, 900_000,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, amount)| {
+            json!({"id":format!("return-{}",i%3),"profile_id":"p","wallet_id":"w","wallet_kind":"descriptor","asset":"BTC","direction":"inbound","occurred_at":"2021-01-01T00:00:00Z","amount":amount,"fee":0,"raw_json":"{}"})
+        })
+        .collect();
+        let mut legs = ranked(&rows, &BTreeSet::new()).unwrap();
+        for leg in &mut legs {
+            leg.small = leg.principal.to_string().parse().unwrap();
+        }
+        let indexes: Vec<_> = (0..legs.len()).collect();
+        let limits = Limits {
+            min_coverage_ppm: 900_000,
+            max_excess_ppm: 100_000,
+            max_return_legs: 4,
+            beam_width: 5,
+            max_return_groups_per_source: 20,
+            ..Limits::default()
+        };
+        for groups in [
+            return_groups(&indexes, &legs, &2_000_000_i128, &limits),
+            return_groups(&indexes, &legs, &BigInt::from(2_000_000), &limits),
+        ] {
+            let principals: Vec<Vec<_>> = groups
+                .iter()
+                .map(|group| group.iter().map(|index| legs[*index].small).collect())
+                .collect();
+            assert_eq!(
+                principals,
+                vec![
+                    vec![1_500_000, 500_000],
+                    vec![1_500_000, 500_000, 100_000],
+                    vec![500_000, 700_000, 900_000],
+                    vec![500_000, 700_000, 900_000, 100_000],
+                ]
+            );
+        }
+    }
 
     fn cases() -> Vec<Value> {
         let vectors: Value = serde_json::from_str(include_str!(

@@ -57,6 +57,7 @@ struct Leg {
 /// bound stays below 2^103; otherwise it uses `BigInt`. Both truncate
 /// division toward zero, and principals are positive.
 trait Amount: Clone + Ord {
+    const SMALL: bool;
     fn of(leg: &Leg) -> Self;
     fn zero() -> Self;
     fn plus(&self, other: &Self) -> Self;
@@ -65,6 +66,7 @@ trait Amount: Clone + Ord {
     fn scaled(&self, ppm: u32) -> Self;
 }
 impl Amount for BigInt {
+    const SMALL: bool = false;
     fn of(leg: &Leg) -> Self {
         leg.principal.clone()
     }
@@ -82,6 +84,7 @@ impl Amount for BigInt {
     }
 }
 impl Amount for i128 {
+    const SMALL: bool = true;
     fn of(leg: &Leg) -> Self {
         leg.small
     }
@@ -167,14 +170,9 @@ pub fn stage(
     let (ignored, accounting) =
         crate::interpretation::gap_ignored_ids(snapshot, components, evidence, interpretation)?;
     drop(span);
-    let rows: Vec<_> = snapshot
-        .gap_worklist
-        .rows
-        .iter()
-        .map(|r| Value::Object(r.clone()))
-        .collect();
-    compute(
-        &rows,
+    compute_rows(
+        &snapshot.gap_worklist.rows,
+        |row| normalize::leg(row, &BTreeSet::new()),
         snapshot.gap_worklist.large_book,
         &ignored,
         &accounting,
@@ -191,10 +189,31 @@ pub fn compute(
     accounting_ignored: &BTreeSet<String>,
     limit: usize,
 ) -> Result<Value, String> {
+    compute_rows(
+        rows,
+        |row| normalize::leg(row, &BTreeSet::new()),
+        large_book,
+        ignored,
+        accounting_ignored,
+        limit,
+    )
+}
+
+fn compute_rows<T: Sync>(
+    rows: &[T],
+    normalize: impl Fn(&T) -> Result<Option<Leg>, String> + Sync,
+    large_book: bool,
+    ignored: &BTreeSet<String>,
+    accounting_ignored: &BTreeSet<String>,
+    limit: usize,
+) -> Result<Value, String> {
     let span = crate::timing::span("gaps.admission");
     // Admission normalizes every row; the first refusal in row order wins.
-    for leg in crate::par::map(rows, |row| normalize::leg(row, &BTreeSet::new())) {
-        crate::par::unwrap(leg)?;
+    let mut legs = Vec::new();
+    for leg in crate::par::map(rows, normalize) {
+        if let Some(leg) = crate::par::unwrap(leg)? {
+            legs.push(leg);
+        }
     }
     drop(span);
     let _span = crate::timing::span("gaps.search");
@@ -213,9 +232,21 @@ pub fn compute(
         }
         r
     };
-    let mut result = bounded(search(rows, ignored, &limits)?);
+    let advisory = if accounting_ignored == ignored {
+        std::mem::take(&mut legs)
+            .into_iter()
+            .filter(|leg| !ignored.contains(&leg.id))
+            .collect()
+    } else {
+        legs.iter()
+            .filter(|leg| !ignored.contains(&leg.id))
+            .cloned()
+            .collect()
+    };
+    let mut result = bounded(search::normalized(advisory, &limits)?);
     if accounting_ignored != ignored {
-        let accounting = bounded(search(rows, accounting_ignored, &limits)?);
+        legs.retain(|leg| !accounting_ignored.contains(&leg.id));
+        let accounting = bounded(search::normalized(legs, &limits)?);
         result.accounting_candidates = accounting.accounting_candidates;
         result.promotion_eligible_count = accounting.promotion_eligible_count;
         result.blocking_source_ids = accounting.blocking_source_ids;
@@ -303,6 +334,21 @@ pub fn worklist_amount_ranges(rows: &[Value]) -> Result<Vec<(String, BigInt, Big
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gap_compute_retains_limit_and_admission_precedence() {
+        assert_eq!(
+            compute(&[], false, &BTreeSet::new(), &BTreeSet::new(), 0).unwrap_err(),
+            "ValueError"
+        );
+        let rows = [
+            json!({"id":"row","profile_id":"p","wallet_id":"w","asset":"BTC","direction":"outbound","amount":1,"occurred_at":"0001-01-01T00:00:00+01:00"}),
+        ];
+        let ignored = BTreeSet::from(["row".to_owned()]);
+        assert_eq!(
+            compute(&rows, false, &ignored, &ignored, 0).unwrap_err(),
+            "OverflowError"
+        );
+    }
     fn vectors() -> &'static Vec<Value> {
         static V: std::sync::OnceLock<Vec<Value>> = std::sync::OnceLock::new();
         V.get_or_init(|| {

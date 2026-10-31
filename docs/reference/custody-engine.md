@@ -3437,6 +3437,205 @@ transaction id. Real books do not share a txid that way.
   They call the binding with `finalized=True` against interpretation- and
   gap-only references, so the finalized stage's `validation` refusal
   surfaces.
+
+## Interpretation and gap kernel checkpoint (R4)
+
+Local branch `t3code/custody-perf-interp` starts at `dd433e4e` and replays
+the R4-1 and rejected R4-4 probe records as `92ecc0562` and `4c130249c`.
+The [typed-stage probes](r4-journal-pipeline.md#r4-4-typed-compilation-probe-stopped)
+showed that typing records alone did not remove the expensive kernels.
+This pass preserves each stage's input and output representation, with no
+new conversions at neighboring stages. Python keeps production authority.
+
+### Kernel changes
+
+- Pipeline preparation borrows unchanged row slices through consolidation,
+  ownership and fanout derivation. Fee normalization clones only when an
+  actual override exists. An override still clones the whole slice; this
+  is not a complete sparse row model.
+- Holds share decoded raw facts, transfer scopes and confirmation states.
+  Raw facts decode in parallel; scope calculation stays on the caller so
+  it reuses recorded detection's operation-local scope cache. Conservative
+  borrowed JSON hints skip impossible scopes and graphless decoding only
+  when the top-level transaction identity is invalid. Oversized integers,
+  duplicate hint fields, nested payloads, explicit status and malformed JSON
+  retain the full decoder and its refusal behavior.
+- Empty pair derivations and quarantine populations skip unused indexes.
+  Pair scopes cover only pair endpoints. Observation lookup borrows hash
+  keys while preserving ordered alias output. Lightning provenance is
+  decoded only for recognized payment-hash sources.
+- Normal stage composition avoids building isolated diagnostic output;
+  that diagnostic entry point retains all its fields. Released contexts
+  clone lazily. Reconciliation indexes every claim-source anchor, including
+  intermediate native-route rows, rather than copying every raw row.
+- Gap admission normalizes once before ignored-id filtering, including rows
+  ignored by both search populations. Both advisory and accounting search
+  reuse those legs. A local borrowed worklist view avoids cloning maps;
+  the only shared changes extract existing field access and raw decoding.
+- The return beam skips deduplication for newly seen identity ranks. Repeated
+  identities retain ordered replacement. States append using the original
+  prefix length, and sorted rank keys extend incrementally. Small integer
+  sorting borrows keys; arbitrary integers retain cached keys. Sorting and
+  duplicate-ID behavior remain deterministic. Independent Python witnesses
+  cover both amount paths and duplicate identities with different principal.
+
+### CPU and wall measurements
+
+The saved before/after release binaries alternate in **five pairs per book**.
+Each table entry selects the minimum process CPU for that span and reports
+the wall span from the same run. CPU uses `CLOCK_PROCESS_CPUTIME_ID`, including
+worker-thread user and system time; whole-child CPU independently uses
+`getrusage(RUSAGE_CHILDREN)`. Temporary instrumentation is absent from product
+source. Both binaries use Rust 1.99.1, locked offline dependencies, the same
+R4 snapshots and the same harness. The one-minute load at run endpoints is
+**14.31–17.88**. CPU is the acceptance measure on this loaded machine.
+
+| Book | Span | CPU before → after, s | Wall before → after, s | CPU speedup |
+| --- | --- | ---: | ---: | ---: |
+| Generic 2k | Interpretation | 0.077767 → 0.018858 | 0.047495 → 0.015756 | 4.124× |
+| Generic 2k | Gaps | 0.110385 → 0.054654 | 0.092976 → 0.034154 | 2.020× |
+| Multi-wallet 2k | Interpretation | 0.196935 → 0.058974 | 0.167470 → 0.053655 | 3.339× |
+| Multi-wallet 2k | Gaps | 0.079975 → 0.038347 | 0.059959 → 0.019636 | 2.086× |
+| Generic 20k | Interpretation | 0.764211 → 0.221165 | 0.463162 → 0.197656 | 3.455× |
+| Generic 20k | Gaps | 0.619846 → 0.286424 | 0.456036 → 0.092145 | 2.164× |
+| Multi-wallet 20k | Interpretation | 2.055276 → 0.674136 | 1.770385 → 0.630862 | 3.049× |
+| Multi-wallet 20k | Gaps | 0.583284 → 0.276918 | 0.396418 → 0.089269 | 2.106× |
+
+Interpretation meets the one-third CPU target and gaps meet the one-half
+target at both sizes on both books. Independently selected whole-child CPU
+and its associated wall time, including the other stages and the ledger:
+
+| Book | Child CPU before → after, s | Child wall before → after, s |
+| --- | ---: | ---: |
+| Generic 2k | 1.616503 → 1.489383 | 0.905023 → 0.840125 |
+| Multi-wallet 2k | 2.233190 → 2.030617 | 1.359048 → 1.203111 |
+| Generic 20k | 16.055593 → 14.694648 | 8.683180 → 7.865738 |
+| Multi-wallet 20k | 21.975216 → 19.564895 | 12.859271 → 10.752868 |
+
+The committed [40 raw records](r4-interpretation-gap-kernel-records.jsonl)
+retain every span, child CPU/wall, pair ordering, endpoint loads, snapshot
+hashes and ledger request/response hashes. Per-span minima are not added to
+claim a synthetic whole-pipeline time. These measurements do not establish
+the broader R4 target of 10× Python custody or 4× end to end.
+
+### Byte parity and activity
+
+The independent Python/Rust campaign covers all twelve generators:
+**24,000 books and 1,030 permutations**, with zero stage differences.
+There are 178 matching finalized-stage refusals; decision-only comparison
+also checks their earlier stages. Per-seed records count canonical distinct
+inputs and active outcomes. A separate audit recomputes these counts,
+including distinct inputs with interpretation claims and gap candidates.
+A deliberately vacuous seed, whose only active output belongs to another
+input, fails with `no distinct active input belongs to the seed`.
+
+Saved unchanged-baseline and final binaries additionally compare literal
+full-response, decision-response and stage byte hashes for all **25,030**
+generated requests, **159 recorded requests plus 159 permutations**, **1,134
+runnable frozen inputs** and all four benchmark snapshots. No hash changes.
+The frozen sweep includes 115 matching whole-pipeline refusals. One additional
+fixture operand, `custody_projection_adapter.json`'s
+`issue_before_constructor_refusal`, is deliberately an isolated adapter input
+without a component header `profile_id`. Both baseline and final panic when
+it is incorrectly sent to the whole-pipeline API; its intended adapter entry
+point is covered by the frozen workspace tests.
+
+Evidence remains under `target/r4-perf/`: `wire-summary.json`, the paired
+hash files, `campaign-seed-activity-audited.jsonl` and
+`campaign-activity-audit.json`. The retained replay uses
+`/home/tg/.cache/kassiber-verify/custody-recordings/`.
+
+### Mutation anchors and verification scope
+
+The catalog retains every one of the **2,292 inherited IDs** and adds nine
+witnesses, for **2,301** recipes. This run selects all **391 recipes in touched
+files**, including both minimal shared helper extractions. It does not claim
+a fresh kill of the remaining 1,910 untouched recipes. Every selected recipe
+must build and fail all its named filters, and every named filter must pass
+unmutated. Compilation errors are not kills.
+
+Moved recipes retain equivalent mutations:
+
+| Recipe | Equivalent mutant at the new anchor |
+| --- | --- |
+| `I-shared-aliases` | Take only the first alias per event in the flattened iterator. |
+| `R2c-graph-raw-hex-gate` | Remove the component-asset admission branch in the extracted decoded-object parser. |
+| `R2c-safety-positive` | Admit zero principal through the shared sign predicate on both integer paths. |
+| `R2c-safety-nested-status` | Disable the shared nested-payload predicate for capture and cached facts. |
+| `R2c-safety-pending-state` | Select confirmed rather than unconfirmed scopes in the borrowed state filter. |
+| `R2c-safety-holds-normalized` | Feed raw rather than normalized derivation rows to fanout holds. |
+| `REC-SAFETY-03` | Insert rather than remove reconciled anchors through the lazy context accessor. |
+| `GAP-116` | Omit authored exclusions through the extracted helper. |
+| `GAP-120` | Skip initial admission for IDs ignored by both search populations. |
+| `GAP-065` | Invert empty-state priority in the extracted comparator shared by both amount paths; recipe text remains unchanged. |
+
+The first new duplicate-ID recipe survived the original whole-search hash
+witness. That attempt is not counted as a kill. A stronger independently
+computed Python return-group case pins replacement of repeated identities
+with different principals, on both the small and arbitrary-integer paths.
+
+All **391 selected recipes** have building named-test kills; the kill set
+equals the selected catalog. All **127 named filters** pass unmutated.
+The nine new recipes and all 382 inherited touched-file recipes are included.
+The single scratch source/build tree is deleted after its summary is saved;
+`mutation-results.jsonl` retains each exact recipe and named-filter result.
+
+The core-accounting census exposed two pre-existing test-plumbing failures:
+`test_split_payout_fails_closed` deliberately splits Python's intermediate
+projection, while Rust receives the unchanged raw snapshot. Both saved
+binaries succeed on those two raw inputs with identical stage/full/decision
+bytes. The test now uses the existing exact-stage, exact-exception injection
+hook only for its expected split-payout validation error. It still requires
+the original compiler to raise that error. The correction only annotates the
+expected test injection; census and shadow pass the complete 94-test module
+with exactly two recorded intentional injections.
+
+Shard verification uses the test socket guard with the product no-egress
+override unset, and a disposable cache `TMPDIR` outside the checkout. The
+tax-shadow session probes expect an external temporary test-module path;
+putting that scratch inside the checkout produces relative-path assertion
+failures. All five session probes pass with the external cache root.
+
+| Final verification | Result |
+| --- | --- |
+| Core-accounting census | 2,033 passed, 75 skipped, 460 subtests; 260 custody snapshots; zero differences |
+| Reports-contracts census | 2,475 passed, 10 skipped, 2,824 subtests; 209 custody snapshots; zero differences |
+| Core-accounting custody-shadow | 681 passed, 40 skipped, 231 subtests; 252 frozen Python comparisons; zero differences |
+| Reports-contracts custody-shadow | 1,875 passed, 10 skipped, 2 deselected, 146 subtests; 205 frozen Python comparisons; zero differences |
+| Tax census in both custody modes | Core-accounting: 548 calls from 18 modules; reports-contracts: 332 calls from 32 modules |
+| Rust workspace tests, including doctests | 1,496 passed; zero failed or ignored |
+| Workspace formatting and all-target Clippy `-D warnings` | Passed |
+| Guarded chain and net builds | 20 and 63 passed, respectively |
+| `classify_tests update` and preflight | Inventory unchanged; 57 passed, 60 subtests |
+
+The shadow runner's two existing query-budget deselections are the parameter
+variants of `test_disjoint_reviewed_routes_limit_observation_reads`; census
+owns and passes that single-build budget check. Other intentional skips remain
+explicit in the logs. Default Rust workspace tests use the repository gate's
+ordinary environment, without the Python test-guard variable. Arming that
+variable on the non-observer build correctly terminated an initial attempt
+with exit 78; that attempt is retained, not counted as a pass. Separate chain
+and net runs enable their observer features with the test guard armed.
+
+All final logs are under `target/r4-perf/`. Manual second review checked
+admission and refusal order, intermediate claim-source anchors, alias order,
+and repeated-identity beam replacement. The final evidence audit records
+source and artifact hashes before local commit; build scratch is removed
+after summaries are saved. No dependency or lockfile changes are required.
+
+### Remaining cost
+
+Interpretation still decodes confirmation facts and prepares derivation
+inputs; actual normalization overrides still require whole-slice copies.
+At 20k, the best final holds CPU is 0.099 s generic and 0.162 s multi-wallet;
+multi-wallet preparation is 0.146 s, including 0.112 s of derivation.
+Gap admission is 0.230/0.220 s and search is 0.048/0.049 s
+(generic/multi-wallet), independently selected subspan minima. Admission
+dominates these books; beam vectors remain a cost on candidate-heavy books.
+Quantity, finalized projection, request fusion and ledger work dominate the
+broader pipeline and belong to the parallel workers. No dependency, schema,
+Python authority or external-I/O contract changes in this checkpoint.
+
 ## Private ledger-response checkpoint (R2g step 2, bounded)
 
 Branch `t3code/r2g-fusion-5`, based on `580015d8`, extends the unpackaged

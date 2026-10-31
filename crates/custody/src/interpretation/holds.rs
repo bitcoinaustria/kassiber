@@ -23,27 +23,43 @@ const SYNTHETIC: [&str; 5] = [
     "multi-consol:",
 ];
 
+fn positive_sign(ordering: std::cmp::Ordering) -> bool {
+    ordering.is_gt()
+}
+
 fn positive(row: &Value) -> Result<bool, String> {
-    Ok(
-        BigInt::from_str(&integer_or_zero(&row["amount"])?.to_string()).expect("Python integer")
-            > BigInt::from(0),
-    )
+    if let Some(amount) = row["amount"].as_i64() {
+        return Ok(positive_sign(amount.cmp(&0)));
+    }
+    if let Some(amount) = row["amount"].as_u64() {
+        return Ok(positive_sign(amount.cmp(&0)));
+    }
+    Ok(positive_sign(
+        BigInt::from_str(&integer_or_zero(&row["amount"])?.to_string())
+            .expect("Python integer")
+            .cmp(&BigInt::from(0)),
+    ))
 }
 
 /// The conflict sentinel has no asset authority. Unlike transfer matching,
 /// Liquid confirmation safety also works without a trusted asset component.
 fn conflict_scope(row: &Value, parsed: Option<&Py>) -> Option<Physical> {
+    conflict_scope_with_transfer(row, parsed, graph::onchain_scope(row))
+}
+
+fn conflict_scope_with_transfer(
+    row: &Value,
+    parsed: Option<&Py>,
+    mut transfer: Option<graph::ownership::TransferScope>,
+) -> Option<Physical> {
     // Only a synthetic id is renamed; other rows are probed as they are.
-    let mut renamed = None;
-    if SYNTHETIC
-        .iter()
-        .any(|prefix| codec::text(&row["id"]).starts_with(prefix))
-    {
-        let probe = renamed.insert(row.clone());
+    let id = codec::text(&row["id"]);
+    if SYNTHETIC.iter().any(|prefix| id.starts_with(prefix)) {
+        let mut probe = row.clone();
         probe["id"] = json!(format!("physical-anchor:{}", codec::pystr(&row["id"])));
+        transfer = graph::onchain_scope(&probe);
     }
-    let probe = renamed.as_ref().unwrap_or(row);
-    if let Some((chain, network, txid, _)) = graph::onchain_scope(probe) {
+    if let Some((chain, network, txid, _)) = transfer {
         return Some((chain, network, txid));
     }
     let parsed = parsed?;
@@ -112,9 +128,13 @@ fn conflict_scope(row: &Value, parsed: Option<&Py>) -> Option<Physical> {
     Some((chain.into(), domain, txid))
 }
 
+fn has_nested_payload(raw: &Py, nested: bool) -> bool {
+    nested && matches!(stored::get(raw, "tx"), Py::Dict(_))
+}
+
 fn payload(row: &Value, nested: bool) -> Py {
     let raw = stored::object(&row["raw_json"]);
-    if nested && matches!(stored::get(&raw, "tx"), Py::Dict(_)) {
+    if has_nested_payload(&raw, nested) {
         stored::get(&raw, "tx").clone()
     } else {
         raw
@@ -153,24 +173,105 @@ pub(crate) fn capture_confirmation(row: &Value) -> Result<Value, String> {
 /// read in each detector's own row order, so refusals keep their order.
 pub(super) struct Facts {
     parsed: Result<Option<Py>, String>,
+    transfer_scope: Option<graph::ownership::TransferScope>,
     scope: Option<Physical>,
     explicit: Option<bool>,
 }
+
+#[derive(serde::Deserialize)]
+struct RawHints<'a> {
+    #[serde(borrow)]
+    txid: Option<&'a str>,
+    vin: Option<serde::de::IgnoredAny>,
+    vout: Option<serde::de::IgnoredAny>,
+    tx: Option<serde::de::IgnoredAny>,
+    ownership_graph: Option<serde::de::IgnoredAny>,
+    raw_hex: Option<serde::de::IgnoredAny>,
+    status: Option<serde::de::IgnoredAny>,
+}
+
+#[derive(serde::Deserialize)]
+struct TransferIdentityHint<'a> {
+    #[serde(borrow)]
+    txid: &'a str,
+}
+
+pub(super) fn invalid_transfer_identity(row: &Value) -> bool {
+    let Some(raw) = row["raw_json"].as_str().filter(|raw| raw.len() <= 4300) else {
+        return false;
+    };
+    let Ok(hint) = serde_json::from_str::<TransferIdentityHint<'_>>(raw) else {
+        return false;
+    };
+    let txid = hint.txid.py_strip();
+    !txid.is_empty() && graph::strict_txid(&json!(txid)).is_none()
+}
+
+fn graphless_facts(row: &Value) -> Option<Facts> {
+    let raw = row["raw_json"].as_str().filter(|raw| raw.len() <= 4300)?;
+    let hints: RawHints<'_> = serde_json::from_str(raw).ok()?;
+    let txid = hints.txid?.py_strip();
+    if txid.is_empty()
+        || graph::strict_txid(&json!(txid)).is_some()
+        || hints.vin.is_some()
+        || hints.vout.is_some()
+        || hints.tx.is_some()
+        || hints.ownership_graph.is_some()
+        || hints.raw_hex.is_some()
+        || hints.status.is_some()
+    {
+        return None;
+    }
+    Some(Facts {
+        parsed: Ok(None),
+        transfer_scope: None,
+        scope: None,
+        explicit: None,
+    })
+}
+
 pub(super) fn facts(rows: &[Value]) -> Vec<Facts> {
     crate::par::map(rows, |row| {
-        let parsed = stored::parse(&row["raw_json"]);
-        let scope = match &parsed {
-            Ok(parsed) => conflict_scope(row, parsed.as_ref()),
-            Err(_) => None,
-        };
-        Facts {
-            parsed,
-            scope,
-            explicit: explicit(&payload(row, true)),
+        if let Some(facts) = graphless_facts(row) {
+            return (facts, true);
         }
+        let raw = stored::object(&row["raw_json"]);
+        let parsed = stored::parse_object(&raw);
+        let raw_txid = stored::text(stored::get(&raw, "txid"));
+        let invalid_txid =
+            !raw_txid.py_strip().is_empty() && graph::strict_txid(&json!(raw_txid)).is_none();
+        (
+            Facts {
+                parsed,
+                transfer_scope: None,
+                scope: None,
+                explicit: explicit(if has_nested_payload(&raw, true) {
+                    stored::get(&raw, "tx")
+                } else {
+                    &raw
+                }),
+            },
+            invalid_txid,
+        )
     })
     .into_iter()
-    .map(crate::par::unwrap)
+    .zip(rows)
+    .map(|(outcome, row)| {
+        let (mut fact, invalid_txid) = crate::par::unwrap(outcome);
+        if invalid_txid && matches!(fact.parsed, Ok(None)) {
+            return fact;
+        }
+        if !invalid_txid {
+            fact.transfer_scope = graph::onchain_scope(row);
+        }
+        fact.scope = match &fact.parsed {
+            Ok(parsed) => {
+                conflict_scope_with_transfer(row, parsed.as_ref(), fact.transfer_scope.clone())
+            }
+            Err(_) => None,
+        };
+        fact
+    })
     .collect()
 }
 
@@ -252,6 +353,7 @@ fn canonical_outpoint(value: &Py) -> Option<String> {
     Some(format!("{txid}:{vout}"))
 }
 
+#[cfg(test)]
 pub(super) fn conflicts(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> {
     conflicts_impl(rows, facts, false)
 }
@@ -260,6 +362,13 @@ pub(crate) fn ledger_conflicts(rows: &[Value]) -> Result<Ids, String> {
 }
 fn conflicts_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, String> {
     let states = confirmation_states(rows, facts, closed)?;
+    conflicts_from_states(rows, facts, &states)
+}
+fn conflicts_from_states(
+    rows: &[Value],
+    facts: &[Facts],
+    states: &BTreeMap<Physical, bool>,
+) -> Result<Ids, String> {
     let mut row_txid = BTreeMap::new();
     let mut outpoints: BTreeMap<Physical, BTreeSet<Physical>> = BTreeMap::new();
     for (row, fact) in rows.iter().zip(facts) {
@@ -300,6 +409,7 @@ fn conflicts_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, 
         .collect())
 }
 
+#[cfg(test)]
 pub(super) fn pending(rows: &[Value], facts: &[Facts]) -> Result<Ids, String> {
     pending_impl(rows, facts, false)
 }
@@ -308,6 +418,13 @@ pub(crate) fn ledger_pending(rows: &[Value]) -> Result<Ids, String> {
 }
 fn pending_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, String> {
     let states = confirmation_states(rows, facts, closed)?;
+    pending_from_states(rows, facts, &states)
+}
+fn pending_from_states(
+    rows: &[Value],
+    facts: &[Facts],
+    states: &BTreeMap<Physical, bool>,
+) -> Result<Ids, String> {
     let mut row_txid = BTreeMap::new();
     let mut explicit_txids = BTreeSet::new();
     for (row, fact) in rows.iter().zip(facts) {
@@ -323,10 +440,9 @@ fn pending_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, St
         }
     }
     let pending: BTreeSet<_> = states
-        .into_iter()
-        .filter_map(|(scope, confirmed)| {
-            (explicit_txids.contains(&scope) && !confirmed).then_some(scope)
-        })
+        .iter()
+        .filter(|(scope, confirmed)| explicit_txids.contains(*scope) && !**confirmed)
+        .map(|(scope, _)| scope.clone())
         .collect();
     for (row, fact) in rows.iter().zip(facts) {
         fact.parsed.as_ref().map_err(Clone::clone)?;
@@ -342,17 +458,28 @@ fn pending_impl(rows: &[Value], facts: &[Facts], closed: bool) -> Result<Ids, St
         .collect())
 }
 
+#[cfg(test)]
 pub(super) fn fanout(rows: &[Value], covered: &Ids) -> Result<Ids, String> {
+    fanout_with_facts(rows, covered, None)
+}
+
+fn fanout_with_facts(
+    rows: &[Value],
+    covered: &Ids,
+    facts: Option<&[Facts]>,
+) -> Result<Ids, String> {
     let mut groups: Vec<(graph::ownership::TransferScope, Vec<&Value>)> = Vec::new();
     let mut index = std::collections::HashMap::new();
-    for row in rows {
-        if SYNTHETIC
-            .iter()
-            .any(|p| codec::pystr(&row["id"]).starts_with(p))
-        {
+    for (row_index, row) in rows.iter().enumerate() {
+        let id = codec::pystr(&row["id"]);
+        if SYNTHETIC.iter().any(|p| id.starts_with(p)) {
             continue;
         }
-        let Some(scope) = graph::onchain_scope(row) else {
+        let scope = match facts {
+            Some(facts) => facts[row_index].transfer_scope.clone(),
+            None => graph::onchain_scope(row),
+        };
+        let Some(scope) = scope else {
             continue;
         };
         codec::push_grouped(&mut groups, &mut index, scope, row);
@@ -417,15 +544,23 @@ pub(super) fn fanout(rows: &[Value], covered: &Ids) -> Result<Ids, String> {
     Ok(held)
 }
 
+#[cfg(test)]
 pub(super) fn unscoped(rows: &[Value]) -> Result<Ids, String> {
+    unscoped_with_facts(rows, None)
+}
+
+fn unscoped_with_facts(rows: &[Value], facts: Option<&[Facts]>) -> Result<Ids, String> {
     let mut groups: Vec<((String, String), Vec<&Value>)> = Vec::new();
     let mut positions: std::collections::HashMap<(String, String), usize> =
         std::collections::HashMap::new();
-    for row in rows {
+    for (index, row) in rows.iter().enumerate() {
         let id = codec::text(&row["id"]);
         if id.starts_with("custody-tax:")
             || SYNTHETIC.iter().any(|p| id.starts_with(p))
-            || graph::onchain_scope(row).is_some()
+            || match facts {
+                Some(facts) => facts[index].transfer_scope.is_some(),
+                None => graph::onchain_scope(row).is_some(),
+            }
         {
             continue;
         }
@@ -471,7 +606,10 @@ pub(super) fn anchors(pair: &Value) -> Ids {
         .filter(|id| !id.is_empty())
         .collect()
 }
-pub(super) fn without_held(pairs: &[Value], held: &Ids) -> Vec<Value> {
+pub(super) fn without_held<'a>(pairs: &'a [Value], held: &Ids) -> std::borrow::Cow<'a, [Value]> {
+    if held.is_empty() {
+        return std::borrow::Cow::Borrowed(pairs);
+    }
     let groups: Ids = pairs
         .iter()
         .filter(|pair| {
@@ -481,13 +619,15 @@ pub(super) fn without_held(pairs: &[Value], held: &Ids) -> Vec<Value> {
         })
         .map(|pair| codec::pystr(&pair["group_id"]))
         .collect();
-    pairs
-        .iter()
-        .filter(|pair| {
-            anchors(pair).is_disjoint(held) && !groups.contains(&codec::text(&pair["group_id"]))
-        })
-        .cloned()
-        .collect()
+    std::borrow::Cow::Owned(
+        pairs
+            .iter()
+            .filter(|pair| {
+                anchors(pair).is_disjoint(held) && !groups.contains(&codec::text(&pair["group_id"]))
+            })
+            .cloned()
+            .collect(),
+    )
 }
 
 #[derive(Serialize)]
@@ -509,13 +649,15 @@ pub(super) struct Inputs<'a> {
 }
 
 pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
+    let _span = crate::timing::span("interpretation.holds");
     let facts = facts(input.rows);
+    let states = confirmation_states(input.rows, &facts, false)?;
     let conflict_ids = if input.has_chain_events {
-        conflicts(input.rows, &facts)?
+        conflicts_from_states(input.rows, &facts, &states)?
     } else {
         Ids::new()
     };
-    let pending_ids = pending(input.rows, &facts)?;
+    let pending_ids = pending_from_states(input.rows, &facts, &states)?;
     let by_id: BTreeMap<_, _> = input
         .rows
         .iter()
@@ -532,11 +674,15 @@ pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
         .collect();
     covered.extend(input.pairs.iter().flat_map(anchors));
     let fanout_ids = if input.has_chain_events {
-        fanout(input.derivation_rows, &covered)?
+        fanout_with_facts(
+            input.derivation_rows,
+            &covered,
+            std::ptr::eq(input.rows, input.derivation_rows).then_some(facts.as_slice()),
+        )?
     } else {
         Ids::new()
     };
-    let unscoped_ids: Ids = unscoped(input.rows)?
+    let unscoped_ids: Ids = unscoped_with_facts(input.rows, Some(&facts))?
         .difference(&covered)
         .filter(|id| !fanout_ids.contains(*id))
         .cloned()
@@ -671,6 +817,42 @@ pub(super) fn compute(input: Inputs<'_>) -> Result<Holds, String> {
 mod tests {
     use super::*;
     use crate::interpretation::array;
+    #[test]
+    fn graphless_confirmation_facts_preserve_full_decoder() {
+        let mut inputs = vec![
+            r#"{"txid":"csv-id","amount":"1","asset":"BTC"}"#.to_owned(),
+            r#"{"txid":"csv-id","vin":[],"vout":[]}"#.to_owned(),
+            r#"{"txid":"csv-id","status":{"confirmed":false}}"#.to_owned(),
+            r#"{"txid":"csv-id","tx":{"vin":[],"vout":[]}}"#.to_owned(),
+            r#"{"txid":"csv-id","ownership_graph":{"vin":[],"vout":[]}}"#.to_owned(),
+            r#"{"txid":"csv-id","chain":"liquid","raw_hex":"00"}"#.to_owned(),
+            r#"{"txid":"csv-id","txid":""}"#.to_owned(),
+            r#"{"txid":"csv-id","unrelated":NaN}"#.to_owned(),
+            r#"{"txid":"csv-id","unrelated":"\ud800"}"#.to_owned(),
+        ];
+        inputs.push(format!(
+            "{{\"txid\":\"csv-id\",\"unrelated\":{}}}",
+            "1".repeat(4301)
+        ));
+        inputs.push(format!("{{\"txid\":\"{}\"}}", "a".repeat(64)));
+        let mut shortcuts = 0;
+        for raw in inputs {
+            let row = json!({"id":"row","external_id":"a".repeat(64),"external_id_kind":"txid","asset":"BTC","raw_json":raw});
+            shortcuts += usize::from(graphless_facts(&row).is_some());
+            let actual = facts(std::slice::from_ref(&row)).pop().unwrap();
+            let parsed = stored::parse(&row["raw_json"]);
+            let scope = parsed
+                .as_ref()
+                .ok()
+                .and_then(|parsed| conflict_scope(&row, parsed.as_ref()));
+            assert_eq!(actual.parsed, parsed);
+            assert_eq!(actual.scope, scope);
+            assert_eq!(actual.transfer_scope, graph::onchain_scope(&row));
+            assert!(!invalid_transfer_identity(&row) || graph::onchain_scope(&row).is_none());
+            assert_eq!(actual.explicit, explicit(&payload(&row, true)));
+        }
+        assert_eq!(shortcuts, 2);
+    }
     fn check(op: &str) {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(
             "../../../../tests/fixtures/custody_safety_helpers.json"

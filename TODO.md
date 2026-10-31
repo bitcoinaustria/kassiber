@@ -345,9 +345,14 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   before accepting R4-2/R4-3
   ([earlier probe](docs/reference/r4-journal-pipeline.md#recovered-baseline-and-r4-2-target-probe)).
   R4-4's first typed compilation/output probe stopped at 0.389 s against
-  its 0.153 s generic target; re-plan typed safety facts and sparse derivation
-  rows before retrying. R4-5 was not started
+  its 0.153 s generic target
   ([probe](docs/reference/r4-journal-pipeline.md#r4-4-typed-compilation-probe-stopped)).
+  The subsequent R4-4/R4-5 kernel pass retains existing stage representations
+  and meets both CPU targets: interpretation 3.05–4.12× and gaps 2.02–2.16×
+  faster across generic/multi-wallet 2k/20k. See the
+  [kernel checkpoint](docs/reference/custody-engine.md#interpretation-and-gap-kernel-checkpoint-r4)
+  for parity and touched-file mutation scope. Overall custody and the
+  R4-2–R4-8 integration budget remain open.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):

@@ -18,7 +18,14 @@ pub(super) struct Profile {
     fanout: ownership::Derivation,
 }
 
-fn rows_after(rows: &[Value], result: &ownership::Derivation) -> Vec<Value> {
+fn rows_after<'a>(rows: &'a [Value], result: &ownership::Derivation) -> Cow<'a, [Value]> {
+    if result.dropped_out_ids.is_empty()
+        && result.dropped_in_ids.is_empty()
+        && result.out_row_overrides.is_empty()
+        && result.synthetic_rows.is_empty()
+    {
+        return Cow::Borrowed(rows);
+    }
     let mut next: Vec<_> = rows
         .iter()
         .filter_map(|row| {
@@ -31,7 +38,7 @@ fn rows_after(rows: &[Value], result: &ownership::Derivation) -> Vec<Value> {
         .collect();
     next.extend(result.synthetic_rows.iter().cloned());
     // The journal calls derive_profile_transfers with sort_key=None.
-    next
+    Cow::Owned(next)
 }
 
 pub(super) fn derive(
@@ -39,6 +46,7 @@ pub(super) fn derive(
     snapshot: &Snapshot,
     initial: &BTreeSet<String>,
 ) -> Result<Profile, String> {
+    let _span = crate::timing::span("interpretation.derive");
     let mut handled = initial.clone();
     let consolidation = consolidation::derive(rows, snapshot, &handled)?;
     let rows = rows_after(rows, &consolidation);
@@ -96,6 +104,12 @@ fn annotate(profile: &Profile) -> Vec<Value> {
 }
 
 fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<Vec<Value>, String> {
+    if profile.consolidation.blocked_sources.is_empty()
+        && profile.ownership.blocked_sources.is_empty()
+        && profile.fanout.blocked_sources.is_empty()
+    {
+        return Ok(Vec::new());
+    }
     let mut members = BTreeMap::new();
     for event in array(&context.canonical["events"]) {
         let mut ids: Vec<_> = array(&event["observation_aliases"])
@@ -206,6 +220,7 @@ pub(super) fn prepare_with_samourai<'a>(
     reserved: &BTreeSet<String>,
     samourai: &Value,
 ) -> Result<Prepared<'a>, String> {
+    let _span = crate::timing::span("interpretation.prepare");
     let mut handled = recorded::resolved_ids(&recorded, context, true);
     handled.extend(reserved.iter().cloned());
     handled.extend(array(&samourai["touched_ids"]).iter().map(codec::text));
@@ -215,11 +230,12 @@ pub(super) fn prepare_with_samourai<'a>(
             .any(|event| event["event_key"]["native_namespace"] == "chain");
     let mut normalized = rows.clone();
     if eligible {
-        for row in normalized.to_mut().iter_mut() {
+        for (index, row) in rows.iter().enumerate() {
             if let Some(observation) = context.observations.get(&anchor(row)) {
                 if row["observation_fee_attribution"] == "implicit_wallet_delta"
                     && observation["fee_attribution"] == "exact"
                 {
+                    let row = &mut normalized.to_mut()[index];
                     row["amount"] = observation["amount_msat"].clone();
                     row["fee"] = observation["fee_msat"].clone();
                     row["observation_fee_attribution"] = json!("exact");

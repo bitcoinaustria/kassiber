@@ -1673,8 +1673,8 @@
   {
     "id": "I-shared-aliases",
     "file": "crates/custody/src/interpretation/mod.rs",
-    "find": "for alias in array(&event[\"observation_aliases\"]) {",
-    "replace": "for alias in array(&event[\"observation_aliases\"]).iter().take(1) {",
+    "find": ".flat_map(|event| array(&event[\"observation_aliases\"]))",
+    "replace": ".flat_map(|event| array(&event[\"observation_aliases\"]).iter().take(1))",
     "expect_failing": [
       "interpretation_shared_aliases"
     ],
@@ -3558,7 +3558,7 @@
   {
     "id": "R2c-graph-raw-hex-gate",
     "file": "crates/custody/src/graph/stored.rs",
-    "find": "(chain == \"liquid\" || truth(get(get(&outer, \"component\"), \"asset_id\")))",
+    "find": "(chain == \"liquid\" || truth(get(get(outer, \"component\"), \"asset_id\")))",
     "replace": "(chain == \"liquid\")",
     "expect_failing": [
       "graph_mapping_values"
@@ -6826,8 +6826,8 @@
   {
     "id": "R2c-safety-positive",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "> BigInt::from(0),",
-    "replace": ">= BigInt::from(0),",
+    "find": "ordering.is_gt()",
+    "replace": "ordering.is_ge()",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -6936,8 +6936,8 @@
   {
     "id": "R2c-safety-nested-status",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "if nested && matches!(stored::get(&raw, \"tx\"), Py::Dict(_)) {",
-    "replace": "if false && nested {",
+    "find": "nested && matches!(stored::get(raw, \"tx\"), Py::Dict(_))",
+    "replace": "false && nested",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7096,8 +7096,8 @@
   {
     "id": "R2c-safety-pending-state",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "(explicit_txids.contains(&scope) && !confirmed).then_some(scope)",
-    "replace": "(explicit_txids.contains(&scope) && confirmed).then_some(scope)",
+    "find": "explicit_txids.contains(*scope) && !**confirmed",
+    "replace": "explicit_txids.contains(*scope) && **confirmed",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7266,8 +7266,8 @@
   {
     "id": "R2c-safety-holds-normalized",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "fanout(input.derivation_rows, &covered)?",
-    "replace": "fanout(input.rows, &covered)?",
+    "find": "fanout_with_facts(\n            input.derivation_rows,",
+    "replace": "fanout_with_facts(\n            input.rows,",
     "expect_failing": [
       "raw_observation_hold_vectors"
     ],
@@ -11286,8 +11286,8 @@
   {
     "id": "REC-SAFETY-03",
     "file": "crates/custody/src/interpretation/safety.rs",
-    "find": "released_context\n                        .excluded\n                        .remove(&super::reviewed::anchor(leg));",
-    "replace": "released_context\n                        .excluded\n                        .insert(super::reviewed::anchor(leg));",
+    "find": "released_context\n                        .get_or_insert_with(|| context.clone())\n                        .excluded\n                        .remove(&super::reviewed::anchor(leg));",
+    "replace": "released_context\n                        .get_or_insert_with(|| context.clone())\n                        .excluded\n                        .insert(super::reviewed::anchor(leg));",
     "rule": "Release only the anchors of fully reconciled components.",
     "expect_failing": [
       "reconciliation_compilation_vectors"
@@ -12936,7 +12936,7 @@
   {
     "id": "GAP-116",
     "file": "crates/custody/src/interpretation/mod.rs",
-    "find": "ignored.extend(Context::from_stages(components, evidence).excluded);",
+    "find": "ignored.extend(excluded(components));",
     "replace": "ignored.extend(BTreeSet::<String>::new());",
     "rule": "Authored components reserve all arrived anchors even when blocked.",
     "expect_failing": [
@@ -12976,8 +12976,8 @@
   {
     "id": "GAP-120",
     "file": "crates/custody/src/gaps/mod.rs",
-    "find": "crate::par::map(rows, |row| normalize::leg(row, &BTreeSet::new()))",
-    "replace": "crate::par::map(&rows[..0], |row| normalize::leg(row, &BTreeSet::new()))",
+    "find": "|row| normalize::leg(row, &BTreeSet::new()),\n        snapshot.gap_worklist.large_book,",
+    "replace": "|row| normalize::leg(row, &ignored.intersection(&accounting).cloned().collect()),\n        snapshot.gap_worklist.large_book,",
     "rule": "Normalize all raw worklist rows before applying ignored ids.",
     "expect_failing": [
       "gaps_operation_vectors"
@@ -23102,5 +23102,95 @@
       "typed_network_payload_arrays_are_not_object_facts"
     ],
     "rule": "Only JSON objects contribute embedded network facts; positional arrays are ignored."
+  },
+  {
+    "id": "PERF-HOLDS-GRAPH",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "|| hints.vin.is_some()\n        || hints.vout.is_some()",
+    "replace": "|| false",
+    "rule": "Graph-bearing records use the complete decoder.",
+    "expect_failing": [
+      "graphless_confirmation_facts_preserve_full_decoder"
+    ]
+  },
+  {
+    "id": "PERF-HOLDS-STATUS",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "|| hints.status.is_some()",
+    "replace": "|| false",
+    "rule": "Explicit status cannot enter the graphless shortcut.",
+    "expect_failing": [
+      "graphless_confirmation_facts_preserve_full_decoder"
+    ]
+  },
+  {
+    "id": "PERF-HOLDS-INTEGER-LIMIT",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".as_str().filter(|raw| raw.len() <= 4300)?",
+    "replace": ".as_str()?",
+    "rule": "The graphless shortcut preserves CPython integer parsing limits.",
+    "expect_failing": [
+      "graphless_confirmation_facts_preserve_full_decoder"
+    ]
+  },
+  {
+    "id": "PERF-GAP-DUPLICATE-IDS",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "if !seen.insert(legs[row].rank) {",
+    "replace": "if false && !seen.insert(legs[row].rank) {",
+    "rule": "Repeated return ids retain ordered beam de-duplication.",
+    "expect_failing": [
+      "gap_beam_unique_and_duplicate_id_python_hashes"
+    ]
+  },
+  {
+    "id": "PERF-GAP-NORMALIZED-LIMIT",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "pub(super) fn normalized(mut legs: Vec<Leg>, limits: &Limits) -> Result<SearchResult, String> {\n    validate_limits(limits)?;",
+    "replace": "pub(super) fn normalized(mut legs: Vec<Leg>, limits: &Limits) -> Result<SearchResult, String> {",
+    "rule": "Reusing admitted legs retains search-limit refusal after raw admission.",
+    "expect_failing": [
+      "gap_compute_retains_limit_and_admission_precedence"
+    ]
+  },
+  {
+    "id": "PERF-HOLDS-TRANSFER-HINT",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "!txid.is_empty() && graph::strict_txid(&json!(txid)).is_none()",
+    "replace": "!txid.is_empty() && graph::strict_txid(&json!(txid)).is_some()",
+    "rule": "Transfer scope hints may exclude only provably invalid raw txids.",
+    "expect_failing": [
+      "graphless_confirmation_facts_preserve_full_decoder"
+    ]
+  },
+  {
+    "id": "PERF-GAP-STATE-PREFIX",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "let previous_states = states.len();",
+    "replace": "let previous_states = 0;",
+    "rule": "Each return extends every state retained before that return, in the original order.",
+    "expect_failing": [
+      "gap_beam_unique_and_duplicate_id_python_hashes"
+    ]
+  },
+  {
+    "id": "PERF-GAP-INCREMENTAL-KEY",
+    "file": "crates/custody/src/gaps/search.rs",
+    "find": "next_key.insert(at, rank);",
+    "replace": "next_key.insert(at, 0);",
+    "rule": "Incremental beam keys contain the exact sorted return-id ranks.",
+    "expect_failing": [
+      "gap_beam_unique_and_duplicate_id_python_hashes"
+    ]
+  },
+  {
+    "id": "PERF-HOLDS-TRANSFER-PARSE-LIMIT",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".as_str().filter(|raw| raw.len() <= 4300) else",
+    "replace": ".as_str() else",
+    "rule": "Transfer identity hints preserve fallback scope when CPython refuses an oversized integer.",
+    "expect_failing": [
+      "graphless_confirmation_facts_preserve_full_decoder"
+    ]
   }
 ]

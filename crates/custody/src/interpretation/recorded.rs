@@ -27,6 +27,9 @@ fn wallet_kind(value: &Value) -> String {
 }
 pub(super) fn lightning_row(row: &Value) -> bool {
     let source = normalized(&row["payment_hash_source"]);
+    if !matches!(source.as_str(), "lnd" | "core_lightning") {
+        return false;
+    }
     let kind = normalized(&row["kind"]);
     let raw = graph::transfer_object(&row["raw_json"]);
     let import = normalized(&raw["_kassiber_provenance"]["import_source"]);
@@ -173,6 +176,9 @@ pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), S
     let mut chain_groups: Groups<(String, String, String, String)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for row in rows {
+        if super::holds::invalid_transfer_identity(row) {
+            continue;
+        }
         if let Some(scope) = graph::onchain_scope(row) {
             crate::codec::push_grouped(&mut chain_groups, &mut index, scope, row);
         }

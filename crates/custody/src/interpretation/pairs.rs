@@ -228,9 +228,17 @@ pub(super) fn compile_with_proofs(
     snapshot: &Snapshot,
     proofs: &BTreeMap<(String, String), NativeTransitionProof>,
 ) -> Result<Value, String> {
+    if pairs.is_empty() {
+        return compile_with_scopes(pairs, context, &BTreeMap::new(), &BTreeMap::new(), proofs);
+    }
+    let endpoints: BTreeSet<_> = pairs
+        .iter()
+        .flat_map(|pair| [anchor(&pair["out"]), anchor(&pair["in"])])
+        .collect();
     let scopes = snapshot
         .rows()
         .iter()
+        .filter(|r| endpoints.contains(&anchor(r)))
         .filter_map(|r| Some((anchor(r), graph::onchain_scope(r)?)))
         .collect();
     compile_with_scopes(
@@ -252,6 +260,7 @@ pub(super) fn compile_with_scopes(
     scopes: &BTreeMap<String, (String, String, String, String)>,
     proofs: &BTreeMap<(String, String), NativeTransitionProof>,
 ) -> Result<Value, String> {
+    let _span = crate::timing::span("interpretation.pairs");
     let fanout = exact_fanout(pairs, context, scopes)?;
     let mut ordered: Vec<_> = pairs.iter().collect();
     ordered.sort_by_key(|p| {

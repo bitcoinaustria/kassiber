@@ -158,7 +158,11 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         .filter(|id| !context.excluded.contains(*id))
         .cloned()
         .collect();
-    let rows_by_id: BTreeMap<_, _> = rows.iter().map(|row| (text(&row["id"]), row)).collect();
+    let rows_by_id: BTreeMap<_, _> = if unverified.is_empty() {
+        BTreeMap::new()
+    } else {
+        rows.iter().map(|row| (text(&row["id"]), row)).collect()
+    };
     let detail = kassiber_pyjson::dumps(&codec::from_json(&json!({"required_for":"authoritative_same_event_observation", "resolution":"sync every imported Samourai source with a chain observer"}))?, &kassiber_pyjson::Options::new().sort_keys(true)).map_err(|e| e.to_string())?;
     let quarantines: Vec<_> = unverified.iter().map(|id| {
         let row = rows_by_id.get(id).copied().unwrap_or(&Value::Null);

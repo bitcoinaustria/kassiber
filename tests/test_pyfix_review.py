@@ -1,5 +1,6 @@
 """Regression coverage for the Python pricing and partial-payout review."""
 import json
+from contextlib import ExitStack
 from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from kassiber.core.source_funds import create_source
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from tests import cli_runner
+from tests.custody_engine_compare import injected_stage_failure
 from tests.test_btcpay_commercial_provenance import _hooks
 from tests.test_custody_authored_migration import _scope, _tx, NOW
 
@@ -146,9 +148,14 @@ def test_split_payout_fails_closed(book, monkeypatch, policy, asset):
         state = replace(state, projection=replace(state.projection, decisions=tuple(decisions)))
         if hasattr(state.tax_eligibility, 'eligible_decisions'):
             state = replace(state, tax_eligibility=replace(state.tax_eligibility, eligible_decisions=tuple(decisions)))
-        return original(profile, rows, state, **kwargs)
+        try:
+            return original(profile, rows, state, **kwargs)
+        except AppError as error:
+            if error.code == 'validation' and str(error) == 'Transaction out: split payout allocation requires review':
+                injections.enter_context(injected_stage_failure('finalized_projection', error))
+            raise
     monkeypatch.setattr(ctp, 'compile_finalized_tax_projection', split)
-    with pytest.raises(AppError, match='out: split payout'):
+    with ExitStack() as injections, pytest.raises(AppError, match='out: split payout'):
         CustodyJournalBuilder(book, book.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()).build_custody_projection()
 
 

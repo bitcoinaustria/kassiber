@@ -461,18 +461,22 @@ pub(crate) fn parse(raw: &Value) -> Result<Option<Py>, String> {
     let Some(outer @ Py::Dict(_)) = outer else {
         return Ok(None);
     };
-    let chain = text(get(&outer, "chain")).py_strip().py_lower();
-    let network = text(get(&outer, "network")).py_strip().py_lower();
+    parse_object(&outer)
+}
+
+pub(crate) fn parse_object(outer: &Py) -> Result<Option<Py>, String> {
+    let chain = text(get(outer, "chain")).py_strip().py_lower();
+    let network = text(get(outer, "network")).py_strip().py_lower();
     let mut items = Vec::new();
-    for payload in [&outer, get(&outer, "tx"), get(&outer, "ownership_graph")] {
+    for payload in [outer, get(outer, "tx"), get(outer, "ownership_graph")] {
         if let Some(parsed) = mapping(payload, &chain, &network)? {
             items.push(parsed);
         }
     }
-    if (chain == "liquid" || truth(get(get(&outer, "component"), "asset_id")))
-        && truth(get(&outer, "raw_hex"))
+    if (chain == "liquid" || truth(get(get(outer, "component"), "asset_id")))
+        && truth(get(outer, "raw_hex"))
     {
-        if let Some(decoded) = crate::liquid::decode(&codec::to_json(get(&outer, "raw_hex"))) {
+        if let Some(decoded) = crate::liquid::decode(&codec::to_json(get(outer, "raw_hex"))) {
             let mut decoded = codec::from_json(&decoded)?;
             put(&mut decoded, "network", string(network.clone()));
             items.push(decoded);
@@ -481,8 +485,8 @@ pub(crate) fn parse(raw: &Value) -> Result<Option<Py>, String> {
     let Some(mut graph) = merge(&items) else {
         return Ok(None);
     };
-    if truth(get(&outer, "txid")) {
-        put(&mut graph, "txid", get(&outer, "txid").clone());
+    if truth(get(outer, "txid")) {
+        put(&mut graph, "txid", get(outer, "txid").clone());
     }
     if !chain.is_empty() {
         put(&mut graph, "chain", string(chain));
@@ -490,7 +494,7 @@ pub(crate) fn parse(raw: &Value) -> Result<Option<Py>, String> {
         put(
             &mut graph,
             "chain",
-            string(if truth(get(get(&outer, "component"), "asset_id")) {
+            string(if truth(get(get(outer, "component"), "asset_id")) {
                 "liquid"
             } else {
                 "bitcoin"
@@ -503,8 +507,8 @@ pub(crate) fn parse(raw: &Value) -> Result<Option<Py>, String> {
     put(
         &mut graph,
         "component",
-        if matches!(get(&outer, "component"), Py::Dict(_)) {
-            get(&outer, "component").clone()
+        if matches!(get(outer, "component"), Py::Dict(_)) {
+            get(outer, "component").clone()
         } else {
             Py::Dict(vec![])
         },

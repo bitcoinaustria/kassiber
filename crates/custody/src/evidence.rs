@@ -69,21 +69,25 @@ pub fn network(chain: &str, original: &Value) -> Result<String, Error> {
     })
 }
 pub fn scope(row: &Value) -> Result<(String, String), Error> {
-    let raw = crate::graph::transfer_object(&row["raw_json"]);
-    let config = crate::graph::transfer_object(if truth(&row["config_json"]) {
-        &row["config_json"]
+    scope_fields(|key| &row[key])
+}
+
+pub(crate) fn scope_fields<'a>(row: impl Fn(&str) -> &'a Value) -> Result<(String, String), Error> {
+    let raw = crate::graph::transfer_object(row("raw_json"));
+    let config = crate::graph::transfer_object(if truth(row("config_json")) {
+        row("config_json")
     } else {
-        &row["wallet_config_json"]
+        row("wallet_config_json")
     });
-    let kind = strip(&text(&row["wallet_kind"])).py_lower();
-    let asset = strip(&text(&row["asset"])).py_upper();
+    let kind = strip(&text(row("wallet_kind"))).py_lower();
+    let asset = strip(&text(row("asset"))).py_upper();
     let raw_chain = text(&raw["chain"]);
     let selected = if !raw["chain"].is_null() && raw["chain"] != "" {
         raw_chain
     } else if lightning(&kind) {
         "lightning".into()
-    } else if !row["chain"].is_null() && row["chain"] != "" {
-        text(&row["chain"])
+    } else if !row("chain").is_null() && *row("chain") != "" {
+        text(row("chain"))
     } else if truth(&config["chain"]) {
         text(&config["chain"])
     } else if asset == "LBTC" {
@@ -99,8 +103,8 @@ pub fn scope(row: &Value) -> Result<(String, String), Error> {
     })?;
     let n = if truth(&raw["network"]) {
         &raw["network"]
-    } else if truth(&row["network"]) {
-        &row["network"]
+    } else if truth(row("network")) {
+        row("network")
     } else {
         &config["network"]
     };
