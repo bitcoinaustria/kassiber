@@ -436,9 +436,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   LND and CLN report acquisition have consent-bound native preparation and
   loopback reference comparisons. CLN subprocess launch, cancellation and
   ancillary refusals are gated and tested; product served-by counts remain zero.
-  Complete LND snapshot/error/TLS/proxy parity, capability services, CLI/daemon
+  LND ancillary refusals and request ordering now have 535 reference cases and
+  a process TLS/proxy/error matrix. Capability/authority services, CLI/daemon
   cutover and product zero-fallback wire/CSV/all-table proof remain open. See the
-  [CLN checkpoint](docs/reference/rust-shell.md#cln-profitability-acquisition-checkpoint-r5-incomplete).
+  [LND continuation](docs/reference/rust-shell.md#lnd-ancillary-and-transport-continuation-r5-incomplete).
 - [x] Port configuration privacy hygiene through the native service, CLI and
   daemon, retaining count-only disclosure, local header inspection, stored
   freshness and Python endpoint/provider classification. The accepted corpus

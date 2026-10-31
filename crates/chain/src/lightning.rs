@@ -221,9 +221,8 @@ impl LndReportClient {
         if response.body.is_empty() {
             return Ok(dict([] as [(&str, Value); 0]));
         }
-        let raw = std::str::from_utf8(&response.body).map_err(|_| {
-            AppError::new("backend_error", "LND returned invalid UTF-8").retryable(true)
-        })?;
+        let raw = std::str::from_utf8(&response.body)
+            .map_err(|_| AppError::new("internal_error", "LND returned invalid UTF-8"))?;
         let value = kassiber_pytext::loads(raw).map_err(|_| {
             AppError::new("backend_error", "LND returned non-JSON data").retryable(true)
         })?;
@@ -232,6 +231,10 @@ impl LndReportClient {
                 "backend_error",
                 "LND returned an unexpected response shape",
             )
+            .with_details(dict([(
+                "response_type",
+                kassiber_envelope::s(kassiber_envelope::type_name(&value)),
+            )]))
             .retryable(true));
         }
         Ok(value)
@@ -243,14 +246,20 @@ impl LndReportClient {
         deadline: Instant,
     ) -> Result<ProfitabilitySnapshot> {
         let info = self.read("/v1/getinfo", None, consent, deadline)?;
-        let now = integer(field(&info, "best_header_timestamp"));
-        drop(info);
-        self.read("/v1/balance/blockchain", None, consent, deadline)?;
-        self.read("/v1/balance/channels", None, consent, deadline)?;
-        self.read("/v1/fees", None, consent, deadline)?;
-        let open = channel_rows(self.read("/v1/channels", None, consent, deadline)?)?;
-        let closed = channel_rows(self.read("/v1/channels/closed", None, consent, deadline)?)?;
-        let now = now?;
+        let onchain = self.read("/v1/balance/blockchain", None, consent, deadline)?;
+        let balance = self.read("/v1/balance/channels", None, consent, deadline)?;
+        let fees = self.read("/v1/fees", None, consent, deadline)?;
+        for row in lnd_rows(&fees, "channel_fees")? {
+            if truthy(field(row, "chan_id")) || truthy(field(row, "channel_id")) {
+                integer(field(row, "base_fee_msat"))?;
+                integer(field(row, "fee_per_mil"))?;
+            }
+        }
+        let open_payload = self.read("/v1/channels", None, consent, deadline)?;
+        let open_rows = lnd_rows(&open_payload, "channels")?;
+        let closed_payload = self.read("/v1/channels/closed", None, consent, deadline)?;
+        let closed_rows = lnd_rows(&closed_payload, "channels")?;
+        let now = integer(field(&info, "best_header_timestamp"))?;
         let start = if now == BigInt::from(0) {
             now.clone()
         } else {
@@ -259,7 +268,7 @@ impl LndReportClient {
         let forwarding = self.read("/v1/switch", Some(serde_json::json!({
             "start_time": start.to_string(), "end_time": if now == BigInt::from(0) { String::new() } else { now.to_string() }, "num_max_events": 1000
         })), consent, deadline)?;
-        let forwards = rows(&forwarding, "forwarding_events")
+        let forwards = lnd_rows(&forwarding, "forwarding_events")?
             .into_iter()
             .filter_map(|row| match integer(field(row, "timestamp")) {
                 Ok(timestamp)
@@ -272,51 +281,43 @@ impl LndReportClient {
                 Ok(_) => Some(Ok(row)),
                 Err(error) => Some(Err(error)),
             })
-            .map(|row| {
-                let row = row?;
-                Ok(Forward {
-                    incoming: optional_text(field(row, "chan_id_in")),
-                    outgoing: optional_text(field(row, "chan_id_out")),
-                    fee_msat: fee(row, "fee")?,
-                })
-            })
             .collect::<Result<Vec<_>>>()?;
-        drop(forwarding);
         let payments = self.read(
             "/v1/payments?include_incomplete=true&max_payments=1000",
             None,
             consent,
             deadline,
         )?;
-        let mut payment_cost: BigInt = 0.into();
-        let mut payment_count = 0;
-        for row in rows(&payments, "payments") {
+        let mut scoped_payments = Vec::new();
+        for row in lnd_rows(&payments, "payments")? {
             if start != BigInt::from(0)
                 && floor_div(integer(field(row, "creation_time_ns"))?, 1_000_000_000) < start
                 && integer(field(row, "creation_date"))? < start
             {
                 continue;
             }
-            if ["SUCCEEDED", "SUCCESS", "COMPLETE"]
-                .contains(&kassiber_pytext::upper(&py_str(field(row, "status"))).as_str())
-            {
-                payment_count += 1;
-                payment_cost += floor_div(fee(row, "fee_sat")?, 1000);
-            }
+            scoped_payments.push(row);
         }
-        drop(payments);
-        self.read(
+        let invoices = self.read(
             "/v1/invoices?num_max_invoices=1000",
             None,
             consent,
             deadline,
         )?;
+        lnd_rows(&invoices, "invoices")?;
+        let mut earned: BTreeMap<PyStr, BigInt> = BTreeMap::new();
+        for row in &forwards {
+            if let Some(outgoing) = optional_text(field(row, "chan_id_out")) {
+                *earned.entry(outgoing).or_insert_with(|| 0.into()) +=
+                    floor_div(fee(row, "fee")?, 1000);
+            }
+        }
         let mut aliases = BTreeMap::new();
-        let peers = open
+        let peers = open_rows
             .iter()
-            .chain(&closed)
-            .filter(|c| c.private && !truthy(&c.alias))
-            .filter_map(|c| c.peer.clone())
+            .chain(&closed_rows)
+            .filter(|c| lnd_truthy(field(c, "private")) && !truthy(field(c, "peer_alias")))
+            .filter_map(|c| optional_text(field(c, "remote_pubkey")))
             .collect::<BTreeSet<_>>();
         for peer in peers {
             let peer_utf8 = peer.as_str().ok_or_else(|| {
@@ -330,37 +331,72 @@ impl LndReportClient {
                     path.push_str(&format!("%{b:02X}"));
                 }
             }
-            if let Ok(payload) = self.read(&path, None, consent, deadline) {
-                let alias = field(field(&payload, "node"), "alias");
-                let alias = if truthy(alias) {
-                    text(alias)
-                } else {
-                    PyStr::default()
-                };
-                let alias = kassiber_pytext::strip_py(&alias);
-                if !alias.is("") {
-                    aliases.insert(peer, alias);
+            match self.read(&path, None, consent, deadline) {
+                Err(error)
+                    if ["interaction_required", "network_egress_disabled"]
+                        .contains(&error.code.as_str())
+                        || Instant::now() >= deadline =>
+                {
+                    return Err(error)
+                }
+                Err(_) => {}
+                Ok(payload) => {
+                    let alias = field(field(&payload, "node"), "alias");
+                    let alias = if truthy(alias) {
+                        text(alias)
+                    } else {
+                        PyStr::default()
+                    };
+                    let alias = kassiber_pytext::strip_py(&alias);
+                    if !alias.is("") {
+                        aliases.insert(peer, alias);
+                    }
                 }
             }
         }
-        for channel in open.iter().chain(&closed) {
-            validate_short_id(channel.short_id.as_ref())?;
-            if let Some(point) = &channel.point {
-                validate_outpoint(point)?;
-            }
-        }
-        let mut earned: BTreeMap<PyStr, BigInt> = BTreeMap::new();
+        let open = channel_rows(&open_rows, false)?;
+        let closed = channel_rows(&closed_rows, true)?;
+        drop(closed);
         let mut revenue_msat: BigInt = 0.into();
         for forward in &forwards {
-            validate_short_id(forward.incoming.as_ref())?;
-            validate_short_id(forward.outgoing.as_ref())?;
-            revenue_msat += &forward.fee_msat;
-            if let Some(outgoing) = &forward.outgoing {
-                *earned.entry(outgoing.clone()).or_insert_with(|| 0.into()) +=
-                    floor_div(forward.fee_msat.clone(), 1000);
-            }
+            revenue_msat += fee(forward, "fee")?;
         }
         let revenue = floor_div(revenue_msat, 1000);
+        let mut payment_cost: BigInt = 0.into();
+        let mut payment_count = 0;
+        for row in scoped_payments {
+            if ["SUCCEEDED", "SUCCESS", "COMPLETE"]
+                .contains(&kassiber_pytext::upper(&py_str(field(row, "status"))).as_str())
+            {
+                payment_count += 1;
+                payment_cost += floor_div(fee(row, "fee_sat")?, 1000);
+            }
+        }
+        for (nested, fallback) in [
+            ("local_balance", "balance"),
+            ("remote_balance", "remote_balance"),
+        ] {
+            let local = field(&balance, nested);
+            integer(if matches!(local, Value::Dict(_)) {
+                field(local, "sat")
+            } else {
+                field(&balance, fallback)
+            })?;
+        }
+        lnd_rows(&info, "chains")?;
+        integer(field(&info, "num_peers"))?;
+        integer(field(&info, "block_height"))?;
+        integer(field(&onchain, "confirmed_balance"))?;
+        for row in &forwards {
+            timestamp(field(row, "timestamp"))?;
+            for (msat, sat) in [("amt_in_msat", "amt_in"), ("amt_out_msat", "amt_out")] {
+                if integer(field(row, msat))? == BigInt::from(0) {
+                    integer(field(row, sat))?;
+                }
+            }
+            validate_short_id(optional_text(field(row, "chan_id_in")).as_ref())?;
+            validate_short_id(optional_text(field(row, "chan_id_out")).as_ref())?;
+        }
         let channels = open
             .into_iter()
             .map(|c| {
@@ -381,6 +417,10 @@ impl LndReportClient {
                 }
             })
             .collect();
+        self.http
+            .gate
+            .authorize(self.request().clone(), consent.cloned())
+            .map_err(|e| e.app_error())?;
         Ok(ProfitabilitySnapshot {
             channels,
             routing: Some(Routing {
@@ -398,39 +438,53 @@ impl LndReportClient {
     }
 }
 
-struct Forward {
-    incoming: Option<PyStr>,
-    outgoing: Option<PyStr>,
-    fee_msat: BigInt,
-}
-
 struct ChannelRow {
     id: PyStr,
-    short_id: Option<PyStr>,
-    point: Option<Value>,
     peer: Option<PyStr>,
     alias: Value,
     private: bool,
     capacity: BigInt,
 }
 
-fn channel_rows(payload: Value) -> Result<Vec<ChannelRow>> {
-    rows(&payload, "channels")
-        .into_iter()
+fn channel_rows(rows: &[&Value], closed: bool) -> Result<Vec<ChannelRow>> {
+    rows.iter()
         .map(|row| {
             let id = optional_text(field(row, "chan_id"));
             let point = ["channel_point", "funding_txid", "closing_tx_hash"]
                 .into_iter()
                 .map(|k| field(row, k))
                 .find(|v| truthy(v));
+            let capacity = integer(field(row, "capacity"))?;
+            integer(field(row, "local_balance"))?;
+            integer(field(row, "remote_balance"))?;
+            if closed {
+                timestamp(
+                    ["close_time", "close_timestamp"]
+                        .into_iter()
+                        .map(|k| field(row, k))
+                        .find(|v| truthy(v))
+                        .unwrap_or(&Value::Null),
+                )?;
+            }
+            let pending = field(row, "pending_htlcs");
+            if truthy(pending)
+                && !matches!(pending, Value::List(_) | Value::Dict(_) | Value::Str(_))
+            {
+                return Err(AppError::new(
+                    "internal_error",
+                    "Invalid LND pending HTLC collection",
+                ));
+            }
+            validate_short_id(id.as_ref())?;
+            if let Some(point) = point {
+                validate_outpoint(point)?;
+            }
             Ok(ChannelRow {
                 id: id.clone().or_else(|| point.map(text)).unwrap_or_default(),
-                short_id: id,
-                point: point.cloned(),
                 peer: optional_text(field(row, "remote_pubkey")),
                 alias: field(row, "peer_alias").clone(),
                 private: lnd_truthy(field(row, "private")),
-                capacity: integer(field(row, "capacity"))?,
+                capacity,
             })
         })
         .collect()
@@ -439,14 +493,31 @@ fn channel_rows(payload: Value) -> Result<Vec<ChannelRow>> {
 fn field<'a>(row: &'a Value, key: &str) -> &'a Value {
     get(row, key).unwrap_or(&Value::Null)
 }
-fn rows<'a>(payload: &'a Value, key: &str) -> Vec<&'a Value> {
-    match field(payload, key) {
+fn lnd_rows<'a>(payload: &'a Value, key: &str) -> Result<Vec<&'a Value>> {
+    Ok(match field(payload, key) {
         Value::List(rows) => rows
             .iter()
             .filter(|r| matches!(r, Value::Dict(_)))
             .collect(),
-        _ => Vec::new(),
+        Value::Dict(_) | Value::Str(_) => Vec::new(),
+        value if !truthy(value) => Vec::new(),
+        _ => {
+            return Err(AppError::new(
+                "internal_error",
+                "Invalid LND response collection",
+            ))
+        }
+    })
+}
+fn timestamp(value: &Value) -> Result<()> {
+    let seconds = integer(value)?;
+    if seconds > BigInt::from(253_402_300_799i64) {
+        return Err(AppError::new(
+            "internal_error",
+            "Lightning timestamp is out of range",
+        ));
     }
+    Ok(())
 }
 fn text(value: &Value) -> PyStr {
     match value {
@@ -507,6 +578,7 @@ fn validate_short_id(value: Option<&PyStr>) -> Result<()> {
         return Ok(());
     };
     let valid = value.as_str().is_some_and(|s| {
+        let s = s.strip_suffix('\n').unwrap_or(s);
         let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
         (s.len() <= 20 && digits(s)) || (s.split('x').count() == 3 && s.split('x').all(digits))
     });
@@ -520,7 +592,7 @@ fn validate_short_id(value: Option<&PyStr>) -> Result<()> {
     }
 }
 fn validate_outpoint(value: &Value) -> Result<()> {
-    let valid = matches!(value, Value::Str(s) if s.as_str().and_then(|s| s.split_once(':')).is_some_and(|(txid, vout)| txid.len() == 64 && txid.bytes().all(|b| b.is_ascii_hexdigit()) && !vout.is_empty() && vout.bytes().all(|b| b.is_ascii_digit())));
+    let valid = matches!(value, Value::Str(s) if s.as_str().and_then(|s| s.strip_suffix('\n').unwrap_or(s).split_once(':')).is_some_and(|(txid, vout)| txid.len() == 64 && txid.bytes().all(|b| b.is_ascii_hexdigit()) && !vout.is_empty() && vout.bytes().all(|b| b.is_ascii_digit())));
     if valid {
         Ok(())
     } else {
@@ -537,6 +609,16 @@ fn expand_path(raw: &str) -> PathBuf {
         }
     }
     raw.into()
+}
+
+fn rows<'a>(payload: &'a Value, key: &str) -> Vec<&'a Value> {
+    match field(payload, key) {
+        Value::List(rows) => rows
+            .iter()
+            .filter(|r| matches!(r, Value::Dict(_)))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(test)]

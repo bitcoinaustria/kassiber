@@ -98,6 +98,49 @@ def cases():
     data["closed"]["channels"] = [{"chan_id": "4", "private": True, "remote_pubkey": "c"}]
     data["aliases"] = {"a": " A ", "b": " B ", "c": " C "}
     yield "sorted-deduplicated-aliases-including-closed", data, 30
+    values = [None, "", "bad", [], {}, True, 1, -1, "１２３", "1_001", 2**100,
+              float("inf"), float("nan")]
+    for resource, key in [("info", "best_header_timestamp"), ("info", "num_peers"),
+                          ("info", "block_height"), ("onchain", "confirmed_balance"),
+                          ("channel_balance", "balance"), ("channel_balance", "remote_balance")]:
+        for index, amount in enumerate(values):
+            data = base()
+            data[resource][key] = amount
+            yield f"ancillary-{resource}-{key}-{index}", data, 30
+    for side in ["local_balance", "remote_balance"]:
+        for index, amount in enumerate(values):
+            data = base()
+            data["channel_balance"][side] = {"sat": amount}
+            yield f"ancillary-nested-{side}-{index}", data, 30
+    for resource in ["open", "closed"]:
+        for key in ["capacity", "local_balance", "remote_balance", "pending_htlcs",
+                    "close_time", "close_timestamp"]:
+            for index, amount in enumerate(values + [253402300799, 253402300800]):
+                data = base()
+                data[resource]["channels"][0][key] = amount
+                yield f"ancillary-{resource}-{key}-{index}", data, 30
+    for key in ["base_fee_msat", "fee_per_mil"]:
+        for index, amount in enumerate(values):
+            data = base()
+            data["fees"]["channel_fees"] = [{"chan_id": "1", key: amount}]
+            yield f"ancillary-fees-{key}-{index}", data, 30
+    for key in ["amt_in_msat", "amt_out_msat", "amt_in", "amt_out", "timestamp"]:
+        for index, amount in enumerate(values + [253402300799, 253402300800]):
+            data = base()
+            data["forwards"]["forwarding_events"][0][key] = amount
+            yield f"ancillary-forwards-{key}-{index}", data, 30
+    for resource, key in [("info", "chains"), ("fees", "channel_fees"),
+                          ("open", "channels"), ("closed", "channels"),
+                          ("forwards", "forwarding_events"), ("payments", "payments"),
+                          ("invoices", "invoices")]:
+        for index, collection in enumerate([None, False, 0, True, 1, 1.5, "text", {"x": []}, [None, "x", {}]]):
+            data = base()
+            data[resource][key] = collection
+            yield f"collection-{resource}-{index}", data, 30
+    for resource in ["open", "closed"]:
+        data = base()
+        data[resource]["channels"][0].update(chan_id="1\n", channel_point="ab" * 32 + ":0\n")
+        yield f"identifier-terminal-newline-{resource}", data, 30
 
 
 def evaluate(name, data, window):

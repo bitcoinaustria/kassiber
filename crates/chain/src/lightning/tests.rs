@@ -58,7 +58,7 @@ fn lnd_report_python_vectors_pin_projection_and_exact_requests() {
     else {
         panic!("fixture cases");
     };
-    assert_eq!(cases.len(), 85);
+    assert_eq!(cases.len(), 535);
     for case in cases {
         let name = py_str(field(&case, "name"));
         let Value::List(calls) = field(&case, "calls") else {
@@ -441,6 +441,37 @@ fn lnd_report_invalid_credentials_and_channel_identifiers_fail_closed() {
                 deadline()
             )
             .is_err());
+        assert_eq!(node.requests().len(), 9);
+    }
+}
+
+#[test]
+fn lnd_report_policy_change_after_final_resource_refuses_optional_aliases_and_projection() {
+    for private in [false, true] {
+        let mut replies = vec![(200, "{}".into()); 9];
+        if private {
+            replies[4].1 =
+                json!({"channels":[{"chan_id":"1","private":true,"remote_pubkey":"peer"}]})
+                    .to_string();
+        }
+        let node = Arc::new(FakeProvider::replies(replies).unwrap());
+        let observed = node.clone();
+        let gate = Gate::new(
+            move || {
+                if observed.requests().len() >= 9 {
+                    Offline::Offline
+                } else {
+                    Offline::Online
+                }
+            },
+            Ledger::default(),
+        );
+        let client = LndReportClient::new(&config(node.base()), gate, "test", action()).unwrap();
+        let result = client.fetch(
+            Some(&Consent::explicit_trigger(client.request())),
+            deadline(),
+        );
+        assert_eq!(result.unwrap_err().code, "network_egress_disabled");
         assert_eq!(node.requests().len(), 9);
     }
 }

@@ -359,7 +359,7 @@ REVIEWS["tests/test_rust_lightning_reports.py"] = {"*": {
 }}
 REVIEWS["tests/test_rust_lightning_acquisition.py"] = {"*": {
     "disposition": "oracle", "group": "reports",
-    "reason": "regenerates LND acquisition projections from unchanged Python, compares actual native fixture and Python HTTP processes on owned loopback nodes, verifies product no-egress and consent refusals, and reproduces raw-response error disclosure; this does not claim public CLI/daemon registration or complete snapshot parity",
+    "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
 }}
 REVIEWS["tests/test_rust_cln_acquisition.py"] = {"*": {
     "disposition": "oracle", "group": "reports",

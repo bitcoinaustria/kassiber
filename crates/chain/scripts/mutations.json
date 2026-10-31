@@ -292,8 +292,8 @@
   {
     "id": "chain-lnd-report-channel-rounding",
     "file": "crates/chain/src/lightning.rs",
-    "find": "floor_div(forward.fee_msat.clone(), 1000)",
-    "replace": "forward.fee_msat.clone()",
+    "find": "floor_div(fee(row, \"fee\")?, 1000)",
+    "replace": "fee(row, \"fee\")?",
     "expect_failing": [
       "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
     ],
@@ -362,8 +362,8 @@
   {
     "id": "chain-lnd-report-identifier",
     "file": "crates/chain/src/lightning.rs",
-    "find": "validate_short_id(channel.short_id.as_ref())?;",
-    "replace": "let _ = &channel.short_id;",
+    "find": "validate_short_id(id.as_ref())?;",
+    "replace": "let _ = &id;",
     "expect_failing": [
       "lnd_report_invalid_credentials_and_channel_identifiers_fail_closed"
     ],
@@ -688,5 +688,95 @@
       "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
     ],
     "rule": "Unused fee-rate fields still retain full-snapshot refusals."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-fees",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(row, \"base_fee_msat\"))?;",
+    "replace": "let _ = field(row, \"base_fee_msat\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Fee-policy ancillary integers must retain Python refusal timing before channel acquisition."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-balances",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(row, \"local_balance\"))?;",
+    "replace": "let _ = field(row, \"local_balance\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Open and closed channel balances are checked even when profitability does not use them."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-htlcs",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if truthy(pending)\n                && !matches!(pending, Value::List(_) | Value::Dict(_) | Value::Str(_))",
+    "replace": "if false && truthy(pending)\n                && !matches!(pending, Value::List(_) | Value::Dict(_) | Value::Str(_))",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Truthy nonsized pending HTLC collections refuse as in the snapshot reference."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-close-time",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if closed {\n                timestamp(",
+    "replace": "if false && closed {\n                timestamp(",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Closed-channel timestamps remain validated without contributing report rows."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-peer-count",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(&info, \"num_peers\"))?;",
+    "replace": "let _ = field(&info, \"num_peers\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Unused node peer counts still propagate reference coercion failures."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-onchain",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(&onchain, \"confirmed_balance\"))?;",
+    "replace": "let _ = field(&onchain, \"confirmed_balance\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Unused onchain balances still propagate reference coercion failures."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-forward-amount",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(row, sat))?;",
+    "replace": "let _ = field(row, sat);",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Forward amount fallback fields must be checked after snapshot balances."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-timestamp-range",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if seconds > BigInt::from(253_402_300_799i64)",
+    "replace": "if false && seconds > BigInt::from(253_402_300_799i64)",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Positive timestamps beyond the Python datetime range refuse."
+  },
+  {
+    "id": "chain-lnd-report-terminal-newline",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let s = s.strip_suffix('\\n').unwrap_or(s);",
+    "replace": "let s = s;",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Keep the reference regex terminal-newline identifier quirk."
   }
 ]

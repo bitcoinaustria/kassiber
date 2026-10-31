@@ -3475,3 +3475,16 @@ The native route inventory is unchanged and successful product Lightning
 served-by counts remain **0 CLI calls and 0 daemon requests**. LND ancillary,
 error/TLS/proxy parity, shared backend/capability services, public wiring,
 registration and product wire/CSV/all-table acceptance remain required.
+
+### R5 Lightning LND ancillary and transport continuation (incomplete)
+
+The first boundary on `t3code/r5-reports-lightning-4`, based on `8b63484d6`,
+retains LND ancillary refusals and their resource order, including checks on
+unused snapshot fields. Its 535-case corpus and loopback process TLS/proxy
+matrix preserve the Python projection and recorded quirks while keeping raw
+responses out of native errors. The
+[continuation checkpoint](../reference/rust-shell.md#lnd-ancillary-and-transport-continuation-r5-incomplete)
+records evidence and explicit privacy differences. Shared backend/capability
+and grant services, CLI/daemon registration and zero-fallback product
+wire/CSV/all-table acceptance remain required; product served-by counts stay
+zero.

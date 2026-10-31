@@ -10574,3 +10574,56 @@ Remaining work, in order:
    against Python, with zero in-scope fallbacks and named service/transport
    mutation kills. Node-snapshot/backend-test routes and AI projections keep
    their separately scoped deferrals.
+
+## LND ancillary and transport continuation (R5, incomplete)
+
+`t3code/r5-reports-lightning-4` starts at `8b63484d6`. Its first boundary
+completes the report client's unused-snapshot checks: fee policies, open and
+closed channel balances, pending-HTLC collection lengths, closed timestamps,
+node/channel/onchain balances, forward amounts and collection iteration.
+Parsing now follows the reference's resource sequence, including requests
+that precede an eventual ancillary refusal. Closed channels remain absent
+from report rows. Optional alias lookups propagate authority failures, and
+the client rechecks authority before returning its projection.
+
+The frozen corpus grows from 85 to **535 cases: 467 successes and 68
+refusals**. It compares the complete request sequence and curated projection.
+The terminal-newline cases reproduce Python's `$` regex quirk for short ids
+and funding outpoints; Rust preserves it. No Python product code is changed.
+
+The process matrix compares owned loopback nodes through direct HTTP, verified
+TLS, custom CAs supplied by path or inline PEM, explicit insecure TLS, HTTP
+forward/CONNECT proxies and SOCKS5 remote-DNS routing. Untrusted certificates
+and wrong names refuse before sending node credentials. Separate comparisons
+pin HTTP status/auth failures, malformed JSON, response shape and invalid
+UTF-8. Invalid UTF-8 retains Python's non-retryable `internal_error` category;
+unexpected response shapes retain their safe `response_type` detail.
+
+The intentional privacy differences remain: native errors omit raw HTTP
+bodies, malformed JSON previews and offending ancillary values. Transport/TLS
+messages describe the native stack rather than reproducing Python/OpenSSL
+text. These differences must remain explicit in product error comparisons.
+
+The new boundary passes all **103 chain/net checks** and **21 Python process
+and oracle tests**, with no skipped process cases. The chain catalog adds nine
+ancillary/quirk mutations and reshapes two inherited entries around the
+deferred parsing boundary. All eleven build and are killed after all three
+named unmutated selections pass; the remaining inherited entries are not
+rerun. All **78 catalog entries** apply. Verification output and summaries
+live under `target/r5-lightning-4/`; scratch and builds stay under this
+worktree's `target/`, with offline/locked Cargo and four build jobs.
+Formatting and chain/net all-target clippy pass with warnings denied. The
+required classifier update records 5,723 definitions; required CI preflight
+passes all 57 checks. Mutation builds are removed after their summary. The
+initial environment sync inherited a 167 MB external intermediate cache;
+that owned cache is removed, and all subsequent Cargo invocations override
+both final and intermediate build locations into this worktree's `target/`.
+
+The product route inventory is unchanged. Successful Rust-served calls remain
+**0** for each of `reports lightning-profitability`,
+`reports export-lightning-profitability-csv` and
+`ui.reports.lightning_profitability`. Shared backend/capability/authority
+services, public CLI/daemon wiring and registration, product wire/CSV/all-112-
+table comparisons, zero-fallback counts and service/transport mutation kills
+remain required. Node-snapshot/backend-test routes and AI projections retain
+their separately scoped deferrals.

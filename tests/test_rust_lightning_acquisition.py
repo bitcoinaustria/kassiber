@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import threading
+import textwrap
 
 import pytest
 
@@ -72,11 +73,101 @@ print(json.dumps({'channels': [{'id': c.id, 'peer_alias': c.peer_alias,
     for c in snapshot.channels], 'routing': asdict(snapshot.routing) if snapshot.routing else None}))
 """
 
+PYTHON_OUTCOME = "try:\n" + textwrap.indent(PYTHON_READ, "    ") + """
+except Exception as error:
+    from kassiber.errors import AppError
+    print(json.dumps({'error': {'code': error.code if isinstance(error, AppError) else 'internal_error',
+        'message': str(error), 'retryable': error.retryable if isinstance(error, AppError) else False}}))
+"""
+
+
+def outcome(native, data, root):
+    data = {"window": 30, "version": __version__, **data}
+    result = subprocess.run([BIN] if native else [sys.executable, "-c", PYTHON_OUTCOME],
+                            cwd=ROOT, env=environment(root), input=json.dumps(data),
+                            text=True, capture_output=True, check=True, timeout=20)
+    output = json.loads(result.stdout)
+    return output["response"] if native else output
+
+
+@pytest.mark.skipif(not BIN, reason="requires native Lightning acquisition fixture")
+def test_lnd_ancillary_real_process_refusals_match_reference_request_order(tmp_path):
+    cases = json.loads((ROOT / "crates/chain/fixtures/python_lightning.json").read_text())
+    selected = [c for c in cases[85:] if "error" in c][::5]
+    assert len(selected) >= 10
+    for case in selected:
+        outputs, requests = [], []
+        for native in [False, True]:
+            with node(case["calls"]) as (url, hits):
+                output = outcome(native, {"backend": {"kind": "lnd", "name": "fake", "url": url,
+                                                     "token": "ABCD", "timeout": 2},
+                                          "window": case["window"]}, tmp_path)
+                outputs.append(output["error"]["code"])
+                requests.append([h["path"] for h in hits])
+        assert outputs == ["internal_error", "internal_error"], case["name"]
+        assert requests[0] == requests[1], case["name"]
+
+
+@pytest.mark.skipif(not BIN, reason="requires native Lightning acquisition fixture")
+@pytest.mark.parametrize("tls,proxy,trust,success", [
+    (False, None, None, True),
+    (True, None, "path", True), (True, None, "inline", True),
+    (True, None, "insecure", True), (True, None, None, False),
+    (False, "http", None, True), (False, "socks5h", None, True),
+    (True, "http", "path", True), (True, "socks5h", "path", True),
+    (True, "socks5h", "wrong-name", False),
+])
+def test_lnd_tls_and_explicit_proxy_process_matrix(tmp_path, tls, proxy, trust, success):
+    from tests.rust_port.lightning_transport import transport
+    calls = [{"response": {}}] * 9
+    for native in [False, True]:
+        with transport(calls, tls=tls, proxy=proxy, wrong_name=trust == "wrong-name") as (backend, hits, routes):
+            if trust in {"path", "wrong-name"}:
+                backend["certificate"] = str(ROOT / "crates/net/tests/fixtures/ca.pem")
+            elif trust == "inline":
+                backend["certificate"] = (ROOT / "crates/net/tests/fixtures/ca.pem").read_text()
+            elif trust == "insecure":
+                backend["insecure"] = "\x1cTRUE\x1f"
+            output = outcome(native, {"backend": backend}, tmp_path)
+            if success:
+                actual = output["result"] if native else output
+                assert actual["routing"]["net_profit_sat"] == 0, output
+                assert len(hits) == 9
+                assert all("grpc-metadata-macaroon: aabb" in h["request"].lower() for h in hits)
+                if proxy:
+                    assert len(routes) == (9 if tls or proxy == "socks5h" else 0)
+            else:
+                assert output["error"]["code"] == "backend_error"
+                assert hits == []
+
+
+@pytest.mark.skipif(not BIN, reason="requires native Lightning acquisition fixture")
+@pytest.mark.parametrize("status,raw,code", [
+    (401, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (403, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (503, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (200, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (200, b"[]", "backend_error"),
+    (200, b"\xff", "internal_error"),
+])
+def test_lnd_process_errors_preserve_codes_and_discard_raw_responses(tmp_path, status, raw, code):
+    from tests.rust_port.lightning_transport import transport
+    outputs = []
+    for native in [False, True]:
+        with transport([{"response": {}}], status=status, raw=raw) as (backend, hits, _):
+            output = outcome(native, {"backend": backend}, tmp_path)
+            assert output["error"]["code"] == code
+            assert len(hits) == 1
+            if native:
+                assert "SYNTHETIC_RESPONSE_SECRET" not in json.dumps(output)
+            outputs.append(output)
+    assert outputs[0]["error"]["retryable"] == outputs[1]["error"]["retryable"]
+
 
 @pytest.mark.skipif(not BIN, reason="requires native Lightning acquisition fixture")
 def test_lnd_report_real_transport_processes_match_python_without_fallback(tmp_path):
     cases = json.loads((ROOT / "crates/chain/fixtures/python_lightning.json").read_text())
-    selected = [c for c in cases if "error" not in c][::7]
+    selected = [c for c in cases[:85] if "error" not in c][::7]
     assert len(selected) == 12
     for case in selected:
         outputs, requests = [], []
