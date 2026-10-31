@@ -89,6 +89,11 @@ The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
 escaped quotes. The Rust redactors must adopt the shared credential corpus
 during Rust integration.
 
+Complete quoted values are scrubbed across line breaks. If the closing quote
+is missing, the floor scrubs through the next whitespace or end of line. Python
+and the webview share exact expected outputs in
+`tests/fixtures/secret_redaction_cases.json`, including truncated diagnostics.
+
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
 default with a time-bounded raw view; exports choose `high_signal`

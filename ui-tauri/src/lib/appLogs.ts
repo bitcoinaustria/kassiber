@@ -139,7 +139,7 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)(["'])((?:\\[^\r\n]|(?!\3)[^\\\r\n])*)\3/gi,
+    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3/gi,
     "$1$2$3[redacted]$3",
   ],
   [
@@ -150,9 +150,12 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   // pattern above stops at the key's closing quote, so the quoted value
   // survives without this; keep the key and redact the value in place.
   [
-    /(["'](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)["']\s*:\s*)(["'])((?:\\[^\r\n]|(?!\2)[^\\\r\n])*)\2/gi,
+    /(["'](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)["']\s*:\s*)(["'])((?:\\[\s\S]|(?!\2)[^\\])*)\2/gi,
     '$1$2[redacted]$2',
   ],
+  // Truncated quoted values stop at whitespace or the end of the line.
+  [/\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)(["'])(?!\[redacted\])[^\s]*/gi, "$1$2$3[redacted]"],
+  [/(["'](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)["']\s*:\s*)(["'])(?!\[redacted\])[^\s]*/gi, "$1$2[redacted]"],
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =
