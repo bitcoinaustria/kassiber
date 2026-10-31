@@ -62,7 +62,10 @@ is observed. The next SDK step is refused and no observer result is applied.
 Esplora remains on the compatibility route with per-request cancellation checks.
 
 Compatibility Esplora and Electrum history caches are bound to the observed
-chain tip, including block identity rather than height alone. An identical tip
+highest observed history/header block, including block identity rather than
+height alone. A history read that races above the initial tip advances the
+anchor to that exact block (and the exact timestamp-supplying Electrum header).
+Checkpoints predating this bound rebuild once. An identical tip
 permits the existing counter/status cache checks. On a taller tip, the observer
 checks that the previously saved tip block still belongs to the current chain;
 Esplora also binds its new tip height to the observed hash. Proven extensions

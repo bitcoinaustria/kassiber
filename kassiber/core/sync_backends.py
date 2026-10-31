@@ -3003,6 +3003,8 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     proxy_url = _backend_proxy_url(backend)
     ssl_context = _backend_ssl_context(backend)
     checkpoint = _checkpoint_mapping(sync_state)
+    kwargs = _esplora_call_kwargs(timeout=timeout, headers=headers,
+                                 proxy_url=proxy_url, ssl_context=ssl_context)
     tip_hash = _esplora_tip_hash(
         backend["url"],
         **_esplora_call_kwargs(timeout=timeout, headers=headers,
@@ -3012,8 +3014,6 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     previous_height = _cache_anchor_height(checkpoint.get("esplora_tip_height"))
     tip_height = previous_height if same_tip else None
     if tip_hash is not None and tip_height is None:
-        kwargs = _esplora_call_kwargs(timeout=timeout, headers=headers,
-                                     proxy_url=proxy_url, ssl_context=ssl_context)
         observed_height = _cache_anchor_height(_esplora_tip_height(backend["url"], **kwargs))
         # Bind height to the actual observed hash, including a racing tip read.
         if observed_height is not None and _esplora_block_hash(
@@ -3023,6 +3023,8 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
             if previous_height is not None and tip_height > previous_height:
                 previous_hash = _esplora_block_hash(backend["url"], previous_height, **kwargs)
                 same_tip = previous_hash is not None and previous_hash == checkpoint.get("esplora_tip_hash")
+    # Older checkpoints can contain confirmations above their recorded anchor.
+    same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 1
     # Bind the complete private transport configuration, not just the backend
     # name. This digest remains inside the local-only freshness checkpoint.
     # A different endpoint, credential, route or TLS policy cannot inherit
@@ -3259,11 +3261,24 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 transactions_total=len(sorted_transactions),
                 records=len(records),
             )
+    # A block can arrive after the initial tip read. Bind reuse to the highest
+    # block actually represented by the cached history, including its identity.
+    highest = max(
+        transactions_by_txid.values(),
+        key=lambda tx: _cache_anchor_height((tx.get("status") or {}).get("block_height")) or 0,
+        default={},
+    ).get("status") or {}
+    highest_height = _cache_anchor_height(highest.get("block_height"))
+    if tip_height is not None and highest_height is not None and highest_height > tip_height:
+        observed_hash = _esplora_block_hash(backend["url"], highest_height, **kwargs)
+        tip_hash = observed_hash if observed_hash == highest.get("block_hash") else None
+        tip_height = highest_height if tip_hash is not None else None
     membership_checkpoint, retracted, history_complete = memberships.finish()
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
             "esplora_tip_hash": tip_hash,
+            "compatibility_history_anchor_version": 1,
             "esplora_tip_height": tip_height,
             "esplora_scripthashes": dict(sorted(next_stats.items())),
             "esplora_history_memberships": membership_checkpoint,
@@ -5038,6 +5053,8 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             previous_fingerprint = _electrum_header_fingerprint(previous_header)
             same_tip = (previous_fingerprint is not None and previous_fingerprint
                         == checkpoint.get("electrum_tip_fingerprint"))
+        same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 1
+        header_fingerprints = {}
         if not same_tip:
             # Subscription statuses contain txids/heights, not block identity.
             # Even identical history entries can have new confirmation times.
@@ -5171,6 +5188,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             if normalized_height not in header_timestamps:
                 header_hex = client.call("blockchain.block.header", [normalized_height])
                 header_timestamps[normalized_height] = block_header_timestamp(header_hex)
+                header_fingerprints[normalized_height] = _electrum_header_fingerprint(header_hex)
             return header_timestamps[normalized_height]
 
         txids = {}
@@ -5253,6 +5271,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 )
                 for height, header_hex in zip(missing_heights, header_hexes):
                     header_timestamps[height] = block_header_timestamp(header_hex)
+                    header_fingerprints[height] = _electrum_header_fingerprint(header_hex)
         for tx_index, (txid, history) in enumerate(ordered_histories, start=1):
             occurred_at = _history_occurred_at(history, height_to_timestamp)
             if sync_state.chain == "liquid":
@@ -5298,6 +5317,12 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions_total=len(ordered_histories),
                     records=len(records),
                 )
+        highest_height = max(header_timestamps, default=0)
+        if tip_height is not None and highest_height > tip_height:
+            # Use the exact header that supplied the cached timestamp; a later
+            # tip read could instead anchor stale data to the replacement fork.
+            tip_fingerprint = header_fingerprints.get(highest_height)
+            tip_height = highest_height if tip_fingerprint is not None else None
     # The known-txid set is fully derivable from the persisted history
     # entries, so drop the redundant legacy key instead of storing the same
     # txids twice per scripthash (including any copy left by older syncs).
@@ -5306,6 +5331,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         {
             "backend": _backend_identity(backend, sync_state),
             "electrum_tip_fingerprint": tip_fingerprint,
+            "compatibility_history_anchor_version": 1,
             "electrum_tip_height": tip_height,
             "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
             "electrum_headers": {

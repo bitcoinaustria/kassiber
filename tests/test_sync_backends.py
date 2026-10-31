@@ -2036,6 +2036,7 @@ class SyncBackendsTest(unittest.TestCase):
             tracked_scripts={target["script_pubkey"]: target},
             history_cache={old_txid: old_graph},
             checkpoint={
+                "compatibility_history_anchor_version": 1,
                 "electrum_stored_graph_version": 1,
                 "electrum_history_entries": {scripthash: {old_txid: old_history}},
                 "electrum_tip_fingerprint": "ab" * 32,
