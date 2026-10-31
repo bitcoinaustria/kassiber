@@ -3,11 +3,11 @@ use super::*;
 use crate::python_text::{decimal_digit, PythonText};
 use money::{empty, Money};
 
-pub(super) fn valid(records: &Value, rows: &Value) -> Result<Value, String> {
+pub(super) fn valid(records: &Value, rows: &dyn Rows) -> Result<Value, String> {
     let mut result = json!({});
     for record in records.as_array().unwrap() {
         let id = text(&record["out_transaction_id"]);
-        let row = &rows[&id];
+        let row = rows.row(&id);
         if row.is_null() {
             continue;
         }
@@ -325,7 +325,7 @@ pub(super) fn time(payout: &Value) -> Result<Value, String> {
         .ok_or_else(|| "AppError".into())
 }
 
-pub(super) fn settlement(obs: &Value, payout: &Value, rows: &Value) -> Result<Value, Error> {
+pub(super) fn settlement(obs: &Value, payout: &Value, rows: &dyn Rows) -> Result<Value, Error> {
     let amount = integer_big(&payout["payout_amount"])?;
     let value = &payout["payout_fiat_value"];
     if amount <= BigInt::from(0) || empty(value) {
@@ -343,7 +343,7 @@ pub(super) fn settlement(obs: &Value, payout: &Value, rows: &Value) -> Result<Va
         string(&obs["anchor_transaction_id"])
     };
     let at = time(payout)?;
-    let mut base = base_row(obs, rows)?;
+    let mut base = base_row_with_rows(obs, rows)?;
     base["asset"] = json!(text(&payout["payout_asset"]).py_upper());
     base["amount"] = number(&amount);
     base["fee"] = json!(0);

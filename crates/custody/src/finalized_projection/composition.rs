@@ -148,9 +148,19 @@ pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
 
 /// Diagnostic records remain CPython values for their entire lifetime.
 pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Error> {
+    evaluate_with_rows(v, diagnostics, &v["rows"])
+}
+
+pub(super) fn evaluate_with_rows(
+    v: &Value,
+    diagnostics: &[Py],
+    rows: &dyn Rows,
+) -> Result<Py, Error> {
+    use super::fee_row_with_rows as fee_row;
+    use super::principal::slice_row_with_rows as slice_row;
     let finalize = v["op"] == "finalize";
     let payouts = if v["op"] == "compose" || finalize {
-        payouts::valid(&v["payouts"], &v["rows"])?
+        payouts::valid(&v["payouts"], rows)?
     } else {
         Value::Null
     };
@@ -205,14 +215,13 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Err
         .iter()
         .map(slice_key)
         .collect::<Result<_, _>>()?;
-    let rows = &v["rows"];
     let mut projected = Vec::new();
     let mut intra = Vec::new();
     let mut cross = Vec::new();
     let mut moves = Vec::new();
     let mut barrier_receipts = Vec::new();
     let mut quarantines =
-        super::quarantines::Quarantines::with_interpreter(v, &closure, diagnostics)?;
+        super::quarantines::Quarantines::with_interpreter(v, &closure, diagnostics, rows)?;
     let mut fees = FeeAllocation::from_decisions(decisions.iter().copied())?;
     for d in &decisions {
         let source = observation(&observations, &d["source"])?;
@@ -362,7 +371,7 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Err
     let mut ordered: Vec<_> = array(&v["observations"]).iter().collect();
     ordered.sort_by_cached_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
     for o in ordered {
-        if o["direction"] != "inbound" || rows.get(string(&o["transaction_id"])).is_none() {
+        if o["direction"] != "inbound" || rows.get(&string(&o["transaction_id"])).is_none() {
             continue;
         }
         let anchor = string(&o["anchor_transaction_id"]);

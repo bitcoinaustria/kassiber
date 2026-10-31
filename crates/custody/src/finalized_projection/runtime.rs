@@ -170,18 +170,35 @@ pub fn stage_with_confirmations(
     quantity: &Py,
     interpreter: &Py,
 ) -> Result<Py, super::Error> {
-    let mut rows = Map::new();
-    for (row, confirmation) in snapshot.transactions.iter().zip(captured) {
-        let mut row = Value::Object(row.clone().into_map());
-        row["_closed_confirmation_observation"] = confirmation;
+    struct BorrowedRows<'a>(std::collections::HashMap<String, (&'a Value, Value)>);
+    impl super::Rows for BorrowedRows<'_> {
+        fn get(&self, id: &str) -> Option<&Value> {
+            self.0.get(id).map(|(row, _)| *row)
+        }
+
+        fn nonempty(&self, id: &str) -> bool {
+            self.0.contains_key(id)
+        }
+
+        fn copy(&self, id: &str) -> Value {
+            let Some((row, confirmation)) = self.0.get(id) else {
+                return Value::Null;
+            };
+            let mut row = (*row).clone();
+            row["_closed_confirmation_observation"] = confirmation.clone();
+            row
+        }
+    }
+    let mut rows = std::collections::HashMap::with_capacity(captured.len());
+    for (row, confirmation) in snapshot.rows().iter().zip(captured) {
         let id = if codec::truth(&row["id"]) {
             codec::pystr(&row["id"])
         } else {
             String::new()
         };
-        rows.insert(id, row);
+        rows.insert(id, (row, confirmation));
     }
-    stage_with_rows(snapshot, Value::Object(rows), quantity, interpreter)
+    stage_with_row_source(snapshot, &BorrowedRows(rows), quantity, interpreter)
 }
 
 /// Assemble Python compiler operands from previously computed Rust stages.
@@ -189,6 +206,15 @@ pub fn stage_with_confirmations(
 pub fn stage_with_rows(
     snapshot: &Snapshot,
     rows: Value,
+    quantity: &Py,
+    interpreter: &Py,
+) -> Result<Py, super::Error> {
+    stage_with_row_source(snapshot, &rows, quantity, interpreter)
+}
+
+fn stage_with_row_source(
+    snapshot: &Snapshot,
+    rows: &dyn super::Rows,
     quantity: &Py,
     interpreter: &Py,
 ) -> Result<Py, super::Error> {
@@ -244,7 +270,6 @@ pub fn stage_with_rows(
         "profile".into(),
         Value::Object(snapshot.profile.clone().into_map()),
     );
-    input.insert("rows".into(), rows);
     input.insert(
         "observations".into(),
         records(stored::get(projection, "observations"), observation)?,
@@ -284,9 +309,10 @@ pub fn stage_with_rows(
     let input = Value::Object(input);
     drop(span);
     let _span = crate::timing::span("finalized.compose");
-    super::compose_lossless_detailed(
+    super::composition::evaluate_with_rows(
         &input,
         stored::list(stored::get(interpreter, "quarantines")),
+        rows,
     )
     .map_err(|error| {
         if error.code == "AppError" {

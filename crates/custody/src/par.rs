@@ -9,7 +9,7 @@ use std::thread;
 /// Items per worker below which the work stays on the calling thread.
 const MIN_CHUNK: usize = 64;
 /// Upper bound on workers, so a large machine is not monopolized.
-const MAX_WORKERS: usize = 8;
+const MAX_WORKERS: usize = 1;
 
 /// The outcome of one item: its value, or the panic it raised.
 pub(crate) type Outcome<R> = thread::Result<R>;

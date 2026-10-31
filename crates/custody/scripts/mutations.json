@@ -20446,8 +20446,8 @@
   {
     "id": "projection-base-anchor",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "&rows[text(&observation[\"anchor_transaction_id\"])]",
-    "replace": "&Value::Null",
+    "find": "let id = if rows.nonempty(&id) {\n        id\n    } else {\n        text(&observation[\"anchor_transaction_id\"])\n    };",
+    "replace": "let id = id;",
     "expect_failing": [
       "projection_base_row_vectors"
     ],
@@ -20456,8 +20456,8 @@
   {
     "id": "projection-base-source",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "let source = if codec::truth(source) {",
-    "replace": "let source = if false {",
+    "find": "let id = if rows.nonempty(&id) {",
+    "replace": "let id = if false {",
     "expect_failing": [
       "projection_base_row_vectors"
     ],
@@ -20476,7 +20476,7 @@
   {
     "id": "projection-base-copy",
     "file": "crates/custody/src/finalized_projection.rs",
-    "find": "source.clone()",
+    "find": "rows.copy(&id)",
     "replace": "json!({})",
     "expect_failing": [
       "projection_base_row_vectors"
@@ -22146,8 +22146,8 @@
   {
     "id": "projection8-row-order",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    for (row, confirmation) in snapshot.transactions.iter().zip(captured) {",
-    "replace": "    for (row, confirmation) in snapshot.transactions.iter().zip(captured).rev() {",
+    "find": "    for (row, confirmation) in snapshot.rows().iter().zip(captured) {",
+    "replace": "    for (row, confirmation) in snapshot.rows().iter().zip(captured).rev() {",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22166,8 +22166,8 @@
   {
     "id": "projection8-raw-rows",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    input.insert(\"rows\".into(), rows);",
-    "replace": "    input.insert(\"rows\".into(), json!({}));",
+    "find": "        rows,\n    )\n    .map_err(|error| {",
+    "replace": "        &json!({}),\n    )\n    .map_err(|error| {",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22556,7 +22556,7 @@
   {
     "id": "projection-review-sweep-M17",
     "file": "crates/custody/src/finalized_projection/quarantines.rs",
-    "find": "input[\"rows\"].get(&id).is_some()",
+    "find": "rows.get(&id).is_some()",
     "replace": "true",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -22576,7 +22576,7 @@
   {
     "id": "projection-review-sweep-M19",
     "file": "crates/custody/src/finalized_projection/quarantines.rs",
-    "find": "if self.input[\"rows\"].get(&id).is_none() {\n                    continue;",
+    "find": "if self.rows.get(&id).is_none() {\n                    continue;",
     "replace": "if false {\n                    continue;",
     "expect_failing": [
       "projection_review_operator_sweep"
@@ -23283,5 +23283,65 @@
       "fusion_graphless_rows_match_confirmation_detectors"
     ],
     "rule": "Custody slices with a stored graph retain pending and closed-confirmation holds."
+  },
+  {
+    "id": "projection-borrowed-confirmation",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "row[\"_closed_confirmation_observation\"] = confirmation.clone();",
+    "replace": "row[\"_closed_confirmation_observation\"] = Value::Null;",
+    "expect_failing": [
+      "projection_borrowed_rows_match_materialized_rows"
+    ],
+    "rule": "Borrowed source rows preserve each admitted confirmation when materialized."
+  },
+  {
+    "id": "projection-borrowed-empty-row",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "self.0.contains_key(id)",
+    "replace": "self.0.get(id).is_some_and(|(row, _)| codec::truth(row))",
+    "expect_failing": [
+      "projection_borrowed_rows_match_materialized_rows"
+    ],
+    "rule": "An empty source row becomes nonempty after its closed confirmation is attached."
+  },
+  {
+    "id": "hash-borrowed-key-order",
+    "file": "crates/custody/src/codec.rs",
+    "find": "fields.sort_unstable_by(|a, b| a.0.cmp(b.0));",
+    "replace": "fields.sort_unstable_by(|a, b| b.0.cmp(a.0));",
+    "expect_failing": [
+      "borrowed_hash_preimages_match_python_values"
+    ],
+    "rule": "Canonical borrowed hashing sorts keys by Python string order."
+  },
+  {
+    "id": "hash-borrowed-ascii",
+    "file": "crates/custody/src/codec.rs",
+    "find": "hash_json_into(v, &Options::new().ensure_ascii(ascii), 0, &mut text)",
+    "replace": "hash_json_into(v, &Options::new().ensure_ascii(false), 0, &mut text)",
+    "expect_failing": [
+      "borrowed_hash_preimages_match_python_values"
+    ],
+    "rule": "Borrowed hash preimages retain the requested Unicode escaping."
+  },
+  {
+    "id": "hash-borrowed-float",
+    "file": "crates/custody/src/codec.rs",
+    "find": "if !value.is_finite() {\n                    return None;",
+    "replace": "if false {\n                    return None;",
+    "expect_failing": [
+      "borrowed_hash_preimages_match_python_values"
+    ],
+    "rule": "Nonfinite hash operands retain the Python JSON spelling through fallback."
+  },
+  {
+    "id": "hash-borrowed-uint",
+    "file": "crates/custody/src/codec.rs",
+    "find": "} else if let Some(value) = value.as_u64() {\n                write!(out, \"{value}\").ok()?;",
+    "replace": "} else if let Some(value) = value.as_u64() {\n                write!(out, \"{}\", value as i64).ok()?;",
+    "expect_failing": [
+      "borrowed_hash_preimages_match_python_values"
+    ],
+    "rule": "Unsigned hash quantities above i64 remain exact positive integers."
   }
 ]

@@ -48,6 +48,7 @@ fn rank(reason: &str) -> (usize, &str) {
 
 pub(super) struct Quarantines<'a> {
     input: &'a Value,
+    rows: &'a dyn Rows,
     records: BTreeMap<Key, Py>,
     interpreter: BTreeSet<Key>,
 }
@@ -56,9 +57,11 @@ impl<'a> Quarantines<'a> {
         input: &'a Value,
         closure: &Value,
         diagnostics: &[Py],
+        rows: &'a dyn Rows,
     ) -> Result<Self, String> {
         let mut result = Self {
             input,
+            rows,
             records: BTreeMap::new(),
             interpreter: BTreeSet::new(),
         };
@@ -87,7 +90,7 @@ impl<'a> Quarantines<'a> {
             .map(string)
             .collect();
         for id in array(&closure["blocked"]).iter().map(string) {
-            if !explicit.contains(&id) && input["rows"].get(&id).is_some() {
+            if !explicit.contains(&id) && rows.get(&id).is_some() {
                 result.insert(
                     &id,
                     "transfer_pair_dependency_blocked",
@@ -125,7 +128,7 @@ impl<'a> Quarantines<'a> {
     }
     pub(super) fn basis(&mut self, source: &Value) -> Result<(), String> {
         let id = string(&source["anchor_transaction_id"]);
-        if self.input["rows"].get(&id).is_none() {
+        if self.rows.get(&id).is_none() {
             return Ok(());
         }
         let implausible = array(&self.input["issues"]).iter().any(|issue| {
@@ -173,7 +176,7 @@ impl<'a> Quarantines<'a> {
                 continue;
             }
             for id in array(&issue["transaction_ids"]).iter().map(string) {
-                if self.input["rows"].get(&id).is_none() {
+                if self.rows.get(&id).is_none() {
                     continue;
                 }
                 let reason = if issue["reason"] == "transfer_fee_implausible" {

@@ -29,6 +29,8 @@ pub fn from_json(v: &Value) -> Result<Py, String> {
         Value::Null => Py::Null,
         Value::Bool(v) => Py::Bool(*v),
         Value::String(v) => Py::Str(v.as_str().into()),
+        Value::Number(n) if n.as_i64().is_some() => Py::Int(n.as_i64().unwrap().into()),
+        Value::Number(n) if n.as_u64().is_some() => Py::Int(n.as_u64().unwrap().into()),
         Value::Number(n) => {
             let s = n.to_string();
             if s.contains(['.', 'e', 'E']) {
@@ -188,7 +190,15 @@ pub fn to_json(v: &Py) -> Value {
     match v {
         Py::Null => Value::Null,
         Py::Bool(v) => Value::Bool(*v),
-        Py::Int(v) => serde_json::from_str(&v.to_string()).unwrap_or(Value::Null),
+        Py::Int(v) => {
+            if let Ok(n) = i64::try_from(v) {
+                Value::from(n)
+            } else if let Ok(n) = u64::try_from(v) {
+                Value::from(n)
+            } else {
+                serde_json::from_str(&v.to_string()).unwrap_or(Value::Null)
+            }
+        }
         Py::Float(v) => serde_json::Number::from_f64(*v)
             .map(Value::Number)
             .unwrap_or(Value::Null),
@@ -306,8 +316,70 @@ pub fn hash_py(v: &Py, ascii: bool) -> Result<(String, String), String> {
     let text = dumps(v, ascii)?;
     Ok((sha256(&text), text))
 }
+fn hash_json_into(v: &Value, options: &Options, depth: usize, out: &mut String) -> Option<()> {
+    use std::fmt::Write;
+    match v {
+        Value::Null => out.push_str("null"),
+        Value::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+        Value::String(value) => kassiber_pyjson::dumps_str_into(value, options, out),
+        Value::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                write!(out, "{value}").ok()?;
+            } else if let Some(value) = value.as_u64() {
+                write!(out, "{value}").ok()?;
+            } else {
+                let text = value.to_string();
+                if !text.contains(['.', 'e', 'E']) {
+                    return None;
+                }
+                let value: f64 = text.parse().ok()?;
+                if !value.is_finite() {
+                    return None;
+                }
+                out.push_str(&kassiber_pyjson::float_repr(value));
+            }
+        }
+        Value::Array(values) => {
+            if !values.is_empty() && depth >= 900 {
+                return None;
+            }
+            out.push('[');
+            for (index, value) in values.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                hash_json_into(value, options, depth + 1, out)?;
+            }
+            out.push(']');
+        }
+        Value::Object(values) => {
+            if !values.is_empty() && depth >= 900 {
+                return None;
+            }
+            let mut fields: Vec<_> = values.iter().collect();
+            fields.sort_unstable_by(|a, b| a.0.cmp(b.0));
+            out.push('{');
+            for (index, (key, value)) in fields.into_iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                kassiber_pyjson::dumps_str_into(key, options, out);
+                out.push(':');
+                hash_json_into(value, options, depth + 1, out)?;
+            }
+            out.push('}');
+        }
+    }
+    Some(())
+}
+
 pub fn hash(v: &Value, ascii: bool) -> Result<(String, String), String> {
-    hash_py(&from_json(v)?, ascii)
+    let mut text = String::new();
+    if hash_json_into(v, &Options::new().ensure_ascii(ascii), 0, &mut text).is_some() {
+        Ok((sha256(&text), text))
+    } else {
+        hash_py(&from_json(v)?, ascii)
+    }
 }
 pub fn sha256(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))

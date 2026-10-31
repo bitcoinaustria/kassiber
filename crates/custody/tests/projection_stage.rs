@@ -94,6 +94,68 @@ fn projection_adapter_input_families() {
 }
 
 #[test]
+fn projection_borrowed_rows_match_materialized_rows() {
+    use serde_json::{json, Map, Value};
+    let mut cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_adapter.json"
+    ))
+    .unwrap();
+    let mut empty = cases
+        .iter()
+        .find(|c| c["case"] == "ordinary_rows")
+        .unwrap()
+        .clone();
+    empty["case"] = json!("empty_source_row");
+    empty["input"]["transactions"][0] = json!({});
+    empty["quantity"]["projection"]["observations"][0]["transaction_id"] = json!("");
+    cases.push(empty);
+    for case in cases {
+        let snapshot: Snapshot = serde_json::from_value(case["input"].clone()).unwrap();
+        let quantity = codec::from_json(&case["quantity"]).unwrap();
+        let interpreter = codec::from_json(&case["interpretation"]).unwrap();
+        for count in [
+            0,
+            snapshot.transactions.len().saturating_sub(1),
+            snapshot.transactions.len(),
+        ] {
+            let captured: Vec<_> = (0..count).map(|index| json!({"row":index})).collect();
+            let mut rows = Map::new();
+            for (row, confirmation) in snapshot.transactions.iter().zip(&captured) {
+                let mut row = Value::Object(row.clone().into_map());
+                row["_closed_confirmation_observation"] = confirmation.clone();
+                let id = if codec::truth(&row["id"]) {
+                    codec::pystr(&row["id"])
+                } else {
+                    String::new()
+                };
+                rows.insert(id, row);
+            }
+            let encode = |result: Result<Py, kassiber_custody::finalized_projection::Error>| {
+                result
+                    .map(|v| codec::dumps(&v, true).unwrap())
+                    .map_err(|e| (e.code, e.message))
+            };
+            assert_eq!(
+                encode(runtime::stage_with_confirmations(
+                    &snapshot,
+                    captured,
+                    &quantity,
+                    &interpreter
+                )),
+                encode(runtime::stage_with_rows(
+                    &snapshot,
+                    Value::Object(rows),
+                    &quantity,
+                    &interpreter
+                )),
+                "{}:{count}",
+                case["case"]
+            );
+        }
+    }
+}
+
+#[test]
 fn projection_capture_precedes_rates() {
     let cases: serde_json::Value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/custody_projection_admission.json"

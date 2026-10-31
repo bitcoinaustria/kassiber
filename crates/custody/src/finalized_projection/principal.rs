@@ -8,7 +8,17 @@ pub fn slice_row(
     side: &str,
     fee: &BigInt,
 ) -> Result<Value, Error> {
-    let mut base = base_row(observation, rows)?;
+    slice_row_with_rows(observation, quantity, rows, side, fee)
+}
+
+pub(super) fn slice_row_with_rows(
+    observation: &Value,
+    quantity: &Value,
+    rows: &dyn Rows,
+    side: &str,
+    fee: &BigInt,
+) -> Result<Value, Error> {
+    let mut base = base_row_with_rows(observation, rows)?;
     let original = if codec::truth(&base["amount"]) {
         &base["amount"]
     } else {

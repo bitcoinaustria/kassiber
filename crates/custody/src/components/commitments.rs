@@ -4,19 +4,27 @@ use super::*;
 use crate::evidence;
 use kassiber_pyjson::{Key, Value as Py};
 
-pub(super) fn without_provenance<'a>(
-    row: impl IntoIterator<Item = (&'a String, &'a Value)>,
-) -> Record {
-    row.into_iter()
-        .filter(|(k, _)| !k.starts_with("observation_"))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect()
+struct WithoutProvenance<'a, R>(&'a R);
+impl<R: evidence::RowRecord> evidence::RowRecord for WithoutProvenance<'_, R> {
+    fn field(&self, key: &str) -> Option<&Value> {
+        if key.starts_with("observation_") {
+            None
+        } else {
+            self.0.field(key)
+        }
+    }
+
+    fn fields(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.0
+            .fields()
+            .filter(|(key, _)| !key.starts_with("observation_"))
+    }
 }
-fn order(row: &Record) -> (String, String, String) {
+fn order(row: &impl evidence::RowRecord) -> (String, String, String) {
     (
-        pystr(&row["occurred_at"]),
-        pystr(&row["created_at"]),
-        pystr(&row["id"]),
+        pystr(row.field("occurred_at").expect("no entry found for key")),
+        pystr(row.field("created_at").expect("no entry found for key")),
+        pystr(row.field("id").expect("no entry found for key")),
     )
 }
 fn anchors(legs: &[Value]) -> BTreeSet<String> {
@@ -38,9 +46,9 @@ pub(super) fn current(shared: &Shared, h: &Value, legs: &[Value]) -> Result<Vec<
         .into_iter()
         .map(|(_, r)| *r)
         .filter(|r| r.get("profile_id") == h.get("profile_id") && ids.contains(&pystr(&r["id"])))
-        .map(without_provenance)
+        .map(WithoutProvenance)
         .collect();
-    rows.sort_by_cached_key(order);
+    rows.sort_by_cached_key(|row| order(row.0));
     let enriched = evidence::enriched_rows(&rows)?;
     let canonical = evidence::canonical_input(&enriched, &json!({}), &BTreeSet::new())?;
     let rejected: BTreeSet<_> = array(&canonical["rejected_events"])
@@ -211,11 +219,8 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
         .iter()
         .filter(|r| r.get("profile_id") == Some(&profile) && !truth(&r["excluded"]))
         .collect();
-    let mut rows: Vec<_> = crate::par::map(&selected, |r| without_provenance(*r))
-        .into_iter()
-        .map(crate::par::unwrap)
-        .collect();
-    rows.sort_by_cached_key(order);
+    let mut rows: Vec<_> = selected.into_iter().map(WithoutProvenance).collect();
+    rows.sort_by_cached_key(|row| order(row.0));
     let rows = evidence::enriched_rows(&rows)?;
     let mut observations: Vec<Value> = Vec::new();
     // Position per encoded transaction id; encoding equality is Value equality.

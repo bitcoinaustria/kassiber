@@ -158,15 +158,41 @@ fn chain_order(row: &Value) -> Result<Value, String> {
     )
 }
 
+pub(super) trait Rows {
+    fn get(&self, id: &str) -> Option<&Value>;
+
+    fn copy(&self, id: &str) -> Value {
+        self.get(id).cloned().unwrap_or(Value::Null)
+    }
+
+    fn row(&self, id: &str) -> &Value {
+        self.get(id).unwrap_or(&Value::Null)
+    }
+
+    fn nonempty(&self, id: &str) -> bool {
+        codec::truth(self.row(id))
+    }
+}
+
+impl Rows for Value {
+    fn get(&self, id: &str) -> Option<&Value> {
+        Value::get(self, id)
+    }
+}
+
 pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, Error> {
-    let source = &rows[text(&observation["transaction_id"])];
-    let source = if codec::truth(source) {
-        source
+    base_row_with_rows(observation, rows)
+}
+
+fn base_row_with_rows(observation: &Value, rows: &dyn Rows) -> Result<Value, Error> {
+    let id = text(&observation["transaction_id"]);
+    let id = if rows.nonempty(&id) {
+        id
     } else {
-        &rows[text(&observation["anchor_transaction_id"])]
+        text(&observation["anchor_transaction_id"])
     };
-    let mut result = if codec::truth(source) {
-        source.clone()
+    let mut result = if rows.nonempty(&id) {
+        rows.copy(&id)
     } else {
         json!({})
     };
@@ -204,7 +230,16 @@ pub fn fee_row(
     rows: &Value,
     side: &str,
 ) -> Result<Value, Error> {
-    let mut base = base_row(observation, rows)?;
+    fee_row_with_rows(observation, amount, rows, side)
+}
+
+fn fee_row_with_rows(
+    observation: &Value,
+    amount: &BigInt,
+    rows: &dyn Rows,
+    side: &str,
+) -> Result<Value, Error> {
+    let mut base = base_row_with_rows(observation, rows)?;
     if codec::truth(&observation["authoritative_chain_observation"])
         && observation["fee_attribution"] == "exact"
     {

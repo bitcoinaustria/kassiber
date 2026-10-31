@@ -289,3 +289,23 @@ fn reconciled_observation_hashes_match_all_r0_vectors() {
         }
     }
 }
+
+#[test]
+fn borrowed_hash_preimages_match_python_values() {
+    for text in [
+        r#"{"é":{"🐍":"钱\n\t\u007f"},"a":[null,true,false,-0.0,1.0,1e-9,1e22]}"#,
+        "[0,-1,9223372036854775807,-9223372036854775808,18446744073709551615]",
+        "[18446744073709551616,-18446744073709551617,1e999,-1e999]",
+        "[1e999,-1e999]",
+        "[[],{},[{},[]]]",
+    ] {
+        let value: Value = serde_json::from_str(text).unwrap();
+        for ascii in [false, true] {
+            assert_eq!(
+                codec::hash(&value, ascii),
+                codec::hash_py(&codec::from_json(&value).unwrap(), ascii),
+                "{text}:{ascii}"
+            );
+        }
+    }
+}
