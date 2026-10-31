@@ -1944,6 +1944,22 @@ mutations and verification are recorded in the
 [21bitcoin checkpoint](../reference/rust-shell.md#21bitcoin-file-ingestion-continuation-r5-importers-batch-1-partial).
 Pocket/Pocketbitcoin and Strike remain before batch 1 is complete.
 
+### R5 exchange file-import batch 1: Pocket continuation (partial)
+
+Native `wallets import-pocket` / `import-pocketbitcoin` preserve gross-to-net
+withdrawal pairing, original header insertion order, stable date ordering,
+single-use candidates, BTC/LBTC aliases, exact Decimal prices/fees, integer
+msat, delivery versus execution timestamps and nested provenance. Both aliases
+share relevant/full evidence admission, default-wallet reuse, conservative
+profile-wide economic matching, excluded full rows, dedupe, runs and rollback.
+
+The 262 frozen Python files compare complete book dumps in both modes.
+Coordinator and encrypted/plaintext wire/state tests pin matching, ambiguity,
+window boundaries, reimports, wallet admission and atomic rollback. The 52
+added mutations and verification are recorded in the
+[Pocket checkpoint](../reference/rust-shell.md#pocket-file-ingestion-continuation-r5-importers-batch-1-partial).
+Strike remains before batch 1 is complete.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

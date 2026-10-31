@@ -280,6 +280,9 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port 21bitcoin active custodial ledger files with exact provider identities,
   legacy-flag cleanup, complete book-dump/rollback parity and named mutation
   killers. See the 21bitcoin continuation in plan 21.
+- [x] Port Pocket/Pocketbitcoin evidence files and both CLI aliases with exact
+  withdrawal pairing, complete book-dump/rollback parity and named mutation
+  killers. See the Pocket continuation in plan 21.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.

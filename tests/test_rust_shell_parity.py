@@ -1413,6 +1413,12 @@ class RustRealStoreParityTest(_Roots):
             "bad,header\nx,y\n", "",
         ], fiat_currency="EUR")
 
+    def test_pocket_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_cli_smoke import _POCKETBITCOIN_CSV
+        self._file_import_parity("import-pocket", [_POCKETBITCOIN_CSV,
+            "bad,header\nx,y\n", "",
+        ], extra=("--mode", "full"), fiat_currency="EUR")
+
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV
         scenarios = [
@@ -1594,6 +1600,7 @@ class RustShellDriftTest(unittest.TestCase):
         self.check("crates/wallets/scripts/generate_bull_vectors.py")
         self.check("crates/wallets/scripts/generate_coinfinity_vectors.py")
         self.check("crates/wallets/scripts/generate_twentyone_vectors.py")
+        self.check("crates/wallets/scripts/generate_pocket_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

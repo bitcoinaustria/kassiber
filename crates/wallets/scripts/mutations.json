@@ -595,7 +595,8 @@
     "find": "let invalidated = !imported.is_empty() || !updated.is_empty();",
     "replace": "let invalidated = false;",
     "expect_failing": [
-      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+      "csv_import_dedupe_batch_membership_and_journal_invalidation",
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
     ],
     "rule": "New and enriched observations invalidate the owning book journal."
   },
@@ -605,7 +606,8 @@
     "find": "for id in inserted_ids {",
     "replace": "for id in inserted_ids.into_iter().take(0) {",
     "expect_failing": [
-      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+      "csv_import_dedupe_batch_membership_and_journal_invalidation",
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
     ],
     "rule": "Only created transactions are linked to a run."
   },
@@ -626,7 +628,8 @@
     "replace": "RELEASE wallet_file_import",
     "expect_failing": [
       "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness",
-      "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness"
+      "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",
+      "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -1489,7 +1492,8 @@
       "river_metadata_failure_rolls_back_observations_tags_and_run",
       "bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
       "coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
-      "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness"
+      "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",
+      "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation"
     ],
     "rule": "River metadata failures roll back the entire import and journal invalidation."
   },
@@ -1976,8 +1980,8 @@
   {
     "id": "W-bull-columns-strip",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "let clean = kassiber_pytext::strip(key).to_owned();",
-    "replace": "let clean = key.to_owned();",
+    "find": "let clean = if strip {",
+    "replace": "let clean = if false {",
     "expect_failing": [
       "python_bull_import_vectors"
     ],
@@ -3482,5 +3486,525 @@
       "twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions"
     ],
     "rule": "Legacy reconciliation lookup must preserve wallet, provider reference, direction, asset and exact msat quantity."
+  },
+  {
+    "id": "W-pocket-header",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "exchange::headers(&rows, REQUIRED, \"Pocket Bitcoin\")?;",
+    "replace": "",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pocket requires the complete exported header family."
+  },
+  {
+    "id": "W-pocket-withdrawal-kind",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "if row_type(&c) != \"withdrawal\"",
+    "replace": "if row_type(&c) != \"exchange\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Only withdrawal rows supply net delivery pairs."
+  },
+  {
+    "id": "W-pocket-withdrawal-gross",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "gross: arithmetic(&abs(amount)?, &abs(fee)?, '+')?",
+    "replace": "gross: arithmetic(&abs(amount)?, &abs(fee)?, '-')?",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pair keys sum absolute net amounts and fees."
+  },
+  {
+    "id": "W-pocket-withdrawal-currency",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "if fee_currency == currency {\n                withdrawals.push",
+    "replace": "if fee_currency != currency {\n                withdrawals.push",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Withdrawal pairing requires fees in the original currency."
+  },
+  {
+    "id": "W-pocket-withdrawal-order",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "withdrawals.sort_by(|a, b| a.date.cmp(&b.date));",
+    "replace": "withdrawals.sort_by(|a, b| b.date.cmp(&a.date));",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Withdrawal candidates sort stably by original date strings."
+  },
+  {
+    "id": "W-pocket-pair-kind",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "if row_type(&c) != \"exchange\" {\n            continue;",
+    "replace": "if row_type(&c) != \"withdrawal\" {\n            continue;",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Only exchange rows consume withdrawal candidates."
+  },
+  {
+    "id": "W-pocket-pair-gross",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "let gross = abs(gross)?;",
+    "replace": "let gross = zero();",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Exchange pairing uses the exact gross BTC amount."
+  },
+  {
+    "id": "W-pocket-pair-asset",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "w.asset == asset && equal(&w.gross, &gross)",
+    "replace": "w.asset != asset && equal(&w.gross, &gross)",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pairs retain the canonical Bitcoin asset."
+  },
+  {
+    "id": "W-pocket-pair-equality",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "w.asset == asset && equal(&w.gross, &gross)",
+    "replace": "w.asset == asset && !equal(&w.gross, &gross)",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pairs require exact Decimal gross equality."
+  },
+  {
+    "id": "W-pocket-pair-date",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "date.is_empty() || w.date.is_empty() || w.date >= date",
+    "replace": "date.is_empty() || w.date.is_empty() || w.date <= date",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Prefer the first withdrawal at or after execution."
+  },
+  {
+    "id": "W-pocket-pair-before",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "unwrap_or(&candidates[0])",
+    "replace": "unwrap_or(candidates.last().unwrap())",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "If all withdrawals precede execution choose the first."
+  },
+  {
+    "id": "W-pocket-pair-consume",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "let withdrawal = withdrawals.remove(selected);",
+    "replace": "let withdrawal = &withdrawals[selected];",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "A withdrawal can pair with only one exchange row."
+  },
+  {
+    "id": "W-pocket-row-index",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "index + 1",
+    "replace": "index + 2",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Fallback references use one-based original row indices."
+  },
+  {
+    "id": "W-pocket-record-kind",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "if row_type(&c) != \"exchange\" {\n        return Ok(None);",
+    "replace": "if row_type(&c) != \"withdrawal\" {\n        return Ok(None);",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Only exchange rows become normalized commercial records."
+  },
+  {
+    "id": "W-pocket-empty-amount",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "Pocket Bitcoin CSV has an exchange row with an empty amount",
+    "replace": "Pocket amount is empty",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Keep the reference empty-amount refusal."
+  },
+  {
+    "id": "W-pocket-buy-direction",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"inbound\",\n            asset,",
+    "replace": "\"outbound\",\n            asset,",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pocket BTC receipts are inbound."
+  },
+  {
+    "id": "W-pocket-sell-direction",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"outbound\",\n            asset,",
+    "replace": "\"inbound\",\n            asset,",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pocket BTC disposals are outbound."
+  },
+  {
+    "id": "W-pocket-buy-kind",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"buy\",",
+    "replace": "\"receive\",",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Fiat purchases keep the buy kind."
+  },
+  {
+    "id": "W-pocket-sell-kind",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"sell\",",
+    "replace": "\"send\",",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Fiat sales keep the sell kind."
+  },
+  {
+    "id": "W-pocket-buy-amount",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "abs(value)?,\n            abs(cost)?,",
+    "replace": "zero(),\n            abs(cost)?,",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Purchases use the exported BTC value amount."
+  },
+  {
+    "id": "W-pocket-sell-amount",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "abs(cost)?,\n            abs(value)?,",
+    "replace": "zero(),\n            abs(value)?,",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Sales use the exported BTC cost amount."
+  },
+  {
+    "id": "W-pocket-fiat-fee-currency",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "if fee_currency == fiat {",
+    "replace": "if fee_currency != fiat {",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Only fees in the trade fiat currency change execution value."
+  },
+  {
+    "id": "W-pocket-buy-fee",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "arithmetic(&fiat_value, &abs(fee)?, '+')?",
+    "replace": "arithmetic(&fiat_value, &abs(fee)?, '-')?",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Purchase execution values include fiat fees."
+  },
+  {
+    "id": "W-pocket-sell-fee",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "nonnegative(arithmetic(&fiat_value, &abs(fee)?, '-')?)?",
+    "replace": "nonnegative(arithmetic(&fiat_value, &abs(fee)?, '+')?)?",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Sale proceeds deduct fiat fees and floor at zero."
+  },
+  {
+    "id": "W-pocket-delivery-direction",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "direction == \"inbound\" && withdrawal_asset == Some(asset)",
+    "replace": "direction == \"outbound\" && withdrawal_asset == Some(asset)",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Only incoming purchases use paired delivery amounts."
+  },
+  {
+    "id": "W-pocket-delivery-amount",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "amount = abs(value)?;",
+    "replace": "amount = zero();",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Paired net withdrawal amount replaces gross purchase quantity."
+  },
+  {
+    "id": "W-pocket-delivery-time",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "occurred = w.get(&[\"date\"]).or(occurred);",
+    "replace": "occurred = occurred.or(w.get(&[\"date\"]));",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Paired withdrawal date establishes delivery time."
+  },
+  {
+    "id": "W-pocket-delivery-fee",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "btc_fee = abs(fee)?",
+    "replace": "btc_fee = zero()",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Paired delivery preserves the BTC fee."
+  },
+  {
+    "id": "W-pocket-delivery-raw",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "raw[\"_pocketbitcoin_withdrawal\"] = Columns::new(withdrawal).json();",
+    "replace": "raw[\"_pocketbitcoin_withdrawal\"] = json!({});",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Provenance preserves sanitized paired withdrawal data."
+  },
+  {
+    "id": "W-pocket-rate",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "Some(v) => Some(v),",
+    "replace": "Some(_v) => None,",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Explicit execution price takes precedence over derived rate."
+  },
+  {
+    "id": "W-pocket-rate-divide",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "arithmetic(&fiat_value, &amount, '/')?",
+    "replace": "arithmetic(&fiat_value, &amount, '*')?",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Missing prices derive from exact fiat value divided by net BTC."
+  },
+  {
+    "id": "W-pocket-reference",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "c.opt(&[\"reference\"])",
+    "replace": "c.opt(&[\"missing-reference\"])",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Use the provider reference when present."
+  },
+  {
+    "id": "W-pocket-external",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "format!(\"pocketbitcoin:{reference}\")",
+    "replace": "format!(\"other:{reference}\")",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Provider references remain namespaced rather than chain ids."
+  },
+  {
+    "id": "W-pocket-occurred",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"occurred_at\":occurred",
+    "replace": "\"occurred_at\":\"2025-01-01\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Delivery timestamps retain reference normalization."
+  },
+  {
+    "id": "W-pocket-fiat-value",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"fiat_value\":repr(&fiat_value)",
+    "replace": "\"fiat_value\":\"0\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve exact fiat execution values."
+  },
+  {
+    "id": "W-pocket-fiat-currency",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"fiat_currency\":fiat",
+    "replace": "\"fiat_currency\":\"USD\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve the trade fiat currency."
+  },
+  {
+    "id": "W-pocket-timestamp",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"pricing_timestamp\":c.get(&[\"date\"])",
+    "replace": "\"pricing_timestamp\":\"2025-01-01\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pricing time remains execution time instead of delivery time."
+  },
+  {
+    "id": "W-pocket-pair",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "format!(\"{asset}-{f}\")",
+    "replace": "format!(\"BTC-{f}\")",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Pricing pair preserves BTC versus LBTC."
+  },
+  {
+    "id": "W-pocket-raw",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "config::stored_json(&raw)",
+    "replace": "config::stored_json(&json!({}))",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Raw provider provenance is preserved separately from matching."
+  },
+  {
+    "id": "W-pocket-pricing_source_kind",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"pricing_source_kind\":\"exchange_execution\"",
+    "replace": "\"pricing_source_kind\":\"changed\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve Pocket pricing_source_kind."
+  },
+  {
+    "id": "W-pocket-pricing_provider",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"pricing_provider\":\"Pocket Bitcoin\"",
+    "replace": "\"pricing_provider\":\"changed\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve Pocket pricing_provider."
+  },
+  {
+    "id": "W-pocket-pricing_method",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"pricing_method\":\"pocketbitcoin_csv\"",
+    "replace": "\"pricing_method\":\"changed\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve Pocket pricing_method."
+  },
+  {
+    "id": "W-pocket-pricing_quality",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"pricing_quality\":\"exact\"",
+    "replace": "\"pricing_quality\":\"changed\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve Pocket pricing_quality."
+  },
+  {
+    "id": "W-pocket-counterparty",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"counterparty\":\"Pocket Bitcoin\"",
+    "replace": "\"counterparty\":\"changed\"",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Preserve Pocket counterparty."
+  },
+  {
+    "id": "W-pocket-economic-flag",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"_exchange_evidence_match_by_economics\":true",
+    "replace": "\"_exchange_evidence_match_by_economics\":false",
+    "expect_failing": [
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
+    ],
+    "rule": "Pocket matches existing observations by economics."
+  },
+  {
+    "id": "W-pocket-window",
+    "file": "crates/wallets/src/file_import/pocket.rs",
+    "find": "\"_exchange_evidence_match_time_tolerance_seconds\":172800",
+    "replace": "\"_exchange_evidence_match_time_tolerance_seconds\":0",
+    "expect_failing": [
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
+    ],
+    "rule": "Pocket matching allows the two-day execution/delivery window."
+  },
+  {
+    "id": "W-pocket-default-label",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "\"Pocket Bitcoin\", \"pocketbitcoin\", \"pocketbitcoin_rows\"",
+    "replace": "\"Changed\", \"pocketbitcoin\", \"pocketbitcoin_rows\"",
+    "expect_failing": [
+      "pocket_default_wallet_admission_precedes_entropy_and_file_access"
+    ],
+    "rule": "Default Pocket wallet admission matches the reference."
+  },
+  {
+    "id": "W-pocket-default-kind",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "\"Pocket Bitcoin\", \"pocketbitcoin\", \"pocketbitcoin_rows\"",
+    "replace": "\"Pocket Bitcoin\", \"custom\", \"pocketbitcoin_rows\"",
+    "expect_failing": [
+      "pocket_default_wallet_admission_precedes_entropy_and_file_access"
+    ],
+    "rule": "Default Pocket wallet admission matches the reference."
+  },
+  {
+    "id": "W-pocket-row-count",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "\"Pocket Bitcoin\", \"pocketbitcoin\", \"pocketbitcoin_rows\"",
+    "replace": "\"Pocket Bitcoin\", \"pocketbitcoin\", \"wrong_rows\"",
+    "expect_failing": [
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
+    ],
+    "rule": "Pocket full imports report normalized row count."
+  },
+  {
+    "id": "W-pocket-evidence",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Self::Bull | Self::Coinfinity | Self::Pocket",
+    "replace": "Self::Bull | Self::Coinfinity",
+    "expect_failing": [
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
+    ],
+    "rule": "Pocket uses the evidence coordinator in both import modes."
+  },
+  {
+    "id": "W-pocket-pair-header-order",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "Self::collect(row, false)",
+    "replace": "Self::collect(row, true)",
+    "expect_failing": [
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Withdrawal pairing uses original header insertion order before record sanitization."
+  },
+  {
+    "id": "W-pocket-provider-dedupe",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "let relax = string(&r.fields, \"pricing_source_kind\") == \"exchange_execution\" || r.ignore_fee;",
+    "replace": "let relax = false;",
+    "expect_failing": [
+      "pocket_reimport_matches_provider_identity_when_fee_changes"
+    ],
+    "rule": "Exact Pocket execution reimports match provider identity despite fee corrections."
   }
 ]

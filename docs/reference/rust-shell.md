@@ -1940,6 +1940,114 @@ Pocket/Pocketbitcoin and Strike remain before batch 1 is complete. Batch 2,
 exchange API sync and AI projections remain outside this checkpoint. No
 production Python code, dependencies or egress are changed.
 
+
+## Pocket file-ingestion continuation (R5 importers batch 1, partial)
+
+Native `wallets import-pocket` and `import-pocketbitcoin` share the same parser
+and evidence coordinator. UTF-8 retains BOM data; delimiters, quoting and header
+variants follow Python. Before sanitizing records, pairing uses the original
+header insertion order, canonical BTC/LBTC asset and exact Decimal gross amount
+(net withdrawal plus BTC fee). Candidates sort stably by their exported date
+strings; each exchange consumes the first withdrawal at or after execution, or
+the first candidate when all precede it. A withdrawal is consumed only once.
+
+Normalized buys use paired net delivery quantities, fees and timestamps, while
+pricing retains execution time. Fiat purchase values include fiat fees; sale
+proceeds deduct them and floor at zero. Provider-scoped references, fallback
+identities, nested raw withdrawal provenance, integer msat, Decimal prices and
+refusals match Python. Relevant mode enriches observed rows by unambiguous
+profile-wide economics within the inclusive two-day window and preserves
+observed fees. Full mode creates/reuses the Pocket Bitcoin wallet and stores
+excluded evidence, reconciliation flags and rollback-capable import runs.
+Provenance and commercial matches do not establish custody or tax inputs.
+
+The frozen Python oracle contains **262 files**, exercised in both import modes
+with aliases alternating between passes. Complete typed book dumps, responses
+and refusals compare with Python on populated books. Additional scenarios pin
+default wallet creation/reuse, economic matches, ambiguous/out-of-window rows,
+reimport dedupe, rollback and refusals. Direct wire/state/rollback comparisons
+exercise both SQLite and SQLCipher.
+
+The acceptance scenarios require **535 Rust importer calls and zero Python
+fallbacks**: 524 frozen comparisons (262 files in both modes), eight coordinator
+calls and three existing smoke-fixture calls. Six direct wire/state/rollback
+scenarios pass across SQLite and SQLCipher. All 41 native file-import tests
+pass. Workspace and harness fmt/clippy pass with warnings denied. Final
+workspace tests and full hybrid gates follow the last importer.
+
+There are **52 added Pocket mutations** (400 wallet entries total). Shared
+column sanitization, dedupe, batch membership, invalidation and both savepoint
+entries are audited with the Pocket coordinator tests. All entries retain named
+killers; unbuildable mutants and survivors do not count as kills.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-pocket-header` | `python_pocket_import_vectors` |
+| `W-pocket-withdrawal-kind` | `python_pocket_import_vectors` |
+| `W-pocket-withdrawal-gross` | `python_pocket_import_vectors` |
+| `W-pocket-withdrawal-currency` | `python_pocket_import_vectors` |
+| `W-pocket-withdrawal-order` | `python_pocket_import_vectors` |
+| `W-pocket-pair-kind` | `python_pocket_import_vectors` |
+| `W-pocket-pair-gross` | `python_pocket_import_vectors` |
+| `W-pocket-pair-asset` | `python_pocket_import_vectors` |
+| `W-pocket-pair-equality` | `python_pocket_import_vectors` |
+| `W-pocket-pair-date` | `python_pocket_import_vectors` |
+| `W-pocket-pair-before` | `python_pocket_import_vectors` |
+| `W-pocket-pair-consume` | `python_pocket_import_vectors` |
+| `W-pocket-row-index` | `python_pocket_import_vectors` |
+| `W-pocket-record-kind` | `python_pocket_import_vectors` |
+| `W-pocket-empty-amount` | `python_pocket_import_vectors` |
+| `W-pocket-buy-direction` | `python_pocket_import_vectors` |
+| `W-pocket-sell-direction` | `python_pocket_import_vectors` |
+| `W-pocket-buy-kind` | `python_pocket_import_vectors` |
+| `W-pocket-sell-kind` | `python_pocket_import_vectors` |
+| `W-pocket-buy-amount` | `python_pocket_import_vectors` |
+| `W-pocket-sell-amount` | `python_pocket_import_vectors` |
+| `W-pocket-fiat-fee-currency` | `python_pocket_import_vectors` |
+| `W-pocket-buy-fee` | `python_pocket_import_vectors` |
+| `W-pocket-sell-fee` | `python_pocket_import_vectors` |
+| `W-pocket-delivery-direction` | `python_pocket_import_vectors` |
+| `W-pocket-delivery-amount` | `python_pocket_import_vectors` |
+| `W-pocket-delivery-time` | `python_pocket_import_vectors` |
+| `W-pocket-delivery-fee` | `python_pocket_import_vectors` |
+| `W-pocket-delivery-raw` | `python_pocket_import_vectors` |
+| `W-pocket-rate` | `python_pocket_import_vectors` |
+| `W-pocket-rate-divide` | `python_pocket_import_vectors` |
+| `W-pocket-reference` | `python_pocket_import_vectors` |
+| `W-pocket-external` | `python_pocket_import_vectors` |
+| `W-pocket-occurred` | `python_pocket_import_vectors` |
+| `W-pocket-fiat-value` | `python_pocket_import_vectors` |
+| `W-pocket-fiat-currency` | `python_pocket_import_vectors` |
+| `W-pocket-timestamp` | `python_pocket_import_vectors` |
+| `W-pocket-pair` | `python_pocket_import_vectors` |
+| `W-pocket-raw` | `python_pocket_import_vectors` |
+| `W-pocket-pricing_source_kind` | `python_pocket_import_vectors` |
+| `W-pocket-pricing_provider` | `python_pocket_import_vectors` |
+| `W-pocket-pricing_method` | `python_pocket_import_vectors` |
+| `W-pocket-pricing_quality` | `python_pocket_import_vectors` |
+| `W-pocket-counterparty` | `python_pocket_import_vectors` |
+| `W-pocket-economic-flag` | `pocket_paired_economics_full_flags_dedupe_and_observation_authority` |
+| `W-pocket-window` | `pocket_paired_economics_full_flags_dedupe_and_observation_authority` |
+| `W-pocket-default-label` | `pocket_default_wallet_admission_precedes_entropy_and_file_access` |
+| `W-pocket-default-kind` | `pocket_default_wallet_admission_precedes_entropy_and_file_access` |
+| `W-pocket-row-count` | `pocket_paired_economics_full_flags_dedupe_and_observation_authority` |
+| `W-pocket-evidence` | `pocket_paired_economics_full_flags_dedupe_and_observation_authority` |
+| `W-pocket-pair-header-order` | `python_pocket_import_vectors` |
+| `W-pocket-provider-dedupe` | `pocket_reimport_matches_provider_identity_when_fee_changes` |
+
+All 52 Pocket additions and six shared audit entries are killed. The initial
+57-entry run killed every Pocket addition and five shared entries. Its extra
+Pocket killer for the inherited idless fingerprint mutation was inapplicable:
+Pocket always supplies a provider ID. The inherited CSV killer remains, and a
+new targeted mutation proves provider-identity dedupe despite fee corrections.
+Both entries passed baselines and were killed on retry. Existing observation
+fees remain authoritative, matching Python. Scratch/build trees were removed.
+
+
+Strike remains before batch 1 is complete. Batch 2, exchange APIs and AI
+projections remain outside this checkpoint. Python production code,
+dependencies and egress are unchanged.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

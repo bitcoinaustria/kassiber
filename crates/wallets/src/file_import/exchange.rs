@@ -5,13 +5,23 @@ use super::*;
 pub(super) struct Columns(Vec<(String, Json)>);
 impl Columns {
     pub fn new(row: &csv::Row) -> Self {
+        Self::collect(row, true)
+    }
+    pub fn unstripped(row: &csv::Row) -> Self {
+        Self::collect(row, false)
+    }
+    fn collect(row: &csv::Row, strip: bool) -> Self {
         let mut entries: Vec<(String, Json)> = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
         for key in &row.headers {
             if !seen.insert(key) {
                 continue;
             }
-            let clean = kassiber_pytext::strip(key).to_owned();
+            let clean = if strip {
+                kassiber_pytext::strip(key).to_owned()
+            } else {
+                key.clone()
+            };
             let value = row.data[key].clone();
             if let Some((_, old)) = entries.iter_mut().find(|(k, _)| *k == clean) {
                 *old = value;

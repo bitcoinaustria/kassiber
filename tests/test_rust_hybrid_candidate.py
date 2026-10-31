@@ -347,6 +347,65 @@ class HybridCandidateTest(unittest.TestCase):
         calls=[item for item in self.served() if item["command"]=="wallets.import-21bitcoin"]
         self.assertEqual(calls,[{"command":"wallets.import-21bitcoin","served_by":"rust"}]*7)
 
+    def test_pocket_aliases_have_no_fallback_and_match_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Pocket workspace"))
+        self.ok(self.cli("profiles", "create", "Pocket book", "--workspace", "Pocket workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Pocket workspace", "--profile", "Pocket book"))
+        self.ok(self.cli("wallets", "create", "--label", "Pocket source", "--kind", "pocketbitcoin"))
+        source = self.data_root.parent / "pocket.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_pocket_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for phase, mode in enumerate(("relevant", "full")):
+                for index, case in enumerate(cases):
+                    command=("import-pocket", "import-pocketbitcoin")[(phase+index)%2]
+                    with self.subTest(mode=mode, case=case["name"], command=command):
+                        source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                        result = self.cli("wallets", command, "--wallet", "Pocket source", "--mode", mode, "--file", str(source))
+                        self.assertIn(result.returncode, (0,1), (result.stdout,result.stderr))
+                        self.assertNotIn("Traceback",result.stderr)
+        calls=[item for item in self.served() if item["command"] in {"wallets.import-pocket", "wallets.import-pocketbitcoin"}]
+        self.assertEqual(len(calls),2*len(cases))
+        self.assertTrue(all(item["served_by"]=="rust" for item in calls))
+        for command in ("wallets.import-pocket", "wallets.import-pocketbitcoin"):
+            self.assertEqual(sum(item["command"]==command for item in calls),len(cases))
+
+    def test_pocket_default_alias_economics_reimport_and_rollback_dump(self):
+        import csv
+        import io
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Pocket workspace"))
+        self.ok(self.cli("profiles", "create", "Pocket book", "--workspace", "Pocket workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Pocket workspace", "--profile", "Pocket book"))
+        self.ok(self.cli("wallets", "create", "--label", "Observed", "--kind", "custom"))
+        source = self.data_root.parent / "pocket.csv"
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            source.write_text("date,txid,amount,fee\n2025-01-02,observed,0.00199,0.00002\n2025-01-02,ambiguous1,0.003,0\n2025-01-03,ambiguous2,0.003,0\n2025-01-06,outside,0.004,0\n")
+            self.ok(self.cli("wallets", "import-csv", "--wallet", "Observed", "--file", str(source)))
+            output=io.StringIO(); writer=csv.writer(output)
+            writer.writerow(["type","date","reference","price.currency","price.amount","cost.currency","cost.amount","fee.currency","fee.amount","value.currency","value.amount"])
+            for i,amount in enumerate(("0.002","0.003","0.004")):
+                writer.writerow(["exchange","2025-01-02",str(i),"EUR","","EUR","100","EUR","1.2","BTC",amount])
+            writer.writerow(["withdrawal","2025-01-03","withdraw","EUR","","EUR","0","BTC","0.00001","BTC","0.00199"])
+            source.write_text(output.getvalue())
+            relevant=self.ok(self.cli("wallets", "import-pocket", "--file", str(source)))["data"]
+            self.assertEqual((relevant["matched"],relevant["skipped_ambiguous"],relevant["skipped_unmatched"]),(1,1,1))
+            full=self.ok(self.cli("wallets", "import-pocketbitcoin", "--mode", "full", "--file", str(source)))["data"]
+            self.assertEqual((full["wallet"],full["imported"],full["pocketbitcoin_rows"]),("Pocket Bitcoin",3,3))
+            repeated=self.ok(self.cli("wallets", "import-pocket", "--mode", "full", "--file", str(source)))["data"]
+            self.assertEqual(repeated["imported"],0)
+            source.write_text(output.getvalue().replace("BTC,0.002", "BTC,0.00201").replace("BTC,0.00001,BTC", "BTC,0.00002,BTC"))
+            corrected=self.ok(self.cli("wallets", "import-pocketbitcoin", "--mode", "full", "--file", str(source)))["data"]
+            self.assertEqual(corrected["imported"],0)
+            self.ok(self.cli("imports", "rollback", "--batch", full["import_batch_id"], "--confirm"))
+            self.ok(self.cli("wallets", "import-pocketbitcoin", "--mode", "full", "--file", str(source)))
+            self.ok(self.cli("wallets", "import-pocketbitcoin", "--file", str(source)))
+            self.assertEqual(self.cli("wallets", "import-pocket", "--wallet", "missing", "--file", str(source)).returncode,1)
+            self.assertEqual(self.cli("wallets", "import-pocketbitcoin", "--file", str(source.parent/"missing.csv")).returncode,1)
+        calls=[item for item in self.served() if item["command"] in {"wallets.import-pocket","wallets.import-pocketbitcoin"}]
+        self.assertEqual(len(calls),8)
+        self.assertTrue(all(item["served_by"]=="rust" for item in calls))
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

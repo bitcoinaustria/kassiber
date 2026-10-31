@@ -463,6 +463,7 @@ fn assert_import_vectors(cases: &Json) {
             "bullbitcoin_csv" => Format::Bull,
             "coinfinity_csv" => Format::Coinfinity,
             "21bitcoin_csv" => Format::TwentyOne,
+            "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
         let result = format.load(path.to_str().unwrap()).and_then(|rows| {
@@ -1920,4 +1921,250 @@ fn twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions()
     )
     .unwrap();
     assert!(outcome.is_empty());
+}
+
+#[test]
+fn python_pocket_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_pocket_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+const POCKET_HEADER: &str = "type,date,reference,price.currency,price.amount,cost.currency,cost.amount,fee.currency,fee.amount,value.currency,value.amount\n";
+const POCKET_PAIR: &str = "exchange,2025-01-02,order,EUR,,EUR,100,EUR,1.2,BTC,0.002\nwithdrawal,2025-01-03,withdraw,EUR,,EUR,0,BTC,0.00001,BTC,0.00199\n";
+fn pocket(conn: &Connection, mode: &str) -> Py {
+    let rows = pocket::parse(csv::rows(&format!("{POCKET_HEADER}{POCKET_PAIR}")).unwrap()).unwrap();
+    let records = rows
+        .iter()
+        .map(normalize)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: "pocket.csv".into(),
+        format: Format::Pocket,
+        mode: Some(mode.into()),
+    };
+    if mode == "relevant" {
+        exchange::enrich(conn, &request, &rows).unwrap()
+    } else {
+        apply(
+            conn,
+            &request,
+            &resolve(conn, "p", "Source").unwrap(),
+            &rows,
+            &records,
+            &mut Ids {
+                identity: None,
+                at: 0,
+            },
+        )
+        .unwrap()
+    }
+}
+#[test]
+fn pocket_paired_economics_full_flags_dedupe_and_observation_authority() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('observed','ws','p','Observed','custom','{}','2025-01-01'); INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('observed','ws','p','observed','chain','observed','2025-01-02T00:00:00Z','inbound','BTC',199000000,2000000,'2025-01-01');").unwrap();
+    let relevant = pocket(&conn, "relevant");
+    assert_eq!(
+        kassiber_envelope::get(&relevant, "matched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    let ready = scalar(
+        &conn,
+        "SELECT journal_input_version FROM profiles WHERE id='p'",
+    );
+    assert_eq!(ready, 1);
+    let full = pocket(&conn, "full");
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        ready + 2
+    );
+    assert_eq!(kassiber_envelope::get(&full, "matched"), Some(&Py::from(1)));
+    assert_eq!(
+        kassiber_envelope::get(&full, "pocketbitcoin_rows"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM tags WHERE code IN ('pocketbitcoin-matched','pocketbitcoin-wallet-gap','pocketbitcoin-ambiguous') AND label LIKE 'Pocket Bitcoin %'"),3);
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='pocketbitcoin-matched'"),1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT excluded FROM transactions WHERE wallet_id='wallet'"
+        ),
+        1
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT fee FROM transactions WHERE id='observed'"),
+        2000000
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT amount FROM transactions WHERE wallet_id='wallet'"
+        ),
+        199000000
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT fee FROM transactions WHERE wallet_id='wallet'"
+        ),
+        1000000
+    );
+    let repeat = pocket(&conn, "full");
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        ready + 4
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
+        1
+    );
+}
+#[test]
+fn pocket_default_wallet_admission_precedes_entropy_and_file_access() {
+    let conn = fixture();
+    conn.execute_batch("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    let request = || Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: std::env::temp_dir()
+            .join("missing-pocket-input.csv")
+            .to_string_lossy()
+            .into(),
+        format: Format::Pocket,
+        mode: Some("full".into()),
+    };
+    let identity = Identity {
+        ids: vec!["provider".into()],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("Import file not found"));
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM wallets WHERE id='provider' AND label='Pocket Bitcoin' AND kind='pocketbitcoin' AND account_id='treasury'"),1);
+    let error = execute(
+        &conn,
+        request(),
+        Some(&Identity {
+            ids: vec![],
+            timestamp: "2025-01-01T00:00:00Z".into(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("Import file not found"));
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 2);
+}
+#[test]
+fn pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    conn.execute_batch("CREATE TRIGGER refuse_pocket BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'pocket denied');END;").unwrap();
+    let file = std::env::temp_dir().join(format!("pocket-rollback-{}.csv", std::process::id()));
+    std::fs::write(&file, format!("{POCKET_HEADER}{POCKET_PAIR}")).unwrap();
+    let result = execute(
+        &conn,
+        Request {
+            profile_id: "p".into(),
+            wallet: "Source".into(),
+            file: file.to_string_lossy().into(),
+            format: Format::Pocket,
+            mode: Some("full".into()),
+        },
+        None,
+    );
+    std::fs::remove_file(file).unwrap();
+    assert!(result.is_err());
+    for table in [
+        "transactions",
+        "tags",
+        "transaction_tags",
+        "import_batches",
+        "import_batch_transactions",
+    ] {
+        assert_eq!(
+            scalar(&conn, &format!("SELECT count(*) FROM {table}")),
+            0,
+            "{table}"
+        );
+    }
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        0
+    );
+    assert!(conn.is_autocommit());
+}
+
+#[test]
+fn pocket_reimport_matches_provider_identity_when_fee_changes() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    pocket(&conn, "full");
+    let changed = format!(
+        "{POCKET_HEADER}{}",
+        POCKET_PAIR
+            .replace("0.002\n", "0.00201\n")
+            .replace("0.00001,BTC", "0.00002,BTC")
+    );
+    let rows = pocket::parse(csv::rows(&changed).unwrap()).unwrap();
+    let records = rows
+        .iter()
+        .map(normalize)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: "pocket.csv".into(),
+        format: Format::Pocket,
+        mode: Some("full".into()),
+    };
+    let result = apply(
+        &conn,
+        &request,
+        &resolve(&conn, "p", "Source").unwrap(),
+        &rows,
+        &records,
+        &mut Ids {
+            identity: None,
+            at: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "updated"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 1000000);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
 }
