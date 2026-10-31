@@ -344,6 +344,9 @@ rates retain the existing at-or-before lookup policy. Missing FMV is a readiness
 barrier (`status.missingFmvAssets`); affected values remain null and handoffs are
 explicitly incomplete drafts. Wallet-context assets use the same lookup,
 and the XLSX assumptions sheet discloses quarantines and incomplete estimates.
+Missing FMV for any held asset, including a wallet-only rail without an
+acquisition bucket, keeps market-value, gain and estimated-tax totals null;
+known quantities and basis remain available for review.
 Exit-tax exports remain valuation drafts outside the ordinary realized-report
 snapshot system; see [saved and filed report impact](custody-components.md#saved-and-filed-report-impact).
 

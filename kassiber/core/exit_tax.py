@@ -483,10 +483,14 @@ def compute_deemed_disposal(
                 }
             )
 
-    if has_unpriced_neu:
+    # A wallet-only asset (for example the incoming rail of a carrying-value
+    # move) has no acquisition bucket here. Its missing valuation still makes
+    # the entire handoff incomplete, as the assumption below promises.
+    has_missing_fmv = any(source["source"] == "missing" for source in fmv_source)
+    if has_unpriced_neu or has_missing_fmv:
         neu_market_total = None
         neu_gain_total = None
-    if has_unpriced_alt:
+    if has_unpriced_alt or has_missing_fmv:
         alt_market_total = None
 
     taxable_gain = (

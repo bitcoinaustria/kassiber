@@ -239,3 +239,23 @@ def test_handoffs_always_show_fmv_source_and_actual_quote_time(engine_book, tmp_
         assert at in values
     finally:
         workbook.close()
+
+
+@pytest.mark.parametrize("country", ("at", "generic"))
+def test_unpriced_wallet_only_rail_keeps_all_valuation_totals_incomplete(engine_book, country):
+    conn = engine_book([
+        ("buy", "Cold", "2024-12-31T12:00:00Z", "inbound", BTC, 0, 30000, "buy"),
+    ], country=country)
+    # Exercise the supported retained wallet-context projection edge over an
+    # otherwise real RP2 journal. Modern cross-asset swaps also emit acquisition
+    # lots, so they cannot create a wallet-only rail for this mapping test.
+    conn.execute("""INSERT INTO journal_entries(id,workspace_id,profile_id,
+        transaction_id,wallet_id,occurred_at,entry_type,asset,quantity,created_at)
+        SELECT 'rail',workspace_id,profile_id,'buy',id,'2024-12-31T13:00:00Z',
+            'transfer_in','LBTC',20000000000,'now' FROM wallets WHERE label='Hot'""")
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    assert any(row["asset"] == "LBTC" and row["marketValue"] is None for row in report["walletHoldings"])
+    assert all(lot["asset"] != "LBTC" for lot in report["lots"])
+    assert report["status"]["missingFmvAssets"] == ["LBTC"]
+    for field in ("neuMarketValue", "altMarketValue", "neuGain", "taxableGain", "estimatedTax"):
+        assert report["totals"][field] is None
