@@ -1659,7 +1659,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
- "nix",
+ "nix 0.30.1",
  "serde_json",
  "tempfile",
 ]

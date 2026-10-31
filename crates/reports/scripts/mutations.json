@@ -5565,7 +5565,9 @@
     "file": "crates/reports/src/artifact_xlsx.rs",
     "find": "\"unrealized_pnl\",\n    ]\n    .contains(&header)\n    {\n        5",
     "replace": "\"unrealized_pnl\",\n    ]\n    .contains(&header)\n    {\n        2",
-    "expect_failing": ["transaction_xlsx_cells_preserve_types_formats_and_links"],
+    "expect_failing": [
+      "transaction_xlsx_cells_preserve_types_formats_and_links"
+    ],
     "rule": "Monetary values remain numeric and retain the money number format."
   },
   {
@@ -5573,7 +5575,9 @@
     "file": "crates/reports/src/artifact_xlsx.rs",
     "find": "if entries.len() == 1 && truthy(value(&entries[0], \"url\")) {",
     "replace": "if false && entries.len() == 1 && truthy(value(&entries[0], \"url\")) {",
-    "expect_failing": ["transaction_xlsx_cells_preserve_types_formats_and_links"],
+    "expect_failing": [
+      "transaction_xlsx_cells_preserve_types_formats_and_links"
+    ],
     "rule": "A single URL attachment remains a named link, without fetching it."
   },
   {
@@ -5581,7 +5585,119 @@
     "file": "crates/reports/src/export.rs",
     "find": "if command.ends_with(\"-xlsx\") {",
     "replace": "if false && command.ends_with(\"-xlsx\") {",
-    "expect_failing": ["transaction_xlsx_export_publishes_native_bytes_and_registers_nothing"],
+    "expect_failing": [
+      "transaction_xlsx_export_publishes_native_bytes_and_registers_nothing"
+    ],
     "rule": "XLSX publication consumes native workbook bytes, never CSV or a Python fallback."
+  },
+  {
+    "id": "xlsx-at-overview-gain-split",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "if index < 3 { 174 } else { 176 }",
+    "replace": "if index < 3 { 176 } else { 174 }",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Overview gains and losses use their own stored Kennzahl groups."
+  },
+  {
+    "id": "xlsx-at-total-loss-split",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "if index == 0 { 174 } else { 176 }",
+    "replace": "if index == 0 { 174 } else { 174 }",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Detail gain and loss totals retain separate signed form amounts."
+  },
+  {
+    "id": "xlsx-at-cent-scale",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "div(&Decimal::from(100), &DECIMAL)",
+    "replace": "div(&Decimal::from(10), &DECIMAL)",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Workbook amounts convert integer euro cents to typed euro cells."
+  },
+  {
+    "id": "xlsx-at-quantity-style",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "Some(\"quantity\") => 12",
+    "replace": "Some(\"quantity\") => 11",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Quantities preserve eight decimal places rather than integer formatting."
+  },
+  {
+    "id": "xlsx-at-detail-quantity",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "or_empty(\"date\"),\n            value(row, \"quantity\").clone(),",
+    "replace": "or_empty(\"date\"),\n            value(row, \"quantity_msat\").clone(),",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Detail quantity cells contain whole-unit quantities, never msat."
+  },
+  {
+    "id": "xlsx-at-blank-detail-style",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "&Value::Null, TEXT",
+    "replace": "&Value::Null, MONEY",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Empty detail rows retain their text-cell formatting."
+  },
+  {
+    "id": "xlsx-at-review-gate",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "(text(report,\"review_gate\"),18)",
+    "replace": "(String::new(),18)",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "The workbook retains the annual adviser review gate."
+  },
+  {
+    "id": "xlsx-at-explanation-mismatches",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "if !mismatches.is_empty() {",
+    "replace": "if false && !mismatches.is_empty() {",
+    "expect_failing": [
+      "austrian_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Stored Kennzahl mismatches remain visible in the explanation sheet."
+  },
+  {
+    "id": "xlsx-at-completion-kind",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "kind: \"austrian-e1kv.xlsx\".into()",
+    "replace": "kind: \"austrian-e1kv.csv-bundle\".into()",
+    "expect_failing": [
+      "austrian_xlsx_export_hashes_actual_bytes_and_saves_without_filing"
+    ],
+    "rule": "Completion records the native workbook artifact kind."
+  },
+  {
+    "id": "xlsx-at-completion-year",
+    "file": "crates/reports/src/austrian_xlsx.rs",
+    "find": "year: Some(value(&report, \"tax_year\").clone())",
+    "replace": "year: Some(Value::Int(2024.into()))",
+    "expect_failing": [
+      "austrian_xlsx_export_hashes_actual_bytes_and_saves_without_filing"
+    ],
+    "rule": "Completion binds the annual report to its resolved tax year."
+  },
+  {
+    "id": "xlsx-at-managed-native",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "        \"ui.reports.export_austrian_e1kv_xlsx\" => (\n            \"reports.export-austrian-e1kv-xlsx\",",
+    "replace": "        \"ui.reports.export_austrian_e1kv_xlsx\" => (\n            \"reports.export-austrian-e1kv-csv\",",
+    "expect_failing": [
+      "austrian_xlsx_managed_request_preserves_format_and_freshness"
+    ],
+    "rule": "Managed annual XLSX requests publish native workbook bytes through the native completion transport."
   }
 ]

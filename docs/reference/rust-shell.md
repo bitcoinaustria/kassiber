@@ -25,10 +25,10 @@ verification, including per-command Rust routing counts.
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
-| `crates/journals` | unregistered custody/fusion pipeline and R4-11 rendering checkpoint; production snapshot loading and journal persistence remain unported |
-| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
+| `crates/journals` | unregistered custody/fusion, R4-9 loader, R4-11 rendering and R4-12 persistence checkpoints; production acceptance remains open |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history and CLI/desktop transaction pages shared by both transports |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
-| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV artifacts, and append-only saved/filed snapshot markers |
+| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian XLSX artifacts, and append-only saved/filed snapshot markers |
 
 ## Command line
 
@@ -94,8 +94,9 @@ document enrichment, rejected-link retention and response ordering. Suggestions
 never apply pricing or kind changes. Prior reports remain evidence without
 ledger, lot, ownership, custody or tax authority.
 `ui.transactions.dashboard/resolve/graph/review_context/ledger_template`,
-`transactions export` in every format, journal/report processing, BTCPay provenance
-sync and commercial review remain `not_implemented`. The acceptance record names the remaining
+platform-specific transaction exports, journal/report processing, BTCPay
+provenance sync and commercial review remain `not_implemented`. Transaction CSV
+and XLSX exports now use the native report transport described below. The acceptance record names the remaining
 dependencies.
 
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
@@ -107,9 +108,12 @@ The initial shell checkpoint implemented `init`, `status`, `daemon`, `commands d
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix` and `import-river`,
-the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial), and every leaf of
+the [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
+report snapshot/CSV export leaves, transaction CSV/XLSX and
+[Austrian XLSX](#austrian-xlsx-service-checkpoint-r5-twelfth-reports-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 71 total at that checkpoint). The service
+`offline` and `backends`, all eight `secrets` leaves, and `backup export`
+and `backup import`, including `--install`. The service
 checkpoints below extend that subset; `describe.rs::IMPLEMENTED` records current
 execution support. Each family registers through its own CLI module. An
 unimplemented leaf parses exactly as in Python and then fails
@@ -4320,6 +4324,104 @@ need native service projections, CLI/daemon registration and routing evidence.
 Their saved completions must hash the Rust bytes, retain exact summaries and
 dependencies under admission, and establish filed markers only on explicit
 filing. PDF remains Python. This is not complete XLSX or reports acceptance.
+
+
+## Austrian XLSX service checkpoint (R5 twelfth reports continuation, partial)
+
+`t3code/r5-reports-12` starts at integrated tip `dd433e4e`, then applies the
+requested Liquid/commercial and XLSX renderer/transaction commits. Documentation
+and inventory conflicts retain the integrated stack's entries. Cargo's lockfile
+qualifies the existing store `nix` dependency as `nix 0.30.1`; no new dependency
+is introduced beyond the already approved renderer stack.
+The three inherited raw-hex export sequences are regenerated against the
+integrated Python schema to retain its compact-calculation column and
+partial-payout migration audit in every database dump. Their response and CSV
+artifact bytes are unchanged.
+
+`reports export-austrian-e1kv-xlsx` and
+`ui.reports.export_austrian_e1kv_xlsx` now use the native annual report and
+in-memory renderer. Overview amounts, all numbered detail/placeholder sheets,
+totals, review assumptions and Kennzahl mismatch explanations retain the Python
+layout and typed values. The projection neither recalculates tax nor changes
+journal facts. A read savepoint spans preparation; the export transport retains
+write admission through publication, actual-byte hashing, saved registration and
+chain dependency capture. Only explicit filing appends a filed marker.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Frozen annual workbook projections | 47 cases: 35 successful documents, 12 exact pre-render refusals |
+| Real service exports | The same 47 cases compare openpyxl content and all database tables |
+| CLI export/filing sequences | Four processed/stale/generic/raw-hex scenarios; repeated explicit filing preserves the captured digest |
+| Desktop | Nine requests, including repeated filenames, years and invalid arguments |
+| Actual digests | Each completion is checked against its own published XLSX bytes before normalization |
+
+`tests/test_rust_austrian_xlsx.py` passes all 52 cases. The workbook comparison
+uses both formula and cached-value openpyxl loads, resolved styles, dimensions,
+merges, panes, names, properties and ZIP/XML validation. Container byte counts
+and the new independently verified artifact digests differ intentionally from
+Python; generated snapshot ids have explicit action mappings. No other response
+or stored value is masked. Preexisting saved commitments remain literal.
+The service fixture closes and checkpoints its seed connection before retaining
+the starting database bytes; an earlier test-only WAL snapshot error is fixed.
+
+The new mutation entries are `xlsx-at-*` in the report catalog, with named
+projection, completion and managed-request killers in `austrian_xlsx.rs`.
+All eleven entries are killed after all three unmutated named selections pass.
+The owned mutation source/build trees have been removed; evidence is
+`target/r5-reports12/austrian-mutations.log`. The inherited 558 rules retain
+their earlier checkpoint audits; all 569 catalog entries validate against this
+checkout. These eleven new rules cover overview splits, detail values/styles,
+cent scaling, empty rows, review/mismatch disclosure, completion kind/year and
+managed native publication.
+
+| Austrian-family routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.export-austrian-e1kv-xlsx` | 16 | 0 |
+| `reports.filed-snapshots.create` in workbook sequences | 12 | 0 |
+| Native daemon sessions (nine annual XLSX requests) | 1 | 0 |
+
+The complete normalized dump covers all 112 tables. Routing totals exclude
+pytest's symlink aliases. Logs and routing summaries are under
+`target/r5-reports12/`. Final Rust verification uses Rust 1.99.1 and
+offline/locked Cargo: workspace formatting, both production and test-harness
+all-target clippy configurations with `-D warnings`, all 1,506 workspace tests
+and all 14 harness tests pass.
+
+The final locked Python 3.11 regression passes 411 tests and four subtests:
+52 annual service/process cases, 43 inherited report scenarios, 217 renderer
+cases, 86 transaction XLSX cases, twelve AI catalog, capability and redaction
+checks and one report contract check. The combined hybrid log records 465 report/transaction
+CLI invocations and fourteen daemon sessions served by Rust, with zero report,
+transaction or daemon fallbacks. Per-command totals are retained in
+`target/r5-reports12/regression-routing.json`.
+
+Both changed oracle generators check cleanly. The required classifier update
+records 5,697 test definitions; `python_test_shards.py run preflight --ci`
+passes all 57 tests, including desktop allowlist, inventory and dependency
+contracts. The report regression runner preserves the inherited account `HOME`
+while isolating books, preferences, owner locks and scratch under `target/`.
+`target/r5-reports12/verification-summary.json` retains the gate and mutation
+results. Owned mutation and verification build trees are removed after writing
+the summaries. Verification is Linux-only; the full Python/frontend quality
+gate, Docker regtest and packaged/platform checks are not run.
+
+This checkpoint completes only the Austrian XLSX command family. Remaining
+requested reads are exit-tax, retained capital-gain explanations (both compact
+and legacy calculations), privacy hygiene/mirror/PSBT, cross-check, Lightning
+profitability, source-funds and the desktop capital-gains view. Remaining artifact
+work includes CLI/desktop year-handoff, Lightning profitability CSV and desktop
+cross-check. Transaction CoinTracking/Blockpit formats and their desktop kind
+remain unregistered. Full-report (including verification), exit-tax,
+year-handoff and cross-check XLSX projections remain Python. Individual
+snapshot/amendment reads retain the earlier core-only deferral.
+
+PDF rendering stays Python by owner decision. In particular,
+`export-source-funds-bundle` calls `write_source_funds_pdf` and embeds that PDF
+in its ZIP, so the whole command stays Python. The current audit package copies
+reviewed evidence, which can include PDFs, and writes JSON. It remains wholly
+Python here; PDF-containing audit packages also retain the owner's whole-command
+Python boundary. No PDF renderer is ported. AI tool
+projections stay Python and continue to use the existing shared services.
 
 ## Not yet ported
 

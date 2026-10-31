@@ -110,7 +110,7 @@ fn format_name(header: &str, value: &Value) -> usize {
     }
 }
 
-fn cell(value: &Value) -> Result<Cell> {
+pub(super) fn cell(value: &Value) -> Result<Cell> {
     Ok(match value {
         Value::Null => Cell::Blank,
         Value::Bool(v) => Cell::Boolean(*v),
@@ -126,7 +126,7 @@ fn cell(value: &Value) -> Result<Cell> {
 fn length(value: &Value) -> usize {
     py_str(value).chars().count()
 }
-fn lines(value: &Value, width: f64) -> usize {
+pub(super) fn lines(value: &Value, width: f64) -> usize {
     if matches!(value, Value::Null) || value == &s("") {
         return 1;
     }
@@ -284,7 +284,10 @@ pub fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
-    if command != "reports.export-transactions-xlsx" {
+    if !matches!(
+        command,
+        "reports.export-transactions-xlsx" | "reports.export-austrian-e1kv-xlsx"
+    ) {
         return Err(AppError::new(
             "not_implemented",
             format!("{command} is not implemented in the Rust backend yet"),
@@ -293,6 +296,9 @@ pub fn prepare(
     conn.execute_batch("SAVEPOINT report_xlsx_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if command == "reports.export-austrian-e1kv-xlsx" {
+            return austrian_xlsx::prepare(conn, args, sources);
+        }
         let (_, profile) = kassiber_setup::references::scope(conn, args)?;
         let (section, mut metadata) = standalone_csv::project(conn, &profile, args)?;
         let rows = section.rows.len();

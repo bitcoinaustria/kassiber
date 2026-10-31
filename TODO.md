@@ -336,14 +336,18 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
 - [x] Add the isolated deterministic `rust_xlsxwriter` renderer and strict
   openpyxl content oracle for all report workbook shapes; port transaction-list
   XLSX projection, publication and CLI/daemon registration with zero fallbacks.
-- [ ] Port full-report (including verification), Austrian E1kv, exit-tax,
+- [x] Port Austrian E1kv XLSX projection and CLI/desktop registration through
+  native completion; compare workbook content, actual hashes, explicit filing
+  and every database table, with zero hybrid fallbacks.
+- [ ] Port full-report (including verification), exit-tax,
   year-handoff and cross-check XLSX projections and registration. Verify their
   saved completions, Rust-byte hashes, explicit filing, complete normalized DB
   sequences and native routing before marking XLSX complete. PDF stays Python.
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
-- [ ] Keep PDF artifacts in Python pending a later rendering decision. Keep
-  unsupported commands disabled and all AI projections in Python.
+- [x] Keep PDF rendering and PDF-containing source-funds bundles in Python by
+  the owner's decision. Keep unsupported commands disabled and AI projections
+  in Python.
 
 ## Rust backend R4
 

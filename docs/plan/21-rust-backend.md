@@ -1123,6 +1123,27 @@ CLI/daemon differentials compare content, metadata and every database table;
 Rust with zero fallbacks. The [checkpoint](../reference/rust-shell.md#transaction-xlsx-transport-r5-partial)
 records the remaining report projections and acceptance gates.
 
+### R5 Austrian XLSX service continuation (partial)
+
+The twelfth reports continuation starts from integrated tip `dd433e4e`, applies
+the owner-specified Liquid/commercial and XLSX renderer/transaction commits,
+and ports Austrian E1kv XLSX through CLI and desktop. The native annual report
+feeds the deterministic renderer; existing export admission spans publication,
+actual-byte hashing, saved registration and dependency capture. Explicit filing
+retains the sealed saved identity, summaries and digest. It adds no tax rules,
+Python product changes, schema or unapproved dependency.
+
+Forty-seven annual fixtures pin workbook projections and real exports, including
+pre-render refusals. Four CLI sequences and nine desktop requests compare
+openpyxl content, wire metadata, all database tables and filing, with explicit
+mappings only for generated ids and independently verified new XLSX digests.
+The [Austrian XLSX checkpoint](../reference/rust-shell.md#austrian-xlsx-service-checkpoint-r5-twelfth-reports-continuation-partial)
+records verification, routing and the exact remaining work. This is not full
+reports or XLSX acceptance: all remaining report reads, other report
+workbooks, platform CSV formats and other artifacts still need native service
+and transport proof. PDF and PDF-containing source-funds bundles remain Python
+by owner decision; AI projections remain Python.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

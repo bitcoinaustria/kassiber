@@ -11,6 +11,7 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_csv",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_austrian_e1kv_xlsx",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
 ];
@@ -20,6 +21,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
         "ui.reports.export_csv"
             | "ui.reports.export_capital_gains_csv"
             | "ui.reports.export_austrian_e1kv_csv"
+            | "ui.reports.export_austrian_e1kv_xlsx"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
     ) {

@@ -9,11 +9,13 @@ pub fn handles(command: &str) -> bool {
         "reports.export-csv"
             | "reports.export-commercial-subledger-csv"
             | "reports.export-austrian-e1kv-csv"
+            | "reports.export-austrian-e1kv-xlsx"
             | "transactions.export"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
+            | "ui.reports.export_austrian_e1kv_xlsx"
             | "ui.reports.export_capital_gains_csv"
     )
 }
@@ -127,7 +129,8 @@ fn execute_admitted(
     sources: &dyn Sources,
 ) -> Result<Value> {
     let desktop = command.starts_with("ui.");
-    let xlsx = command == "ui.transactions.export_xlsx"
+    let xlsx = command == "ui.reports.export_austrian_e1kv_xlsx"
+        || command == "ui.transactions.export_xlsx"
         || (command == "transactions.export" && text(raw, "export_format") == "xlsx");
     if !desktop && command != "transactions.export" {
         let target = PathBuf::from(text(
@@ -184,6 +187,12 @@ fn execute_admitted(
                 "report",
             )
         }
+        "ui.reports.export_austrian_e1kv_xlsx" => (
+            "reports.export-austrian-e1kv-xlsx",
+            format!("kassiber-austrian-e1kv-{}", py_str(value(raw, "year"))),
+            ".xlsx",
+            "austrian_e1kv",
+        ),
         "reports.export-austrian-e1kv-csv" | "ui.reports.export_austrian_e1kv_csv" => (
             "reports.export-austrian-e1kv-csv",
             format!("kassiber-austrian-e1kv-{}-csv", py_str(value(raw, "year"))),

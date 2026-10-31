@@ -19,6 +19,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.balance-history",
     "reports.export-csv",
     "reports.export-austrian-e1kv-csv",
+    "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
@@ -33,6 +34,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         command,
         "reports.export-csv"
             | "reports.export-austrian-e1kv-csv"
+            | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-commercial-subledger-csv"
             | "transactions.export"
     ) {

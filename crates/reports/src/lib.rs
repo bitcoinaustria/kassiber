@@ -5,6 +5,7 @@ pub mod artifact_xlsx;
 mod austrian;
 mod austrian_csv;
 mod austrian_text;
+mod austrian_xlsx;
 mod calendar;
 mod capital_csv;
 mod commercial;

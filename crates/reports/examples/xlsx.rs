@@ -10,7 +10,7 @@ impl kassiber_setup::Sources for Fixed {
         Ok("2026-01-02T03:04:05Z".into())
     }
     fn uuid(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
-        panic!("transaction export requested an identity")
+        Ok("00000000-0000-4000-8000-000000000001".into())
     }
 }
 fn main() {
@@ -22,7 +22,9 @@ fn main() {
             let args = kassiber_pytext::loads(request["args_json"].as_str().unwrap()).unwrap();
             kassiber_reports::export::export(
                 &conn,
-                "reports.export-transactions-xlsx",
+                request["command"]
+                    .as_str()
+                    .unwrap_or("reports.export-transactions-xlsx"),
                 &args,
                 Path::new(request["path"].as_str().unwrap()),
                 &Fixed,
