@@ -21,7 +21,7 @@ METHODS = ("fifo", "lifo", "hifo", "lofo", "moving_average", "moving_average_at"
 def engine_book(tmp_path):
     connections = []
 
-    def build(rows, *, method="fifo", country="at", quotes=(), pair=False):
+    def build(rows, *, method="fifo", country="at", quotes=(), pair=False, overrides=None):
         conn = open_db(tmp_path / f"engine-{len(connections)}")
         connections.append(conn)
         accounts.create_workspace(conn, "W")
@@ -40,6 +40,10 @@ def engine_book(tmp_path):
                  "fp-" + tid, at, direction, "BTC", amount, fee, "EUR", rate,
                  str(rate) if rate is not None else None, kind, tid, "{}", at),
             )
+        for tid, fields in (overrides or {}).items():
+            for key, value in fields.items():
+                assert key in {"at_category_override", "taxability_override"}
+                conn.execute(f"UPDATE transactions SET {key}=? WHERE id=?", (value, tid))
         for at, rate in quotes:
             conn.execute(
                 """INSERT INTO rates_cache(pair,timestamp,rate,source,fetched_at)
@@ -147,7 +151,7 @@ def test_reviewer_headline_also_accounts_for_the_consumed_alt_fee(engine_book):
     sale = conn.execute("SELECT * FROM journal_entries WHERE entry_type='disposal'").fetchone()
     fee = conn.execute("SELECT * FROM journal_entries WHERE entry_type='transfer_fee'").fetchone()
     assert sale["at_category"] == "alt_taxfree"
-    assert parse_marker(sale["description"], MARKER_REGIME) == "neu"
+    assert parse_marker(sale["description"], MARKER_REGIME) == "alt"
     assert fee["quantity"] == -10_000_000
     assert Decimal(fee["cost_basis_exact"]) == Decimal("0.80")
     legacy_neu_qty = Decimal("0.86") + Decimal(sale["quantity"] + fee["quantity"]) / BTC
@@ -294,3 +298,72 @@ def test_handoff_stamps_current_input_version_and_quotes_without_snapshot(engine
         assert conn.execute("SELECT COUNT(*) FROM filed_report_snapshots").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM filed_report_chain_captures").fetchone()[0] == 0
     assert versions[1] == versions[0] + 1
+
+
+# Independent review simulator figures; these must not be computed from the
+# report's own categories or its consumption projection.
+REVIEW_TAX = dict(zip(METHODS, (7706.60, 4264.98, 5985.79, 7706.60, 7706.60, 5340.48)))
+REVIEW_GAIN = dict(zip(METHODS, (70756.90, 72509.00, 78766.50, 70756.90, 73273.81)))
+DISPOSAL_OVERRIDES = (
+    {}, {"at_category_override": "alt_taxfree"},
+    {"at_category_override": "neu_gain"}, {"taxability_override": 0},
+    {"at_category_override": "alt_taxfree", "taxability_override": 0},
+    {"at_category_override": "none"},
+)
+
+
+def reviewer_rows():
+    return regime_rows() + [
+        ("late", "Cold", "2024-03-31T23:30:00-01:00", "outbound", BTC // 10, 0, 70000, "withdrawal"),
+        ("fraction", "Cold", "2024-03-31T23:59:59.500000Z", "inbound", BTC // 1000, 0, 61000, "deposit"),
+        ("future-buy", "Hot", "2025-01-01T00:00:00Z", "inbound", BTC, 0, 90000, "deposit"),
+        ("future-sell", "Cold", "2025-02-01T00:00:00Z", "outbound", BTC // 2, 0, 95000, "withdrawal"),
+    ]
+
+
+@pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("override", DISPOSAL_OVERRIDES)
+def test_reviewer_method_jurisdiction_override_matrix(engine_book, method, country, override):
+    if country == "generic" and method == "moving_average_at":
+        from kassiber.tax_policy import build_tax_policy
+        assert method not in build_tax_policy({"tax_country": country}).accounting_methods
+        return
+    conn = engine_book(reviewer_rows(), method=method, country=country, pair=True,
+                       overrides={"sell": override}, quotes=[("2024-03-31T12:00:00Z", 65000)])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+    assert report["totals"]["estimatedTax" if country == "at" else "neuGain"] == (
+        REVIEW_TAX if country == "at" else REVIEW_GAIN)[method]
+    for row in conn.execute("SELECT * FROM journal_entries WHERE entry_type='disposal'"):
+        if country == "at":
+            regimes = {infer_regime_from_timestamp(f["lot"]["occurred_at"])
+                       for f in json.loads(row["calculation_json"])["fragments"]}
+            assert regimes == {parse_marker(row["description"], MARKER_REGIME)}
+        if row["transaction_id"] == "sell" and country == "at":
+            # Overrides still change realized tax treatment.
+            category = override.get("at_category_override")
+            if category and category != "none":
+                assert row["at_category"] == category
+            elif category == "none" or override.get("taxability_override") == 0:
+                assert row["at_category"] is None
+
+
+@pytest.mark.parametrize("category", ("neu_gain", "alt_taxfree", "none"))
+def test_disposal_override_keeps_separate_consumed_regime_rows(engine_book, category):
+    conn = engine_book([
+        ("alt", "Cold", "2020-01-01T00:00:00Z", "inbound", BTC // 10, 0, 8000, "buy"),
+        ("neu", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC // 2, 0, 40000, "buy"),
+        ("sell", "Cold", "2024-12-31T12:00:00Z", "outbound", 3 * BTC // 10, 0, 65000, "sell"),
+    ], overrides={"sell": {"at_category_override": category}})
+    sales = list(conn.execute("SELECT * FROM journal_entries WHERE entry_type='disposal'"))
+    assert len(sales) == 2
+    assert {parse_marker(r["description"], MARKER_REGIME):
+            (r["quantity"], Decimal(r["cost_basis_exact"])) for r in sales} == {
+        "alt": (-BTC // 10, Decimal(800)), "neu": (-BTC // 5, Decimal(8000)),
+    }
+    assert {r["at_category"] for r in sales} == {None if category == "none" else category}
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    assert report["totals"]["altQuantitySats"] == 0
+    assert report["totals"]["neuQuantitySats"] == 30_000_000
+    assert report["totals"]["neuCostBasis"] == 12000
+    assert report["totals"]["estimatedTax"] == 2062.50

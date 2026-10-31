@@ -11,7 +11,7 @@ Design (see docs/plan/11-exit-tax-deemed-disposal.md):
 - This module owns NO tax math. It reads the stored journal projection the
   tax engine already computed and reconstructs the remaining inventory and its
   cost basis per regime directly from those entries: acquisitions add (by
-  acquisition-date regime), disposals subtract (by their `at_category` regime
+  acquisition-date regime), disposals subtract (by their persisted consumed regime
   and the engine's own consumed cost basis). Income recognition lines are
   skipped for quantity/basis — the engine already books the matching
   acquisition lot for earn receipts, so counting income again would double the
@@ -198,20 +198,19 @@ def _description_at_regime(description: Any) -> Optional[str]:
 
 
 def _entry_is_alt(entry: Mapping[str, Any]) -> bool:
-    """Regime of a journal entry for inventory accounting.
+    """Read the matched-lot marker before the overrideable tax category.
 
-    Disposals/fees carry an `at_category` (e.g. ``neu_gain``, ``alt_taxfree``);
-    its prefix is authoritative. The tax engine serializes explicit Austrian
-    overrides and transfer fee regimes into the description as ``at_regime=...``;
-    honor that marker before falling back to the acquisition-date cutoff.
+    Rebuilt disposal and fee rows persist their pre-override consumed regime.
+    The category/date fallback supports legacy projections; freshness checks
+    require affected retained books to rebuild before reports use them.
     """
 
-    category = entry.get("at_category")
-    if dec(entry.get("quantity") or 0) < 0 and category:
-        return str(category).startswith("alt")
     marker = _description_at_regime(entry.get("description"))
     if marker is not None:
         return marker == "alt"
+    category = entry.get("at_category")
+    if dec(entry.get("quantity") or 0) < 0 and category:
+        return str(category).startswith("alt")
     occurred_at = entry.get("occurred_at")
     if occurred_at:
         return infer_regime_from_timestamp(str(occurred_at)) == "alt"

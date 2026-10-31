@@ -1453,7 +1453,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         source_row = row_by_id.get(taxable_event.unique_id)
         if tax_country == "at":
             at_category, at_kennzahl = _classify_at_disposal(gain_loss)
-            if entry_type in {"fee", "transfer_fee"}:
+            if entry_type in {"disposal", "fee", "transfer_fee"}:
                 # Keep RP2's consumed-lot regime before presentation overrides
                 # and before fees lose their capital-gains category below.
                 consumed_regime = "alt" if at_category.startswith("alt") else "neu"
@@ -1470,7 +1470,8 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 at_kennzahl = kennzahl_for_disposal_category(at_category)
             # One taxable event can split across multiple Austrian semantic
             # buckets when RP2 matches against heterogeneous acquired lots, so
-            # keep separate journal rows per category.
+            # keep separate journal rows per category and consumed regime, even
+            # when a user override maps both regimes to the same category.
             event_key = (taxable_event.internal_id, capital_gains_type, at_category, consumed_regime)
         event = realized_by_event.setdefault(
             event_key,
@@ -1516,15 +1517,14 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             gain_loss = Decimal("0")
             event["at_category"] = None
             event["at_kennzahl"] = None
-            if event["consumed_regime"] is not None:
-                # Input notes describe wallet-regime intent. Generic lot
-                # methods can consume another regime; the persisted fee row
-                # must describe the lots actually removed from inventory.
-                description = " ".join([
-                    marker_token(MARKER_REGIME, event["consumed_regime"]),
-                    *(token for token in str(description or "").split()
-                      if not token.startswith(f"{MARKER_REGIME}=")),
-                ])
+        if event["consumed_regime"] is not None:
+            # Persist matched-lot authority independently of the realized tax
+            # category, which the user may override or remove entirely.
+            description = " ".join([
+                marker_token(MARKER_REGIME, event["consumed_regime"]),
+                *(token for token in str(description or "").split()
+                  if not token.startswith(f"{MARKER_REGIME}=")),
+            ])
         quantity = event["quantity"] if event["entry_type"] == "income" else -event["quantity"]
         entry = {
             "id": str(uuid.uuid4()),
