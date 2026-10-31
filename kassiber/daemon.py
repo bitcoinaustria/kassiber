@@ -1518,10 +1518,14 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
             # Every queued callback shares the daemon's writer: tool calls,
             # chat persistence and provider-format detection alike. A failed
             # callback must not leave work for the next request to commit.
-            if ctx.conn is not None:
-                ctx.conn.rollback()
-            followups.clear()
-            task.response.put((False, exc))
+            try:
+                if ctx.conn is not None:
+                    ctx.conn.rollback()
+            finally:
+                # The caller is waiting on this queue even if the connection
+                # closed or failed during rollback. Preserve its original error.
+                followups.clear()
+                task.response.put((False, exc))
         else:
             task.response.put((True, payload))
         finally:

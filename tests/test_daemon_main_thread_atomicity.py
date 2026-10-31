@@ -52,3 +52,27 @@ def test_failed_main_thread_task_releases_writer_and_discards_writes(tmp_path, m
         assert conn.execute('SELECT COUNT(*) FROM custody_components').fetchone()[0] == 0
     finally:
         conn.close()
+
+
+def test_failed_rollback_still_answers_waiting_worker(tmp_path, monkeypatch):
+    """drain_edge.py: a callback closes the shared connection before failing."""
+    conn = open_db(tmp_path)
+    failure = RuntimeError('callback failed after closing the database')
+    response = queue.Queue(maxsize=1)
+    tasks = queue.Queue()
+    def callback(shared):
+        daemon._GRAPH_SYNC_FOLLOWUPS.get().append(object())
+        shared.close()
+        raise failure
+    tasks.put(daemon._DaemonMainThreadTask(callback, response, request_id='queued'))
+    followups = []
+    monkeypatch.setattr(daemon, '_start_freshness_background_worker', lambda *a, **kw: followups.append(kw))
+    previous_request = daemon.current_request_id.get()
+    previous_graph_context = daemon._GRAPH_SYNC_FOLLOWUPS.get()
+    with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
+        daemon._drain_daemon_main_thread_tasks(SimpleNamespace(conn=conn, main_thread_tasks=tasks))
+    # A real worker uses response.get() with no timeout. Never strand it here.
+    assert response.get_nowait() == (False, failure)
+    assert daemon.current_request_id.get() == previous_request
+    assert daemon._GRAPH_SYNC_FOLLOWUPS.get() is previous_graph_context
+    assert not followups
