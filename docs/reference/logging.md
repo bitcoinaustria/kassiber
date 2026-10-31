@@ -102,8 +102,13 @@ HTTP(S), TCP/TLS, SOCKS5(H), and WS(S), including empty usernames and token-only
 userinfo. Token and Digest authorization and two JSON-escaped assignment layers
 are covered by the same Python/webview corpus. A normal JSON object and up to
 two enclosing JSON strings (triple encoding)
-retain their representation while redacting assigned values. Deeper encoding
-is outside this textual backstop; emit structured secret fields instead.
+retain their representation while redacting assigned values. This is a fixed
+pass limit to keep work linear in the diagnostic's length. Four-layer JSON
+and Python `repr()` of double-encoded JSON are outside this textual backstop:
+their different or deeper escape sequences can leave secret values readable.
+Emit structured secret fields instead of repeatedly serializing or applying
+`repr()` to credential-bearing objects. This limit applies to Python and the
+webview; it does not limit structured secret-key scrubbing.
 Credential matching starts only at full identifier boundaries, including
 leading dash/dot runs and digit prefixes, to keep long diagnostic lines linear.
 Explicit CLI flags also scrub space-separated values (`--rpcpassword VALUE`),
