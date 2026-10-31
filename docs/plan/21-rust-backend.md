@@ -3405,3 +3405,31 @@ additional unported non-PDF artifact in this worker's family. Cross-check,
 Lightning, source-funds, PDF-containing artifacts and AI projections retain
 their separate ownership and checkpoints. Python product code, schema,
 dependencies and lockfiles are unchanged.
+### R5 privacy hygiene continuation (partial)
+
+`t3code/r5-reports-privacy` starts at `0475d3e49`, the year-handoff worker B
+tip. It ports the configuration-posture privacy hygiene service and registers
+`reports.privacy-hygiene` and `ui.reports.privacy_hygiene`. The service reads
+local database headers and stored aggregate facts without probing endpoints,
+refreshing journals or exposing private configuration. Endpoint posture retains
+Python 3.11's URL/IP rules, proxy-kind allowlist and infrastructure-owner
+precedence. Provider, watch-only material, inventory and privacy-marker counts
+retain their reference scope and truthiness. Stale journals are reported as a
+fact rather than admitted as tax reports.
+
+The [privacy checkpoint](../reference/rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
+records exact wire comparisons, every one of the 112 tables, native routing,
+named mutations and retained reference quirks. Native inventory increases to
+154 CLI leaves (22 reports), with 15 report daemon kinds plus two transaction
+exports. The parallel platform CSV worker's registrations are separate.
+Full daemon wire acceptance is still blocked by corrupt stored journal markers:
+typed errors match, but Rust omits Python's stderr and `error.debug` traceback.
+The checkpoint retains a named reproduction instead of normalizing the gap.
+
+This is a partial handoff. Privacy Mirror still needs the shared immutable
+Chain Analysis index, observer projection, clustering, patterns, attribution,
+conditional entropy and process-bound handles. The reduced PSBT report still
+needs the shared v0/v2 parser, categorical features and inventory/linkage
+overlay. Both CLI/daemon reads remain unregistered and fail closed; no separate
+graph interpreter or PSBT signing authority is introduced. AI projections and
+all Python files remain unchanged. No dependency, lockfile or schema changes.

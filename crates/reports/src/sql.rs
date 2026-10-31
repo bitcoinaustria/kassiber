@@ -28,7 +28,7 @@ pub fn optional_rows(conn: &Connection, query: &str, args: impl Params) -> Resul
     }
 }
 
-fn optional_cache_error(error: &rusqlite::Error) -> bool {
+pub(super) fn optional_cache_error(error: &rusqlite::Error) -> bool {
     // CPython 3.11 sqlite3's primary-code mapping to OperationalError.
     matches!(error, rusqlite::Error::SqliteFailure(code, _) if matches!(code.extended_code & 0xff,
         ffi::SQLITE_ERROR | ffi::SQLITE_PERM | ffi::SQLITE_ABORT | ffi::SQLITE_BUSY |

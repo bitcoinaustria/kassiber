@@ -27,6 +27,7 @@ pub const COMMANDS: &[&str] = &[
     "transactions.export",
     "reports.cross-check",
     "reports.export-year-handoff",
+    "reports.privacy-hygiene",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -450,6 +451,48 @@ mod tests {
         );
         assert!(COMMANDS.contains(&"reports.export-year-handoff"));
         assert!(crate::describe::IMPLEMENTED.contains(&"reports.export-year-handoff"));
+    }
+
+    #[test]
+    fn privacy_hygiene_cli_preserves_scope_and_output_shape() {
+        for format in ["json", "table", "plain", "csv"] {
+            let args = crate::argparse::parse_args(
+                &[
+                    "--format",
+                    format,
+                    "reports",
+                    "privacy-hygiene",
+                    "--workspace",
+                    "Main",
+                    "--profile",
+                    "Book",
+                ]
+                .map(str::to_owned),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let payload = request(&args);
+            assert_eq!(
+                get(&payload, "workspace"),
+                Some(&kassiber_envelope::s("Main"))
+            );
+            assert_eq!(
+                get(&payload, "profile"),
+                Some(&kassiber_envelope::s("Book"))
+            );
+            assert_eq!(get(&payload, "csv"), Some(&Value::Bool(format == "csv")));
+            assert_eq!(
+                get(&payload, "text"),
+                Some(&Value::Bool(matches!(format, "table" | "plain")))
+            );
+        }
+        assert!(COMMANDS.contains(&"reports.privacy-hygiene"));
+        assert!(crate::describe::IMPLEMENTED.contains(&"reports.privacy-hygiene"));
+        assert!(!COMMANDS.contains(&"reports.privacy-mirror"));
+        assert!(!COMMANDS.contains(&"reports.psbt-privacy"));
     }
 
 }

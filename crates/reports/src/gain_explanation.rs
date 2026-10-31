@@ -18,7 +18,7 @@ const PRICING: [&str; 12] = [
     "pricing_timestamp",
 ];
 
-fn profile_number(profile: &Value, key: &str) -> Result<Value> {
+pub(super) fn profile_number(profile: &Value, key: &str) -> Result<Value> {
     let raw = value(profile, key);
     let parsed = if !truthy(raw) {
         0.into()

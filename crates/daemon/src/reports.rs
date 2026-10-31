@@ -22,8 +22,12 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_cross_check",
     "ui.reports.export_year_handoff",
     "ui.transactions.export_platform_csv",
+    "ui.reports.privacy_hygiene",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if kind == "ui.reports.privacy_hygiene" {
+        return book.reports(kind, &privacy_args(raw)?);
+    }
     if matches!(
         kind,
         "ui.reports.cross_check" | "ui.reports.export_cross_check"
@@ -160,6 +164,34 @@ fn gain_args(kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
             .cloned()
             .unwrap_or(Value::Null),
     )]))
+}
+
+fn privacy_args(raw: Option<&Value>) -> Result<Value, AppError> {
+    let empty = dict::<&str>([]);
+    let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
+    let Value::Dict(fields) = args else {
+        return Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(type_name(args)))])));
+    };
+    if !fields.is_empty() {
+        let mut unknown: Vec<Value> = fields
+            .iter()
+            .map(|(k, _)| match k {
+                kassiber_pyjson::Key::Str(k) => Value::Str(k.clone()),
+                _ => unreachable!(),
+            })
+            .collect();
+        unknown.sort_by(|a, b| match (a, b) {
+            (Value::Str(a), Value::Str(b)) => a.cmp(b),
+            _ => unreachable!(),
+        });
+        return Err(AppError::new(
+            "validation",
+            "ui.reports.privacy_hygiene received unsupported arguments",
+        )
+        .with_details(dict([("unknown", Value::List(unknown))])));
+    }
+    Ok(empty)
 }
 
 fn history_args(raw: Option<&Value>) -> Result<Value, AppError> {
@@ -493,6 +525,36 @@ mod tests {
                 "ui.reports.export_year_handoff",
             ]
         );
+    }
+
+    #[test]
+    fn privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects() {
+        assert_eq!(privacy_args(None).unwrap(), dict::<&str>([]));
+        assert_eq!(privacy_args(Some(&Value::Null)).unwrap(), dict::<&str>([]));
+        for raw in [
+            Value::List(vec![]),
+            Value::Bool(false),
+            s(""),
+            Value::Int(0.into()),
+        ] {
+            let error = privacy_args(Some(&raw)).unwrap_err();
+            assert_eq!(error.code, "validation");
+            assert_eq!(error.message, "daemon args must be an object");
+            assert_eq!(error.details, Some(dict([("type", s(type_name(&raw)))])));
+        }
+        let error =
+            privacy_args(Some(&dict([("z", Value::Null), ("a", Value::Null)]))).unwrap_err();
+        assert_eq!(
+            error.message,
+            "ui.reports.privacy_hygiene received unsupported arguments"
+        );
+        assert_eq!(
+            error.details,
+            Some(dict([("unknown", Value::List(vec![s("a"), s("z")]))]))
+        );
+        assert!(KINDS.contains(&"ui.reports.privacy_hygiene"));
+        assert!(!KINDS.contains(&"ui.reports.privacy_mirror"));
+        assert!(!KINDS.contains(&"ui.reports.psbt_privacy"));
     }
 
 }

@@ -84,9 +84,9 @@ fn real_store_creates_schema_and_requires_explicit_init() {
     let output = run(&mut kassiber(&["daemon"]));
     assert!(output.status.success(), "{}", text(&output.stderr));
     assert!(text(&output.stdout).contains("daemon.ready"));
-    let output = run(&mut kassiber(&["--machine", "reports", "privacy-hygiene"]));
+    let output = run(&mut kassiber(&["--machine", "reports", "privacy-mirror"]));
     assert_eq!(output.status.code(), Some(1));
-    assert!(text(&output.stdout).contains("\"command\": \"reports.privacy-hygiene\""));
+    assert!(text(&output.stdout).contains("\"command\": \"reports.privacy-mirror\""));
 }
 
 #[test]

@@ -1029,3 +1029,16 @@ so unlock input is consumed once. Production builds have no hybrid handoff.
 Wallets using the active default retain that selection in their grant. The
 service re-resolves the current stored default before fetch and publication;
 changing it cannot redirect an already authorized sync to another backend.
+## Native configuration privacy hygiene
+
+The native configuration privacy hygiene read (`reports privacy-hygiene` and
+`ui.reports.privacy_hygiene`) inspects only stored configuration, local counts
+and the active database header. It performs no DNS lookup, socket connection,
+provider launch or backend probe, including for loopback endpoints. Endpoint
+posture is inferred rather than verified: Python's private-address ranges and
+`.local` names retain the `on_device` label. Counts include configured disabled
+AI providers. Neither classification grants network consent. The output omits
+endpoints, credentials, labels, watch-only material, raw metadata and exact
+amounts. AI dispatch remains Python. The
+[Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
+records parity and the unported Mirror/PSBT boundary.

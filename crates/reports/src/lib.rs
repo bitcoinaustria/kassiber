@@ -31,6 +31,7 @@ mod history;
 mod holdings;
 mod journal;
 mod platform_csv;
+mod privacy_hygiene;
 mod snapshot_write;
 mod snapshots;
 mod sql;
@@ -158,6 +159,19 @@ pub fn execute_with_sources(
             );
         }
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+        if matches!(
+            command,
+            "reports.privacy-hygiene" | "ui.reports.privacy_hygiene"
+        ) {
+            let report = privacy_hygiene::report(conn, &workspace, &profile)?;
+            return Ok(
+                if truthy(value(args, "text")) || truthy(value(args, "csv")) {
+                    privacy_hygiene::table(&report)
+                } else {
+                    report
+                },
+            );
+        }
         if command == "reports.explain-capital-gain" {
             let reference = kassiber_pytext::loads(&text(args, "reference"))
                 .map_err(|_| AppError::new("validation", "Result reference must be JSON"))?;

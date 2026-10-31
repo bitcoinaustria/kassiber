@@ -5325,7 +5325,9 @@
     "file": "crates/cli/src/run.rs",
     "find": "matches!(\n                args.text(\"export_format\"),\n                Some(\"csv\" | \"xlsx\" | \"cointracking-csv\" | \"blockpit-csv\")\n            )",
     "replace": "args.text(\"export_format\").is_some()",
-    "expect_failing": ["transaction_export_admission_registers_all_native_formats"],
+    "expect_failing": [
+      "transaction_export_admission_registers_all_native_formats"
+    ],
     "rule": "Transaction formats outside the closed native allowlist remain refused before bootstrap."
   },
   {
@@ -8167,5 +8169,365 @@
       "platform_csv_daemon_kind_is_registered"
     ],
     "rule": "The report subset retains Python's advertised wire order independently of port chronology."
+  },
+  {
+    "id": "privacy-r5-normalize-kind",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "kassiber_pytext::strip(&string_or_empty(v)).to_lowercase()",
+    "replace": "string_or_empty(v)",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Endpoint kind and ownership classification must strip whitespace and lowercase Python strings."
+  },
+  {
+    "id": "privacy-r5-malformed-bracket",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "if !before.is_empty() || (!after.is_empty() && !after.starts_with(':')) {",
+    "replace": "if before.len() == usize::MAX || after.len() == usize::MAX {",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Malformed bracketed authorities must use Python's raw-host fallback."
+  },
+  {
+    "id": "privacy-r5-url-control-stripping",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": ".filter(|c| !matches!(c, '\\t' | '\\r' | '\\n'))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "URL parsing must remove embedded tab, carriage return and newline characters as Python does."
+  },
+  {
+    "id": "privacy-r5-private-exceptions",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "&& !exceptions.iter().any(|n| in_network(ip, n))",
+    "replace": "&& exceptions.iter().all(|n| n.is_empty())",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Private-address classification must retain Python's public exceptions within reserved networks."
+  },
+  {
+    "id": "privacy-r5-mapped-address",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "return private_ip(IpAddr::V4(v4));",
+    "replace": "return v4.is_unspecified();",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "IPv4-mapped IPv6 addresses must inherit the mapped IPv4 privacy classification."
+  },
+  {
+    "id": "privacy-r5-local-first",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "if local_host(&host) {",
+    "replace": "if host.is_empty() && local_host(&host) {",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Local endpoint classification must precede self-hosted and proxy classifications."
+  },
+  {
+    "id": "privacy-r5-self-hosted",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "return \"self_hosted\";",
+    "replace": "return \"remote\";",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Explicit self ownership must retain the self_hosted posture."
+  },
+  {
+    "id": "privacy-r5-proxy-honored",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "|| (proxy\n            && [",
+    "replace": "|| (!proxy\n            && [",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Shielded posture requires a configured proxy on a transport that honors it."
+  },
+  {
+    "id": "privacy-r5-empty-endpoint",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "if host.is_empty() {\n        \"unknown\"",
+    "replace": "if host.len() == usize::MAX {\n        \"unknown\"",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "An empty endpoint without ownership or proxy evidence must remain unknown."
+  },
+  {
+    "id": "privacy-r5-lightning-surface",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "{ \"lightning\" }",
+    "replace": "{ \"market\" }",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Lightning backends must contribute to the Lightning surface counts."
+  },
+  {
+    "id": "privacy-r5-liquid-surface",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "chain == \"liquid\" || kind == \"liquid-esplora\"",
+    "replace": "chain == \"never\" || kind == \"never\"",
+    "expect_failing": [
+      "privacy_hygiene_endpoint_postures_match_python_and_all_112_tables"
+    ],
+    "rule": "Liquid chain and liquid-esplora endpoints must contribute to the Liquid surface counts."
+  },
+  {
+    "id": "privacy-r5-credential-config",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "\"password\", \"rpc_file\", \"username\"",
+    "replace": "\"omitted-password\", \"rpc_file\", \"username\"",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "A stored backend password must contribute to the credentialed backend count without disclosure."
+  },
+  {
+    "id": "privacy-r5-disabled-providers",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "FROM ai_providers ORDER BY name ASC",
+    "replace": "FROM ai_providers WHERE enabled!=0 ORDER BY name ASC",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Configured disabled providers must remain counted for Python parity."
+  },
+  {
+    "id": "privacy-r5-cli-locators",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "\"copilot-cli://default\",",
+    "replace": "\"copilot-cli://omitted\",",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Every recognized CLI provider locator must retain the CLI provider category."
+  },
+  {
+    "id": "privacy-r5-local-acknowledgement",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "if kind != \"local\" && !truthy(value(&row, \"acknowledged_at\")) {",
+    "replace": "if !truthy(value(&row, \"acknowledged_at\")) {",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Local providers must not require off-device acknowledgement."
+  },
+  {
+    "id": "privacy-r5-wallet-profile",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "WHERE profile_id=? ORDER BY kind ASC",
+    "replace": "WHERE profile_id!=? ORDER BY kind ASC",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Wallet material counts must stay within the selected profile."
+  },
+  {
+    "id": "privacy-r5-watch-samourai",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "\"samourai\",",
+    "replace": "\"omitted-samourai\",",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Samourai watch-only material must contribute to the watch-only wallet count."
+  },
+  {
+    "id": "privacy-r5-change-descriptor",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "&[\"descriptor\", \"change_descriptor\"][..]",
+    "replace": "&[\"descriptor\"][..]",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "A change descriptor alone must contribute to the descriptor wallet count."
+  },
+  {
+    "id": "privacy-r5-source-file",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "(\"source_file_wallet_count\", &[\"source_file\"][..])",
+    "replace": "(\"source_file_wallet_count\", &[\"omitted\"][..])",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Source-file wallet configurations must retain their separate count."
+  },
+  {
+    "id": "privacy-r5-count-limitations",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "if !sql::optional_cache_error(&e) {",
+    "replace": "if sql::optional_cache_error(&e) {",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Unavailable optional count columns must produce limitations rather than aborting the report."
+  },
+  {
+    "id": "privacy-r5-count-changes",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "else if processed_count != number(active) || version != processed_version {",
+    "replace": "else if processed_count != number(active) && version != processed_version {",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Either a changed transaction count or a changed journal input version must make freshness stale."
+  },
+  {
+    "id": "privacy-r5-empty-freshness",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "let status = if active == 0 {",
+    "replace": "let status = if active < 0 {",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "A book without active transactions must retain the no_transactions freshness status."
+  },
+  {
+    "id": "privacy-r5-not-processed",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "} else if !truthy(value(profile, \"last_processed_at\")) {",
+    "replace": "} else if truthy(value(profile, \"last_processed_at\")) {",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "A missing processing timestamp must retain the not_processed status."
+  },
+  {
+    "id": "privacy-r5-highest-severity",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "\"alert\" => 3,",
+    "replace": "\"alert\" => 0,",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "An alert finding must outrank warning and informational findings."
+  },
+  {
+    "id": "privacy-r5-read-only",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "(\"read_only\", Value::Bool(true))",
+    "replace": "(\"read_only\", Value::Bool(false))",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "The privacy hygiene payload must declare its read-only boundary."
+  },
+  {
+    "id": "privacy-r5-header-plaintext",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "&header == b\"SQLite format 3\\0\"",
+    "replace": "&header != b\"SQLite format 3\\0\"",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "The SQLite plaintext signature must classify as plaintext rather than encrypted_like."
+  },
+  {
+    "id": "privacy-r5-header-memory",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "fact().unwrap_or((\"unknown\", \"unknown\"))",
+    "replace": "fact().unwrap_or((\"plaintext\", \"exact\"))",
+    "expect_failing": [
+      "privacy_hygiene_storage_headers_preserve_unknown_empty_and_encrypted_states"
+    ],
+    "rule": "An in-memory database without a file header must retain unknown encryption evidence."
+  },
+  {
+    "id": "privacy-r5-header-empty",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "if size == 0 {",
+    "replace": "if size == u64::MAX {",
+    "expect_failing": [
+      "privacy_hygiene_storage_headers_preserve_unknown_empty_and_encrypted_states"
+    ],
+    "rule": "An empty database file must retain the missing_or_empty status."
+  },
+  {
+    "id": "privacy-r5-active-count",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "kassiber_pytext::loads(include_str!(\"privacy_hygiene_metadata.json\")).unwrap()",
+    "replace": "kassiber_pytext::loads(&include_str!(\"privacy_hygiene_metadata.json\").replace(\"profile_id = ? AND excluded = 0\",\"profile_id = ? AND excluded != 0\")).unwrap()",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "The active transaction count must exclude excluded observations."
+  },
+  {
+    "id": "privacy-r5-raw-count",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "kassiber_pytext::loads(include_str!(\"privacy_hygiene_metadata.json\")).unwrap()",
+    "replace": "kassiber_pytext::loads(&include_str!(\"privacy_hygiene_metadata.json\").replace(\"trim(raw_json) NOT IN ('', '{}', 'null')\",\"trim(raw_json) NOT IN ('')\")).unwrap()",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Empty, empty-object and null JSON placeholders must not contribute to retained raw metadata counts."
+  },
+  {
+    "id": "privacy-r5-boundary-count",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "kassiber_pytext::loads(include_str!(\"privacy_hygiene_metadata.json\")).unwrap()",
+    "replace": "kassiber_pytext::loads(&include_str!(\"privacy_hygiene_metadata.json\").replace(\"trim(privacy_boundary) != ''\",\"trim(privacy_boundary) = ''\")).unwrap()",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Only nonempty privacy-boundary markers must contribute to the marker count."
+  },
+  {
+    "id": "privacy-r5-inventory-active",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "kassiber_pytext::loads(include_str!(\"privacy_hygiene_metadata.json\")).unwrap()",
+    "replace": "kassiber_pytext::loads(&include_str!(\"privacy_hygiene_metadata.json\").replace(\"AND spent_at IS NULL\",\"AND spent_at IS NOT NULL\")).unwrap()",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Only unspent inventory rows must contribute to the active UTXO count."
+  },
+  {
+    "id": "privacy-r5-privacy-quarantines",
+    "file": "crates/reports/src/privacy_hygiene.rs",
+    "find": "kassiber_pytext::loads(include_str!(\"privacy_hygiene_metadata.json\")).unwrap()",
+    "replace": "kassiber_pytext::loads(&include_str!(\"privacy_hygiene_metadata.json\").replace(\"reason LIKE 'privacy%'\",\"reason LIKE 'missing%'\")).unwrap()",
+    "expect_failing": [
+      "privacy_hygiene_facts_match_python_and_all_112_tables"
+    ],
+    "rule": "Only privacy-prefixed reasons must contribute to the privacy quarantine count."
+  },
+  {
+    "id": "privacy-r5-cli-registered",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"reports.privacy-hygiene\",",
+    "replace": "    \"reports.privacy-hygiene-omitted\",",
+    "expect_failing": [
+      "privacy_hygiene_cli_preserves_scope_and_output_shape"
+    ],
+    "rule": "The native CLI must register the configuration privacy hygiene read."
+  },
+  {
+    "id": "privacy-r5-daemon-registered",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.reports.privacy_hygiene\",",
+    "replace": "    \"ui.reports.privacy_hygiene_omitted\",",
+    "expect_failing": [
+      "privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects"
+    ],
+    "rule": "The native daemon must register the configuration privacy hygiene kind."
+  },
+  {
+    "id": "privacy-r5-daemon-unknown",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    if !fields.is_empty() {\n        let mut unknown: Vec<Value>",
+    "replace": "    if fields.is_empty() {\n        let mut unknown: Vec<Value>",
+    "expect_failing": [
+      "privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects"
+    ],
+    "rule": "The daemon configuration privacy hygiene kind must reject unsupported arguments."
   }
 ]

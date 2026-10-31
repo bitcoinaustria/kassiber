@@ -190,6 +190,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-wasabi",
     "reports.cross-check",
     "reports.export-year-handoff",
+    "reports.privacy-hygiene",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

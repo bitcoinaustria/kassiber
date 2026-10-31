@@ -10096,3 +10096,133 @@ summaries remain under `target/r5-platform/`.
 Verification is Linux-only. The full Python/frontend quality gate, Docker
 regtest and packaged/platform checks are not run. This checkpoint completes
 the platform CSV family; it does not claim full R5 completion or push readiness.
+## Privacy hygiene checkpoint (R5 reports privacy, partial)
+
+`t3code/r5-reports-privacy` starts at `0475d3e49`, the year-handoff worker B
+tip. It adds the native configuration privacy hygiene service and appends
+`reports.privacy-hygiene` and `ui.reports.privacy_hygiene` to their transport
+registries. The parallel platform CSV worker owns its separate registrations.
+The cross-check checkpoint requested as an additional example is absent from
+this base; the year-handoff checkpoint above supplies the acceptance standard.
+
+The service reads the active database header, configured endpoint/provider
+posture, watch-only material counts, transaction/inventory aggregates and stored
+journal freshness. Output remains count-only and redacted. It never probes a
+provider or endpoint, launches an external process, refreshes observations or
+journals, or changes custody/accounting authority. The report is available even
+when journals need processing, matching Python's informational-read boundary.
+The only extra filesystem read is the active database's header. No new network
+route or `kassiber-net` grant is needed. The process oracle arms the strict
+attempt observer for both implementations, including loopback.
+
+The frozen corpus has 208 cases. Each compares canonical service bytes and
+SHA-256 commitments to complete sorted rows in all 112 database tables, before
+and after the read. The seed retains Python's immutable compatibility audit
+rows; no generated row identity or timestamp is normalized. Cases cover URL/IP
+classification, Python 3.11 private-range exceptions, transport/proxy/owner
+precedence, provider acknowledgement and truthiness, watch-only configuration,
+freshness, malformed markers, count-column failures and raw JSON placeholders.
+Separate native checks cover in-memory, empty and SQLCipher header states.
+
+The process oracle compares exit codes and raw stdout/stderr for JSON, table,
+plain, CSV, machine output, output files and scope refusals. Daemon response
+lines compare literally for valid reads, unsupported/non-object arguments and
+stale expected scope; the inherited initial `daemon.ready` handshake is outside
+this report-specific comparison. All 112 tables compare after each CLI action
+and daemon session, with no report writes or in-scope hybrid fallback.
+
+| Dedicated hygiene parity routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.privacy-hygiene` | 48 | 0 |
+| Daemon sessions (40 hygiene requests) | 5 | 0 |
+
+The separate corrupt-marker diagnostic reproduction runs one additional native
+daemon session, excluded from the parity counts above. All three process/oracle
+tests pass, including the 208-case unchanged-Python oracle.
+
+The report mutation catalog has 755 applicable entries. All 36 new
+`privacy-r5-*` entries are killed by these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `privacy_hygiene_endpoint_postures_match_python_and_all_112_tables` | 11 |
+| `privacy_hygiene_facts_match_python_and_all_112_tables` | 20 |
+| `privacy_hygiene_storage_headers_preserve_unknown_empty_and_encrypted_states` | 2 |
+| `privacy_hygiene_cli_preserves_scope_and_output_shape` | 1 |
+| `privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects` | 2 |
+
+All five named selections pass unmutated. The unchanged shared checker runs the
+three crate library targets and the hygiene integration target in a disposable
+scratch copy, with fresh source timestamps to exclude cached mutated artifacts.
+The 719 inherited recipes retain their earlier evidence and are not rerun.
+`target/r5-privacy/mutation-summary.json` maps every new recipe to its killer;
+complete command logs retain compilation and selection evidence. Build errors,
+missing selections and the interrupted/failed preliminary campaigns contribute
+no kills. The owned mutation build tree is removed after summarizing.
+
+Retained reference quirks and their checked-in reproduction witnesses:
+
+| Reference behavior | Fixture / reproduction |
+| --- | --- |
+| RFC1918 addresses and `.local` names are labelled `on_device` without verifying where they resolve | `host-10.1.2.3`, `host-node.local` |
+| Malformed `[::1` falls back to a stripped local host and is labelled `on_device` | `host-[::1` |
+| A disabled configured remote provider still contributes to provider and unacknowledged counts | `disabled-provider` |
+| A corrupt journal integer raises an internal error, including when the report only needs freshness facts | `malformed-journal_input_version` |
+| An unavailable count column yields zero and an unknown limitation while the enclosing fact retains its `exact` evidence label | `unavailable-address`, `unavailable-raw_json` |
+
+`privacy_hygiene_frozen_oracle_matches_unchanged_python` reevaluates every
+fixture through unchanged Python and verifies the same all-table commitments.
+Run the checked-in reproductions on disposable roots under this worktree's
+`target/`, preserving account `HOME`:
+
+```sh
+mkdir -p target/r5-privacy/tmp
+mise exec rust@1.99.1 uv@latest -- env CARGO_BUILD_JOBS=8 \
+  TMPDIR="$PWD/target/r5-privacy/tmp" \
+  CARGO_TARGET_DIR="$PWD/target/r5-privacy-build" \
+  CARGO_BUILD_BUILD_DIR="$PWD/target/r5-privacy-build" \
+  CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+  cargo test --offline --locked -p kassiber --features test-harness \
+  --test privacy_reports -- --nocapture
+```
+
+The corrupt-marker daemon case is an explicit acceptance gap. Typed code and
+message agree, but Python emits a traceback to stderr and `error.debug`; Rust
+emits no traceback and returns `debug: null`. The named
+`privacy_hygiene_corrupt_daemon_marker_reproduces_reference_debug_gap` test pins
+that difference. It is not counted as a raw-wire parity pass. No fabricated
+Python stack trace or diagnostic normalization hides the gap.
+
+Native inventory after this branch alone is 154 CLI leaves, including 22 report
+commands, and 15 report daemon kinds plus two transaction export kinds. AI
+projections and all Python files remain unchanged. There are no dependency,
+lockfile or product schema changes.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting, production
+and test-harness workspace/all-target clippy with `-D warnings`, all 128 report,
+CLI and daemon tests, and all three hygiene process/oracle tests. Locked Python
+3.11.17 passes 17 selected AI catalog, report-contract and shell-drift checks
+plus four subtests. The required classifier update and CI preflight pass; the
+latter runs all 57 tests without skips. The final mutation applicability check
+confirms all 755 entries. `target/r5-privacy/verification-summary.json` records
+the gates, routing, mutations and explicit diagnostic gap. Tests run one job at
+a time, preserve account `HOME` and use disposable roots under `target/`. Owned
+verification and mutation build trees are removed after summarizing.
+
+Verification is Linux-only. The full workspace test run, full Python/frontend
+quality gate and packaged/platform gates are not run. The separate binary test
+suite is not executed because its inherited helper overrides `HOME`, forbidden
+for this task; its unsupported-command witness moves from hygiene to Mirror and
+is reviewed with the native registries. No push-ready claim is made.
+
+This is a partial handoff. Privacy Mirror and PSBT report reads remain
+unregistered and fail closed. Mirror requires the shared immutable observation
+index, observer projection, traversal, clustering/hypotheses, structural and
+multi-hop features, attribution, conditional entropy and process/book-bound
+`ca-ref:` handles before its report projection can be accepted. PSBT requires
+the shared v0/v2 parser, framing/UTXO/locktime checks, categorical features,
+inventory/linkage overlay, redaction and CLI/file/daemon input parity. Signing,
+broadcasting and spending keys stay outside the watch-only boundary. The
+separate legacy `ui.privacy_hygiene.snapshot` scorer is also unported; this
+checkpoint covers the configuration report only. Full corrupt-marker daemon
+diagnostic parity remains outstanding in addition to those two report families.
