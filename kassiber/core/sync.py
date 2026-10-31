@@ -19,6 +19,7 @@ from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
+from .sync_control import checked_parallel_map, run_sync_network, sync_transport_check
 from .esplora_history import full_scan_checkpoint
 from .onchain import stored_tx_mapping
 from .chain_observer import (
@@ -690,16 +691,17 @@ def fetch_wallet_backend(
     force_full: bool = False,
     source_overlap_preflight: SourceOverlapPreflight | None = None,
     observer_fetch_preflight: ObserverFetchPreflight | None = None,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> WalletBackendFetch:
     """Run discovery, optional overlap preflight, then backend fetch."""
-    discovery = discover_wallet_backend(
+    discovery = run_sync_network(lambda: discover_wallet_backend(
         runtime_config,
         profile,
         wallet,
         hooks,
         checkpoint,
         force_full=force_full,
-    )
+    ), check_cancelled)
     if (
         source_overlap_preflight is not None
         and discovery.skip_outcome is None
@@ -712,14 +714,18 @@ def fetch_wallet_backend(
         )
     if observer_fetch_preflight is not None:
         token = _wrap_sync_progress_for_wallet(wallet)
+        check_token = sync_transport_check.set(check_cancelled)
         try:
+            if check_cancelled is not None:
+                check_cancelled()
             observer_fetch = observer_fetch_preflight(wallet, discovery)
             if observer_fetch is not None:
                 return observer_fetch
         finally:
+            sync_transport_check.reset(check_token)
             if token is not None:
                 sync_progress_emitter.reset(token)
-    return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
+    return run_sync_network(lambda: fetch_wallet_backend_from_discovery(wallet, hooks, discovery), check_cancelled)
 
 
 def apply_fetch_observer_updates(
@@ -1373,6 +1379,7 @@ def prefetch_wallets_backend(
     max_workers: int = WALLET_FETCH_FANOUT,
     source_overlap_preflight: SourceOverlapPreflight | None = None,
     observer_fetch_preflight: ObserverFetchPreflight | None = None,
+    check_wallet_cancelled: Callable[[WalletRow], None] | None = None,
 ) -> dict[str, "WalletBackendFetch | BaseException"]:
     """Run discovery/preflight/fetch for several backend wallets.
 
@@ -1389,6 +1396,11 @@ def prefetch_wallets_backend(
         return {}
 
     def _parallel_wallet_step(step):
+        if check_wallet_cancelled is not None:
+            return dict(zip(
+                (str(wallet["id"]) for wallet in wallets),
+                checked_parallel_map(step, wallets, check_wallet_cancelled, max(1, min(max_workers, len(wallets)))),
+            ))
         if len(wallets) == 1 or max_workers <= 1:
             return {str(wallet["id"]): step(wallet) for wallet in wallets}
         results: dict[str, Any] = {}
@@ -1448,13 +1460,19 @@ def prefetch_wallets_backend(
             if isinstance(discovery, BaseException) or discovery is None:
                 continue
             token = _wrap_sync_progress_for_wallet(wallet)
+            check_token = sync_transport_check.set(
+                (lambda: check_wallet_cancelled(wallet)) if check_wallet_cancelled is not None else None
+            )
             try:
+                if check_wallet_cancelled is not None:
+                    check_wallet_cancelled(wallet)
                 observer_fetch = observer_fetch_preflight(wallet, discovery)
                 if observer_fetch is not None:
                     observer_fetches[wallet_id] = observer_fetch
             except Exception as exc:
                 observer_fetches[wallet_id] = exc
             finally:
+                sync_transport_check.reset(check_token)
                 if token is not None:
                     sync_progress_emitter.reset(token)
 

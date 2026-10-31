@@ -130,6 +130,9 @@ jobs recheck the current source-class and triggering-feature settings before
 starting transport work; disabling either cancels that work. A manual refresh
 executes only the jobs selected by that action, including its prefetch stage.
 An already transmitted request cannot be recalled.
+Saved freshness cancellation is rechecked before each subsequent compatibility
+HTTP request or Electrum batch, including active-book prefetch. Network workers
+wait for that check on the thread owning the book's SQLite connection.
 Graph follow-ups use an in-memory grant tied to the successful sync, active book,
 wallet configuration and backend. They recheck cancellation, the no-egress switch,
 and any automatic-sync permission before transport and cache writes. Locking or

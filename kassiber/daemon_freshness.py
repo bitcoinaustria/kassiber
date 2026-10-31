@@ -1762,6 +1762,11 @@ def _prefetch_onchain_freshness_jobs(
         for wallet in wallets
     }
     prefetched_by_job: dict[str, Any] = {}
+
+    def check_wallet_cancelled(wallet) -> None:
+        job = eligible_job_by_wallet_id[str(wallet["id"])]
+        core_freshness._check_cancelled(conn, str(job["id"]))
+
     # Both force-full groups reuse one shared Electrum pool so the incremental
     # and forced-full prefetches do not tear down and re-establish the same
     # backend connection between groups.
@@ -1786,6 +1791,7 @@ def _prefetch_onchain_freshness_jobs(
                     for wallet in grouped_wallets
                 },
                 force_full=force_full,
+                check_wallet_cancelled=check_wallet_cancelled,
             )
             for wallet in grouped_wallets:
                 wallet_id = str(wallet["id"])

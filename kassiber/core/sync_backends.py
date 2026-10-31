@@ -73,6 +73,7 @@ from .onchain import (
 )
 from .privacy_hops import privacy_boundary_from_import_record
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
+from .sync_control import check_sync_transport, run_sync_network, sync_transport_check
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
@@ -121,6 +122,7 @@ def http_get_json(
     _max_attempts=None,
 ):
     def _opener():
+        check_sync_transport()
         request_headers = {
             "Accept": "application/json",
             "User-Agent": f"{APP_NAME}/{__version__}",
@@ -161,6 +163,7 @@ def http_get_text(
     _max_attempts=None,
 ):
     def _opener():
+        check_sync_transport()
         request_headers = {
             "Accept": accept,
             "User-Agent": f"{APP_NAME}/{__version__}",
@@ -203,6 +206,7 @@ def http_post_json(
     deadline=None,
 ):
     def _opener():
+        check_sync_transport()
         request = urlrequest.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
@@ -292,6 +296,7 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
 
 
 def _connect_backend_socket(backend, host, port):
+    check_sync_transport()
     require_egress_enabled()
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
@@ -402,6 +407,7 @@ class ElectrumClient:
             return self._call_locked(method, params)
 
     def _call_locked(self, method, params=None):
+        check_sync_transport()
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         self.request_id += 1
@@ -453,6 +459,7 @@ class ElectrumClient:
             return self._batch_call_locked(requests)
 
     def _batch_call_locked(self, requests):
+        check_sync_transport()
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         if not requests:
@@ -580,6 +587,7 @@ class _ElectrumBatchDispatcher:
             return []
         pending = {
             "requests": requests,
+            "check": sync_transport_check.get(),
             "event": threading.Event(),
             "result": None,
             "error": None,
@@ -646,14 +654,25 @@ class _ElectrumBatchDispatcher:
                     # and must not mask the error being reported to callers.
                     pass
 
-        def execute_requests(requests):
+        def check_callers(pending_calls):
+            for pending in pending_calls:
+                if pending["check"] is not None:
+                    try:
+                        pending["check"]()
+                    except Exception as exc:
+                        pending["error"] = exc
+                        raise
+
+        def execute_requests(requests, pending_calls):
             nonlocal client
+            check_callers(pending_calls)
             if client is None:
                 candidate = ElectrumClient(self.backend)
                 candidate.__enter__()
                 client = candidate
             results = []
             for start in range(0, len(requests), self.batch_size):
+                check_callers(pending_calls)
                 results.extend(
                     client.batch_call(requests[start : start + self.batch_size])
                 )
@@ -686,31 +705,40 @@ class _ElectrumBatchDispatcher:
                         for request in pending["requests"]
                     ]
                     try:
-                        combined_results = execute_requests(combined)
+                        combined_results = execute_requests(combined, pending_calls)
                     except Exception as combined_error:
                         discard_client()
-                        can_isolate_rpc_error = (
+                        can_isolate_call_error = (
                             len(pending_calls) > 1
-                            and isinstance(combined_error, AppError)
-                            and combined_error.code == "electrum_rpc_error"
+                            and (
+                                any(pending["error"] is combined_error for pending in pending_calls)
+                                or (
+                                    isinstance(combined_error, AppError)
+                                    and combined_error.code == "electrum_rpc_error"
+                                )
+                            )
                         )
-                        if can_isolate_rpc_error:
+                        if can_isolate_call_error:
                             # Read-only Electrum calls are safe to retry. Split a
-                            # request-level RPC error back into its logical callers
-                            # so one rejected request cannot contaminate another
-                            # wallet. Transport/session failures affect the whole
+                            # request-level RPC error or cancellation back into its
+                            # logical callers so one wallet cannot cancel another.
+                            # Transport/session failures affect the whole
                             # connection and must not multiply timeouts per caller.
                             for index, pending in enumerate(pending_calls):
+                                if pending["error"] is not None:
+                                    continue
                                 try:
                                     pending["result"] = execute_requests(
-                                        pending["requests"]
+                                        pending["requests"],
+                                        [pending],
                                     )
                                 except Exception as exc:
+                                    check_failed = pending["error"] is exc
                                     pending["error"] = exc
                                     discard_client()
                                     if not (
-                                        isinstance(exc, AppError)
-                                        and exc.code == "electrum_rpc_error"
+                                        check_failed
+                                        or (isinstance(exc, AppError) and exc.code == "electrum_rpc_error")
                                     ):
                                         for remaining in pending_calls[index + 1 :]:
                                             remaining["error"] = exc
@@ -1466,12 +1494,12 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             descriptor_plan is not None
             and getattr(descriptor_plan, "kind", None) != "silent-payment"
         ):
-            online_discovery = discover_compatibility_descriptor_targets(
+            online_discovery = run_sync_network(lambda: discover_compatibility_descriptor_targets(
                 discovery.backend,
                 descriptor_plan,
                 discovery.kind,
                 checkpoint=state.checkpoint,
-            )
+            ))
             online_targets = list(online_discovery["targets"])
             compatibility_state = replace(
                 state,
@@ -1515,7 +1543,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                 )
         adapter = COMPATIBILITY_SYNC_BACKEND_ADAPTERS[discovery.kind]
         try:
-            records, meta = adapter(discovery.backend, wallet, compatibility_state)
+            records, meta = run_sync_network(lambda: adapter(discovery.backend, wallet, compatibility_state))
         except AppError:
             raise
         except Exception as exc:

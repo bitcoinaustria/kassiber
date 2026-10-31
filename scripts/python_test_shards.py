@@ -73,6 +73,7 @@ _NETWORK_SERIAL_MODULES = frozenset(
         "test_proxy",
         "test_regtest_backend_stack",
         "test_sync_backends",
+        "test_freshness_prefetch_cancellation",
     }
 )
 _DAEMON_SERIAL_MODULES = frozenset({"test_cli_chat", "test_daemon_smoke", "test_mcp_server"})
