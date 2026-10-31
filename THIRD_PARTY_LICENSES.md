@@ -80,6 +80,11 @@ third-party package or runtime requirement is added.
 | `secp256k1` / `secp256k1-zkp` | locked transitive | Bitcoin and Liquid public-key operations used by the descriptor libraries; no signing or broadcast API is exposed by Kassiber | CC0-1.0 |
 | `regex` | `1` | Bounded non-backtracking descriptor token and wallet-export syntax normalization; already used transitively by backend redaction | MIT OR Apache-2.0 |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
+| `rust_xlsxwriter` | `0.102.0` (exact, optional features off) | In-memory native XLSX reports, styles and cached formulas; OOXML rendering is unavailable in the standard library | MIT OR Apache-2.0 |
+| `zip` | `9.1.3` (exact, default features off, `deflate`) | Writer's ZIP container and in-memory repair of point heights/numeric XML; no archive extraction or new transport | MIT |
+| `zlib-rs` / `zopfli` | locked transitive `0.6.8` / `0.8.4` | Writer's pure Rust DEFLATE backends; no system zlib dependency | Zlib / Apache-2.0 |
+| `typed-path` / `nix` | locked transitive `0.13.0` / `0.31.3` | ZIP path types and platform support; renderer uses only RAM buffers | MIT OR Apache-2.0 / MIT |
+| `crc32fast` / `simd-adler32` | locked transitive `1.5.3` / `0.3.10` | ZIP/compression checksums; updates required by the cached Zopfli dependency | MIT OR Apache-2.0 / MIT |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |

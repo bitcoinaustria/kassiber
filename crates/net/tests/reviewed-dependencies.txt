@@ -94,3 +94,8 @@ kassiber-diagnostics test-hooks
 bdk_wallet std
 bdk_chain std
 bdk_core std
+
+# In-memory OOXML/ZIP rendering only. No optional clock, filesystem or C zlib.
+kassiber-xlsx
+rust_xlsxwriter
+zip deflate

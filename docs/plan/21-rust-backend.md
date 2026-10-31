@@ -1082,6 +1082,37 @@ CSV destination is an existing directory; exact error-byte parity remains open
 for that case. See the [transport checkpoint](../reference/rust-shell.md#csv-export-transport-checkpoint-r5-tenth-continuation)
 for per-command counts, mutations and final verification.
 
+### R5 XLSX owner decision (2026-10-31)
+
+The owner chose `rust_xlsxwriter` 0.102.0 for native XLSX now. PDF remains
+Python. XLSX acceptance compares workbook content, not ZIP bytes: ordered sheet
+names, typed cells, formulas and cached values, meaningful styles and dimensions,
+merges, panes and defined names. Document properties must be deterministic.
+Existing saved digests remain unchanged; new completions hash the Rust bytes.
+
+`crates/xlsx` isolates in-memory workbook rendering from report computation and
+publication. It disables every optional writer feature: no clock integrations,
+autofit, alternative decimal library, constant-memory scratch files, C zlib,
+WASM, or serialization macros. The writer's mandatory `zip/deflate` transitives
+are pure Rust (`flate2` with `zlib-rs`, plus Zopfli). The existing pinned
+`flate2` 1.1.9 is retained. Zopfli requires the lockfile's checksum-library
+updates. A direct dependency on the same ZIP crate repairs generated row
+heights and numeric representations in RAM; no new dependency family is added.
+The standard library and existing workspace have no OOXML renderer.
+
+The renderer requires an explicit creation timestamp and writes it to both
+creation and modification properties. Python's XlsxWriter reads wall time;
+the test recorder pins that independent clock to the supplied test timestamp.
+ZIP member timestamps are fixed at 1980-01-01. ZIP compression, XML ordering,
+shared-string/style indices and container bytes intentionally differ from
+Python. These are not workbook content differences. Python's 16-significant-digit
+numeric cells, full-precision formula caches and point heights are preserved.
+
+This decision and renderer foundation do not by themselves enable a command.
+Native projection, export completion and CLI/daemon routing require their own
+parity and refusal evidence before registration. The generic-ledger import
+template and XLSX reading remain outside the report-export slice.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

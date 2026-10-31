@@ -4201,6 +4201,59 @@ process callers in this checkout; they do not justify new wire kinds. The
 separate directory-target Python fix remains necessary before claiming exact
 error bytes for the already registered full-report/Austrian CSV publication.
 
+## XLSX renderer foundation (R5, partial)
+
+The owner decision of 2026-10-31 moves XLSX rendering to
+`crates/xlsx` with `rust_xlsxwriter` 0.102.0; PDF remains Python. The isolated
+renderer accepts typed workbook content and returns complete bytes in RAM.
+It cannot open a book, establish accounting facts, publish a report or file it.
+The [plan decision](../plan/21-rust-backend.md#r5-xlsx-owner-decision-2026-10-31)
+records dependency features, licenses and deterministic properties.
+
+`tests/rust_port/xlsx.py` records the real Python writer's rendering calls while
+independently producing its workbook. `tests/test_rust_xlsx.py` compares that
+file with the Rust renderer using openpyxl in formula and cached-value modes.
+The canonical dump includes every populated/styled blank cell, all style
+properties, typed formula caches, hyperlinks, differential formats, ordered
+sheets, dimensions, merges, freeze panes, filters, defined names, margins,
+page setup and core document properties. Style/shared-string indices and XML
+ordering are structural details, so styles are resolved before comparison.
+ZIP checksums, unique members and XML parsing must succeed; openpyxl must load
+without warnings. Repeated renders must be byte-identical to each other.
+
+| Renderer parity corpus | Passed |
+| --- | ---: |
+| Full, transactions, Austrian E1kv, year handoff and exit-tax contract books | 5 |
+| CoinTracking and Blockpit cross-check workbooks | 2 |
+| Inherited export fixtures, including exact pre-render refusals | 197 |
+| Empty/boolean/Unicode/formula-like strings, negative/huge/tiny numbers, long text and 2,000 rows | 13 |
+| Total | 217 |
+
+Content differences found and resolved: Python rounds ordinary numeric cells
+to 16 significant digits but preserves full float text for formula caches;
+Rust otherwise writes huge floats as literal integers; Rust quantizes row
+heights to integer pixels, collapses explicit empty strings into blanks, and
+adds default portrait/200-DPI printer hints. The in-memory ZIP pass preserves
+Python's numeric representation, exact point heights and empty string types,
+and removes those unsolicited print hints. Bold, widths, formulas, caches,
+merges, panes, names and timestamps compare without remaining differences in
+this corpus. Container bytes intentionally differ from Python.
+
+`crates/xlsx/scripts/repro_python_single_column_title.py` reproduces the Python
+reference bug where merging a one-cell title warns and silently omits it.
+Rust preserves that omission for parity; Python product code is unchanged.
+
+All six renderer mutations are killed by the named tests in
+`crates/xlsx/tests/content.rs`; their catalog and offline scratch-tree runner
+live under `crates/xlsx/scripts/`. Renderer fmt, clippy with `-D warnings` and
+all six Rust tests pass. Evidence is under `target/xlsx/{parity,mutations}.log`;
+the disposable mutation build and source trees are removed after verification.
+
+This is a renderer boundary, not complete XLSX service acceptance. These
+tests do not establish native admission or routing for the unregistered XLSX
+report commands. Native projections and their CLI/daemon transport, completion
+hashes/summaries and explicit filing need separate verification.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug
