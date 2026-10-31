@@ -355,6 +355,12 @@ projections stay Python. Progress and remaining work for this slice:
   amounts/fees, complete book-dump/rollback parity and named mutation killers.
   See the partial batch-2a checkpoint in plan 21; CoinTracking, Blockpit,
   Binance supplemental and BTCPay file imports remain.
+- [ ] Finish CoinTracking batch-2a acceptance: the native parser/coordinator and
+  CLI now have frozen files, full-book parity and named mutation coverage; the
+  daemon remains gated on native local freshness/journal orchestration and
+  persistence. Add daemon wire/full-dump and SQLCipher parity before starting
+  Blockpit, Binance supplemental and BTCPay files. See the CoinTracking checkpoint
+  in plan 21. Batch 2b remains deferred.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.

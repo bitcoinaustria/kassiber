@@ -465,6 +465,7 @@ fn assert_import_vectors(cases: &Json) {
             "21bitcoin_csv" => Format::TwentyOne,
             "strike_csv" => Format::Strike,
             "ledgerlive_csv" => Format::LedgerLive,
+            "cointracking_csv" => Format::CoinTracking,
             "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
@@ -2564,5 +2565,235 @@ fn twentyone_legacy_reactivation_rolls_back_when_invalidation_fails() {
             1
         );
         assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    }
+}
+
+#[test]
+fn python_cointracking_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_cointracking_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+const COINTRACKING_HEADER: &str =
+    "Type,Buy Amount,Buy Currency,Sell Amount,Sell Currency,Fee,Fee Currency,Date,Tx-ID,Comment\n";
+fn cointracking_fixture(encrypted: bool) -> Connection {
+    let conn = fixture_codec(encrypted);
+    conn.execute(
+        "UPDATE wallets SET kind='cointracking' WHERE id='wallet'",
+        [],
+    )
+    .unwrap();
+    conn
+}
+#[test]
+fn cointracking_coordinator_reconciles_identity_economics_and_idless_collisions() {
+    for encrypted in [false, true] {
+        let conn = cointracking_fixture(encrypted);
+        conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('chain','ws','p','Observed','descriptor','{}','2025-01-01');
+            INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('economic','ws','p','chain','observed','economic','2025-01-02T00:00:00Z','inbound','BTC',200000000,0,'2025-01-01');").unwrap();
+        let txid = "ab".repeat(32);
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('identity','ws','p','chain',?,'identity','2025-01-01T00:00:00Z','inbound','BTC',1,0,'2025-01-01')",[&txid]).unwrap();
+        let body = format!("{COINTRACKING_HEADER}Deposit,0.002,BTC,,,,,2025-01-02,econ,one\nDeposit,0.003,BTC,,,,,2025-01-03,{txid},two\nDeposit,0.004,BTC,,,,,2025-01-04,,three\nDeposit,0.004,BTC,,,,,2025-01-04,,four\nDeposit,0.005,BTC,,,,,2025-01-05,active,five\n");
+        let result = import_kind(&conn, &body, Format::CoinTracking).unwrap();
+        for (key, n) in [
+            ("imported", 5),
+            ("matched", 1),
+            ("ambiguous", 3),
+            ("unmatched", 1),
+            ("excluded", 4),
+            ("reconciliation_rows", 5),
+            ("reconciliation_changed", 4),
+        ] {
+            assert_eq!(
+                kassiber_envelope::get(&result, key),
+                Some(&Py::from(n)),
+                "{key}"
+            );
+        }
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            1
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 2);
+        assert_eq!(
+            scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
+            5
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='cointracking_csv' AND rows_inserted=5"),1);
+        assert_eq!(scalar(&conn,"SELECT count(DISTINCT fingerprint) FROM transactions WHERE wallet_id='wallet' AND external_id IS NULL"),2);
+        let repeated = import_kind(&conn, &body, Format::CoinTracking).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "unchanged"),
+            Some(&Py::from(5))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "reconciliation_rows"),
+            Some(&Py::from(0))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "journal_invalidated"),
+            Some(&Py::Bool(false))
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        conn.execute("DELETE FROM transactions WHERE wallet_id='chain'", [])
+            .unwrap();
+        conn.execute("UPDATE transactions SET description=NULL WHERE wallet_id='wallet' AND external_id IS NOT NULL",[]).unwrap();
+        let enriched = import_kind(&conn, &body, Format::CoinTracking).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&enriched, "reconciliation_flags_cleared"),
+            Some(&Py::from(2))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&enriched, "reactivated"),
+            Some(&Py::from(2))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            2
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 2);
+    }
+}
+#[test]
+fn cointracking_admission_and_late_failure_leave_every_write_uncommitted() {
+    let conn = fixture();
+    let error = execute(
+        &conn,
+        Request {
+            profile_id: "p".into(),
+            wallet: "Source".into(),
+            file: "missing.csv".into(),
+            format: Format::CoinTracking,
+            mode: None,
+        },
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "migration_wallet_kind_required");
+    assert_eq!(
+        error.details,
+        Some(dict([
+            ("wallet", s("Source")),
+            ("wallet_kind", s("custom"))
+        ]))
+    );
+    for encrypted in [false, true] {
+        let conn = cointracking_fixture(encrypted);
+        let content = format!("{COINTRACKING_HEADER}Deposit,1,BTC,,,,,2025-01-02,,one\nDeposit,1,BTC,,,,,2025-01-02,,two\n");
+        conn.execute_batch("CREATE TRIGGER refuse_cointracking BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'denied');END;").unwrap();
+        assert!(import_kind(&conn, &content, Format::CoinTracking).is_err());
+        for table in [
+            "transactions",
+            "tags",
+            "transaction_tags",
+            "import_batches",
+            "import_batch_transactions",
+        ] {
+            assert_eq!(scalar(&conn, &format!("SELECT count(*) FROM {table}")), 0);
+        }
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            0
+        );
+    }
+}
+
+#[test]
+fn cointracking_authored_exclusions_survive_reconciliation_and_reactivation() {
+    for encrypted in [false, true] {
+        for (choice, expected) in [("true", 1), ("false", 0), ("null", 1)] {
+            let conn = cointracking_fixture(encrypted);
+            let body = format!("{COINTRACKING_HEADER}Deposit,1,BTC,,,,,2025-01-02,external,one\n");
+            import_kind(&conn, &body, Format::CoinTracking).unwrap();
+            conn.execute("INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,source,changed_at,journal_input_version_after) SELECT 'edit','ws','p',id,'wallet','test','2025-01-01',1 FROM transactions",[]).unwrap();
+            conn.execute("INSERT INTO transaction_edit_fields(id,event_id,field,after_value) VALUES('field','edit','excluded',?)",[choice]).unwrap();
+            conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('chain','ws','p','Observed','descriptor','2025-01-01');
+            INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('economic','ws','p','chain','other','economic','2025-01-02T00:00:00Z','inbound','BTC',100000000000,0,'2025-01-01');
+            UPDATE transactions SET description=NULL WHERE wallet_id='wallet';").unwrap();
+            let flagged = import_kind(&conn, &body, Format::CoinTracking).unwrap();
+            assert_eq!(
+                kassiber_envelope::get(&flagged, "ambiguous"),
+                Some(&Py::from(1))
+            );
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT excluded FROM transactions WHERE wallet_id='wallet'"
+                ),
+                expected
+            );
+            conn.execute_batch("DELETE FROM transactions WHERE wallet_id='chain';UPDATE transactions SET description=NULL WHERE wallet_id='wallet';").unwrap();
+            import_kind(&conn, &body, Format::CoinTracking).unwrap();
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT excluded FROM transactions WHERE wallet_id='wallet'"
+                ),
+                i64::from(choice == "true")
+            );
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 0);
+        }
+    }
+}
+
+#[test]
+fn cointracking_only_canonical_txids_establish_chain_identity() {
+    for encrypted in [false, true] {
+        for (external, copies, direction, asset, profile, matched, ambiguous) in [
+            (
+                format!("{}  {}", "ab".repeat(15), "cd".repeat(16)),
+                1,
+                "inbound",
+                "BTC",
+                "p",
+                0,
+                0,
+            ),
+            ("AB".repeat(32), 1, "inbound", "BTC", "p", 1, 0),
+            ("AB".repeat(32), 2, "inbound", "BTC", "p", 0, 1),
+            ("AB".repeat(32), 1, "outbound", "BTC", "p", 0, 0),
+            ("AB".repeat(32), 1, "inbound", "LBTC", "p", 0, 0),
+            ("AB".repeat(32), 1, "inbound", "BTC", "q", 0, 0),
+        ] {
+            let conn = cointracking_fixture(encrypted);
+            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('chain','ws',?,'Observed','xpub','2025-01-01')",[profile]).unwrap();
+            for index in 0..copies {
+                conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES(?,'ws',?,'chain',?,?,'2024-01-01T00:00:00Z',?,?,1,0,'2024-01-01')",params![format!("observed-{index}"),profile,external,format!("observed-{index}"),direction,asset]).unwrap();
+            }
+            let body =
+                format!("{COINTRACKING_HEADER}Deposit,1,BTC,,,,,2025-01-02,{external},one\n");
+            let result = import_kind(&conn, &body, Format::CoinTracking).unwrap();
+            assert_eq!(
+                kassiber_envelope::get(&result, "matched"),
+                Some(&Py::from(matched))
+            );
+            assert_eq!(
+                kassiber_envelope::get(&result, "ambiguous"),
+                Some(&Py::from(ambiguous))
+            );
+            assert_eq!(
+                kassiber_envelope::get(&result, "unmatched"),
+                Some(&Py::from(i64::from(matched + ambiguous == 0)))
+            );
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT excluded FROM transactions WHERE wallet_id='wallet'"
+                ),
+                i64::from(matched + ambiguous > 0)
+            );
+        }
     }
 }

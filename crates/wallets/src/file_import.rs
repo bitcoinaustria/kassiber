@@ -6,9 +6,11 @@ mod exchange;
 mod generic_json;
 mod ledgerlive;
 mod phoenix;
+mod platform_csv;
 mod pocket;
 mod river;
 mod strike;
+mod tax_platform;
 mod twentyone;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
@@ -46,6 +48,7 @@ pub enum Format {
     Strike,
     Pocket,
     LedgerLive,
+    CoinTracking,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -60,10 +63,12 @@ impl Format {
             Self::Strike => "strike_csv",
             Self::Pocket => "pocketbitcoin_csv",
             Self::LedgerLive => "ledgerlive_csv",
+            Self::CoinTracking => "cointracking_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
+            Self::CoinTracking => tax_platform::load(file),
             Self::Json => generic_json::load(file),
             Self::Csv => csv::load(file),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
@@ -1180,6 +1185,19 @@ pub fn execute(
     } else {
         None
     };
+    if request.format == Format::CoinTracking {
+        let wallet = wallet.as_ref().expect("migration wallet");
+        let kind: String = conn
+            .query_row("SELECT kind FROM wallets WHERE id=?", [&wallet.id], |r| {
+                r.get(0)
+            })
+            .map_err(database_error)?;
+        if kind != "cointracking" {
+            return Err(AppError::new("migration_wallet_kind_required", "cointracking_csv requires a dedicated cointracking wallet")
+                .with_hint("Create the provider migration wallet first. Do not import provider history into a descriptor or other authoritative wallet.")
+                .with_details(dict([("wallet",s(wallet.label.as_str())),("wallet_kind",s(kind.as_str()))])));
+        }
+    }
     let rows = request.format.load(&request.file)?;
     // Relevant mode normalizes and validates each row in reference order;
     // a matched price refusal precedes normalization of any later row.
@@ -1473,6 +1491,9 @@ fn apply(
                 .unwrap()
                 .1 = Py::Bool(true);
         }
+    }
+    if request.format == Format::CoinTracking {
+        tax_platform::reconcile(conn, request, wallet, ids, &mut result, invalidated)?;
     }
     if !inserted_ids.is_empty() {
         let batch = ids.next(conn)?;

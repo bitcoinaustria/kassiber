@@ -2129,6 +2129,26 @@ The shared tax-platform normalization and dedicated migration-wallet
 reconciliation are prerequisites within the CoinTracking/Blockpit slices;
 prior tax reports remain evidence. No sync/API/AI path is enabled here.
 
+### R5 file-import batch 2a: CoinTracking core/CLI checkpoint (partial)
+
+The continuation includes the legacy 21bitcoin readiness reference correction
+and ports CoinTracking parsing, private row identities, dedicated migration-wallet
+admission and transactional overlap reconciliation to the native file service.
+It retains unsupported cross-asset/type/fee barriers, original rows, audited
+inclusion choices, import runs, enrichment, reimport readiness and rollback.
+There are 301 frozen Python edge files, full typed book-dump CLI comparisons,
+plaintext/encrypted wire/state checks and 38 new named mutations. The
+[CoinTracking checkpoint](../reference/rust-shell.md#cointracking-core-and-cli-ingestion-r5-batch-2a-partial)
+records final verification and served-by counts.
+
+CoinTracking is not complete against the daemon acceptance requirement:
+`ui.wallets.import_file` also runs local freshness/journal refresh, whose native
+orchestration and persistence are still absent. The daemon kind stays disabled
+and its CoinTracking served-by count is zero. Finish that shared contract and
+its encrypted/full-dump parity before moving to Blockpit, Binance supplemental
+or BTCPay files. Batch 2b remains deferred. Python production changes are limited
+to the requested 21bitcoin correction; no dependency, egress, sync or AI path is added.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

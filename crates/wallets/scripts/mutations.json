@@ -633,7 +633,8 @@
       "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",
       "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation",
       "strike_late_failure_rolls_back_observations_runs_and_readiness",
-      "twentyone_legacy_reactivation_rolls_back_when_invalidation_fails"
+      "twentyone_legacy_reactivation_rolls_back_when_invalidation_fails",
+      "cointracking_admission_and_late_failure_leave_every_write_uncommitted"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -5135,5 +5136,385 @@
       "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
     ],
     "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-cointracking-headers",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !missing.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Refuse incomplete provider history headers, including empty files."
+  },
+  {
+    "id": "W-cointracking-decode-bom",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "let text = csv::read_sig(file)?;",
+    "replace": "let text = csv::read_text(file)?;",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Decode one UTF-8 BOM before interpreting migration headers."
+  },
+  {
+    "id": "W-cointracking-delimiter",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "let d = sniff(&text);",
+    "replace": "let d = Dialect {delimiter: ',',quote:'\"',double:true,spaces:false};",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Honor the reference CSV delimiter and quote dialect."
+  },
+  {
+    "id": "W-cointracking-empty-header",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "if kassiber_pytext::strip(&text).is_empty() {",
+    "replace": "if !kassiber_pytext::strip(&text).is_empty() {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Empty files remain missing-column refusals."
+  },
+  {
+    "id": "W-cointracking-decimal-comma",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "text.replace('.', \"\").replace(',', \".\")",
+    "replace": "text.replace(',', \"\")",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "European prices retain their decimal point."
+  },
+  {
+    "id": "W-cointracking-decimal-round",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let amount = abs(amount)?;",
+    "replace": "let amount = amount;",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Context-rounded absolute Bitcoin quantities determine identity and storage."
+  },
+  {
+    "id": "W-cointracking-both-sides",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if inbound.is_some() && outbound.is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Bitcoin-to-Bitcoin rows require explicit review."
+  },
+  {
+    "id": "W-cointracking-scope",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if inbound.is_none() && outbound.is_none() {",
+    "replace": "if inbound.is_none() || outbound.is_none() {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Import exactly the Bitcoin leg and skip unrelated rows."
+  },
+  {
+    "id": "W-cointracking-standalone",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if standalone {\n        outgoing",
+    "replace": "if false {\n        outgoing",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Standalone Bitcoin fee rows become a single spend, never amount plus fee."
+  },
+  {
+    "id": "W-cointracking-cross-asset",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "opposing.as_deref().filter(|v| !FIAT.contains(v))",
+    "replace": "opposing.as_deref().filter(|_| false)",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Account-currency values cannot authorize a cross-asset price guess."
+  },
+  {
+    "id": "W-cointracking-type",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "mapped(c.get(&[\"Type\"]), inbound.is_some())?",
+    "replace": "(\"Buy\",\"inbound\",Some(\"buy\"))",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Preserve reviewed provider type mappings and unsupported-type refusals."
+  },
+  {
+    "id": "W-cointracking-direction",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if direction != type_direction {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Reject types that disagree with the Bitcoin leg direction."
+  },
+  {
+    "id": "W-cointracking-non-taxable",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "kind = Some(\"expense_non_taxable\");",
+    "replace": "kind = Some(\"spend\");",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Non-taxable expenses retain the non-sale review barrier."
+  },
+  {
+    "id": "W-cointracking-fee-asset",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !accepted_fee {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Third-asset fees require review before generic normalization."
+  },
+  {
+    "id": "W-cointracking-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "btc_fee = fee;",
+    "replace": "btc_fee = zero();",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Preserve Bitcoin fees independently of fiat execution fees."
+  },
+  {
+    "id": "W-cointracking-fiat-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "arithmetic(&base, &fiat_fee, '+')?",
+    "replace": "base",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Acquisition execution prices include same-currency fees."
+  },
+  {
+    "id": "W-cointracking-sell-net",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "nonnegative(arithmetic(&base, &fiat_fee, '-')?)?",
+    "replace": "base",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Disposal execution prices use nonnegative net proceeds."
+  },
+  {
+    "id": "W-cointracking-date",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let occurred = date(c.get(&[\"Date\"]), index)?;",
+    "replace": "let occurred = \"2025-01-01\".to_owned();",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Validate provider dates and retain their spelling for private row identity."
+  },
+  {
+    "id": "W-cointracking-id-namespace",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "cointracking:{digest}:{occurrence}",
+    "replace": "provider:{digest}:{occurrence}",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Provider-private identities stay stable and separate from chain ids."
+  },
+  {
+    "id": "W-cointracking-id-occurrence",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "*occurrence += 1;",
+    "replace": "*occurrence += 0;",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Preserve repeated identical ID-less source rows and reimport idempotence."
+  },
+  {
+    "id": "W-cointracking-id-hash",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "Sha256::digest(encoded.as_bytes())",
+    "replace": "Sha256::digest(b\"wrong\")",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Private identities commit to the reference economic payload."
+  },
+  {
+    "id": "W-cointracking-id-date",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "(\"occurred_at\", s(text(&row.data, \"occurred_at\")))",
+    "replace": "(\"occurred_at\", s(\"wrong\"))",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Private identity includes the pre-normalization timestamp spelling."
+  },
+  {
+    "id": "W-cointracking-raw",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "config::stored_json(&c.json())",
+    "replace": "\"{}\"",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Original provider rows remain audit evidence."
+  },
+  {
+    "id": "W-cointracking-method",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"pricing_method\":\"cointracking_csv\"",
+    "replace": "\"pricing_method\":\"generic_ledger\"",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Preserve the dedicated provider pricing method."
+  },
+  {
+    "id": "W-cointracking-admission",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if kind != \"cointracking\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "cointracking_admission_and_late_failure_leave_every_write_uncommitted"
+    ],
+    "rule": "Reject authoritative and unrelated wallets before reading the file."
+  },
+  {
+    "id": "W-cointracking-atomic",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if request.format == Format::CoinTracking {\n        tax_platform::reconcile",
+    "replace": "if false {\n        tax_platform::reconcile",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Coordinate reconciliation in the same atomic import operation."
+  },
+  {
+    "id": "W-cointracking-source-collision",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let collision = string(row, \"external_id\").is_empty()",
+    "replace": "let collision = false && string(row, \"external_id\").is_empty()",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Identical ID-less source occurrences remain held for review."
+  },
+  {
+    "id": "W-cointracking-affected",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !affected.contains(&id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Stable reimports reconcile only inserted or changed observations."
+  },
+  {
+    "id": "W-cointracking-authority",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "w.kind IN ('descriptor','silent-payment','xpub')",
+    "replace": "w.kind IN ('custom')",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Only authoritative wallet kinds establish chain overlap."
+  },
+  {
+    "id": "W-cointracking-txid",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if matches == 1 {",
+    "replace": "if matches == 2 {",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "A single canonical chain id establishes an exact match."
+  },
+  {
+    "id": "W-cointracking-economics",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "by_economics.contains(&economic(row))",
+    "replace": "false",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Economic collisions remain ambiguous rather than proven duplicates."
+  },
+  {
+    "id": "W-cointracking-clear",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !current.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Remove stale reconciliation tags after changed rows no longer overlap."
+  },
+  {
+    "id": "W-cointracking-reactivate",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if choice != Some(true) && is_excluded {",
+    "replace": "if false {",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Reactivation restores accounting inputs when overlap disappears."
+  },
+  {
+    "id": "W-cointracking-exclude",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let desired = choice.unwrap_or(true);",
+    "replace": "let desired = choice.unwrap_or(false);",
+    "expect_failing": [
+      "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Hold matched and ambiguous rows while preserving authored inclusion choices."
+  },
+  {
+    "id": "W-cointracking-authored",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let desired = choice.unwrap_or(true);",
+    "replace": "let desired = true;",
+    "expect_failing": [
+      "cointracking_authored_exclusions_survive_reconciliation_and_reactivation"
+    ],
+    "rule": "Preserve the latest audited report-inclusion choice during overlap and cleanup."
+  },
+  {
+    "id": "W-cointracking-authored-reactivation",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if choice != Some(true) && is_excluded {",
+    "replace": "if is_excluded {",
+    "expect_failing": [
+      "cointracking_authored_exclusions_survive_reconciliation_and_reactivation"
+    ],
+    "rule": "Preserve the latest audited report-inclusion choice during overlap and cleanup."
+  },
+  {
+    "id": "W-cointracking-cr-refusal",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "if ahead.next().is_some_and(|c| c != '\\n') {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_cointracking_import_vectors"
+    ],
+    "rule": "Retain the reference StringIO bare-CR record refusal."
+  },
+  {
+    "id": "W-cointracking-canonical-txid",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())",
+    "replace": "value.len() == 64",
+    "expect_failing": [
+      "cointracking_only_canonical_txids_establish_chain_identity"
+    ],
+    "rule": "Only 64 hexadecimal characters establish a canonical chain transaction id; formatting whitespace is not proof."
   }
 ]

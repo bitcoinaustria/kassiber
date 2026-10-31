@@ -1281,14 +1281,25 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None):
+    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
+        if "HOME" in os.environ:
+            self.env["HOME"] = os.environ["HOME"]
+        else:
+            self.env.pop("HOME", None)
         self.import_run_book()
         if fiat_currency:
             self.ok(self.call(False, ["profiles", "set", "--fiat-currency", fiat_currency]))
         database = self.root / "kassiber.sqlite3"
+        if wallet_kind or seed:
+            with closing(sqlite3.connect(database)) as conn:
+                if wallet_kind:
+                    conn.execute("UPDATE wallets SET kind=? WHERE label='Import source'", (wallet_kind,))
+                if seed:
+                    seed(conn)
+                conn.commit()
         file = self.home / "input.csv"
         fixed_time = "2025-01-02T03:04:05Z"
         identities = [f"00000000-0000-4000-8000-{i:012}" for i in range(1, 21)]
@@ -1441,6 +1452,29 @@ class RustRealStoreParityTest(_Roots):
             "2025-01-02,BTC,IN,1,repeat\ninvalid,BTC,OUT,1,later\n",
             "bad,header\nx,y\n", "",
         ])
+
+    def test_cointracking_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_tax_platform_migration import COINTRACKING_CSV
+        header = "Type,Buy Amount,Buy Currency,Sell Amount,Sell Currency,Fee,Fee Currency,Date,Tx-ID\n"
+        self._file_import_parity("import-cointracking", [
+            COINTRACKING_CSV, "\ufeff" + COINTRACKING_CSV,
+            header + "Deposit,0.002,BTC,,,,,2025-01-02,\n" * 2,
+            header + "Deposit,0.002,BTC,,,,,2025-01-02,first\nDeposit,1,BTC,,,,,invalid,later\n",
+            "bad,header\nx,y\n", "",
+        ], fiat_currency="EUR", wallet_kind="cointracking")
+
+    def test_cointracking_coordinator_wire_bytes_full_state_and_rollback(self):
+        txid = "ab" * 32
+        def seed(conn):
+            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) SELECT 'observed',workspace_id,profile_id,'Observed','descriptor','2025-01-01' FROM wallets WHERE label='Import source'")
+            for identity, external, stamp, amount in (("economic", "observed", "2025-01-02T00:00:00Z", 200000000), ("identity", txid, "2025-01-01T00:00:00Z", 1)):
+                conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT ?,workspace_id,profile_id,id,?,?,?,'inbound','BTC',?,0,'2025-01-01' FROM wallets WHERE id='observed'", (identity, external, identity, stamp, amount))
+        header = "Type,Buy Amount,Buy Currency,Sell Amount,Sell Currency,Fee,Fee Currency,Date,Tx-ID\n"
+        self._file_import_parity("import-cointracking", [
+            header + "Deposit,0.002,BTC,,,,,2025-01-02,econ\n"
+            + f"Deposit,0.003,BTC,,,,,2025-01-03,{txid}\n"
+            + "Deposit,0.004,BTC,,,,,2025-01-04,\n" * 2,
+        ], fiat_currency="EUR", wallet_kind="cointracking", seed=seed)
 
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV
@@ -1625,6 +1659,8 @@ class RustShellDriftTest(unittest.TestCase):
         self.check("crates/wallets/scripts/generate_twentyone_vectors.py")
         self.check("crates/wallets/scripts/generate_strike_vectors.py")
         self.check("crates/wallets/scripts/generate_pocket_vectors.py")
+        self.check("crates/wallets/scripts/generate_ledgerlive_vectors.py")
+        self.check("crates/wallets/scripts/generate_cointracking_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

@@ -2315,12 +2315,137 @@ the 57-check preflight (60 subtests) pass. All 504 mutations are killed after
 The hybrid Ledger Live scenarios record 175 Rust-served imports and zero
 Python fallbacks.
 
-This checkpoint completes only the first importer of batch 2a. CoinTracking,
-Blockpit, Binance supplemental and BTCPay file ingestion remain unported.
+This checkpoint completed only the first importer of batch 2a. CoinTracking,
+Blockpit, Binance supplemental and BTCPay file ingestion were deferred.
 Generic ledger, Wasabi, Samourai and document ingestion remain later work.
-Python remains the reference; the inherited unpriced legacy 21bitcoin
-reactivation readiness bug remains a separate reference correction. This slice
-adds no crates, egress, sync route or AI projection.
+Python remains the reference. The legacy 21bitcoin readiness correction above
+is included on the continuation branch; its frozen normalization vectors remain
+unchanged. This slice adds no crates, egress, sync route or AI projection.
+
+
+## CoinTracking core and CLI ingestion (R5 batch 2a, partial)
+
+Native `wallets import-cointracking` uses the shared file-import service and
+requires a dedicated CoinTracking migration wallet before reading the file.
+It preserves CSV dialect detection, BOM/header handling, locale-aware decimals,
+Bitcoin-family legs, standalone fees, non-taxable expense review kinds,
+unsupported-type/cross-asset barriers and original provider rows. Private
+identities hash Python's economic payload and preserve each ID-less occurrence
+without inventing a chain transaction id.
+
+The coordinator compares only inserted/changed provider rows against descriptor,
+xpub and Silent Payments observations in the same profile. A single canonical
+chain id matches; multiple matches, economic collisions and identical ID-less
+source occurrences remain ambiguous. Matched/ambiguous rows receive the provider
+tags and default exclusions; latest audited inclusion choices remain authoritative.
+Changed rows can clear obsolete tags and reactivate only when an authored
+exclusion permits it. Reimports preserve readiness, and late run-recording
+failures roll back observations, tags, exclusions and input-version changes.
+
+There are 301 frozen Python files, including 40 seeded dialect combinations.
+Native tests compare complete normalized fields and private fingerprints; hybrid
+CLI tests compare every schema object, row and SQLite storage class and assert
+Rust routing with zero importer fallback. Coordinator cases add overlap,
+ID promotion, enrichment, reimports, refusals and rollback. Raw wire bytes and
+complete state are compared on both SQLite and SQLCipher books. Native encrypted
+coordinator/fault tests also pin authored exclusions and once-only invalidation.
+
+The reference also refuses valid exports using bare CR record separators because
+`_read_generic_ledger_csv` wraps the file in `io.StringIO(text)` without a
+newline override. The complete `cointracking:seeded-dialect-15` file is a frozen
+reproduction: `load_cointracking_csv_records` raises `csv.Error` with
+`new-line character seen in unquoted field - do you need to open the file with newline=''?`.
+The native parser preserves that refusal; Python is not corrected in this slice.
+An offline minimal reproduction also verifies that equivalent CRLF input loads:
+`uv run --locked python -m tests.rust_port.repro_cointracking_cr`.
+
+The catalog contains 38 new CoinTracking mutations, each with a named killer in
+`crates/wallets/scripts/mutations.json`; the combined catalog has 550 entries,
+including the eight cherry-picked 21bitcoin readiness mutations. A fresh audit
+passes all 12 named baselines and kills all 47 selected entries: the 38 new
+rules, eight readiness rules and inherited `W-import-atomic`, extended with the
+CoinTracking late-failure witness. There are no survivors or build errors.
+The other 503 entries retain their earlier kill evidence. Mutation source and
+build trees are removed after recording the summary.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-cointracking-headers` | `python_cointracking_import_vectors` |
+| `W-cointracking-decode-bom` | `python_cointracking_import_vectors` |
+| `W-cointracking-delimiter` | `python_cointracking_import_vectors` |
+| `W-cointracking-empty-header` | `python_cointracking_import_vectors` |
+| `W-cointracking-decimal-comma` | `python_cointracking_import_vectors` |
+| `W-cointracking-decimal-round` | `python_cointracking_import_vectors` |
+| `W-cointracking-both-sides` | `python_cointracking_import_vectors` |
+| `W-cointracking-scope` | `python_cointracking_import_vectors` |
+| `W-cointracking-standalone` | `python_cointracking_import_vectors` |
+| `W-cointracking-cross-asset` | `python_cointracking_import_vectors` |
+| `W-cointracking-type` | `python_cointracking_import_vectors` |
+| `W-cointracking-direction` | `python_cointracking_import_vectors` |
+| `W-cointracking-non-taxable` | `python_cointracking_import_vectors` |
+| `W-cointracking-fee-asset` | `python_cointracking_import_vectors` |
+| `W-cointracking-fee` | `python_cointracking_import_vectors` |
+| `W-cointracking-fiat-fee` | `python_cointracking_import_vectors` |
+| `W-cointracking-sell-net` | `python_cointracking_import_vectors` |
+| `W-cointracking-date` | `python_cointracking_import_vectors` |
+| `W-cointracking-id-namespace` | `python_cointracking_import_vectors` |
+| `W-cointracking-id-occurrence` | `python_cointracking_import_vectors` |
+| `W-cointracking-id-hash` | `python_cointracking_import_vectors` |
+| `W-cointracking-id-date` | `python_cointracking_import_vectors` |
+| `W-cointracking-raw` | `python_cointracking_import_vectors` |
+| `W-cointracking-method` | `python_cointracking_import_vectors` |
+| `W-cointracking-admission` | `cointracking_admission_and_late_failure_leave_every_write_uncommitted` |
+| `W-cointracking-atomic` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-source-collision` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-affected` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-authority` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-txid` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-economics` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-clear` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-reactivate` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-exclude` | `cointracking_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-cointracking-authored` | `cointracking_authored_exclusions_survive_reconciliation_and_reactivation` |
+| `W-cointracking-authored-reactivation` | `cointracking_authored_exclusions_survive_reconciliation_and_reactivation` |
+| `W-cointracking-cr-refusal` | `python_cointracking_import_vectors` |
+| `W-cointracking-canonical-txid` | `cointracking_only_canonical_txids_establish_chain_identity` |
+
+The fresh hybrid runs record the following importer calls; setup and rollback
+commands are excluded from these counts:
+
+| CLI importer | Rust-served calls | Python importer fallbacks |
+| --- | ---: | ---: |
+| CoinTracking | 309 | 0 |
+| 21bitcoin, including corrected readiness | 225 | 0 |
+| Ledger Live | 175 | 0 |
+
+Final formatting and strict workspace/harness clippy pass, as do all 1,533
+workspace tests and 14 harness tests. The focused Python run passes 30 tests
+and 739 subtests, including every selected importer file, coordinator sequences,
+plaintext/SQLCipher wire bytes and full state, rollback, Python reference tests
+and fresh file-vector regeneration. The required classifier update records
+5,708 test definitions; all 57 preflight checks pass. All 550 mutation recipes
+apply to the final source. The full Python/frontend quality gate, regtest and
+packaged/platform gates were not run.
+
+Verification summaries and logs are retained locally under
+`target/r5-importers-6-artifacts/`; mutation and verification build trees are
+removed after recording their results. Commands use the pinned mise toolchain,
+locked Python 3.11 and offline Cargo, with disposable roots under `target/`.
+The hybrid and file-import wire fixtures preserve the account `HOME` and redirect
+data/config/preferences and owner namespaces explicitly.
+
+
+This is a verified core/CLI checkpoint, **not completion of CoinTracking under
+the batch-2a daemon requirement**. `ui.wallets.import_file` stays unregistered:
+Python's handler also queues local freshness jobs and rebuilds journals, while
+native journal orchestration/persistence and that freshness path remain unported.
+Registering a reduced import-only handler would change its contract. Daemon
+CoinTracking served-by remains zero. Finish the native local refresh contract,
+then add daemon wire/full-dump and encrypted-book parity before starting Blockpit.
+Blockpit, Binance supplemental and BTCPay files have not been started; generic
+ledger, Wasabi, Samourai and document ingestion remain deferred. No Python
+production code beyond the requested reference cherry-pick, dependency, egress,
+sync route or AI projection changes are included.
 
 ## Daemon
 

@@ -2439,13 +2439,13 @@
     },
     "tests/test_rust_setup_desktop.py": {
       "test_setup_desktop_mutations_snapshots_and_plaintext_authorization": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
-      "test_owner_reveal_and_reset_reauthorize_the_unlocked_encrypted_book": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
-      "test_core_credential_references_merge_only_current_local_candidates": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1}
+      "test_owner_reveal_and_reset_reauthorize_the_unlocked_encrypted_book": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
+      "test_core_credential_references_merge_only_current_local_candidates": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},
-      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 40},
+      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 42},
       "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 4}
     },
     "tests/test_rust_store_interop.py": {

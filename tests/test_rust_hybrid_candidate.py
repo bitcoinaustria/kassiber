@@ -49,7 +49,6 @@ class HybridCandidateTest(unittest.TestCase):
             "KASSIBER_HYBRID_RUST_BIN": str(Path(RUST_BIN).resolve()),
             "KASSIBER_HYBRID_LOG": str(self.log),
             "KASSIBER_RUST_TEST_OWNER_ROOT": str(owners),
-            "HOME": str(home),
             "XDG_DATA_HOME": str(home / "xdg-data"),
             "XDG_CONFIG_HOME": str(home / "xdg-config"),
             "XDG_STATE_HOME": str(home / "xdg-state"),
@@ -565,6 +564,71 @@ class HybridCandidateTest(unittest.TestCase):
         stdout, _ = process.communicate(b"", timeout=120)
         self.assertEqual(json.loads(stdout.splitlines()[0])["kind"], "daemon.ready")
         self.assertEqual(self.served(), [{"command": "daemon", "served_by": "python"}])
+
+    def test_cointracking_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Migration workspace"))
+        self.ok(self.cli("profiles", "create", "Migration book", "--workspace", "Migration workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Migration workspace", "--profile", "Migration book"))
+        self.ok(self.cli("wallets", "create", "--label", "CoinTracking source", "--kind", "cointracking"))
+        source = self.data_root.parent / "cointracking.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_cointracking_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-cointracking", "--wallet", "CoinTracking source", "--file", str(source))
+                    self.assertIn(result.returncode, (0, 1), (result.stdout, result.stderr))
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-cointracking"]
+        self.assertEqual(calls, [{"command": "wallets.import-cointracking", "served_by": "rust"}] * len(cases))
+
+    def test_cointracking_reconciliation_reimport_identity_promotion_and_rollback_match_dump(self):
+        import sqlite3
+        from contextlib import closing
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Migration workspace"))
+        self.ok(self.cli("profiles", "create", "Migration book", "--workspace", "Migration workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Migration workspace", "--profile", "Migration book"))
+        for label, kind in (("CoinTracking source", "cointracking"), ("Observed", "custom")):
+            self.ok(self.cli("wallets", "create", "--label", label, "--kind", kind))
+        database = next(self.data_root.rglob("kassiber.sqlite3"))
+        txid = "ab" * 32
+        with closing(sqlite3.connect(database)) as conn:
+            conn.execute("UPDATE wallets SET kind='descriptor' WHERE label='Observed'")
+            for identity, external, stamp, amount in (("economic", "observed", "2025-01-02T00:00:00Z", 200000000), ("identity", txid, "2025-01-01T00:00:00Z", 1)):
+                conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT ?,workspace_id,profile_id,id,?,?,?,'inbound','BTC',?,0,'2025-01-01' FROM wallets WHERE label='Observed'", (identity, external, identity, stamp, amount))
+            conn.commit()
+        source = self.data_root.parent / "cointracking.csv"
+        header = "Type,Buy Amount,Buy Currency,Sell Amount,Sell Currency,Fee,Fee Currency,Date,Tx-ID,Comment\n"
+        body = (header + "Deposit,0.002,BTC,,,,,2025-01-02,econ,one\n"
+                + f"Deposit,0.003,BTC,,,,,2025-01-03,{txid},two\n"
+                + "Deposit,0.004,BTC,,,,,2025-01-04,,three\nDeposit,0.004,BTC,,,,,2025-01-04,,four\n"
+                + "Deposit,0.005,BTC,,,,,2025-01-05,active,five\n")
+        source.write_text(body)
+        args = ("wallets", "import-cointracking", "--wallet", "CoinTracking source", "--file", str(source))
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            first = self.ok(self.cli(*args))["data"]
+            self.assertEqual((first["imported"], first["matched"], first["ambiguous"], first["excluded"]), (5, 1, 3, 4))
+            repeated = self.ok(self.cli(*args))["data"]
+            self.assertEqual((repeated["unchanged"], repeated["reconciliation_rows"]), (5, 0))
+            self.assertFalse(repeated["journal_invalidated"])
+            with closing(sqlite3.connect(database)) as conn:
+                conn.execute("DELETE FROM transactions WHERE wallet_id=(SELECT id FROM wallets WHERE label='Observed')")
+                conn.execute("UPDATE transactions SET description=NULL WHERE external_id IS NOT NULL")
+                conn.commit()
+            enriched = self.ok(self.cli(*args))["data"]
+            self.assertEqual((enriched["reconciliation_flags_cleared"], enriched["reactivated"]), (2, 2))
+            source.write_text(body.replace("2025-01-04,,three", f"2025-01-04,{txid},three"))
+            promoted = self.ok(self.cli(*args))["data"]
+            self.assertEqual((promoted["imported"], len(promoted["updated_records"])), (0, 1))
+            self.ok(self.cli("imports", "rollback", "--batch", first["import_batch_id"], "--confirm"))
+            self.assertEqual(self.ok(self.cli(*args))["data"]["imported"], 5)
+            self.assertEqual(self.cli("wallets", "import-cointracking", "--wallet", "missing", "--file", str(source)).returncode, 1)
+            self.assertEqual(self.cli("wallets", "import-cointracking", "--wallet", "Observed", "--file", str(source.parent / "missing.csv")).returncode, 1)
+            self.assertEqual(self.cli("wallets", "import-cointracking", "--wallet", "CoinTracking source", "--file", str(source.parent / "missing.csv")).returncode, 1)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-cointracking"]
+        self.assertEqual(calls, [{"command": "wallets.import-cointracking", "served_by": "rust"}] * 8)
 
 
 if __name__ == "__main__":
