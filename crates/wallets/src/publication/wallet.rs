@@ -851,7 +851,7 @@ fn describe(
 
 /// `backends.redact_backend_url` for the `scheme://[user@]host[:port]/path` forms
 /// Kassiber backends use; query, fragment and credentials are dropped.
-fn redact_url(url: &str) -> String {
+pub(crate) fn redact_url(url: &str) -> String {
     let value = kassiber_pytext::strip(url);
     let Some((scheme, rest)) = value.split_once("://") else {
         return value.into();

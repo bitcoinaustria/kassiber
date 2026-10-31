@@ -236,7 +236,7 @@
   {
     "id": "fetch-backend-selection",
     "file": "crates/wallets/src/fetch.rs",
-    "find": "if config[\"backend\"] != backend[\"name\"] || text(&backend[\"name\"]).is_empty() {",
+    "find": "if (!requested.is_empty() && requested.to_lowercase() != text(&backend[\"name\"]))\n            || text(&backend[\"name\"]).is_empty()\n        {",
     "replace": "if false {",
     "expect_failing": [
       "fetch_unsupported_routes_refuse_before_traffic_and_transactions"

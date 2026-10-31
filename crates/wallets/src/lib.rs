@@ -24,6 +24,7 @@ pub mod observer_apply;
 pub mod observer_state;
 pub mod publication;
 pub mod scan;
+pub mod sync;
 pub use derive::{derive_wallet, Derive};
 mod preview;
 use kassiber_envelope::{dict, s, AppError};

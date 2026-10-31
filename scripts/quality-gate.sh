@@ -63,6 +63,7 @@ run cargo build -p kassiber-wallets --example observer_state_fixture --features 
 run cargo build -p kassiber-wallets --example bdk_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example records_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked
+run cargo build -p kassiber-wallets --example sync_fixture --features test-harness --offline --locked
 run cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
 export KASSIBER_TEST_CUSTODY_LOADER_BIN="$ROOT/target/release/examples/custody-load"
 run py crates/wallets/scripts/discovery_mutation_check.py --check

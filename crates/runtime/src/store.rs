@@ -284,6 +284,15 @@ pub trait Book: Send {
     fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet lifecycle"))
     }
+    fn wallet_sync(
+        &mut self,
+        _profile_id: &str,
+        _wallet: Option<&str>,
+        _all: bool,
+        _force_full: bool,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "wallet sync"))
+    }
     /// Stored reports, local exports and append-only saved/filed markers;
     /// no Python or network fallback.
     fn reports(&mut self, command: &str, _args: &Value) -> Result<Value, AppError> {

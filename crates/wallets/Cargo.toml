@@ -36,6 +36,10 @@ required-features = ["test-harness"]
 name = "publication_fixture"
 required-features = ["test-harness"]
 
+[[example]]
+name = "sync_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-chain = { path = "../chain" }
 kassiber-net = { path = "../net" }

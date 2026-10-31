@@ -295,6 +295,17 @@ one `{"command", "served_by"}` line per call. A slice proves its commands
 ran in Rust from that log. `tests/test_rust_hybrid_candidate.py` pins the
 routing.
 
+The unregistered Bitcoin wallet-sync service has a separate guarded driver,
+`cargo build -p kassiber-wallets --example sync_fixture --features test-harness
+--offline --locked`. `tests/test_rust_wallet_sync_service.py` compares its full
+`wallets.sync` envelope and every logical book row with Python's complete
+`handlers.sync_wallet`, including both wallet selection modes, the fixture and
+restart corpus, reviewed books and process consent/cancellation/no-egress fences.
+This is service-boundary evidence; it does not establish CLI/daemon registration
+or native hybrid served-by counts. The serial Rust-enabled lane builds the
+driver explicitly. Keep its books and temporary files under a disposable root
+and retain the socket guards.
+
 For plaintext file-import scenarios, `KASSIBER_HYBRID_IMPORT_ORACLE=1` also
 replays each native CSV/Phoenix call through Python's core on an in-memory
 backup. Test-only identity/clock inputs keep generated rows comparable. Every

@@ -18,6 +18,14 @@ pub fn execute(
         book.resolve_scope(namespace.get("workspace"), namespace.get("profile"))?;
     let wallet = namespace.text("wallet").unwrap_or_default().to_owned();
     let operation = match namespace.text("wallets_command").unwrap_or_default() {
+        "sync" => {
+            return book.wallet_sync(
+                &profile_id,
+                namespace.text("wallet"),
+                namespace.flag("all"),
+                namespace.flag("force_full"),
+            );
+        }
         "import-csv" | "import-json" | "import-phoenix" | "import-river" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,

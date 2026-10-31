@@ -23,7 +23,7 @@ checker.ENGINE_PACKAGES = (
 )
 CATALOGS = [
     ROOT / "crates/wallets/scripts" / f"{name}_mutations.json"
-    for name in ("discovery", "acquisition", "observer", "bdk", "record", "persistence", "fetch")
+    for name in ("discovery", "acquisition", "observer", "bdk", "record", "persistence", "fetch", "service")
 ] + [ROOT / "crates/chain/scripts/mutations.json"]
 
 

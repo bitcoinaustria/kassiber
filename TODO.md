@@ -165,6 +165,10 @@ through the shared setup crate.
   This is an unregistered preparation seam; see the native fetch handoff.
 - [ ] Connect native preparation/publication to shared CLI/daemon wallet and
   freshness services, retaining pre-egress refusal of unsupported shapes.
+  The request-bound wallet-sync service and inactive CLI/book adapter now exist;
+  daemon freshness queue/state/progress orchestration and pre-bootstrap hybrid
+  capability selection are still pending. See the wallet-sync service checkpoint
+  in `docs/reference/rust-shell.md`.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.

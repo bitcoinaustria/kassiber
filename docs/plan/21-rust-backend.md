@@ -2532,3 +2532,35 @@ refresh. All 501 sync mutations (452 inherited, 36 fetch, 13 new) and the separa
 twelve descriptor mutations are rerun and killed. No product-route acceptance
 is claimed; shared services, product fences, pre-bootstrap fallback and all four
 registrations remain pending as detailed in the handoff.
+
+### R5 Bitcoin sync: wallet-service checkpoint (partial)
+
+`crates/wallets::sync` now owns selection, request-scoped authorization, ordered
+preparation and atomic publication. Explicit selection and `--all` preserve
+label ordering, deprecated-wallet filtering, single-wallet errors, isolated
+batch errors, successful freshness markers and journal staleness. The service
+revalidates the admitted connection, database identity, profile, wallets,
+network, resolved backends, observer epochs and checkpoints before traffic and
+publication. Missing/foreign/revoked/replayed consent, offline/no-egress and
+cancellation remain fenced; local publication checks revocation, cancellation
+and offline policy through the commit stage.
+
+Backend resolution includes saved custom backends and the active default.
+The original named/default selection is retained for revalidation, so changing
+the stored default refuses an existing action before traffic.
+
+An inactive CLI/book adapter calls this shared service with the persisted
+offline policy. The live service oracle invokes Python's complete CLI sync
+handler and the independent native service on disposable loopback backends,
+comparing full envelopes and every normalized table across both protocols.
+This advances beyond the prepared-fetch/publication helper boundary, but is
+not registered CLI/daemon product acceptance.
+
+The freshness coordinator, progress events, default local journal refresh,
+pre-bootstrap unsupported hybrid selection and all four `IMPLEMENTED` entries
+remain unfinished. In particular, the native `Book` interface has no journal
+refresh operation, and the hybrid probe currently resolves only command-line
+shape; it cannot inspect saved wallet/backend capabilities without opening a
+book. Route activation must resolve those boundaries before claiming native
+served-by counts. See the wallet-sync service checkpoint at the end of
+`docs/reference/rust-shell.md` for verification and the remaining handoff.

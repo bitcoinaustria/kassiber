@@ -6243,3 +6243,141 @@ gate, tax/custody shadow overlays, Docker regtest and packaged/platform gates
 were not run. Successful native product calls remain zero for all four routes;
 fallback counts are unmeasured. Internal publication refusals never authorize
 retrying a started native invocation through Python.
+
+### Bitcoin wallet-sync service checkpoint (R5, partial)
+
+Local branch `t3code/r5-sync-13` starts at `0207dbcfc`. The shared
+`kassiber-wallets::sync` service now joins native preparation to atomic wallet
+publication. It selects an explicit wallet or the label-ordered, nondeprecated
+`--all` population, preserves single-wallet errors and isolated batch error
+rows, and publishes the existing freshness checkpoints and journal-staleness
+effects. Source-less wallets retain Python's skipped result. Networked sync
+retains the assembler's single Bitcoin descriptor-wallet capability boundary;
+Liquid, Core RPC, Lightning, Silent Payments, file/enrichment routes and
+additional-wallet overlap still refuse during inert service construction.
+
+One exact-action grant binds the admitted connection, database identity,
+profile/workspace, ordered wallet selection, book network, resolved backend
+and captured observer/checkpoint inputs. Construction and revalidation only
+read local state. Missing, foreign, revoked and replayed grants refuse before
+transport; foreign/revoked grants also remain unconsumed. Selection, backend,
+network and observer changes are rechecked before fetch and publication.
+Every savepoint stage, including commit, checks cancellation, revocation and
+the current gate policy, rolling back all wallet writes on refusal. Both
+hostname and loopback fences are covered by the test attempt observer.
+`KASSIBER_NO_EGRESS` retains its separate product meaning. No BDK networking
+crate or external dependency is added, and `Cargo.lock` is unchanged.
+
+The inactive CLI/book adapter delegates to the service and reads the persisted
+offline preference afresh. It grants consent only in that explicit invocation;
+saved/seeded backends grant none. No command or daemon kind is registered by
+this checkpoint. The test-only `sync_fixture` driver calls the same service on
+disposable books. CI's serial Rust-enabled lane and the local quality gate
+build it explicitly; its Python tests remain differential oracles in the
+disposition inventory.
+
+The service oracle invokes Python's complete `handlers.sync_wallet` independently
+of native preparation, then compares the full `wallets.sync` envelope and every
+normalized logical book row. Only the existing wall-clock `elapsed_ms` field is
+normalized. Fixture books run under both explicit and `--all` selection;
+sequences restart the native process each round. Reviewed books retain current
+journals, saved reports and missing-authority cases.
+
+| Service corpus | Electrum rounds | Esplora rounds |
+| --- | ---: | ---: |
+| Ten fixtures, both selection modes | 30 | 30 |
+| Eight three-round restart sequences | 24 | 24 |
+| Five reviewed-book scenarios | 12 | 12 |
+| Active default-backend selection | 1 | 1 |
+| Total successful service rounds | 67 | 67 |
+
+The separate frozen-publication test composes all 102 Python rounds through
+the service under both selection modes, checking complete outputs and books
+for 204 runs. Neither proof traverses a registered CLI or daemon route.
+
+The first mutation pass exposed two test gaps: removing the service's foreign
+and revoked grant checks still reached a lower transport refusal. The
+strengthened named test also checks that the service has not consumed the
+rejected grant.
+
+Review also found two native backend-resolution gaps: default-backed wallets
+were treated as an empty backend name, and saved custom backends absent from
+the seeded runtime map were rejected. The service now resolves the current
+stored default and retains the original requested backend selection for
+revalidation; a changed default cannot redirect an existing grant. Named
+backends keep case/whitespace normalization. Missing defaults retain Python's
+`backend_not_configured` error, and malformed backend values refuse rather
+than being converted to a default grant. No Python reference bug was found.
+
+All 46 new service recipes and the affected inherited backend-selection recipe
+are killed after 16 named baselines pass. The final run reports no survivors,
+build errors or empty selections. The unified catalogue now has 547 entries;
+the other 500 inherited sync recipes and the separate twelve descriptor recipes
+retain the preceding checkpoint's execution evidence and were not rerun here.
+The completed mutation source/build trees were removed after writing
+`target/r5-sync-13-artifacts/service-mutations-final.json`.
+
+Formatting and production/harness workspace clippy pass with warnings denied.
+The production workspace passes 1,524 tests with no failures or ignored tests;
+the guarded binary passes fourteen. Network observer checks pass 63 tests,
+chain observer checks 22, and guarded fetch checks eight. Twelve selected
+service/fetch refusal tests also pass with the strict observer, including
+loopback. Tests that intentionally contact their fake provider use the
+loopback-enabled observer. Production builds retain the intentional refusal
+of an armed test environment without the observer feature.
+
+All eight sync parity suites plus Python's chain-observer tests pass 301 tests
+without skips, including the 76 service-oracle cases and 134 successful native
+service rounds tabulated above. Final summaries and command logs remain under
+`target/r5-sync-13-artifacts/`.
+
+The wallets-sync shard passes 716 tests plus 126 subtests, serial-network
+passes 198 tests plus 41 subtests, and daemon-cli passes 682 tests plus 169
+subtests. Before the final commit, `classify_tests update` and its check record
+5,697 definitions; `python_test_shards.py run preflight --ci` passes all 57
+tests plus 62 subtests. The verification build trees and disposable books are
+removed after their summaries are written. No requested checkpoint check
+remains sandbox-blocked.
+
+This is a verified service boundary, **not R5 product-slice acceptance**.
+Successful native product calls remain:
+
+| Route | Successful native product calls | Hybrid fallbacks |
+| --- | ---: | --- |
+| `wallets.sync` | 0 | Unmeasured |
+| `ui.wallets.sync` | 0 | Unmeasured |
+| `ui.freshness.run` | 0 | Unmeasured |
+| `ui.workspace.freshness.run` | 0 | Unmeasured |
+
+Remaining work, in dependency order:
+
+1. Implement native local journal refresh and its admitted-book operation.
+   `crates/journals` currently exposes pure computation/rendering; the native
+   runtime has no refresh operation. Python's default daemon wallet sync
+   invokes `run_local_journal_refresh`, including current-journal skipping,
+   auto-pairing and deferred/error summaries. A native daemon must preserve
+   those effects rather than silently omit the default step.
+2. Implement the shared freshness coordinator: source specs and policy,
+   recovered/enqueued/selected jobs, dispatch rechecks, pause/cooldown and
+   cancellation, checkpoint/result redaction, rates/journal coordination,
+   profile/workspace ordering, snapshots, summaries and final envelopes.
+   Preserve exact-action or narrowly enabled automatic-feature consent;
+   persisted/recovered jobs never grant network permission.
+3. Wire progress events and CLI/daemon request cancellation to the shared
+   services, preserving atomic publication and book-switch/revocation fences.
+4. Select unsupported whole invocations for Python before bootstrap, database
+   open or secret consumption. The current hybrid probe checks only parsed
+   command-line shape. The service's local database capability checks cannot
+   serve as this pre-bootstrap decision. Never retry a started native failure
+   through Python.
+5. Register all four routes only after full CLI/daemon envelope and post-sync
+   book parity over the fixture/restart/reviewed corpus on both protocols,
+   strict product fence regressions, zero-fallback hybrid served-by evidence
+   and named mutation kills for the additional orchestration branches.
+
+Product-boundary parity, daemon progress/journal parity and the zero-fallback
+hybrid workload remain unrun because those boundaries are not implemented.
+The wallets-sync, serial-network and daemon-cli shard runs use the Python
+reference candidate; passing them does not establish native served-by counts.
+The full Python/frontend quality gate, shadow overlays, Docker regtest and
+packaged/platform gates were not run.

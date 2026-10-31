@@ -1199,6 +1199,63 @@ impl Book for RealBook {
         }
         kassiber_wallets::execute(self.conn()?, operation)
     }
+    fn wallet_sync(
+        &mut self,
+        profile_id: &str,
+        wallet: Option<&str>,
+        all: bool,
+        force_full: bool,
+    ) -> Result<Value, AppError> {
+        use kassiber_net::{Gate, Ledger, Offline};
+        use kassiber_wallets::{
+            publication::wallet::SystemSources,
+            scan::Cancellation,
+            sync::{resolve_backend, Request, Sync, SyncConsent},
+        };
+        use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+        let gate = Gate::new(
+            || match Context::from_env()
+                .ok()
+                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            {
+                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                Some(_) => Offline::Online,
+                None => Offline::Unavailable,
+            },
+            Ledger::default(),
+        );
+        let backends = &self.backends;
+        let conn = self
+            .book
+            .as_mut()
+            .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+            .connection_mut();
+        let action = Sync::new(
+            conn,
+            &Request {
+                profile_id,
+                wallet,
+                all,
+                force_full,
+                version: env!("CARGO_PKG_VERSION"),
+            },
+            |conn, name| resolve_backend(conn, backends, name),
+        )?;
+        let consent = SyncConsent::explicit_trigger(&action);
+        let result = action.run(
+            conn,
+            &gate,
+            Some(&consent),
+            &Cancellation::default(),
+            Instant::now() + Duration::from_secs(900),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+            &mut SystemSources::default(),
+            |conn, name| resolve_backend(conn, backends, name),
+        )?;
+        Ok(Value::List(result))
+    }
     fn import_runs(&mut self, operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         kassiber_imports::execute(self.conn()?, operation)
     }

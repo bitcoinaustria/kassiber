@@ -708,3 +708,21 @@ acquisition action's consent, scope, cancellation and offline checks. A tip
 failure grants no absence authority. No product route or background feature is
 enabled by the cache change. The live compatibility sequence oracle covers
 same-height reorgs, unchanged tips and missing legacy anchors on both protocols.
+
+### Rust wallet-sync service boundary
+
+`kassiber-wallets::sync` now selects wallets and joins native preparation to
+atomic publication. It preserves explicit versus `--all` selection, label
+ordering, deprecated-wallet filtering, force-full scans, per-wallet error
+isolation and successful freshness/journal-staleness publication. The supported
+backend path still requires a profile with one Bitcoin descriptor wallet; other
+backend/source shapes refuse during inert construction. Local no-source wallets
+retain their skip result and book-network guards.
+
+The service has request-bound consent and revalidates book, wallet, backend,
+network and observer inputs before preparation and publication. Cancellation,
+revocation and offline changes roll back every publication stage. Progress
+callbacks, daemon freshness queues, journal refresh and route activation are
+still pending. The live service oracle compares Python's complete `sync_wallet`
+handler with the native service and every normalized table; it does not exercise
+the registered CLI or daemon.

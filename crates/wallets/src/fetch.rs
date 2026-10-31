@@ -139,7 +139,14 @@ impl Fetch {
         if !matches!(text(&backend["kind"]), "electrum" | "esplora") {
             return Err(fallback("backend_kind"));
         }
-        if config["backend"] != backend["name"] || text(&backend["name"]).is_empty() {
+        let requested = match &config["backend"] {
+            Value::Null => "",
+            Value::String(name) => name.trim(),
+            _ => return Err(fallback("backend_selection")),
+        };
+        if (!requested.is_empty() && requested.to_lowercase() != text(&backend["name"]))
+            || text(&backend["name"]).is_empty()
+        {
             return Err(fallback("backend_selection"));
         }
         // Preserve the ordinary BDK versus compatibility source boundary.
@@ -331,6 +338,54 @@ impl Fetch {
     }
     pub fn captured_config(&self) -> &str {
         &self.captured_config
+    }
+
+    pub(crate) fn revalidate(&self, conn: &Connection) -> Result<()> {
+        let current = Self::new(
+            conn,
+            &self.scope.profile_id,
+            &self.scope.wallet_id,
+            &self.backend,
+            self.force_full,
+            &self.version,
+        )?;
+        let same = current.scope == self.scope
+            && current.checkpoint == self.checkpoint
+            && current.observers.len() == self.observers.len()
+            && current.observers.iter().zip(&self.observers).all(|(a, b)| {
+                a.identity == b.identity
+                    && a.epoch == b.epoch
+                    && a.prior == b.prior
+                    && a.current == b.current
+            });
+        if !same {
+            return Err(AppError::new(
+                "stale_context",
+                "Wallet fetch inputs changed",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_permission(
+        &self,
+        gate: &Gate,
+        consent: Option<&FetchConsent>,
+    ) -> Result<()> {
+        let proof = consent
+            .filter(|grant| Arc::ptr_eq(&self.identity, &grant.identity))
+            .ok_or_else(|| {
+                AppError::new(
+                    "interaction_required",
+                    "Wallet fetch requires consent for this exact action",
+                )
+            })?;
+        gate.authorize(
+            self.transport.request().clone(),
+            Some(proof.transport.clone()),
+        )
+        .map_err(|e| e.app_error())?;
+        Ok(())
     }
 
     pub fn run(

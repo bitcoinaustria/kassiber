@@ -938,3 +938,18 @@ disables reuse and does not bypass the return-time consent/offline/cancellation
 fence. The no-consent HTTP regression includes the tip-hash path, with empty
 attempt and egress buffers. No new connector, background job or AI projection
 is introduced; the four product sync routes remain unregistered.
+
+The unregistered wallet-sync service binds one explicit grant to the admitted
+connection, book identity, profile, ordered wallet selection, network scope and
+resolved backends. Constructors and revalidation perform local reads only.
+Preparation rechecks observer epochs and checkpoints before traffic. Publication
+rechecks cancellation, grant revocation and the fresh `kassiber-net` offline
+policy at every savepoint stage, including commit. The inactive CLI/book adapter
+reads the persisted offline preference afresh; `KASSIBER_NO_EGRESS` remains
+enforced by the gate. No saved backend creates a grant. The service adds no
+automatic trigger or AI projection; daemon freshness and hybrid route activation
+remain pending.
+
+Wallets using the active default retain that selection in their grant. The
+service re-resolves the current stored default before fetch and publication;
+changing it cannot redirect an already authorized sync to another backend.

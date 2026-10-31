@@ -169,12 +169,6 @@ impl Config {
     pub fn resolve(&self, conn: &Connection, name: &str) -> Result<Value, AppError> {
         use kassiber_store::rusqlite::{types::ValueRef, OptionalExtension};
         let name = name.trim().to_lowercase();
-        if !self.runtime.contains_key(&name) {
-            return Err(AppError::new(
-                "app_error",
-                format!("Unknown backend '{name}'"),
-            ));
-        }
         let stored = conn
             .query_row(
                 "SELECT * FROM backends WHERE lower(name)=?",
@@ -197,6 +191,12 @@ impl Config {
             .optional()
             .map_err(map_sqlite_error)
             .map_err(error)?;
+        if stored.is_none() && !self.runtime.contains_key(&name) {
+            return Err(AppError::new(
+                "app_error",
+                format!("Unknown backend '{name}'"),
+            ));
+        }
         let mut result = stored.unwrap_or_else(|| json!(self.runtime.get(&name).unwrap()));
         if let Some(raw) = result.get("config_json").and_then(Value::as_str) {
             let extra: Value = serde_json::from_str(raw)
