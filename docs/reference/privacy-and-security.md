@@ -142,6 +142,8 @@ they establish neither ownership nor accounting facts.
 Raw transport checkpoints, including cached script and transaction memberships,
 remain in local source state. Sanitized job results and desktop/AI freshness
 responses omit these containers before projection.
+The same projection covers control results from freshness pause and resume;
+those actions retain the private checkpoint locally for the next sync.
 
 The Rust freshness source/admission prerequisite only reads local state. It
 creates no consent grant, recovers no jobs and contacts no backend, even when
