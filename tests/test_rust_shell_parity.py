@@ -322,8 +322,8 @@ class RustDaemonParityTest(_Roots):
         served = set(rust_ready["data"]["supported_kinds"])
         python_ready["data"]["supported_kinds"] = [
             *[kind for kind in python_ready["data"]["supported_kinds"] if kind in served],
-            "test.stream", "test.emit_event", "test.late", "test.secret_store", "test.freshness.plan",
-            "test.freshness.execute",
+            "test.stream", "test.emit_event", "test.late", "test.secret_store", "test.freshness.plan", "test.freshness.select", "test.freshness.invoke",
+            "test.freshness.execute", "test.freshness.product.execute",
             "test.freshness.cancel", "test.freshness.pause", "test.freshness.resume",
             "test.freshness.request.cancel", "test.freshness.request.revoke",
             "test.freshness.graph.pending",

@@ -251,20 +251,18 @@ def test_acquisition_no_traffic_before_consent_or_while_offline(tmp_path, protoc
             assert hits == []
 
 
-def test_acquisition_checkpoint_keeps_product_sync_unimplemented(tmp_path):
-    """Registration must wait for observer authority and atomic application."""
+def test_acquisition_product_defaults_require_whole_invocation_fallback(tmp_path):
     binary = str(Path(RUST_BIN).resolve())
     root = tmp_path / "book"
-    env = _env(tmp_path)
+    env = {**_env(tmp_path), "KASSIBER_NO_EGRESS": "1", "KASSIBER_TEST_NO_EGRESS": "1"}
+    owners = tmp_path / "owners"
+    owners.mkdir(mode=0o700)
+    env["KASSIBER_RUST_TEST_OWNER_ROOT"] = str(owners)
     argv = [binary, "--machine", "--data-root", str(root)]
-    result = subprocess.run([*argv, "wallets", "sync", "--all"], env=env,
-                            capture_output=True, text=True, timeout=15)
-    assert result.returncode == 1
-    assert json.loads(result.stdout)["error"]["code"] == "not_implemented"
-    assert not root.exists()
     subprocess.run([*argv, "init"], env=env, capture_output=True, check=True, timeout=15)
     kinds = ["ui.wallets.sync", "ui.freshness.run", "ui.workspace.freshness.run"]
-    requests = [{"kind": kind, "request_id": str(i), "args": {"all": True}}
+    requests = [{"kind": kind, "request_id": str(i),
+                 "args": {"workspace_id": "unused"} if kind == kinds[2] else {"all": True}}
                 for i, kind in enumerate(kinds)]
     requests.append({"kind": "daemon.shutdown", "request_id": "shutdown"})
     result = subprocess.run([*argv, "daemon"], env=env,
@@ -272,6 +270,6 @@ def test_acquisition_checkpoint_keeps_product_sync_unimplemented(tmp_path):
                             capture_output=True, text=True, check=True, timeout=15)
     messages = [json.loads(line) for line in result.stdout.splitlines()]
     for i, kind in enumerate(kinds):
-        assert kind not in messages[0]["data"]["supported_kinds"]
+        assert kind in messages[0]["data"]["supported_kinds"]
         response = next(m for m in messages if m.get("request_id") == str(i))
-        assert response["error"]["code"] == "not_implemented"
+        assert response["error"]["code"] == "native_fallback_required"

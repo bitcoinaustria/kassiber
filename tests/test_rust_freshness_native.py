@@ -166,7 +166,7 @@ def test_native_freshness_admitted_book_execution_is_inert_without_run(tmp_path)
     assert [row["kind"] for row in rows] == ["daemon.ready", "test.freshness.execute", "daemon.shutdown"]
     assert len(rows[1]["data"]["enqueued"]) == 1
     assert rows[1]["data"]["completed"] == []
-    assert "ui.freshness.run" not in rows[0]["data"]["supported_kinds"]
+    assert "ui.freshness.run" in rows[0]["data"]["supported_kinds"]
 
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
@@ -277,7 +277,7 @@ def test_native_freshness_live_stream_matches_python(tmp_path, protocol):
                           for event in expected_events]
     assert rows[-2] == {**build_envelope("test.freshness.execute", expected), "request_id": "sync"}
     assert dump_bytes(books[1]) == dump_bytes(books[0])
-    assert "ui.freshness.run" not in rows[0]["data"]["supported_kinds"]
+    assert "ui.freshness.run" in rows[0]["data"]["supported_kinds"]
 
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])

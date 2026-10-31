@@ -136,6 +136,9 @@ pub fn supported_kinds() -> Vec<&'static str> {
     }));
     kinds.extend(rates::KINDS);
     kinds.extend(review::KINDS);
+    kinds.push("ui.freshness.run");
+    kinds.extend(freshness::product::CONTROL_KINDS);
+    kinds.push("ui.workspace.freshness.run");
     kinds.extend(services::kinds().filter(|k| workspaces::KINDS.contains(k)));
     kinds.extend(
         services::kinds()
@@ -170,6 +173,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             .copied()
             .filter(|k| ["ui.wallets.update", "ui.wallets.delete"].contains(k)),
     );
+    kinds.push("ui.wallets.sync");
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
     kinds.extend(
         services::kinds()
@@ -595,6 +599,11 @@ impl Daemon {
         }
         self.backup_sessions.expire();
         self.freshness_before_request(&kind_text)?;
+        if freshness::product::RUN_KINDS.contains(&kind_text.as_str())
+            || freshness::product::CONTROL_KINDS.contains(&kind_text.as_str())
+        {
+            return freshness::product::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
         if backup::KINDS.contains(&kind_text.as_str()) {
             return backup::handle(self, &kind_text, args.as_ref(), &request_id);
         }

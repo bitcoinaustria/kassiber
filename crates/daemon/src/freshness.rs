@@ -1,11 +1,12 @@
-#[cfg(feature = "test-kinds")]
 pub(crate) mod product;
 
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+#[cfg(any(test, feature = "test-kinds"))]
+use std::time::Duration;
+use std::time::Instant;
 
 use kassiber_envelope::{dict, get, success, AppError};
 use kassiber_pyjson::Value;
@@ -35,6 +36,7 @@ struct Finished {
 }
 
 struct GraphActive {
+    #[cfg(any(test, feature = "test-kinds"))]
     id: String,
     cancel: Cancellation,
     worker: JoinHandle<GraphFinished>,
@@ -66,6 +68,7 @@ fn busy() -> AppError {
     .retryable(true)
 }
 
+#[cfg(any(test, feature = "test-kinds"))]
 fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     get(value, key).and_then(|v| match v {
         Value::Str(v) => v.as_str().filter(|v| !v.is_empty()),
@@ -109,6 +112,7 @@ impl Requests {
         }
     }
 
+    #[cfg(any(test, feature = "test-kinds"))]
     pub(crate) fn control(&mut self, args: &Value, revoke: bool) -> Result<Value, AppError> {
         let target = text(args, "target_request_id").ok_or_else(|| {
             AppError::new("validation", "Freshness control requires target_request_id")
@@ -206,7 +210,7 @@ impl Daemon {
         {
             return Ok(());
         }
-        let Some((id, grant)) = self.freshness_requests.published.take() else {
+        let Some((_id, grant)) = self.freshness_requests.published.take() else {
             return Ok(());
         };
         let cancel = grant.cancellation();
@@ -302,7 +306,12 @@ impl Daemon {
                 }
             })
             .map_err(|_| AppError::new("internal_error", "Could not start graph worker"))?;
-        self.freshness_requests.graph = Some(GraphActive { id, cancel, worker });
+        self.freshness_requests.graph = Some(GraphActive {
+            #[cfg(any(test, feature = "test-kinds"))]
+            id: _id,
+            cancel,
+            worker,
+        });
         Ok(())
     }
 

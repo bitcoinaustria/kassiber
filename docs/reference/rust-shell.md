@@ -8281,8 +8281,9 @@ sync ignores unknown arguments and validates its boolean flags; freshness
 rejects unknown arguments, validates wallet/auto-pair/force-full, and retains
 Python truthiness for all/run/rates and omitted or falsy limits. Truthy limits
 currently admit only integer and boolean representations. Expected scope is
-checked separately and removed before argument validation. Enabled unported sources decline before consent;
-disabled rate policy remains effective even with `rates:true`. Wallet sync also
+checked separately and removed before argument validation. Enabled unported
+sources decline before consent; disabled rate policy remains effective even
+with `rates:true`. Wallet sync also
 declines paused or empty source selections because Python can use its separate
 direct-sync path in those cases. Execution never retries through Python.
 
@@ -8299,3 +8300,114 @@ a wallet: both active-book routes dereference `None` instead of returning a
 typed error. Native selection declines this unserved shape; Python is unchanged.
 The product corpus clones immutable disposable seed books per configuration;
 each case still owns its books and compares every normalized table.
+
+### Bitcoin wallet-sync product routes (R5, no-refresh)
+
+The native daemon registers `ui.wallets.sync`, `ui.freshness.run` and
+`ui.workspace.freshness.run` for their admitted explicit no-refresh shapes,
+plus `ui.freshness.cancel`, `.pause` and `.resume`. Ready capabilities retain
+Python order. Wallet sync requires `process_journals:false`; freshness requires
+`journals:false`. Successful executions use nonempty UTF-8 string request IDs.
+Enabled unported sources and wallet sync's paused/empty direct-sync cases
+decline as a whole before consent. The guarded hybrid candidate checks that
+selection changes no logical rows or backend hit counts, records its decision
+once, and sends admitted requests to the actual registered kind. It routes a
+declined invocation to the Python reference before execution; native errors
+cannot trigger a reference retry. Default enqueue-only calls exercise that
+separate reference branch without network traffic.
+
+Product requests automatically arm the graph mailbox after terminal flush.
+The acceptance corpus compares product envelopes, ordered progress/background
+events and every normalized table on both protocols, including restarts,
+reviewed books, workspace order and real automatic graph lookup. No-refresh
+sync retains journal staleness and reviewed accounting authority. Product
+controls remain available during fetch. Offline/no-egress, cancellation and
+expected-scope fences still precede transport. The three previously recorded
+reference deviations remain: stopping after prefetch cancellation, redacting
+pause/resume checkpoints and refusing mismatched Electrum transaction bytes.
+The additional `all:false`/missing-wallet repro is an unserved input shape.
+
+Occupied execution returns `project_operation_in_progress` from both selection
+and product dispatch, preventing a busy native request from selecting Python.
+Live source controls compare terminal envelopes and every normalized table;
+ordered events match apart from Python's recorded extra progress after prefetch
+cancellation. A workspace job already running when paused can finish, while
+active-book prefetch rechecks dispatch eligibility. Missing/non-object BDK state
+aggregates retain Python's incomplete-state error; unsupported versions retain
+its rebuild error, separate from malformed changeset decoding. Discovery still
+emits before observer construction fails.
+
+All 248 distinct product cases pass without skips: 206 completed in the main
+run and 42 in the continuation after correcting the graph fixture's outpoint
+unpacking and cache-presence assertion. Those fixture corrections change no
+product behavior. The clean parity witness records 327 native round trips:
+107 `ui.wallets.sync`, 109 `ui.freshness.run` and 111
+`ui.workspace.freshness.run`, with zero served-shape fallbacks. It records a call
+only after envelopes, ordered events and every normalized table match.
+The separate default enqueue-only cases deliberately select Python before
+execution. Live-control comparisons retain only the documented prefetch-stop
+progress exception; terminal envelopes and complete books still match.
+
+Default refresh integration is deliberately separate. The dependency is the
+registered native `journals process` service from
+`t3code/r4-13-journals-process-2`; no Python journal bridge is introduced here.
+Connect it through these existing boundaries:
+
+1. Adapt the registered R4 service at `Book::freshness_execute` /
+   `RealBook::freshness_execute`, passing the worker-owned connection and caller
+   authority into the native execution handler. Extend the handler composed
+   with `freshness::native::Native` to support `journal_refresh` through
+   `execution::Handler::supports/run`. Journal execution remains local and
+   shares foreground exclusion, cancellation and input-version checks.
+2. Extend `planning::Request`/`Plan::new` and `sources::build` admission to capture
+   journal policy and the caller's auto-pair authority, and admit the journal
+   specification only when that native handler exists. Preserve freshness and
+   workspace job ordering, including the priority-80 journal step. Assistant
+   calls must retain their no-auto-pair authority.
+3. Keep wallet sync's separate post-wallet local refresh, including
+   `skip_rebuild_when_current`, its appended enqueued/completed rows, and the
+   retryable-busy `deferred` summary after a successful sync. Preserve all
+   current, disabled, deferred, failed and cancelled journal summaries and
+   product progress/envelope projections.
+4. Only then relax the product parser's explicit journal opt-out and the
+   planning journal guard. Re-run the full product oracle and mutations for
+   default refresh shapes, including every normalized table, both protocols,
+   restarts/reviewed books and zero served-shape fallbacks. Keep any enabled
+   unported rate-source refusal. Removing the parser guard alone cannot make
+   defaults native. Retain graph-grant publication after the entire terminal
+   response, cancellation/revocation sharing and lifecycle quiescence.
+
+All 18 final product mutations are killed after 16 distinct named baselines
+pass. The main campaign kills 17; the incomplete-state recipe is tightened to
+Electrum, whose reconstruction actually reaches that decoder, and then passes
+its baseline and kill. Esplora can reuse cached observations in that scenario.
+The recipes cover registration, arguments, journal opt-out, request identity,
+unsupported/direct-wallet admission, enqueue-only behavior, workspace scope,
+force-full, automatic graph startup, busy selection, live pause, restore,
+authenticated rotation and observer-state error/progress parity. Build errors,
+skips and empty selections do not count as kills.
+
+All 225 affected Rust tests pass: 184 wallet, 16 daemon, six binary, eight
+supervisor and 11 protocol cases. Encrypted write-failure rollback/reopen and
+the inherited 102-round service corpus remain intact. Formatting and production
+and harness clippy pass with warnings denied. Freshness queue/admission/
+execution/progress/lifecycle/graph/product static mutation checks pass with
+29/12/19/16/18/23/18 entries; combined sync and routing also pass with 547 and
+14. Other inherited campaigns were not rerun at this boundary.
+
+All 13 edited inherited caller regressions pass, with two subtests, covering
+setup/protocol capability ordering, guarded planning/execution/streams and
+default-shape refusal. The required `classify_tests update` records 5,819
+definitions, and `python_test_shards.py run preflight --ci` passes all 57 tests.
+A manual second pass reviewed production registration, inert/busy selection,
+request/scope/consent barriers, source controls, terminal publication and worker
+retirement, oracle witnesses, mutation reachability and documentation. No test
+remains sandbox-blocked.
+
+Logs, the clean served-by witness and the proof summary remain under
+`target/r5-sync-22-artifacts/`. Task-owned mutation/verification build trees and
+disposable books are removed after summarizing results. Account HOME is
+preserved, and no background job remains. The full quality gate, tax/custody
+shadow overlays, Docker regtest and packaged/platform gates were not run.
+Explicit no-refresh daemon routes are accepted at this boundary; default
+refresh remains open at the R4 handoff above.

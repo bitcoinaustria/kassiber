@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from kassiber import daemon_freshness as df
+from kassiber.daemon import SUPPORTED_KINDS
 from kassiber.core import freshness, sync as core_sync, transaction_graph
 from kassiber.envelope import build_envelope
 from tests.rust_freshness_session import Session
@@ -82,6 +83,23 @@ def reference(book, rt, kind, args, index):
     return rows
 
 
+def candidate(session, book, rt, kind, args, index=0, *, chain):
+    before = dump_bytes(book)
+    before_hits = len(chain.hits)
+    session.send("test.freshness.select", "select", {"kind": kind, "args": args, "request_id": "sync"})
+    selection = session.until("select")
+    assert dump_bytes(book) == before
+    assert len(chain.hits) == before_hits
+    supported = selection["data"]["supported"]
+    served_by = "rust" if supported else "python"
+    session.served = [*getattr(session, "served", []), {"command": kind, "served_by": served_by}]
+    if not supported:
+        rows = reference(book, rt, kind, args, index)
+        return served_by, rows[-1], rows
+    session.send(kind, "sync", args)
+    return served_by, session.until("sync", kind), None
+
+
 def round_trip(tmp_path, chain, protocol, url, roots, books, kind, index=0, **extra):
     args = arguments(kind, **extra)
     initial = copy.deepcopy({key: value for key, value in chain.__dict__.items() if key not in {"lock", "hits"}})
@@ -91,16 +109,16 @@ def round_trip(tmp_path, chain, protocol, url, roots, books, kind, index=0, **ex
         chain.__dict__.update(initial)
     env = _environment(tmp_path, protocol, url, index)
     env["KASSIBER_RUST_TEST_GRAPH_PREFIX"] = f"r{index}-graph"
+    before_hits = len(chain.hits)
     with Session(roots[1], env) as session:
+        ready = session.rows[0]["data"]["supported_kinds"]
+        assert kind in ready
+        assert [item for item in ready if not item.startswith("test.")] == [item for item in SUPPORTED_KINDS if item in ready]
         session.send("status", "open")
         assert session.until("open")["kind"] == "status"
-        before = dump_bytes(books[1])
-        session.send("test.freshness.select", "select", {"kind": kind, "args": args, "request_id": "sync"})
-        selection = session.until("select")
-        assert selection["data"] == {"supported": True}, selection
-        assert dump_bytes(books[1]) == before
-        session.send("test.freshness.invoke", "sync", {"kind": kind, "args": args})
-        terminal = session.until("sync", kind)
+        assert len(chain.hits) == before_hits
+        served_by, terminal, _ = candidate(session, books[1], runtime(protocol, url), kind, args, index, chain=chain)
+        assert served_by == "rust", session.served
         assert terminal["kind"] == kind, terminal
         graph_events = sum(row["kind"] == "ui.freshness.background" for row in expected)
         while sum(row["kind"] == "ui.freshness.background" for row in session.rows) < graph_events:
@@ -110,7 +128,8 @@ def round_trip(tmp_path, chain, protocol, url, roots, books, kind, index=0, **ex
     (tmp_path / "product-parity.json").write_text(json.dumps({"actual": actual, "expected": expected}, indent=2))
     assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
     assert dump_bytes(books[1]) == dump_bytes(books[0])
-    record = {"command": kind, "served_by": "rust", "fallbacks": 0}
+    assert session.served == [{"command": kind, "served_by": "rust"}]
+    record = {"command": kind, "served_by": served_by, "fallbacks": 0}
     witness = Path(os.environ.get("KASSIBER_RUST_PRODUCT_WITNESS", tmp_path / "product-served.jsonl"))
     with witness.open("a") as output:
         output.write(json.dumps(record) + "\n")
@@ -237,6 +256,8 @@ def test_product_wallet_selection_refuses_direct_sync_reference_path(tmp_path, s
         before = dump_bytes(books[1])
         session.send("test.freshness.select", "select", {"kind": KINDS[0], "args": arguments(KINDS[0])})
         assert session.until("select")["data"] == {"supported": False}
+        session.send(KINDS[0], "direct", arguments(KINDS[0]))
+        assert session.until("direct", KINDS[0])["error"]["code"] == "native_fallback_required"
         assert dump_bytes(books[1]) == before
         assert chain.hits == []
         session.finish()
@@ -289,7 +310,7 @@ def test_product_argument_errors_match_reference_without_effects(tmp_path, kind,
                                       hint=error.hint, retryable=error.retryable), "request_id": "sync"}
     with Session(roots[1], _environment(tmp_path)) as session:
         before = dump_bytes(books[1])
-        session.send("test.freshness.invoke", "sync", {"kind": kind, "args": args})
+        session.send(kind, "sync", args)
         assert session.until("sync") == expected
         session.finish()
         assert dump_bytes(books[1]) == before
@@ -304,6 +325,27 @@ def test_product_enqueue_only_and_run_limit(tmp_path, kind, run):
         round_trip(tmp_path, chain, "esplora", url, roots, books, kind, run=run, limit=1)
         if not run:
             assert chain.hits == []
+
+
+@pytest.mark.parametrize("kind", KINDS[1:])
+def test_product_hybrid_declines_defaults_before_reference_enqueue(tmp_path, kind):
+    config, chain, _ = _fixture("empty")
+    roots, books = _books(tmp_path, config)
+    args = arguments(kind, run=False)
+    args.pop("journals")
+    with serve(chain, "esplora") as url:
+        rt = runtime("esplora", url)
+        expected = reference(books[0], rt, kind, args, 0)
+        with Session(roots[1], _environment(tmp_path, "esplora", url)) as session:
+            session.send("status", "open")
+            assert session.until("open")["kind"] == "status"
+            served_by, _, actual = candidate(session, books[1], rt, kind, args, chain=chain)
+            assert served_by == "python"
+            assert actual == expected
+            assert session.served == [{"command": kind, "served_by": "python"}]
+            assert dump_bytes(books[1]) == dump_bytes(books[0])
+            assert chain.hits == []
+            session.finish()
 
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
@@ -323,7 +365,7 @@ def test_product_workspace_preserves_active_context_and_book_order(tmp_path, pro
 @pytest.mark.parametrize("kind", KINDS)
 def test_product_automatic_graph_lookup_matches_reference(tmp_path, protocol, kind):
     config, chain, _ = _fixture("empty")
-    txid = chain.fund(FOREIGN, 100000)
+    txid, _ = chain.fund(FOREIGN, 100000)
     roots, books = _books(tmp_path, config)
     for book in books:
         with connect(book) as conn:
@@ -331,7 +373,7 @@ def test_product_automatic_graph_lookup_matches_reference(tmp_path, protocol, ki
     with serve(chain, protocol) as url:
         round_trip(tmp_path, chain, protocol, url, roots, books, kind)
     with connect(books[1]) as conn:
-        assert conn.execute("SELECT count(*) FROM transaction_graph_cache").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM transaction_graph_cache WHERE txid=?", (txid,)).fetchone()[0] == 1
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -341,6 +383,19 @@ def test_product_matching_scope_is_removed_before_argument_validation(tmp_path, 
     with serve(chain, "esplora") as url:
         round_trip(tmp_path, chain, "esplora", url, roots, books, kind,
                    expected_scope={"workspace_id": "w", "profile_id": "p"})
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+@pytest.mark.parametrize("kind,extra", [
+    (KINDS[0], {"wallet": " a ", "all": False, "force_full": None, "ignored": True}),
+    (KINDS[1], {"wallet": " a ", "all": False, "force_full": None, "auto_pair": True}),
+    (KINDS[2], {"workspace_id": " w "}),
+])
+def test_product_argument_coercions_match_reference(tmp_path, protocol, kind, extra):
+    config, chain, _ = _fixture("empty")
+    roots, books = _books(tmp_path, config)
+    with serve(chain, protocol) as url:
+        round_trip(tmp_path, chain, protocol, url, roots, books, kind, **extra)
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -366,7 +421,7 @@ def test_product_consent_fences_before_transport(tmp_path, kind, fence):
             elif fence.endswith("scope"):
                 args["expected_scope"] = ({"workspace_id": "w", "profile_id": "other"}
                                           if fence == "stale-scope" else {})
-            session.send("test.freshness.invoke", "sync", {"kind": kind, "args": args})
+            session.send(kind, "sync", args)
             result = session.until("sync", kind)
             if fence in {"offline", "no-egress"}:
                 data = result["data"]["books"][0] if kind == KINDS[2] else result["data"]
@@ -377,3 +432,65 @@ def test_product_consent_fences_before_transport(tmp_path, kind, fence):
                 assert dump_bytes(books[1]) == before
             assert chain.hits == []
             session.finish()
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("control", ["cancel", "pause"])
+def test_product_source_controls_remain_available_during_fetch(tmp_path, protocol, kind, control):
+    from tests.test_rust_freshness_lifecycle import BlockedHits, unpublished
+
+    config, chain, _ = _fixture("receive-change")
+    roots, books = _books(tmp_path, config)
+    class ReferenceControl(list):
+        def append(self, item):
+            first = not self
+            super().append(item)
+            if first:
+                with connect(books[0]) as conn, deterministic_sources("r0"):
+                    job = conn.execute("SELECT id,source_key FROM freshness_jobs").fetchone()
+                    if control == "cancel":
+                        freshness.cancel_job(conn, job[0])
+                    else:
+                        freshness.pause_source(conn, "p", job[1])
+                    conn.commit()
+
+    chain.hits = ReferenceControl()
+    with serve(chain, protocol) as url:
+        expected = reference(books[0], runtime(protocol, url), kind, arguments(kind), 0)
+        chain.hits = hits = BlockedHits(protocol)
+        with Session(roots[1], _environment(tmp_path, protocol, url)) as session:
+            session.send(kind, "sync", arguments(kind))
+            assert hits.started.wait(30)
+            try:
+                before, before_hits = dump_bytes(books[1]), len(hits)
+                session.send("test.freshness.select", "busy", {"kind": kind, "args": arguments(kind)})
+                assert session.until("busy")["error"]["code"] == "project_operation_in_progress"
+                session.send(kind, "competing", arguments(kind))
+                assert session.until("competing")["error"]["code"] == "project_operation_in_progress"
+                assert dump_bytes(books[1]) == before
+                assert len(hits) == before_hits
+                with connect(books[1]) as conn:
+                    job = conn.execute("SELECT id,source_key FROM freshness_jobs").fetchone()
+                args = {"job_id": job[0]} if control == "cancel" else {"source_key": job[1]}
+                session.send(f"ui.freshness.{control}", "control", args)
+                assert session.until("control")["kind"] == f"ui.freshness.{control}"
+                hits.release.set()
+                session.until("sync", kind)
+                actual = [row for row in session.rows if row.get("request_id") == "sync" or row.get("event")]
+                (tmp_path / "product-control-parity.json").write_text(json.dumps({"actual": actual, "expected": expected}, indent=2))
+                if control == "cancel" and kind != KINDS[2]:
+                    assert actual[-1] == expected[-1]
+                    assert actual[:-1] == expected[:len(actual) - 1]
+                    assert len(expected) > len(actual)
+                else:
+                    assert actual == expected
+                assert dump_bytes(books[1]) == dump_bytes(books[0])
+                if control == "pause":
+                    session.send("ui.freshness.resume", "resume", {"source_key": job[1]})
+                    assert session.until("resume")["data"]["result"]["paused"] is False
+                if control == "cancel" or kind != KINDS[2]:
+                    unpublished(books[1])
+                session.finish()
+            finally:
+                hits.release.set()

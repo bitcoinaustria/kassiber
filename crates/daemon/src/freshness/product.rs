@@ -238,6 +238,9 @@ pub(crate) fn supported(
     raw_args: Option<&Value>,
     id: &RequestId,
 ) -> Result<bool, AppError> {
+    if daemon.freshness_requests.running() {
+        return Err(super::busy());
+    }
     if !valid_id(id) || !raw_args.is_some_and(|args| no_refresh(kind, args)) {
         return Ok(false);
     }

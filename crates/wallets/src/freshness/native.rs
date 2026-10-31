@@ -241,6 +241,11 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
         }
         let backend = selected.backend.as_ref().map_err(Clone::clone)?;
         let wallet_id = or_text(field(&selected.wallet, "id"));
+        let label = field(&selected.wallet, "label");
+        emit(&dict([
+            ("phase", s("discovery")),
+            ("wallet", label.clone()),
+        ]))?;
         let action = Fetch::new(
             conn,
             &selected.profile,
@@ -265,11 +270,6 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             self.cancel.clone(),
         )
         .ok();
-        let label = field(&selected.wallet, "label");
-        emit(&dict([
-            ("phase", s("discovery")),
-            ("wallet", label.clone()),
-        ]))?;
         let resolver = std::cell::RefCell::new(&mut self.backend);
         let check_batch = || {
             check(

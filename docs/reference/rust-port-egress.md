@@ -733,3 +733,29 @@ prepares and publishes against owned loopback fixtures under the subprocess
 guard. CLI, daemon and AI sync routing remain unregistered; this checkpoint
 does not enable automatic freshness. See the
 [fetch handoff](rust-shell.md#bitcoin-native-fetch-assembly-r5).
+
+## Bitcoin product sync and freshness (R5, no-refresh)
+
+The [product checkpoint](rust-shell.md#bitcoin-wallet-sync-product-routes-r5-no-refresh)
+supersedes the unregistered daemon status of the earlier checkpoints. The three
+native product run kinds admit explicit journal opt-outs and supported Bitcoin
+Esplora/Electrum sources. Admission and the guarded hybrid selector initiate no
+transport; the selector never opens or migrates a database. Saved backends and
+jobs, launch, status and idle confer no sync or graph authority.
+
+Only the exact product invocation creates its once-only request consent.
+Foreground acquisition still uses the captured `kassiber-net` gate and existing
+clients, with current offline/no-egress, scope, replay, cancellation and
+revocation fences. There is no BDK networking dependency or alternate-backend
+fallback. After successful terminal serialization, write and flush, private
+successful-job grants authorize bounded graph follow-up on the captured
+backend. The worker owns its connection and rechecks authority between batches
+and before cache writes. Source pause/cancel, restore and authenticated rotation
+retain the same stopping and connection-retirement barriers.
+
+`test_product_consent_fences_before_transport` and
+`test_product_source_controls_remain_available_during_fetch` drive the registered
+product paths. The complete product oracle records per-invocation hybrid
+decisions and rejects any served-shape reference fallback. Default refresh
+remains dependent on native R4-13 journal processing; no Python journal bridge,
+new AI allowlist entry or disk logging is introduced.

@@ -3025,3 +3025,44 @@ lookup service, their unsolicited events, parity and graph mutation acceptance.
 The mailbox has no consumer and creates no graph traffic or graph-cache writes.
 Product validation/whole-shape selection, full product daemon parity and route
 registration remain open; all three product routes still use Python.
+
+### R5 Bitcoin sync: no-refresh daemon registration
+
+The native daemon now registers admitted explicit no-refresh variants of
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`, plus
+source cancel/pause/resume. Product requests automatically arm graph consumption
+after the terminal-flush barrier. The guarded whole-invocation hybrid selector
+is inert on already opened books and declines unopened/locked books, default
+refresh, unsupported protocol IDs and unported source selections before consent.
+Native errors never authorize a Python retry.
+
+Acceptance compares full product envelopes, ordered progress/background events
+and every normalized table over both loopback protocols, fixture/restart and
+reviewed-book scenarios, workspace ordering and real automatic graph lookup.
+Product cancellation, offline/no-egress and scope fences remain in place. The
+three previously recorded reference deviations are retained with their repros;
+Python is unchanged. The `all:false`/missing-wallet input also has a reference
+repro and remains outside the served selection.
+
+All 248 product cases pass across the main and continuation runs, without
+skips. The oracle witness records 107 wallet-sync, 109 active-book freshness
+and 111 workspace freshness native round trips, with zero served-shape
+fallbacks. The two default enqueue-only hybrid cases select Python before
+execution. Live source-control comparisons preserve the documented earlier
+stop after prefetch cancellation while matching terminal results and complete
+normalized books.
+
+All 18 final product mutations are killed after 16 named baselines pass; the
+stored-state error recipe specifically reaches Electrum reconstruction.
+All 225 affected Rust tests and 13 inherited caller regressions pass, with
+two subtests. Formatting and production/harness clippy pass. Required test
+classification records 5,819 definitions, and CI preflight passes all 57 tests.
+
+Default refresh is still open. Once native `journals process` from
+`t3code/r4-13-journals-process-2` is registered, adapt it through the worker-owned
+`Book::freshness_execute` handler, extend journal admission and caller auto-pair
+authority, preserve wallet sync's separate follow-up and freshness/workspace
+job/summary ordering, and prove defaults before removing either journal guard.
+Enabled unported rate sources still decline. No Python journal bridge is
+introduced. The [product handoff](../reference/rust-shell.md#bitcoin-wallet-sync-product-routes-r5-no-refresh)
+records the exact integration boundaries and verification.

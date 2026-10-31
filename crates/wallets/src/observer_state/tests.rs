@@ -422,10 +422,19 @@ fn observer_full_rebuild_discards_only_wallet_state_and_never_borrows_another_ch
         json!({"schema_version":1,"bdk_changeset":[]}),
     ] {
         loaded.prior = Some(prior.clone());
-        assert_eq!(
-            loaded.bdk_changeset(false).unwrap_err().code,
-            "observer_state_rebuild_required"
-        );
+        let expected = if prior["schema_version"] == 2 {
+            AppError::new(
+                "observer_state_rebuild_required",
+                "Stored BDK observer state must be rebuilt",
+            )
+            .with_hint("Run a full wallet refresh to rebuild derived BDK observer state.")
+        } else {
+            AppError::new(
+                "observer_state_rebuild_required",
+                "Stored BDK observer state is incomplete",
+            )
+        };
+        assert_eq!(loaded.bdk_changeset(false).unwrap_err(), expected);
         assert!(loaded.bdk_changeset(true).unwrap().is_none());
         assert_eq!(loaded.prior, Some(prior));
     }

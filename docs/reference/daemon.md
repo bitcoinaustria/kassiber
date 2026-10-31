@@ -795,21 +795,27 @@ retries, pauses, resumes, and cancels jobs, but it never performs network sync
 itself. Persistent state lives in SQLite under `freshness_jobs` and
 `freshness_source_states`.
 
-The Rust port has an internal admitted-book executor for supported Bitcoin
-jobs with an explicit journal opt-out. It covers execution state, retries,
-checkpoints, terminal aggregation, fetch progress and authority checks between
-fetch batches. Its guarded daemon request runner owns a separate connection,
-streams progress, services request/source cancellation and offline changes,
-and joins before book switching, locking or shutdown. Its private successful-job
-graph grants now cross the terminal-write boundary into a bounded mailbox.
-The graph worker consumes those grants using bounded Bitcoin reference lookup
-and its own SQLite/SQLCipher connection. Automatic
-mailbox consumption is now armed by admitted native product requests, with
-the terminal-flush barrier and both source-control boundaries preserved. This
-lifecycle is still driven through a guarded seam; product validation/selection
-and registration remain pending. All three product sync/freshness routes still
-use Python. See the latest
-[Rust checkpoint](rust-shell.md#bitcoin-wallet-sync-automatic-graph-lifecycle-r5-partial).
+The Rust daemon registers the supported Bitcoin no-refresh variants of
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.
+Wallet sync requires explicit `process_journals:false`; the freshness kinds
+require explicit `journals:false`. Successful native executions require a
+nonempty UTF-8 string request ID and a fully supported source selection.
+Enabled unported rate sources, unsupported wallet/backend shapes and wallet
+sync's separate direct-sync cases remain on Python in the test hybrid candidate.
+Defaults still require native journal processing from R4-13. A direct native
+unsupported invocation refuses before consent and never retries through Python.
+The guarded candidate selector only reads an already opened book; it neither
+opens nor migrates a database, changes queue state nor contacts a backend.
+
+The native request runner owns a separate connection, streams product progress,
+services `ui.freshness.cancel`, `.pause`, `.resume` and offline changes while
+fetching, and joins before book switching, locking or shutdown. Private
+successful-job graph grants enter a bounded mailbox only after the terminal
+record is written and flushed. Automatic graph lookup then uses the captured
+backend through `kassiber-net`, its own SQLite/SQLCipher connection and the same
+source controls. Saved jobs, launch, status and idle without a live request
+grant cannot authorize graph work. See the
+[Rust product checkpoint](rust-shell.md#bitcoin-wallet-sync-product-routes-r5-no-refresh).
 
 Within the daemon, refresh execution is serialized across recovery, queueing,
 batch fetch and apply. A background tick skips an occupied execution slot; an

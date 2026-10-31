@@ -127,7 +127,7 @@ through the shared setup crate.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
-## Rust backend R5 Bitcoin wallet sync (CLI registered; daemon routes pending)
+## Rust backend R5 Bitcoin wallet sync (CLI and no-refresh daemon registered)
 
 - [x] Port the compatibility descriptor gap walker for Esplora and Electrum,
   with exact-action consent, cancellation, progress, loopback differential
@@ -162,63 +162,67 @@ through the shared setup crate.
 - [x] Assemble complete native prepared fetches, including output/coverage facts
   and named observer routes. Compare native preparation and full-book
   publication against Python on the 102-round fixture/restart/reviewed corpus.
-  This is an unregistered preparation seam; see the native fetch handoff.
-- [ ] Connect native preparation/publication to shared CLI/daemon wallet and
+  This preparation seam is shared by the registered CLI and no-refresh daemon
+  services; see the native fetch handoff.
+- [x] Connect native preparation/publication to shared CLI/daemon wallet and
   freshness services, retaining pre-egress refusal of unsupported shapes.
   The request-bound service and CLI route now exist; the hybrid runner checks
-  saved capabilities in an inert admitted-book preflight before consent. Daemon
-  freshness execution now has an unregistered admitted-book implementation;
-  fetch progress and batch controls now reach the guarded daemon seam. Product
-  routes still need automatic graph-worker startup, product validation/selection
-  and complete no-refresh daemon parity; default requests remain on Python.
-  The unregistered pre-dispatch queue now covers policy, state, recovery,
+  saved capabilities in an inert admitted-book preflight before consent. The
+  three daemon routes now serve admitted explicit no-refresh shapes, with
+  product progress, controls, automatic graph follow-up and complete-book parity.
+  Default refresh remains on Python pending native R4-13 journals.
+  The shared pre-dispatch queue covers policy, state, recovery,
   single-flight/forced enqueue, cancellation controls, selected dispatch and
   workspace ordering. It grants no transport authority. See the queue checkpoint
-  in `docs/reference/rust-shell.md` for the remaining execution and route work.
+  in `docs/reference/rust-shell.md` for the remaining default-refresh integration.
 - [x] Port freshness source specifications and inert whole-request admission
   through `Book`, with foreground exclusion and selection/configuration
   revalidation. The admitted plan requires an explicit journal opt-out and
   refuses enabled unported sources before queue mutation or consent. This is
-  an internal prerequisite; live daemon controls and route registration remain open.
+  shared by the registered no-refresh product routes and their live controls.
 - [x] Execute admitted Bitcoin freshness jobs with retries/backoff, SQLite-busy
   rollback, private checkpoints, active-book/workspace aggregation and UI
   redaction. Verify terminal envelopes and complete logical books against
-  Python with gated Electrum/Esplora fixtures. The guarded runner now supplies
-  request progress, controls and graph handoff; product acceptance remains open.
+  Python with gated Electrum/Esplora fixtures. Product routes now use the same
+  request progress, controls and graph handoff.
 - [x] Connect native fetch progress and synchronous authority checks through
   discovery, BDK and compatibility acquisition. Match Python's active-book
   prefetch/workspace event ordering; check persisted cancellation, book and
-  wallet/backend inputs between batches. The guarded daemon streams these
-  events; product lifecycle integration and automatic graph startup remain open.
+  wallet/backend inputs between batches. Registered no-refresh product routes
+  stream these events and arm graph follow-up after terminal flush.
 - [x] Add the guarded daemon request runner with a dedicated connection,
   early/active cancellation, source controls, offline/revocation/replay fences
-  and switch/lock/shutdown/EOF quiescence. Keep product registration gated on
-  automatic graph startup, product validation/selection and full served-shape parity.
+  and switch/lock/shutdown/EOF quiescence. Product dispatch retains whole-shape
+  admission and the same lifecycle barriers.
 - [x] Carry private successful-job graph grants through the guarded runner and
   publish them into a bounded mailbox after the terminal response is flushed.
   Preserve request cancellation, configuration checks and lifecycle discard.
 - [x] Add the guarded connection-owning, stoppable graph worker and bounded native
   reference lookup, with grant revalidation, SQLCipher cleanup, unsolicited
   events and graph/lifecycle parity and mutation acceptance.
-  It starts explicitly in guarded builds; no product route is registered.
-- [ ] Integrate automatic graph-worker startup with the eventual native product
+  Admitted product requests now arm it automatically after terminal flush.
+- [x] Integrate automatic graph-worker startup with the native product
   request lifecycle, retaining the flushed-response barrier, source controls and
   complete product graph/event/restart/reviewed-book acceptance. Automatic
   arming and both source-control boundaries are verified through the guarded
-  product-lifecycle seam; product registration remains pending.
+  seam and registered no-refresh product acceptance.
 - [x] Validate product argument shapes and protocol request IDs through the
   guarded adapter, with inert admitted-book selection for explicit no-refresh
   variants. Selection never opens or migrates a database and refuses defaults,
   unsupported sources and wallet sync's distinct direct-sync paths.
-- [ ] Register only no-refresh shapes passing full envelope/event/table parity
-  with zero served-shape fallbacks. All three daemon product served-by counts
-  remain zero; the complete fixture/restart/reviewed-book corpus is prepared.
+- [x] Register no-refresh shapes passing full envelope/event/table parity with
+  zero served-shape fallbacks across the fixture/restart/reviewed-book corpus.
+  Per-route native served-by counts are recorded in the latest Rust checkpoint.
 - [ ] Reject mismatched Electrum raw-transaction IDs in Python graph lookup.
   `test_reference_electrum_mismatched_transaction_repro_and_native_refusal`
   demonstrates the reference bug; native decoding already refuses the response.
 - [ ] Redact private checkpoints from Python freshness pause/resume results.
   The disposable `test_reference_source_control_checkpoint_repro_and_native_parity`
   repro pins the disclosure; Rust already applies the shared UI projection.
+- [ ] Return a typed Python validation error for `all:false` without a wallet
+  in wallet sync and active-book freshness. The disposable
+  `test_reference_all_false_without_wallet_repro_and_native_refusal` pins the
+  current `None.strip()` failure; native whole-invocation selection declines it.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.
@@ -226,13 +230,18 @@ through the shared setup crate.
   fixture, restart-sequence and reviewed-book preparation/publication parity.
 - [x] Enable supported CLI `wallets sync` with complete live fixture, restart and
   reviewed-book comparisons on Electrum/Esplora and zero hybrid fallbacks.
-- [ ] Enable verified explicit no-refresh variants of `ui.wallets.sync`,
+- [x] Enable verified explicit no-refresh variants of `ui.wallets.sync`,
   `ui.freshness.run` and `ui.workspace.freshness.run` after inert whole-shape
   selection, full envelope/event/book parity and zero served-shape hybrid
-  fallbacks. Keep defaults and unsupported Liquid, Core RPC, Lightning, Silent
+  fallbacks. Keep unsupported Liquid, Core RPC, Lightning, Silent
   Payments and additional-wallet overlap on Python in the hybrid runner; direct
-  native unsupported calls refuse without retrying. Native journal refresh
-  still requires R4-13.
+  native unsupported calls refuse without retrying.
+- [ ] Enable default refresh after the native R4-13 `journals process` service
+  is registered and adapted through the worker-owned freshness handler. Preserve
+  wallet sync's separate follow-up, workspace/job ordering, journal summaries
+  and assistant no-auto-pair authority; retain enabled unported rate refusals.
+  The product checkpoint in `docs/reference/rust-shell.md` records the exact
+  seams and required default-refresh proof. No Python journal bridge.
 
 ## Rust backend R5 secrets, backup and diagnostics
 

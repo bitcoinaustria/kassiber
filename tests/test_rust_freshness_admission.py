@@ -288,4 +288,4 @@ def test_freshness_admission_uses_admitted_book_seam(tmp_path):
     assert [row["kind"] for row in rows] == ["daemon.ready", "test.freshness.plan", "daemon.shutdown"]
     with connect(book) as conn:
         assert rows[1] == {**build_envelope("test.freshness.plan", _expected(conn)), "request_id": "plan"}
-    assert "ui.wallets.sync" not in rows[0]["data"]["supported_kinds"]
+    assert "ui.wallets.sync" in rows[0]["data"]["supported_kinds"]

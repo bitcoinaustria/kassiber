@@ -502,10 +502,17 @@ impl LoadedState {
             return Ok(None);
         };
         if !version_one(&prior["schema_version"]) {
-            return Err(invalid("schema_version"));
+            return Err(AppError::new(
+                "observer_state_rebuild_required",
+                "Stored BDK observer state must be rebuilt",
+            )
+            .with_hint("Run a full wallet refresh to rebuild derived BDK observer state."));
         }
         if !prior["bdk_changeset"].is_object() {
-            return Err(invalid("bdk_changeset"));
+            return Err(AppError::new(
+                "observer_state_rebuild_required",
+                "Stored BDK observer state is incomplete",
+            ));
         }
         normalize_changeset(&prior["bdk_changeset"]).map(Some)
     }

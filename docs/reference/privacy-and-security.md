@@ -144,8 +144,12 @@ The Rust freshness source/admission prerequisite only reads local state. It
 creates no consent grant, recovers no jobs and contacts no backend, even when
 saved configuration selects a loopback server. Its admitted plan requires an
 explicit journal opt-out and rejects the entire selection when an enabled
-source has no native executor. The three daemon sync/freshness product routes
-remain on Python until event/control and complete-book parity are verified.
+source has no native executor. The three native daemon sync/freshness product
+routes now admit their verified explicit no-refresh variants. The guarded
+whole-invocation hybrid selector reads only an already opened book; static
+opt-outs and unopened/locked books decline without database open or migration.
+Defaults and unsupported source shapes stay on Python in that candidate;
+native execution never retries through Python after starting.
 
 The internal Rust freshness executor consumes an admitted plan under its
 foreground slot. Its once-only request grant binds to that exact plan;
@@ -153,30 +157,28 @@ missing, foreign, revoked or cancelled requests refuse before queue writes.
 Enqueue-only execution creates no client. Explicit execution uses the existing
 `kassiber-net` gate for every transport and rechecks scope, cancellation,
 revocation and offline permission around fetch and atomic publication. An
-offline/no-egress refusal records a failed, report-blocking job. The guarded
-request runner services early/active cancellation, source controls and offline
+offline/no-egress refusal records a failed, report-blocking job. The native
+request runner services cancellation, source controls and offline
 changes while fetching; switch, lock, shutdown and EOF cancel/revoke and join
 its connection owner before releasing the book. Used request identities cannot
 create another grant. Source-control results redact private checkpoints,
 including the result container that Python pause/resume currently returns unredacted.
 That reference bug has a disposable repro; Python is unchanged here.
 
-The guarded runner now carries private successful-job graph grants separately
+The runner carries private successful-job graph grants separately
 from the response and publishes them into a bounded in-memory mailbox only
 after the terminal record is written and flushed. Request cancellation or
 revocation and book/lock/shutdown/EOF boundaries discard that authority. Grant
 checks bind the successful job, database, active book and network binding,
-wallet configuration and selected backend. A guarded, explicitly started worker
-can now consume the mailbox. It opens and closes its own connection, receives
-one temporary SQLCipher session secret and drops that secret immediately after
+wallet configuration and selected backend. Admitted native product requests
+automatically arm the graph worker. It opens and closes its own connection,
+receives one temporary SQLCipher session secret and drops it immediately after
 opening. It rechecks the grant and current offline/no-egress permission between
 Electrum batches, around HTTP retries and before cache writes. Lookup is limited
 to Bitcoin Esplora/Electrum references through `kassiber-net`, with no alternate
-backend fallback. Admitted native product requests now arm automatic mailbox
-consumption, retaining the terminal-flush barrier; that lifecycle is exercised
-through a guarded seam until product validation and registration pass. The
-three product routes still remain on Python. Restore and authenticated
-passphrase rotation also quiesce the connection-owning workers before
+backend fallback. Automatic mailbox consumption retains the terminal-flush
+barrier and cannot recover authority from a saved job or backend configuration.
+Restore and authenticated passphrase rotation also quiesce the workers before
 retirement or replacement.
 Execution test kinds exist only in guarded builds, with no new renderer or AI
 allowlist entry. Disposable-loopback regressions verify empty attempt and egress
@@ -968,7 +970,7 @@ remains on the Python reference until its adapters are ported. The current
 implementation/verification boundary is recorded in
 [Rust egress paths](rust-port-egress.md#chain-client-paths-r5-partial).
 
-The unregistered Rust Bitcoin acquisition helper also requires a separate
+The Rust Bitcoin acquisition helper also requires a separate
 request-local grant bound to its exact targets, backend and book/source scope.
 Configuration and descriptor discovery do not grant acquisition consent; offline
 mode refuses even empty target lists, and configured proxies never retry
@@ -976,7 +978,7 @@ directly. Its test-only driver fetches observations without creating ownership,
 custody, absence authority or durable wallet state. See the
 [acquisition egress checkpoint](rust-port-egress.md#bitcoin-protocol-acquisition-r5-preparation-only).
 
-The unregistered native Bitcoin BDK execution helper links only the pinned
+The native Bitcoin BDK execution helper links only the pinned
 wallet/chain/core state crates. BDK receives no transport or storage path;
 Kassiber's consent-bound Electrum client fetches all observations. Private cache
 snapshots and book network are bound before granting the exact action. Cached
@@ -990,8 +992,8 @@ shared across its discovery, acquisition and BDK stages; revocation reaches
 each transport. Missing or foreign grants, stale scope, cancellation and
 offline mode refuse before traffic. Other source shapes refuse before egress.
 The guarded test driver can publish the completed fetch to a disposable book.
-The CLI wallet-sync service now also uses this assembler; daemon integration
-and AI projections remain pending. See the
+The CLI wallet-sync service and registered no-refresh daemon paths share this
+assembler. This adds no AI projection. See the
 [native fetch checkpoint](rust-shell.md#bitcoin-native-fetch-assembly-r5).
 
 The Rust compatibility fetch adapters use the same explicit-sync tip anchors:
@@ -1001,8 +1003,8 @@ disables reuse and does not bypass the return-time consent/offline/cancellation
 fence. The no-consent HTTP regression includes the tip-hash path, with empty
 attempt and egress buffers. No new connector, background job or AI projection
 is introduced. The CLI `wallets sync` now uses this service for supported
-Bitcoin descriptor wallets; the three daemon sync/freshness routes remain
-unregistered.
+Bitcoin descriptor wallets; the three daemon sync/freshness routes use the same
+adapters for admitted explicit no-refresh requests.
 
 The wallet-sync service binds one explicit grant to the admitted
 connection, book identity, profile, ordered wallet selection, network scope and
@@ -1012,7 +1014,9 @@ rechecks cancellation, grant revocation and the fresh `kassiber-net` offline
 policy at every savepoint stage, including commit. The CLI/book adapter
 reads the persisted offline preference afresh; `KASSIBER_NO_EGRESS` remains
 enforced by the gate. No saved backend creates a grant. The service adds no
-automatic trigger or AI projection; daemon freshness remains pending.
+automatic trigger or AI projection. Registered no-refresh daemon requests use
+their separate exact-action lifecycle and terminal-flush graph handoff described
+above; default journal refresh still requires native R4-13 integration.
 
 The test-only hybrid CLI may open the admitted book to check saved sync
 capabilities. This check constructs and discards an inert action without
