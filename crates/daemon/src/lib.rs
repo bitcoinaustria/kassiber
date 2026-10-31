@@ -117,7 +117,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         reports::KINDS
             .iter()
             .copied()
-            .filter(|k| !k.starts_with("ui.transactions.export_")),
+            .filter(|k| k.starts_with("ui.reports.")),
     );
     kinds.extend(documents::KINDS);
     kinds.extend(transfers::KINDS);

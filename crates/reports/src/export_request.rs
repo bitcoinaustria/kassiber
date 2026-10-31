@@ -17,6 +17,7 @@ pub fn handles(command: &str) -> bool {
             | "transactions.export"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
+            | "ui.transactions.export_platform_csv"
             | "ui.reports.export_xlsx"
             | "reports.export-year-handoff"
             | "ui.reports.export_year_handoff"
@@ -176,12 +177,18 @@ fn execute_admitted(
         replace(&mut args, "workspace", Value::Null);
         replace(&mut args, "profile", Value::Null);
     }
-    let (_, profile) = kassiber_setup::references::scope(conn, &args)?;
+    let profile = if command == "ui.transactions.export_platform_csv" {
+        Value::Null
+    } else {
+        kassiber_setup::references::scope(conn, &args)?.1
+    };
     let mut range_label = None;
     if desktop
         && !matches!(
             command,
-            "ui.transactions.export_csv" | "ui.transactions.export_xlsx"
+            "ui.transactions.export_csv"
+                | "ui.transactions.export_xlsx"
+                | "ui.transactions.export_platform_csv"
         )
     {
         freshness(conn, &profile)?;
@@ -290,9 +297,15 @@ fn execute_admitted(
                 "capital_gains",
             )
         }
-        "transactions.export" | "ui.transactions.export_csv" | "ui.transactions.export_xlsx" => {
+        "transactions.export"
+        | "ui.transactions.export_csv"
+        | "ui.transactions.export_xlsx"
+        | "ui.transactions.export_platform_csv" => {
             if desktop {
-                let allowed = ["wallet", "wallets", "range", "from", "to", "timezone"];
+                let mut allowed = vec!["wallet", "wallets", "range", "from", "to", "timezone"];
+                if command == "ui.transactions.export_platform_csv" {
+                    allowed.push("platform");
+                }
                 if let Value::Dict(fields) = raw {
                     let mut unknown: Vec<_> = fields
                         .iter()
@@ -316,6 +329,11 @@ fn execute_admitted(
                         )])));
                     }
                 }
+                if command == "ui.transactions.export_platform_csv"
+                    && !matches!(value(raw, "platform"), Value::Str(_))
+                {
+                    return Err(validation(format!("{command} requires a platform")));
+                }
                 replace(&mut args, "wallets", wallet_args(command, raw)?);
                 for name in ["range", "from", "to", "timezone"] {
                     let v = value(raw, name);
@@ -328,7 +346,9 @@ fn execute_admitted(
                     }
                 }
             } else {
-                if !["csv", "xlsx"].contains(&text(raw, "export_format").as_str()) {
+                if !["csv", "xlsx", "cointracking-csv", "blockpit-csv"]
+                    .contains(&text(raw, "export_format").as_str())
+                {
                     return Err(AppError::new(
                         "not_implemented",
                         "This transaction export format is not implemented in the Rust backend yet",
@@ -353,6 +373,15 @@ fn execute_admitted(
                     replace(&mut args, "timezone", Value::Null);
                 }
             }
+            let profile = if command == "ui.transactions.export_platform_csv"
+                && ["range", "from", "to", "timezone"]
+                    .iter()
+                    .any(|key| !matches!(value(raw, key), Value::Null))
+            {
+                kassiber_setup::references::scope(conn, &args)?.1
+            } else {
+                profile.clone()
+            };
             if let Some(range) = range(conn, &profile, &args, sources)? {
                 range_label = Some(
                     range
@@ -361,12 +390,31 @@ fn execute_admitted(
                 );
                 replace(&mut args, "export_range", range.payload()?);
             }
+            let platform = if command == "ui.transactions.export_platform_csv" {
+                Some(platform_csv::platform(value(raw, "platform"))?)
+            } else if command == "transactions.export" {
+                match text(raw, "export_format").as_str() {
+                    "cointracking-csv" => Some("cointracking"),
+                    "blockpit-csv" => Some("blockpit"),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            if let Some(platform) = platform {
+                replace(&mut args, "platform", s(platform));
+            }
             let stem = format!(
-                "kassiber-transactions{}",
+                "{}{}",
+                platform
+                    .map(|p| format!("kassiber-{p}"))
+                    .unwrap_or_else(|| "kassiber-transactions".into()),
                 range_label.map(|l| format!("-{l}")).unwrap_or_default()
             );
             (
-                if xlsx {
+                if platform.is_some() {
+                    "reports.export-platform-csv"
+                } else if xlsx {
                     "reports.export-transactions-xlsx"
                 } else {
                     "reports.export-transactions-csv"

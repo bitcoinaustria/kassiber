@@ -438,8 +438,7 @@ registers them; exit-tax preserves its reference no-registration boundary.
   CLI/daemon process oracles prove byte parity and zero CSV fallbacks, including
   desktop capital-gains CSV. Graphless Liquid dependency capture now matches
   Python's local parse-success boundary, with stored identity and ambiguity
-  guards intact. Platform transaction
-  formats remain separate work; see the
+  guards intact. Platform transaction formats are recorded below; see the
   [CSV transport checkpoint](docs/reference/rust-shell.md#csv-export-transport-checkpoint-r5-tenth-continuation).
 - [x] Add the isolated deterministic `rust_xlsxwriter` renderer and strict
   openpyxl content oracle for all report workbook shapes; port transaction-list
@@ -453,8 +452,15 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port year-handoff XLSX projection, CLI/daemon registration, saved
   completion and explicit filing; compare openpyxl content, all 112 tables
   and native routing. See the [worker B checkpoint](docs/reference/rust-shell.md#year-handoff-xlsx-checkpoint-r5-reports-worker-b-partial).
-- [ ] Port CoinTracking/Blockpit transaction CSV and their desktop export kind,
-  then other permitted non-PDF artifacts.
+- [x] Port CoinTracking/Blockpit CSV through `transactions export` and
+  `ui.transactions.export_platform_csv`, preserving exact UTF-8 CSV bytes,
+  current journals, scoped quarantines and the reference no-registration
+  boundary. See the [platform checkpoint](docs/reference/rust-shell.md#platform-csv-checkpoint-r5).
+- [ ] After migration parity, correct platform CSV reference bugs in a separate
+  behavior change: unused aggregate overflow, empty-date all-time failure and
+  empty exact journal values masking legacy amounts. The
+  [platform checkpoint](docs/reference/rust-shell.md#platform-csv-checkpoint-r5)
+  links the disposable repro; keep current parity until that change is accepted.
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
 - [x] Keep PDF rendering and PDF-containing source-funds bundles in Python by

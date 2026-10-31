@@ -5323,12 +5323,10 @@
   {
     "id": "request-cli-format-admission",
     "file": "crates/cli/src/run.rs",
-    "find": "matches!(args.text(\"export_format\"), Some(\"csv\" | \"xlsx\"))",
+    "find": "matches!(\n                args.text(\"export_format\"),\n                Some(\"csv\" | \"xlsx\" | \"cointracking-csv\" | \"blockpit-csv\")\n            )",
     "replace": "args.text(\"export_format\").is_some()",
-    "expect_failing": [
-      "transaction_export_admission_only_registers_native_csv_and_xlsx"
-    ],
-    "rule": "Unported transaction formats remain refused before bootstrap and are not falsely served by the Rust hybrid probe."
+    "expect_failing": ["transaction_export_admission_registers_all_native_formats"],
+    "rule": "Transaction formats outside the closed native allowlist remain refused before bootstrap."
   },
   {
     "id": "liquid-hex-strip",
@@ -7709,5 +7707,465 @@
       "year_handoff_cli_forwards_year_file_and_book_scope"
     ],
     "rule": "CLI transport forwards the selected year."
+  },
+  {
+    "id": "platform-mixed",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "if classification.contains('+') {",
+    "replace": "if false {",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Mixed transfer and taxable parts refuse without guessing one import event."
+  },
+  {
+    "id": "platform-conversion-nontaxable",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "return if non_taxable {",
+    "replace": "return if false {",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "A reviewed non-taxable conversion has no compatible single import row."
+  },
+  {
+    "id": "platform-conversion-leg",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "conversions.contains(&tx) && !swaps.contains(&tx)",
+    "replace": "false",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Taxable conversion legs trade at booked proceeds and cost."
+  },
+  {
+    "id": "platform-income-nontaxable",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "non_taxable && classification == \"income\"",
+    "replace": "false && classification == \"income\"",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "Reviewed non-taxable income retains its platform vocabulary."
+  },
+  {
+    "id": "platform-payment-nontaxable",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "non_taxable && classification == \"disposal\"",
+    "replace": "false && classification == \"disposal\"",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Reviewed non-taxable payments retain their platform vocabulary."
+  },
+  {
+    "id": "platform-transfer",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"internal_transfer\" => (Some(fallback), None),",
+    "replace": "\"internal_transfer\" => (Some(\"income\"), None),",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "Own-wallet transfers use deposit/withdrawal legs."
+  },
+  {
+    "id": "platform-swap-warning",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"swap\" => (Some(fallback), Some(\"swap\")),",
+    "replace": "\"swap\" => (Some(fallback), None),",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "Tax-neutral swaps disclose the manual linking requirement."
+  },
+  {
+    "id": "platform-fee-event",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"fee\" => (Some(\"fee\"), None),",
+    "replace": "\"fee\" => (Some(fallback), None),",
+    "expect_failing": [
+      "platform_csv_amount_bytes"
+    ],
+    "rule": "Fee-only rows retain the fee event."
+  },
+  {
+    "id": "platform-mining",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "=> \"mining\",",
+    "replace": "=> \"income\",",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "Mining and mining rewards map to mining."
+  },
+  {
+    "id": "platform-staking",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"staking\" => \"staking\",",
+    "replace": "\"staking\" => \"income\",",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "Staking keeps its platform event."
+  },
+  {
+    "id": "platform-airdrop",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"airdrop\" => \"airdrop\",",
+    "replace": "\"airdrop\" => \"income\",",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "Airdrop keeps its platform event."
+  },
+  {
+    "id": "platform-buy-fiat",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "kind == \"buy\" && fiat",
+    "replace": "kind == \"buy\" && !fiat",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "A buy requires an exact recorded cash leg in the book currency."
+  },
+  {
+    "id": "platform-sell-fiat",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "kind == \"sell\" && fiat",
+    "replace": "kind == \"sell\" && !fiat",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "A sale requires an exact recorded cash leg in the book currency."
+  },
+  {
+    "id": "platform-value-precedence",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "recorded.as_ref().or(fmv.as_ref())",
+    "replace": "fmv.as_ref().or(recorded.as_ref())",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Booked values take precedence over observed FMV."
+  },
+  {
+    "id": "platform-fee-only-debit",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "if event == \"fee\" {\n            \"wallet_movement_msat\"",
+    "replace": "if event == \"fee\" {\n            \"principal_msat\"",
+    "expect_failing": [
+      "platform_csv_amount_bytes"
+    ],
+    "rule": "Fee-only rows move the full wallet debit."
+  },
+  {
+    "id": "platform-fee-column",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "outbound && int(source, \"fee\") != 0 && event != \"fee\"",
+    "replace": "outbound && int(source, \"fee\") != 0",
+    "expect_failing": [
+      "platform_csv_amount_bytes"
+    ],
+    "rule": "Fee-only rows do not double count their fee in a separate column."
+  },
+  {
+    "id": "platform-fee-included",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"amount_includes_fee\":truthy(value(source,\"amount_includes_fee\"))",
+    "replace": "\"amount_includes_fee\":false",
+    "expect_failing": [
+      "platform_csv_amount_bytes"
+    ],
+    "rule": "The shared boundary normalizer removes included outbound fees from principal."
+  },
+  {
+    "id": "platform-exact-values",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "COALESCE(proceeds_exact,proceeds) AS proceeds",
+    "replace": "proceeds AS proceeds",
+    "expect_failing": [
+      "platform_csv_amount_bytes"
+    ],
+    "rule": "Exact journal values precede legacy floats."
+  },
+  {
+    "id": "platform-unbooked-warning",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "(Some(fallback), Some(\"unbooked\"))",
+    "replace": "(Some(fallback), None)",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Unbooked rows disclose plain deposit/withdrawal interpretation."
+  },
+  {
+    "id": "platform-ticker-warning",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "if !tickerless.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Issued Liquid assets use full ids and disclose ticker mapping."
+  },
+  {
+    "id": "platform-scope-quarantine",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "&& contains(range,&text(&row,\"occurred_at\"),true)?",
+    "replace": "&& true",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Quarantines outside the selected period do not block the file."
+  },
+  {
+    "id": "platform-undated-quarantine",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "if possible && undated(raw) {",
+    "replace": "if false && undated(raw) {",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Undated quarantines may belong to any bounded period."
+  },
+  {
+    "id": "platform-range",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "if !contains(range, &occurred, false)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Resolved date bounds select rows before export."
+  },
+  {
+    "id": "platform-freshness",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "    export_request::freshness(conn, profile)?;",
+    "replace": "",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Source failures block platform artifacts."
+  },
+  {
+    "id": "platform-readiness",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "    require_context(conn, profile, false)?;",
+    "replace": "",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Platform artifacts require current journals and report readiness."
+  },
+  {
+    "id": "platform-registration",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "completion: None,",
+    "replace": "completion: Some(crate::export_completion::Completion { kind: \"platform.csv\".into(), year: None, scope: Value::Null }),",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Platform transaction CSV never establishes a saved or filed marker."
+  },
+  {
+    "id": "platform-dialect",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "bytes: artifact_csv::encode(&output),",
+    "replace": "bytes: artifact_csv::encode(&output).into_iter().filter(|b| *b != b'\\r').collect(),",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "CSV bytes retain UTF-8, quoting and CRLF line endings."
+  },
+  {
+    "id": "platform-pair-ref",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": ".take(12)",
+    "replace": ".take(11)",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Pair references retain the shared twelve-character prefix."
+  },
+  {
+    "id": "platform-ct-label",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"interest\" => \"Interest Income\",",
+    "replace": "\"interest\" => \"Income\",",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "CoinTracking uses Interest Income for interest."
+  },
+  {
+    "id": "platform-bp-label",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "\"interest\" => \"Interest\",",
+    "replace": "\"interest\" => \"Income\",",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "Blockpit uses Interest for interest."
+  },
+  {
+    "id": "platform-ct-trade-group",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "s(\"Kassiber\"),",
+    "replace": "s(\"\"),",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "CoinTracking retains the Kassiber trade group."
+  },
+  {
+    "id": "platform-date-error",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "kassiber_pytext::repr_str(&raw_z)",
+    "replace": "kassiber_pytext::repr_str(raw)",
+    "expect_failing": [
+      "platform_csv_python_vectors_and_112_tables"
+    ],
+    "rule": "Timestamp error bytes retain Python's Z replacement."
+  },
+  {
+    "id": "platform-overflow",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "for group in [\"t.asset\", \"w.label,t.asset\"] {",
+    "replace": "for group in [] as [&str;0] {",
+    "expect_failing": [
+      "platform_csv_amount_bytes"
+    ],
+    "rule": "Preserve the Python report aggregate integer-overflow refusal."
+  },
+  {
+    "id": "platform-lbtc-code",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "asset.id == \"liquid:lbtc\"",
+    "replace": "asset.id == \"liquid:other\"",
+    "expect_failing": [
+      "platform_csv_base_bytes"
+    ],
+    "rule": "The target ticker for Liquid Bitcoin is LBTC."
+  },
+  {
+    "id": "platform-cost-value",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "event == \"buy\" && warning == Some(\"conversion\") {\n            \"cost\"",
+    "replace": "event == \"buy\" && warning == Some(\"conversion\") {\n            \"income\"",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "A taxable conversion purchase uses booked acquisition cost."
+  },
+  {
+    "id": "platform-foreign-fiat",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "cash.is_some() && kassiber_pytext::upper(&text(exported, \"fiat_currency\")) == currency",
+    "replace": "cash.is_some()",
+    "expect_failing": [
+      "platform_csv_event_bytes"
+    ],
+    "rule": "A recorded foreign currency is not a book-currency cash leg."
+  },
+  {
+    "id": "platform-native-route",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "if platform.is_some() {\n                    \"reports.export-platform-csv\"",
+    "replace": "if false {\n                    \"reports.export-platform-csv\"",
+    "expect_failing": [
+      "platform_csv_requests_keep_validation_ranges_and_native_publication"
+    ],
+    "rule": "Both CLI and desktop platform requests select the native platform renderer."
+  },
+  {
+    "id": "platform-request-platform",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "allowed.push(\"platform\");",
+    "replace": "allowed.push(\"wrong\");",
+    "expect_failing": [
+      "platform_csv_requests_keep_validation_ranges_and_native_publication"
+    ],
+    "rule": "The desktop platform selector is an admitted argument."
+  },
+  {
+    "id": "platform-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.reports.export_year_handoff\",\n    \"ui.transactions.export_platform_csv\",",
+    "replace": "    \"ui.reports.export_year_handoff\",\n    \"ui.transactions.export_platform_csv_WRONG\",",
+    "expect_failing": [
+      "platform_csv_daemon_kind_is_registered"
+    ],
+    "rule": "The daemon advertises native platform exports."
+  },
+  {
+    "id": "platform-cli-registration",
+    "file": "crates/cli/src/run.rs",
+    "find": "Some(\"csv\" | \"xlsx\" | \"cointracking-csv\" | \"blockpit-csv\")",
+    "replace": "Some(\"csv\" | \"xlsx\" | \"cointracking-csv\")",
+    "expect_failing": [
+      "transaction_export_admission_registers_all_native_formats"
+    ],
+    "rule": "Both platform choices are native before book bootstrap."
+  },
+  {
+    "id": "platform-single-wallet-price-scope",
+    "file": "crates/reports/src/platform_csv.rs",
+    "find": "transaction_csv::report_rows(conn, profile, wallet)?",
+    "replace": "transaction_csv::report_rows(conn, profile, None)?",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "A single-wallet export never interprets invalid observed prices in other wallets."
+  },
+  {
+    "id": "platform-validation-before-scope",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "    let profile = if command == \"ui.transactions.export_platform_csv\" {\n        Value::Null\n    } else {\n        kassiber_setup::references::scope(conn, &args)?.1\n    };",
+    "replace": "    let profile = kassiber_setup::references::scope(conn, &args)?.1;",
+    "expect_failing": [
+      "platform_csv_requests_keep_validation_ranges_and_native_publication"
+    ],
+    "rule": "Malformed platform requests retain validation precedence even before a workspace exists."
+  },
+  {
+    "id": "platform-unicode-bare",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "let upper = kassiber_pytext::upper(code);",
+    "replace": "let upper = code.to_uppercase();",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Asset identity and display codes retain CPython Unicode 14 casing, including characters assigned later."
+  },
+  {
+    "id": "platform-unicode-suffix",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "let code = kassiber_pytext::upper(id.rsplit(':').next().unwrap());",
+    "replace": "let code = id.rsplit(':').next().unwrap().to_uppercase();",
+    "expect_failing": [
+      "platform_csv_scope_and_barrier_bytes"
+    ],
+    "rule": "Asset identity and display codes retain CPython Unicode 14 casing, including characters assigned later."
+  },
+  {
+    "id": "platform-daemon-wire-order",
+    "file": "crates/daemon/src/lib.rs",
+    "find": ".filter(|k| k.starts_with(\"ui.transactions.export_\")),",
+    "replace": ".filter(|k| *k == \"ui.transactions.export_csv\"),",
+    "expect_failing": [
+      "platform_csv_daemon_kind_is_registered"
+    ],
+    "rule": "All native transaction export kinds occupy Python's transaction-export position in daemon.ready."
+  },
+  {
+    "id": "platform-daemon-report-order",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.reports.explain_capital_gain\",\n    \"ui.reports.summary\",",
+    "replace": "    \"ui.reports.summary\",\n    \"ui.reports.explain_capital_gain\",",
+    "expect_failing": [
+      "platform_csv_daemon_kind_is_registered"
+    ],
+    "rule": "The report subset retains Python's advertised wire order independently of port chronology."
   }
 ]

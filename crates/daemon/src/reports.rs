@@ -3,24 +3,25 @@ use kassiber_envelope::{dict, get, s, type_name, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 pub const KINDS: &[&str] = &[
-    "ui.reports.summary",
     "ui.reports.explain_capital_gain",
+    "ui.reports.summary",
     "ui.reports.balance_sheet",
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.exit_tax_preview",
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
-    "ui.reports.exit_tax_preview",
-    "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
+    "ui.reports.export_exit_tax_xlsx",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
     "ui.reports.cross_check",
     "ui.reports.export_cross_check",
     "ui.reports.export_year_handoff",
+    "ui.transactions.export_platform_csv",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
     if matches!(
@@ -47,6 +48,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
             | "ui.reports.export_year_handoff"
+            | "ui.transactions.export_platform_csv"
     ) {
         let empty = dict::<&str>([]);
         let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
@@ -445,4 +447,52 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn platform_csv_daemon_kind_is_registered() {
+        assert!(KINDS.contains(&"ui.transactions.export_platform_csv"));
+        let kinds = crate::supported_kinds();
+        let position = |kind| kinds.iter().position(|k| *k == kind).unwrap();
+        assert!(
+            position("ui.transactions.export_platform_csv")
+                < position("ui.transactions.metadata.update")
+        );
+        assert_eq!(
+            kinds
+                .iter()
+                .copied()
+                .filter(|k| k.starts_with("ui.transactions.export_"))
+                .collect::<Vec<_>>(),
+            [
+                "ui.transactions.export_csv",
+                "ui.transactions.export_xlsx",
+                "ui.transactions.export_platform_csv"
+            ]
+        );
+        assert_eq!(
+            kinds
+                .iter()
+                .copied()
+                .filter(|k| k.starts_with("ui.reports."))
+                .collect::<Vec<_>>(),
+            [
+                "ui.reports.explain_capital_gain",
+                "ui.reports.summary",
+                "ui.reports.balance_sheet",
+                "ui.reports.portfolio_summary",
+                "ui.reports.tax_summary",
+                "ui.reports.balance_history",
+                "ui.reports.exit_tax_preview",
+                "ui.reports.export_csv",
+                "ui.reports.export_xlsx",
+                "ui.reports.export_capital_gains_csv",
+                "ui.reports.export_austrian_e1kv_xlsx",
+                "ui.reports.export_austrian_e1kv_csv",
+                "ui.reports.export_exit_tax_xlsx",
+                "ui.reports.cross_check",
+                "ui.reports.export_cross_check",
+                "ui.reports.export_year_handoff",
+            ]
+        );
+    }
+
 }

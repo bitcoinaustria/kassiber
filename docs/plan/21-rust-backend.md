@@ -3373,8 +3373,35 @@ records openpyxl content, exact wire metadata, all 112 database tables,
 zero in-scope fallbacks, mutation evidence and reproducible reference quirks.
 The native inventory is 153 CLI leaves (21 reports) and 14 report daemon
 kinds plus two transaction exports. Cross-check, Lightning and non-PDF
-source-funds belong to the other reports worker. Worker B's remaining work is
-CoinTracking/Blockpit CSV and privacy hygiene/mirror/PSBT reads; the artifact
+source-funds belong to the other reports worker. The platform CSV continuation
+below completes CoinTracking/Blockpit.
+Privacy hygiene/mirror/PSBT reads continue independently; the artifact
 inventory finds no other unported non-PDF artifact in this worker's scope.
 PDF-containing exports and AI projections remain Python; dependencies, tax
 rules, schema and Python product code are unchanged.
+
+### R5 platform CSV continuation
+
+`t3code/r5-reports-platform-csv` starts at `0475d3e49` and completes
+CoinTracking/Blockpit through the native report service, `transactions export`
+and `ui.transactions.export_platform_csv`. Byte-exact UTF-8/CRLF artifacts,
+wire metadata/errors and all 112 database tables compare against unchanged
+Python, including its no-snapshot-registration boundary. Exact msat quantities,
+booked values, current journals, source freshness, wallet/date scopes,
+quarantines and unsupported mixed classifications retain the reference rules.
+The 156 frozen projections and all 163 live service/process comparisons pass;
+64 CLI calls and three daemon sessions have no in-scope fallback. All 46 new
+mutations and the reshaped inherited format-admission mutation are killed by
+named tests. The final selected regression passes 445 tests and 1,096 subtests;
+required CI preflight passes all 57 tests after the classifier update.
+
+The [platform checkpoint](../reference/rust-shell.md#platform-csv-checkpoint-r5)
+records routing, killed mutations, verification and disposable reference-bug
+repros. No additional CLI leaf is needed: the existing native transaction
+export now admits all four formats. The native inventory is 153 CLI leaves
+(21 report commands), 14 report daemon kinds and three transaction export
+kinds. Privacy reads continue on the independent privacy branch; there is no
+additional unported non-PDF artifact in this worker's family. Cross-check,
+Lightning, source-funds, PDF-containing artifacts and AI projections retain
+their separate ownership and checkpoints. Python product code, schema,
+dependencies and lockfiles are unchanged.

@@ -19485,6 +19485,11 @@
         "tests": 2
       }
     },
+    "tests/test_rust_platform_csv.py": {
+      "test_platform_csv_service_bytes_metadata_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing", "reviewed": true, "tests": 1},
+      "test_platform_csv_cli_bytes_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing", "reviewed": true, "tests": 1},
+      "test_platform_csv_daemon_bytes_collisions_validation_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_rates_candidate.py": {
       "test_all_six_cli_leaves_are_served_by_rust": {
         "disposition": "oracle",

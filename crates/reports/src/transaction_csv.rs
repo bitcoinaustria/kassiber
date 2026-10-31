@@ -28,7 +28,7 @@ pub(super) const HEADERS: &[&str] = &[
     "attachments",
 ];
 
-fn optional(row: &Value, exact: &str, legacy: &str) -> Result<Option<Decimal>> {
+pub(super) fn optional(row: &Value, exact: &str, legacy: &str) -> Result<Option<Decimal>> {
     let raw = value(row, exact);
     let raw = if matches!(raw, Value::Null) || raw == &s("") {
         value(row, legacy)

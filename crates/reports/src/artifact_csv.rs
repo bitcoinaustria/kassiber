@@ -56,9 +56,15 @@ pub fn prepare(
             let limit = history_limit(value(&args, "history_limit"))?;
             replace(&mut args, "history_limit", limit);
         }
+        if command == "reports.export-platform-csv" {
+            platform_csv::platform(value(&args, "platform"))?;
+        }
         let (workspace, profile) = kassiber_setup::references::scope(conn, &args)?;
         if command == "reports.export-transactions-csv" {
             return standalone_csv::prepare(conn, &profile, &args);
+        }
+        if command == "reports.export-platform-csv" {
+            return platform_csv::prepare(conn, &profile, &args);
         }
         require_context(conn, &profile, false)?;
         match command {

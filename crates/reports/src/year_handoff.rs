@@ -11,9 +11,9 @@ struct Holding {
     ordinal: usize,
 }
 #[derive(Default)]
-struct Facts {
-    types: BTreeSet<String>,
-    categories: BTreeSet<String>,
+pub(super) struct Facts {
+    pub(super) types: BTreeSet<String>,
+    pub(super) categories: BTreeSet<String>,
     amounts: BTreeMap<String, Decimal>,
 }
 #[derive(Default)]
@@ -29,10 +29,10 @@ struct Activity {
     assets: BTreeSet<String>,
 }
 #[derive(Clone)]
-struct Asset {
-    id: String,
-    code: String,
-    chain: &'static str,
+pub(super) struct Asset {
+    pub(super) id: String,
+    pub(super) code: String,
+    pub(super) chain: &'static str,
     bitcoin: bool,
 }
 impl Default for Holding {
@@ -45,9 +45,9 @@ impl Default for Holding {
     }
 }
 impl Asset {
-    fn new(raw: &str) -> Self {
+    pub(super) fn new(raw: &str) -> Self {
         let code = kassiber_pytext::strip(raw);
-        let upper = code.to_uppercase();
+        let upper = kassiber_pytext::upper(code);
         let (id, code, chain, bitcoin) = if upper == "BTC" {
             ("bitcoin:btc".into(), "BTC".into(), "bitcoin", true)
         } else if ["LBTC", "L-BTC"].contains(&upper.as_str()) {
@@ -66,7 +66,7 @@ impl Asset {
             } else {
                 upper
             };
-            let code = id.rsplit(':').next().unwrap().to_uppercase();
+            let code = kassiber_pytext::upper(id.rsplit(':').next().unwrap());
             (id, code, "", false)
         };
         Self {
@@ -87,7 +87,7 @@ impl Asset {
         Decimal::from_parts(units < &BigInt::from(0), units.magnitude().clone(), -11)
             .map_err(arithmetic)
     }
-    fn exact(&self, units: &BigInt) -> Result<String> {
+    pub(super) fn exact(&self, units: &BigInt) -> Result<String> {
         let raw = self
             .quantity(units)?
             .to_fixed_places(11, Rounding::HalfEven)
@@ -1128,7 +1128,7 @@ pub(super) fn build(
         ("warnings", Value::List(warnings)),
     ]))
 }
-fn classify(fact: &Facts, swap: bool) -> String {
+pub(super) fn classify(fact: &Facts, swap: bool) -> String {
     let mut labels = Vec::new();
     if ["transfer_in", "transfer_out", "transfer_fee"]
         .iter()

@@ -97,9 +97,10 @@ document enrichment, rejected-link retention and response ordering. Suggestions
 never apply pricing or kind changes. Prior reports remain evidence without
 ledger, lot, ownership, custody or tax authority.
 `ui.transactions.dashboard/resolve/graph/review_context/ledger_template`,
-platform-specific transaction exports, journal/report processing, BTCPay
-provenance sync and commercial review remain `not_implemented`. Transaction CSV
-and XLSX exports now use the native report transport described below. The acceptance record names the remaining
+journal/report processing, BTCPay
+provenance sync and commercial review remain `not_implemented`. Transaction
+CSV, XLSX, CoinTracking and Blockpit exports now use the native report transport
+described below. The acceptance record names the remaining
 dependencies.
 
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
@@ -9972,9 +9973,9 @@ verification build trees are removed after summarizing. Verification is
 Linux-only; the full Python/frontend quality gate, Docker regtest and packaged
 or platform checks are not run.
 
-This checkpoint covers year-handoff only. Worker B still owns
-`transactions export --export-format cointracking-csv` / `blockpit-csv` and
-`ui.transactions.export_platform_csv`, followed by the three privacy
+This checkpoint covers year-handoff only. The
+[platform CSV continuation](#platform-csv-checkpoint-r5) completes
+CoinTracking/Blockpit; the parallel privacy worker owns the three privacy
 hygiene/mirror/PSBT CLI and daemon reads. The artifact inventory finds no
 additional unported non-PDF artifact in Worker B's scope. Cross-check XLSX
 and Lightning CSV belong to Worker A along with their reads and non-PDF
@@ -9982,3 +9983,116 @@ source-funds reads. Individual snapshot/amendment process callers remain
 previously deferred. PDF rendering, PDF-containing bundles/audit packages and
 AI projections stay Python. No Python product code, tax rules, schema,
 dependencies or lockfiles change.
+
+## Platform CSV checkpoint (R5)
+
+`t3code/r5-reports-platform-csv` starts at `0475d3e49`. CoinTracking and
+Blockpit now run natively through `transactions export --export-format
+cointracking-csv|blockpit-csv` and `ui.transactions.export_platform_csv`.
+The CLI leaf was already registered for Kassiber CSV/XLSX; its closed native
+format allowlist now admits both platforms. The new daemon kind is appended.
+The advertised subset follows Python's wire order: transaction exports appear
+together before metadata, and report reads/exports keep their reference order.
+The registration test pins both placement and the complete report subset.
+The inventory remains 153 CLI leaves (21 report commands), with 14 report
+kinds and three transaction export kinds. Privacy reads belong to the parallel
+privacy worker. The worker-B artifact inventory has no other unported non-PDF
+artifact; cross-check, Lightning and source-funds belong to the other family.
+
+The shared native service reuses handoff classification and asset presentation,
+transaction report projections, exact decimal arithmetic and custody boundary
+normalization. Booked income/proceeds/cost decide platform values; observations,
+reviewed relations and non-taxable overrides retain their separate meanings.
+Current journals, source freshness, scoped quarantines and unsupported mixed or
+non-taxable conversion rows block publication. Single-wallet reads retain the
+reference price scope. Bounded ranges preserve undated warnings and quarantine
+barriers. Exports never rebuild journals, fetch providers or register a
+saved/filed report, matching Python.
+
+The frozen corpus and live service oracle compare UTF-8 CSV bytes directly,
+including CRLF, quoting, embedded CR/LF, Unicode, exact quantities and header
+order. Response metadata/error bytes and all 112 database tables compare
+without generated-id, digest or artifact normalization. CLI and daemon sessions
+also compare literal wire bytes, selected wallets/dates, collision filenames
+and complete books. No hybrid fallback is accepted for an in-scope call.
+
+The corpus contains 156 projections: 120 CSV artifacts and 36 exact refusals.
+It includes bare and namespaced Unicode assets whose casing changed after
+CPython's Unicode 14 tables; the shared handoff asset presentation now uses
+`kassiber-pytext` for those cases too. Empty-book requests pin structural
+validation before scope lookup. Frozen metadata omits its disposable output
+path; live comparisons include that path literally. All 163 live comparisons
+pass: 156 service cases, four CLI scenarios and three daemon sessions.
+
+| Dedicated platform parity routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `transactions.export` (both platforms) | 64 | 0 |
+| Daemon sessions (93 platform requests) | 3 | 0 |
+
+Reference bugs and quirks remain unchanged, with a disposable repro at
+`crates/reports/scripts/repro_python_platform_csv.py`: unused report aggregation
+can overflow SQLite integers before writing otherwise representable rows;
+an empty stored date fails an all-time export; empty exact journal values
+coalesce to zero rather than legacy values; and Linux `strftime` leaves years
+below 1000 unpadded. The corpus also retains timestamp-error text after `Z`
+replacement. Python product code, schema, dependencies and lockfiles are
+unchanged. Reproduce without changing account `HOME`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_platform_csv.py
+```
+
+The report mutation catalog contains 765 entries. All 46 new `platform-*`
+entries and the reshaped inherited format-admission entry are killed:
+
+| Named test | Mutations killed |
+| --- | ---: |
+| `platform_csv_base_bytes` | 11 |
+| `platform_csv_event_bytes` | 10 |
+| `platform_csv_amount_bytes` | 6 |
+| `platform_csv_scope_and_barrier_bytes` | 11 |
+| `platform_csv_python_vectors_and_112_tables` | 1 |
+| `platform_csv_requests_keep_validation_ranges_and_native_publication` | 3 |
+| `platform_csv_daemon_kind_is_registered` | 3 |
+| `transaction_export_admission_registers_all_native_formats` | 2 |
+
+All eight named selections pass unmutated. The 718 unchanged inherited
+entries retain their prior evidence and are not freshly rerun. Build errors
+and empty selections are errors. `target/r5-platform/mutation-summary.json`
+maps all 47 entries to their named killers and the three local campaign logs.
+The runner removes source scratch; the owned mutation build tree is removed
+after summarizing.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting and both
+production and test-harness workspace/all-target clippy with `-D warnings`.
+All 1,528 workspace tests pass before the final daemon wire-order correction.
+After that correction, both clippy configurations, all 25 daemon tests and all
+14 guarded binary tests pass again. The six affected Python handshake/launcher
+regressions and two subtests pass. Probes are rebuilt from the real worktree
+after mutation verification. Verification preserves account `HOME`, uses
+disposable data roots and keeps all scratch under `target/`.
+
+The final locked Python 3.11 regression passes 445 tests and 1,096 subtests
+without skips, including all 163 platform cases, original platform CSV tests,
+year-handoff and transaction CSV/XLSX callers, shared shell/hybrid regressions
+and the retained contract/inventory checks. Its distinct retained routing logs
+record 242 report/transaction-export CLI calls, 164 transaction-list calls and
+10 daemon sessions served by Rust, with zero in-scope fallback. Three Python
+`journals.process` calls are setup outside report scope. Counts exclude pytest
+symlink aliases; `target/r5-platform/final-routing-summary.json` retains
+per-command and per-log totals. The dedicated platform counts above are strict
+assertions over their own CLI and daemon logs.
+
+The required classifier update records 5,712 definitions and the three new
+retained report oracles in the serial daemon lane. Required CI preflight passes
+all 57 tests. The frozen-vector check, four reference-bug repros and final
+765-entry mutation applicability check pass. The combined
+`target/r5-platform/verification-summary.json` records these gates alongside
+routing and mutation evidence. Owned mutation and verification build trees,
+disposable books and scratch are removed after summarizing; small logs and
+summaries remain under `target/r5-platform/`.
+
+Verification is Linux-only. The full Python/frontend quality gate, Docker
+regtest and packaged/platform checks are not run. This checkpoint completes
+the platform CSV family; it does not claim full R5 completion or push readiness.

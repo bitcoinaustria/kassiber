@@ -30,6 +30,7 @@ mod gains_desktop;
 mod history;
 mod holdings;
 mod journal;
+mod platform_csv;
 mod snapshot_write;
 mod snapshots;
 mod sql;
