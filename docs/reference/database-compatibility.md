@@ -73,6 +73,13 @@ The scoped 128 MiB rebuild cache is a connection setting. It adds no schema,
 migration or stored-format change, so the same Python/Rust schema manifest and
 older-binary coexistence rules apply. SQLCipher retains DELETE/FULL durability.
 
+Native journal persistence has a separate process-termination campaign in
+`crates/journals/tests/crash.rs`: dirty-page DML boundaries and pre/post-COMMIT
+on physical SQLite WAL/NORMAL and SQLCipher DELETE/FULL books. Reopen checks
+complete typed dumps, integrity and foreign keys. This covers the unregistered
+R4-12 writer, not migration termination or the R4-13 pipeline caller; see the
+[persistence checkpoint](r4-journal-persistence-checkpoint.md#follow-up-from-b5eb38ea8).
+
 ## Intentionally not inferred during upgrade
 
 - Direct payout decimal precision lost through historical float conversion

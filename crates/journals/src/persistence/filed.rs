@@ -93,6 +93,12 @@ fn uuid5(impact: &str) -> String {
         &h[20..]
     )
 }
+fn chain_ready(latest: &Value, current: &Value) -> bool {
+    latest["status"] != "unavailable"
+        && (latest["status"] == "retracted"
+            || (current["status"] == "observed" && truth(&current["confirmed"])))
+}
+
 pub(super) fn resolve<O: storage::WriteObserver>(
     w: &mut Writer<'_, O>,
     wid: &str,
@@ -163,10 +169,7 @@ pub(super) fn resolve<O: storage::WriteObserver>(
         let current = codec::to_json(
             &kassiber_wallets::publication::reports::current(w.conn, &dep).map_err(error)?,
         );
-        if latest["status"] == "unavailable"
-            || (latest["status"] != "retracted"
-                && (current["status"] != "observed" || !truth(&current["confirmed"])))
-        {
+        if !chain_ready(&latest, &current) {
             continue;
         }
         let snapshots = rows(
@@ -205,4 +208,41 @@ pub(super) fn resolve<O: storage::WriteObserver>(
         resolutions,
     )?;
     Ok(count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation() {
+        for (latest, current, confirmed, ready) in [
+            ("unavailable", "observed", true, false),
+            ("unavailable", "unavailable", false, false),
+            ("retracted", "unavailable", false, true),
+            ("retracted", "observed", false, true),
+            ("observed", "unavailable", true, false),
+            ("observed", "observed", false, false),
+            ("observed", "observed", true, true),
+        ] {
+            assert_eq!(
+                chain_ready(
+                    &json!({"status":latest}),
+                    &json!({"status":current,"confirmed":confirmed})
+                ),
+                ready
+            );
+        }
+    }
+    #[test]
+    fn filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals() {
+        for value in [json!(null), json!("bad"), json!("[]"), json!("null")] {
+            assert_eq!(object(&value), json!({}));
+        }
+        assert_eq!(object(&json!("{\"a\":1}")), json!({"a":1}));
+        let c = Connection::open_in_memory().unwrap();
+        let values = rows(&c, "SELECT NULL AS n, 1 AS i, 1.5 AS f, 'é' AS s", []).unwrap();
+        assert_eq!(values, [json!({"n":null,"i":1,"f":1.5,"s":"é"})]);
+        assert!(rows(&c, "SELECT x'00' AS blob", []).is_err());
+        assert!(summaries(&c, "p", &Value::Null, &json!(2024), &json!({})).is_err());
+    }
 }

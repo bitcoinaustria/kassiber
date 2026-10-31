@@ -315,3 +315,263 @@ fn synthetic_quarantines_are_filtered_before_readiness() {
     equal(&c, &v["expected"], &v["name"]);
     c.execute_batch("ROLLBACK").unwrap();
 }
+
+#[test]
+fn malformed_entry_and_holding_bindings_roll_back_before_freshness() {
+    use serde_json::json;
+    let v = cases().remove(0);
+    for mode in 0..6 {
+        let c = Connection::open_in_memory().unwrap();
+        load(&c, &v["before"]);
+        c.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let result = store_with(&c, &v, &mut Writes::default(), |s| match mode {
+            0 => s.entries[0].workspace_id = json!({"bad":1}),
+            1 => s.entries[0].profile_id = json!([]),
+            2 => s.entries[0].quantity.0 = "9223372036854775808".parse().unwrap(),
+            3 => s.account_holdings.pairs[0].0.pop().map(|_| ()).unwrap(),
+            4 => s.wallet_holdings.pairs[0].0.push(Value::Null),
+            5 => s.entries[0].transaction_id = serde_json::from_str("9223372036854775808").unwrap(),
+            _ => unreachable!(),
+        });
+        assert!(result.is_err(), "mode {mode}");
+        equal(&c, &v["before"], &v["name"]);
+        c.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
+fn missing_inactive_or_changed_components_never_persist_reconciliations() {
+    use serde_json::json;
+    let original = cases()
+        .into_iter()
+        .find(|v| v["name"] == "reconciliation-snapshot:recovered")
+        .unwrap();
+    for mode in 0..5 {
+        let mut v = original.clone();
+        let proof =
+            &v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0];
+        assert!(proof["component_id"].is_string());
+        if mode == 1 {
+            v["before"]["custody_components"]["rows"][0][8] = json!("draft");
+        }
+        if mode == 3 {
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["native_claim_amounts"] = json!([]);
+        }
+        if mode == 4 {
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["component_revision"] = Value::Null;
+        }
+        let c = Connection::open_in_memory().unwrap();
+        load(&c, &v["before"]);
+        c.execute_batch("BEGIN IMMEDIATE").unwrap();
+        if mode == 0 {
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["component_id"] = json!("missing");
+        }
+        if mode == 2 {
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["component_revision"] = json!(999);
+        }
+        store(&c, &v, &mut Writes::default()).unwrap();
+        assert_eq!(
+            c.query_row(
+                "SELECT COUNT(*) FROM journal_custody_reconciliations",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0,
+            "mode {mode}"
+        );
+        c.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
+fn economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal() {
+    use serde_json::json;
+    let original = cases()
+        .into_iter()
+        .find(|v| v["name"] == "payout:reviewed_conversion")
+        .unwrap();
+    for mode in 0..12 {
+        let mut v = original.clone();
+        let q = &mut v["record"]["custody"]["quantity_state"];
+        let relation = &mut q["reviewed_conversion_pairs"][0];
+        match mode {
+            0 => {}
+            1 => {
+                relation["out_amount"] = Value::Null;
+                relation["out_amount_msat"] = json!(7000);
+            }
+            2 => {
+                relation["out_amount"] = Value::Null;
+                relation["in_amount"] = Value::Null;
+            }
+            3 => {
+                relation["out_amount"] = json!(0);
+            }
+            4 => {
+                relation["out_amount"] = json!(-1);
+            }
+            5 => {
+                relation["in_amount"] = json!(0);
+            }
+            6 => {
+                relation["in_amount"] = json!(-1);
+            }
+            7 => {
+                relation["out_id"] = json!("missing");
+            }
+            8 => {
+                relation["in_id"] = json!("");
+                relation["in_amount"] = Value::Null;
+            }
+            9 => {
+                relation["in_id"] = Value::Null;
+                relation["payout_asset"] = json!("EUR");
+                relation["payout_occurred_at"] = json!("2026-01-01T00:00:00Z");
+            }
+            10 => {
+                relation["out_amount"] = json!("");
+                relation["out_amount_msat"] = json!("");
+            }
+            11 => {
+                relation["in_amount"] = json!("");
+                relation["payout_amount"] = json!(17000);
+            }
+            _ => unreachable!(),
+        }
+        let c = Connection::open_in_memory().unwrap();
+        load(&c, &v["before"]);
+        c.execute_batch("BEGIN IMMEDIATE").unwrap();
+        store(&c, &v, &mut Writes::default()).unwrap();
+        let rows: Vec<(i64, i64, String)> = c.prepare("SELECT source_amount_msat,target_amount_msat,target_asset FROM journal_custody_economic_relations WHERE relation_kind='conversion'").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().collect::<Result<_, _>>().unwrap();
+        if (3..=8).contains(&mode) {
+            assert!(rows.is_empty(), "mode {mode}");
+        } else {
+            assert_eq!(
+                rows,
+                [(
+                    if mode == 1 { 7000 } else { 10000 },
+                    if mode == 11 { 17000 } else { 20000 },
+                    if mode == 9 { "EUR" } else { "LBTC" }.to_owned()
+                )],
+                "mode {mode}"
+            );
+        }
+        c.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
+fn pending_chain_impacts_stay_open_without_dependencies_or_current_authority() {
+    use serde_json::json;
+    let original = cases()
+        .into_iter()
+        .find(|v| v["name"].as_str().unwrap().contains("retraction_inbox"))
+        .unwrap();
+    for mode in 0..4 {
+        let mut v = original.clone();
+        if mode == 0 {
+            v["before"]["filed_report_chain_dependencies"]["rows"] = json!([]);
+        }
+        if mode == 1 || mode == 2 {
+            let status = if mode == 1 { "unavailable" } else { "observed" };
+            v["before"]["chain_analysis_watch_inbox"]["rows"][0][6] =
+                json!(json!({"after":{"status":status},"before":{}}).to_string());
+        }
+        let c = Connection::open_in_memory().unwrap();
+        load(&c, &v["before"]);
+        c.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let stored = store(&c, &v, &mut Writes::default()).unwrap();
+        assert_eq!(stored.filed_report_impacts_resolved, usize::from(mode == 3));
+        assert_eq!(
+            c.query_row(
+                "SELECT COUNT(*) FROM filed_report_chain_resolutions",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            i64::from(mode == 3)
+        );
+        c.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
+fn corrupt_filed_snapshot_refuses_and_rolls_back_freshness() {
+    use serde_json::json;
+    let mut v = cases()
+        .into_iter()
+        .find(|v| v["name"].as_str().unwrap().contains("retraction_inbox"))
+        .unwrap();
+    v["before"]["filed_report_snapshots"]["rows"] = json!([]);
+    let c = Connection::open_in_memory().unwrap();
+    load(&c, &v["before"]);
+    c.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let error = store(&c, &v, &mut Writes::default()).unwrap_err();
+    assert_eq!(error.message, "filed report snapshot not found");
+    equal(&c, &v["before"], &v["name"]);
+    c.execute_batch("ROLLBACK").unwrap();
+}
+
+#[test]
+fn nested_cache_and_checkpoint_refusals_restore_signed_settings() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    let scratch = Scratch::new("guard-refusals");
+    let c = Connection::open(scratch.0.join("book.sqlite3")).unwrap();
+    c.execute_batch("PRAGMA journal_mode=WAL;PRAGMA wal_autocheckpoint=73;PRAGMA cache_size=-321;PRAGMA cache_spill=OFF").unwrap();
+    let get = |setting| {
+        c.pragma_query_value(None, setting, |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    let outer = RebuildCache::enter(&c).unwrap();
+    {
+        let _inner = RebuildCache::enter(&c).unwrap();
+        assert_eq!(get("cache_size"), -131072);
+    }
+    assert_eq!(get("cache_size"), -131072);
+    outer.restore().unwrap();
+    assert_eq!(get("cache_size"), -321);
+    assert_eq!(get("cache_spill"), 0);
+    let checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+    c.execute_batch("BEGIN IMMEDIATE").unwrap();
+    assert!(checkpoint.after_reply().is_err());
+    assert_eq!(get("wal_autocheckpoint"), 73);
+    c.execute_batch("ROLLBACK").unwrap();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+        assert_eq!(get("wal_autocheckpoint"), 0);
+        panic!("injected");
+    }));
+    assert!(panic.is_err());
+    assert_eq!(get("wal_autocheckpoint"), 73);
+}
+
+#[test]
+fn component_blockers_keep_filed_impacts_pending_without_quarantines() {
+    use serde_json::json;
+    let mut v = cases()
+        .into_iter()
+        .find(|v| v["name"] == "filed-change")
+        .unwrap();
+    v["record"]["custody"]["component_blockers"] = json!([{"component_id":"unresolved"}]);
+    let c = Connection::open_in_memory().unwrap();
+    load(&c, &v["before"]);
+    c.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let stored = store(&c, &v, &mut Writes::default()).unwrap();
+    assert!(stored.quarantines.is_empty());
+    assert_eq!(stored.filed_report_impacts_resolved, 0);
+    assert_eq!(
+        c.query_row(
+            "SELECT COUNT(*) FROM custody_filed_report_impact_resolutions",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    c.execute_batch("ROLLBACK").unwrap();
+}

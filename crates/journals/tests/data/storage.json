@@ -2513,6 +2513,1226 @@
           }
         ],
         "method": "FIFO",
+        "schema_version": 1,
+        "future_key": "must retain legacy"
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"future_key\": \"must retain legacy\", \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null,
+            "future_key": "must retain legacy"
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"future_key\": \"must retain legacy\", \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined",
+              "future_key": "must retain legacy"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"future_key\": \"must retain legacy\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null,
+                "future_key": "must retain legacy"
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"future_key\": \"must retain legacy\", \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_quality\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_source_kind\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_timestamp\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
+        "schema_version": 1
+      },
+      [
+        "{\"engine\": \"kassiber_tax\", \"fragments\": [{\"acquisition_basis_exact\": null, \"acquisition_quantity_msat\": null, \"acquisition_quantity_msat_exact\": null, \"basis_authority\": \"income\", \"cost_basis_exact\": \"0\", \"event\": {\"asset\": \"BTC\", \"crypto_fee_msat\": 0, \"crypto_fee_msat_exact\": \"0\", \"engine_event_id\": \"custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound\", \"fiat_fee_exact\": \"0\", \"occurred_at\": \"2024-04-01T00:00:00+00:00\", \"pricing\": {\"fiat_currency\": \"EUR\", \"fiat_price_source\": null, \"fiat_rate_exact\": \"60000\", \"fiat_value_exact\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": null}, \"spot_price_exact\": \"60000\", \"transaction_id\": \"mined\"}, \"gain_loss_exact\": \"740.7407340000\", \"lot\": null, \"proceeds_exact\": \"740.7407340000\", \"quantity_msat\": 1234567890, \"quantity_msat_exact\": \"1234567890\", \"unit_basis_override_exact\": null}], \"method\": \"FIFO\", \"schema_version\": 1}",
+        null
+      ]
+    ],
+    [
+      {
+        "engine": "kassiber_tax",
+        "fragments": [
+          {
+            "acquisition_basis_exact": null,
+            "acquisition_quantity_msat": null,
+            "acquisition_quantity_msat_exact": null,
+            "basis_authority": "income",
+            "cost_basis_exact": "0",
+            "event": {
+              "asset": "BTC",
+              "crypto_fee_msat": 0,
+              "crypto_fee_msat_exact": "0",
+              "engine_event_id": "custody-tax:3e7a26081fb21674a72ad129fd658a34295393b7deb0a29e168a9d3d5871cd3c:0:1234567890:inbound",
+              "fiat_fee_exact": "0",
+              "occurred_at": "2024-04-01T00:00:00+00:00",
+              "pricing": {
+                "fiat_currency": "EUR",
+                "fiat_price_source": null,
+                "fiat_rate_exact": "60000",
+                "fiat_value_exact": null,
+                "pricing_fetched_at": null,
+                "pricing_granularity": null,
+                "pricing_method": null,
+                "pricing_pair": null,
+                "pricing_provider": null,
+                "pricing_quality": null,
+                "pricing_source_kind": null,
+                "pricing_timestamp": null
+              },
+              "spot_price_exact": "60000",
+              "transaction_id": "mined"
+            },
+            "gain_loss_exact": "740.7407340000",
+            "lot": null,
+            "proceeds_exact": "740.7407340000",
+            "quantity_msat": 1234567890,
+            "quantity_msat_exact": "1234567890",
+            "unit_basis_override_exact": null
+          }
+        ],
+        "method": "FIFO",
         "schema_version": 1
       },
       [

@@ -3,12 +3,13 @@
 
 Only target/ scratch books are written. Rendering and dump comparison are
 outside the timer; storage and COMMIT are inside, passive checkpoint outside.
-Every run starts from the same physical database. At load >8 all five
-Python/Rust pairs alternate order and the best of five is reported.
+Every run starts from the same physical database. Five Python/Rust pairs
+alternate order by default; --runs allows exploratory measurements.
 """
 from contextlib import ExitStack
 from decimal import Decimal
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -45,11 +46,17 @@ def main():
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--modes',nargs='+',default=['fresh','unchanged','appended','changed'])
     parser.add_argument('--probe',type=Path,default=Path('target/release/examples/journal-persist'))
+    parser.add_argument('--runs',type=int,default=5)
     parser.add_argument('--cipher',action='store_true',help='encrypt each disposable starting copy with a synthetic test key')
     args=parser.parse_args()
+    if args.runs < 1: parser.error('--runs must be positive')
     target=Path('target').resolve();out=args.out.resolve()
     if not out.is_relative_to(target): parser.error('--out must be under target/')
     out.mkdir(parents=True,exist_ok=True)
+    manifest=dict(book=json.loads((args.book/'bench-book.json').read_text()),runs=args.runs,
+        python=sys.version,cpus=os.cpu_count(),probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),
+        sources={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(Path('crates/journals/src').rglob('*.rs'))})
+    (out/'environment.json').write_text(json.dumps(manifest,indent=2)+'\n')
     passphrase='synthetic-test-only' if args.cipher else None
     def connect(root): return open_db(root,passphrase=passphrase)
     results=[]
@@ -98,7 +105,7 @@ def main():
         vector.update(database=str(native/'kassiber.sqlite3'))
         if passphrase: vector['passphrase']=passphrase
         request.write_text(json.dumps(dict(vector,expected=expected),separators=(',',':')))
-        floor_request.write_text(json.dumps(dict(name=mode,database=str(floor/'kassiber.sqlite3'),passphrase=passphrase,floor=recorder.batches),separators=(',',':')))
+        floor_request.write_text(json.dumps(dict(name=mode,database=str(floor/'kassiber.sqlite3'),passphrase=passphrase,floor=recorder.batches,expected=expected),separators=(',',':')))
         trials=[];probe=subprocess.Popen([str(args.probe.resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
         def rust(path,dest):
             if dest.exists(): shutil.rmtree(dest)
@@ -106,7 +113,7 @@ def main():
             load=os.getloadavg()[0];probe.stdin.write(str(path)+'\n');probe.stdin.flush()
             result=json.loads(probe.stdout.readline())
             if not result['ok']: raise RuntimeError(json.dumps(result)[:2000])
-            return dict(seconds=result['seconds'],load1=load)
+            return dict(seconds=result['seconds'],cpu_seconds=result['cpu_seconds'],phases=result.get('phases'),load1=load)
         def py():
             if python.exists(): shutil.rmtree(python)
             shutil.copytree(base,python);c=connect(python)
@@ -118,15 +125,15 @@ def main():
                     stack.enter_context(patch.object(module,'now_iso',lambda:CLOCK))
                 stack.enter_context(journal_write_cache(c))
                 c.execute('BEGIN IMMEDIATE');c.execute('SAVEPOINT journals_process')
-                load=os.getloadavg()[0];start=time.perf_counter()
+                load=os.getloadavg()[0];start_cpu=time.process_time();start=time.perf_counter()
                 original(c,vector['record']['profile'],states[0],created_at=CLOCK)
                 c.execute('RELEASE journals_process');c.commit()
-                seconds=time.perf_counter()-start
+                seconds=time.perf_counter()-start;cpu_seconds=time.process_time()-start_cpu
             assert dump(c)==expected
             c.execute('PRAGMA wal_checkpoint(PASSIVE)');c.close()
-            return dict(seconds=seconds,load1=load)
+            return dict(seconds=seconds,cpu_seconds=cpu_seconds,load1=load)
         try:
-            runs=5
+            runs=args.runs
             for run in range(runs):
                 pair={}
                 for engine in (['python','rust'] if run%2==0 else ['rust','python']):
@@ -135,8 +142,9 @@ def main():
                 print(mode,run,pair,flush=True)
         finally:
             probe.stdin.close();probe.wait(timeout=60)
-        best={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python','rust','floor')}
-        results.append(dict(mode=mode,transactions=count,best=best,trials=trials,over_floor=best['rust']-best['floor']))
+        best={engine:min(t[engine]['cpu_seconds'] for t in trials) for engine in ('python','rust','floor')}
+        best_wall={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python','rust','floor')}
+        results.append(dict(mode=mode,transactions=count,best=best,best_wall=best_wall,trials=trials,over_floor=best['rust']-best['floor']))
         (out/'summary.json').write_text(json.dumps(results,indent=2)+'\n')
         shutil.rmtree(root)
 

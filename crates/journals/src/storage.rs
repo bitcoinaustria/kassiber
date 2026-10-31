@@ -2,20 +2,38 @@
 //! No command registration, clock, entropy, connection opening or commit occurs
 //! here. Values are bound through the book's existing SQLCipher driver.
 use crate::{pyjson, Refusal};
-use kassiber_store::rusqlite::{self, params_from_iter, types::Value as Sql, Connection};
+use kassiber_store::rusqlite::{
+    self, params_from_iter,
+    types::{Value as Sql, ValueRef},
+    Connection, ToSql,
+};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
-trait SqlText {
-    fn as_str(&self) -> Option<&str>;
-}
-impl SqlText for Sql {
+mod calculation;
+pub(crate) use calculation::encode as encode_typed_calculation;
+
+trait Cell {
+    fn value_ref(&self) -> ValueRef<'_>;
     fn as_str(&self) -> Option<&str> {
-        if let Self::Text(s) = self {
-            Some(s)
-        } else {
-            None
-        }
+        self.value_ref().as_str().ok()
+    }
+}
+impl Cell for Sql {
+    fn value_ref(&self) -> ValueRef<'_> {
+        self.into()
+    }
+}
+impl Cell for ValueRef<'_> {
+    fn value_ref(&self) -> ValueRef<'_> {
+        *self
+    }
+}
+
+struct CellParam<'a, T>(&'a T);
+impl<T: Cell> ToSql for CellParam<'_, T> {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Borrowed(self.0.value_ref()))
     }
 }
 
@@ -74,8 +92,8 @@ fn compact_tuple(value: &Value) -> Option<String> {
             Value::Null => out.push_str("null"),
             Value::String(s) => kassiber_pyjson::dumps_str_into(s, options, out),
             Value::Number(n) if integer(value) => {
-                let spelling = n.to_string();
-                out.push_str(if spelling == "-0" { "0" } else { &spelling });
+                let spelling = n.as_str();
+                out.push_str(if spelling == "-0" { "0" } else { spelling });
             }
             Value::Array(items) => {
                 out.push('[');
@@ -105,16 +123,24 @@ pub fn journal_entry_id(
     asset: &str,
     ordinal: usize,
 ) -> Result<String, Refusal> {
-    let text = compact_tuple(&json!([
+    use std::fmt::Write;
+    let options = kassiber_pyjson::Options::new().compact();
+    let mut text = String::with_capacity(192);
+    text.push('[');
+    for value in [
         "kassiber-journal-entry-v1",
         profile,
         transaction,
         wallet,
         kind,
         asset,
-        ordinal
-    ]))
-    .expect("entry identity tuple contains only strings and an ordinal");
+    ] {
+        if text.len() > 1 {
+            text.push(',');
+        }
+        kassiber_pyjson::dumps_str_into(value, &options, &mut text);
+    }
+    write!(text, ",{ordinal}]").expect("String formatting");
     let mut hex = kassiber_custody::codec::sha256(&text).as_bytes()[..32].to_vec();
     hex[12] = b'8';
     let variant = (hex[16] as char).to_digit(16).expect("SHA-256 hex");
@@ -171,11 +197,14 @@ fn text(v: &Value) -> bool {
 }
 fn integer(v: &Value) -> bool {
     v.as_number()
-        .is_some_and(|n| !n.to_string().contains(['.', 'e', 'E']))
+        .is_some_and(|n| !n.as_str().contains(['.', 'e', 'E']))
 }
 fn exact_integer(v: &Value, exact: &Value) -> bool {
-    let spelling = v.to_string();
-    integer(v) && exact.as_str() == Some(spelling.as_str())
+    exact_integer_text(v, exact.as_str())
+}
+fn exact_integer_text(v: &Value, exact: Option<&str>) -> bool {
+    v.as_number()
+        .is_some_and(|n| !n.as_str().contains(['.', 'e', 'E']) && exact == Some(n.as_str()))
 }
 fn source(v: &Value) -> Option<Value> {
     if !keys(
@@ -310,18 +339,18 @@ pub fn encode_calculation(value: &Value) -> Result<(Option<String>, Option<Strin
     }
 }
 
-fn same_row<const N: usize>(
+fn same_row<const N: usize, T: Cell>(
     old: &rusqlite::Row<'_>,
-    new: &[Sql; N],
+    new: &[T; N],
     reals: &[usize],
 ) -> rusqlite::Result<bool> {
-    use rusqlite::types::ValueRef;
     for (index, value) in new[..N - 1].iter().enumerate() {
         let prior = old.get_ref(index)?;
-        if prior != ValueRef::from(value) {
+        let value = value.value_ref();
+        if prior != value {
             return Ok(false);
         }
-        if let (ValueRef::Real(a), Sql::Real(b)) = (prior, value) {
+        if let (ValueRef::Real(a), ValueRef::Real(b)) = (prior, value) {
             if a == 0.0 && reals.contains(&index) && a.is_sign_negative() != b.is_sign_negative() {
                 return Ok(false);
             }
@@ -333,6 +362,7 @@ fn same_row<const N: usize>(
 /// Called after each successful DML statement, including deletes matching zero
 /// rows. Returning an error exercises the surrounding caller's rollback path.
 pub trait WriteObserver {
+    fn phase(&mut self, _phase: &'static str) {}
     fn wrote(&mut self, table: &'static str) -> rusqlite::Result<()>;
 }
 impl WriteObserver for () {
@@ -342,10 +372,10 @@ impl WriteObserver for () {
 }
 
 #[allow(clippy::too_many_arguments)] // Fixed SQL column layout mirrors Python's shared delta writer.
-fn replace<const N: usize>(
+fn replace<const N: usize, T: Cell>(
     conn: &Connection,
     profile: &str,
-    rows: &[[Sql; N]],
+    rows: &[[T; N]],
     table: &'static str,
     columns: &[&str; N],
     reals: &[usize],
@@ -354,66 +384,66 @@ fn replace<const N: usize>(
 ) -> rusqlite::Result<()> {
     let names = columns.join(", ");
     let mut select = conn.prepare(&format!("SELECT {names} FROM {table} WHERE profile_id = ?"))?;
-    let identifier = |row: &[Sql; N]| match &row[0] {
-        Sql::Text(s) => Ok(s.clone()),
-        _ => Err(rusqlite::Error::InvalidQuery),
-    };
-    let wanted: HashMap<&str, &[Sql; N]> = rows
+    let wanted: HashMap<&str, usize> = rows
         .iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(index, row)| {
             row[0]
                 .as_str()
-                .map(|id| (id, row))
+                .map(|id| (id, index))
                 .ok_or(rusqlite::Error::InvalidQuery)
         })
         .collect::<rusqlite::Result<_>>()?;
     if wanted.len() != rows.len() {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    let mut changed: HashSet<String> = wanted.keys().map(|id| (*id).to_owned()).collect();
+    let mut changed = vec![true; rows.len()];
     let mut existing_order = Vec::new();
-    let mut stamps = HashMap::<String, HashSet<String>>::new();
+    let mut stamps = HashMap::<&str, (String, bool)>::new();
     {
         let mut existing = select.query([profile])?;
         while let Some(old) = existing.next()? {
-            let id = old.get_ref(0)?.as_str()?.to_owned();
-            if let Some(new) = wanted.get(id.as_str()) {
-                if same_row(old, new, reals)? {
-                    changed.remove(&id);
-                }
+            let id = old.get_ref(0)?.as_str()?;
+            if let Some(&index) = wanted.get(id) {
+                let new = &rows[index];
+                changed[index] = !same_row(old, new, reals)?;
                 if let Some(tie) = tie {
                     let time = new[tie].as_str().ok_or(rusqlite::Error::InvalidQuery)?;
-                    stamps
-                        .entry(time.into())
-                        .or_default()
-                        .insert(old.get(N - 1)?);
+                    let created = old.get_ref(N - 1)?.as_str()?;
+                    match stamps.entry(time) {
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert((created.into(), false));
+                        }
+                        std::collections::hash_map::Entry::Occupied(mut entry) => {
+                            if entry.get().0 != created {
+                                entry.get_mut().1 = true;
+                            }
+                        }
+                    }
                 }
+                existing_order.push((Some(index), String::new()));
+            } else {
+                existing_order.push((None, id.to_owned()));
             }
-            existing_order.push(id);
         }
     }
     if let Some(tie) = tie {
         let mut dirty_times = HashSet::new();
-        for row in rows {
-            let time = row[tie]
-                .as_str()
-                .ok_or(rusqlite::Error::InvalidQuery)?
-                .to_owned();
-            if changed.contains(row[0].as_str().expect("validated text id")) {
-                dirty_times.insert(time.clone());
+        for (index, row) in rows.iter().enumerate() {
+            let time = row[tie].as_str().ok_or(rusqlite::Error::InvalidQuery)?;
+            if changed[index] {
+                dirty_times.insert(time);
             }
         }
         dirty_times.extend(
             stamps
                 .into_iter()
-                .filter(|(_, s)| s.len() > 1)
-                .map(|(t, _)| t),
+                .filter(|(_, (_, mixed))| *mixed)
+                .map(|(time, _)| time),
         );
-        changed = rows
-            .iter()
-            .filter(|row| dirty_times.contains(row[tie].as_str().expect("validated time")))
-            .map(identifier)
-            .collect::<rusqlite::Result<_>>()?;
+        for (index, row) in rows.iter().enumerate() {
+            changed[index] = dirty_times.contains(row[tie].as_str().expect("validated time"));
+        }
     }
     let mut delete = conn.prepare(&format!(
         "DELETE FROM {table} WHERE profile_id = ? AND {} = ?",
@@ -421,17 +451,20 @@ fn replace<const N: usize>(
     ))?;
     // Python's old-row iteration order is SQLite's SELECT order. Retain it:
     // deletion order matters for trigger/fault-injection witnesses.
-    for id in existing_order {
-        if !wanted.contains_key(id.as_str()) || changed.contains(&id) {
-            delete.execute([profile, &id])?;
+    for (index, removed) in existing_order {
+        if index.is_none_or(|index| changed[index]) {
+            let id = index.map_or(removed.as_str(), |index| {
+                rows[index][0].as_str().expect("validated text id")
+            });
+            delete.execute([profile, id])?;
             observer.wrote(table)?;
         }
     }
     let slots = vec!["?"; N].join(",");
     let mut insert = conn.prepare(&format!("INSERT INTO {table}({names}) VALUES({slots})"))?;
-    for row in rows {
-        if changed.contains(row[0].as_str().expect("validated text id")) {
-            insert.execute(params_from_iter(row))?;
+    for (index, row) in rows.iter().enumerate() {
+        if changed[index] {
+            insert.execute(params_from_iter(row.iter().map(CellParam)))?;
             observer.wrote(table)?;
         }
     }
@@ -473,25 +506,54 @@ pub fn replace_quantity_postings(
     )
 }
 
+pub(crate) fn replace_borrowed_postings(
+    conn: &Connection,
+    profile: &str,
+    rows: &[[ValueRef<'_>; 12]],
+    observer: &mut impl WriteObserver,
+) -> rusqlite::Result<()> {
+    replace(
+        conn,
+        profile,
+        rows,
+        "journal_quantity_postings",
+        &POSTING_COLUMNS,
+        &[],
+        None,
+        observer,
+    )
+}
+
 /// Connection-local rebuild tuning; hold this scope until after commit/rollback.
 /// SQLCipher DELETE/FULL and explicit cache-spill settings remain unchanged.
 pub struct RebuildCache<'a> {
     conn: &'a Connection,
-    previous: i64,
+    previous: Option<i64>,
 }
 impl<'a> RebuildCache<'a> {
     pub fn enter(conn: &'a Connection) -> rusqlite::Result<Self> {
         let previous = conn.pragma_query_value(None, "cache_size", |r| r.get(0))?;
         conn.pragma_update(None, "cache_size", -131072)?;
-        Ok(Self { conn, previous })
+        Ok(Self {
+            conn,
+            previous: Some(previous),
+        })
     }
-    pub fn restore(self) -> rusqlite::Result<()> {
-        self.conn.pragma_update(None, "cache_size", self.previous)
+    pub fn restore(mut self) -> rusqlite::Result<()> {
+        self.conn.pragma_update(
+            None,
+            "cache_size",
+            self.previous.expect("active cache scope"),
+        )?;
+        self.previous = None;
+        Ok(())
     }
 }
 impl Drop for RebuildCache<'_> {
     fn drop(&mut self) {
-        let _ = self.conn.pragma_update(None, "cache_size", self.previous);
+        if let Some(previous) = self.previous {
+            let _ = self.conn.pragma_update(None, "cache_size", previous);
+        }
     }
 }
 

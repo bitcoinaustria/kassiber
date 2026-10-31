@@ -40,6 +40,10 @@ pub(super) fn exact(v: &Value) -> Result<BigInt, String> {
     }
     BigInt::from_str(&v.to_string()).map_err(|_| "ValueError".into())
 }
+pub fn principal_msat(v: &Value) -> Result<Value, String> {
+    principal(v).map(|n| number(&n))
+}
+
 pub(super) fn principal(v: &Value) -> Result<BigInt, String> {
     let amount = exact(&v["amount_msat"])?;
     Ok(

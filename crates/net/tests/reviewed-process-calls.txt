@@ -20,4 +20,5 @@ crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CA
 crates/setup/src/network_partition.rs|export|let status = std::process::Command::new(&binary)
 crates/backup/src/encryption.rs|run|let status = std::process::Command::new(path)
 crates/backup/src/desktop_tests.rs|incoming_authentication_is_quiet_and_ignores_active_operator_binding|let child = std::process::Command::new(std::env::current_exe().unwrap())
+crates/journals/tests/crash.rs|killed_writes_recover_complete_stale_books_on_sqlite_and_sqlcipher|let mut command = Command::new(std::env::current_exe().unwrap());
 crates/diagnostics/build.rs|main|std::process::Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))

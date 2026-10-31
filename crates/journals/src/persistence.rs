@@ -15,21 +15,22 @@ impl From<rusqlite::Error> for Refusal {
         Self::new("DatabaseError", e.to_string())
     }
 }
-pub(super) fn bind(v: &Value) -> Result<Sql, Refusal> {
+pub(super) fn borrowed(v: &Value) -> Result<rusqlite::types::ValueRef<'_>, Refusal> {
+    use rusqlite::types::ValueRef;
     Ok(match v {
-        Value::Null => Sql::Null,
-        Value::String(s) => Sql::Text(s.clone()),
-        Value::Bool(b) => Sql::Integer(i64::from(*b)),
+        Value::Null => ValueRef::Null,
+        Value::String(s) => ValueRef::Text(s.as_bytes()),
+        Value::Bool(b) => ValueRef::Integer(i64::from(*b)),
         Value::Number(n) => {
-            if !n.to_string().contains(['.', 'e', 'E']) {
-                Sql::Integer(n.as_i64().ok_or_else(|| {
-                    Refusal::new(
-                        "OverflowError",
-                        "Python int too large to convert to SQLite INTEGER",
-                    )
-                })?)
+            if let Some(n) = n.as_i64() {
+                ValueRef::Integer(n)
+            } else if !n.as_str().contains(['.', 'e', 'E']) {
+                return Err(Refusal::new(
+                    "OverflowError",
+                    "Python int too large to convert to SQLite INTEGER",
+                ));
             } else {
-                Sql::Real(
+                ValueRef::Real(
                     n.as_f64()
                         .ok_or_else(|| Refusal::new("ValueError", "invalid SQLite REAL"))?,
                 )
@@ -41,6 +42,16 @@ pub(super) fn bind(v: &Value) -> Result<Sql, Refusal> {
                 "unsupported SQLite binding",
             ))
         }
+    })
+}
+pub(super) fn bind(v: &Value) -> Result<Sql, Refusal> {
+    use rusqlite::types::ValueRef;
+    Ok(match borrowed(v)? {
+        ValueRef::Null => Sql::Null,
+        ValueRef::Integer(n) => Sql::Integer(n),
+        ValueRef::Real(n) => Sql::Real(n),
+        ValueRef::Text(s) => Sql::Text(std::str::from_utf8(s).expect("JSON text").into()),
+        ValueRef::Blob(_) => unreachable!("JSON contains no blob scalars"),
     })
 }
 fn t(s: impl Into<String>) -> Sql {
@@ -152,6 +163,7 @@ fn store<O: storage::WriteObserver>(
     at: &str,
     ids: &mut impl FnMut() -> Result<String, Refusal>,
 ) -> Result<Stored, Refusal> {
+    writer.observer.phase("setup");
     let pid = string(&profile["id"]);
     let wid = string(&profile["workspace_id"]);
     let previous: Option<String> = writer.conn.query_row(
@@ -171,8 +183,10 @@ fn store<O: storage::WriteObserver>(
     ] {
         writer.clear(table, &pid)?;
     }
+    writer.observer.phase("quantity");
     quantity::reconciliations(writer, profile, state, at)?;
     let quantity_counts = quantity::store(writer, &wid, &pid, state.custody_quantity, at)?;
+    writer.observer.phase("pricing");
     let pricing: HashMap<String, (Sql, Sql)> = writer
         .conn
         .prepare(
@@ -180,6 +194,7 @@ fn store<O: storage::WriteObserver>(
         )?
         .query_map([&pid], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))?
         .collect::<rusqlite::Result<_>>()?;
+    writer.observer.phase("entries_prepare");
     let mut ordinals = HashMap::new();
     let mut rows = Vec::with_capacity(state.entries.len());
     for e in &state.entries {
@@ -192,14 +207,12 @@ fn store<O: storage::WriteObserver>(
         let ordinal = ordinals.entry(key.clone()).or_insert(0usize);
         let id = storage::journal_entry_id(&pid, &key.0, &key.1, key.2, key.3, *ordinal)?;
         *ordinal += 1;
-        let calculation = e
+        let (legacy, compact) = e
             .calculation
             .as_ref()
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(|e| Refusal::new("ValueError", e.to_string()))?
-            .unwrap_or(Value::Null);
-        let (legacy, compact) = storage::encode_calculation(&calculation)?;
+            .map(storage::encode_typed_calculation)
+            .transpose()?
+            .unwrap_or((None, None));
         let (source, quality) = pricing
             .get(&key.0)
             .cloned()
@@ -238,7 +251,9 @@ fn store<O: storage::WriteObserver>(
             t(at),
         ]);
     }
+    writer.observer.phase("entries_write");
     storage::replace_journal_entries(writer.conn, &pid, &rows, writer.observer)?;
+    writer.observer.phase("small_tables");
     let live: HashSet<String> = pricing.into_keys().collect();
     let mut quarantines = dedupe_quarantines(&state.quarantines)?;
     quarantines.retain(|q| live.contains(&string(&q.transaction_id)));
@@ -385,6 +400,7 @@ fn store<O: storage::WriteObserver>(
     writer.conn.prepare("UPDATE profiles SET last_processed_at=?,last_processed_tx_count=?,last_processed_input_version=journal_input_version,ownership_review_counts_json=? WHERE id=?")?
         .execute(params![processed_at,count,pyjson(&state.ownership_review_counts,false)?,pid])?;
     writer.observer.wrote("profiles")?;
+    writer.observer.phase("filed");
     let filed_report_impacts_resolved = if !truth(state.custody_component_blockers)
         && quarantines.is_empty()
         && array(&state.custody_quantity["issues"]).is_empty()
@@ -393,6 +409,7 @@ fn store<O: storage::WriteObserver>(
     } else {
         0
     };
+    writer.observer.phase("complete");
     Ok(Stored {
         processed_at,
         processed_transactions: count,
@@ -400,4 +417,43 @@ fn store<O: storage::WriteObserver>(
         quantity_counts,
         filed_report_impacts_resolved,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values() {
+        for (value, expected) in [
+            (json!(null), Sql::Null),
+            (json!(true), Sql::Integer(1)),
+            (json!(false), Sql::Integer(0)),
+            (json!("é🔥"), t("é🔥")),
+            (json!(i64::MIN), Sql::Integer(i64::MIN)),
+            (json!(i64::MAX), Sql::Integer(i64::MAX)),
+            (json!(1.5), Sql::Real(1.5)),
+        ] {
+            assert_eq!(bind(&value).unwrap(), expected);
+        }
+        let Sql::Real(n) = bind(&json!(-0.0)).unwrap() else {
+            panic!("REAL");
+        };
+        assert!(n.is_sign_negative());
+        for value in [json!([]), json!({"n":1})] {
+            assert_eq!(bind(&value).unwrap_err().family, "ProgrammingError");
+        }
+        for text in [
+            "9223372036854775808",
+            "-9223372036854775809",
+            "999999999999999999999999999999",
+        ] {
+            let value = serde_json::from_str(text).unwrap();
+            let error = bind(&value).unwrap_err();
+            assert_eq!(error.family, "OverflowError");
+            assert_eq!(
+                error.message,
+                "Python int too large to convert to SQLite INTEGER"
+            );
+        }
+    }
 }

@@ -157,19 +157,29 @@ pub fn store(
     v: &Value,
     writes: &mut Writes,
 ) -> Result<persistence::Stored, Refusal> {
+    store_with(c, v, writes, |_| {})
+}
+#[allow(dead_code)]
+pub fn store_with(
+    c: &Connection,
+    v: &Value,
+    writes: &mut Writes,
+    edit: impl FnOnce(&mut kassiber_journals::JournalState<'_>),
+) -> Result<persistence::Stored, Refusal> {
     let r = &v["record"];
     let response = if r["response"].is_null() {
         boundary::empty_response()
     } else {
         boundary::ledger_response(&r["response"])?
     };
-    let state = boundary::build(
+    let mut state = boundary::build(
         &r["profile"],
         &r["custody"],
         r["wallets"].as_array().unwrap(),
         &response,
         String::new,
     )?;
+    edit(&mut state);
     let mut ids = v["ids"].as_array().unwrap().iter();
     let mut identity = || {
         ids.next()

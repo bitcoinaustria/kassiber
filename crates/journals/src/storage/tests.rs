@@ -247,3 +247,192 @@ fn quarantine_deduplication_and_enrichment_match_lossless_python_json() {
         );
     }
 }
+
+#[test]
+fn malformed_storage_id_and_tie_shapes_refuse_without_writes() {
+    let c = Connection::open_in_memory().unwrap();
+    table(&c, "journal_entries", &ENTRY_COLUMNS);
+    let a = entry("a", "same", "old");
+    replace_journal_entries(&c, "p", std::slice::from_ref(&a), &mut ()).unwrap();
+    let before = snapshot::<29>(&c, "journal_entries");
+    for value in [
+        Sql::Null,
+        Sql::Integer(1),
+        Sql::Real(1.0),
+        Sql::Blob(vec![0]),
+    ] {
+        for index in [0, 6] {
+            let mut invalid = a.clone();
+            invalid[index] = value.clone();
+            assert!(replace_journal_entries(&c, "p", &[invalid], &mut ()).is_err());
+            assert_eq!(snapshot::<29>(&c, "journal_entries"), before);
+        }
+    }
+    assert!(replace_journal_entries(&c, "p", &[a.clone(), a], &mut ()).is_err());
+    assert_eq!(snapshot::<29>(&c, "journal_entries"), before);
+}
+
+#[test]
+fn processing_marker_refuses_datetime_overflow() {
+    let result = journal_processed_at("2020-01-01", Some("9999-12-31T23:59:59.999999Z"));
+    assert_eq!(result.unwrap_err().family, "OverflowError");
+}
+
+#[test]
+fn typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks() {
+    fn check(c: &crate::Calculation) {
+        assert_eq!(
+            encode_typed_calculation(c).unwrap(),
+            encode_calculation(&serde_json::to_value(c).unwrap()).unwrap()
+        );
+    }
+    let cases: Value = serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
+    let mut compared = 0;
+    for case in array(&cases) {
+        let Ok(response) = crate::boundary::ledger_response(&case["response"]) else {
+            continue;
+        };
+        let Ok(state) = crate::boundary::build(
+            &case["profile"],
+            &case["custody"],
+            array(&case["wallets"]),
+            &response,
+            String::new,
+        ) else {
+            continue;
+        };
+        for entry in &state.entries {
+            let Some(c) = &entry.calculation else {
+                continue;
+            };
+            check(c);
+            compared += 1;
+            for mode in 0..19 {
+                let mut c = c.clone();
+                match mode {
+                    0 => c.schema_version = 2,
+                    1 => c.method = "é🔥\0\n\"\\".into(),
+                    2 => c.fragments.clear(),
+                    3 => c.fragments.extend(c.fragments.clone()),
+                    _ if c.fragments.is_empty() => continue,
+                    4 => c.fragments[0].quantity_msat = json!(true),
+                    5 => c.fragments[0].quantity_msat = json!(1.0),
+                    6 => c.fragments[0].quantity_msat_exact = "wrong".into(),
+                    7 => {
+                        c.fragments[0].acquisition_quantity_msat = None;
+                        c.fragments[0].acquisition_quantity_msat_exact = None;
+                    }
+                    8 => {
+                        c.fragments[0].acquisition_quantity_msat = None;
+                        c.fragments[0].acquisition_quantity_msat_exact = Some("0".into());
+                    }
+                    9 => c.fragments[0].acquisition_quantity_msat = Some(json!(true)),
+                    10 => c.fragments[0].event.crypto_fee_msat_exact = "wrong".into(),
+                    11 => c.fragments[0].event.crypto_fee_msat = json!(false),
+                    12 => {
+                        std::sync::Arc::make_mut(&mut c.fragments[0].event.provenance)
+                            .transaction_id = json!(1)
+                    }
+                    13 => {
+                        std::sync::Arc::make_mut(&mut c.fragments[0].event.provenance)
+                            .pricing
+                            .0[0] = json!(true)
+                    }
+                    14 => c.fragments[0].lot = None,
+                    17 => {
+                        std::sync::Arc::make_mut(&mut c.fragments[0].event.provenance)
+                            .pricing
+                            .0[0] = json!(1)
+                    }
+                    18 => {
+                        let mut positive = c.fragments[0].clone();
+                        positive.lot = None;
+                        positive.event.crypto_fee_msat = json!(0);
+                        positive.event.crypto_fee_msat_exact = "0".into();
+                        let mut negative = positive.clone();
+                        negative.event.crypto_fee_msat = serde_json::from_str("-0").unwrap();
+                        negative.event.crypto_fee_msat_exact = "-0".into();
+                        c.fragments = vec![negative, positive];
+                    }
+                    16 => {
+                        c.fragments[0].acquisition_quantity_msat = Some(Value::Null);
+                        c.fragments[0].acquisition_quantity_msat_exact = None;
+                    }
+                    15 => {
+                        let f = &mut c.fragments[0];
+                        f.quantity_msat =
+                            serde_json::from_str("999999999999999999999999999999999999999")
+                                .unwrap();
+                        f.quantity_msat_exact = f.quantity_msat.to_string();
+                    }
+                    _ => unreachable!(),
+                }
+                check(&c);
+            }
+        }
+    }
+    assert!(compared > 10);
+}
+
+#[test]
+fn compact_tuple_refuses_nonintegral_or_structured_scalars() {
+    for v in [json!(true), json!(1.0), json!({"bad":1})] {
+        assert!(compact_tuple(&v).is_none());
+    }
+    assert_eq!(
+        compact_tuple(&json!([null, "é", 1, []])).unwrap(),
+        "[null,\"\\u00e9\",1,[]]"
+    );
+}
+
+#[test]
+fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs() {
+    use crate::model::{Calculation, Fragment, PricingFacts, Source, SourceProvenance};
+    let mut calculation = Calculation {
+        schema_version: 1,
+        engine: "kassiber-tax",
+        method: "fifo".into(),
+        fragments: Vec::new(),
+    };
+    for index in 0..4096 {
+        let source = Source {
+            provenance: std::sync::Arc::new(SourceProvenance {
+                transaction_id: json!(format!("transaction-{index}")),
+                engine_event_id: format!("event-{index}"),
+                occurred_at: "2026-01-01T00:00:00Z".into(),
+                pricing: PricingFacts(std::array::from_fn(|_| Value::Null)),
+            }),
+            asset: "BTC".into(),
+            spot_price_exact: "30000".into(),
+            fiat_fee_exact: "0".into(),
+            crypto_fee_msat: json!(0),
+            crypto_fee_msat_exact: "0".into(),
+        };
+        calculation.fragments.push(Fragment {
+            quantity_msat: json!(1),
+            quantity_msat_exact: "1".into(),
+            cost_basis_exact: "1".into(),
+            proceeds_exact: "2".into(),
+            gain_loss_exact: "1".into(),
+            unit_basis_override_exact: None,
+            basis_authority: "engine",
+            acquisition_basis_exact: None,
+            acquisition_quantity_msat: None,
+            acquisition_quantity_msat_exact: None,
+            event: source.clone(),
+            lot: Some(source),
+        });
+    }
+    calculation.fragments.extend(calculation.fragments.clone());
+    let encoded = encode_typed_calculation(&calculation).unwrap();
+    assert_eq!(
+        encoded,
+        encode_calculation(&serde_json::to_value(calculation).unwrap()).unwrap()
+    );
+    let compact: Value = serde_json::from_str(encoded.1.as_ref().unwrap()).unwrap();
+    assert_eq!(array(&compact[3]).len(), 4096);
+    for (index, fragment) in array(&compact[4]).iter().enumerate() {
+        assert_eq!(fragment[8], index % 4096);
+        assert_eq!(fragment[9], index % 4096);
+    }
+}

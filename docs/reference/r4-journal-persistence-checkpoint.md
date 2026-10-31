@@ -6,6 +6,143 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Follow-up from `b5eb38ea8`
+
+This local follow-up improves persistence and adds semantic and crash witnesses.
+**R4-12 is still unaccepted:** the process-CPU budget fails, the exhaustive
+branch audit remains open, and the inherited full R4 campaigns remain open.
+The evidence below separates this run from the starting checkpoint.
+
+### Implementation and stage contract
+
+The native path now encodes typed calculations directly into the exact compact
+bytes, binds quantity-posting text by reference, and indexes changed rows by
+position. Entry UUID preimages use the ASCII tuple directly. Source dictionaries
+retain first-seen order with indexed deduplication, including thousands of
+distinct sources in one calculation. Dynamic shapes retain the existing legacy
+fallback. Statements remain prepared once per table; rows execute in reference
+order with the same indexes and transaction policy.
+
+Economic-relation fallback amounts now use the custody service's exact principal
+primitive, including fee treatment. Missing source identifiers use Python's
+first-truthy-id-or-empty-string rule. Filed-chain authority and report barriers
+have additional witnesses. Cache scopes disarm successful explicit restoration
+and retain signed nested restoration on refusal and unwind. The prerequisite
+restack repairs remove duplicate manifest keys and adapt the direct loader to
+the current snapshot row type; no dependency versions or schemas change.
+
+The public stage remains
+`persistence::store_ledger_state(conn, profile, &JournalState, clock, ids, observer)`.
+It returns `Stored` with the processing marker, counts, quarantines and resolved
+impact count. Its inner savepoint rolls back errors and unwinds. `phase` is an
+optional default callback on `WriteObserver`; the service reads no clock.
+R4-13 must retain the borrowed stage owners, enter the cache/checkpoint guards,
+acquire `BEGIN IMMEDIATE` before snapshot reads and repairs, own the outer
+savepoint and COMMIT, publish success after COMMIT, and run `after_reply` after
+the response. Error handling must unwind pre-build repairs as well as this
+stage. The writer consumes the shared plaintext WAL/NORMAL or SQLCipher
+DELETE/FULL connection policy.
+
+### CPU and wall measurements
+
+Each cell is **process CPU / wall seconds**, with independent minima over five
+alternating Python/native pairs. Floor, native and Python each pass an unmasked
+complete dump comparison in every trial: 120 timed stores verified. The floor
+prepares statements and converts recorded scalars before timing; execution and
+COMMIT remain timed. Native calculation/scalar preparation and comparison remain
+inside its timer. Decoding, rendering, dump verification and the passive
+checkpoint stay outside. Both book kinds have 20,000 transactions; generic has
+20,000 entries, multi-wallet has 19,983 entries and 17 quarantines.
+
+| Book / rebuild | Python CPU / wall | Native CPU / wall | Floor CPU / wall | Native CPU − floor | Load 1m range |
+| --- | ---: | ---: | ---: | ---: | --- |
+| generic-sqlite / fresh | 1.758730 / 1.866601 | 1.080039 / 1.137810 | 0.740874 / 0.859770 | 0.339165 | 65.882–90.029 |
+| generic-sqlite / unchanged | 1.280150 / 1.299705 | 0.502755 / 0.559595 | 0.002157 / 0.017326 | 0.500598 | 51.538–57.471 |
+| multi-wallet-sqlite / fresh | 1.978529 / 2.156990 | 1.374834 / 1.443026 | 0.877888 / 0.948535 | 0.496946 | 41.404–47.454 |
+| multi-wallet-sqlite / unchanged | 1.297317 / 1.310028 | 0.531179 / 0.573347 | 0.012889 / 0.045795 | 0.518290 | 37.172–45.206 |
+| generic-sqlcipher / fresh | 1.725692 / 1.870674 | 1.119964 / 1.304450 | 0.712771 / 0.886034 | 0.407193 | 43.472–50.606 |
+| generic-sqlcipher / unchanged | 2.291301 / 2.577306 | 0.962341 / 1.176505 | 0.004416 / 0.093124 | 0.957925 | 64.789–78.438 |
+| multi-wallet-sqlcipher / fresh | 2.394335 / 2.733182 | 1.335984 / 1.487191 | 1.129136 / 1.398471 | 0.206848 | 59.610–71.390 |
+| multi-wallet-sqlcipher / unchanged | 1.858559 / 1.960311 | 0.760920 / 0.840818 | 0.020987 / 0.096197 | 0.739933 | 50.828–61.363 |
+
+All eight modes miss **floor + 0.15 CPU seconds**. Phase profiles identify
+calculation preparation, posting preparation and retained-row comparison as
+remaining overhead. The direct typed encoder removes the intermediate JSON
+object tree; borrowed postings and indexed change flags remove repeated string
+copies and ID bookkeeping. SQL index maintenance remains included in both the
+native run and its exact DML floor. SQLCipher retains DELETE/FULL and the scoped
+128 MiB cache required for coexistence; durability is unchanged.
+
+[The follow-up measurement record](r4-journal-persistence-followup-measurements.json)
+retains every CPU/wall/load trial, phase measurements, binary/source hashes,
+book seed and CSV hashes, plus separate final verification hashes and results.
+These measurements precede the final indexed source
+dictionary and missing-ID hardening; their source hashes identify the measured
+variant. They do not claim a final-revision timing pass. The earlier exploratory
+before/after profile mixed encoder revisions in its unchanged case and is not
+an acceptance baseline. Appended and changed rebuilds were not remeasured here.
+
+### Follow-up verification
+
+The new process-termination campaign flushes dirty pages after each successful
+DML, handshakes with its parent, and is killed at each such boundary, immediately
+before COMMIT, and immediately after COMMIT. It reopens all cases, checks the
+full stale or committed dump, and checks integrity and foreign keys. It covers
+three fixtures (cipher, filed-change and chain retraction) on physical SQLite
+WAL/NORMAL and SQLCipher DELETE/FULL files. This is deterministic termination
+between DML statements, rather than instruction-level fault injection inside
+SQLite's COMMIT implementation.
+The helper's self-launch is reviewed by exact file, function and call line in
+`crates/net/tests/reviewed-process-calls.txt`; the process guard passes all nine
+tests with that entry.
+
+Named witnesses additionally pin malformed bindings and holding tuples,
+compact-shape refusals, marker overflow, missing/inactive/revised reconciliation
+components, relation fallbacks/nonpositive amounts, unavailable or unconfirmed
+chain authority, missing filed snapshots, component barriers, and signed cache
+and checkpoint restoration. The refreshed Python-generated storage vectors
+retain source/pricing/fragment missing-key and unknown-key cases.
+
+| Follow-up check | Result |
+| --- | --- |
+| `cargo fmt --all -- --check` | Pass |
+| Offline release workspace clippy, all targets, `-D warnings` | Pass |
+| Offline release workspace tests, one test thread | 1,648 passed; zero failed or ignored |
+| Offline release journal tests, one test thread | 50 passed; zero failed or ignored |
+| Python render and storage oracles | 8 passed |
+| Expanded journal mutation catalog | 164/164 killed; 32 baseline filters passed; zero survivors or build errors |
+| Final mutation catalog validation | 164 recipes valid against the final source |
+| Process/network chokepoint guard | 9 passed |
+| Required test classifier update | Complete; refreshed inherited subprocess flags and generated counts |
+| Required preflight shard | 57 passed |
+| Manual second review | Complete; bounded deduplication and missing-ID cases fixed |
+
+The preflight initially found an inherited documentation command with its locked
+flag out of the required position. Reordering those flags closes that failure;
+Python product behavior is unchanged. The complete workspace run used the local
+mock-socket sandbox exception; no test remains blocked by the sandbox. The
+mutation campaign preceded the final test-only module relocation and signed-zero
+witness; final source validation and the workspace run cover those changes.
+The mutation build tree was removed automatically. Verification build artifacts
+are removed after their logs and source hashes are summarized.
+
+### Remaining acceptance work and integration handoff
+
+1. Meet floor + 0.15 process CPU seconds on final-revision generic and
+   multi-wallet 20k, on SQLite and SQLCipher, with exact dumps; repeat appended
+   and changed rebuilds and the inherited 2k comparisons.
+2. Finish the branch-to-mutation audit beyond the expanded catalog. Named
+   failures establish each recipe's witness, not exhaustive coverage by count.
+3. Rerun the inherited 24,000 books and 1,030 permutations, 159 recorded requests
+   and permutations plus fresh recordings, full census/shadow, and 2,285 custody
+   recipes. Preserve the known Python shadow read-budget repro below.
+4. Validate the R4-13 caller's whole-transaction ownership, response/checkpoint
+   ordering and rollback of pre-build repairs when its integration lands.
+
+The remaining sections retain the **starting checkpoint's historical evidence**;
+its 682-match corpus and earlier timing/mutation counts are not rerun claims for
+this follow-up.
+
 ## Implementation and ownership
 
 `crates/journals/src/persistence.rs::store_ledger_state` consumes the R4-11
@@ -45,7 +182,7 @@ runs PASSIVE after COMMIT and the response, then restores the prior setting.
 SQLCipher remains DELETE/FULL and receives no WAL checkpoint. These guards are
 caller-owned so they can cover the complete rebuild transaction.
 
-## Dump oracle and corpora
+## Starting checkpoint dump oracle and corpora
 
 Captures preserve every table, column, rowid, id and timestamp. Both runtimes
 start from the same logical snapshot; benchmark trials copy the same physical
@@ -94,7 +231,7 @@ reference work again, giving 5,254 observation reads against the 3,840 budget.
 The failure is preserved as a harness/performance repro; Python product code is
 unchanged. The broader census/shadow campaigns have not been run here.
 
-## Verification and measurements
+## Starting checkpoint verification and measurements
 
 `every_write_failure_and_panic_rolls_back_the_journal` injects both a returned
 error and an unwind after each of 604 successful DML statements across the
@@ -128,7 +265,7 @@ no test remains blocked by the sandbox. Preflight refreshed eight generated
 error-index source references for the prerequisite storage changes. The focused
 shadow read-budget repro above remains separate from these passing gates.
 
-### Persistence timing
+### Starting checkpoint persistence timing
 
 The books were built by `scripts/journals-bench-books.py` at `4f6ca7d06`,
 with 20,000 transactions, generic seed 1 and multi-wallet seed 7. Generic
@@ -193,12 +330,14 @@ results are recorded.
   the inherited 24,000-book/permutation, recording/replay, full census/shadow and
   2,285-recipe custody campaign gates. This checkpoint does not claim them.
 
-The remaining mutation audit must add named witnesses for every compact-shape
-validation/refusal, binding-width and invalid-shape refusal, missing/inactive or
-revision-mismatched reconciliation component, economic-relation missing/fallback
-and nonpositive-amount path, filed-chain availability/authority path, and cache
-or checkpoint refusal/restoration path. The checked catalog samples these services;
-its kill count alone is not proof of exhaustive branch coverage. The complete
+The starting checkpoint's named audit gaps included compact-shape validation,
+binding widths, reconciliation validity, relation fallbacks, filed-chain authority
+and cache/checkpoint restoration. The follow-up above adds witnesses and recipes
+across those categories. The remaining audit must map every conditional and
+refusal in `persistence.rs`, `persistence/{quantity,filed,quarantine}.rs`,
+`storage.rs` and `storage/calculation.rs` to its named killed recipe, documenting
+unreachable and driver-error-only paths. Catalog size alone does not establish
+that audit. The complete
 inherited campaign also includes 1,030 generator permutations, 159 recorded
 requests and their permutations plus fresh recordings, and the 2k benchmark
 comparisons. None of those full campaigns is replaced by the focused captures.
@@ -210,6 +349,8 @@ the environment was synchronized with `uv sync --locked --python 3.11`.
 Cargo runs offline. Point `TMPDIR` at an existing directory under worktree
 `target/`; a read-only shared uv cache can use `UV_NO_SYNC=1` and
 `UV_CACHE_DIR=target/uv-cache` after synchronization. Never use a real book.
+Use `CARGO_BUILD_JOBS=8`, `CARGO_TARGET_DIR=$PWD/target` and
+`CARGO_BUILD_BUILD_DIR=$PWD/target/build` to keep builds bounded and local.
 
 ```sh
 cargo test --offline -p kassiber-journals -- --test-threads=1

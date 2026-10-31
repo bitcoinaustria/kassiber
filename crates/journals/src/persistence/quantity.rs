@@ -1,6 +1,23 @@
 //! Quantity artifacts are storage projections of the completed custody stage.
 use super::*;
+use kassiber_store::rusqlite::types::ValueRef;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+
+fn key(v: &Value) -> Cow<'_, str> {
+    v.as_str()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(|| Cow::Owned(string(v)))
+}
+
+fn relation_source_id(relation: &Value) -> String {
+    ["out_id", "out_transaction_id"]
+        .iter()
+        .map(|&field| &relation[field])
+        .find(|value| truth(value))
+        .map(string)
+        .unwrap_or_default()
+}
 
 fn nullable(v: &Value) -> Result<Sql, Refusal> {
     if truth(v) {
@@ -73,30 +90,31 @@ pub(super) fn store<O: storage::WriteObserver>(
     ] {
         w.clear(table, pid)?;
     }
+    w.observer.phase("quantity_postings_prepare");
     let observations: HashMap<_, _> = array(&q["projection"]["observations"])
         .iter()
-        .map(|o| (string(&o["quantity_hash"]), o))
+        .map(|o| (key(&o["quantity_hash"]), o))
         .collect();
     let mut postings = Vec::new();
     let mut balances = BTreeMap::<(String, String, String), i128>::new();
     for p in array(&q["projection"]["postings"]) {
         let o = observations
-            .get(&string(&p["observation_hash"]))
+            .get(&key(&p["observation_hash"]))
             .copied()
             .unwrap_or(&Value::Null);
         postings.push([
-            bind(&p["posting_id"])?,
-            t(wid),
-            t(pid),
-            bind(&o["anchor_transaction_id"])?,
-            bind(&p["observation_hash"])?,
-            bind(&o["occurred_at"])?,
-            bind(&p["asset"])?,
-            bind(&p["location_kind"])?,
-            bind(&p["location_id"])?,
-            bind(&p["amount_msat"])?,
-            bind(&p["state"])?,
-            t(at),
+            borrowed(&p["posting_id"])?,
+            ValueRef::Text(wid.as_bytes()),
+            ValueRef::Text(pid.as_bytes()),
+            borrowed(&o["anchor_transaction_id"])?,
+            borrowed(&p["observation_hash"])?,
+            borrowed(&o["occurred_at"])?,
+            borrowed(&p["asset"])?,
+            borrowed(&p["location_kind"])?,
+            borrowed(&p["location_id"])?,
+            borrowed(&p["amount_msat"])?,
+            borrowed(&p["state"])?,
+            ValueRef::Text(at.as_bytes()),
         ]);
         let key = (
             string(&p["location_kind"]),
@@ -111,7 +129,9 @@ pub(super) fn store<O: storage::WriteObserver>(
         })?;
         *balances.entry(key).or_default() += i128::from(amount);
     }
-    storage::replace_quantity_postings(w.conn, pid, &postings, w.observer)?;
+    w.observer.phase("quantity_postings_write");
+    storage::replace_borrowed_postings(w.conn, pid, &postings, w.observer)?;
+    w.observer.phase("quantity_other");
     counts.insert("postings", postings.len());
     let mut rows = Vec::new();
     for issue in array(&q["issues"]) {
@@ -188,17 +208,28 @@ pub(super) fn store<O: storage::WriteObserver>(
     )?;
     let eligible: HashSet<&Value> = array(&q["tax_eligibility"]["eligible_decisions"])
         .iter()
+        .filter(|d| {
+            matches!(
+                d["state"].as_str(),
+                Some("internal_verified" | "internal_reviewed")
+            ) && !d["target"].is_null()
+        })
         .collect();
     let mut eligible_source_slices = HashSet::new();
-    for d in &eligible {
+    let has_relations = !array(&q["reviewed_conversion_pairs"]).is_empty()
+        || !array(&q["reviewed_direct_payouts"]).is_empty();
+    for d in array(&q["tax_eligibility"]["eligible_decisions"]) {
         let source = observations
-            .get(&string(&d["source"]["observation_hash"]))
+            .get(&key(&d["source"]["observation_hash"]))
             .ok_or_else(|| Refusal::new("KeyError", "eligible source observation"))?;
-        eligible_source_slices.insert((
-            string(&source["anchor_transaction_id"]),
-            slice_amount(&d["source"])?,
-            d["component_id"].clone(),
-        ));
+        let amount = slice_amount(&d["source"])?;
+        if has_relations {
+            eligible_source_slices.insert((
+                string(&source["anchor_transaction_id"]),
+                amount,
+                d["component_id"].clone(),
+            ));
+        }
     }
     let mut rows = Vec::new();
     for d in array(&q["projection"]["decisions"]) {
@@ -210,10 +241,10 @@ pub(super) fn store<O: storage::WriteObserver>(
             continue;
         }
         let source = observations
-            .get(&string(&d["source"]["observation_hash"]))
+            .get(&key(&d["source"]["observation_hash"]))
             .ok_or_else(|| Refusal::new("KeyError", "decision source observation"))?;
         let target = observations
-            .get(&string(&d["target"]["observation_hash"]))
+            .get(&key(&d["target"]["observation_hash"]))
             .ok_or_else(|| Refusal::new("KeyError", "decision target observation"))?;
         let id = hash(&json!([
             "canonical-custody-decision-v1",
@@ -300,7 +331,11 @@ pub(super) fn store<O: storage::WriteObserver>(
     )?;
     let by_tx: HashMap<_, _> = array(&q["projection"]["observations"])
         .iter()
-        .filter(|o| truth(&o["anchor_transaction_id"]))
+        .filter(|o| {
+            (!array(&q["reviewed_conversion_pairs"]).is_empty()
+                || !array(&q["reviewed_direct_payouts"]).is_empty())
+                && truth(&o["anchor_transaction_id"])
+        })
         .map(|o| (string(&o["anchor_transaction_id"]), o))
         .collect();
     let mut rows = Vec::new();
@@ -309,9 +344,9 @@ pub(super) fn store<O: storage::WriteObserver>(
         ("direct_payout", &q["reviewed_direct_payouts"]),
     ] {
         for r in array(relations) {
-            let source_id = crate::fallback(&r["out_id"], &r["out_transaction_id"]);
+            let source_id = relation_source_id(r);
             let target_id = &r["in_id"];
-            let Some(source) = by_tx.get(&string(source_id)) else {
+            let Some(source) = by_tx.get(&source_id) else {
                 continue;
             };
             let target = by_tx
@@ -323,15 +358,19 @@ pub(super) fn store<O: storage::WriteObserver>(
             if absent(source_amount) {
                 source_amount = &r["out_amount_msat"];
             }
+            let source_principal;
             if absent(source_amount) {
-                source_amount = &source["principal_msat"];
+                source_principal = kassiber_custody::quantity::principal_msat(source)?;
+                source_amount = &source_principal;
             }
             let mut target_amount = &r["in_amount"];
             if absent(target_amount) {
                 target_amount = &r["payout_amount"];
             }
+            let target_principal;
             if absent(target_amount) && !target.is_null() {
-                target_amount = &target["principal_msat"];
+                target_principal = kassiber_custody::quantity::principal_msat(target)?;
+                target_amount = &target_principal;
             }
             let source_amount = kassiber_custody::codec::integer(source_amount)?;
             let target_amount = kassiber_custody::codec::integer_or_zero(target_amount)?;
@@ -354,7 +393,7 @@ pub(super) fn store<O: storage::WriteObserver>(
             };
             let eligible = source_amount.as_i64().is_some_and(|amount| {
                 eligible_source_slices.contains(&(
-                    string(source_id),
+                    source_id.clone(),
                     i128::from(amount),
                     r["component_id"].clone(),
                 ))
@@ -363,7 +402,7 @@ pub(super) fn store<O: storage::WriteObserver>(
                 hash(&json!([
                     "canonical-custody-economic-relation-v3",
                     kind,
-                    string(source_id),
+                    source_id,
                     target_id,
                     r["component_id"],
                     source["asset"],
@@ -374,7 +413,7 @@ pub(super) fn store<O: storage::WriteObserver>(
                 t(wid),
                 t(pid),
                 t(kind),
-                t(string(source_id)),
+                t(&source_id),
                 bind(&target_id)?,
                 bind(&r["component_id"])?,
                 bind(&source["asset"])?,
@@ -486,4 +525,26 @@ pub(super) fn reconciliations<O: storage::WriteObserver>(
         ],
         rows,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn economic_relation_source_ids_use_first_truthy_id_or_empty_string() {
+        for (relation, expected) in [
+            (json!({}), ""),
+            (json!({"out_id":null,"out_transaction_id":null}), ""),
+            (json!({"out_id":false,"out_transaction_id":0}), ""),
+            (
+                json!({"out_id":"first","out_transaction_id":"second"}),
+                "first",
+            ),
+            (json!({"out_id":"","out_transaction_id":"second"}), "second"),
+            (json!({"out_id":null,"out_transaction_id":"None"}), "None"),
+            (json!({"out_id":1,"out_transaction_id":"second"}), "1"),
+        ] {
+            assert_eq!(relation_source_id(&relation), expected);
+        }
+    }
 }

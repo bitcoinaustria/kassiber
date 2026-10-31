@@ -722,8 +722,8 @@
   {
     "id": "JP-mixed-stamps",
     "file": "crates/journals/src/storage.rs",
-    "find": "s.len() > 1",
-    "replace": "s.len() > 2",
+    "find": "if entry.get().0 != created {",
+    "replace": "if false && entry.get().0 != created {",
     "expect_failing": [
       "mixed_timestamps_and_signed_zero_force_entry_rewrites"
     ],
@@ -732,8 +732,8 @@
   {
     "id": "JP-delete-removed",
     "file": "crates/journals/src/storage.rs",
-    "find": "!wanted.contains_key(id.as_str()) || changed.contains(&id)",
-    "replace": "changed.contains(&id)",
+    "find": "if index.is_none_or(|index| changed[index]) {",
+    "replace": "if index.is_some_and(|index| changed[index]) {",
     "expect_failing": [
       "entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids"
     ],
@@ -962,8 +962,8 @@
   {
     "id": "JP-quantity-observation",
     "file": "crates/journals/src/persistence/quantity.rs",
-    "find": "bind(&o[\"anchor_transaction_id\"])?",
-    "replace": "Sql::Null",
+    "find": "borrowed(&o[\"anchor_transaction_id\"])?",
+    "replace": "ValueRef::Null",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -1438,5 +1438,525 @@
       "balance_join_matches_existing_comparator_and_promotes_before_overflow"
     ],
     "rule": "Nonempty observation indexes still join named balance reasons."
+  },
+  {
+    "id": "JP-compact-top-shape",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !keys(v, &[\"engine\", \"fragments\", \"method\", \"schema_version\"])",
+    "replace": "if false && !keys(v, &[\"engine\", \"fragments\", \"method\", \"schema_version\"])",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-schema-type",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| !integer(&v[\"schema_version\"])\n        || v[\"schema_version\"] != 1",
+    "replace": "|| (v[\"schema_version\"] != 1 && v[\"schema_version\"] != 1.0 && v[\"schema_version\"] != true)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-schema-value",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| v[\"schema_version\"] != 1",
+    "replace": "|| false && v[\"schema_version\"] != 1",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-engine-type",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| !v[\"engine\"].is_string()",
+    "replace": "|| false && !v[\"engine\"].is_string()",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-method-type",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| !v[\"method\"].is_string()",
+    "replace": "|| false && !v[\"method\"].is_string()",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-fragment-quantity",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| !exact_integer(&f[\"quantity_msat\"], &f[\"quantity_msat_exact\"])",
+    "replace": "|| false && !exact_integer(&f[\"quantity_msat\"], &f[\"quantity_msat_exact\"])",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-null-acquisition",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !f[\"acquisition_quantity_msat_exact\"].is_null() {",
+    "replace": "if false && !f[\"acquisition_quantity_msat_exact\"].is_null() {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-fragment-text",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !text(&f[key]) {",
+    "replace": "if false && !text(&f[key]) {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-source-text",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !text(&v[key]) {",
+    "replace": "if false && !text(&v[key]) {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-pricing-text",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !text(&v[\"pricing\"][key]) {",
+    "replace": "if false && !text(&v[\"pricing\"][key]) {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-compact-source-fee",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| !exact_integer(&v[\"crypto_fee_msat\"], &v[\"crypto_fee_msat_exact\"])",
+    "replace": "|| false && !exact_integer(&v[\"crypto_fee_msat\"], &v[\"crypto_fee_msat_exact\"])",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Retain legacy bytes when a compact calculation cannot round-trip its shape or scalar types."
+  },
+  {
+    "id": "JP-typed-schema",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "if calculation.schema_version != 1 {",
+    "replace": "if false && calculation.schema_version != 1 {",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-version",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "out.push_str(\"[2,\");",
+    "replace": "out.push_str(\"[1,\");",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-pricing-order",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "[0, 5, 1, 2, 9, 10, 11, 8, 7, 4, 3, 6]",
+    "replace": "[0, 1, 5, 2, 9, 10, 11, 8, 7, 4, 3, 6]",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-quantity",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "if !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact))",
+    "replace": "if false && !exact_integer_text(&fragment.quantity_msat, Some(&fragment.quantity_msat_exact))",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-source-id",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "if !text(&source.provenance.transaction_id)",
+    "replace": "if false && !text(&source.provenance.transaction_id)",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-source-pricing",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "|| source.provenance.pricing.0.iter().any(|v| !text(v))",
+    "replace": "|| false && source.provenance.pricing.0.iter().any(|v| !text(v))",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-dedupe",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "positions.entry(encoded.clone()).or_insert_with(||",
+    "replace": "positions.entry(format!(\"{}:{encoded}\", fragments.len())).or_insert_with(||",
+    "expect_failing": [
+      "typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-typed-fallback",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "super::encode_calculation(&value)",
+    "replace": "Ok((Some(crate::pyjson(&value, false)?), None))",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "The typed encoder preserves the reference compact bytes and dynamic legacy fallbacks."
+  },
+  {
+    "id": "JP-bind-bool",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "ValueRef::Integer(i64::from(*b))",
+    "replace": "ValueRef::Integer(i64::from(!*b))",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "Preserve SQLite scalar types and Python binding refusal semantics."
+  },
+  {
+    "id": "JP-bind-real",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Sql::Real(n),",
+    "replace": "Sql::Real(n.abs()),",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "Preserve SQLite scalar types and Python binding refusal semantics."
+  },
+  {
+    "id": "JP-bind-overflow",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "\"OverflowError\",\n                    \"Python int too large to convert to SQLite INTEGER\"",
+    "replace": "\"OverflowError\",\n                    \"wrong integer refusal\"",
+    "expect_failing": [
+      "scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values"
+    ],
+    "rule": "Preserve SQLite scalar types and Python binding refusal semantics."
+  },
+  {
+    "id": "JP-holding-width",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "if key.len() != 4 {",
+    "replace": "if key.len() == 4 {",
+    "expect_failing": [
+      "malformed_entry_and_holding_bindings_roll_back_before_freshness"
+    ],
+    "rule": "Malformed holding tuples fail atomically."
+  },
+  {
+    "id": "JP-reconciliation-empty",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if expected.is_empty()",
+    "replace": "if false && expected.is_empty()",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only current active components with nonempty matching claims retain reconciliation certificates."
+  },
+  {
+    "id": "JP-reconciliation-state",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if component.get::<_, String>(1)? != \"active\"",
+    "replace": "if false && component.get::<_, String>(1)? != \"active\"",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only current active components with nonempty matching claims retain reconciliation certificates."
+  },
+  {
+    "id": "JP-reconciliation-revision",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "|| component.get::<_, i64>(0)? != proof[\"component_revision\"].as_i64().unwrap_or(-1)",
+    "replace": "|| false && component.get::<_, i64>(0)? != proof[\"component_revision\"].as_i64().unwrap_or(-1)",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only current active components with nonempty matching claims retain reconciliation certificates."
+  },
+  {
+    "id": "JP-relation-source-fallback",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "source_amount = &r[\"out_amount_msat\"];",
+    "replace": "source_amount = &Value::Null;",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-source-principal",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "source_principal = kassiber_custody::quantity::principal_msat(source)?;",
+    "replace": "source_principal = json!(1);",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-target-principal",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "target_principal = kassiber_custody::quantity::principal_msat(target)?;",
+    "replace": "target_principal = json!(1);",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-source-zero",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "|| source_amount == 0",
+    "replace": "|| false && source_amount == 0",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-target-zero",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "|| target_amount == 0",
+    "replace": "|| false && target_amount == 0",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-source-negative",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "source_amount.to_string().starts_with('-')",
+    "replace": "false && source_amount.to_string().starts_with('-')",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-target-negative",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "target_amount.to_string().starts_with('-')",
+    "replace": "false && target_amount.to_string().starts_with('-')",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-relation-payout-fallback",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "target_amount = &r[\"payout_amount\"];",
+    "replace": "target_amount = &Value::Null;",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Economic relations preserve exact fallback principal and discard nonpositive amounts."
+  },
+  {
+    "id": "JP-chain-unavailable",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "latest[\"status\"] != \"unavailable\"",
+    "replace": "latest[\"status\"] == \"unavailable\"",
+    "expect_failing": [
+      "filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation"
+    ],
+    "rule": "Uncertainty never becomes a sealed resolution without confirmed current authority or authoritative retraction."
+  },
+  {
+    "id": "JP-chain-retraction",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "latest[\"status\"] == \"retracted\"",
+    "replace": "false && latest[\"status\"] == \"retracted\"",
+    "expect_failing": [
+      "filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation"
+    ],
+    "rule": "Uncertainty never becomes a sealed resolution without confirmed current authority or authoritative retraction."
+  },
+  {
+    "id": "JP-chain-current",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "current[\"status\"] == \"observed\"",
+    "replace": "true || current[\"status\"] == \"observed\"",
+    "expect_failing": [
+      "filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation"
+    ],
+    "rule": "Uncertainty never becomes a sealed resolution without confirmed current authority or authoritative retraction."
+  },
+  {
+    "id": "JP-chain-confirmation",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "truth(&current[\"confirmed\"])",
+    "replace": "!truth(&current[\"confirmed\"])",
+    "expect_failing": [
+      "filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation"
+    ],
+    "rule": "Uncertainty never becomes a sealed resolution without confirmed current authority or authoritative retraction."
+  },
+  {
+    "id": "JP-chain-dependency",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "        let Some(dep) = dependency.first() else {\n            continue;\n        };",
+    "replace": "        let dep = dependency.first().ok_or_else(|| error(\"missing dependency\"))?;",
+    "expect_failing": [
+      "pending_chain_impacts_stay_open_without_dependencies_or_current_authority"
+    ],
+    "rule": "Missing dependencies retain pending impacts without guessing report facts."
+  },
+  {
+    "id": "JP-filed-object-fallback",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": ".filter(Value::is_object)",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Malformed or non-object saved JSON retains the reference empty-object fallback."
+  },
+  {
+    "id": "JP-marker-current-db",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "SELECT last_processed_at FROM profiles WHERE id=?",
+    "replace": "SELECT NULL FROM profiles WHERE id=?",
+    "expect_failing": [
+      "repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions"
+    ],
+    "rule": "Every rebuild expires explanations against the current stored marker even with a stale caller profile."
+  },
+  {
+    "id": "JP-impact-component-barrier",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "if !truth(state.custody_component_blockers)",
+    "replace": "if true || !truth(state.custody_component_blockers)",
+    "expect_failing": [
+      "component_blockers_keep_filed_impacts_pending_without_quarantines"
+    ],
+    "rule": "A zero-quarantine component blocker still prevents filed-impact resolution."
+  },
+  {
+    "id": "JP-cache-restore-negative",
+    "file": "crates/journals/src/storage.rs",
+    "find": "self.previous.expect(\"active cache scope\")",
+    "replace": "self.previous.expect(\"active cache scope\").abs()",
+    "expect_failing": [
+      "nested_cache_and_checkpoint_refusals_restore_signed_settings"
+    ],
+    "rule": "Cache scopes restore the exact signed prior setting."
+  },
+  {
+    "id": "JP-checkpoint-enter-transaction",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !conn.is_autocommit() {",
+    "replace": "if false && !conn.is_autocommit() {",
+    "expect_failing": [
+      "scoped_cache_and_checkpoint_restore_exact_settings"
+    ],
+    "rule": "Deferral is acquired before the caller starts its transaction."
+  },
+  {
+    "id": "JP-checkpoint-pending-transaction",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !self.conn.is_autocommit() {",
+    "replace": "if false && !self.conn.is_autocommit() {",
+    "expect_failing": [
+      "scoped_cache_and_checkpoint_restore_exact_settings"
+    ],
+    "rule": "Checkpoint refusal restores autocheckpoint settings without checkpointing pending writes."
+  },
+  {
+    "id": "JP-checkpoint-restore",
+    "file": "crates/journals/src/storage.rs",
+    "find": ".pragma_update(None, \"wal_autocheckpoint\", self.previous);",
+    "replace": ".pragma_update(None, \"wal_autocheckpoint\", 1);",
+    "expect_failing": [
+      "nested_cache_and_checkpoint_refusals_restore_signed_settings"
+    ],
+    "rule": "Checkpoint scope restores its exact prior threshold on refusal and unwind."
+  },
+  {
+    "id": "JP-cache-drop-negative",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let _ = self.conn.pragma_update(None, \"cache_size\", previous);",
+    "replace": "let _ = self.conn.pragma_update(None, \"cache_size\", previous.abs());",
+    "expect_failing": [
+      "nested_cache_and_checkpoint_refusals_restore_signed_settings"
+    ],
+    "rule": "Unwinding or nested cache scopes preserve signed prior settings."
+  },
+  {
+    "id": "JP-compact-source-shape",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !keys(\n        v,",
+    "replace": "if false && !keys(\n        v,",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Unknown and missing shape fields retain exactly the legacy calculation."
+  },
+  {
+    "id": "JP-compact-pricing-shape",
+    "file": "crates/journals/src/storage.rs",
+    "find": "|| !keys(&v[\"pricing\"], &PRICING)",
+    "replace": "|| false && !keys(&v[\"pricing\"], &PRICING)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Unknown and missing shape fields retain exactly the legacy calculation."
+  },
+  {
+    "id": "JP-compact-fragment-shape",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !keys(\n            f,",
+    "replace": "if false && !keys(\n            f,",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Unknown and missing shape fields retain exactly the legacy calculation."
+  },
+  {
+    "id": "JP-relation-source-empty",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": ".unwrap_or_default()",
+    "replace": ".unwrap_or_else(|| \"None\".into())",
+    "expect_failing": [
+      "economic_relation_source_ids_use_first_truthy_id_or_empty_string"
+    ],
+    "rule": "Missing relation source identifiers must not acquire the literal None anchor."
+  },
+  {
+    "id": "JP-relation-source-precedence",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "[\"out_id\", \"out_transaction_id\"]",
+    "replace": "[\"out_transaction_id\", \"out_id\"]",
+    "expect_failing": [
+      "economic_relation_source_ids_use_first_truthy_id_or_empty_string"
+    ],
+    "rule": "The first truthy source identifier has Python precedence."
   }
 ]

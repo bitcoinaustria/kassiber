@@ -1,12 +1,58 @@
 //! Local R4-12 oracle/benchmark. Never registered, packaged or installed.
 #[path = "../tests/support/mod.rs"]
 mod support;
+use kassiber_journals::storage::WriteObserver;
 use kassiber_journals::{boundary, persistence, storage};
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
-fn replay_floor(c: &Connection, v: &Value) -> Result<f64, Box<dyn std::error::Error>> {
+#[cfg(unix)]
+fn cpu() -> f64 {
+    use nix::sys::resource::{getrusage, UsageWho};
+    let r = getrusage(UsageWho::RUSAGE_SELF).expect("process CPU clock");
+    let u = r.user_time();
+    let s = r.system_time();
+    (u.tv_sec() + s.tv_sec()) as f64 + (u.tv_usec() + s.tv_usec()) as f64 / 1e6
+}
+#[cfg(not(unix))]
+fn cpu() -> f64 {
+    panic!("journal-persist CPU measurements require Unix")
+}
+struct BenchWrites {
+    writes: support::Writes,
+    phase: &'static str,
+    wall: std::time::Instant,
+    cpu: f64,
+    phases: serde_json::Map<String, Value>,
+}
+impl BenchWrites {
+    fn new() -> Self {
+        Self {
+            writes: support::Writes::default(),
+            phase: "begin",
+            wall: std::time::Instant::now(),
+            cpu: cpu(),
+            phases: serde_json::Map::new(),
+        }
+    }
+}
+impl storage::WriteObserver for BenchWrites {
+    fn wrote(&mut self, table: &'static str) -> kassiber_store::rusqlite::Result<()> {
+        self.writes.wrote(table)
+    }
+    fn phase(&mut self, phase: &'static str) {
+        let current_cpu = cpu();
+        self.phases.insert(
+            self.phase.into(),
+            json!({"wall":self.wall.elapsed().as_secs_f64(),"cpu":current_cpu-self.cpu}),
+        );
+        self.phase = phase;
+        self.cpu = current_cpu;
+        self.wall = std::time::Instant::now();
+    }
+}
+fn replay_floor(c: &Connection, v: &Value) -> Result<(f64, f64), Box<dyn std::error::Error>> {
     use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql};
     let mut batches = Vec::new();
     for batch in v["floor"].as_array().ok_or("floor batches")? {
@@ -32,6 +78,7 @@ fn replay_floor(c: &Connection, v: &Value) -> Result<f64, Box<dyn std::error::Er
             .collect::<Vec<_>>();
         batches.push((statement, rows));
     }
+    let start_cpu = cpu();
     let start = std::time::Instant::now();
     for (statement, rows) in &mut batches {
         for row in rows {
@@ -39,7 +86,7 @@ fn replay_floor(c: &Connection, v: &Value) -> Result<f64, Box<dyn std::error::Er
         }
     }
     c.execute_batch("RELEASE journals_process;COMMIT")?;
-    Ok(start.elapsed().as_secs_f64())
+    Ok((start.elapsed().as_secs_f64(), cpu() - start_cpu))
 }
 
 fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
@@ -65,11 +112,11 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     let cache = storage::RebuildCache::enter(&c)?;
     c.execute_batch("BEGIN IMMEDIATE;SAVEPOINT journals_process")?;
     if !v["floor"].is_null() {
-        let seconds = replay_floor(&c, v)?;
+        let (seconds, cpu_seconds) = replay_floor(&c, v)?;
         cache.restore()?;
         println!(
             "{}",
-            json!({"ok":true,"name":v["name"],"seconds":seconds,"floor":true})
+            json!({"ok":v["expected"].is_null() || support::logical_equal(&support::snapshot(&c), &v["expected"]),"name":v["name"],"seconds":seconds,"cpu_seconds":cpu_seconds,"floor":true})
         );
         io::stdout().flush()?;
         checkpoint.after_reply()?;
@@ -122,8 +169,9 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
             .map(str::to_owned)
             .ok_or_else(|| kassiber_journals::Refusal::from("UUID tape exhausted".to_owned()))
     };
+    let start_cpu = cpu();
     let start = std::time::Instant::now();
-    let mut writes = support::Writes::default();
+    let mut writes = BenchWrites::new();
     let stored = persistence::store_ledger_state(
         &c,
         &r["profile"],
@@ -132,15 +180,18 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
         &mut identity,
         &mut writes,
     )?;
+    writes.phase("commit");
     c.execute_batch("RELEASE journals_process;COMMIT")?;
+    writes.phase("committed");
     let seconds = start.elapsed().as_secs_f64();
+    let cpu_seconds = cpu() - start_cpu;
     cache.restore()?;
     let verified = if v["expected"].is_null() {
         true
     } else {
         support::logical_equal(&support::snapshot(&c), &v["expected"])
     };
-    let reply = json!({"ok":verified,"name":v["name"],"seconds":seconds,"writes":writes.count,"tables":writes.tables,"stored":stored});
+    let reply = json!({"ok":verified,"name":v["name"],"seconds":seconds,"cpu_seconds":cpu_seconds,"phases":writes.phases,"writes":writes.writes.count,"tables":writes.writes.tables,"stored":stored});
     let reply = if verified {
         reply
     } else {

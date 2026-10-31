@@ -434,7 +434,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;
   the native checkpoint preserves reference behavior pending that correction.
 - [ ] Finish the [R4-12 persistence checkpoint](docs/reference/r4-journal-persistence-checkpoint.md):
-  close the write-floor budget, exhaustive persistence mutations and inherited
+  close the CPU write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):

@@ -58,6 +58,17 @@ def vectors():
         c=deepcopy(calculation);del c[key];calculations.append(c)
     for key in calculation['fragments'][0]:
         c=deepcopy(calculation);del c['fragments'][0][key];calculations.append(c)
+    for path in ([], ['fragments', 0], ['fragments', 0, 'event'], ['fragments', 0, 'event', 'pricing']):
+        c=deepcopy(calculation);item=c
+        for key in path: item=item[key]
+        item['future_key']='must retain legacy';calculations.append(c)
+    for path in (['fragments', 0, 'event'], ['fragments', 0, 'event', 'pricing']):
+        item=calculation
+        for key in path: item=item[key]
+        for missing in item:
+            c=deepcopy(calculation);item=c
+            for key in path: item=item[key]
+            del item[missing];calculations.append(c)
     nullable=deepcopy(calculation)
     nullable['fragments'][0]['acquisition_quantity_msat']=None
     nullable['fragments'][0]['acquisition_quantity_msat_exact']=None
