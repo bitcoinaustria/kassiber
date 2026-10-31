@@ -418,6 +418,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   Evidence inherited from t3code/r4-9-loader-determinism@aaf6216e3; pending fresh r9 verification.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
+- [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
+  port source-overlap repair/warnings and drifted legacy-pair component refresh,
+  expose the ordered combined stage, and complete generated/recorded book and
+  legacy/refusal coverage, whole-pipeline rollback, mutation and CPU acceptance.
+  Cached pricing has an unregistered native interface and complete-dump oracle;
+  it does not establish repair parity or authorize R4-13 to skip either repair.
 - [ ] Finish the [R4-12 persistence checkpoint](docs/reference/r4-journal-persistence-checkpoint.md):
   close the write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,

@@ -1,0 +1,194 @@
+{
+  "boundary": "auto-pricing only; repair stages remain unported",
+  "benchmark_run": {
+    "full_dump_comparisons": 104,
+    "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
+    "timings": [
+      {
+        "driver": "SQLite",
+        "transactions": 20000,
+        "activity": "priced",
+        "python_cpu_seconds": [
+          0.0067720320000006495,
+          0.010359279999999416,
+          0.009731158999997547,
+          0.008677010999999624,
+          0.011108039000003345
+        ],
+        "native_cpu_seconds": [
+          0.008096999999999993,
+          0.009780999999999998,
+          0.007571000000000008,
+          0.007923,
+          0.008306999999999995
+        ],
+        "python_median": 0.009731158999997547,
+        "native_median": 0.008096999999999993
+      },
+      {
+        "driver": "SQLite",
+        "transactions": 20000,
+        "activity": "missing-cache",
+        "python_cpu_seconds": [
+          2.0530250189999997,
+          2.107061281,
+          2.0735167899999993,
+          2.1001365289999967,
+          2.1209676159999944
+        ],
+        "native_cpu_seconds": [
+          0.10450699999999999,
+          0.06963700000000002,
+          0.07697899999999999,
+          0.08260200000000001,
+          0.07273400000000001
+        ],
+        "python_median": 2.1001365289999967,
+        "native_median": 0.07697899999999999
+      },
+      {
+        "driver": "SQLite",
+        "transactions": 20000,
+        "activity": "cache-fill",
+        "python_cpu_seconds": [
+          3.160830105999999,
+          3.2900710529999984,
+          3.0954710639999945,
+          3.1160074100000017,
+          3.245514460999999
+        ],
+        "native_cpu_seconds": [
+          0.49046599999999996,
+          0.48587299999999994,
+          0.547096,
+          0.455434,
+          0.669817
+        ],
+        "python_median": 3.160830105999999,
+        "native_median": 0.49046599999999996
+      },
+      {
+        "driver": "SQLCipher",
+        "transactions": 20000,
+        "activity": "priced",
+        "python_cpu_seconds": [
+          0.01949516899999537,
+          0.028808420000004276,
+          0.02163939700000128,
+          0.02270532600000763,
+          0.020011358000004975
+        ],
+        "native_cpu_seconds": [
+          0.021772000000000014,
+          0.020413999999999988,
+          0.01897399999999999,
+          0.02226699999999998,
+          0.022042000000000006
+        ],
+        "python_median": 0.02163939700000128,
+        "native_median": 0.021772000000000014
+      },
+      {
+        "driver": "SQLCipher",
+        "transactions": 20000,
+        "activity": "missing-cache",
+        "python_cpu_seconds": [
+          2.346644752000003,
+          2.599383223000004,
+          2.3683444730000076,
+          2.254618515000004,
+          2.512638429000006
+        ],
+        "native_cpu_seconds": [
+          0.11312899999999998,
+          0.09035599999999999,
+          0.098854,
+          0.10532999999999998,
+          0.10713100000000003
+        ],
+        "python_median": 2.3683444730000076,
+        "native_median": 0.10532999999999998
+      },
+      {
+        "driver": "SQLCipher",
+        "transactions": 20000,
+        "activity": "cache-fill",
+        "python_cpu_seconds": [
+          3.7722959040000035,
+          4.103576543999992,
+          3.549381787999991,
+          3.609193159,
+          3.452585275000004
+        ],
+        "native_cpu_seconds": [
+          0.7098019999999999,
+          0.621775,
+          0.5920289999999999,
+          0.698037,
+          0.615302
+        ],
+        "python_median": 3.609193159,
+        "native_median": 0.621775
+      }
+    ],
+    "fixture_note": "Initial 52-fixture run; final replay adds the live-enabled cache-miss fixture. Timed work is pricing only."
+  },
+  "final_replay": {
+    "boundary": "auto-pricing only; repair stages remain unported",
+    "full_dump_comparisons": 106,
+    "network": "native process killed on socket/connect/send syscalls; guard self-test passed"
+  },
+  "mutation_campaign": {
+    "catalog": "crates/journals/scripts/prebuild_mutations.json",
+    "runner": "crates/journals/scripts/mutation_check.py",
+    "baseline_tests_passed": 7,
+    "entries": 15,
+    "killed": {
+      "JP-writer": [
+        "prebuild_pricing_requires_caller_write_transaction"
+      ],
+      "JP-profile": [
+        "prebuild_pricing_scopes_and_skips"
+      ],
+      "JP-excluded": [
+        "prebuild_pricing_scopes_and_skips"
+      ],
+      "JP-exact-missing": [
+        "prebuild_pricing_full_python_dumps_and_refusals"
+      ],
+      "JP-provenance": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-confirmation": [
+        "prebuild_pricing_timestamp_selection"
+      ],
+      "JP-time-bound": [
+        "prebuild_pricing_timestamp_selection"
+      ],
+      "JP-manual-tie": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-rate-precedence": [
+        "prebuild_pricing_precedence_and_precision"
+      ],
+      "JP-exact-value": [
+        "prebuild_pricing_precedence_and_precision"
+      ],
+      "JP-msat": [
+        "prebuild_pricing_precedence_and_precision"
+      ],
+      "JP-provider-quality": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-count": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-external-ref": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-rollback": [
+        "prebuild_pricing_refusal_rolls_back_earlier_writes"
+      ]
+    }
+  }
+}

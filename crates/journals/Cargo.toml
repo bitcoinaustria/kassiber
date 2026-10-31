@@ -1,6 +1,6 @@
 [package]
 name = "kassiber-journals"
-description = "Pure journal rendering and joins over finalized custody and ledger results"
+description = "Journal preparation, rendering, joins and caller-owned persistence"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -17,10 +17,8 @@ kassiber-pytext = { path = "../pytext" }
 kassiber-tax-core = { path = "../../tax-engine/core" }
 # Reuse the book's SQLCipher driver and existing Python-compatible timestamp
 # parser; neither the standard library nor the renderer supplies these.
-kassiber-store = { path = "../store" }
 kassiber-rates = { path = "../rates" }
 kassiber-reports = { path = "../reports" }
-kassiber-wallets = { path = "../wallets" }
 # UUIDv5 resolution identities need SHA-1; reuse the locked Bitcoin hash crate.
 bitcoin_hashes = "0.14"
 serde = { version = "1", features = ["derive"] }
@@ -40,6 +38,10 @@ test-harness = []
 
 [[example]]
 name = "custody-load"
+required-features = ["test-harness"]
+
+[[example]]
+name = "journal-prebuild"
 required-features = ["test-harness"]
 
 [[example]]

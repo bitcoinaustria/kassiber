@@ -1,0 +1,152 @@
+[
+  {
+    "id": "JP-writer",
+    "file": "crates/journals/src/prebuild.rs",
+    "find": "conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write",
+    "replace": "conn.transaction_state(Some(\"main\"))? == rusqlite::TransactionState::Write",
+    "expect_failing": [
+      "prebuild_pricing_requires_caller_write_transaction"
+    ],
+    "rule": "Require the caller's reserved writer transaction before pricing reads."
+  },
+  {
+    "id": "JP-profile",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "WHERE profile_id=? AND excluded=0",
+    "replace": "WHERE profile_id IS NOT NULL AND excluded=0 AND ? IS NOT NULL",
+    "expect_failing": [
+      "prebuild_pricing_scopes_and_skips"
+    ],
+    "rule": "Keep pricing within the resolved profile."
+  },
+  {
+    "id": "JP-excluded",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "AND excluded=0 AND (",
+    "replace": "AND excluded IN (0,1) AND (",
+    "expect_failing": [
+      "prebuild_pricing_scopes_and_skips"
+    ],
+    "rule": "Excluded observations must not be auto-priced."
+  },
+  {
+    "id": "JP-exact-missing",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "AND (fiat_value_exact IS NULL OR CAST(fiat_value_exact AS REAL)<=0)",
+    "replace": "AND (fiat_value_exact IS NULL OR CAST(fiat_value_exact AS REAL)>=0)",
+    "expect_failing": [
+      "prebuild_pricing_full_python_dumps_and_refusals"
+    ],
+    "rule": "A usable exact fiat value prevents repricing imported evidence."
+  },
+  {
+    "id": "JP-provenance",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "pricing_source_kind IS NULL AND pricing_quality IS NULL",
+    "replace": "pricing_source_kind IS NOT NULL AND pricing_quality IS NULL",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Only unannotated legacy rates-cache prices receive provenance enrichment."
+  },
+  {
+    "id": "JP-confirmation",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": ".unwrap_or(&row.occurred_at);",
+    "replace": ".unwrap_or(&row.occurred_at);\n        let pricing_at = &row.occurred_at;",
+    "expect_failing": [
+      "prebuild_pricing_timestamp_selection"
+    ],
+    "rule": "Prefer confirmation time over observation time."
+  },
+  {
+    "id": "JP-time-bound",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "kassiber_timestamp_us(timestamp)<=kassiber_timestamp_us(?)",
+    "replace": "timestamp<=?",
+    "expect_failing": [
+      "prebuild_pricing_timestamp_selection"
+    ],
+    "rule": "Compare parsed rate instants including fractions and offsets."
+  },
+  {
+    "id": "JP-manual-tie",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "CASE WHEN source='manual' THEN 0 ELSE 1 END ASC",
+    "replace": "CASE WHEN source='manual' THEN 1 ELSE 0 END ASC",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Manual rates win equal-timestamp cache ties."
+  },
+  {
+    "id": "JP-rate-precedence",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "first(&[&row.rate_exact, &cached.rate_exact, &row.rate, &cached.rate])?",
+    "replace": "first(&[&cached.rate_exact, &row.rate_exact, &row.rate, &cached.rate])?",
+    "expect_failing": [
+      "prebuild_pricing_precedence_and_precision"
+    ],
+    "rule": "A stored exact transaction rate outranks the cached rate."
+  },
+  {
+    "id": "JP-exact-value",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "let mut value = first(&[&row.value_exact])?;",
+    "replace": "let mut value = None;",
+    "expect_failing": [
+      "prebuild_pricing_precedence_and_precision"
+    ],
+    "rule": "Keep a stored exact value before calculating a fallback."
+  },
+  {
+    "id": "JP-msat",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Decimal::from(100_000_000_000i64)",
+    "replace": "Decimal::from(100_000_000i64)",
+    "expect_failing": [
+      "prebuild_pricing_precedence_and_precision"
+    ],
+    "rule": "Convert integer msat to BTC with the existing decimal context."
+  },
+  {
+    "id": "JP-provider-quality",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "\"daily\", \"coarse\", \"monthly\", \"yearly\"",
+    "replace": "\"none\", \"coarse\", \"monthly\", \"yearly\"",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Retain coarse pricing quality without adding a strict-review decision."
+  },
+  {
+    "id": "JP-count",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "if missing {",
+    "replace": "if !missing {",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Count only rows whose four legacy/exact pricing columns were all NULL."
+  },
+  {
+    "id": "JP-external-ref",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Option::<String>::None,",
+    "replace": "Some(\"incorrect\"),",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Clear an old external pricing reference as the Python cache payload does."
+  },
+  {
+    "id": "JP-rollback",
+    "file": "crates/journals/src/prebuild.rs",
+    "find": "ROLLBACK TO r4_journal_pricing; RELEASE r4_journal_pricing",
+    "replace": "RELEASE r4_journal_pricing",
+    "expect_failing": [
+      "prebuild_pricing_refusal_rolls_back_earlier_writes"
+    ],
+    "rule": "Roll back earlier pricing writes after a later refusal."
+  }
+]

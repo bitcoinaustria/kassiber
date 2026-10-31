@@ -363,7 +363,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)](r4-native-loader-checkpoint.md#loader-9-acceptance); all 308 loader and 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; inherited non-BLOB audit has 16,384 matches, zero writes/unsafe admissions; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
-| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity | Python 0.03 | ≤ 0.03 s |
+| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Auto-pricing checkpoint](#r4-10-auto-pricing-checkpoint); both repair stages and campaign acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
@@ -379,6 +379,115 @@ therefore retains both boundaries, introduces no such conversions, and
 accepts optimizations by process CPU time across five alternating pairs.
 See the checkpoint for its bounded touched-file mutation rerun and the
 remaining whole-pipeline budget.
+
+### R4-10 auto-pricing checkpoint
+
+This is a partial, unregistered library checkpoint. It ports only
+`cli.handlers.auto_price_transactions_from_rates_cache`. **R4-10 is not
+complete, and this function is not a replacement for the pre-build pipeline.**
+Python's ordered pre-build contract is:
+
+1. `_repair_journal_source_overlaps`, followed by
+   `_journal_source_overlap_warning`. Duplicate exclusions use audited
+   metadata edits; unresolved or conflicting reviews prevent address-list
+   trimming. Trimming updates wallet configuration, clears the matching UTXO
+   inventory and resets its on-chain freshness checkpoint.
+2. `refresh_drifted_legacy_pair_components`. Only active migration-authored
+   `legacy_review_migration` components whose sole issue is an evidence
+   commitment mismatch, with valid anchors, qualify. Connected pair groups
+   migrate atomically; migration issues and component revisions remain part
+   of the result. Re-resolve the profile when this stage changes it.
+3. `auto_price_transactions_from_rates_cache`, then the snapshot/build.
+
+The native pricing interface is
+`kassiber_journals::prebuild::auto_price_transactions_from_rates_cache(
+&Connection, &PricingScope) -> Result<usize, Refusal>`. `PricingScope` supplies
+the refreshed profile id, its fiat currency and the explicit decimal context.
+The Python journal runtime uses precision 32 and half-even rounding; pass
+`Context::new(32, Rounding::HalfEven)`. The count includes only rows whose
+four numeric/exact price columns were all SQL NULL before pricing; legacy
+provenance enrichment and replacement of zero/negative prices do not count.
+
+The caller must already own a write transaction (`BEGIN IMMEDIATE`) and the
+whole-pipeline savepoint. Pricing refuses transactions without a writer
+reservation, uses an inner savepoint, restores its writes on refusal or
+unwinding, retains earlier caller writes and never commits. A later build or
+persistence refusal must still roll back the caller's entire pipeline savepoint, including repairs
+and successful pricing. The function does not validate tax policy, acquire a
+book, repair sources or components, or refresh a profile on the caller's behalf.
+
+Rate selection reads only `rates_cache`, including uncommitted caller rows.
+It parses timestamp bounds at microsecond precision, preserves Python's
+timestamp/source/fetched-at ordering, and prefers `confirmed_at` when present.
+Stored exact transaction prices retain Python's precedence. The same legacy
+and exact values and all provenance columns are written, including clearing
+`pricing_external_ref`; profile freshness and metadata history are left to the
+same Python triggers/caller contracts. A connection-local deterministic
+`kassiber_timestamp_us` SQL function is registered only if pricing candidates
+exist and the function is absent. No provider, client, consent token,
+filesystem location, clock or entropy source enters the interface.
+
+`tests/rust_port/journal_prebuild_oracle.py` records complete logical dumps,
+including rowids, SQL storage classes, exact text, REAL bits, and refusal
+causes. The checked-in representation shares identical tables and columns;
+tests reconstruct the complete expected dump before comparing every table.
+`scripts/check-journal-prebuild.py` repeats comparisons on real plaintext and
+SQLCipher files. Its native subprocess runs under a Linux x86-64 syscall
+filter that kills socket creation, connect and send calls, including loopback;
+a socket-construction self-test verifies the filter. The Python oracle also
+forbids DNS and socket connection calls.
+
+The final replay passes **106 comparisons** (53 pricing fixtures on each
+driver), including a cache miss with market-rate refresh enabled. The bounded
+pricing catalog in `crates/journals/scripts/prebuild_mutations.json` has
+**15 entries**, all killed by their declared named tests after the seven-test
+baseline passed. These results do not cover the unported repairs.
+
+Checkpoint checks pass: 18 journal library tests and six pricing integration
+tests, the reproducible Python oracle, Rust formatting and clippy with warnings
+denied, the required classifier update and all 57 Python preflight checks.
+
+Python currently skips `L-BTC`, although the tax reference promises that alias;
+only `LBTC` maps to BTC in the reference implementation. This checkpoint
+preserves that behavior. Run
+`uv run --locked python -m tests.rust_port.repro_journal_lbtc_price_alias`
+for a disposable in-memory repro. Python is unchanged.
+
+The pricing-only benchmark uses disposable 20,000-transaction books and five
+Python/native pairs. CPU spans include the pricing query, cache lookup and
+writes, including the native inner savepoint. They exclude book opening,
+writer acquisition, fixture construction, dump verification and final rollback;
+neither runtime commits the timed work. The three activities are an already
+priced book, all prices missing with an empty cache, and all prices missing with
+one stored rate. These are controlled pricing fixtures, not the complete
+generator books or an end-to-end journal measurement.
+
+| Driver / activity | Python median CPU (s) | Native median CPU (s) |
+| --- | ---: | ---: |
+| SQLite, priced | 0.009731 | 0.008097 |
+| SQLite, missing cache | 2.100137 | 0.076979 |
+| SQLite, cache fill | 3.160830 | 0.490466 |
+| SQLCipher, priced | 0.021639 | 0.021772 |
+| SQLCipher, missing cache | 2.368344 | 0.105330 |
+| SQLCipher, cache fill | 3.609193 | 0.621775 |
+
+The ≤0.03 s ceiling is met for the already-priced pricing stage on both drivers;
+both missing-price activities exceed it. The repair stages are unmeasured.
+[Raw CPU samples and driver replay evidence](r4-prebuild-pricing-results.json)
+retain all five measurements. Reproduce with a release `journal-prebuild`
+example (`--features test-harness`) and
+`uv run --locked python scripts/check-journal-prebuild.py --binary
+<absolute-example-path> --benchmark --out <target/results.json>`.
+
+Remaining R4-10 acceptance work: port both repair stages and their warning and
+result projections; expose the combined ordered pre-build stage for R4-13;
+prove whole-pipeline rollback after subsequent build/persistence refusals;
+compare the twelve generators with per-scenario activity, recorded books and
+fresh recordings on both drivers; expand the legacy/refusal corpus beyond
+these bounded decimal and timestamp fixtures; complete the inherited census,
+shadow, frozen-vector and whole-catalog mutation gates. The pricing-only
+fixtures and bounded mutation catalog do not establish those broader gates or
+the complete pre-build CPU target. No production route calls this checkpoint.
 
 ## Performance budget
 

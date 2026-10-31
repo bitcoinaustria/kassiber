@@ -80,6 +80,9 @@ pub(super) fn load<'a>(
     let mut groups =
         std::collections::BTreeMap::<_, (BTreeSet<String>, Vec<serde_json::Value>)>::new();
     for row in rows {
+        let row = row
+            .as_object()
+            .ok_or_else(|| Error::Invalid("transaction row".into()))?;
         if !may_have_txid(row) {
             continue;
         }

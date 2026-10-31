@@ -7,6 +7,7 @@ pub mod boundary;
 pub mod loader;
 mod model;
 pub mod persistence;
+pub mod prebuild;
 mod render;
 pub mod storage;
 pub use model::*;
