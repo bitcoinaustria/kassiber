@@ -453,6 +453,18 @@ registers them; exit-tax preserves its reference no-registration boundary.
   shared observation index, public-observer analytics, parser, categorical
   features and inventory overlays before registering CLI/daemon reads. Preserve
   process-bound redaction, conditional hypotheses and watch-only analysis.
+- [x] Port stored source-funds source/link/case/recipient listings and paginated
+  desktop evidence listing, preserving full editor metadata, frozen case
+  recipient fields and unchanged accounting state. This is a partial boundary;
+  see the [stored-list checkpoint](docs/reference/rust-shell.md#source-funds-stored-list-checkpoint-r5-partial).
+- [ ] Match Python's source-funds internal-error traceback/debug diagnostics;
+  current service refusal codes/messages agree, but full process wire acceptance
+  remains blocked on this Rust shell gap.
+- [ ] Finish source-funds report traversal/disclosure, review-context/request-input,
+  coverage and suggest/assemble dry runs, then case saving, source mutations,
+  link mutations/batch review (including persisted suggest/assemble) and recipient
+  mutations in separate verified commits. Preserve consent, once-only execution
+  and SQLite/SQLCipher rollback.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

@@ -19,6 +19,10 @@ fn main() {
         let request: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
         let result = {
             let conn = Connection::open(Path::new(request["database"].as_str().unwrap())).unwrap();
+            if let Some(passphrase) = request["passphrase"].as_str() {
+                conn.pragma_update(None, "key", passphrase).unwrap();
+                conn.execute_batch("PRAGMA cipher_log_level=NONE;PRAGMA cipher_compatibility=4;PRAGMA kdf_iter=256000;PRAGMA cipher_page_size=4096;").unwrap();
+            }
             let args = kassiber_pytext::loads(request["args_json"].as_str().unwrap()).unwrap();
             let command = request["command"]
                 .as_str()
@@ -31,7 +35,9 @@ fn main() {
                     | "reports.explain-capital-gain"
                     | "ui.reports.explain_capital_gain"
                     | "ui.reports.capital_gains"
-            ) {
+            ) || command.starts_with("source-funds.")
+                || command.starts_with("ui.source_funds.")
+            {
                 if command == "reports.cross-check" {
                     kassiber_reports::export_request::execute(
                         &conn,

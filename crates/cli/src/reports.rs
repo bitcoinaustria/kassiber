@@ -28,6 +28,10 @@ pub const COMMANDS: &[&str] = &[
     "reports.cross-check",
     "reports.export-year-handoff",
     "reports.privacy-hygiene",
+    "source-funds.sources.list",
+    "source-funds.links.list",
+    "source-funds.cases.list",
+    "source-funds.recipients.list",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -37,6 +41,9 @@ pub fn kind(command: &str) -> Option<&'static str> {
     }
 }
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if command.starts_with("source-funds.") {
+        return book.reports(command, &source_funds_request(args));
+    }
     if command == "reports.cross-check" {
         return book.reports(command, &cross_check_request(args));
     }
@@ -57,6 +64,13 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &snapshot_request(args));
     }
     book.reports(command, &request(args))
+}
+
+fn source_funds_request(args: &Namespace) -> Value {
+    dict(
+        ["workspace", "profile", "target_transaction", "state"]
+            .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+    )
 }
 
 fn cross_check_request(args: &Namespace) -> Value {
@@ -170,6 +184,94 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    struct SourceFundsCapture;
+    impl Book for SourceFundsCapture {
+        fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+            Ok(dict([
+                ("command", kassiber_envelope::s(command)),
+                ("args", args.clone()),
+            ]))
+        }
+        fn is_initialized(&self) -> Result<bool, AppError> {
+            unreachable!()
+        }
+        fn context(&self) -> Result<kassiber_runtime::store::BookContext, AppError> {
+            unreachable!()
+        }
+        fn status_facts(&self) -> Result<kassiber_runtime::store::StatusFacts, AppError> {
+            unreachable!()
+        }
+        fn resolve_scope(
+            &self,
+            _: Option<&Value>,
+            _: Option<&Value>,
+        ) -> Result<(String, String), AppError> {
+            unreachable!()
+        }
+        fn rollback(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+        fn close(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+    }
+    #[test]
+    fn source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists() {
+        let argv = [
+            "source-funds",
+            "links",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--target-transaction",
+            "external-in",
+            "--state",
+            "reviewed",
+        ]
+        .map(String::from);
+        let args = crate::argparse::parse_args(
+            &argv,
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        let payload = source_funds_request(&args);
+        for key in ["workspace", "profile", "target_transaction", "state"] {
+            assert_eq!(get(&payload, key), args.get(key));
+        }
+        for command in [
+            "source-funds.sources.list",
+            "source-funds.links.list",
+            "source-funds.cases.list",
+            "source-funds.recipients.list",
+        ] {
+            assert!(COMMANDS.contains(&command));
+            assert!(crate::describe::IMPLEMENTED.contains(&command));
+            let actual = execute(&mut SourceFundsCapture, command, &args).unwrap();
+            assert_eq!(
+                get(&actual, "command"),
+                Some(&kassiber_envelope::s(command))
+            );
+            assert_eq!(get(&actual, "args"), Some(&payload));
+        }
+        for command in [
+            "reports.source-funds",
+            "reports.export-source-funds-pdf",
+            "reports.export-source-funds-bundle",
+            "source-funds.suggest",
+            "source-funds.assemble",
+            "source-funds.sources.create",
+            "source-funds.links.create",
+            "source-funds.recipients.create",
+        ] {
+            assert!(!COMMANDS.contains(&command));
+            assert!(!crate::describe::IMPLEMENTED.contains(&command));
+        }
+    }
     #[test]
     fn cross_check_cli_forwards_filters_files_and_native_registration() {
         let args = crate::argparse::parse_args(

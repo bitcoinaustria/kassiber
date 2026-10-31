@@ -129,3 +129,13 @@ report's canonical `simplified_flow` nodes and explicit edges; adjacent levels
 never imply a connection. CoinJoin/PayJoin boundaries remain marked boundaries.
 The printable SVG/PDF stays server-rendered from that same frozen report, so
 interactive selection and zoom cannot alter disclosure or evidence authority.
+
+The partial Rust R5 port serves the stored source, link, case and recipient
+listings through the CLI and daemon, plus the daemon's paginated evidence
+listing. These editor reads retain full attachment metadata without opening
+evidence files. Case listings use their frozen recipient fields and do not
+load or validate the saved report payload. They do not rebuild journals or
+establish provenance, ownership or tax facts. Report traversal, review/input
+handoffs, coverage, suggest/assemble dry runs and all source-funds mutations
+remain pending in Rust. PDF rendering and PDF-containing bundles remain in
+Python by the owner's decision; their routes are not registered natively.

@@ -191,6 +191,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.cross-check",
     "reports.export-year-handoff",
     "reports.privacy-hygiene",
+    "source-funds.sources.list",
+    "source-funds.links.list",
+    "source-funds.cases.list",
+    "source-funds.recipients.list",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

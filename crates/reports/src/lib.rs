@@ -35,6 +35,7 @@ mod privacy_hygiene;
 pub mod lightning;
 mod snapshot_write;
 mod snapshots;
+mod source_funds_reads;
 mod sql;
 mod standalone_csv;
 mod summary;
@@ -127,6 +128,9 @@ pub fn execute_with_sources(
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if source_funds_reads::handles(command) {
+            return source_funds_reads::execute(conn, command, args);
+        }
         if matches!(
             command,
             "reports.balance-history" | "ui.reports.balance_history"

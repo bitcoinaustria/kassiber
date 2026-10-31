@@ -5752,6 +5752,144 @@ stay Python. No Python product, tax-rule, schema, dependency or lockfile changes
 are included. Verification is Linux-only; the full Python/frontend quality gate,
 Docker regtest and packaged/platform checks are not claimed here.
 
+## Source-funds stored-list checkpoint (R5 partial)
+
+`t3code/r5-reports-sof` starts at `9338364db`. Native
+`source-funds sources list`, `links list`, `cases list` and `recipients list`
+delegate to the same stored-provenance service as their five desktop kinds
+(the four listings plus `ui.source_funds.evidence.list`). Entries are appended
+to the existing registries and mutation catalog for parallel integration.
+
+The service holds one SQLite snapshot and performs no acquisition, journal
+refresh, evidence-file reads, ownership inference or tax interpretation.
+Source and target denominations and msat fields remain distinct. Editor
+attachment lists retain their full local metadata and authored association
+order. Evidence pagination retains its separate raw-label projection, joined
+transaction boundary and cursor/limit behavior. Recipient listings retain
+SQLite ordering and explicit inclusion of retired rows. Cases use frozen
+recipient and external-id fields, without loading their report snapshots.
+Stale journals and blocked acquisition sources do not add accounting gates to
+these provenance editor reads. No new egress, dependency, lockfile, schema,
+tax-rule or Python product changes are included.
+
+The native inventory is 157 CLI leaves, including the existing 21 report
+commands and four source-funds listings. The daemon adds five source-funds
+listing kinds alongside the existing 15 report and two transaction export
+kinds. Generic CLI `--output` publication remains shared with the shell.
+There are no XLSX artifacts in this boundary, so openpyxl comparison is not
+applicable. Source-funds PDF rendering and PDF-containing bundles remain
+Python by owner decision; their CLI and daemon routes stay unregistered.
+
+The unchanged reference quirks have synthetic reproductions:
+
+- Nondecimal Unicode digits such as `²` pass `str.isdigit()` cursor validation,
+  then raise an internal integer-conversion error. Excessively long numeric
+  cursors also retain their internal conversion refusal.
+- A fractional value stored in an INTEGER-affinity quantity column retains
+  that fractional raw field while Python truncates the BTC display projection
+  through `int()`, including positive zero for a value between -1 and 0.
+  The native read reproduces this behavior; it does not grant
+  a new write path for ambiguous amounts.
+- Case listing does not validate snapshot JSON or its hash. A listing can
+  expose the saved metadata even when loading the snapshot would fail.
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_reads
+```
+
+**Unaccepted diagnostic gap:** Python's uncaught internal exceptions emit a
+traceback on stderr and a redacted traceback in `error.debug`. The Rust shell
+currently returns the same error code/message without that Python traceback.
+The initial process campaign exposed this gap in all four daemon scenarios;
+those failures are retained in the local verification log. Internal refusals
+are compared as structured service outcomes in the 227-case frozen corpus,
+while the process acceptance scenarios cover normal results and typed
+`AppError` refusals with literal bytes. No trace/debug normalization is used.
+Two strict-xfail process witnesses retain the nondecimal and oversized cursor
+reproductions in `test_source_funds_stored_internal_error_wire_parity`; they do
+not count as acceptance. Full source-funds wire acceptance remains blocked on
+this diagnostic gap.
+
+The final process suite passes 236 tests, with those two diagnostic witnesses
+expected to fail. Their marker is limited to the final wire mismatch; setup,
+table and routing failures remain ordinary failures.
+
+| Compared boundary | Evidence |
+| --- | --- |
+| Native service | All 227 frozen cases; canonical structured outcome bytes and all 112 tables per case |
+| SQLCipher service | Ten listing/refusal calls on an encrypted book; outcome bytes and all 112 tables |
+| CLI | Four ready/stale/source-blocked/no-context scenarios, 37 calls each; literal stdout/stderr/status, 16 output files and every table after each call |
+| Daemon | Four corresponding sessions, 53 source-funds requests each; literal response lines and every table after each session |
+
+The passing process scenarios record 148 native CLI calls and 212 source-funds
+daemon requests with zero stored-list fallback. The diagnostic witnesses add
+two native sessions; they are excluded from acceptance counts. Raw routing
+records, per-command counts and output-file hashes are retained under
+`target/r5-sof/routing-final/` and `routing-summary.json`. The initial failed
+campaign is summarized separately and never contributes passing evidence.
+
+All 755 catalog entries apply. All 24 new `sof-list-*` mutations are killed by
+these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination` | 19 |
+| `source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists` | 3 |
+| `source_funds_stored_daemon_preserves_arguments_and_registers_only_lists` | 2 |
+
+The initial 23-entry campaign and the added negative-zero witness pass their
+unmutated baselines and kill every entry without build errors or absent test
+selections. The 731 inherited entries retain their earlier evidence and are not
+rerun. Mutation builds use an isolated copy and build directory, which is
+removed after summarizing; the real probes are rebuilt from the worktree after
+the last mutation. Per-entry evidence is in
+`target/r5-sof/mutation-summary.json`.
+
+Rust 1.99.1 offline/locked verification passes formatting, production and
+harness workspace/all-target clippy with `-D warnings`, 1,526 workspace tests
+and 14 guarded binary tests. The initial workspace run caught an unreviewed
+`Ipv4Addr` spelling in the pure URL-literal parser; the correction uses the
+already permitted `IpAddr` literal parser, without changing the network guard.
+The full workspace rerun passes. After adding the final fractional negative-zero
+case, both clippy configurations and all three affected named tests pass again
+against the 227-case corpus. The generator checks cleanly and the unchanged
+Python reference repro passes all 11 assertions.
+
+The locked Python 3.11.17 regression passes 280 tests and 25 subtests,
+including the original source-funds workflows, capability/catalog contracts
+and AI disclosure references. Its 20 stored-list CLI calls are native with
+zero fallback. Its 235 unported source-funds/report calls remain Python and
+are excluded from acceptance; `regression-routing-summary.json` records the
+per-command counts. After restricting the expected-failure marker to wire
+mismatches, both diagnostic witnesses pass their setup, all-table and native
+routing guards again and retain only the two expected wire failures.
+
+The required classifier update records 5,714 definitions, with all five new
+definitions reviewed as retained report oracles. The module is in the serial
+daemon CI lane. Required CI preflight passes all 57 tests.
+`target/r5-sof/verification-summary.json` retains the gates, routing, mutation
+evidence, corpus counts, reference repro and explicit unaccepted diagnostic gap.
+Verification preserves account `HOME`, uses `CARGO_BUILD_JOBS=8`, disables
+incremental/debug build output and isolates scratch, books, preferences and
+owner roots under `target/`. Both Cargo output directories are overridden to
+the worktree; its inactive default shared intermediate tree was identified by
+Cargo metadata and removed. Owned mutation and verification build/data trees
+are removed after summarizing; logs, raw routing records and summaries remain.
+Verification is Linux-only. The full Python/frontend quality gate, Docker
+regtest and packaged/platform checks are not claimed.
+
+This checkpoint does not complete the first requested read family. The ordered
+remainder is report traversal/disclosure and optional diagrams, review-context
+and request-input handoffs, coverage, and suggest/assemble dry runs. Case saving
+comes next, followed by source, link/batch-review (including persisted
+suggest/assemble) and recipient mutations in separate verified commits.
+Mutation families still need exact consent and once-only behavior and
+SQLite/SQLCipher rollback verification. All these
+unported routes remain Python in the hybrid candidate; their fallback is not
+counted as acceptance. The Lightning and year-handoff/platform/privacy branches
+retain their separate ownership.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

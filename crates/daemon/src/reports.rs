@@ -23,8 +23,16 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_year_handoff",
     "ui.transactions.export_platform_csv",
     "ui.reports.privacy_hygiene",
+    "ui.source_funds.sources.list",
+    "ui.source_funds.links.list",
+    "ui.source_funds.cases.list",
+    "ui.source_funds.recipients.list",
+    "ui.source_funds.evidence.list",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if kind.starts_with("ui.source_funds.") {
+        return book.reports(kind, &cross_check_args(raw)?);
+    }
     if kind == "ui.reports.privacy_hygiene" {
         return book.reports(kind, &privacy_args(raw)?);
     }
@@ -324,6 +332,81 @@ fn tax_summary_args(args: &Value) -> Result<Value, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    struct SourceFundsCapture;
+    impl Book for SourceFundsCapture {
+        fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+            Ok(dict([("command", s(command)), ("args", args.clone())]))
+        }
+        fn is_initialized(&self) -> Result<bool, AppError> {
+            unreachable!()
+        }
+        fn context(&self) -> Result<kassiber_runtime::store::BookContext, AppError> {
+            unreachable!()
+        }
+        fn status_facts(&self) -> Result<kassiber_runtime::store::StatusFacts, AppError> {
+            unreachable!()
+        }
+        fn resolve_scope(
+            &self,
+            _: Option<&Value>,
+            _: Option<&Value>,
+        ) -> Result<(String, String), AppError> {
+            unreachable!()
+        }
+        fn rollback(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+        fn close(&mut self) -> Result<(), AppError> {
+            unreachable!()
+        }
+    }
+    #[test]
+    fn source_funds_stored_daemon_preserves_arguments_and_registers_only_lists() {
+        let args = dict([
+            ("target_transaction", s(" external-in ")),
+            ("state", s(" accepted ")),
+            ("include_inactive", Value::Bool(true)),
+            ("cursor", s("1")),
+            ("limit", Value::Int(2.into())),
+        ]);
+        for kind in [
+            "ui.source_funds.sources.list",
+            "ui.source_funds.links.list",
+            "ui.source_funds.cases.list",
+            "ui.source_funds.recipients.list",
+            "ui.source_funds.evidence.list",
+        ] {
+            assert!(KINDS.contains(&kind));
+            assert_eq!(cross_check_args(Some(&args)).unwrap(), args);
+            let actual = execute(&mut SourceFundsCapture, kind, Some(&args)).unwrap();
+            assert_eq!(get(&actual, "command"), Some(&s(kind)));
+            assert_eq!(get(&actual, "args"), Some(&args));
+        }
+        for kind in [
+            "ui.source_funds.preview",
+            "ui.source_funds.review_context",
+            "ui.source_funds.request_input",
+            "ui.source_funds.coverage",
+            "ui.source_funds.export_pdf",
+            "ui.source_funds.export_bundle",
+            "ui.source_funds.cases.save",
+            "ui.source_funds.suggest",
+            "ui.source_funds.assemble",
+            "ui.source_funds.sources.create",
+            "ui.source_funds.links.create",
+            "ui.source_funds.recipients.create",
+        ] {
+            assert!(!KINDS.contains(&kind));
+        }
+        assert_eq!(cross_check_args(None).unwrap(), dict::<&str>([]));
+        assert_eq!(
+            cross_check_args(Some(&Value::Null)).unwrap(),
+            dict::<&str>([])
+        );
+        let error = cross_check_args(Some(&Value::Bool(false))).unwrap_err();
+        assert_eq!(error.message, "daemon args must be an object");
+        assert_eq!(error.details, Some(dict([("type", s("bool"))])));
+    }
     #[test]
     fn cross_check_daemon_preserves_uploaded_bytes_and_registration() {
         let args = kassiber_pytext::loads(r#"{"tool":"cointracking","filename":"history.csv","source_bytes_base64":"YQ==","wallets":["cold"],"year":2024,"tool_sources":["Exchange"],"include_tool_wallets":true}"#).unwrap();

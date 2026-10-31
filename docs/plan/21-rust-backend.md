@@ -1237,6 +1237,36 @@ artifacts, and privacy hygiene/mirror/PSBT reads. PDF-containing exports and AI
 projections stay Python. No Python product, tax-rule, schema, dependency or
 lockfile changes are included.
 
+### R5 source-funds stored-list continuation (partial)
+
+`t3code/r5-reports-sof` starts at `9338364db`. The first boundary adds native
+source, link, saved-case and recipient listings through both CLI and daemon,
+and the daemon's paginated evidence listing. One shared report service reads
+stored provenance under a database snapshot without journal rebuilding,
+accounting admission, evidence-file reads or external I/O. Stored source
+denominations and exact msat fields remain separate from ownership and tax
+authority. Case recipient metadata remains frozen at save time.
+
+The inventory becomes 157 native CLI leaves, including 21 report commands and four
+source-funds listing commands. Daemon registration adds five source-funds
+listing kinds alongside the existing 15 report and two transaction export
+kinds. PDF and PDF-containing bundle routes remain Python by owner decision.
+There are no source-funds workbook exports in this stored-list boundary.
+
+This is not completion of the read family. Python's internal-error traceback
+diagnostics still differ from the Rust shell and block full wire acceptance;
+the checkpoint records the exact limitation rather than normalizing it away.
+The ordered remainder is report traversal/disclosure, review-context/request-input,
+coverage and suggest/assemble
+dry runs; case saving; source mutations; link mutations including batch review
+and persisted suggest/assemble; then recipient mutations. Each family requires
+its own verified commit. Mutation families must retain consent, once-only
+execution and SQLite/SQLCipher rollback.
+The Lightning and year-handoff/platform/privacy workers retain their separate
+ownership. The [stored-list checkpoint](../reference/rust-shell.md#source-funds-stored-list-checkpoint-r5-partial)
+records the verification and preserved Python quirks. Python product code,
+dependencies, lockfiles, schema and tax rules are unchanged.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

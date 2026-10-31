@@ -8759,5 +8759,245 @@
       "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
     ],
     "rule": "CSV preserves UnicodeEncodeError and partial direct writes instead of replacing surrogates."
+  },
+  {
+    "id": "sof-list-source-profile",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "source_funds_sources WHERE profile_id=? ORDER BY",
+    "replace": "source_funds_sources WHERE ? IS NOT NULL ORDER BY",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Source editor reads retain the selected book scope."
+  },
+  {
+    "id": "sof-list-source-order",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "source_funds_sources WHERE profile_id=? ORDER BY created_at DESC,id DESC",
+    "replace": "source_funds_sources WHERE profile_id=? ORDER BY created_at ASC,id ASC",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Sources retain reverse creation and identity order."
+  },
+  {
+    "id": "sof-list-attachment-order",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "ORDER BY j.created_at ASC,a.id ASC",
+    "replace": "ORDER BY j.created_at DESC,a.id DESC",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Evidence editor attachment order follows authored association times then attachment identities."
+  },
+  {
+    "id": "sof-list-target-filter",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "query.push_str(\" AND to_transaction_id=?\");",
+    "replace": "query.push_str(\" AND ? IS NOT NULL\");",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Target link filtering is scoped to the resolved canonical transaction."
+  },
+  {
+    "id": "sof-list-state-filter",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "query.push_str(\" AND state=?\");",
+    "replace": "query.push_str(\" AND ? IS NOT NULL\");",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "A link state filter must not include links from other states."
+  },
+  {
+    "id": "sof-list-from-amount",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "amount(value(row, \"from_allocation_amount\"))?",
+    "replace": "amount(value(row, \"allocation_amount\"))?",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Parent allocations remain independent of target allocations and assets."
+  },
+  {
+    "id": "sof-list-from-asset",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "if truthy(value(row, \"from_asset\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "A reviewed cross-asset link retains its source denomination."
+  },
+  {
+    "id": "sof-list-inactive-read",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "desktop && truthy(value(args, \"include_inactive\"))",
+    "replace": "false",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Desktop recipient reads honor explicit inclusion of retired recipients."
+  },
+  {
+    "id": "sof-list-active-order",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "\"active DESC,\"",
+    "replace": "\"\"",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Included retired recipients follow active recipients regardless of label."
+  },
+  {
+    "id": "sof-list-frozen-recipient",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "fallback(row, \"recipient_label_snapshot\")",
+    "replace": "fallback(row, \"label\")",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Case listings retain recipient names frozen at save time."
+  },
+  {
+    "id": "sof-list-cursor-range",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "if number > 2_147_483_647i64.into() {",
+    "replace": "if number > 2_147_483_648i64.into() {",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Evidence cursor offsets refuse values above signed 32-bit range."
+  },
+  {
+    "id": "sof-list-cursor-digit",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "v.chars().all(is_digit)",
+    "replace": "v.chars().all(|c| c.is_ascii_digit())",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Unicode digit cursor validation retains CPython behavior, including its internal conversion refusal."
+  },
+  {
+    "id": "sof-list-limit-cap",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "if limit > 200.into() {\n            200",
+    "replace": "if limit > 200.into() {\n            1",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Evidence reads clamp excessive requested page size to 200, not one."
+  },
+  {
+    "id": "sof-list-evidence-orphans",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "JOIN transactions t ON t.id=a.transaction_id JOIN wallets w ON w.id=t.wallet_id WHERE a.profile_id=?",
+    "replace": "LEFT JOIN transactions t ON t.id=a.transaction_id LEFT JOIN wallets w ON w.id=t.wallet_id WHERE a.profile_id=?",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Evidence lists include only transaction-linked evidence with a present wallet."
+  },
+  {
+    "id": "sof-list-next-cursor",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "s((offset + limit).to_string())",
+    "replace": "s(offset.to_string())",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "A paginated evidence cursor advances beyond the page just returned."
+  },
+  {
+    "id": "sof-list-editor-path",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "(\"stored_relpath\", fallback(row, \"stored_relpath\"))",
+    "replace": "(\"stored_relpath\", s(\"\"))",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Local editor reads retain full stored attachment metadata without reading evidence files."
+  },
+  {
+    "id": "sof-list-cli-forward",
+    "file": "crates/cli/src/reports.rs",
+    "find": "return book.reports(command, &source_funds_request(args));",
+    "replace": "return book.reports(command, &dict::<&str>([]));",
+    "expect_failing": [
+      "source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists"
+    ],
+    "rule": "Source-funds CLI callers forward scope and filters to the shared native service."
+  },
+  {
+    "id": "sof-list-daemon-forward",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "if kind.starts_with(\"ui.source_funds.\") {\n        return book.reports(kind, &cross_check_args(raw)?);",
+    "replace": "if kind.starts_with(\"ui.source_funds.\") {\n        return book.reports(kind, &dict::<&str>([]));",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "Source-funds daemon callers preserve exact argument shapes for native validation."
+  },
+  {
+    "id": "sof-list-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "\"reports.cross-check\",\n    \"source-funds.sources.list\",",
+    "replace": "\"reports.cross-check\",",
+    "expect_failing": [
+      "source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists"
+    ],
+    "rule": "The source listing is registered natively in the CLI and its implementation catalog."
+  },
+  {
+    "id": "sof-list-catalog-registration",
+    "file": "crates/cli/src/describe.rs",
+    "find": "\"reports.cross-check\",\n    \"source-funds.sources.list\",",
+    "replace": "\"reports.cross-check\",",
+    "expect_failing": [
+      "source_funds_stored_cli_forwards_scope_filters_and_registers_only_lists"
+    ],
+    "rule": "The source listing is registered natively in the CLI and its implementation catalog."
+  },
+  {
+    "id": "sof-list-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "\"ui.reports.export_cross_check\",\n    \"ui.source_funds.sources.list\",",
+    "replace": "\"ui.reports.export_cross_check\",",
+    "expect_failing": [
+      "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
+    ],
+    "rule": "The desktop source listing is registered natively without enabling PDF or mutation routes."
+  },
+  {
+    "id": "sof-list-service-dispatch",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if source_funds_reads::handles(command) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Stored provenance reads dispatch before accounting admission and retain their native service."
+  },
+  {
+    "id": "sof-list-msat-scale",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "&Decimal::from(100_000_000_000i64), &DECIMAL",
+    "replace": "&Decimal::from(100_000_000i64), &DECIMAL",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Stored editor quantities use millisatoshi-to-BTC conversion without losing the original msat field."
+  },
+  {
+    "id": "sof-list-integer-zero",
+    "file": "crates/reports/src/source_funds_reads.rs",
+    "find": "if n.trunc() == 0.0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
+    ],
+    "rule": "Python int conversion discards the negative sign when a stored fractional amount truncates to zero."
   }
 ]
