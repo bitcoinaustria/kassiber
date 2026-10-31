@@ -41,8 +41,9 @@ rows**: it reads the journal state RP2 already computed
 (`hooks.build_ledger_state`) and rebuilds the remaining inventory + cost basis
 **per regime, directly from those entries**:
 
-1. Walk the journal entries through the departure date's `23:59:59Z` cutoff,
-   comparing instants rather than stored timestamp text.
+1. Walk journal entries strictly before the next day's `00:00:00Z`, including
+   fractional seconds at the end of the UTC departure day and comparing
+   instants rather than stored timestamp text.
 2. Acquisitions/income **add** quantity + cost (acquisition-date regime via
    `infer_regime_from_timestamp`); disposals **subtract** quantity + their
    engine-computed consumed cost basis (regime from the entry's `at_category`).

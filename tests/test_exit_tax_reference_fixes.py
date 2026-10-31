@@ -65,7 +65,8 @@ def test_report_names_the_books_selected_method(country):
     ("2024-01-02T00:30:00+02:00", 100000000),  # Jan 1 in UTC
     ("2024-01-01T23:30:00-02:00", 0),          # Jan 2 in UTC
     ("2024-01-01T23:59:59Z", 100000000),
-    ("2024-01-01T23:59:59.000001Z", 0),
+    ("2024-01-01T23:59:59.000001Z", 100000000),
+    ("2024-01-02T00:00:00Z", 0),
 ])
 def test_departure_cutoff_compares_exact_instants(book, occurred_at, expected_sats):
     book.execute("UPDATE journal_entries SET occurred_at=? WHERE id='buy'", (occurred_at,))

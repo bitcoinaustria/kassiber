@@ -179,3 +179,22 @@ def test_old_fee_journals_require_one_rebuild_without_rewriting_evidence(engine_
             else:
                 assert profile["last_processed_at"] == old_profile["last_processed_at"]
         reopened.close()
+
+
+@pytest.mark.parametrize("quote_source", ("cache", "transaction"))
+@pytest.mark.parametrize("last_instant", ("2024-03-31T23:59:59.500000Z", "2024-03-31T23:59:59.999999Z"))
+def test_full_departure_day_includes_fractional_inventory_and_quotes(engine_book, quote_source, last_instant):
+    rows = [
+        ("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy"),
+        ("last", "Cold", last_instant, "inbound", BTC // 1000, 0, 61000, "buy"),
+        ("next", "Cold", "2024-04-01T02:00:00+02:00", "inbound", BTC, 0, 90000, "buy"),
+    ]
+    quotes = [(last_instant, 65000), ("2024-04-01T00:00:00Z", 95000)] if quote_source == "cache" else []
+    conn = engine_book(rows, quotes=quotes)
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+    assert report["totals"]["neuQuantitySats"] == 100_100_000
+    assert report["walletHoldings"][0]["quantitySats"] == 100_100_000
+    assert report["fmvSource"] == [{
+        "asset": "BTC", "rate": 65000 if quote_source == "cache" else 61000,
+        "pair": "BTC-EUR", "asOf": last_instant, "source": quote_source,
+    }]
