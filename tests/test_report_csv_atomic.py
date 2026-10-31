@@ -242,6 +242,32 @@ def test_csv_writable_file_falls_back_when_sibling_cannot_be_created(tmp_path, m
     assert list(tmp_path.iterdir()) == [target]
 
 
+@pytest.mark.parametrize('error_number', [errno.ENOSPC, getattr(errno, 'EDQUOT', errno.ENOSPC)])
+def test_csv_storage_exhaustion_never_truncates_previous_export(tmp_path, monkeypatch, error_number):
+    """csv_more.py: staging exhaustion must not fall back to open('w')."""
+    target = tmp_path / 'report.csv'
+    target.write_bytes(b'previous complete report\r\n')
+    target.chmod(0o640)
+    real_open = os.open
+    def refuse_staging(path, flags, *args, **kwargs):
+        if flags & os.O_CREAT:
+            raise OSError(error_number, 'injected storage exhaustion')
+        return real_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, 'open', refuse_staging)
+    consumed = []
+    def rows():
+        consumed.append(True)
+        yield ['partial']
+        raise OSError(error_number, 'write also exhausted storage')
+    with pytest.raises(OSError) as error:
+        _write_csv_rows(target, rows())
+    assert error.value.errno == error_number
+    assert target.read_bytes() == b'previous complete report\r\n'
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    assert not consumed
+    assert list(tmp_path.iterdir()) == [target]
+
+
 def test_csv_fsync_orders_file_replace_directory(tmp_path, monkeypatch):
     target = tmp_path / 'report.csv'
     events = []
