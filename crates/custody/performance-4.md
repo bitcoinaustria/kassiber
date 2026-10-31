@@ -67,9 +67,9 @@ Seconds, Python/native comparison:
 Python admission is included in components. Custody speedups are 1.40× and
 1.99×; complete-process speedups are 1.24× and 1.49×. Median custody CPU is
 6.1516/4.5682 s generic and 14.7211/6.6817 s multi-wallet. One-minute load
-ranges are 75.19–175.08 and 131.77–192.38, respectively. Wall spans are retained
-in the machine-readable record, but this shared-host run does not meet the
-design's idle-host condition.
+ranges are 75.19–175.08 and 131.77–192.38, respectively. Whole-process wall times
+are retained in the machine-readable record, but this shared-host run does not
+meet the design's idle-host condition.
 
 Independent saved-native-baseline/candidate comparisons:
 
@@ -103,6 +103,23 @@ its replacement directly corrupts that same error family, with the original
 rule and frozen test retained.
 Mutation, classification and preflight results are recorded in
 [`performance-4.json`](performance-4.json).
+
+The local implementation checkpoint is `a7da5b474`. All **231 touched-file
+recipes** were freshly killed. Resumable whole-catalog shard **0/8** additionally
+kills all **274 selected recipes**, after its **244 named tests** pass unmutated.
+The combined kill set is **505/2,333**, with no survivor or build error in this
+completed shard. **1,828 recipes and shards 1/8 through 7/8 remain unverified**;
+this is not a full-catalog pass. Classification update passes without disposition
+changes, and CI preflight passes **57 tests**.
+
+The local runner checkpoints each kill with source and catalog fingerprints in
+`target/custody-perf-4/mutation-state.json`. Resume serially with
+`target/custody-perf-4/run uv run --locked python target/custody-perf-4/mutations.py 1/8`,
+then shards 2/8 through 7/8. It restores source bytes and refreshes timestamps
+before checking each shard's unmutated tests. Mutants must compile before their
+assigned tests fail. Disposable mutation and verification build/source trees
+were removed after their results were summarized; the runner recreates them.
+No test job remains running at this checkpoint.
 
 The machine-readable record retains every paired trial, stage CPU, process CPU
 and wall time, load observations, binary hashes, changed-source hashes, suite
