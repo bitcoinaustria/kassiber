@@ -6616,7 +6616,7 @@ def _execute_read_only_ai_tool(
             # External agent reads (MCP) are strictly read-only: no journal
             # rebuild and no opt-in freshness sync; stale state is reported.
             if (
-                call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES
+                entry.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES
                 and runtime.maintenance_state.get("read_maintenance") != "disabled"
             ):
                 maintenance_metadata = _auto_maintain_for_read(
