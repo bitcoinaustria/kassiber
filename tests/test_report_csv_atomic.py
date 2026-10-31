@@ -8,6 +8,7 @@ import errno
 import subprocess
 import sys
 import threading
+import json
 
 import pytest
 
@@ -130,6 +131,58 @@ def test_cli_csv_export_to_device(tmp_path, target):
     assert result.returncode == 0, result.stdout + result.stderr
     if target == '/dev/stdout':
         assert 'Kassiber Transactions - Book' in result.stdout
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='POSIX devices and pipes')
+@pytest.mark.parametrize('target', ['/dev/stdout', '/dev/null', 'fifo'])
+def test_cli_reports_export_csv_skips_non_regular_artifact_registration(tmp_path, target):
+    """Exercise reports export-csv, whose saved-artifact hook follows writing."""
+    from kassiber.cli.handlers import process_journals
+    from kassiber.db import open_db
+    from tests.test_custody_authored_migration import _scope, _tx, NOW
+
+    root = tmp_path / 'book'
+    conn = open_db(root)
+    try:
+        _scope(conn)
+        _tx(conn, 'buy', 'btc', 'inbound', 'BTC', 100000, NOW)
+        conn.execute("UPDATE transactions SET fiat_rate=50000, fiat_rate_exact='50000'")
+        conn.commit()
+        process_journals(conn, 'Books', 'Book')
+    finally:
+        conn.close()
+    received = []
+    reader = None
+    if target == 'fifo':
+        fifo = tmp_path / 'report.pipe'
+        os.mkfifo(fifo)
+        target = str(fifo)
+        def read():
+            with fifo.open('rb') as stream:
+                received.append(stream.read())
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
+    result = subprocess.run([sys.executable, '-m', 'kassiber', '--machine', '--data-root', str(root),
+        'reports', 'export-csv', '--workspace', 'Books', '--profile', 'Book', '--file', target],
+        text=True, capture_output=True, timeout=30)
+    if reader:
+        reader.join(timeout=5)
+        assert not reader.is_alive()
+        assert b'Kassiber Report - Book' in received[0]
+        assert stat.S_ISFIFO(fifo.stat().st_mode)
+    assert result.returncode == 0, result.stdout + result.stderr
+    # stdout may contain the CSV followed by the ordinary machine envelope.
+    payload = json.loads(result.stdout[result.stdout.rfind('\n{') + 1:])
+    assert payload['data']['report_snapshot']['status'] == 'skipped'
+    assert payload['data']['report_snapshot']['reason'] == 'non_regular_target'
+    assert 'registration skipped' in payload['data']['report_snapshot']['message']
+    if target == '/dev/stdout':
+        assert 'Kassiber Report - Book' in result.stdout
+    conn = open_db(root)
+    try:
+        assert conn.execute('SELECT COUNT(*) FROM filed_report_snapshots').fetchone()[0] == 0
+    finally:
+        conn.close()
 
 
 @pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='requires named pipes')

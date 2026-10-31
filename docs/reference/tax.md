@@ -448,7 +448,9 @@ it does not expand to cover a 25-hour autumn departure day.
 CSV exports stage ordinary files in the destination directory, preserve file
 modes, flush and fsync before replacement, and fsync the directory where
 supported. Symlinks are written through. Devices and pipes are written directly;
-hard-linked files and existing writable files whose directory cannot hold a
+report exports to these non-regular targets succeed and explicitly report that
+saved-artifact registration was skipped. No saved report snapshot is created.
+Hard-linked files and existing writable files whose directory cannot hold a
 staged sibling are written in place. These compatibility paths are not atomic:
 an interrupted write can leave partial output, as with `open("w")`.
 Replacement errors name only the requested destination, including when it

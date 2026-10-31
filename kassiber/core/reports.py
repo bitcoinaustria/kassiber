@@ -314,6 +314,12 @@ def _register_saved_export(
     period_end_year: int | None = None,
     report_scope: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if any(not stat.S_ISREG(Path(path).expanduser().stat().st_mode) for path in artifact_paths):
+        return {
+            "status": "skipped",
+            "reason": "non_regular_target",
+            "message": "Saved-artifact registration skipped for non-regular output target.",
+        }
     return core_custody_filed_reports.register_saved_report_export(
         conn,
         workspace_id=str(workspace["id"]),
