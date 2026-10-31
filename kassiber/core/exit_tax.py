@@ -34,7 +34,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from ..errors import AppError
 from ..tax_policy import build_tax_policy
-from ..time_utils import parse_timestamp, timestamp_microseconds
+from ..time_utils import parse_iso_datetime_or_none, parse_timestamp, timestamp_microseconds
 from . import pricing
 from . import report_context as core_report_context
 from . import custody_journal
@@ -261,7 +261,8 @@ def _fmv_at(
         return rate, {
             "asset": asset, "rate": float(rate),
             "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-            "asOf": timestamp, "source": source,
+            "asOf": parse_iso_datetime_or_none(timestamp).isoformat().replace("+00:00", "Z"),
+            "source": source,
         }
     return None, {
         "asset": asset, "rate": None,
@@ -321,8 +322,10 @@ def compute_deemed_disposal(
     - inflow cost: acquisitions carry it in ``fiat_value`` (``cost_basis`` is
       ``None``).
     - outflow basis: the engine-computed consumed ``cost_basis``.
-    - ``at_category`` (AT only): ``None``, or a string whose prefix (``alt`` /
-      ``neu`` / ``income``) is the regime; acquisitions/transfers carry ``None``.
+    - ``at_regime`` in the description (AT): the pre-override consumed regime
+      on disposal/fee rows; acquisition markers retain acquisition regime.
+    - ``at_category`` (AT): overrideable realized tax treatment, independent of
+      consumed inventory regime; acquisitions/transfers carry ``None``.
     """
 
     jurisdiction = str(profile.get("tax_country") or "generic").strip().lower()

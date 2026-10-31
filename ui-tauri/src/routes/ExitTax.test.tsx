@@ -60,3 +60,14 @@ it.each(["en", "de"])("puts missing-FMV readiness above enabled exports in %s", 
     expect(button).not.toMatch(/\sdisabled(?:=|\s|>)/);
   }
 });
+
+it.each([
+  ["2024-12-31T12:34:56.123456+01:00", "2024-12-31T11:34:56.123456Z"],
+  ["2024-12-31T12:34:56-02:00", "2024-12-31T14:34:56Z"],
+])("renders offset quote %s in UTC without losing precision", (asOf, utc) => {
+  state.report = buildExitTaxFixture();
+  state.report.fmvSource[0].asOf = asOf;
+  const html = renderToStaticMarkup(<ExitTax />);
+  expect(html).toContain(`<time dateTime="${utc}">${utc}</time>`);
+  expect(html).not.toContain(asOf);
+});

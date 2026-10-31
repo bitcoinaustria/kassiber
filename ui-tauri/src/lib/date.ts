@@ -20,3 +20,13 @@ export function formatShortDate(value: string | null | undefined): string {
   const normalized = value.replace("T", " ").replace(/Z$/, "");
   return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
 }
+
+/** Convert an RFC3339 instant to UTC, retaining every fractional-second digit. */
+export function formatUtcTimestamp(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parts = /^(.*?)(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!parts) return null;
+  const instant = new Date(`${parts[1]}${parts[3]}`);
+  if (Number.isNaN(instant.getTime())) return null;
+  return instant.toISOString().replace(/\.000Z$/, `${parts[2] ?? ""}Z`);
+}

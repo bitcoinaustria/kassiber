@@ -623,3 +623,31 @@ def test_dashboard_wallet_flags_follow_real_consumption_despite_override(engine_
     cold = conn.execute("SELECT id FROM wallets WHERE label='Cold'").fetchone()[0]
     assert flags[cold] is has_alt
     assert tile["taxFreeQuantitySats"] == (10_000_000 if has_alt else 0)
+
+
+@pytest.mark.parametrize("source", ("cache", "transaction"))
+@pytest.mark.parametrize(("at", "utc"), [
+    ("2024-12-31T12:34:56.123456+01:00", "2024-12-31T11:34:56.123456Z"),
+    ("2024-12-31T12:34:56-02:00", "2024-12-31T14:34:56Z"),
+])
+def test_fmv_asof_renders_utc_in_payload_pdf_and_xlsx(engine_book, tmp_path, source, at, utc):
+    conn = engine_book([("buy", "Cold", at, "inbound", BTC, 0, 30000, "buy")],
+                       quotes=[(at, 65000)] if source == "cache" else [])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    assert report["fmvSource"][0]["asOf"] == utc
+    for format in ("pdf", "xlsx"):
+        artifact = tmp_path / f"asof.{format}"
+        getattr(reports, f"export_exit_tax_{format}_report")(
+            conn, "W", "P", artifact, handlers._report_hooks(), departure_date="2024-12-31")
+        if format == "pdf":
+            text = artifact.read_bytes().decode("latin1")
+            assert f"as of: {utc}" in text
+            assert at not in text
+        else:
+            workbook = openpyxl.load_workbook(artifact)
+            try:
+                values = [cell.value for row in workbook["FMV quotes"] for cell in row]
+                assert utc in values
+                assert at not in values
+            finally:
+                workbook.close()

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
+import { formatUtcTimestamp } from "@/lib/date";
 import type { ExitTaxFmvSource } from "@/mocks/exitTax";
 
 export function ExitTaxFmvCard({
@@ -12,6 +13,7 @@ export function ExitTaxFmvCard({
 }) {
   const { t } = useTranslation("overview");
   const missing = quotes.filter((quote) => quote.source === "missing").map((quote) => quote.asset);
+  const displayedQuotes = quotes.map((quote) => ({ ...quote, asOf: formatUtcTimestamp(quote.asOf) }));
   return (
     <section className="kb-surface p-(--kb-card-padding)">
       <h2 className="text-sm font-medium">{t("exitTaxFmv.title")}</h2>
@@ -21,7 +23,7 @@ export function ExitTaxFmvCard({
         </p>
       ) : null}
       <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
-        {quotes.map((quote) => (
+        {displayedQuotes.map((quote) => (
           <li key={quote.asset} className="flex items-start justify-between gap-2">
             <span>{quote.pair}</span>
             <span className="text-right tabular-nums">
