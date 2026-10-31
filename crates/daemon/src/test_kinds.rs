@@ -15,11 +15,12 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 4] = [
+pub const KINDS: [&str; 5] = [
     "test.stream",
     "test.emit_event",
     "test.late",
     "test.secret_store",
+    "test.freshness.plan",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -49,6 +50,38 @@ pub(crate) fn handle(
     }
     let args = get(request, "args");
     Some(match kind {
+        "test.freshness.plan" => (|| {
+            use kassiber_wallets::freshness::planning::{Request, Scope};
+            if let Some(locked) = daemon.open_lazily(request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let workspace = arg_text(args, "workspace_id");
+            let wallet = arg_text(args, "wallet");
+            let flag = |key| {
+                args.and_then(|v| get(v, key)).and_then(|v| match v {
+                    Value::Bool(value) => Some(*value),
+                    _ => None,
+                })
+            };
+            let plan = daemon.book_mut()?.freshness_plan(&Request {
+                scope: if workspace.is_empty() {
+                    Scope::ActiveProfile
+                } else {
+                    Scope::Workspace(workspace)
+                },
+                wallet: (!wallet.is_empty()).then_some(wallet),
+                rates: flag("rates"),
+                journals: flag("journals"),
+                force_full: flag("force_full").unwrap_or(false),
+            })?;
+            Ok((
+                Some(with_request_id(
+                    success(kind, plan.specifications()),
+                    request_id,
+                )),
+                false,
+            ))
+        })(),
         // `count` deltas `delay_ms` apart from a worker thread, then the
         // terminal record; the request loop keeps serving meanwhile.
         "test.stream" => {

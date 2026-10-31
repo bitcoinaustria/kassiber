@@ -7608,3 +7608,96 @@ Live daemon stream/book parity, supported-shape fallback counts and execution
 mutation acceptance remain unrun because those routes are unimplemented.
 The full quality gate, inherited mutation reruns, tax/custody shadow overlays,
 Docker regtest and packaged/platform gates were not run.
+
+### Bitcoin wallet-sync source specifications and admission (R5, partial)
+
+Local branch `t3code/r5-sync-16` starts at `86e71ef68`. This continuation adds
+`crates/wallets::freshness::sources` and `planning`, plus the narrow
+`Book::freshness_plan` operation. These are local prerequisites for the daemon
+coordinator; they do not recover/enqueue/execute jobs, create consent, open
+transport clients, publish graph grants or register a product route.
+
+The source builder matches Python's wallet ordering, explicit ID-or-label
+selection, deprecated-wallet exclusion, descriptor/xpub/address classification,
+file and Core Lightning precedence, BTCPay wallet/provenance and account-route
+specifications, rate/journal entries, force-full/single-flight intent, automatic
+pair intent and policy filtering. Describing an unported source is distinct
+from admitting its execution. Existing wallet configuration validators are
+shared with the source builder.
+
+An admitted plan owns a process-local foreground execution slot from before
+selection through its drop. Competing admission returns Python's retryable
+`project_operation_in_progress`; all failure paths release the slot. Whole
+workspace admission checks every profile before any recovery, queue mutation
+or network consent. It leaves active context unchanged. Revalidation binds the
+plan to the exact connection/database identity, active context, ordered profile
+set, wallet/configuration rows, current policy, source specs and native sync
+backend/observer/checkpoint inputs. No validation error authorizes retry after
+native execution has started.
+
+The journal choice is explicit no-refresh admission: `journals: Some(false)`
+is required at the internal request boundary, even if saved journal policy is
+disabled. A future `ui.wallets.sync` adapter must map an explicit
+`process_journals: false` to that choice; defaults continue through Python.
+Enabled market-rate jobs, BTCPay sources, Liquid/Core RPC and other unsupported
+native wallet/backend shapes refuse the complete plan. Address-only and
+additional-wallet overlap remain outside native sync. Ambiguous ID/label
+matches also refuse because Python's source selector and the CLI resolver can
+otherwise select different wallet sets. No native journal or Python subprocess
+refresh operation is claimed, and R4-13 remains outstanding.
+
+The extended guarded `freshness_fixture` compares source specifications,
+envelopes and complete logical tables with Python. Admission cases verify
+zero-attempt/no-egress construction, workspace ordering, mixed-workspace
+refusal without recovering interrupted jobs, slot release, configuration and
+backend revalidation, connection binding and validation-versus-capability
+refusal. The guarded daemon's `test.freshness.plan` drives the real `Book` seam;
+it is absent from release builds and renderer/AI allowlists. Test data and new
+harness scratch stay under this worktree's `target/`, preserving account HOME.
+
+The continuation remains, in order:
+
+1. Consume the admitted plan under its execution slot, adding job handlers,
+   running/success/error transitions, retry-after/backoff/database-busy handling,
+   source checkpoints, result aggregation and final UI redaction/snapshots.
+2. Wire wallet-fetch progress into daemon event envelopes and request controls,
+   including early cancellation, pause/cancel dispatch rechecks, book switching,
+   offline/revocation/replay fences and after-response graph-grant handoff.
+   Persisted or recovered jobs must never become transport authority.
+3. Keep default journal refresh on Python. Admit product no-refresh shapes only
+   after their request validation and whole-shape hybrid selection exist;
+   alternatively implement the narrow existing-Python journal handoff with its
+   complete local auto-pair/current/disabled/deferred/error contract.
+4. Prove complete live daemon envelopes, event streams and every normalized
+   table on disposable Electrum/Esplora backends, restart/reviewed corpus,
+   zero served-shape fallbacks and execution/control mutation kills. Only then
+   register `ui.wallets.sync`, `ui.freshness.run` or
+   `ui.workspace.freshness.run` for completed shapes.
+
+Successful native product calls added here remain zero for all three daemon
+routes. CLI `wallets.sync` retains its existing registration. This checkpoint
+does not establish live daemon execution/progress or R5 slice acceptance.
+
+Verification passes all 63 source/admission cases and the 39 inherited queue
+cases, plus the affected desktop/daemon handshake checks: 110 tests and two
+subtests without skips. Every source parity scenario compares complete typed
+envelopes and logical tables. All 12 source/admission mutations are killed
+after nine named baseline selections pass; build errors and empty selections
+cannot count as kills. The inherited queue and sync mutation campaigns were
+not rerun. Both admission and inherited queue catalogues remain checked by the
+local quality gate, and the new oracle module runs in the existing Rust-enabled
+serial CI lane.
+
+Formatting and production/harness clippy pass with warnings denied. All 204
+affected Rust tests pass, including the 179 wallet-library tests and disposable
+loopback/encrypted rollback cases. The required `classify_tests update` records
+5,748 definitions; `python_test_shards.py run preflight --ci` passes 57 tests and
+62 subtests. No Python reference bug was found, and no verification remains
+sandbox-blocked. A manual second pass reviewed source classification, admission
+authority, configuration fences, test-only routing and the documentation.
+
+Command logs and the summary remain under `target/r5-sync-16-artifacts/`.
+Mutation and verification build trees and disposable books are removed after
+summarizing their results. No background job is left running. The full quality
+gate, tax/custody shadow overlays, Docker regtest and packaged/platform gates
+were not run.

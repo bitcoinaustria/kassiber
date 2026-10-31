@@ -8,6 +8,7 @@ import pytest
 
 from kassiber.core import freshness
 from kassiber.daemon_freshness import _due_jobs_for_refresh, _run_requested_freshness_jobs, _workspace_freshness_run_payload
+from kassiber.daemon_freshness import _freshness_wallet_source_specs, _filter_freshness_specs_by_policy
 from kassiber.envelope import build_envelope, build_error_envelope
 from kassiber.errors import AppError
 from tests.rust_sync_env import child_env
@@ -38,6 +39,10 @@ def _reference(conn, operation):
     name, args = operation["op"], operation["args"]
     if name == "sql":
         conn.executescript(args["sql"])
+    elif name == "specs":
+        return _freshness_wallet_source_specs(conn, **args)
+    elif name == "filter_specs":
+        return _filter_freshness_specs_by_policy(args["specs"], freshness.FreshnessPolicy(**args["policy"]), force=args.get("force", False))
     elif name == "upsert":
         return freshness.upsert_source_state(conn, **args)
     elif name == "enqueue":

@@ -2911,3 +2911,25 @@ the narrow existing-Python journal operation or explicitly admit only no-refresh
 shapes, and prove live daemon envelope/event/book parity with zero fallbacks.
 See the queue checkpoint in `docs/reference/rust-shell.md` for verification and
 the exact handoff.
+
+### R5 Bitcoin sync: source specification and admission checkpoint (partial)
+
+`crates/wallets::freshness::sources` now constructs the Python daemon's local
+source specifications, including wallet/file/deprecation precedence, BTCPay
+wallet/provenance/account routes, rates, journals, force-full intent and policy
+filtering. Discovery does not grant permission to execute those sources.
+
+The new `Book::freshness_plan` seam admits a complete active-book or workspace
+selection without queue writes, recovery, transport or consent. A plan owns the
+foreground execution slot until dropped and captures connection/database,
+context, ordered profiles, wallets, policy and native sync inputs for later
+revalidation. Admission requires an explicit journal opt-out and refuses enabled
+rates, BTCPay, unsupported wallet/backend shapes and ambiguous ID/label matches.
+Defaults remain on the existing Python path; no journal subprocess bridge is
+introduced. The guarded daemon test kind verifies the real admitted-book seam
+but is absent from production builds and desktop/AI allowlists.
+
+No product route is registered by this checkpoint. Job execution, retry/backoff,
+UI redaction and aggregation, stream/control/graph wiring, hybrid request-shape
+selection and full live daemon parity remain. See the new checkpoint at the end
+of `docs/reference/rust-shell.md` for verification and the continuation.

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "freshness-source-deprecated",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "options.wallet.is_none() && config::boolean(config.get(\"deprecated\"))?",
+    "replace": "false && options.wallet.is_none() && config::boolean(config.get(\"deprecated\"))?",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+    ],
+    "rule": "Unscoped discovery excludes deprecated wallets but explicit selection retains them."
+  },
+  {
+    "id": "freshness-source-forced-singleflight",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "Value::Bool(!force)",
+    "replace": "Value::Bool(true)",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+    ],
+    "rule": "Forced source requests replace pending work instead of silently reusing it."
+  },
+  {
+    "id": "freshness-source-file-precedence",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "&& !file {",
+    "replace": "&& (file || !file) {",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+    ],
+    "rule": "Configured file sources are not also discovered as on-chain jobs."
+  },
+  {
+    "id": "freshness-source-coreln",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "field(&wallet, \"kind\") != &s(\"coreln\")",
+    "replace": "field(&wallet, \"kind\") != &s(\"not-a-kind\")",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+    ],
+    "rule": "Core Lightning material does not acquire an on-chain freshness source."
+  },
+  {
+    "id": "freshness-source-account-scope",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "if options.wallet.is_none() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_source_account_routes_order_and_wallet_scope"
+    ],
+    "rule": "A wallet-specific action cannot enqueue unrelated account provenance."
+  },
+  {
+    "id": "freshness-source-policy-force",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "force\n                || get(",
+    "replace": "false\n                || get(",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_source_policy_filter"
+    ],
+    "rule": "An explicit forced policy filter retains all requested source specifications."
+  },
+  {
+    "id": "freshness-admission-explicit-journal-optout",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "if request.journals != Some(false) {",
+    "replace": "if request.journals == Some(true) {",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_policy_cannot_enable_implicit_journal_refresh"
+    ],
+    "rule": "An implicit default must stay on Python even when the saved journal policy is disabled."
+  },
+  {
+    "id": "freshness-admission-source-boundary",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "if field(spec, \"job_type\") != &s(\"onchain_wallet_history\") {",
+    "replace": "if false && field(spec, \"job_type\") != &s(\"onchain_wallet_history\") {",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_refuses_unsupported_whole_shapes"
+    ],
+    "rule": "Enabled unported rate and provenance jobs refuse the whole invocation before mutation."
+  },
+  {
+    "id": "freshness-admission-execution-slot",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": ".compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)",
+    "replace": ".compare_exchange(false, false, Ordering::AcqRel, Ordering::Acquire)",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_execution_slot_released_after_refusal_and_drop"
+    ],
+    "rule": "A live plan owns the foreground slot until it is dropped."
+  },
+  {
+    "id": "freshness-admission-config-recheck",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "|| capture(conn, &self.request)? != self.captured",
+    "replace": "|| false && capture(conn, &self.request)? != self.captured",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_rechecks_scope_config_and_policy"
+    ],
+    "rule": "Current source policy and profile selection are rechecked before the next phase."
+  },
+  {
+    "id": "freshness-admission-backend-recheck",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "action.validate(conn, &mut backend)?;",
+    "replace": "let _ = (&action, &mut backend);",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_rejects_different_connection_and_backend"
+    ],
+    "rule": "A captured native action cannot survive a selected backend change."
+  },
+  {
+    "id": "freshness-admission-ambiguous-wallet",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "request.wallet.is_some() && wallets.len() > 1",
+    "replace": "request.wallet.is_some() && wallets.len() > 2",
+    "expect_failing": [
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_rejects_ambiguous_id_label_selection"
+    ],
+    "rule": "ID/label collisions cannot select a different set of wallets in the two runtimes."
+  }
+]

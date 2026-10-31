@@ -2,7 +2,10 @@ use kassiber_envelope::{build_error_envelope, dict, get, py_str, success, AppErr
 use kassiber_pyjson::{Options, Value};
 use kassiber_store::rusqlite::Connection;
 use kassiber_wallets::{
-    freshness::{redact, Queue},
+    freshness::{
+        planning::{Plan, Request, Scope},
+        redact, sources, Queue,
+    },
     publication::wallet::Sources,
 };
 use std::io::Read;
@@ -28,6 +31,10 @@ fn text(v: &Value, key: &str) -> String {
     py_str(field(v, key))
 }
 fn main() {
+    let gate = kassiber_net::Gate::new(
+        || kassiber_net::Offline::Unavailable,
+        kassiber_net::Ledger::default(),
+    );
     let mut raw = String::new();
     std::io::stdin()
         .take(64 * 1024 * 1024)
@@ -47,6 +54,79 @@ fn main() {
         let result: Result<Value, AppError> = (|| {
             let mut queue = Queue::new(&conn, &mut sources);
             Ok(match command.as_str() {
+                "specs" => Value::List(sources::build(
+                    &conn,
+                    &text(args, "profile_id"),
+                    &sources::Options {
+                        wallet: get(args, "wallet_ref")
+                            .filter(|v| !matches!(v, Value::Null))
+                            .map(py_str),
+                        rates: get(args, "include_rates").is_none_or(kassiber_envelope::truthy),
+                        journals: get(args, "include_journals")
+                            .is_none_or(kassiber_envelope::truthy),
+                        auto_pair: get(args, "auto_pair_before_journals")
+                            .is_some_and(kassiber_envelope::truthy),
+                        force_full: get(args, "force_full").is_some_and(kassiber_envelope::truthy),
+                    },
+                )?),
+                "filter_specs" => {
+                    let Value::List(specs) = field(args, "specs") else {
+                        panic!("specs required")
+                    };
+                    Value::List(sources::filter_by_policy(
+                        specs.clone(),
+                        field(args, "policy"),
+                        get(args, "force").is_some_and(kassiber_envelope::truthy),
+                    ))
+                }
+                "plan" | "plan_busy" | "plan_changed" | "plan_other_connection" => {
+                    let flag = |key| {
+                        get(args, key).and_then(|v| match v {
+                            Value::Bool(value) => Some(*value),
+                            _ => None,
+                        })
+                    };
+                    let request = Request {
+                        scope: get(args, "workspace_id")
+                            .map(|v| Scope::Workspace(py_str(v)))
+                            .unwrap_or(Scope::ActiveProfile),
+                        wallet: get(args, "wallet")
+                            .filter(|v| !matches!(v, Value::Null))
+                            .map(py_str),
+                        rates: flag("rates"),
+                        journals: flag("journals"),
+                        force_full: flag("force_full").unwrap_or(false),
+                    };
+                    let backend = || {
+                        serde_json::from_str(
+                            &kassiber_pyjson::dumps(field(args, "backend"), &Options::new())
+                                .unwrap(),
+                        )
+                        .unwrap()
+                    };
+                    let plan = Plan::new(&conn, &request, "test", |_, _| Ok(backend()))?;
+                    if command == "plan_busy" {
+                        let _ = Plan::new(&conn, &request, "test", |_, _| Ok(backend()))?;
+                    }
+                    if command == "plan_changed" {
+                        conn.execute_batch(&text(args, "sql")).unwrap();
+                    }
+                    if command == "plan_other_connection" {
+                        let other = Connection::open(text(&input, "book")).unwrap();
+                        plan.validate(&other, |_, _| Ok(backend()))?;
+                    }
+                    plan.validate(&conn, |_, _| {
+                        Ok(get(args, "changed_backend")
+                            .map(|v| {
+                                serde_json::from_str(
+                                    &kassiber_pyjson::dumps(v, &Options::new()).unwrap(),
+                                )
+                                .unwrap()
+                            })
+                            .unwrap_or_else(backend))
+                    })?;
+                    plan.specifications()
+                }
                 "upsert" => queue.upsert(args)?,
                 "enqueue" => queue.enqueue(args)?,
                 "cancel" => queue.cancel(&text(args, "id"))?,
@@ -182,6 +262,8 @@ fn main() {
                 None,
             ),
         });
+        assert!(gate.attempts().records.is_empty());
+        assert!(gate.ledger().snapshot(0, 100).records.is_empty());
     }
     println!(
         "{}",

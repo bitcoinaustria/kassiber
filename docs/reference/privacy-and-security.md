@@ -140,6 +140,14 @@ Raw transport checkpoints, including cached script and transaction memberships,
 remain in local source state. Sanitized job results and desktop/AI freshness
 responses omit these containers before projection.
 
+The Rust freshness source/admission prerequisite only reads local state. It
+creates no consent grant, recovers no jobs and contacts no backend, even when
+saved configuration selects a loopback server. Its admitted plan requires an
+explicit journal opt-out and rejects the entire selection when an enabled
+source has no native executor. The three daemon sync/freshness product routes
+remain on Python until execution, event/control and complete-book parity are
+verified; the admission test kind exists only in guarded test builds.
+
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview
 and restored chat history. Checking models for one provider, or checking one

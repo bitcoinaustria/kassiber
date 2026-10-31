@@ -6,6 +6,9 @@ use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pyjson::{Key, Options, Value};
 use kassiber_store::rusqlite::{params, Connection};
 
+pub mod planning;
+pub mod sources;
+
 const JOB_TYPES: &[&str] = &[
     "onchain_wallet_history",
     "wallet_graph_references",

@@ -172,6 +172,11 @@ through the shared setup crate.
   single-flight/forced enqueue, cancellation controls, selected dispatch and
   workspace ordering. It grants no transport authority. See the queue checkpoint
   in `docs/reference/rust-shell.md` for the remaining execution and route work.
+- [x] Port freshness source specifications and inert whole-request admission
+  through `Book`, with foreground exclusion and selection/configuration
+  revalidation. The admitted plan requires an explicit journal opt-out and
+  refuses enabled unported sources before queue mutation or consent. This is
+  an internal prerequisite; daemon execution and route registration remain open.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.

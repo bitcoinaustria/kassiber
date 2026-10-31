@@ -100,6 +100,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_wallet_sync_service",
         "test_rust_wallet_sync_cli",
         "test_rust_freshness_queue",
+        "test_rust_freshness_admission",
     }
 )
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})

@@ -293,6 +293,12 @@ pub trait Book: Send {
     ) -> Result<bool, AppError> {
         Err(not_implemented("wallets", "wallet sync capability"))
     }
+    fn freshness_plan(
+        &self,
+        _request: &kassiber_wallets::freshness::planning::Request,
+    ) -> Result<kassiber_wallets::freshness::planning::Plan, AppError> {
+        Err(not_implemented("wallets", "freshness admission"))
+    }
     fn wallet_sync(
         &mut self,
         _profile_id: &str,

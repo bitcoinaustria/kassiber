@@ -1243,6 +1243,17 @@ impl Book for RealBook {
         }
         kassiber_wallets::execute(self.conn()?, operation)
     }
+    fn freshness_plan(
+        &self,
+        request: &kassiber_wallets::freshness::planning::Request,
+    ) -> Result<kassiber_wallets::freshness::planning::Plan, AppError> {
+        kassiber_wallets::freshness::planning::Plan::new(
+            self.conn()?,
+            request,
+            env!("CARGO_PKG_VERSION"),
+            |conn, name| kassiber_wallets::sync::resolve_backend(conn, &self.backends, name),
+        )
+    }
     fn wallet_sync_supported(
         &self,
         profile_id: &str,

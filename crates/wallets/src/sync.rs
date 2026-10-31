@@ -277,7 +277,7 @@ impl Sync {
             .collect()
     }
 
-    fn validate(
+    pub(crate) fn validate(
         &self,
         conn: &Connection,
         backend: &mut impl FnMut(&Connection, &str) -> Result<Json>,

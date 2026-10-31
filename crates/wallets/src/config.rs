@@ -297,7 +297,7 @@ pub fn payment_method(input: &str) -> Result<String, AppError> {
     };
     Ok(format!("{}-{handler}", currency.trim()))
 }
-fn normalize_btcpay(config: &mut Value) -> Result<(), AppError> {
+pub(crate) fn normalize_btcpay(config: &mut Value) -> Result<(), AppError> {
     let Some(source) = optional_text(config.get("sync_source")) else {
         return Ok(());
     };
