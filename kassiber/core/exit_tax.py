@@ -28,7 +28,7 @@ Not tax advice.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Mapping, Optional, Sequence
 
@@ -175,14 +175,15 @@ def _normalize_destination(destination: Optional[str]) -> str:
 
 
 def _resolve_departure(departure_date: Optional[str]) -> tuple[str, str]:
-    """Return (departure_date 'YYYY-MM-DD', cutoff RFC3339 end-of-day)."""
+    """Return (UTC departure day, exclusive cutoff at the next UTC midnight)."""
 
     if not departure_date:
         day = datetime.now(timezone.utc).date().isoformat()
     else:
         # parse_timestamp validates and normalizes; keep only the date part.
         day = parse_timestamp(str(departure_date))[:10]
-    cutoff = f"{day}T23:59:59Z"
+    next_day = datetime.fromisoformat(day).date() + timedelta(days=1)
+    cutoff = f"{next_day.isoformat()}T00:00:00Z"
     return day, cutoff
 
 
@@ -231,7 +232,7 @@ def _fmv_at(
     pair = core_rates.transaction_rate_pair(asset, fiat_currency)
     if pair is not None:
         try:
-            cached = core_rates.get_cached_rate_at_or_before(conn, pair, target_iso)
+            cached = core_rates.get_cached_rate_at_or_before(conn, pair, target_iso, exclusive=True)
         except (AppError, sqlite3.OperationalError):
             cached = None
         if cached is not None:
@@ -338,7 +339,7 @@ def compute_deemed_disposal(
     for asset, value in (state.get("latest_rates") or {}).items():
         timestamp = (state.get("latest_rate_timestamps") or {}).get(asset)
         instant = timestamp_microseconds(timestamp)
-        if instant is not None and instant <= cutoff_instant:
+        if instant is not None and instant < cutoff_instant:
             fallback_quotes[asset] = {"rate": value, "timestamp": timestamp}
 
     wallet_labels = {
@@ -361,7 +362,7 @@ def compute_deemed_disposal(
         instant = timestamp_microseconds(occurred_at)
         if instant is None:
             raise AppError("Exit-tax inventory requires a valid journal timestamp.", code="validation")
-        if instant > cutoff_instant:
+        if instant >= cutoff_instant:
             continue  # not yet held / disposed of as of the departure date
         entry_type = str(entry.get("entry_type") or "")
         asset = str(entry.get("asset") or "")
@@ -587,7 +588,7 @@ def report_exit_tax(
     workspace = report_context.workspace
     profile = report_context.profile
     day, cutoff = _resolve_departure(departure_date)
-    state = custody_journal.load_stored_ledger_state(conn, profile, rate_cutoff=cutoff)
+    state = custody_journal.load_stored_ledger_state(conn, profile, rate_cutoff=cutoff, rate_cutoff_exclusive=True)
     profile = dict(profile)
     workspace_label = workspace["label"] if "label" in workspace.keys() else None
     profile.setdefault("workspace_label", workspace_label)

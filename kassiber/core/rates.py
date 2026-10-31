@@ -405,14 +405,14 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
     ]
 
 
-def get_cached_rate_at_or_before(conn, pair, occurred_at):
+def get_cached_rate_at_or_before(conn, pair, occurred_at, *, exclusive=False):
     normalized = require_supported_pair(pair)
     occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
     row = conn.execute(
         f"""
         SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
-        WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", "<=")}
+        WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", "<" if exclusive else "<=")}
         ORDER BY timestamp DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
                  fetched_at DESC

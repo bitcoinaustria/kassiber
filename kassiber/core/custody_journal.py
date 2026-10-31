@@ -161,7 +161,7 @@ def stored_move_transaction_ids(
 
 
 def transaction_rate_quotes_for_profile(
-    conn, profile_id: str, *, at_or_before: str | None = None
+    conn, profile_id: str, *, at_or_before: str | None = None, exclusive: bool = False
 ) -> dict[str, dict[str, Any]]:
     """Return transaction rates with their actual observation timestamps.
 
@@ -175,7 +175,7 @@ def transaction_rate_quotes_for_profile(
     order = "occurred_at DESC, created_at DESC"
     params = [profile_id]
     if at_or_before is not None:
-        bound = " AND " + timestamp_predicate(conn, "occurred_at", "<=")
+        bound = " AND " + timestamp_predicate(conn, "occurred_at", "<" if exclusive else "<=")
         order = "kassiber_timestamp_us(occurred_at) DESC, created_at DESC, id DESC"
         params.append(at_or_before)
 
@@ -1097,6 +1097,7 @@ def load_stored_ledger_state(
     profile: Mapping[str, Any],
     *,
     rate_cutoff: str | None = None,
+    rate_cutoff_exclusive: bool = False,
 ) -> dict[str, Any]:
     """Load the report-facing ledger projection without reinterpreting custody."""
 
@@ -1139,7 +1140,9 @@ def load_stored_ledger_state(
             (profile_id,),
         ).fetchall()
     }
-    quotes = transaction_rate_quotes_for_profile(conn, profile_id, at_or_before=rate_cutoff)
+    quotes = transaction_rate_quotes_for_profile(
+        conn, profile_id, at_or_before=rate_cutoff, exclusive=rate_cutoff_exclusive
+    )
     return {
         "entries": entries,
         "quarantines": quarantines,

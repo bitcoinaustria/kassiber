@@ -331,11 +331,12 @@ the live formula remains available for later spreadsheet edits.
 
 Exit-tax previews and PDF/XLSX estimates report the book's selected accounting
 method. They reconstruct global inventory and wallet quantities from journal
-entries through the departure cutoff (`23:59:59Z`), comparing UTC instants even
+entries before the next day's `00:00:00Z` (exclusive), including fractional
+seconds at the end of the departure day and comparing UTC instants even
 for legacy offset timestamps. Internal transfers move wallet context without
 changing global inventory; income recognition is not counted twice.
-FMV uses a cached quote at or before the cutoff, then a transaction price at or
-before it, with the actual quote timestamp disclosed. Future or undated prices
+FMV uses a cached quote strictly before that same cutoff, then a transaction
+price before it, with the actual quote timestamp disclosed. Future or undated prices
 cannot fill a historical valuation. Wallet-context assets use the same lookup,
 and the XLSX assumptions sheet discloses quarantines and incomplete estimates.
 Exit-tax exports remain valuation drafts outside the ordinary realized-report
