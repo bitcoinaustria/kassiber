@@ -1538,6 +1538,13 @@ Behavior:
 - custody movements retain no fiat execution price and require reviewed pairing
   when the export has no txid
 
+Reimports clear legacy 21bitcoin reconciliation tags and reactivate the
+corresponding excluded rows. Reactivation invalidates journals once even when
+the row has no execution price or other import update, so reports require
+processing the current inputs. Clearing a legacy tag on an already-active row
+does not by itself invalidate journals. A failed invalidation rolls back the
+reactivation with the import.
+
 ## Pocket Bitcoin
 
 Kassiber supports Pocket Bitcoin account CSV exports as exchange evidence. The

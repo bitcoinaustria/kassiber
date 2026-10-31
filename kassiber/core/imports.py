@@ -3193,6 +3193,10 @@ def import_file_into_wallet(
                 input_format,
             )
         )
+        # Reactivation changes journal inputs even without a pricing refresh.
+        if outcome.get("reactivated") and not outcome.get("journal_invalidated"):
+            hooks.invalidate_journals(conn, profile["id"])
+            outcome["journal_invalidated"] = True
     # Record the run before committing, so a wrongly-mapped import can be rolled
     # back without deleting the whole wallet. Only rows this run created are
     # linked (see core.import_batches), so enrichment of pre-existing rows is
