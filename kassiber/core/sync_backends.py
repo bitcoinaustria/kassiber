@@ -5065,7 +5065,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             previous_fingerprint = _electrum_header_fingerprint(previous_header)
             same_tip = (previous_fingerprint is not None and previous_fingerprint
                         == checkpoint.get("electrum_tip_fingerprint"))
-        same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 2
+        same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 3
         header_fingerprints = {}
         if not same_tip:
             # Subscription statuses contain txids/heights, not block identity.
@@ -5331,15 +5331,24 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 )
         highest_height = max(header_timestamps, default=0)
         if tip_height is not None and highest_height > tip_height:
-            # Recheck the initial tip after the reads before advancing. Keeping
-            # only the newest header can hide stale cached entries below it if
-            # a reorg replaced the initial tip midway through this sync.
+            raced_headers_valid = True
+            for height in sorted(header_timestamps):
+                if height <= tip_height:
+                    continue
+                try:
+                    reread_header = client.call("blockchain.block.header", [height])
+                except AppError:
+                    reread_header = None
+                fingerprint = _electrum_header_fingerprint(reread_header)
+                if fingerprint is None or fingerprint != header_fingerprints.get(height):
+                    raced_headers_valid = False
+                    break
             try:
                 initial_header = client.call("blockchain.block.header", [tip_height])
             except AppError:
                 initial_header = None
             initial_fingerprint = _electrum_header_fingerprint(initial_header)
-            if initial_fingerprint is not None and initial_fingerprint == tip_fingerprint:
+            if raced_headers_valid and initial_fingerprint is not None and initial_fingerprint == tip_fingerprint:
                 # Keep the exact header that supplied the cached timestamp.
                 tip_fingerprint = header_fingerprints.get(highest_height)
                 tip_height = highest_height if tip_fingerprint is not None else None
@@ -5353,7 +5362,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         {
             "backend": _backend_identity(backend, sync_state),
             "electrum_tip_fingerprint": tip_fingerprint,
-            "compatibility_history_anchor_version": 2,
+            "compatibility_history_anchor_version": 3,
             "electrum_tip_height": tip_height,
             "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
             "electrum_headers": {
