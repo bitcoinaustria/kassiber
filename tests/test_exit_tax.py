@@ -470,7 +470,7 @@ class ExitTaxComputeTests(unittest.TestCase):
             set(report.keys()),
             {
                 "workspace", "profile", "jurisdictionCode", "fiatCurrency",
-                "departureDate", "destination", "method", "journalInputVersion", "fmvSource", "totals",
+                "departureDate", "departureTimezone", "destination", "method", "journalInputVersion", "fmvSource", "totals",
                 "lots", "walletHoldings", "assumptions", "reviewGate", "status",
             },
         )

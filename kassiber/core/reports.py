@@ -7462,6 +7462,7 @@ def _exit_tax_xlsx_specs(report):
         {"field": "Profile", "value": report["profile"]},
         {"field": "Jurisdiction", "value": report["jurisdictionCode"]},
         {"field": "Departure date", "value": report["departureDate"]},
+        {"field": "Departure timezone", "value": report["departureTimezone"]},
         {"field": "Destination", "value": report["destination"]},
         {"field": "Collection timing", "value": totals["collectionTiming"]},
         {"field": "Accounting method", "value": report["method"]},

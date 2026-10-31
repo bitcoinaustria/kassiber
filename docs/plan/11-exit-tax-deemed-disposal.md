@@ -41,14 +41,15 @@ rows**: it reads the stored journal projection RP2 already computed
 (`custody_journal.load_stored_ledger_state`) and rebuilds the remaining inventory + cost basis
 **per regime, directly from those entries**:
 
-1. Walk journal entries strictly before the next day's `00:00:00Z`, including
-   fractional seconds at the end of the UTC departure day and comparing
+1. Walk journal entries strictly before the next civil midnight, including
+   fractional seconds at the end of the civil departure day (Europe/Vienna
+   including DST for AT, UTC for generic) and comparing
    instants rather than stored timestamp text.
 2. Acquisitions **add** quantity + cost (regime marker, then acquisition date).
    Income rows annotate the same receipt and are not counted twice. Disposals
    and fees **subtract** quantity + engine-computed consumed cost basis.
-   Outflow `at_category` takes precedence over input regime markers; fee rows
-   use the regime of RP2's consumed lots.
+   Disposal and fee markers persist RP2's pre-override consumed regime and
+   take precedence over overrideable realized categories.
 3. Internal transfers (`transfer_in` / `transfer_out`) create no
    acquisition/disposal entry, so they never touch the global pool — the split
    is transfer-invariant and needs no pair reconstruction.
@@ -73,7 +74,7 @@ No new tax math — the report reads the engine's own numbers.
 | Need | Source used |
 |---|---|
 | Remaining inventory + cost basis per regime | stored journal projection (acquisition `fiat_value`, outflow `cost_basis`), walked in `compute_deemed_disposal` |
-| Alt/Neu attribution | outflow `at_category` prefix first; otherwise regime marker, then `occurred_at` via `infer_regime_from_timestamp()`; fee markers reflect consumed lots |
+| Alt/Neu attribution | persisted consumed-regime marker first, then legacy category/date fallback; disposal and fee markers reflect matched lots before tax overrides |
 | FMV at the departure date | closest cached or transaction quote strictly before the cutoff and within the preceding 24 hours, disclosing source and actual quote timestamp (`_fmv_at`) |
 | 27.5% rate, Kennzahl mapping | `AT_SONDERSTEUERSATZ` (estimate constant) + `kennzahl_for_disposal_category()` |
 | PDF / XLSX adviser handoff | `hooks.write_text_pdf` + the generic XLSX writer in `kassiber/core/reports.py` |
@@ -180,7 +181,7 @@ defaults it invoked.
   XLSX and the desktop FMV card disclose every quote's source and `asOf`.
 - **Export history:** exit-tax estimates intentionally do not register ordinary
   realized-journal snapshots or chain dependency captures. A replayable
-  valuation recipe is needed first. PDF/XLSX stamp the journal input version
+  valuation recipe is needed first. PDF/XLSX stamp the departure timezone and journal input version
   and FMV source/`asOf` for interim manual freshness comparisons; see
   [saved and filed report impact](../reference/custody-components.md#saved-and-filed-report-impact).
 - **Re-run journals first.** The estimate is only trustworthy after journals are

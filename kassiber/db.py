@@ -973,8 +973,6 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
-<<<<<<< HEAD
-=======
 JOURNAL_CALCULATION_SEMANTICS_VERSION = 2
 JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
 
@@ -1017,7 +1015,6 @@ def _migrate_journal_semantics_adoption(conn) -> int:
         SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE {affected}""")
     return 1
->>>>>>> 91cc18ce1 (Require version 2 journal semantics for consumed regimes)
 
 
 def _migrate_partial_payout_semantics(conn) -> int:
@@ -5543,13 +5540,9 @@ def ensure_schema_compat(conn):
         conn.commit()
     if _migrate_custody_hold_semantics(conn):
         conn.commit()
-<<<<<<< HEAD
     if _migrate_tax_engine_semantics(conn):
         conn.commit()
-    if _migrate_at_fee_regime_semantics(conn):
-=======
     if _migrate_at_outflow_regime_semantics(conn):
->>>>>>> 91cc18ce1 (Require version 2 journal semantics for consumed regimes)
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")

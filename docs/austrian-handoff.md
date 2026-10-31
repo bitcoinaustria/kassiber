@@ -295,3 +295,13 @@ the Austrian legislator ever amends the cutoff, change both in one reviewed
 change, so unmarked events classified via the new cutoff are interpreted
 consistently by the reports. RP2 keeps the old cutoff, so the parity
 comparison must list the change as a reviewed difference.
+
+## Exit-tax departure calendar
+
+Austrian exit-tax drafts use the Europe/Vienna civil departure day, including
+DST, matching the acquisition-regime cutoff and realized capital-gains tax year.
+The exclusive next Vienna midnight bounds inventory and both cached and
+transaction FMV quotes; either quote source must be within 24 elapsed hours.
+Timed departures with offsets are converted to their Vienna civil day first.
+PDF/XLSX stamp the departure timezone. Generic books retain UTC days.
+This is the owner's decision; the previous UTC-versus-Vienna question is closed.

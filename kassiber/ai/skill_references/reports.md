@@ -224,14 +224,15 @@ deferred (Nichtfestsetzung); `third_country` reports it as due immediately. The
 amount is the same; only the collection timing differs. Estimate only — it
 requires processed journals and is a draft for a Steuerberater, not a filing.
 The method is the book's selected algorithm. Inventory and wallet quantities
-include the entire UTC departure day, strictly before the next UTC midnight;
+include the civil departure day, strictly before its next midnight: Europe/Vienna
+(including DST) for Austrian books, UTC for generic books;
 FMV uses only cached or transaction prices strictly before that same cutoff
 and discloses their actual source timestamps. Quarantines and missing
 prices leave an incomplete estimate. The closest cached or transaction quote wins; both sources must be within
 24 hours before the cutoff. Older prices are missing FMV, never zero tax.
 `status.missingFmvAssets` identifies that readiness barrier. PDF/XLSX and the
 desktop FMV card disclose quote source and `asOf`. Exit-tax exports intentionally create no
-ordinary realized-report snapshot. PDF/XLSX stamp `journalInputVersion` and FMV
+ordinary realized-report snapshot. PDF/XLSX stamp `departureTimezone`, `journalInputVersion` and FMV
 quotes for manual freshness comparison, without automatic amendment tracking.
 See `docs/plan/11-exit-tax-deemed-disposal.md`.
 

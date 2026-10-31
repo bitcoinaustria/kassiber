@@ -331,9 +331,9 @@ the live formula remains available for later spreadsheet edits.
 
 Exit-tax previews and PDF/XLSX estimates report the book's selected accounting
 method. They reconstruct global inventory and wallet quantities from journal
-entries before the next day's `00:00:00Z` (exclusive), including fractional
-seconds at the end of the departure day and comparing UTC instants even
-for legacy offset timestamps. Internal transfers move wallet context without
+entries before the next civil midnight (exclusive): Europe/Vienna for Austrian
+books, UTC for generic books. This includes fractional seconds and compares
+exact instants even for legacy offset timestamps. Internal transfers move wallet context without
 changing global inventory; income recognition is not counted twice.
 FMV chooses the closest cached or transaction quote strictly before that same
 cutoff. Either source must be at most 24 hours old relative to the cutoff;
@@ -353,19 +353,22 @@ snapshot system; see [saved and filed report impact](custody-components.md#saved
 PDF/XLSX drafts stamp the journal input version alongside the FMV quotes for
 manual comparison after changes; this does not register a saved/filed snapshot.
 
-### Exit-tax cutoff timezone: owner decision pending
+### Exit-tax departure day and timezone
 
-The departure day currently means the UTC calendar day. Austrian Alt/Neu
-classification uses the Europe/Vienna calendar. Keep that policy unchanged
-until the owner chooses whether to retain a clearly labelled UTC day, use the
-book jurisdiction's civil day (with DST-aware midnight bounds), or accept an
-explicit departure timezone/instant. Any change must apply to inventory and
-FMV together and be visible on the handoff.
+Austrian books use the Europe/Vienna civil departure day, including DST,
+consistent with the Alt/Neu cutoff and realized capital-gains tax year.
+Generic books use the UTC day. A date-only departure names that civil day;
+a departure supplied with a time and offset is converted to the jurisdiction's
+civil day first. The exclusive cutoff is the next midnight in that timezone,
+converted to UTC for inventory, cached quotes and transaction quotes together.
+PDF and XLSX drafts stamp `departureTimezone` as well as the departure date.
+This replaces the earlier open timezone question with the owner's decision.
 
-For departure 2024-12-31, a receipt at 2025-01-01 00:30 Europe/Vienna is
-2024-12-31 23:30Z: the current UTC day includes it although the Vienna departure
-day has ended. In summer, 2024-04-01 00:30 Europe/Vienna is 2024-03-31 22:30Z.
-The 22:30Z conversion is the summer case; winter uses UTC+1.
+For departure 2024-12-31, a receipt at 2025-01-01 00:30 Europe/Vienna
+(2024-12-31 23:30Z) is excluded from an Austrian book. In summer,
+2024-04-01 00:30 Europe/Vienna (2024-03-31 22:30Z) is likewise excluded
+from departure 2024-03-31. The FMV age limit remains 24 elapsed hours;
+it does not expand to cover a 25-hour autumn departure day.
 
 ## Rates and tax input quality
 
