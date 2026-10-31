@@ -23,6 +23,9 @@ as a Python extension; the rows below list its direct Rust dependencies, and
 the root `Cargo.lock` is the transitive inventory.
 The private custody fusion probe reuses this existing tax-engine crate through
 a development dependency; this adds no external package or runtime dependency.
+The native journal pre-build reuses Kassiber's transfer crate for component
+normalization, revisions, activation and evidence commitments. This internal
+dependency adds no third-party package.
 The Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2), which the engine replaced,
 is a development dependency only: tests use it as the engine's parity oracle.
 Rust storage also uses the existing internal `kassiber-pydecimal` crate for

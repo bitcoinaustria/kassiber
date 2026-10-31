@@ -1,6 +1,7 @@
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::{types::ValueRef, Connection, Params};
+use std::cell::RefCell;
 
 pub type Result<T> = std::result::Result<T, AppError>;
 
@@ -11,16 +12,71 @@ pub struct Scope<'a> {
 }
 
 pub fn error(error: kassiber_store::rusqlite::Error) -> AppError {
+    let mapped = mapped_error(&error);
+    SQLITE_ERRORS.with(|errors| {
+        if let Some(slot) = errors.borrow_mut().last_mut() {
+            if slot.is_none() {
+                *slot = Some(error);
+            }
+        }
+    });
+    mapped
+}
+
+fn mapped_error(error: &kassiber_store::rusqlite::Error) -> AppError {
     // Python propagates trigger refusals through the service boundary. Preserve
     // their message without exposing the SQL statement or connection details.
     // The shell's shared envelope still applies output redaction.
-    if let kassiber_store::rusqlite::Error::SqliteFailure(code, Some(message)) = &error {
+    if let kassiber_store::rusqlite::Error::SqliteFailure(code, Some(message)) = error {
         if code.extended_code == kassiber_store::rusqlite::ffi::SQLITE_CONSTRAINT_TRIGGER {
             return AppError::new("internal_error", message.clone());
         }
     }
-    let e = kassiber_store::map_sqlite_error(error);
+    let copy = match error {
+        kassiber_store::rusqlite::Error::SqliteFailure(code, message) => {
+            kassiber_store::rusqlite::Error::SqliteFailure(*code, message.clone())
+        }
+        _ => kassiber_store::rusqlite::Error::InvalidQuery,
+    };
+    let e = kassiber_store::map_sqlite_error(copy);
     AppError::new(e.code, e.message).retryable(e.retryable)
+}
+
+thread_local! {
+    static SQLITE_ERRORS: RefCell<Vec<Option<kassiber_store::rusqlite::Error>>> = const { RefCell::new(Vec::new()) };
+}
+
+#[derive(Debug)]
+pub enum CapturedError {
+    Sqlite(kassiber_store::rusqlite::Error),
+    App(AppError),
+}
+
+struct ErrorScope(bool);
+
+impl Drop for ErrorScope {
+    fn drop(&mut self) {
+        if self.0 {
+            SQLITE_ERRORS.with(|errors| {
+                errors.borrow_mut().pop();
+            });
+        }
+    }
+}
+
+pub(super) fn capture_sqlite<T>(
+    f: impl FnOnce() -> Result<T>,
+) -> std::result::Result<T, CapturedError> {
+    SQLITE_ERRORS.with(|errors| errors.borrow_mut().push(None));
+    let mut scope = ErrorScope(true);
+    let result = f();
+    let error = SQLITE_ERRORS.with(|errors| errors.borrow_mut().pop().flatten());
+    scope.0 = false;
+    match (result, error) {
+        (Ok(value), _) => Ok(value),
+        (Err(_), Some(error)) => Err(CapturedError::Sqlite(error)),
+        (Err(error), None) => Err(CapturedError::App(error)),
+    }
 }
 
 pub fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Value>> {
@@ -162,5 +218,33 @@ pub fn bind(value: &Value, index: usize) -> Result<kassiber_store::rusqlite::typ
                 kassiber_envelope::type_name(value)
             ),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migration_sqlite_capture_preserves_errors_and_restores_scope() {
+        let c = Connection::open_in_memory().unwrap();
+        let mapped = error(c.execute("SELECT absent", []).unwrap_err());
+        assert_eq!(mapped.code, "internal_error");
+        let domain = || Err::<(), _>(AppError::new("validation", "domain refusal"));
+        assert!(matches!(capture_sqlite(domain), Err(CapturedError::App(_))));
+        let raw = capture_sqlite(|| {
+            c.execute("SELECT absent", []).map_err(error)?;
+            Ok(())
+        });
+        assert!(matches!(raw, Err(CapturedError::Sqlite(_))));
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _: std::result::Result<(), CapturedError> = capture_sqlite(|| {
+                let _ = c.execute("SELECT absent", []).map_err(error);
+                panic!("injected capture unwind")
+            });
+        }));
+        assert!(panic.is_err());
+        assert!(matches!(capture_sqlite(domain), Err(CapturedError::App(_))));
+        SQLITE_ERRORS.with(|errors| assert!(errors.borrow().is_empty()));
     }
 }

@@ -1,0 +1,25 @@
+{
+  "schema": "kassiber.r4-prebuild-legacy-checkpoint.v1",
+  "boundary": "Separate source, legacy-refresh/profile-reload and pricing stage entry points; no production route",
+  "legacy_scenarios": 38,
+  "full_dump_driver_comparisons": 280,
+  "driver_cases_each": {
+    "pricing": 53,
+    "source_overlap": 49,
+    "legacy_refresh": 38
+  },
+  "drivers": ["SQLite", "SQLCipher"],
+  "network_guard": "Native socket/connect/send syscall rejection with a socket-construction self-test; Python DNS/connect/send patches",
+  "native_legacy_tests": 7,
+  "native_transfer_tests": 41,
+  "legacy_mutation_entries": 21,
+  "mutation_campaign": "Not yet executed; recipe applicability is checked separately",
+  "remaining": [
+    "Combined ordered API and rollback after later build/persistence failures",
+    "Twelve-generator per-scenario activity and frozen campaign vectors",
+    "Recorded and fresh-book campaign on both drivers",
+    "Focused census and shadow",
+    "Whole-stage branch mutation campaign",
+    "Whole-stage 20k process CPU profiling and cache optimization"
+  ]
+}

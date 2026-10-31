@@ -167,11 +167,15 @@ pub(super) fn allocation(id: String, source: &str, sink: &str, a: i128, b: i128)
 pub(super) fn group(rows: &[Value], full: bool) -> Result<Value> {
     let mut ordered = rows.to_vec();
     ordered.sort_by_key(|r| (text(r, "created_at"), text(r, "id")));
-    let ids: Vec<_> = ordered.iter().map(|r| text(r, "id")).collect();
     let hashes = ordered
         .iter()
         .map(|r| hash(&project(r, FIELDS), false))
         .collect::<Result<Vec<_>>>()?;
+    group_hashed(&ordered, full, &hashes)
+}
+
+pub(super) fn group_hashed(ordered: &[Value], full: bool, hashes: &[String]) -> Result<Value> {
+    let ids: Vec<_> = ordered.iter().map(|r| text(r, "id")).collect();
     let profile = text(&ordered[0], "profile_id");
     let mut parts = vec!["transaction_pair_group", &profile];
     parts.extend(hashes.iter().map(String::as_str));

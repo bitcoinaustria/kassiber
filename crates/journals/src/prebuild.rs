@@ -4,10 +4,12 @@ use kassiber_store::rusqlite::{
     self, functions::FunctionFlags, params, types::Value as Sql, Connection,
 };
 
+mod legacy;
 mod overlap;
 mod pricing;
 mod sources;
 
+pub use legacy::{refresh_drifted_legacy_pair_components, ConsolidationResult, LegacyRefresh};
 pub use overlap::{
     repair_journal_source_overlaps, source_overlap_result_fields, source_overlap_warning,
 };

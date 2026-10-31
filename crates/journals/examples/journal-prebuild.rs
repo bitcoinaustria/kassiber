@@ -2,8 +2,9 @@
 #[path = "../tests/support/mod.rs"]
 mod support;
 use kassiber_journals::prebuild::{
-    auto_price_transactions_from_rates_cache, repair_journal_source_overlaps,
-    source_overlap_result_fields, source_overlap_warning, PricingScope,
+    auto_price_transactions_from_rates_cache, refresh_drifted_legacy_pair_components,
+    repair_journal_source_overlaps, source_overlap_result_fields, source_overlap_warning,
+    PricingScope,
 };
 use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::Connection;
@@ -78,6 +79,10 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
             )
             .map_err(|e| kassiber_journals::Refusal::from(e.to_string()))?);
             Ok(json!({"repair":repair,"warning":warning}))
+        })
+    } else if v["stage"] == "legacy" {
+        refresh_drifted_legacy_pair_components(&conn, &v["profile"], &mut clock).map(|result| {
+            json!({"consolidation":{"activated":result.consolidation.activated,"unchanged":result.consolidation.unchanged,"skipped":result.consolidation.skipped},"profile":result.profile})
         })
     } else {
         auto_price_transactions_from_rates_cache(

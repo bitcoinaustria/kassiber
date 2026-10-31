@@ -14,6 +14,7 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
+kassiber-transfers = { path = "../transfers" }
 kassiber-tax-core = { path = "../../tax-engine/core" }
 # Reuse the book's SQLCipher driver and existing Python-compatible timestamp
 # parser; neither the standard library nor the renderer supplies these.

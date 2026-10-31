@@ -9,6 +9,7 @@ mod gap_review;
 mod gap_review_store;
 mod gap_snapshot;
 mod history;
+pub mod legacy_refresh;
 mod pair_authoring;
 mod pair_spec;
 pub mod pairing;

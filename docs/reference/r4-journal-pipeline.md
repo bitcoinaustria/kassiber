@@ -363,7 +363,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)](r4-native-loader-checkpoint.md#loader-9-acceptance); all 308 loader and 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; inherited non-BLOB audit has 16,384 matches, zero writes/unsafe admissions; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
-| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Auto-pricing checkpoint](#r4-10-auto-pricing-checkpoint); legacy repair, combined interface and campaign acceptance remain open. | Python 0.03 | ≤ 0.03 s |
+| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Auto-pricing checkpoint](#r4-10-auto-pricing-checkpoint); combined interface and campaign acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
@@ -382,8 +382,9 @@ remaining whole-pipeline budget.
 
 ### R4-10 auto-pricing checkpoint
 
-This is a partial, unregistered library checkpoint. It ports cached pricing
-and the [source-overlap stage](#r4-10-source-overlap-checkpoint). **R4-10 is not
+This is a partial, unregistered library checkpoint. It ports cached pricing,
+the [source-overlap stage](#r4-10-source-overlap-checkpoint), and
+[legacy refresh](#r4-10-legacy-refresh-checkpoint). **R4-10 is not
 complete, and this function is not a replacement for the pre-build pipeline.**
 Python's ordered pre-build contract is:
 
@@ -480,8 +481,7 @@ example (`--features test-harness`) and
 `uv run --locked python scripts/check-journal-prebuild.py --binary
 <absolute-example-path> --benchmark --out <target/results.json>`.
 
-Remaining R4-10 acceptance work: port drifted legacy-pair component refresh
-and its profile reload; expose the combined ordered pre-build stage for R4-13;
+Remaining R4-10 acceptance work: expose the combined ordered pre-build stage for R4-13;
 prove whole-pipeline rollback after subsequent build/persistence refusals;
 compare the twelve generators with per-scenario activity, recorded books and
 fresh recordings on both drivers; expand the legacy/refusal corpus beyond
@@ -561,13 +561,62 @@ for a disposable in-memory repro. This port retains the reference conversion;
 rejecting those invalid legacy quantities needs a separate Python correction
 and refreshed parity vectors.
 
-The next legacy-refresh port must retain the distinction between migration
-domain refusals (record a skipped migration issue) and SQLite failures
-(propagate and roll back). The existing private component-authoring helpers in
-`crates/transfers` map SQLite errors to `AppError`; catching all such errors as
-migration skips would hide technical failures. No combined pre-build entry
+Legacy refresh retains the distinction between migration domain refusals
+(record a skipped migration issue) and SQLite failures (propagate and roll
+back). The private component-authoring helpers in `crates/transfers` normally
+map SQLite errors to `AppError`; the refresh preserves their raw errors in a
+bounded scoped capture so the journal boundary can propagate their exception
+family. No combined pre-build entry
 point is available at this checkpoint, so R4-13 still needs the complete
 Python pre-build pipeline until that port and its rollback gate are finished.
+
+### R4-10 legacy-refresh checkpoint
+
+`prebuild::refresh_drifted_legacy_pair_components(&Connection, &serde_json::Value,
+clock) -> Result<LegacyRefresh, Refusal>` accepts the resolved profile and a
+fallible `FnMut() -> Result<String, Refusal>`. `LegacyRefresh` contains
+`consolidation` (`activated`, `unchanged`, `skipped`) and `profile`. After an
+activated **or skipped** outcome, `profile` is reloaded from the same connection;
+otherwise the supplied projection is retained. Later pricing, loading and
+persistence must use this returned profile. The migration count is per
+connected group, rather than per legacy row.
+
+Only active migration-authored legacy pair components with valid anchors and
+exactly the evidence commitment mismatch issue qualify. Existing economics,
+unrelated authored components, deleted rows and unlinked legacy rows do not
+gain authority. Every linked member of a connected pair group must qualify;
+unlinked neighbors remain part of the same atomic migration. Revisions,
+canonical economic row hashes, source residuals, evidence snapshots,
+commitments, memberships, legacy links and migration issues use the shared
+transfer authoring implementation. The journals crate adds only an internal
+dependency on that implementation, without an external package.
+
+The caller must own a reserved writer transaction. An outer stage savepoint
+and inner group savepoints retain caller writes and restore all stage writes
+on technical refusal or unwinding. A domain refusal restores the partial group
+before recording its durable issue. SQLite failures retain their raw exception
+family and propagate. Clock failures preserve the supplied refusal; clocks are
+sampled only where Python samples them. No network, filesystem, implicit clock
+or entropy source enters the interface.
+
+`tests.rust_port.journal_legacy_refresh_oracle` freezes **38 complete logical
+dumps** and result/refusal projections. They include connected split and
+conversion groups, mixed linked/unlinked groups, two independent groups,
+changing clocks, legacy REAL/integer text, malformed links, author/evidence
+eligibility, prior issues, explicit timestamp normalization and domain refusals
+after partial activation. Native tests also inject clock refusal/unwinding and
+a late SQL failure after an earlier group's successful work. Both changed
+outcomes independently prove profile reload. The bounded legacy mutation
+catalog is `crates/journals/scripts/legacy_mutations.json`; the inherited
+whole-stage campaign, combined interface, later-stage rollback and CPU gates
+remain open. No production route calls this checkpoint.
+
+The separate-stage replay passes **280 full-dump comparisons**: all 53 pricing,
+49 source and 38 legacy cases on each real driver under the native socket
+guard. All seven legacy tests and 41 transfer tests pass, as do the existing
+journal unit, render, join, persistence, source and pricing suites. The
+[checkpoint evidence](r4-prebuild-legacy-results.json) records the exact scope;
+these results do not establish whole-stage campaign or performance acceptance.
 
 ## Performance budget
 
