@@ -682,8 +682,8 @@
   {
     "id": "JP-same-column-tuple",
     "file": "crates/journals/src/storage.rs",
-    "find": "new[..N - 1].iter()",
-    "replace": "new[..N - 2].iter()",
+    "find": "0..N - 1",
+    "replace": "0..N - 2",
     "expect_failing": [
       "mixed_timestamps_and_signed_zero_force_entry_rewrites"
     ],
@@ -812,8 +812,8 @@
   {
     "id": "JP-pricing",
     "file": "crates/journals/src/persistence.rs",
-    "find": "source,\n            quality,",
-    "replace": "quality,\n            source,",
+    "find": "source.into(),\n            quality.into(),",
+    "replace": "quality.into(),\n            source.into(),",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -832,8 +832,8 @@
   {
     "id": "JP-entry-type",
     "file": "crates/journals/src/persistence.rs",
-    "find": "t(e.entry_type),",
-    "replace": "t(\"income\"),",
+    "find": "ValueRef::Text(e.entry_type.as_bytes()),",
+    "replace": "ValueRef::Text(b\"income\"),",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -962,8 +962,8 @@
   {
     "id": "JP-quantity-observation",
     "file": "crates/journals/src/persistence/quantity.rs",
-    "find": "borrowed(&o[\"anchor_transaction_id\"])?",
-    "replace": "ValueRef::Null",
+    "find": "borrowed(o.transaction)?,",
+    "replace": "ValueRef::Null,",
     "expect_failing": [
       "journal_persistence_matches_complete_python_dumps"
     ],
@@ -1072,7 +1072,7 @@
   {
     "id": "JP-live-quarantines",
     "file": "crates/journals/src/persistence.rs",
-    "find": "quarantines.retain(|q| live.contains(&string(&q.transaction_id)));",
+    "find": "quarantines.retain(|q| live.contains(quantity::key(&q.transaction_id).as_ref()));",
     "replace": "quarantines.retain(|q| {let _ = (&live,q);true});",
     "expect_failing": [
       "synthetic_quarantines_are_filtered_before_readiness"
@@ -1613,7 +1613,7 @@
     "id": "JP-typed-dedupe",
     "file": "crates/journals/src/storage/calculation.rs",
     "find": "positions.entry(encoded.clone()).or_insert_with(||",
-    "replace": "positions.entry(format!(\"{}:{encoded}\", fragments.len())).or_insert_with(||",
+    "replace": "positions.entry(Arc::<str>::from(format!(\"{}:{encoded}\", fragments.len()))).or_insert_with(||",
     "expect_failing": [
       "typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs"
     ],
@@ -1958,5 +1958,175 @@
       "economic_relation_source_ids_use_first_truthy_id_or_empty_string"
     ],
     "rule": "The first truthy source identifier has Python precedence."
+  },
+  {
+    "id": "JP-source-cache-provenance",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "provenance: Arc::as_ptr(&value.provenance),",
+    "replace": "provenance: std::ptr::null(),",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A shared source encoding must bind every source operand and retain invalid-shape refusals."
+  },
+  {
+    "id": "JP-source-cache-asset",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "asset: &value.asset,",
+    "replace": "asset: \"\",",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A shared source encoding must bind every source operand and retain invalid-shape refusals."
+  },
+  {
+    "id": "JP-source-cache-spot",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "spot: &value.spot_price_exact,",
+    "replace": "spot: \"\",",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A shared source encoding must bind every source operand and retain invalid-shape refusals."
+  },
+  {
+    "id": "JP-source-cache-fiat-fee",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "fiat_fee: &value.fiat_fee_exact,",
+    "replace": "fiat_fee: \"\",",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A shared source encoding must bind every source operand and retain invalid-shape refusals."
+  },
+  {
+    "id": "JP-source-cache-crypto-fee",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "crypto_fee: &value.crypto_fee_msat,",
+    "replace": "crypto_fee: &Value::Null,",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A shared source encoding must bind every source operand and retain invalid-shape refusals."
+  },
+  {
+    "id": "JP-source-cache-crypto-exact",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "crypto_fee_exact: &value.crypto_fee_msat_exact,",
+    "replace": "crypto_fee_exact: \"\",",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A shared source encoding must bind every source operand and retain invalid-shape refusals."
+  },
+  {
+    "id": "JP-decimal-sign",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "Sql::Real(float), t(fixed)",
+    "replace": "Sql::Real(f64::abs(float)), t(fixed)",
+    "expect_failing": [
+      "shared_decimal_spelling_preserves_float_bits_and_exact_text"
+    ],
+    "rule": "Shared decimal formatting preserves the signed REAL zero and exact text."
+  },
+  {
+    "id": "JP-borrowed-entry-id",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "0 => (&self.owned[0]).into(),",
+    "replace": "0 => (&self.owned[1]).into(),",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Borrowed entry projections retain the exact column layout."
+  },
+  {
+    "id": "JP-borrowed-entry-metadata",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "1..=8 => self.metadata[index - 1],",
+    "replace": "1..=8 => self.metadata[index],",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Borrowed entry projections retain the exact column layout."
+  },
+  {
+    "id": "JP-borrowed-entry-numbers",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "9..=21 => (&self.owned[index - 8]).into(),",
+    "replace": "9..=21 => (&self.owned[index - 9]).into(),",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Borrowed entry projections retain the exact column layout."
+  },
+  {
+    "id": "JP-borrowed-entry-tail",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "22..=28 => self.metadata[index - 14],",
+    "replace": "22..=28 => self.metadata[index - 15],",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Borrowed entry projections retain the exact column layout."
+  },
+  {
+    "id": "JP-posting-field-observation",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "\"observation_hash\" => 1,",
+    "replace": "\"observation_hash\" => 0,",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Posting field extraction retains the reference SQL column order."
+  },
+  {
+    "id": "JP-posting-field-asset",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "\"asset\" => 2,",
+    "replace": "\"asset\" => 3,",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Posting field extraction retains the reference SQL column order."
+  },
+  {
+    "id": "JP-posting-field-location",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "\"location_id\" => 4,",
+    "replace": "\"location_id\" => 3,",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Posting field extraction retains the reference SQL column order."
+  },
+  {
+    "id": "JP-posting-field-amount",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "\"amount_msat\" => 5,",
+    "replace": "\"amount_msat\" => 6,",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Posting field extraction retains the reference SQL column order."
+  },
+  {
+    "id": "JP-posting-field-state",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "\"state\" => 6,",
+    "replace": "\"state\" => 5,",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Posting field extraction retains the reference SQL column order."
+  },
+  {
+    "id": "JP-binding-refusal-order",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "let quantity = amount(&e.quantity)?;",
+    "replace": "let quantity = { decimal_bindings(Some(&e.fiat_value))?; amount(&e.quantity)? };",
+    "expect_failing": [
+      "binding_refusals_precede_decimal_formatting_and_roll_back_every_write"
+    ],
+    "rule": "Validate metadata and quantity bindings before decimal formatting, preserving the reference refusal order and rollback."
   }
 ]

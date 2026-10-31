@@ -86,6 +86,31 @@ fn persistence_refuses_without_a_caller_transaction() {
     equal(&c, &v["before"], &v["name"]);
 }
 
+#[test]
+fn binding_refusals_precede_decimal_formatting_and_roll_back_every_write() {
+    use kassiber_journals::JournalDecimal;
+    use serde_json::json;
+    let v = &cases()[0];
+    let c = Connection::open_in_memory().unwrap();
+    load(&c, &v["before"]);
+    for (bad_metadata, expected) in [(true, "ProgrammingError"), (false, "OverflowError")] {
+        c.execute_batch("BEGIN IMMEDIATE;SAVEPOINT journals_process")
+            .unwrap();
+        let result = store_with(&c, v, &mut Writes::default(), |state| {
+            let entry = &mut state.entries[0];
+            if bad_metadata {
+                entry.workspace_id = json!({"unsupported":true});
+            }
+            entry.quantity = JournalDecimal("1E+20".parse().unwrap());
+            entry.fiat_value = JournalDecimal("1E+100000001".parse().unwrap());
+        });
+        assert_eq!(result.unwrap_err().family, expected);
+        equal(&c, &v["before"], &v["name"]);
+        c.execute_batch("ROLLBACK TO journals_process;RELEASE journals_process;ROLLBACK")
+            .unwrap();
+    }
+}
+
 struct Scratch(std::path::PathBuf);
 impl Scratch {
     fn new(name: &str) -> Self {

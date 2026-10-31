@@ -6,6 +6,195 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Continuation from `32767d331`
+
+This continuation keeps **R4-12 unaccepted**. It reduces preparation without
+changing the schema, stored values, UUIDs, DML order, transaction policy or
+the public persistence stage. No preparation moves outside the persistence
+timer. Unchanged entries still require calculation/scalar preparation and full
+retained-row comparison; the required cheap unchanged path remains open.
+
+Entry bindings borrow metadata and pricing text rather than cloning them into
+SQL values. Ordinary REAL and exact decimal bindings share one fixed spelling;
+long spellings retain the original Decimal conversion. Metadata and amount refusals
+still precede decimal formatting, including when both inputs are invalid.
+Quantity postings extract their fields once, reuse observation metadata and
+borrow balance keys. The additional `quantity_postings_bind` span separates
+the observation index from posting preparation.
+
+Calculation-source encodings are shared within one store. Cache keys bind the
+immutable borrowed provenance owner and every independent source operand,
+including the exact fee spelling. The borrow lifetime prevents provenance
+mutation or address reuse while cached. Per-calculation dictionaries still
+deduplicate by encoded content in first-seen order, and invalid shapes retain
+the legacy fallback. The cache is dropped on return, refusal or unwind.
+
+### Appended benchmark correction
+
+The inherited benchmark copied a transaction's original `raw_json.txid` while
+changing its table id, fingerprint and external id. Those rows can remain
+aliases of the original observation. An isolated generic-2k reproduction adds
+20 transaction rows but produces **zero appended entries**, with 2,000 entries
+and 4,000 postings unchanged. Giving those rows distinct raw txids and dates
+produces 2,020 entries and 4,040 postings. This is a benchmark fixture defect;
+Python product code is unchanged.
+
+The corrected harness appends after the latest observation, within the injected
+build clock, and updates raw identity/date and a present confirmation timestamp.
+It records entry/posting INSERT and DELETE activity and refuses vacuous fresh,
+unchanged, appended or changed cases. Every appended transaction must reach its
+entry. Earlier appended timing rows lacked this witness and are superseded.
+The benchmark now records its own source hash as well as native source hashes.
+
+### Continuation measurements
+
+A clean-base generic-20k profile ran before editing. Its unchanged store took
+0.459113 CPU seconds: entry preparation 0.113357, entry comparison 0.062483,
+posting preparation 0.100754 and posting comparison 0.110475. That single pair
+identifies the work to remove; it is not a five-pair acceptance result.
+
+The final variant ran all four rebuild modes on both book sizes and drivers:
+**480 timed stores, all exact dumps**. Each table cell below is an independent
+minimum over five alternating Python/native pairs, with a floor replay after
+each pair. Units are process CPU seconds; every wall sample and phase profile
+is retained in the [continuation measurement record](r4-journal-persistence-continuation-measurements.json).
+Load ranges include all three engines' samples. Preparation, retained-row
+comparison, writes and COMMIT stay timed. Decoding, rendering, dump verification
+and passive checkpointing stay outside the timer.
+
+Only generic SQLite fresh meets the required 20k floor + 0.15 CPU budget;
+**seven of eight fresh/unchanged cells fail**. All unchanged 20k cells fail.
+Native beats Python in every measured mode, but R4-12 remains unaccepted.
+All 2k modes are within 0.047 CPU seconds of the floor. These comparisons do
+not establish a speed improvement over the historical variants under different
+host contention. A cheap, fully validated unchanged-row path remains necessary.
+
+20,000 transactions:
+
+| Book / rebuild | Python CPU | Native CPU | Floor CPU | Native − floor | Load 1m range |
+| --- | ---: | ---: | ---: | ---: | --- |
+| generic-sqlite / fresh | 1.504052 | 0.931166 | 0.853787 | 0.077379 | 42.941–46.548 |
+| generic-sqlite / unchanged | 2.158688 | 0.769648 | 0.001453 | 0.768195 | 52.110–62.775 |
+| generic-sqlite / appended | 2.342143 | 0.802534 | 0.028169 | 0.774365 | 53.500–59.256 |
+| generic-sqlite / changed | 1.434473 | 0.669721 | 0.148010 | 0.521711 | 43.791–62.193 |
+| multi-wallet-sqlite / fresh | 1.552594 | 1.116595 | 0.951404 | 0.165191 | 31.765–36.177 |
+| multi-wallet-sqlite / unchanged | 1.432145 | 0.453280 | 0.014439 | 0.438841 | 34.413–45.429 |
+| multi-wallet-sqlite / appended | 1.482188 | 0.466169 | 0.029273 | 0.436896 | 41.725–46.224 |
+| multi-wallet-sqlite / changed | 1.867898 | 0.585272 | 0.188936 | 0.396336 | 33.721–36.030 |
+| generic-sqlcipher / fresh | 1.900272 | 1.004052 | 0.774469 | 0.229583 | 29.255–33.992 |
+| generic-sqlcipher / unchanged | 2.556472 | 0.957430 | 0.004577 | 0.952853 | 36.122–57.454 |
+| generic-sqlcipher / appended | 1.638017 | 0.599036 | 0.072553 | 0.526483 | 47.216–58.188 |
+| generic-sqlcipher / changed | 1.692202 | 0.923522 | 0.409398 | 0.514124 | 26.570–30.851 |
+| multi-wallet-sqlcipher / fresh | 1.736885 | 1.118850 | 0.844563 | 0.274287 | 25.150–30.489 |
+| multi-wallet-sqlcipher / unchanged | 1.446978 | 0.608311 | 0.019554 | 0.588757 | 24.261–29.088 |
+| multi-wallet-sqlcipher / appended | 1.495798 | 0.708857 | 0.088449 | 0.620408 | 24.616–26.249 |
+| multi-wallet-sqlcipher / changed | 1.942433 | 1.114866 | 0.482496 | 0.632370 | 21.479–22.852 |
+
+2,000 transactions:
+
+| Book / rebuild | Python CPU | Native CPU | Floor CPU | Native − floor | Load 1m range |
+| --- | ---: | ---: | ---: | ---: | --- |
+| generic-sqlite / fresh | 0.112811 | 0.071574 | 0.057841 | 0.013733 | 21.282–22.090 |
+| generic-sqlite / unchanged | 0.077541 | 0.028323 | 0.000930 | 0.027393 | 20.716–20.779 |
+| generic-sqlite / appended | 0.088368 | 0.031780 | 0.003146 | 0.028634 | 20.258–21.679 |
+| generic-sqlite / changed | 0.110395 | 0.041262 | 0.013376 | 0.027886 | 21.144–21.773 |
+| multi-wallet-sqlite / fresh | 0.134229 | 0.088138 | 0.071129 | 0.017009 | 20.738–21.151 |
+| multi-wallet-sqlite / unchanged | 0.109622 | 0.041821 | 0.006241 | 0.035580 | 20.894–21.320 |
+| multi-wallet-sqlite / appended | 0.116552 | 0.038112 | 0.008513 | 0.029599 | 20.375–20.582 |
+| multi-wallet-sqlite / changed | 0.150519 | 0.049409 | 0.020427 | 0.028982 | 20.948–21.466 |
+| generic-sqlcipher / fresh | 0.156806 | 0.085447 | 0.074710 | 0.010737 | 23.208–27.196 |
+| generic-sqlcipher / unchanged | 0.112926 | 0.046507 | 0.002907 | 0.043600 | 21.324–22.481 |
+| generic-sqlcipher / appended | 0.112525 | 0.056402 | 0.014135 | 0.042267 | 21.503–22.824 |
+| generic-sqlcipher / changed | 0.147470 | 0.088989 | 0.047962 | 0.041027 | 20.192–22.900 |
+| multi-wallet-sqlcipher / fresh | 0.159128 | 0.105484 | 0.081055 | 0.024429 | 22.663–23.592 |
+| multi-wallet-sqlcipher / unchanged | 0.123538 | 0.057623 | 0.011377 | 0.046246 | 22.312–23.168 |
+| multi-wallet-sqlcipher / appended | 0.143286 | 0.070378 | 0.023448 | 0.046930 | 22.595–23.430 |
+| multi-wallet-sqlcipher / changed | 0.195903 | 0.104858 | 0.059261 | 0.045597 | 22.994–24.300 |
+
+### Continuation verification and stop state
+
+| Check | Final result |
+| --- | --- |
+| Five alternating pairs, all modes/sizes/drivers | 480 exact timed-store dumps |
+| Offline release journal tests, one test thread | 53 passed; zero failed or ignored |
+| Offline release journal clippy, all targets, `-D warnings` | Pass |
+| Workspace formatting check | Pass |
+| Python render/storage oracles | 8 passed |
+| Journal mutation catalog | 181/181 killed; zero survivors or build errors |
+| Unmutated mutation baselines | 35 distinct filters passed across three shards |
+| Required test-classifier update | Complete; no generated diff |
+| Required preflight shard, `--ci` | 57 passed |
+| Manual second review | Complete |
+
+The journal tests include complete dumps, error/unwind rollback and deterministic
+process-termination recovery on physical SQLite WAL/NORMAL and SQLCipher
+DELETE/FULL books. These are the existing persistence-stage witnesses, with the
+new refusal-order case; they do not exercise the R4-13 caller's repairs.
+
+The mutation run is resumable by source hashes, with incremental per-shard logs
+and explicit recipe subsets in the measurement record. It runs the 17 new
+recipes followed by the inherited 164, partitioned into 64/64/53. Each shard
+deletes its build tree before the next starts. One initial decimal-sign recipe
+failed to compile because method-call syntax prevented float type inference;
+it was corrected to `f64::abs(float)` and the entire shard rerun. That initial
+build error is recorded separately and is not counted as a kill. Production
+source did not change during the timing or final verification campaigns.
+
+This is a **verified partial checkpoint**, not R4-12 acceptance. What remains:
+
+1. Implement the cheap unchanged-row path and meet the final 20k CPU budget on
+   both book shapes and drivers. Three fresh and all four unchanged cells still
+   fail; repeat the comparisons after further production changes.
+2. Finish the exhaustive persistence branch-to-mutation audit. The 181 named
+   kills do not establish exhaustive coverage.
+3. Rerun the inherited 24,000 books, 1,030 permutations, 159 recordings at
+   `/home/tg/.cache/kassiber-verify/custody-recordings/` and their permutations
+   plus fresh recordings, full census/shadow, and 2,285 custody mutations.
+   None of those full campaigns was rerun in this continuation. Preserve the
+   known Python shadow read-budget repro below.
+4. Execute the integrated R4-13 contract witnesses below on both physical
+   drivers, including post-COMMIT failure handling, then write the acceptance
+   record. The source review below does not close that gate.
+
+### R4-13 caller contract review
+
+The inspected `t3code/r4-13-journals-process-2` revision is `16c145721`.
+This is a source review, **not an integrated verification result**. Its
+`process::process` currently acquires `BEGIN IMMEDIATE` before profile
+resolution, repairs, pricing and snapshot loading. Its transaction guard owns
+the whole rollback; the persistence stage's nested savepoint cannot undo
+earlier repairs. The branch has named tests for pre-build refusals, phase
+unwinds, persistence failure after repairs and successful atomic persistence.
+Those tests have not been rerun with this continuation.
+
+The integration must preserve these boundaries:
+
+- Hold the borrowed profile, custody, wallet and ledger owners until persistence
+  returns. The source-encoding cache lives only within that call.
+- Enter the connection cache and checkpoint guards while idle, acquire the
+  write transaction before any snapshot or repair, and keep every repair,
+  pricing write, journal write and freshness marker in the same transaction.
+- On any pre-COMMIT refusal or unwind, roll back the entire transaction,
+  including pre-build writes, and restore the connection settings. A caller
+  that catches the persistence refusal must still perform this outer rollback.
+- Publish success only after COMMIT. Restore the rebuild cache after transaction
+  completion; retain the checkpoint guard until the response is published and
+  flushed. Only then invoke `after_reply`, which performs PASSIVE on WAL and
+  restores the previous automatic-checkpoint setting. SQLCipher stays
+  DELETE/FULL and receives no WAL checkpoint.
+- Treat errors after COMMIT separately from rebuild failures: they cannot
+  roll back committed repairs or journals. The inspected orchestration still
+  has a fallible cache restoration and a progress callback after COMMIT; its
+  probe also lets an `after_reply` error reach the outer error-response path.
+  The integrated transport needs witnesses for these cases, including no
+  second failure response after publishing success.
+
+Final verification must exercise both physical drivers, pre-build and
+persistence error/unwind paths, success visibility from another connection,
+response flush before checkpoint, and setting restoration after a dropped
+response/checkpoint handle. The existing persistence-only rollback and crash
+witnesses do not establish the complete caller contract.
+
 ## Follow-up from `b5eb38ea8`
 
 This local follow-up improves persistence and adds semantic and crash witnesses.
@@ -349,7 +538,7 @@ the environment was synchronized with `uv sync --locked --python 3.11`.
 Cargo runs offline. Point `TMPDIR` at an existing directory under worktree
 `target/`; a read-only shared uv cache can use `UV_NO_SYNC=1` and
 `UV_CACHE_DIR=target/uv-cache` after synchronization. Never use a real book.
-Use `CARGO_BUILD_JOBS=8`, `CARGO_TARGET_DIR=$PWD/target` and
+Use `CARGO_BUILD_JOBS=4`, `CARGO_TARGET_DIR=$PWD/target` and
 `CARGO_BUILD_BUILD_DIR=$PWD/target/build` to keep builds bounded and local.
 
 ```sh

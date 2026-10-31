@@ -11,13 +11,12 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 mod calculation;
+#[cfg(test)]
 pub(crate) use calculation::encode as encode_typed_calculation;
+pub(crate) use calculation::Encoder as CalculationEncoder;
 
 trait Cell {
     fn value_ref(&self) -> ValueRef<'_>;
-    fn as_str(&self) -> Option<&str> {
-        self.value_ref().as_str().ok()
-    }
 }
 impl Cell for Sql {
     fn value_ref(&self) -> ValueRef<'_> {
@@ -30,10 +29,19 @@ impl Cell for ValueRef<'_> {
     }
 }
 
-struct CellParam<'a, T>(&'a T);
-impl<T: Cell> ToSql for CellParam<'_, T> {
+struct CellParam<'a>(ValueRef<'a>);
+impl ToSql for CellParam<'_> {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Borrowed(self.0.value_ref()))
+        Ok(rusqlite::types::ToSqlOutput::Borrowed(self.0))
+    }
+}
+
+pub(crate) trait BindingRow<const N: usize> {
+    fn cell(&self, index: usize) -> ValueRef<'_>;
+}
+impl<const N: usize, T: Cell> BindingRow<N> for [T; N] {
+    fn cell(&self, index: usize) -> ValueRef<'_> {
+        self[index].value_ref()
     }
 }
 
@@ -339,14 +347,14 @@ pub fn encode_calculation(value: &Value) -> Result<(Option<String>, Option<Strin
     }
 }
 
-fn same_row<const N: usize, T: Cell>(
+fn same_row<const N: usize, T: BindingRow<N>>(
     old: &rusqlite::Row<'_>,
-    new: &[T; N],
+    new: &T,
     reals: &[usize],
 ) -> rusqlite::Result<bool> {
-    for (index, value) in new[..N - 1].iter().enumerate() {
+    for index in 0..N - 1 {
         let prior = old.get_ref(index)?;
-        let value = value.value_ref();
+        let value = new.cell(index);
         if prior != value {
             return Ok(false);
         }
@@ -372,10 +380,10 @@ impl WriteObserver for () {
 }
 
 #[allow(clippy::too_many_arguments)] // Fixed SQL column layout mirrors Python's shared delta writer.
-fn replace<const N: usize, T: Cell>(
+fn replace<const N: usize, T: BindingRow<N>>(
     conn: &Connection,
     profile: &str,
-    rows: &[[T; N]],
+    rows: &[T],
     table: &'static str,
     columns: &[&str; N],
     reals: &[usize],
@@ -388,8 +396,9 @@ fn replace<const N: usize, T: Cell>(
         .iter()
         .enumerate()
         .map(|(index, row)| {
-            row[0]
+            row.cell(0)
                 .as_str()
+                .ok()
                 .map(|id| (id, index))
                 .ok_or(rusqlite::Error::InvalidQuery)
         })
@@ -408,7 +417,10 @@ fn replace<const N: usize, T: Cell>(
                 let new = &rows[index];
                 changed[index] = !same_row(old, new, reals)?;
                 if let Some(tie) = tie {
-                    let time = new[tie].as_str().ok_or(rusqlite::Error::InvalidQuery)?;
+                    let time = new
+                        .cell(tie)
+                        .as_str()
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?;
                     let created = old.get_ref(N - 1)?.as_str()?;
                     match stamps.entry(time) {
                         std::collections::hash_map::Entry::Vacant(entry) => {
@@ -430,7 +442,10 @@ fn replace<const N: usize, T: Cell>(
     if let Some(tie) = tie {
         let mut dirty_times = HashSet::new();
         for (index, row) in rows.iter().enumerate() {
-            let time = row[tie].as_str().ok_or(rusqlite::Error::InvalidQuery)?;
+            let time = row
+                .cell(tie)
+                .as_str()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
             if changed[index] {
                 dirty_times.insert(time);
             }
@@ -442,7 +457,7 @@ fn replace<const N: usize, T: Cell>(
                 .map(|(time, _)| time),
         );
         for (index, row) in rows.iter().enumerate() {
-            changed[index] = dirty_times.contains(row[tie].as_str().expect("validated time"));
+            changed[index] = dirty_times.contains(row.cell(tie).as_str().expect("validated time"));
         }
     }
     let mut delete = conn.prepare(&format!(
@@ -454,7 +469,7 @@ fn replace<const N: usize, T: Cell>(
     for (index, removed) in existing_order {
         if index.is_none_or(|index| changed[index]) {
             let id = index.map_or(removed.as_str(), |index| {
-                rows[index][0].as_str().expect("validated text id")
+                rows[index].cell(0).as_str().expect("validated text id")
             });
             delete.execute([profile, id])?;
             observer.wrote(table)?;
@@ -464,7 +479,9 @@ fn replace<const N: usize, T: Cell>(
     let mut insert = conn.prepare(&format!("INSERT INTO {table}({names}) VALUES({slots})"))?;
     for (index, row) in rows.iter().enumerate() {
         if changed[index] {
-            insert.execute(params_from_iter(row.iter().map(CellParam)))?;
+            insert.execute(params_from_iter(
+                (0..N).map(|index| CellParam(row.cell(index))),
+            ))?;
             observer.wrote(table)?;
         }
     }
@@ -475,6 +492,15 @@ pub fn replace_journal_entries(
     conn: &Connection,
     profile: &str,
     rows: &[[Sql; 29]],
+    observer: &mut impl WriteObserver,
+) -> rusqlite::Result<()> {
+    replace_entry_bindings(conn, profile, rows, observer)
+}
+
+pub(crate) fn replace_entry_bindings(
+    conn: &Connection,
+    profile: &str,
+    rows: &[impl BindingRow<29>],
     observer: &mut impl WriteObserver,
 ) -> rusqlite::Result<()> {
     replace(

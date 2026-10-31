@@ -20,7 +20,7 @@ def _offline_run(command, cwd, env):
         command = [*command[:2], '--offline', *command[2:]]
         if '--' in command:
             command = [*command, '--test-threads=1']
-        env = {**env, 'CARGO_BUILD_BUILD_DIR': str(cwd / 'target/build'), 'CARGO_TARGET_DIR': str(cwd / 'target'), 'CARGO_BUILD_JOBS': '8', 'CARGO_PROFILE_DEV_DEBUG': '0', 'CARGO_INCREMENTAL': '0'}
+        env = {**env, 'CARGO_BUILD_BUILD_DIR': str(cwd / 'target/build'), 'CARGO_TARGET_DIR': str(cwd / 'target'), 'CARGO_BUILD_JOBS': '4', 'CARGO_PROFILE_DEV_DEBUG': '0', 'CARGO_INCREMENTAL': '0'}
     return _run(command, cwd, env)
 
 checker._run = _offline_run

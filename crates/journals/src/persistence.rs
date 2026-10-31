@@ -2,6 +2,7 @@
 //! Call under the caller's BEGIN IMMEDIATE and journal savepoint; the nested
 //! savepoint also protects callers that catch a storage refusal.
 use crate::{array, model::*, pyjson, render::msat, storage, string, truth, Refusal};
+use kassiber_store::rusqlite::types::ValueRef;
 use kassiber_store::rusqlite::{self, params, params_from_iter, types::Value as Sql, Connection};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -63,17 +64,36 @@ fn opt(s: Option<String>) -> Sql {
 fn real(d: &JournalDecimal) -> Sql {
     Sql::Real(d.0.to_string().parse().expect("Decimal float spelling"))
 }
-fn optional_real(d: &Option<JournalDecimal>) -> Sql {
-    d.as_ref().map_or(Sql::Null, real)
-}
-fn exact(d: &JournalDecimal) -> Result<Sql, Refusal> {
-    Ok(t(d.0.to_fixed_string()?))
-}
-fn optional_exact(d: &Option<JournalDecimal>) -> Result<Sql, Refusal> {
-    d.as_ref().map_or(Ok(Sql::Null), exact)
-}
 fn amount(d: &JournalDecimal) -> Result<Sql, Refusal> {
     bind(&msat(&d.0)?)
+}
+
+struct EntryBindings<'a> {
+    metadata: [ValueRef<'a>; 15],
+    owned: [Sql; 14],
+}
+impl storage::BindingRow<29> for EntryBindings<'_> {
+    fn cell(&self, index: usize) -> ValueRef<'_> {
+        match index {
+            0 => (&self.owned[0]).into(),
+            1..=8 => self.metadata[index - 1],
+            9..=21 => (&self.owned[index - 8]).into(),
+            22..=28 => self.metadata[index - 14],
+            _ => unreachable!("entry column"),
+        }
+    }
+}
+fn decimal_bindings(d: Option<&JournalDecimal>) -> Result<(Sql, Sql), Refusal> {
+    let Some(d) = d else {
+        return Ok((Sql::Null, Sql::Null));
+    };
+    let fixed = d.0.to_fixed_string()?;
+    let float = if fixed.len() <= 64 {
+        fixed.parse().expect("Decimal float spelling")
+    } else {
+        d.0.to_string().parse().expect("Decimal float spelling")
+    };
+    Ok((Sql::Real(float), t(fixed)))
 }
 
 pub(super) struct Writer<'a, O> {
@@ -197,10 +217,11 @@ fn store<O: storage::WriteObserver>(
     writer.observer.phase("entries_prepare");
     let mut ordinals = HashMap::new();
     let mut rows = Vec::with_capacity(state.entries.len());
+    let mut calculations = storage::CalculationEncoder::default();
     for e in &state.entries {
         let key = (
-            string(&e.transaction_id),
-            string(&e.wallet_id),
+            quantity::key(&e.transaction_id),
+            quantity::key(&e.wallet_id),
             e.entry_type,
             e.asset.as_str(),
         );
@@ -210,53 +231,66 @@ fn store<O: storage::WriteObserver>(
         let (legacy, compact) = e
             .calculation
             .as_ref()
-            .map(storage::encode_typed_calculation)
+            .map(|calculation| calculations.encode(calculation))
             .transpose()?
             .unwrap_or((None, None));
         let (source, quality) = pricing
-            .get(&key.0)
-            .cloned()
-            .unwrap_or((Sql::Null, Sql::Null));
-        rows.push([
-            t(id),
-            bind(&e.workspace_id)?,
-            bind(&e.profile_id)?,
-            bind(&e.transaction_id)?,
-            bind(&e.wallet_id)?,
-            bind(&e.account_id)?,
-            bind(&e.occurred_at)?,
-            t(e.entry_type),
-            t(&e.asset),
-            amount(&e.quantity)?,
-            real(&e.fiat_value),
-            real(&e.unit_cost),
-            optional_real(&e.cost_basis),
-            optional_real(&e.proceeds),
-            optional_real(&e.gain_loss),
-            exact(&e.fiat_value)?,
-            exact(&e.unit_cost)?,
-            optional_exact(&e.cost_basis)?,
-            optional_exact(&e.proceeds)?,
-            optional_exact(&e.gain_loss)?,
-            opt(legacy),
-            opt(compact),
-            source,
-            quality,
-            t(&e.description),
-            opt(e.at_category.clone()),
+            .get(key.0.as_ref())
+            .unwrap_or(&(Sql::Null, Sql::Null));
+        let metadata = [
+            borrowed(&e.workspace_id)?,
+            borrowed(&e.profile_id)?,
+            borrowed(&e.transaction_id)?,
+            borrowed(&e.wallet_id)?,
+            borrowed(&e.account_id)?,
+            borrowed(&e.occurred_at)?,
+            ValueRef::Text(e.entry_type.as_bytes()),
+            ValueRef::Text(e.asset.as_bytes()),
+            source.into(),
+            quality.into(),
+            ValueRef::Text(e.description.as_bytes()),
+            e.at_category
+                .as_ref()
+                .map_or(ValueRef::Null, |s| ValueRef::Text(s.as_bytes())),
             e.at_kennzahl
                 .flatten()
-                .map_or(Sql::Null, |n| Sql::Integer(n.into())),
-            opt(e.capital_gains_type.map(str::to_owned)),
-            t(at),
-        ]);
+                .map_or(ValueRef::Null, |n| ValueRef::Integer(n.into())),
+            e.capital_gains_type
+                .map_or(ValueRef::Null, |s| ValueRef::Text(s.as_bytes())),
+            ValueRef::Text(at.as_bytes()),
+        ];
+        let quantity = amount(&e.quantity)?;
+        let (fiat, fiat_exact) = decimal_bindings(Some(&e.fiat_value))?;
+        let (unit, unit_exact) = decimal_bindings(Some(&e.unit_cost))?;
+        let (basis, basis_exact) = decimal_bindings(e.cost_basis.as_ref())?;
+        let (proceeds, proceeds_exact) = decimal_bindings(e.proceeds.as_ref())?;
+        let (gain, gain_exact) = decimal_bindings(e.gain_loss.as_ref())?;
+        rows.push(EntryBindings {
+            metadata,
+            owned: [
+                t(id),
+                quantity,
+                fiat,
+                unit,
+                basis,
+                proceeds,
+                gain,
+                fiat_exact,
+                unit_exact,
+                basis_exact,
+                proceeds_exact,
+                gain_exact,
+                opt(legacy),
+                opt(compact),
+            ],
+        });
     }
     writer.observer.phase("entries_write");
-    storage::replace_journal_entries(writer.conn, &pid, &rows, writer.observer)?;
+    storage::replace_entry_bindings(writer.conn, &pid, &rows, writer.observer)?;
     writer.observer.phase("small_tables");
-    let live: HashSet<String> = pricing.into_keys().collect();
+    let live: HashSet<&str> = pricing.keys().map(String::as_str).collect();
     let mut quarantines = dedupe_quarantines(&state.quarantines)?;
-    quarantines.retain(|q| live.contains(&string(&q.transaction_id)));
+    quarantines.retain(|q| live.contains(quantity::key(&q.transaction_id).as_ref()));
     let mut candidates = HashMap::<String, Vec<Value>>::new();
     for c in array(&state.ownership_review_candidates) {
         if truth(&c["out_id"]) {
@@ -422,6 +456,32 @@ fn store<O: storage::WriteObserver>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shared_decimal_spelling_preserves_float_bits_and_exact_text() {
+        for spelling in [
+            "0",
+            "-0.00",
+            "123.4500",
+            "1E-32",
+            "1E+32",
+            "1E-1000",
+            "1E+1000",
+            "9007199254740993",
+            "1.00000000000000011102230246251565404236316680908203125",
+        ] {
+            let decimal = JournalDecimal(spelling.parse().unwrap());
+            let (float, exact) = decimal_bindings(Some(&decimal)).unwrap();
+            let Sql::Real(float) = float else {
+                panic!("REAL binding")
+            };
+            let Sql::Real(reference) = real(&decimal) else {
+                panic!("REAL reference")
+            };
+            assert_eq!(float.to_bits(), reference.to_bits(), "{spelling}");
+            assert_eq!(exact, t(decimal.0.to_fixed_string().unwrap()));
+        }
+        assert_eq!(decimal_bindings(None).unwrap(), (Sql::Null, Sql::Null));
+    }
     #[test]
     fn scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values() {
         for (value, expected) in [

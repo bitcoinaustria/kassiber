@@ -437,6 +437,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   close the CPU write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
+  Borrowed bindings, shared source encodings and cached posting metadata avoid
+  repeated work; final 20k CPU passes one of eight required fresh/unchanged
+  cells. Unchanged builds still need a cheap comparison path. Corrected appended
+  benchmark inputs carry distinct raw identities and assert actual writes.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations
   and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)

@@ -8,6 +8,7 @@ alternate order by default; --runs allows exploratory measurements.
 """
 from contextlib import ExitStack
 from decimal import Decimal
+from datetime import datetime, timedelta
 import argparse
 import hashlib
 import json
@@ -55,6 +56,7 @@ def main():
     out.mkdir(parents=True,exist_ok=True)
     manifest=dict(book=json.loads((args.book/'bench-book.json').read_text()),runs=args.runs,
         python=sys.version,cpus=os.cpu_count(),probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),
+        harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         sources={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(Path('crates/journals/src').rglob('*.rs'))})
     (out/'environment.json').write_text(json.dumps(manifest,indent=2)+'\n')
     passphrase='synthetic-test-only' if args.cipher else None
@@ -77,12 +79,21 @@ def main():
         conn=connect(base)
         profile=conn.execute('SELECT * FROM profiles LIMIT 1').fetchone()
         count=conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0]
+        appended_ids=set()
         if mode=='fresh':
             conn.execute('DELETE FROM journal_entries');conn.execute('DELETE FROM journal_quantity_postings')
         elif mode=='appended':
             rows=conn.execute("SELECT * FROM transactions WHERE direction='inbound' AND kind='buy' ORDER BY occurred_at LIMIT ?",(count//100,)).fetchall()
+            latest=datetime.fromisoformat(conn.execute('SELECT MAX(occurred_at) FROM transactions').fetchone()[0].replace('Z','+00:00'))
             for index,row in enumerate(rows):
-                row=dict(row);row.update(id=f'append-{index}',fingerprint=f'append-{index}',external_id=f'append-{index}',occurred_at=f'2026-01-{index%28+1:02}T00:{index%60:02}:00Z')
+                occurred=latest+timedelta(seconds=index+1)
+                assert occurred<=datetime.fromisoformat(CLOCK.replace('Z','+00:00')), 'appended observation is outside the build clock'
+                occurred=occurred.isoformat().replace('+00:00','Z')
+                identity=f'append-{index}';appended_ids.add(identity)
+                row=dict(row);row.update(id=identity,fingerprint=identity,external_id=identity,occurred_at=occurred)
+                if row['confirmed_at'] is not None: row['confirmed_at']=occurred
+                raw=json.loads(row['raw_json']);raw.update(txid=identity,date=occurred)
+                row['raw_json']=json.dumps(raw,sort_keys=True)
                 conn.execute(f'INSERT INTO transactions({",".join(row)}) VALUES({",".join("?" for _ in row)})',tuple(row.values()))
         elif mode=='changed':
             rows=conn.execute('SELECT id,fiat_rate_exact FROM transactions ORDER BY occurred_at').fetchall()
@@ -100,6 +111,17 @@ def main():
         with patch.object(custody_journal,'store_ledger_state',observed):
             vector=capture(recorder,mode,conn.execute('SELECT * FROM profiles LIMIT 1').fetchone())
         expected=vector.pop('expected');vector.pop('before');conn.close()
+        activity={table:{'insert':0,'delete':0} for table in ('journal_entries','journal_quantity_postings')}
+        for sql,rows in recorder.batches:
+            for table,counts in activity.items():
+                if sql.startswith(f'INSERT INTO {table}('): counts['insert']+=len(rows)
+                if sql.startswith(f'DELETE FROM {table} '): counts['delete']+=len(rows)
+        if mode=='unchanged': assert not any(n for counts in activity.values() for n in counts.values()), activity
+        if mode in ('fresh','appended'): assert all(counts['insert'] for counts in activity.values()), activity
+        if mode=='changed': assert activity['journal_entries']['insert'], activity
+        if mode=='appended':
+            stored=expected['journal_entries'];transaction_index=stored['columns'].index('transaction_id')
+            assert appended_ids <= {r[transaction_index] for r in stored['rows']}, 'appended observations collapsed or were withheld'
         native=root/'native';python=root/'python';floor=root/'floor'
         request=root/'request.json';floor_request=root/'floor.json'
         vector.update(database=str(native/'kassiber.sqlite3'))
@@ -144,7 +166,9 @@ def main():
             probe.stdin.close();probe.wait(timeout=60)
         best={engine:min(t[engine]['cpu_seconds'] for t in trials) for engine in ('python','rust','floor')}
         best_wall={engine:min(t[engine]['seconds'] for t in trials) for engine in ('python','rust','floor')}
-        results.append(dict(mode=mode,transactions=count,best=best,best_wall=best_wall,trials=trials,over_floor=best['rust']-best['floor']))
+        results.append(dict(mode=mode,transactions=count,appended_transactions=len(appended_ids),activity=activity,
+            entries=len(expected['journal_entries']['rows']),postings=len(expected['journal_quantity_postings']['rows']),
+            best=best,best_wall=best_wall,trials=trials,over_floor=best['rust']-best['floor']))
         (out/'summary.json').write_text(json.dumps(results,indent=2)+'\n')
         shutil.rmtree(root)
 

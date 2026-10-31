@@ -436,3 +436,58 @@ fn typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_in
         assert_eq!(fragment[9], index % 4096);
     }
 }
+
+#[test]
+fn shared_calculation_encoder_keeps_every_source_operand_and_refusal() {
+    use std::sync::Arc;
+    let cases: Value = serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
+    let calculation = array(&cases)
+        .iter()
+        .find_map(|case| {
+            let response = crate::boundary::ledger_response(&case["response"]).ok()?;
+            let state = crate::boundary::build(
+                &case["profile"],
+                &case["custody"],
+                array(&case["wallets"]),
+                &response,
+                String::new,
+            )
+            .ok()?;
+            state
+                .entries
+                .into_iter()
+                .filter_map(|entry| entry.calculation)
+                .find(|calculation| !calculation.fragments.is_empty())
+        })
+        .unwrap();
+    let mut calculations = vec![calculation.clone()];
+    for mode in 0..9 {
+        let mut next = calculation.clone();
+        let source = &mut next.fragments[0].event;
+        match mode {
+            0 => source.asset = "LBTC".into(),
+            1 => source.spot_price_exact = "123.4500".into(),
+            2 => source.fiat_fee_exact = "12".into(),
+            3 => {
+                source.crypto_fee_msat = json!(7);
+                source.crypto_fee_msat_exact = "7".into();
+            }
+            4 => source.crypto_fee_msat_exact = "mismatch".into(),
+            5 => source.crypto_fee_msat = json!(true),
+            6 => Arc::make_mut(&mut source.provenance).pricing.0[0] = json!(true),
+            7 => Arc::make_mut(&mut source.provenance).transaction_id = json!(42),
+            8 => Arc::make_mut(&mut source.provenance).occurred_at = "other".into(),
+            _ => unreachable!(),
+        }
+        calculations.push(next);
+    }
+    let mut encoder = CalculationEncoder::default();
+    for _ in 0..2 {
+        for calculation in &calculations {
+            assert_eq!(
+                encoder.encode(calculation).unwrap(),
+                encode_calculation(&serde_json::to_value(calculation).unwrap()).unwrap()
+            );
+        }
+    }
+}

@@ -4,6 +4,53 @@ use kassiber_pyjson::{dumps_str_into, Options};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::sync::Arc;
+
+#[derive(Hash, PartialEq, Eq)]
+struct SourceKey<'a> {
+    provenance: *const SourceProvenance,
+    asset: &'a str,
+    spot: &'a str,
+    fiat_fee: &'a str,
+    crypto_fee: &'a Value,
+    crypto_fee_exact: &'a str,
+}
+
+#[derive(Default)]
+pub(crate) struct Encoder<'a> {
+    sources: HashMap<SourceKey<'a>, Arc<str>>,
+}
+impl<'a> Encoder<'a> {
+    fn source(&mut self, value: &'a Source, options: &Options) -> Option<Arc<str>> {
+        let key = SourceKey {
+            provenance: Arc::as_ptr(&value.provenance),
+            asset: &value.asset,
+            spot: &value.spot_price_exact,
+            fiat_fee: &value.fiat_fee_exact,
+            crypto_fee: &value.crypto_fee_msat,
+            crypto_fee_exact: &value.crypto_fee_msat_exact,
+        };
+        if let Some(encoded) = self.sources.get(&key) {
+            return Some(encoded.clone());
+        }
+        let encoded: Arc<str> = source(value, options)?.into();
+        self.sources.insert(key, encoded.clone());
+        Some(encoded)
+    }
+
+    pub(crate) fn encode(
+        &mut self,
+        calculation: &'a Calculation,
+    ) -> Result<(Option<String>, Option<String>), Refusal> {
+        if let Some(compact) = compact(calculation, self) {
+            Ok((None, Some(compact)))
+        } else {
+            let value = serde_json::to_value(calculation)
+                .map_err(|e| Refusal::new("ValueError", e.to_string()))?;
+            super::encode_calculation(&value)
+        }
+    }
+}
 
 fn scalar(value: &Value, out: &mut String, options: &Options) -> Option<()> {
     match value {
@@ -53,12 +100,12 @@ fn source(source: &Source, options: &Options) -> Option<String> {
     out.push(']');
     Some(out)
 }
-fn compact(calculation: &Calculation) -> Option<String> {
+fn compact<'a>(calculation: &'a Calculation, encoder: &mut Encoder<'a>) -> Option<String> {
     if calculation.schema_version != 1 {
         return None;
     }
     let options = Options::new().compact();
-    let mut sources = Vec::<String>::new();
+    let mut sources = Vec::<Arc<str>>::new();
     let mut positions = HashMap::new();
     let mut fragments = String::with_capacity(calculation.fragments.len() * 256);
     fragments.push('[');
@@ -106,7 +153,7 @@ fn compact(calculation: &Calculation) -> Option<String> {
         for value in [Some(&fragment.event), fragment.lot.as_ref()] {
             fragments.push(',');
             if let Some(value) = value {
-                let encoded = source(value, &options)?;
+                let encoded = encoder.source(value, &options)?;
                 let position = *positions.entry(encoded.clone()).or_insert_with(|| {
                     sources.push(encoded);
                     sources.len() - 1
@@ -120,7 +167,7 @@ fn compact(calculation: &Calculation) -> Option<String> {
     }
     fragments.push(']');
     let mut out = String::with_capacity(
-        fragments.len() + sources.iter().map(String::len).sum::<usize>() + 64,
+        fragments.len() + sources.iter().map(|s| s.len()).sum::<usize>() + 64,
     );
     out.push_str("[2,");
     dumps_str_into(calculation.engine, &options, &mut out);
@@ -138,14 +185,9 @@ fn compact(calculation: &Calculation) -> Option<String> {
     out.push(']');
     Some(out)
 }
+#[cfg(test)]
 pub(crate) fn encode(
     calculation: &Calculation,
 ) -> Result<(Option<String>, Option<String>), Refusal> {
-    if let Some(compact) = compact(calculation) {
-        Ok((None, Some(compact)))
-    } else {
-        let value = serde_json::to_value(calculation)
-            .map_err(|e| Refusal::new("ValueError", e.to_string()))?;
-        super::encode_calculation(&value)
-    }
+    Encoder::default().encode(calculation)
 }

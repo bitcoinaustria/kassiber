@@ -4,10 +4,52 @@ use kassiber_store::rusqlite::types::ValueRef;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-fn key(v: &Value) -> Cow<'_, str> {
+pub(super) fn key(v: &Value) -> Cow<'_, str> {
     v.as_str()
         .map(Cow::Borrowed)
         .unwrap_or_else(|| Cow::Owned(string(v)))
+}
+
+#[derive(Clone, Copy)]
+struct Observation<'a> {
+    row: &'a Value,
+    transaction: &'a Value,
+    occurred: &'a Value,
+}
+impl<'a> Observation<'a> {
+    fn new(row: &'a Value) -> Self {
+        Self {
+            row,
+            transaction: &row["anchor_transaction_id"],
+            occurred: &row["occurred_at"],
+        }
+    }
+}
+impl std::ops::Deref for Observation<'_> {
+    type Target = Value;
+    fn deref(&self) -> &Value {
+        self.row
+    }
+}
+
+fn posting_fields(posting: &Value) -> [&Value; 7] {
+    let mut fields = [&Value::Null; 7];
+    if let Some(object) = posting.as_object() {
+        for (key, value) in object {
+            let index = match key.as_str() {
+                "posting_id" => 0,
+                "observation_hash" => 1,
+                "asset" => 2,
+                "location_kind" => 3,
+                "location_id" => 4,
+                "amount_msat" => 5,
+                "state" => 6,
+                _ => continue,
+            };
+            fields[index] = value;
+        }
+    }
+    fields
 }
 
 fn relation_source_id(relation: &Value) -> String {
@@ -93,35 +135,34 @@ pub(super) fn store<O: storage::WriteObserver>(
     w.observer.phase("quantity_postings_prepare");
     let observations: HashMap<_, _> = array(&q["projection"]["observations"])
         .iter()
-        .map(|o| (key(&o["quantity_hash"]), o))
+        .map(|o| (key(&o["quantity_hash"]), Observation::new(o)))
         .collect();
-    let mut postings = Vec::new();
-    let mut balances = BTreeMap::<(String, String, String), i128>::new();
-    for p in array(&q["projection"]["postings"]) {
+    w.observer.phase("quantity_postings_bind");
+    let input_postings = array(&q["projection"]["postings"]);
+    let mut postings = Vec::with_capacity(input_postings.len());
+    let mut balances = BTreeMap::<_, i128>::new();
+    for p in input_postings {
+        let [id, observation, asset, kind, location, amount, state] = posting_fields(p);
         let o = observations
-            .get(&key(&p["observation_hash"]))
+            .get(&key(observation))
             .copied()
-            .unwrap_or(&Value::Null);
+            .unwrap_or_else(|| Observation::new(&Value::Null));
         postings.push([
-            borrowed(&p["posting_id"])?,
+            borrowed(id)?,
             ValueRef::Text(wid.as_bytes()),
             ValueRef::Text(pid.as_bytes()),
-            borrowed(&o["anchor_transaction_id"])?,
-            borrowed(&p["observation_hash"])?,
-            borrowed(&o["occurred_at"])?,
-            borrowed(&p["asset"])?,
-            borrowed(&p["location_kind"])?,
-            borrowed(&p["location_id"])?,
-            borrowed(&p["amount_msat"])?,
-            borrowed(&p["state"])?,
+            borrowed(o.transaction)?,
+            borrowed(observation)?,
+            borrowed(o.occurred)?,
+            borrowed(asset)?,
+            borrowed(kind)?,
+            borrowed(location)?,
+            borrowed(amount)?,
+            borrowed(state)?,
             ValueRef::Text(at.as_bytes()),
         ]);
-        let key = (
-            string(&p["location_kind"]),
-            string(&p["location_id"]),
-            string(&p["asset"]),
-        );
-        let amount = p["amount_msat"].as_i64().ok_or_else(|| {
+        let key = (key(kind), key(location), key(asset));
+        let amount = amount.as_i64().ok_or_else(|| {
             Refusal::new(
                 "OverflowError",
                 "quantity posting does not fit SQLite INTEGER",
