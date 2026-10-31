@@ -1263,93 +1263,95 @@ def process_journals(
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Build and store one complete journal projection in one core transaction."""
+    from .journal_storage import journal_write_cache
 
-    def progress(phase: str) -> None:
-        if progress_observer is not None:
-            progress_observer({"phase": phase})
+    with journal_write_cache(conn):
+        def progress(phase: str) -> None:
+            if progress_observer is not None:
+                progress_observer({"phase": phase})
 
-    owns_immediate_transaction = not conn.in_transaction
-    if owns_immediate_transaction:
-        # Reserve SQLite's single writer slot before any projection reads. A
-        # deferred transaction can otherwise take a WAL snapshot, then fail
-        # immediately with SQLITE_BUSY_SNAPSHOT when it upgrades after a
-        # background freshness writer commits; busy_timeout cannot repair that
-        # upgrade race.
-        progress("writer_wait")
-        conn.execute("BEGIN IMMEDIATE")
-    try:
-        progress("preparing")
-        _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-        require_tax_processing_supported(profile)
-        conn.execute("SAVEPOINT journals_process")
-        try:
-            progress("repairing")
-            overlap_repair = repair_source_overlaps(conn, profile)
-            overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
-            evidence_repair = (
-                custody_authored_migration.refresh_drifted_legacy_pair_components(
-                    conn,
-                    profile_id=str(profile["id"]),
-                )
-            )
-            if evidence_repair.changed:
-                _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-            progress("pricing")
-            auto_priced = auto_price(conn, profile)
-            progress("building")
-            state = build_ledger_state(conn, profile)
-            progress("storing")
-            stored = store_ledger_state(conn, profile, state)
-        except Exception:
-            conn.execute("ROLLBACK TO SAVEPOINT journals_process")
-            conn.execute("RELEASE SAVEPOINT journals_process")
-            raise
-        conn.execute("RELEASE SAVEPOINT journals_process")
-        conn.commit()
-        progress("complete")
-    except Exception:
+        owns_immediate_transaction = not conn.in_transaction
         if owns_immediate_transaction:
-            conn.rollback()
-        raise
+            # Reserve SQLite's single writer slot before any projection reads. A
+            # deferred transaction can otherwise take a WAL snapshot, then fail
+            # immediately with SQLITE_BUSY_SNAPSHOT when it upgrades after a
+            # background freshness writer commits; busy_timeout cannot repair that
+            # upgrade race.
+            progress("writer_wait")
+            conn.execute("BEGIN IMMEDIATE")
+        try:
+            progress("preparing")
+            _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+            require_tax_processing_supported(profile)
+            conn.execute("SAVEPOINT journals_process")
+            try:
+                progress("repairing")
+                overlap_repair = repair_source_overlaps(conn, profile)
+                overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
+                evidence_repair = (
+                    custody_authored_migration.refresh_drifted_legacy_pair_components(
+                        conn,
+                        profile_id=str(profile["id"]),
+                    )
+                )
+                if evidence_repair.changed:
+                    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+                progress("pricing")
+                auto_priced = auto_price(conn, profile)
+                progress("building")
+                state = build_ledger_state(conn, profile)
+                progress("storing")
+                stored = store_ledger_state(conn, profile, state)
+            except Exception:
+                conn.execute("ROLLBACK TO SAVEPOINT journals_process")
+                conn.execute("RELEASE SAVEPOINT journals_process")
+                raise
+            conn.execute("RELEASE SAVEPOINT journals_process")
+            conn.commit()
+            progress("complete")
+        except Exception:
+            if owns_immediate_transaction:
+                conn.rollback()
+            raise
 
-    custody_quantity = stored["custody_quantity"]
-    result = {
-        "profile": profile["label"],
-        "entries_created": len(state["entries"]),
-        "quarantined": len(stored["quarantines"]),
-        "transfers_detected": len(state.get("custody_transfers", [])),
-        "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
-        "auto_priced": auto_priced,
-        "processed_transactions": stored["processed_transactions"],
-        "processed_at": stored["processed_at"],
-        "custody_quantity": {
-            **stored["quantity_counts"],
-            "differences": len(state.get("quantity_differences", ())),
-            "blocked": bool(custody_quantity and custody_quantity.report_blocked),
-            "blocked_from": (
-                custody_quantity.tax_eligibility.blocked_from
-                if custody_quantity is not None
-                else None
-            ),
-        },
-    }
-    if state.get("direct_swap_payouts"):
-        result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
-    if state.get("warnings"):
-        result["warnings"] = state["warnings"]
-    if state.get("custody_component_blockers"):
-        result["custody_component_blockers"] = state["custody_component_blockers"]
-    if overlap_repair is not None:
-        result["source_overlap_repair"] = overlap_repair
-    if overlap_warning is not None:
-        result["source_overlap_warning"] = overlap_warning
-    if evidence_repair.activated:
-        result["custody_pair_evidence_repairs"] = evidence_repair.activated
-    if stored["filed_report_impacts_resolved"]:
-        result["filed_report_impacts_resolved"] = stored[
-            "filed_report_impacts_resolved"
-        ]
-    return result
+        custody_quantity = stored["custody_quantity"]
+        result = {
+            "profile": profile["label"],
+            "entries_created": len(state["entries"]),
+            "quarantined": len(stored["quarantines"]),
+            "transfers_detected": len(state.get("custody_transfers", [])),
+            "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
+            "auto_priced": auto_priced,
+            "processed_transactions": stored["processed_transactions"],
+            "processed_at": stored["processed_at"],
+            "custody_quantity": {
+                **stored["quantity_counts"],
+                "differences": len(state.get("quantity_differences", ())),
+                "blocked": bool(custody_quantity and custody_quantity.report_blocked),
+                "blocked_from": (
+                    custody_quantity.tax_eligibility.blocked_from
+                    if custody_quantity is not None
+                    else None
+                ),
+            },
+        }
+        if state.get("direct_swap_payouts"):
+            result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
+        if state.get("warnings"):
+            result["warnings"] = state["warnings"]
+        if state.get("custody_component_blockers"):
+            result["custody_component_blockers"] = state["custody_component_blockers"]
+        if overlap_repair is not None:
+            result["source_overlap_repair"] = overlap_repair
+        if overlap_warning is not None:
+            result["source_overlap_warning"] = overlap_warning
+        if evidence_repair.activated:
+            result["custody_pair_evidence_repairs"] = evidence_repair.activated
+        if stored["filed_report_impacts_resolved"]:
+            result["filed_report_impacts_resolved"] = stored[
+                "filed_report_impacts_resolved"
+            ]
+        return result
 
 
 __all__ = [

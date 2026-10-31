@@ -1652,15 +1652,20 @@ journal and encrypts pages that are written again later.
 `process_journals` and review apply raise the connection's `cache_size` to
 128 MiB (`-131072`) for their transaction. They restore the previous value
 after commit or rollback, so the daemon's long-lived connection returns to
-16 MB. Past 128 MiB of dirty pages, SQLite spills as it does today.
+its prior cache size (normally 16,000 KiB). With review apply's `commit=False`,
+the cache is restored on return while the caller still owns the pending
+transaction and its commit or rollback. Nested scopes restore their own exact
+signed `cache_size` value, including a positive page count. Explicit
+`cache_spill` settings are untouched. Past 128 MiB of dirty pages, SQLite
+spills as it does today under its existing spill setting.
 
 **Migration.** None, because nothing is stored. Older binaries are
 unaffected.
 
 **Risks:**
 
-- **Memory.** Peak memory rises by about 50 MB at generic 20,000, at most
-  128 MiB.
+- **Memory.** The prototype's peak memory rises by about 50 MB at generic
+  20,000. The page-cache target is 128 MiB; whole-process memory can exceed it.
 - **Decrypted pages in memory.** More decrypted pages stay in RAM during the
   build. The build already holds the book's rows in RAM, and nothing reaches
   disk or logs.
@@ -1786,7 +1791,10 @@ same-second explanation expiry have separate regressions.
 
 All ten book/encryption cases match across 54 captured sections each: every
 report command, generated file and workbook/archive member, audit evidence,
-audit package, retained calculations and 16 redacted AI projections. As in the
+audit package, retained calculations, 15 successful redacted AI projections and
+a matching dashboard validation refusal. A separate ten-case dashboard success
+comparison between `3c6c324c` and `5ad2ab0c`, with `period: all` and the same
+approved baseline id canonicalization, also matches in full. As in the
 compact comparison, commands missing required bench inputs match their errors;
 their success paths depend on the accounting/report shards. Full compressed
 dumps remain under `target/r4-storage/results/dumps/changed-*`; their hashes,
@@ -1824,6 +1832,54 @@ keys, global entry-id collision rollback, no-op cursors, retained audit times,
 and same-second or backward-clock explanation expiry. Two old test expectations
 were updated for UUIDv8 and retained posting creation times; frozen accounting
 vectors are unchanged.
+
+### Scoped-cache implementation measurements
+
+These compare `5ad2ab0c` with the 128 MiB cache. Every real Python CLI command
+starts from a disposable primed copy with `journal_entries` and
+`journal_quantity_postings` emptied before timing, exercising a full rewrite of
+both large tables. Counts are checked after timing to prove both were rebuilt.
+The command time includes imports, book open, processing, commit and close;
+the preparation and verification are outside it. Before/after runs alternate
+AB/BA, with five samples per version.
+
+| Book | Plaintext, before → after (s) | SQLCipher, before → after (s) |
+| --- | ---: | ---: |
+| generic 2k | 1.862 → 1.907 | 2.110 → 2.149 |
+| generic 20k | 13.165 → 12.786 | 13.940 → 13.411 |
+| multi-wallet 2k | 2.352 → 2.345 | 2.664 → 2.707 |
+| multi-wallet 20k | 22.496 → 22.478 | 23.810 → 22.685 |
+
+Load ranged from 3.96 to 7.58. At 20k, SQLCipher improves 3.8% on generic
+and 4.7% on multi-wallet; plaintext improves 2.9% and 0.1%. The 2k results
+range from 2.4% slower to 0.3% faster and establish no consistent gain.
+These full rewrites differ from the changed-row section's unchanged rebuilds;
+do not combine their endpoints or infer a no-op cache speedup.
+
+All ten book/encryption cases match across the same 54 captured sections,
+without id mapping: report envelopes, file/member hashes, audit evidence and
+packages, retained calculations and 16 successful redacted AI projections.
+The dashboard capture uses `period: all` so it exercises its full success path.
+Report commands without the required bench inputs still compare their typed
+refusals; supported success cases also depend on the accounting/report shards.
+
+The cache regression fails on both drivers before the change. Focused storage
+and review verification passes 71 tests, including success/failure restoration,
+positive prior page counts, nested exceptions, explicit spill settings and a
+caller-owned review transaction with `commit=False`. Backup/restore remains
+covered by the storage regressions. This connection-only change needs no new
+schema manifest or migration; the compact column's Rust mirror remains current.
+
+The final required report, daemon/CLI and security shards pass. Core accounting
+under the tax/custody census passes 1,963 tests with 421 tax calls and 316
+finalized custody comparisons; fusion records 313 comparisons and the same three
+narrow fixture exceptions. Custody shadow with tax census passes 613 tests and
+421 tax calls. All three Rust store manifests match.
+
+The offline Rust workspace and fresh Rust read/interoperability/migration matrix
+pass; the latter passes 381 tests (two skipped). The final classifier and
+source-contract refresh and preflight pass (57 tests and 57 subtests). Manual
+second review found no outstanding correctness or consistency issues.
 
 
 ## Decisions for the owner

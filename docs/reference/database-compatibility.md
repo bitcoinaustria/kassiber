@@ -69,6 +69,10 @@ pass remain identical; both runtimes accept these opaque text ids. Older Python
 can rebuild with uuid4 ids and legacy calculations, causing one full entry
 rewrite the next time current Python rebuilds. Backups preserve both formats.
 
+The scoped 128 MiB rebuild cache is a connection setting. It adds no schema,
+migration or stored-format change, so the same Python/Rust schema manifest and
+older-binary coexistence rules apply. SQLCipher retains DELETE/FULL durability.
+
 ## Intentionally not inferred during upgrade
 
 - Direct payout decimal precision lost through historical float conversion

@@ -12323,7 +12323,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:631",
+      "at": "kassiber/core/review_workflow.py:632",
       "callee": "_error",
       "code": "review_artifact_invalid",
       "form": "call",
@@ -12339,7 +12339,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:636",
+      "at": "kassiber/core/review_workflow.py:639",
       "callee": "_error",
       "code": "review_artifact_invalid",
       "form": "call",

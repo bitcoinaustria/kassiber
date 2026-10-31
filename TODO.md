@@ -339,7 +339,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   [the storage measurements](docs/reference/r4-journal-pipeline.md#compact-storage-implementation-measurements).
 - [x] Establish deterministic journal ids and changed-row writes in Python as
   the R4-12 persistence reference.
-- [ ] Scope the 128 MiB journal rebuild cache in Python as the R4-12 reference.
+- [x] Scope the 128 MiB journal rebuild cache in Python as the R4-12 reference.
 - [ ] R4-2 to R4-8: typed rows, custody stages and fusion, one step per run,
   each with the full mutation catalog rerun and before/after timings.
   R4-2's first prototype stopped at 0.301 s against its 0.250 s target;
