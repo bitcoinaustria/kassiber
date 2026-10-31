@@ -65,7 +65,12 @@ Compatibility Esplora and Electrum history caches are bound to the observed
 highest observed history/header block, including block identity rather than
 height alone. A history read that races above the initial tip advances the
 anchor to that exact block (and the exact timestamp-supplying Electrum header).
-Checkpoints predating this bound rebuild once. An identical tip
+Advancement also requires a post-read proof that the initial tip still belongs
+to the chain. Esplora verifies every history block above that initial tip, not
+only the highest one. A failed, missing or malformed proof clears the anchor
+so the next sync refreshes instead of reusing mixed-fork entries. Version-2
+anchors rebuild earlier checkpoints once, including version 1, which could
+advance across a mid-sync reorg. An identical tip
 permits the existing counter/status cache checks. On a taller tip, the observer
 checks that the previously saved tip block still belongs to the current chain;
 Esplora also binds its new tip height to the observed hash. When unchanged histories

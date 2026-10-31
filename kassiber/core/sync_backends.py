@@ -3024,7 +3024,7 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 previous_hash = _esplora_block_hash(backend["url"], previous_height, **kwargs)
                 same_tip = previous_hash is not None and previous_hash == checkpoint.get("esplora_tip_hash")
     # Older checkpoints can contain confirmations above their recorded anchor.
-    same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 1
+    same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 2
     # Bind the complete private transport configuration, not just the backend
     # name. This digest remains inside the local-only freshness checkpoint.
     # A different endpoint, credential, route or TLS policy cannot inherit
@@ -3261,24 +3261,36 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 transactions_total=len(sorted_transactions),
                 records=len(records),
             )
-    # A block can arrive after the initial tip read. Bind reuse to the highest
-    # block actually represented by the cached history, including its identity.
-    highest = max(
-        transactions_by_txid.values(),
-        key=lambda tx: _cache_anchor_height((tx.get("status") or {}).get("block_height")) or 0,
-        default={},
-    ).get("status") or {}
-    highest_height = _cache_anchor_height(highest.get("block_height"))
-    if tip_height is not None and highest_height is not None and highest_height > tip_height:
-        observed_hash = _esplora_block_hash(backend["url"], highest_height, **kwargs)
-        tip_hash = observed_hash if observed_hash == highest.get("block_hash") else None
-        tip_height = highest_height if tip_hash is not None else None
+    # A block can arrive after the initial tip read. Every newer entry must
+    # belong to the current chain, and that chain must still contain the initial
+    # tip: otherwise older reused rows could be promoted onto a replacement fork.
+    raced_statuses = [
+        tx.get("status") or {} for tx in transactions_by_txid.values()
+        if tip_height is not None
+        and (_cache_anchor_height((tx.get("status") or {}).get("block_height")) or 0) > tip_height
+    ]
+    if raced_statuses:
+        observed_hashes = {
+            height: _esplora_block_hash(backend["url"], height, **kwargs)
+            for height in sorted({status["block_height"] for status in raced_statuses})
+        }
+        entries_on_chain = all(
+            observed_hashes[status["block_height"]] is not None
+            and observed_hashes[status["block_height"]] == status.get("block_hash")
+            for status in raced_statuses
+        )
+        initial_hash = _esplora_block_hash(backend["url"], tip_height, **kwargs)
+        if entries_on_chain and initial_hash is not None and initial_hash == tip_hash:
+            tip_height = max(observed_hashes)
+            tip_hash = observed_hashes[tip_height]
+        else:
+            tip_height = tip_hash = None
     membership_checkpoint, retracted, history_complete = memberships.finish()
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
             "esplora_tip_hash": tip_hash,
-            "compatibility_history_anchor_version": 1,
+            "compatibility_history_anchor_version": 2,
             "esplora_tip_height": tip_height,
             "esplora_scripthashes": dict(sorted(next_stats.items())),
             "esplora_history_memberships": membership_checkpoint,
@@ -5053,7 +5065,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             previous_fingerprint = _electrum_header_fingerprint(previous_header)
             same_tip = (previous_fingerprint is not None and previous_fingerprint
                         == checkpoint.get("electrum_tip_fingerprint"))
-        same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 1
+        same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 2
         header_fingerprints = {}
         if not same_tip:
             # Subscription statuses contain txids/heights, not block identity.
@@ -5319,10 +5331,20 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 )
         highest_height = max(header_timestamps, default=0)
         if tip_height is not None and highest_height > tip_height:
-            # Use the exact header that supplied the cached timestamp; a later
-            # tip read could instead anchor stale data to the replacement fork.
-            tip_fingerprint = header_fingerprints.get(highest_height)
-            tip_height = highest_height if tip_fingerprint is not None else None
+            # Recheck the initial tip after the reads before advancing. Keeping
+            # only the newest header can hide stale cached entries below it if
+            # a reorg replaced the initial tip midway through this sync.
+            try:
+                initial_header = client.call("blockchain.block.header", [tip_height])
+            except AppError:
+                initial_header = None
+            initial_fingerprint = _electrum_header_fingerprint(initial_header)
+            if initial_fingerprint is not None and initial_fingerprint == tip_fingerprint:
+                # Keep the exact header that supplied the cached timestamp.
+                tip_fingerprint = header_fingerprints.get(highest_height)
+                tip_height = highest_height if tip_fingerprint is not None else None
+            else:
+                tip_height = tip_fingerprint = None
     # The known-txid set is fully derivable from the persisted history
     # entries, so drop the redundant legacy key instead of storing the same
     # txids twice per scripthash (including any copy left by older syncs).
@@ -5331,7 +5353,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         {
             "backend": _backend_identity(backend, sync_state),
             "electrum_tip_fingerprint": tip_fingerprint,
-            "compatibility_history_anchor_version": 1,
+            "compatibility_history_anchor_version": 2,
             "electrum_tip_height": tip_height,
             "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
             "electrum_headers": {
