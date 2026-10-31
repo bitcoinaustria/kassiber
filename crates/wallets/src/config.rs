@@ -157,6 +157,15 @@ pub fn addresses(value: Option<&Value>) -> Result<Vec<String>, AppError> {
         })
         .collect())
 }
+
+/// Bitcoin address scripts for local ownership/receipt readers. This has the
+/// same Bitcoin-only scope as core.address_scripts; Liquid display addresses
+/// must not be treated as ownership scripts by those callers.
+pub fn bitcoin_address_script(address: &str) -> Option<String> {
+    bitcoin::Address::from_str(address)
+        .ok()
+        .map(|address| address.assume_checked().script_pubkey().to_hex_string())
+}
 pub fn safe(config: &Value) -> Result<Value, AppError> {
     let mut safe = json!({});
     for key in SAFE {

@@ -1,0 +1,252 @@
+[
+  {
+    "id": "JL-write-lock",
+    "file": "crates/journals/src/loader.rs",
+    "find": "conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write",
+    "replace": "conn.transaction_state(Some(\"main\"))? == rusqlite::TransactionState::Write",
+    "expect_failing": [
+      "native_loader_requires_caller_write_transaction"
+    ],
+    "rule": "write lock"
+  },
+  {
+    "id": "JL-integer-storage",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Integer(value) => Value::from(value),",
+    "replace": "ValueRef::Integer(value) => Value::Float(value as f64),",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "integer storage"
+  },
+  {
+    "id": "JL-real-storage",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Real(value) => Value::Float(value),",
+    "replace": "ValueRef::Real(value) => Value::from(value.to_string()),",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "real storage"
+  },
+  {
+    "id": "JL-duplicate-column",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".filter(|(_, name)| seen.insert(*name))",
+    "replace": ".filter(|(_, name)| { seen.insert(*name); true })",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "duplicate column"
+  },
+  {
+    "id": "JL-active-components",
+    "file": "crates/journals/src/loader.rs",
+    "find": "state='active'",
+    "replace": "state='superseded'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "active components"
+  },
+  {
+    "id": "JL-leg-order",
+    "file": "crates/journals/src/loader.rs",
+    "find": "sql.push_str(\" ORDER BY ordinal,id\");",
+    "replace": "sql.push_str(\" ORDER BY ordinal DESC,id\");",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "leg order"
+  },
+  {
+    "id": "JL-anchor-lookup",
+    "file": "crates/journals/src/loader.rs",
+    "find": "WHERE t.id=?\",[&id]",
+    "replace": "WHERE t.id=? AND t.excluded=0\",[&id]",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "anchor lookup"
+  },
+  {
+    "id": "JL-loan-deletion",
+    "file": "crates/journals/src/loader.rs",
+    "find": "deleted_at IS NULL",
+    "replace": "deleted_at IS NOT NULL",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "loan deletion"
+  },
+  {
+    "id": "JL-evidence-subject",
+    "file": "crates/journals/src/loader.rs",
+    "find": "subject_kind='custody_component'",
+    "replace": "subject_kind='other'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "evidence subject"
+  },
+  {
+    "id": "JL-migration-resolution",
+    "file": "crates/journals/src/loader.rs",
+    "find": "resolved_at IS NULL",
+    "replace": "resolved_at IS NOT NULL",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "migration resolution"
+  },
+  {
+    "id": "JL-latest-review",
+    "file": "crates/journals/src/loader.rs",
+    "find": "MAX(revision)",
+    "replace": "MIN(revision)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "latest review"
+  },
+  {
+    "id": "JL-channel-kind",
+    "file": "crates/journals/src/loader.rs",
+    "find": "r.record_type='channel'",
+    "replace": "r.record_type='payment'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "channel kind"
+  },
+  {
+    "id": "JL-config-marker",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Bool(mentions)",
+    "replace": "Value::Bool(!mentions)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "config marker"
+  },
+  {
+    "id": "JL-script-source",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "(\"by_script\", self.scripts.encode(references))",
+    "replace": "(\"by_script\", self.outpoints.encode(references))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "script source"
+  },
+  {
+    "id": "JL-outpoint-source",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "(\"by_outpoint\", self.outpoints.encode(references))",
+    "replace": "(\"by_outpoint\", self.scripts.encode(references))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "outpoint source"
+  },
+  {
+    "id": "JL-retired-policy",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "status='retired'",
+    "replace": "status='active'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "retired policy"
+  },
+  {
+    "id": "JL-inventory-account",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "match_facts(&wallet,\"\",&chain,&network,\"inventory\")",
+    "replace": "match_facts(&wallet,\"wrong\",&chain,&network,\"inventory\")",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "inventory account"
+  },
+  {
+    "id": "JL-scan-warning",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "ownership scan depth is invalid",
+    "replace": "ownership scan depth changed",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "scan warning"
+  },
+  {
+    "id": "JL-derived-history",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"derived_history\"",
+    "replace": "\"derived\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "derived history"
+  },
+  {
+    "id": "JL-worklist-threshold",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "count > 50_000",
+    "replace": "count > 500_000",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "worklist threshold"
+  },
+  {
+    "id": "JL-source-budget",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "64_usize.min(256 - sources.len())",
+    "replace": "63_usize.min(256 - sources.len())",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "source budget"
+  },
+  {
+    "id": "JL-typed-limit",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "LIMIT 256",
+    "replace": "LIMIT 255",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "typed limit"
+  },
+  {
+    "id": "JL-return-limit",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "LIMIT 512",
+    "replace": "LIMIT 511",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "return limit"
+  },
+  {
+    "id": "JL-nonobject-config",
+    "file": "crates/journals/src/loader.rs",
+    "find": "mapping && text(raw).to_lowercase().contains(\"samourai\")",
+    "replace": "(mapping || raw != &Value::Null) && text(raw).to_lowercase().contains(\"samourai\")",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Malformed and scalar config text cannot establish a Samourai marker."
+  },
+  {
+    "id": "JL-blob-refusal",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Blob(_) => {\n            return Err(Error::Unsupported(\n                \"custody snapshot v1 cannot serialize SQLite BLOB\",\n            ))\n        }",
+    "replace": "ValueRef::Blob(_) => Value::Null,",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "A legacy blob is never coerced to a null fact."
+  }
+]

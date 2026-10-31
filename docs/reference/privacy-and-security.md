@@ -875,6 +875,16 @@ These local parity fixtures can contain private book facts and must stay in a
 disposable worktree data root. Nothing is redacted for parity; they are not
 diagnostic exports or AI projections. The checked-in corpus is synthetic.
 
+The experimental R4-9 test-only `KASSIBER_TEST_CUSTODY_LOADER_BIN` hook adds a
+native snapshot byte comparison to custody census/shadow runs when explicitly
+set. It sends a complete `iterdump` of the caller's current connection through
+a local child-process pipe, including uncommitted changes. That copy can contain
+unrelated private wallet/provider configuration; it stays in RAM, is never
+written as a fixture or diagnostic, and assertion failures expose only a byte
+offset. The `custody-load` example requires the `test-harness` feature and has no
+product, daemon or AI route. Its root mode opens plaintext/SQLCipher books through
+`crates/store`; SQL-copy mode is solely a disposable verification fixture.
+
 The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
 BTCPay and local Core-detection tests through the reviewed network gate.
 Its action grant binds the exact daemon kind, form arguments and book; backend

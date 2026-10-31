@@ -325,6 +325,15 @@ def _build(self, *, finalized):
 
     try:
         snapshot = self.load_snapshot()
+        from tests.rust_port.custody_loader_oracle import compare as compare_loader
+        try:
+            compare_loader(self.conn, self.profile, snapshot)
+        except BaseException:
+            # A test can intentionally catch an AssertionError. Keep loader
+            # differences fatal to the session, like custody-stage differences.
+            record("difference", compared=(), skipped=STAGES)
+            recorded = True
+            raise
         if observer is not None:
             observer.stage("snapshot", snapshot)
         # Census preserves the one-build read budget; shadow also audits SQL.

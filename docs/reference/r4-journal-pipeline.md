@@ -16,6 +16,8 @@ The [R7 integration audit](rust-backend-r7-integration.md) records the linear
 restack and its verification. The separate [tax-engine speed pass](tax-engine.md#ledger-performance-checkpoint-r4-2026-10-30)
 measures 2.03–3.96× faster `ledger` calls with byte-identical responses; its
 timings supersede the engine line in this design's original measurements.
+R4-9 has a [test-only loader checkpoint](r4-native-loader-checkpoint.md)
+that misses its 0.30 s target and remains unaccepted and unrouted.
 This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
@@ -354,7 +356,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-6 | Typed quantity state; remove the Python-model conversion | 1.58 / 1.82 | ≤ 1/4 |
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
-| R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python | Python load 1.57 / 1.89 (floor 0.11) | ≤ 0.30 s |
+| R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python; [test-only checkpoint](r4-native-loader-checkpoint.md), target missed, acceptance remains open | Python load 1.57 / 1.89 (floor 0.11) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |

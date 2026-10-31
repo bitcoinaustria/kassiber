@@ -1,0 +1,345 @@
+{
+  "schema": "kassiber.custody-loader-bench.v1",
+  "as_of": "2026-10-31T12:00:00Z",
+  "binary_sha256": "40b977676161500a04b6ee535f6cc703458bec98d1f5e3cdbeded78e5d3b7e4f",
+  "records": [
+    {
+      "kind": "generic",
+      "transactions": 2000,
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 2000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 2000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 2000
+        },
+        "built_by": "1f064db49aee856b1014fb9ef5ba7e5cbfd78a3b",
+        "build_seconds": 5.2
+      },
+      "byte_equal": true,
+      "sha256": "ae7d305b0ecb3a27ee3a32fc273db0814b06e5e1a58c696474c702c04067e088",
+      "bytes": 6793240,
+      "pairs": [
+        {
+          "load": [
+            21.46533203125,
+            20.74560546875,
+            23.337890625
+          ],
+          "python": 0.11425089799740817,
+          "rust": 0.069991719,
+          "adapter": 0.058728961,
+          "total": 0.12872068
+        },
+        {
+          "load": [
+            21.46533203125,
+            20.74560546875,
+            23.337890625
+          ],
+          "python": 0.1254956340053468,
+          "rust": 0.077817446,
+          "adapter": 0.05830705,
+          "total": 0.13612449599999998
+        },
+        {
+          "load": [
+            21.46533203125,
+            20.74560546875,
+            23.337890625
+          ],
+          "python": 0.12189634900278179,
+          "rust": 0.072267678,
+          "adapter": 0.060662313,
+          "total": 0.132929991
+        },
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.11185422500420827,
+          "rust": 0.071742475,
+          "adapter": 0.057885669,
+          "total": 0.129628144
+        },
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.11405575300159398,
+          "rust": 0.075140515,
+          "adapter": 0.05906241,
+          "total": 0.134202925
+        }
+      ]
+    },
+    {
+      "kind": "multi-wallet",
+      "transactions": 2000,
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 2000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "e106b0aa2628699a1bff2b7fa4705a94ff8aa3c52761582e69baee21090e0d6c",
+          "Cold.csv": "e65f77cd25ab4e5de41f831eccc073c12b9cd2c5b9909fdca5ae4bea88eabdca",
+          "LHot.csv": "77da8aad0da7f1401e6ed0d8663299c669a05b5a194e2c6fd6c2d3ac9299ab98",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 342,
+        "pegs_paired": 171,
+        "journals": {
+          "entries_created": 2000,
+          "quarantined": 0,
+          "cross_asset_pairs": 171,
+          "processed_transactions": 2000
+        },
+        "built_by": "1f064db49aee856b1014fb9ef5ba7e5cbfd78a3b",
+        "build_seconds": 150.8
+      },
+      "byte_equal": true,
+      "sha256": "fea8b0be19813462af70b79a56c752906420b169d62130156739b7c4b289ab0a",
+      "bytes": 9238672,
+      "pairs": [
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.17109661900030915,
+          "rust": 0.091269571,
+          "adapter": 0.074859277,
+          "total": 0.166128848
+        },
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.16666622200136771,
+          "rust": 0.086536505,
+          "adapter": 0.071433347,
+          "total": 0.157969852
+        },
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.1768516099982662,
+          "rust": 0.100922455,
+          "adapter": 0.075036031,
+          "total": 0.175958486
+        },
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.16028556200035382,
+          "rust": 0.089025101,
+          "adapter": 0.076165151,
+          "total": 0.16519025199999998
+        },
+        {
+          "load": [
+            21.107421875,
+            20.68310546875,
+            23.3037109375
+          ],
+          "python": 0.1588825060025556,
+          "rust": 0.090168951,
+          "adapter": 0.070164653,
+          "total": 0.160333604
+        }
+      ]
+    },
+    {
+      "kind": "generic",
+      "transactions": 20000,
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "1f064db49aee856b1014fb9ef5ba7e5cbfd78a3b",
+        "build_seconds": 28.3
+      },
+      "byte_equal": true,
+      "sha256": "7c1592e67bd5cf5c2fc743e02402f3a9c3d9692124fb7e6c5b6be6cf6e1b54e1",
+      "bytes": 68023010,
+      "pairs": [
+        {
+          "load": [
+            21.17919921875,
+            20.705078125,
+            23.29638671875
+          ],
+          "python": 1.2177328480029246,
+          "rust": 0.75222098,
+          "adapter": 0.598829772,
+          "total": 1.351050752
+        },
+        {
+          "load": [
+            20.60400390625,
+            20.59375,
+            23.24609375
+          ],
+          "python": 1.283226662002562,
+          "rust": 0.739233785,
+          "adapter": 0.581270946,
+          "total": 1.320504731
+        },
+        {
+          "load": [
+            20.60400390625,
+            20.59375,
+            23.24609375
+          ],
+          "python": 1.2488825309992535,
+          "rust": 0.780818834,
+          "adapter": 0.595190586,
+          "total": 1.37600942
+        },
+        {
+          "load": [
+            19.83447265625,
+            20.43408203125,
+            23.18017578125
+          ],
+          "python": 1.2408657959967968,
+          "rust": 0.745950281,
+          "adapter": 0.591556078,
+          "total": 1.337506359
+        },
+        {
+          "load": [
+            19.83447265625,
+            20.43408203125,
+            23.18017578125
+          ],
+          "python": 1.290525680000428,
+          "rust": 0.771203329,
+          "adapter": 0.586689844,
+          "total": 1.357893173
+        }
+      ]
+    },
+    {
+      "kind": "multi-wallet",
+      "transactions": 20000,
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 20000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+          "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+          "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 3306,
+        "pegs_paired": 300,
+        "journals": {
+          "entries_created": 19983,
+          "quarantined": 17,
+          "cross_asset_pairs": 300,
+          "processed_transactions": 20000
+        },
+        "built_by": "1f064db49aee856b1014fb9ef5ba7e5cbfd78a3b",
+        "build_seconds": 934.3
+      },
+      "byte_equal": true,
+      "sha256": "5e0d4df8afade6ad667287dec6ffaadbb1883c4b82a9f031501923bb747e8f9e",
+      "bytes": 76513056,
+      "pairs": [
+        {
+          "load": [
+            21.31396484375,
+            20.74560546875,
+            23.2529296875
+          ],
+          "python": 1.5341774520056788,
+          "rust": 0.872625553,
+          "adapter": 0.684294282,
+          "total": 1.556919835
+        },
+        {
+          "load": [
+            20.72802734375,
+            20.63330078125,
+            23.203125
+          ],
+          "python": 1.5384102130046813,
+          "rust": 0.917034438,
+          "adapter": 0.70293532,
+          "total": 1.6199697579999999
+        },
+        {
+          "load": [
+            20.72802734375,
+            20.63330078125,
+            23.203125
+          ],
+          "python": 1.521802299997944,
+          "rust": 0.923457296,
+          "adapter": 0.649554586,
+          "total": 1.573011882
+        },
+        {
+          "load": [
+            20.830078125,
+            20.65625,
+            23.1962890625
+          ],
+          "python": 1.4890282070045942,
+          "rust": 0.891575012,
+          "adapter": 0.721727132,
+          "total": 1.613302144
+        },
+        {
+          "load": [
+            21.64453125,
+            20.828125,
+            23.23828125
+          ],
+          "python": 1.4706769790063845,
+          "rust": 0.897867997,
+          "adapter": 0.735336651,
+          "total": 1.633204648
+        }
+      ]
+    }
+  ]
+}
