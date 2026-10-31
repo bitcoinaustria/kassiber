@@ -7701,3 +7701,108 @@ Mutation and verification build trees and disposable books are removed after
 summarizing their results. No background job is left running. The full quality
 gate, tax/custody shadow overlays, Docker regtest and packaged/platform gates
 were not run.
+
+### Bitcoin wallet-sync freshness execution (R5, partial)
+
+Local branch `t3code/r5-sync-17` starts at `ab2581a73`. This continuation
+implements the first execution handoff step for the admitted Bitcoin,
+explicit-no-journal shapes. `freshness::execution` ports running/progress,
+success/error/cancel transitions, exact requested dispatch, retry-after,
+capped exponential backoff and SHA256 jitter, database-busy rollback, private
+source checkpoints, aggregation and final UI snapshots. A handler's own
+`not_found` or removal-shaped error remains a failed job; only disappearance
+of the exact executing job can become a deferred outcome.
+
+`Book::freshness_execute` consumes the admitted plan under its foreground
+slot. `freshness::native` connects on-chain jobs to the existing native fetch
+and atomic publication services. Request-local consent binds to that exact
+plan and supplies per-fetch grants through `kassiber-net`. Recovery and stored
+jobs supply no consent. Missing, foreign or revoked grants and early
+cancellation refuse before queue writes. Offline/no-egress refuses transport;
+the explicitly requested job records the failed, report-blocking outcome.
+An enqueue-only action does not open a client. No dependency was added.
+
+Publication retains both existing wallet sync marker writes: the CLI's atomic
+publication marker, followed by the daemon completion marker. The new
+publication callback can inspect the admitted connection at each apply stage
+without committing progress inside the savepoint. Source cancellation,
+scope, revocation and transport permission are checked around fetch and
+publication. These are execution primitives, not completion of live daemon
+control wiring. In particular, persisted source cancellation is not yet
+checked between every fetch batch.
+
+`freshness::ui` applies structured checkpoint/credential redaction plus the
+daemon's free-text URL/host and operational redaction. This includes string
+leaves containing surrogate code points. Active-book results retain partial
+success and failure rows; workspace results retain per-book state, attention
+and blocking/backoff totals without changing active context.
+
+The guarded `freshness_fixture` compares scripted handlers, complete typed
+envelopes, progress payloads and every logical table with Python. The separate
+`freshness_sync_fixture` executes real disposable Electrum/Esplora jobs and
+compares terminal envelopes and complete books with Python's daemon freshness
+coordinator. Its fixture/restart/reviewed comparisons use fixed identities,
+wall clocks and elapsed time; progress events are not compared by this
+driver. `test.freshness.execute` exercises the real admitted `Book` seam but
+is absent from release builds and renderer/AI allowlists.
+
+All three product daemon routes still use Python, including explicit
+no-refresh variants. Successful native product calls added here remain zero
+for `ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.
+R4-13 and default journal refresh remain outstanding; no journal subprocess
+bridge or native journal interpretation is introduced.
+
+The remaining handoff is:
+
+1. Wire native fetch progress callbacks through live daemon stream envelopes,
+   early/request cancellation, source controls between fetch batches, book
+   switching and request-bound offline/revocation/replay fences. Add the
+   after-response graph-grant handoff and its worker lifecycle. Persisted or
+   recovered jobs must remain insufficient transport authority. Prove Python
+   stream/control parity and kill named mutations before claiming step 2.
+2. Add product argument validation and inert whole-shape hybrid selection for
+   explicitly requested no-refresh variants, or provide the narrow existing
+   Python journal bridge with its complete local contract. Defaults stay on
+   Python; native default journal processing still requires R4-13.
+3. Prove full live daemon envelopes/events/books over the broader
+   fixture/restart/reviewed corpus, zero served-shape fallbacks and the
+   remaining control/graph mutations before registering any product route.
+
+This run stops at the verified first handoff boundary. Step 2 remains open,
+including native fetch batch progress, cancellation checks between batches,
+live request/book-switch controls, offline/revoked/replayed request fences and
+after-response graph grants with a connection-owning, stoppable worker. These
+need their own Python stream/control parity and named mutation acceptance.
+Step 3 has not started. Product no-refresh routes and default journal refresh
+still use Python.
+
+Focused Python verification passes 310 tests and two subtests across execution,
+queue/admission, native Electrum/Esplora jobs, the inherited sync service and
+daemon/catalogue checks, plus three desktop setup/handshake cases. All 218
+affected Rust tests pass, including 179 wallet tests, encrypted rollback and
+the inherited 102-round corpus. The final empty unexpected-error-message case
+is also covered by the unmutated mutation baseline. No test is skipped in
+these runs.
+
+All 19 execution mutations are killed by their named tests after 13 unmutated
+baseline selections pass. They cover state/checkpoints, retries and backoff,
+busy/removal rollback, cancellation and dispatch rechecks, report blocking,
+aggregation and URL/host redaction, exact/revoked consent, the separate daemon
+sync marker, force-full and removal-shaped handler errors. Build failures,
+skips and empty selections do not count as kills. The inherited queue and
+admission campaigns were not rerun; all three catalogues pass static checks
+(29 queue, 12 admission and 19 execution entries).
+
+Formatting and affected production/harness clippy pass with warnings denied.
+The required `classify_tests update` records 5,769 definitions;
+`python_test_shards.py run preflight --ci` passes 57 tests and 62 subtests.
+A manual second pass reviewed transaction boundaries, native authority and
+revalidation, UI redaction, guarded routing, classification and documentation.
+No Python reference bug was found, and no verification remains sandbox-blocked.
+
+Command logs and the summary remain under `target/r5-sync-17-artifacts/`.
+Mutation and verification build trees and disposable books are removed after
+summarizing their results. Account HOME is preserved, and no background job
+is left running. The full quality gate, inherited mutation campaigns,
+tax/custody shadow overlays, Docker regtest and packaged/platform gates were
+not run. This checkpoint does not establish live daemon route acceptance.

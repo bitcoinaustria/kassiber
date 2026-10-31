@@ -133,6 +133,7 @@ jobs:
           cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked
           cargo build -p kassiber-wallets --example sync_fixture --features test-harness --offline --locked
           cargo build -p kassiber-wallets --example freshness_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example freshness_sync_fixture --features test-harness --offline --locked
 
       - name: Run Python shard
         shell: bash

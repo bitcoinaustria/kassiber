@@ -167,7 +167,8 @@ through the shared setup crate.
   freshness services, retaining pre-egress refusal of unsupported shapes.
   The request-bound service and CLI route now exist; the hybrid runner checks
   saved capabilities in an inert admitted-book preflight before consent. Daemon
-  freshness execution/progress and default local journal refresh remain pending.
+  freshness execution now has an unregistered admitted-book implementation;
+  live daemon progress/controls and default local journal refresh remain pending.
   The unregistered pre-dispatch queue now covers policy, state, recovery,
   single-flight/forced enqueue, cancellation controls, selected dispatch and
   workspace ordering. It grants no transport authority. See the queue checkpoint
@@ -176,7 +177,12 @@ through the shared setup crate.
   through `Book`, with foreground exclusion and selection/configuration
   revalidation. The admitted plan requires an explicit journal opt-out and
   refuses enabled unported sources before queue mutation or consent. This is
-  an internal prerequisite; daemon execution and route registration remain open.
+  an internal prerequisite; live daemon controls and route registration remain open.
+- [x] Execute admitted Bitcoin freshness jobs with retries/backoff, SQLite-busy
+  rollback, private checkpoints, active-book/workspace aggregation and UI
+  redaction. Verify terminal envelopes and complete logical books against
+  Python with gated Electrum/Esplora fixtures. Live request progress, controls,
+  graph handoff and product route registration remain open.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.

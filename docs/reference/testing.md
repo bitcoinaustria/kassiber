@@ -306,6 +306,17 @@ or native hybrid served-by counts. The serial Rust-enabled lane builds the
 driver explicitly. Keep its books and temporary files under a disposable root
 and retain the socket guards.
 
+The guarded `freshness_sync_fixture` additionally executes admitted Bitcoin
+freshness jobs. `tests/test_rust_freshness_native.py` compares terminal
+envelopes and every logical table with Python's daemon freshness coordinator
+on disposable Electrum/Esplora servers. Identity and clock seams are fixed;
+elapsed time is frozen in the Python reference rather than removed from the
+comparison. This proves internal execution, not live daemon progress, graph
+handoff or product routing. The separate `freshness_fixture` drives scripted
+handlers for deterministic retry, cancellation, removal, checkpoint and
+redaction cases in `tests/test_rust_freshness_execution.py`. Both fixtures
+require `--features test-harness` and preserve account HOME.
+
 For plaintext file-import scenarios, `KASSIBER_HYBRID_IMPORT_ORACLE=1` also
 replays each native CSV/Phoenix call through Python's core on an in-memory
 backup. Test-only identity/clock inputs keep generated rows comparable. Every

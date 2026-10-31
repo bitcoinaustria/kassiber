@@ -433,7 +433,26 @@ pub fn apply(
     sources: &mut dyn Sources,
     mut stage: impl FnMut(&str) -> Result<()>,
 ) -> Result<Vec<Value>> {
+    apply_mode(conn, request, sources, |_, name| stage(name))
+}
+
+pub(crate) fn apply_job(
+    conn: &mut Connection,
+    request: &Request<'_>,
+    sources: &mut dyn Sources,
+    stage: impl FnMut(&Connection, &str) -> Result<()>,
+) -> Result<Vec<Value>> {
+    apply_mode(conn, request, sources, stage)
+}
+
+fn apply_mode(
+    conn: &mut Connection,
+    request: &Request<'_>,
+    sources: &mut dyn Sources,
+    mut stage: impl FnMut(&Connection, &str) -> Result<()>,
+) -> Result<Vec<Value>> {
     let savepoint = conn.savepoint().map_err(database_error)?;
+    let mut stage = |name: &str| stage(&savepoint, name);
     stage("begin")?;
     let clock = Clock(RefCell::new(sources));
     let results = publish(&savepoint, request, &clock, &mut stage)?;

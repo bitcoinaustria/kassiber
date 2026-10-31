@@ -1278,6 +1278,48 @@ impl Book for RealBook {
             Err(error) => Err(error),
         }
     }
+    fn freshness_execute(
+        &mut self,
+        plan: kassiber_wallets::freshness::planning::Plan,
+        options: &kassiber_wallets::freshness::execution::Options,
+        consent: Option<&kassiber_wallets::freshness::native::Consent>,
+        cancel: &kassiber_wallets::scan::Cancellation,
+        progress: &mut dyn FnMut(&Value) -> Result<(), AppError>,
+    ) -> Result<Value, AppError> {
+        use kassiber_net::{Gate, Ledger, Offline};
+        use std::time::{Duration, Instant};
+        let gate = Gate::new(
+            || match Context::from_env()
+                .ok()
+                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            {
+                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                Some(_) => Offline::Online,
+                None => Offline::Unavailable,
+            },
+            Ledger::default(),
+        );
+        let backends = &self.backends;
+        let conn = self
+            .book
+            .as_mut()
+            .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+            .connection_mut();
+        let (mut sources, start_time) = sync_sources();
+        plan.execute_native(
+            conn,
+            options,
+            sources.as_mut(),
+            progress,
+            &gate,
+            consent,
+            cancel,
+            Instant::now() + Duration::from_secs(900),
+            start_time,
+            env!("CARGO_PKG_VERSION"),
+            |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
+        )
+    }
     fn wallet_sync(
         &mut self,
         profile_id: &str,

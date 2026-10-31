@@ -795,6 +795,12 @@ retries, pauses, resumes, and cancels jobs, but it never performs network sync
 itself. Persistent state lives in SQLite under `freshness_jobs` and
 `freshness_source_states`.
 
+The Rust port has an internal admitted-book executor for supported Bitcoin
+jobs with an explicit journal opt-out. It covers execution state, retries,
+checkpoints and terminal aggregation; live progress, request controls and graph
+handoff remain pending. All three product sync/freshness routes still use
+Python. See the latest [Rust checkpoint](rust-shell.md#bitcoin-wallet-sync-freshness-execution-r5-partial).
+
 Within the daemon, refresh execution is serialized across recovery, queueing,
 batch fetch and apply. A background tick skips an occupied execution slot; an
 explicit competing refresh returns retryable `project_operation_in_progress`.

@@ -19,11 +19,12 @@ class Runner(BaseRunner):
     def outcome(self, runner, test):
         build = checker._run(
             ["cargo", "build", "--offline", "--locked", "-p", "kassiber-wallets", "--features", "test-harness",
-             "--example", "freshness_fixture"], self.scratch, self.cargo_env,
+             "--example", "freshness_fixture", "--example", "freshness_sync_fixture"], self.scratch, self.cargo_env,
         )
         if build.returncode:
             return "error", build.stderr[-4000:]
         self.env["KASSIBER_RUST_FRESHNESS_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/freshness_fixture")
+        self.env["KASSIBER_RUST_FRESHNESS_SYNC_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/freshness_sync_fixture")
         return super().outcome("pytest", test)
 
 

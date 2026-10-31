@@ -2933,3 +2933,29 @@ No product route is registered by this checkpoint. Job execution, retry/backoff,
 UI redaction and aggregation, stream/control/graph wiring, hybrid request-shape
 selection and full live daemon parity remain. See the new checkpoint at the end
 of `docs/reference/rust-shell.md` for verification and the continuation.
+
+### R5 Bitcoin sync: job execution checkpoint (partial)
+
+`crates/wallets::freshness::execution` consumes the admitted plan while its
+foreground slot remains held. It ports running/progress/success/error state,
+requested-job dispatch, retry-after and SHA256-jittered capped backoff,
+database-busy rollback, source checkpoints, wallet-result aggregation and
+active-book/workspace snapshots. UI rendering adds the daemon's free-text
+URL/host and operational redaction to the queue's structured redaction.
+
+`Book::freshness_execute` connects supported on-chain jobs to native fetch and
+atomic publication. An explicit request-local grant is bound to the admitted
+plan; persisted jobs carry no transport authority. Native publication retains
+the CLI's existing sync marker and the daemon's separate completion marker.
+All transport goes through `kassiber-net`; no networking dependency was added.
+Only explicit journal opt-outs remain admitted. The guarded fixtures and
+daemon test kind are absent from production dispatch and desktop/AI allowlists.
+
+Terminal-envelope and full logical-book comparisons exercise both protocols,
+checkpoint restarts, reviewed force-full refreshes and workspace aggregation.
+Their fixed clock isolates state parity from progress timing. They do not
+establish live progress-stream parity. Source cancellation during fetch,
+request lifecycle/replay controls and after-response graph grants still need
+the next handoff step. The three product daemon routes remain on Python,
+including no-refresh shapes. See the final checkpoint in
+`docs/reference/rust-shell.md` for verification and the exact continuation.

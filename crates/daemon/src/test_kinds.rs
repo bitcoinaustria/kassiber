@@ -15,12 +15,13 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 5] = [
+pub const KINDS: [&str; 6] = [
     "test.stream",
     "test.emit_event",
     "test.late",
     "test.secret_store",
     "test.freshness.plan",
+    "test.freshness.execute",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -50,7 +51,7 @@ pub(crate) fn handle(
     }
     let args = get(request, "args");
     Some(match kind {
-        "test.freshness.plan" => (|| {
+        "test.freshness.plan" | "test.freshness.execute" => (|| {
             use kassiber_wallets::freshness::planning::{Request, Scope};
             if let Some(locked) = daemon.open_lazily(request_id)? {
                 return Ok((Some(locked), false));
@@ -74,11 +75,30 @@ pub(crate) fn handle(
                 journals: flag("journals"),
                 force_full: flag("force_full").unwrap_or(false),
             })?;
+            let payload = if kind == "test.freshness.execute" {
+                let proof = kassiber_wallets::freshness::native::Consent::explicit_trigger(&plan);
+                if flag("revoke") == Some(true) {
+                    proof.revoke();
+                }
+                let cancel = kassiber_wallets::scan::Cancellation::default();
+                if flag("cancel") == Some(true) {
+                    cancel.cancel();
+                }
+                daemon.book_mut()?.freshness_execute(
+                    plan,
+                    &kassiber_wallets::freshness::execution::Options {
+                        run: flag("run").unwrap_or(true),
+                        limit: None,
+                    },
+                    (flag("consent") != Some(false)).then_some(&proof),
+                    &cancel,
+                    &mut |_| Ok(()),
+                )?
+            } else {
+                plan.specifications()
+            };
             Ok((
-                Some(with_request_id(
-                    success(kind, plan.specifications()),
-                    request_id,
-                )),
+                Some(with_request_id(success(kind, payload), request_id)),
                 false,
             ))
         })(),

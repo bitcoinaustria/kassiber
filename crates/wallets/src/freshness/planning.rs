@@ -1,8 +1,8 @@
-use super::{sources, workspace_profiles, Queue};
+use super::{execution, put, sources, ui, workspace_profiles, Queue};
 use crate::{
     publication::{
         row::{field, first, or_text, Result},
-        wallet::{fallback, SystemSources},
+        wallet::{fallback, Sources, SystemSources},
     },
     sync::{Request as SyncRequest, Sync},
 };
@@ -52,13 +52,13 @@ pub struct Request {
 }
 
 #[derive(PartialEq)]
-struct Captured {
-    context: Value,
+pub(super) struct Captured {
+    pub(super) context: Value,
     workspace: Option<Value>,
-    profiles: Vec<Value>,
-    wallets: Vec<Vec<Value>>,
+    pub(super) profiles: Vec<Value>,
+    pub(super) wallets: Vec<Vec<Value>>,
     policies: Vec<Value>,
-    specs: Vec<Vec<Value>>,
+    pub(super) specs: Vec<Vec<Value>>,
 }
 
 fn capture(conn: &Connection, request: &Request) -> Result<Captured> {
@@ -126,7 +126,8 @@ fn capture(conn: &Connection, request: &Request) -> Result<Captured> {
 pub struct Plan {
     _execution: Execution,
     request: Request,
-    captured: Captured,
+    pub(super) captured: Captured,
+    pub(super) identity: std::sync::Arc<()>,
     actions: Vec<Sync>,
     connection: usize,
     database: String,
@@ -213,6 +214,7 @@ impl Plan {
             _execution: execution,
             request: request.clone(),
             captured,
+            identity: std::sync::Arc::new(()),
             actions,
             connection: std::ptr::from_ref(conn).addr(),
             database: conn.path().unwrap_or("").into(),
@@ -275,5 +277,226 @@ impl Plan {
                 ),
             ),
         ])
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute(
+        self,
+        conn: &mut Connection,
+        options: &execution::Options,
+        sources: &mut dyn Sources,
+        handler: &mut dyn execution::Handler,
+        observer: &mut dyn FnMut(&Value) -> Result<()>,
+        clock: &dyn Fn(i64) -> Result<String>,
+        backend: impl FnMut(&Connection, &str) -> Result<Json>,
+    ) -> Result<Value> {
+        self.validate(conn, backend)?;
+        if self.captured.profiles.is_empty() && self.captured.workspace.is_none() {
+            let mut result = Queue::new(conn, sources).snapshot("")?;
+            for (key, value) in [
+                ("profile", Value::Null),
+                ("enqueued", Value::List(vec![])),
+                ("completed", Value::List(vec![])),
+            ] {
+                put(&mut result, key, value);
+            }
+            return Ok(ui::payload(&result));
+        }
+        let label = |v: &Value| {
+            dict([
+                ("id", field(v, "id").clone()),
+                ("label", field(v, "label").clone()),
+            ])
+        };
+        let workspace = self.captured.workspace.as_ref().map(label);
+        let mut books = Vec::new();
+        let mut totals = [0usize; 6];
+        for (profile, specs) in self.captured.profiles.iter().zip(&self.captured.specs) {
+            let id = or_text(field(profile, "id"));
+            execution::begin(conn)?;
+            let recovered = Queue::new(conn, sources).recover(Some(&id))?;
+            execution::commit(conn)?;
+            execution::begin(conn)?;
+            let mut enqueued = Vec::new();
+            for spec in specs {
+                let mut input = spec.clone();
+                put(&mut input, "profile_id", s(id.as_str()));
+                let job = Queue::new(conn, sources).enqueue(&input)?;
+                if truthy(field(&job, "job_type")) {
+                    enqueued.push(job);
+                }
+            }
+            execution::commit(conn)?;
+            let limit = options
+                .limit
+                .filter(|limit| *limit != 0)
+                .unwrap_or(enqueued.len().max(1) as i64);
+            let run_total = limit.min(enqueued.len().max(1) as i64).max(1) as usize;
+            let mut seen = Vec::new();
+            let mut book_progress = |event: &Value| {
+                let mut event = event.clone();
+                if let Some(workspace) = &workspace {
+                    put(&mut event, "workspace", workspace.clone());
+                    put(&mut event, "profile", label(profile));
+                } else {
+                    let job_id = or_text(field(&event, "job_id"));
+                    if !job_id.is_empty() && !seen.contains(&job_id) {
+                        seen.push(job_id.clone());
+                    }
+                    if let Some(index) = seen.iter().position(|id| id == &job_id) {
+                        put(&mut event, "job_index", Value::from(index + 1));
+                    }
+                    put(
+                        &mut event,
+                        "job_total",
+                        Value::from(run_total.max(seen.len())),
+                    );
+                }
+                observer(&ui::payload(&event))
+            };
+            let ids = enqueued
+                .iter()
+                .map(|job| or_text(field(job, "id")))
+                .collect::<Vec<_>>();
+            let completed = if options.run {
+                let selected = if workspace.is_none() {
+                    Queue::new(conn, sources).requested_due(&id, &ids, limit)?
+                } else {
+                    enqueued.clone()
+                };
+                execution::run_requested(
+                    conn,
+                    &id,
+                    &selected
+                        .iter()
+                        .map(|job| or_text(field(job, "id")))
+                        .collect::<Vec<_>>(),
+                    limit,
+                    sources,
+                    handler,
+                    &mut book_progress,
+                    clock,
+                )?
+            } else {
+                vec![]
+            };
+            let mut result = Queue::new(conn, sources).snapshot(&id)?;
+            let blocked =
+                super::integer(field(field(&result, "summary"), "blocking_reports"))? as usize;
+            let cooling =
+                super::integer(field(field(&result, "summary"), "rate_limited"))? as usize;
+            let errors = completed
+                .iter()
+                .filter(|job| {
+                    ![s("done"), s("cancelled"), s("rate_limited")].contains(field(job, "status"))
+                })
+                .count();
+            for (total, value) in totals.iter_mut().zip([
+                enqueued.len(),
+                completed.len(),
+                errors,
+                cooling,
+                usize::from(blocked > 0),
+                usize::from(blocked == 0),
+            ]) {
+                *total += value;
+            }
+            for (key, value) in [
+                ("profile", label(profile)),
+                ("results", Value::List(ui::results(&completed))),
+                ("recovered", Value::List(recovered)),
+                ("enqueued", Value::List(enqueued)),
+                ("completed", Value::List(completed)),
+            ] {
+                put(&mut result, key, value);
+            }
+            if workspace.is_some() {
+                put(
+                    &mut result,
+                    "attention",
+                    dict([
+                        ("blockedReports", Value::Bool(blocked > 0)),
+                        ("rateLimited", Value::Bool(cooling > 0)),
+                        ("errors", Value::from(errors)),
+                    ]),
+                );
+            } else {
+                put(
+                    &mut result,
+                    "force_full",
+                    Value::Bool(self.request.force_full),
+                );
+            }
+            books.push(result);
+        }
+        let result = if let Some(workspace) = workspace {
+            let mut summary = dict([
+                ("books", Value::from(books.len())),
+                ("ok", Value::Bool(totals[2] == 0 && totals[4] == 0)),
+                ("reports_blocked", Value::from(totals[4])),
+            ]);
+            for (key, total) in [
+                "enqueued",
+                "completed",
+                "errors",
+                "rate_limited",
+                "blocked_books",
+                "synced_books",
+            ]
+            .into_iter()
+            .zip(totals)
+            {
+                put(&mut summary, key, Value::from(total));
+            }
+            dict([
+                ("workspace", workspace),
+                ("books", Value::List(books)),
+                ("summary", summary),
+            ])
+        } else {
+            books.remove(0)
+        };
+        Ok(ui::payload(&result))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_native(
+        self,
+        conn: &mut Connection,
+        options: &execution::Options,
+        sources: &mut dyn Sources,
+        observer: &mut dyn FnMut(&Value) -> Result<()>,
+        gate: &kassiber_net::Gate,
+        consent: Option<&super::native::Consent>,
+        cancel: &crate::scan::Cancellation,
+        deadline: std::time::Instant,
+        start_time: u64,
+        version: &str,
+        mut backend: impl FnMut(&Connection, &str) -> Result<Json>,
+    ) -> Result<Value> {
+        cancel.check(deadline)?;
+        self.validate(conn, &mut backend)?;
+        let proof = super::native::Consent::consume(consent, &self)?;
+        let resolver = std::cell::RefCell::new(&mut backend);
+        let mut handler = super::native::Native::new(
+            &self,
+            conn,
+            proof,
+            gate,
+            cancel,
+            deadline,
+            start_time,
+            version,
+            |conn, name| resolver.borrow_mut()(conn, name),
+        )?;
+        self.execute(
+            conn,
+            options,
+            sources,
+            &mut handler,
+            observer,
+            &execution::retry_time,
+            |conn, name| resolver.borrow_mut()(conn, name),
+        )
     }
 }

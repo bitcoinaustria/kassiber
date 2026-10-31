@@ -299,6 +299,16 @@ pub trait Book: Send {
     ) -> Result<kassiber_wallets::freshness::planning::Plan, AppError> {
         Err(not_implemented("wallets", "freshness admission"))
     }
+    fn freshness_execute(
+        &mut self,
+        _plan: kassiber_wallets::freshness::planning::Plan,
+        _options: &kassiber_wallets::freshness::execution::Options,
+        _consent: Option<&kassiber_wallets::freshness::native::Consent>,
+        _cancel: &kassiber_wallets::scan::Cancellation,
+        _progress: &mut dyn FnMut(&Value) -> Result<(), AppError>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "freshness execution"))
+    }
     fn wallet_sync(
         &mut self,
         _profile_id: &str,

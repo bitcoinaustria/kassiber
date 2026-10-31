@@ -145,8 +145,19 @@ creates no consent grant, recovers no jobs and contacts no backend, even when
 saved configuration selects a loopback server. Its admitted plan requires an
 explicit journal opt-out and rejects the entire selection when an enabled
 source has no native executor. The three daemon sync/freshness product routes
-remain on Python until execution, event/control and complete-book parity are
-verified; the admission test kind exists only in guarded test builds.
+remain on Python until event/control and complete-book parity are verified.
+
+The internal Rust freshness executor consumes an admitted plan under its
+foreground slot. Its once-only request grant binds to that exact plan;
+missing, foreign, revoked or cancelled requests refuse before queue writes.
+Enqueue-only execution creates no client. Explicit execution uses the existing
+`kassiber-net` gate for every transport and rechecks scope, cancellation,
+revocation and offline permission around fetch and atomic publication. An
+offline/no-egress refusal records a failed, report-blocking job. Progress
+streams, cancellation between fetch batches and the graph-grant handoff remain
+unfinished. Execution test kinds exist only in guarded builds, with no new
+renderer or AI allowlist entry. Disposable-loopback regressions verify empty
+attempt and egress buffers before consent and under pretransport fences.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview

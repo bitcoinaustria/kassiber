@@ -90,6 +90,9 @@ def _reference(conn, operation):
         freshness.update_job_progress(conn, job, args["progress"])
     elif name == "redact":
         return freshness.redact_freshness_payload(args)
+    elif name in {"run_job", "run_requested", "plan_execute", "ui_payload", "ui_snapshot", "sync_results"}:
+        from tests.rust_freshness_execution import reference
+        return reference(conn, name, args)
     else:
         raise AssertionError(name)
 
