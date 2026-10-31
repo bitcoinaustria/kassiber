@@ -587,3 +587,39 @@ def test_dashboard_today_uses_the_same_vienna_civil_day(engine_book, monkeypatch
     profile = conn.execute("SELECT * FROM profiles").fetchone()
     tile = ui_snapshot._tax_free_balance_snapshot(conn, profile, {})
     assert tile["taxableQuantitySats"] == 100_100_000
+
+
+@pytest.mark.parametrize(("marker", "category", "expected"), [
+    ("alt", "neu_gain", True),
+    ("neu", "alt_taxfree", False),
+    ("alt", None, True),
+    ("neu", None, False),
+    (None, "alt_taxfree", True),
+    (None, "neu_gain", False),
+])
+def test_dashboard_entry_has_alt_regime_uses_consumed_marker(marker, category, expected):
+    assert ui_snapshot._entry_has_alt_regime({
+        "quantity": Decimal("-0.1"), "at_category": category,
+        "description": f"at_regime={marker}" if marker else "legacy",
+        "occurred_at": "2024-12-31T12:00:00Z",
+    }) is expected
+
+
+@pytest.mark.parametrize(("method", "category", "sold", "has_alt"), [
+    ("fifo", "neu_gain", BTC // 10, False),
+    ("lifo", "alt_taxfree", BTC // 2, True),
+])
+def test_dashboard_wallet_flags_follow_real_consumption_despite_override(engine_book, method, category, sold, has_alt):
+    conn = engine_book([
+        ("alt", "Cold", "2020-01-01T00:00:00Z", "inbound", BTC // 10, 0, 8000, "buy"),
+        ("neu", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC // 2, 0, 40000, "buy"),
+        ("sell", "Cold", "2024-12-31T12:00:00Z", "outbound", sold, 0, 65000, "sell"),
+    ], method=method, overrides={"sell": {"at_category_override": category}})
+    sale = dict(conn.execute("SELECT * FROM journal_entries WHERE entry_type='disposal'").fetchone())
+    assert ui_snapshot._entry_has_alt_regime(sale) is (method == "fifo")
+    profile = conn.execute("SELECT * FROM profiles").fetchone()
+    tile = ui_snapshot._tax_free_balance_snapshot(conn, profile, {})
+    flags = {w["walletId"]: w["hasTaxFreeBalance"] for w in tile["wallets"]}
+    cold = conn.execute("SELECT id FROM wallets WHERE label='Cold'").fetchone()[0]
+    assert flags[cold] is has_alt
+    assert tile["taxFreeQuantitySats"] == (10_000_000 if has_alt else 0)
