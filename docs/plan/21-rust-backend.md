@@ -2067,8 +2067,9 @@ complete for these file-import commands, with zero importer fallbacks.
 Batch 2 is nine provider/format slices, with separate acceptance and commits.
 These are relative implementation sizes, including parser/coordinator parity,
 edge-file dump comparisons, rollback and named mutation evidence, rather than
-elapsed-time promises. The generic-ledger and tax-platform work should precede
-CoinTracking/Blockpit because their parsers share that normalization machinery.
+elapsed-time promises. CoinTracking/Blockpit share tax-platform normalization,
+including the generic-ledger semantics their parsers use. That shared core can
+precede the complete generic-ledger file loader.
 
 | Importer | Size | Main work beyond batch 1 |
 | --- | --- | --- |
@@ -2141,13 +2142,35 @@ plaintext/encrypted wire/state checks and 38 new named mutations. The
 [CoinTracking checkpoint](../reference/rust-shell.md#cointracking-core-and-cli-ingestion-r5-batch-2a-partial)
 records final verification and served-by counts.
 
-CoinTracking is not complete against the daemon acceptance requirement:
-`ui.wallets.import_file` also runs local freshness/journal refresh, whose native
-orchestration and persistence are still absent. The daemon kind stays disabled
-and its CoinTracking served-by count is zero. Finish that shared contract and
-its encrypted/full-dump parity before moving to Blockpit, Binance supplemental
-or BTCPay files. Batch 2b remains deferred. Python production changes are limited
-to the requested 21bitcoin correction; no dependency, egress, sync or AI path is added.
+The continuation accepts core and CLI importer checkpoints independently of
+the [shared file-import daemon follow-up](../reference/rust-shell.md#shared-file-import-daemon-parity-pending).
+That shared item owns the pending transport contract for every importer.
+
+### R5 file-import continuation: Blockpit core/CLI checkpoint
+
+Native Blockpit ingestion extends the shared tax-platform core with required
+and optional header families, English/German labels, standalone Bitcoin fee
+legs and non-taxable outflow review kinds. Dedicated-wallet admission, private
+row identities, original evidence, canonical-id/economic reconciliation,
+provider-isolated tags, authored inclusion choices, enrichment, ID promotion,
+reimports, readiness and atomic rollback retain Python behavior.
+
+There are 365 frozen Python files. Native normalized-field/fingerprint vectors,
+hybrid full-book comparisons with served-by assertions, and raw CLI wire/full
+typed book-dump comparisons for every file on SQLite and SQLCipher cover the
+slice. Coordinator sequences and encrypted/plaintext fault tests supplement the
+file corpus. The shared bare-CR reference bug is retained with a Blockpit repro;
+Python production code remains unchanged. The
+[Blockpit checkpoint](../reference/rust-shell.md#blockpit-core-and-cli-ingestion-r5-continuation)
+records mutation killers and final verification.
+
+The fresh hybrid scenarios record 373 Rust-served Blockpit imports and zero
+importer fallbacks. The mutation catalog adds 61 named Blockpit entries to the
+retained 550 (611 total).
+
+Remaining core/CLI slices, each requiring its own verified commit, are Binance
+supplemental, BTCPay files, generic ledger, Wasabi, Samourai and document
+ingestion. No dependency, egress, sync route or AI projection is added.
 
 ## Risks
 

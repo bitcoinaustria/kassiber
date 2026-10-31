@@ -1319,33 +1319,47 @@ class RustRealStoreParityTest(_Roots):
             if encrypted:
                 self.ok(self.call(False, ["secrets", "init"], secret=secret, new_secret=True))
             baseline = database.read_bytes()
-            for content in scenarios:
-                file.write_bytes(content.encode())
-                results,states=[],[]
-                for rust in (False,True):
+            for scenario in scenarios:
+                steps = scenario if isinstance(scenario, list) else [scenario]
+                results, states = [], []
+                for rust in (False, True):
                     database.write_bytes(baseline)
-                    args=["wallets",command,"--wallet","Import source","--file",str(file),*extra]
-                    if rust:
-                        result=self.call(True,args,secret=secret)
-                    else:
-                        with tempfile.TemporaryFile() as fd, mock.patch.object(cli_runner,"prefix",return_value=(sys.executable,"-c",script,str(self.owners))):
-                            auth=[]
-                            if secret is not None:
-                                fd.write(secret.encode());fd.seek(0)
-                                auth=["--db-passphrase-fd",str(fd.fileno())]
-                            result=cli_runner.run(["--machine",*auth,"--data-root",str(self.root),*args],reference=True,cwd=ROOT,env=self.env,capture_output=True,timeout=TIMEOUT,pass_fds=(fd.fileno(),) if secret else ())
-                    results.append((result.returncode,result.stdout,result.stderr))
+                    wires, dumps = [], []
+                    batches = []
+                    for step in steps:
+                        content, edits = step if isinstance(step, tuple) else (step, [])
+                        if edits:
+                            with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
+                                for sql in edits:
+                                    conn.execute(sql)
+                                conn.commit()
+                        file.write_bytes(content.encode() if isinstance(content, str) else content)
+                        args = ["wallets", command, "--wallet", "Import source", "--file", str(file), *extra]
+                        if rust:
+                            result = self.call(True, args, secret=secret)
+                        else:
+                            with tempfile.TemporaryFile() as fd, mock.patch.object(cli_runner, "prefix", return_value=(sys.executable, "-c", script, str(self.owners))):
+                                auth = []
+                                if secret is not None:
+                                    fd.write(secret.encode()); fd.seek(0)
+                                    auth = ["--db-passphrase-fd", str(fd.fileno())]
+                                result = cli_runner.run(["--machine", *auth, "--data-root", str(self.root), *args], reference=True, cwd=ROOT, env=self.env, capture_output=True, timeout=TIMEOUT, pass_fds=(fd.fileno(),) if secret else ())
+                        wires.append((result.returncode, result.stdout, result.stderr))
+                        with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
+                            dumps.append(normalized_dump(conn))
+                        if result.returncode == 0:
+                            batch = json.loads(result.stdout)["data"].get("import_batch_id")
+                            if batch:
+                                batches.append(batch)
+                    for batch in batches:
+                        self.ok(self.call(rust, ["imports", "rollback", "--batch", batch, "--confirm"], secret=secret))
                     with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
-                        states.append(normalized_dump(conn))
-                    if result.returncode==0:
-                        data=json.loads(result.stdout)["data"]
-                        if data.get("import_batch_id"):
-                            self.ok(self.call(rust,["imports","rollback","--batch",data["import_batch_id"],"--confirm"],secret=secret))
-                    with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
-                        states[-1] = (states[-1], normalized_dump(conn))
-                with self.subTest(encrypted=encrypted,content=content[:100]):
-                    self.assertEqual(results[1],results[0])
-                    self.assertEqual(states[1],states[0])
+                        dumps.append(normalized_dump(conn))
+                    results.append(wires)
+                    states.append(dumps)
+                with self.subTest(encrypted=encrypted, content=steps[0][:100]):
+                    self.assertEqual(results[1], results[0])
+                    self.assertEqual(states[1], states[0])
             database.write_bytes(baseline)
 
     def test_csv_import_wire_bytes_full_state_dedupe_enrichment_and_rollback(self):
@@ -1475,6 +1489,31 @@ class RustRealStoreParityTest(_Roots):
             + f"Deposit,0.003,BTC,,,,,2025-01-03,{txid}\n"
             + "Deposit,0.004,BTC,,,,,2025-01-04,\n" * 2,
         ], fiat_currency="EUR", wallet_kind="cointracking", seed=seed)
+
+    def test_blockpit_reference_files_wire_bytes_full_state_and_rollback(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_blockpit_imports.json").read_text())
+        self._file_import_parity("import-blockpit", [
+            bytes(case["bytes"]) if "bytes" in case else case["text"] for case in cases
+        ], fiat_currency="EUR", wallet_kind="blockpit")
+
+    def test_blockpit_coordinator_wire_bytes_full_state_and_rollback(self):
+        txid = "ab" * 32
+        def seed(conn):
+            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) SELECT 'observed',workspace_id,profile_id,'Observed','descriptor','2025-01-01' FROM wallets WHERE label='Import source'")
+            for identity, external, stamp, amount in (("economic", "observed", "2025-01-02T00:00:00Z", 200000000), ("identity", txid, "2025-01-01T00:00:00Z", 1)):
+                conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT ?,workspace_id,profile_id,id,?,?,?,'inbound','BTC',?,0,'2025-01-01' FROM wallets WHERE id='observed'", (identity, external, identity, stamp, amount))
+        header = "Date (UTC),Integration Name,Label,Outgoing Asset,Outgoing Amount,Incoming Asset,Incoming Amount,Fee Asset,Fee Amount,Comments,Trx. ID\n"
+        body = (header + "2025-01-02,Source,Deposit,,,BTC,0.002,,,one,econ\n"
+                + f"2025-01-03,Source,Deposit,,,BTC,0.003,,,two,{txid}\n"
+                + "2025-01-04,Source,Deposit,,,BTC,0.004,,,three,\n"
+                + "2025-01-04,Source,Deposit,,,BTC,0.004,,,four,\n")
+        promoted = body.replace("three,\n", f"three,{txid}\n")
+        self._file_import_parity("import-blockpit", [[
+            body, body,
+            (body, ["DELETE FROM transactions WHERE wallet_id='observed'",
+                    "UPDATE transactions SET description=NULL WHERE external_id IS NOT NULL"]),
+            promoted, promoted.replace("2025-01-02,", "invalid,", 1),
+        ]], fiat_currency="EUR", wallet_kind="blockpit", seed=seed)
 
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV
@@ -1661,6 +1700,7 @@ class RustShellDriftTest(unittest.TestCase):
         self.check("crates/wallets/scripts/generate_pocket_vectors.py")
         self.check("crates/wallets/scripts/generate_ledgerlive_vectors.py")
         self.check("crates/wallets/scripts/generate_cointracking_vectors.py")
+        self.check("crates/wallets/scripts/generate_blockpit_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

@@ -634,7 +634,8 @@
       "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation",
       "strike_late_failure_rolls_back_observations_runs_and_readiness",
       "twentyone_legacy_reactivation_rolls_back_when_invalidation_fails",
-      "cointracking_admission_and_late_failure_leave_every_write_uncommitted"
+      "cointracking_admission_and_late_failure_leave_every_write_uncommitted",
+      "blockpit_admission_and_late_failure_leave_every_write_uncommitted"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -1171,8 +1172,8 @@
   {
     "id": "W-river-casefold",
     "file": "crates/wallets/src/file_import/river.rs",
-    "find": ".replace('\u017f', \"s\")",
-    "replace": ".replace('\u017f', \"z\")",
+    "find": ".replace('ſ', \"s\")",
+    "replace": ".replace('ſ', \"z\")",
     "expect_failing": [
       "python_river_import_vectors"
     ],
@@ -4050,8 +4051,8 @@
   {
     "id": "W-strike-dash",
     "file": "crates/wallets/src/file_import/strike.rs",
-    "find": "[\"-\", \"\u2013\", \"\u2014\"]",
-    "replace": "[\"missing\", \"\u2013\", \"\u2014\"]",
+    "find": "[\"-\", \"–\", \"—\"]",
+    "replace": "[\"missing\", \"–\", \"—\"]",
     "expect_failing": [
       "python_strike_import_vectors"
     ],
@@ -4481,7 +4482,7 @@
     "id": "W-strike-date-month-case",
     "file": "crates/wallets/src/file_import/strike.rs",
     "find": ".map(|ch| ch.to_ascii_lowercase())",
-    "replace": ".map(|ch| if ch == '\u0131' { 'i' } else { ch.to_ascii_lowercase() })",
+    "replace": ".map(|ch| if ch == 'ı' { 'i' } else { ch.to_ascii_lowercase() })",
     "expect_failing": [
       "python_strike_import_vectors"
     ],
@@ -5240,7 +5241,7 @@
   {
     "id": "W-cointracking-type",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "mapped(c.get(&[\"Type\"]), inbound.is_some())?",
+    "find": "mapped(c.get(provider.kind), inbound.is_some(), provider)?",
     "replace": "(\"Buy\",\"inbound\",Some(\"buy\"))",
     "expect_failing": [
       "python_cointracking_import_vectors"
@@ -5310,7 +5311,7 @@
   {
     "id": "W-cointracking-date",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "let occurred = date(c.get(&[\"Date\"]), index)?;",
+    "find": "let occurred = date(c.get(provider.date), index)?;",
     "replace": "let occurred = \"2025-01-01\".to_owned();",
     "expect_failing": [
       "python_cointracking_import_vectors"
@@ -5320,8 +5321,8 @@
   {
     "id": "W-cointracking-id-namespace",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "cointracking:{digest}:{occurrence}",
-    "replace": "provider:{digest}:{occurrence}",
+    "find": "format.migration_kind()));",
+    "replace": "\"provider\"));",
     "expect_failing": [
       "python_cointracking_import_vectors"
     ],
@@ -5370,7 +5371,7 @@
   {
     "id": "W-cointracking-method",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "\"pricing_method\":\"cointracking_csv\"",
+    "find": "\"pricing_method\":format.name()",
     "replace": "\"pricing_method\":\"generic_ledger\"",
     "expect_failing": [
       "python_cointracking_import_vectors"
@@ -5380,7 +5381,7 @@
   {
     "id": "W-cointracking-admission",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if kind != \"cointracking\" {",
+    "find": "if kind != request.format.migration_kind() {",
     "replace": "if false {",
     "expect_failing": [
       "cointracking_admission_and_late_failure_leave_every_write_uncommitted"
@@ -5390,7 +5391,7 @@
   {
     "id": "W-cointracking-atomic",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if request.format == Format::CoinTracking {\n        tax_platform::reconcile",
+    "find": "if request.format.migration() {\n        tax_platform::reconcile",
     "replace": "if false {\n        tax_platform::reconcile",
     "expect_failing": [
       "cointracking_coordinator_reconciles_identity_economics_and_idless_collisions"
@@ -5516,5 +5517,615 @@
       "cointracking_only_canonical_txids_establish_chain_identity"
     ],
     "rule": "Only 64 hexadecimal characters establish a canonical chain transaction id; formatting whitespace is not proof."
+  },
+  {
+    "id": "W-blockpit-headers",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !missing.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Refuse incomplete provider history headers, including empty files."
+  },
+  {
+    "id": "W-blockpit-decode-bom",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "let text = csv::read_sig(file)?;",
+    "replace": "let text = csv::read_text(file)?;",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Decode one UTF-8 BOM before interpreting migration headers."
+  },
+  {
+    "id": "W-blockpit-delimiter",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "let d = sniff(&text);",
+    "replace": "let d = Dialect {delimiter: ',',quote:'\"',double:true,spaces:false};",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Honor the reference CSV delimiter and quote dialect."
+  },
+  {
+    "id": "W-blockpit-empty-header",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "if kassiber_pytext::strip(&text).is_empty() {",
+    "replace": "if !kassiber_pytext::strip(&text).is_empty() {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Empty files remain missing-column refusals."
+  },
+  {
+    "id": "W-blockpit-decimal-comma",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "text.replace('.', \"\").replace(',', \".\")",
+    "replace": "text.replace(',', \"\")",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "European prices retain their decimal point."
+  },
+  {
+    "id": "W-blockpit-decimal-round",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let amount = abs(amount)?;",
+    "replace": "let amount = amount;",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Context-rounded absolute Bitcoin quantities determine identity and storage."
+  },
+  {
+    "id": "W-blockpit-both-sides",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if inbound.is_some() && outbound.is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Bitcoin-to-Bitcoin rows require explicit review."
+  },
+  {
+    "id": "W-blockpit-scope",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if inbound.is_none() && outbound.is_none() {",
+    "replace": "if inbound.is_none() || outbound.is_none() {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Import exactly the Bitcoin leg and skip unrelated rows."
+  },
+  {
+    "id": "W-blockpit-standalone",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if standalone {\n        outgoing",
+    "replace": "if false {\n        outgoing",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Standalone Bitcoin fee rows become a single spend, never amount plus fee."
+  },
+  {
+    "id": "W-blockpit-cross-asset",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "opposing.as_deref().filter(|v| !FIAT.contains(v))",
+    "replace": "opposing.as_deref().filter(|_| false)",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Account-currency values cannot authorize a cross-asset price guess."
+  },
+  {
+    "id": "W-blockpit-type",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "mapped(c.get(provider.kind), inbound.is_some(), provider)?",
+    "replace": "(\"Buy\",\"inbound\",Some(\"buy\"))",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Preserve reviewed provider type mappings and unsupported-type refusals."
+  },
+  {
+    "id": "W-blockpit-direction",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if direction != type_direction {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Reject types that disagree with the Bitcoin leg direction."
+  },
+  {
+    "id": "W-blockpit-non-taxable",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "kind = Some(\"expense_non_taxable\");",
+    "replace": "kind = Some(\"spend\");",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Non-taxable expenses retain the non-sale review barrier."
+  },
+  {
+    "id": "W-blockpit-fee-asset",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !accepted_fee {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Third-asset fees require review before generic normalization."
+  },
+  {
+    "id": "W-blockpit-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "btc_fee = fee;",
+    "replace": "btc_fee = zero();",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Preserve Bitcoin fees independently of fiat execution fees."
+  },
+  {
+    "id": "W-blockpit-fiat-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "arithmetic(&base, &fiat_fee, '+')?",
+    "replace": "base",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Acquisition execution prices include same-currency fees."
+  },
+  {
+    "id": "W-blockpit-sell-net",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "nonnegative(arithmetic(&base, &fiat_fee, '-')?)?",
+    "replace": "base",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Disposal execution prices use nonnegative net proceeds."
+  },
+  {
+    "id": "W-blockpit-date",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let occurred = date(c.get(provider.date), index)?;",
+    "replace": "let occurred = \"2025-01-01\".to_owned();",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Validate provider dates and retain their spelling for private row identity."
+  },
+  {
+    "id": "W-blockpit-id-namespace",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "format.migration_kind()));",
+    "replace": "\"provider\"));",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Provider-private identities stay stable and separate from chain ids."
+  },
+  {
+    "id": "W-blockpit-id-occurrence",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "*occurrence += 1;",
+    "replace": "*occurrence += 0;",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Preserve repeated identical ID-less source rows and reimport idempotence."
+  },
+  {
+    "id": "W-blockpit-id-hash",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "Sha256::digest(encoded.as_bytes())",
+    "replace": "Sha256::digest(b\"wrong\")",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Private identities commit to the reference economic payload."
+  },
+  {
+    "id": "W-blockpit-id-date",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "(\"occurred_at\", s(text(&row.data, \"occurred_at\")))",
+    "replace": "(\"occurred_at\", s(\"wrong\"))",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Private identity includes the pre-normalization timestamp spelling."
+  },
+  {
+    "id": "W-blockpit-raw",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "config::stored_json(&c.json())",
+    "replace": "\"{}\"",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Original provider rows remain audit evidence."
+  },
+  {
+    "id": "W-blockpit-method",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"pricing_method\":format.name()",
+    "replace": "\"pricing_method\":\"generic_ledger\"",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Preserve the dedicated provider pricing method."
+  },
+  {
+    "id": "W-blockpit-admission",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if kind != request.format.migration_kind() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "blockpit_admission_and_late_failure_leave_every_write_uncommitted"
+    ],
+    "rule": "Reject authoritative and unrelated wallets before reading the file."
+  },
+  {
+    "id": "W-blockpit-atomic",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if request.format.migration() {\n        tax_platform::reconcile",
+    "replace": "if false {\n        tax_platform::reconcile",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Coordinate reconciliation in the same atomic import operation."
+  },
+  {
+    "id": "W-blockpit-source-collision",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let collision = string(row, \"external_id\").is_empty()",
+    "replace": "let collision = false && string(row, \"external_id\").is_empty()",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Identical ID-less source occurrences remain held for review."
+  },
+  {
+    "id": "W-blockpit-affected",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !affected.contains(&id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Stable reimports reconcile only inserted or changed observations."
+  },
+  {
+    "id": "W-blockpit-authority",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "w.kind IN ('descriptor','silent-payment','xpub')",
+    "replace": "w.kind IN ('custom')",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Only authoritative wallet kinds establish chain overlap."
+  },
+  {
+    "id": "W-blockpit-txid",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if matches == 1 {",
+    "replace": "if matches == 2 {",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "A single canonical chain id establishes an exact match."
+  },
+  {
+    "id": "W-blockpit-economics",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "by_economics.contains(&economic(row))",
+    "replace": "false",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Economic collisions remain ambiguous rather than proven duplicates."
+  },
+  {
+    "id": "W-blockpit-clear",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if !current.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Remove stale reconciliation tags after changed rows no longer overlap."
+  },
+  {
+    "id": "W-blockpit-reactivate",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if choice != Some(true) && is_excluded {",
+    "replace": "if false {",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Reactivation restores accounting inputs when overlap disappears."
+  },
+  {
+    "id": "W-blockpit-exclude",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let desired = choice.unwrap_or(true);",
+    "replace": "let desired = choice.unwrap_or(false);",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Hold matched and ambiguous rows while preserving authored inclusion choices."
+  },
+  {
+    "id": "W-blockpit-authored",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let desired = choice.unwrap_or(true);",
+    "replace": "let desired = true;",
+    "expect_failing": [
+      "blockpit_authored_exclusions_survive_reconciliation_and_reactivation"
+    ],
+    "rule": "Preserve the latest audited report-inclusion choice during overlap and cleanup."
+  },
+  {
+    "id": "W-blockpit-authored-reactivation",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if choice != Some(true) && is_excluded {",
+    "replace": "if is_excluded {",
+    "expect_failing": [
+      "blockpit_authored_exclusions_survive_reconciliation_and_reactivation"
+    ],
+    "rule": "Preserve the latest audited report-inclusion choice during overlap and cleanup."
+  },
+  {
+    "id": "W-blockpit-cr-refusal",
+    "file": "crates/wallets/src/file_import/platform_csv.rs",
+    "find": "if ahead.next().is_some_and(|c| c != '\\n') {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the reference StringIO bare-CR record refusal."
+  },
+  {
+    "id": "W-blockpit-canonical-txid",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())",
+    "replace": "value.len() == 64",
+    "expect_failing": [
+      "blockpit_only_canonical_txids_establish_chain_identity"
+    ],
+    "rule": "Only 64 hexadecimal characters establish a canonical chain transaction id; formatting whitespace is not proof."
+  },
+  {
+    "id": "W-blockpit-schema",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "Format::Blockpit => &BLOCKPIT",
+    "replace": "Format::Blockpit => &COINTRACKING",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-optional-fee-amount",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "&[\"Fee Amount\", \"Fee Amount (optional)\"]",
+    "replace": "&[\"Fee Amount\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-optional-fee-asset",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "&[\"Fee Asset\", \"Fee Asset (optional)\"]",
+    "replace": "&[\"Fee Asset\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-optional-txid",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "&[\"Trx. ID\", \"Trx. ID (optional)\", \"Transaction ID\"]",
+    "replace": "&[\"Trx. ID\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-optional-note",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "&[\"Comments\", \"Comment\", \"Comment (optional)\"]",
+    "replace": "&[\"Comments\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-source-note",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "&[\"Source Name\"]",
+    "replace": "&[\"Source Type\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-integration",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "counterparty: &[\"Integration Name\"]",
+    "replace": "counterparty: &[\"Source Name\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-incoming-amount",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "incoming_amount: &[\"Incoming Amount\"]",
+    "replace": "incoming_amount: &[\"Outgoing Amount\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-outgoing-amount",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "outgoing_amount: &[\"Outgoing Amount\"]",
+    "replace": "outgoing_amount: &[\"Incoming Amount\"]",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-deposit",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "| \"deposit\" => \"deposit\",",
+    "replace": "| \"deposit\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-gift-in",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "| \"geschenk (ein)\" => \"gift / tip\",",
+    "replace": "| \"geschenk (ein)\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-airdrop",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"airdrop\" => \"airdrop\",",
+    "replace": "\"airdrop\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-income",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "| \"security-token-ertrag\" => \"income\",",
+    "replace": "| \"security-token-ertrag\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-staking",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"staking\" => \"staking\",",
+    "replace": "\"staking\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-interest",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"interest\" | \"zinsen\" => \"interest income\",",
+    "replace": "\"interest\" | \"zinsen\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-fork",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"hard fork\" | \"hardfork\" => \"fork\",",
+    "replace": "\"hard fork\" | \"hardfork\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-mining",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"mining\" => \"mining\",",
+    "replace": "\"mining\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-withdrawal",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "| \"withdrawal\" => \"withdrawal\",",
+    "replace": "| \"withdrawal\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-gift-out",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "| \"geschenk (aus)\" => \"gift\",",
+    "replace": "| \"geschenk (aus)\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-payment",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"payment\" | \"zahlung\" | \"fee\" | \"gebühr\" => \"spend\",",
+    "replace": "\"payment\" | \"zahlung\" | \"fee\" | \"gebühr\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-label-loss",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"lost\" | \"verloren\" => \"lost\",",
+    "replace": "\"lost\" | \"verloren\" => \"unsupported\",",
+    "expect_failing": [
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "Retain the provider column and type contracts, including optional and localized spellings."
+  },
+  {
+    "id": "W-blockpit-provider-tags",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let prefix = request.format.migration_kind();",
+    "replace": "let prefix = \"cointracking\";",
+    "expect_failing": [
+      "blockpit_promotes_ids_without_losing_occurrences_or_provider_tags"
+    ],
+    "rule": "Blockpit reconciliation creates, clears and links only its own provider tags."
+  },
+  {
+    "id": "W-blockpit-tag-labels",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let name = platform(request.format).name;",
+    "replace": "let name = \"CoinTracking\";",
+    "expect_failing": [
+      "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
+    ],
+    "rule": "Reconciliation tag labels identify the source provider."
   }
 ]

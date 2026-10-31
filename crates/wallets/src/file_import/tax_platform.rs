@@ -2,7 +2,7 @@ use super::exchange::Columns;
 use super::river::{abs, arithmetic, nonnegative, positive, repr, truth, zero};
 use super::*;
 
-const REQUIRED: &[&str] = &[
+const COINTRACKING_REQUIRED: &[&str] = &[
     "Type",
     "Buy Amount",
     "Buy Currency",
@@ -10,6 +10,69 @@ const REQUIRED: &[&str] = &[
     "Sell Currency",
     "Date",
 ];
+const BLOCKPIT_REQUIRED: &[&str] = &[
+    "Date (UTC)",
+    "Integration Name",
+    "Label",
+    "Outgoing Asset",
+    "Outgoing Amount",
+    "Incoming Asset",
+    "Incoming Amount",
+];
+struct Platform {
+    name: &'static str,
+    required: &'static [&'static str],
+    incoming_asset: &'static [&'static str],
+    incoming_amount: &'static [&'static str],
+    outgoing_asset: &'static [&'static str],
+    outgoing_amount: &'static [&'static str],
+    fee_asset: &'static [&'static str],
+    fee_amount: &'static [&'static str],
+    date: &'static [&'static str],
+    kind: &'static [&'static str],
+    counterparty: &'static [&'static str],
+    txid: &'static [&'static str],
+    note: [&'static [&'static str]; 2],
+}
+const COINTRACKING: Platform = Platform {
+    name: "CoinTracking",
+    required: COINTRACKING_REQUIRED,
+    incoming_asset: &["Buy Currency"],
+    incoming_amount: &["Buy Amount"],
+    outgoing_asset: &["Sell Currency"],
+    outgoing_amount: &["Sell Amount"],
+    fee_asset: &["Fee Currency", "Fee Cur."],
+    fee_amount: &["Fee", "Fee Amount"],
+    date: &["Date"],
+    kind: &["Type"],
+    counterparty: &["Exchange"],
+    txid: &["Tx-ID (optional)", "Tx-ID", "Trade ID"],
+    note: [&["Trade-Group"], &["Comment"]],
+};
+const BLOCKPIT: Platform = Platform {
+    name: "Blockpit",
+    required: BLOCKPIT_REQUIRED,
+    incoming_asset: &["Incoming Asset"],
+    incoming_amount: &["Incoming Amount"],
+    outgoing_asset: &["Outgoing Asset"],
+    outgoing_amount: &["Outgoing Amount"],
+    fee_asset: &["Fee Asset", "Fee Asset (optional)"],
+    fee_amount: &["Fee Amount", "Fee Amount (optional)"],
+    date: &["Date (UTC)", "Date"],
+    kind: &["Label"],
+    counterparty: &["Integration Name"],
+    txid: &["Trx. ID", "Trx. ID (optional)", "Transaction ID"],
+    note: [
+        &["Comments", "Comment", "Comment (optional)"],
+        &["Source Name"],
+    ],
+};
+fn platform(format: Format) -> &'static Platform {
+    match format {
+        Format::Blockpit => &BLOCKPIT,
+        _ => &COINTRACKING,
+    }
+}
 const FIAT: &[&str] = &[
     "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
     "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
@@ -118,6 +181,7 @@ fn date(value: Option<String>, index: usize) -> Result<String, AppError> {
 fn mapped(
     raw: Option<String>,
     inbound: bool,
+    provider: &Platform,
 ) -> Result<(&'static str, &'static str, Option<&'static str>), AppError> {
     let text = raw
         .as_deref()
@@ -126,11 +190,50 @@ fn mapped(
         .ok_or_else(|| {
             AppError::new(
                 "validation",
-                "CoinTracking row is missing its transaction type",
+                format!("{} row is missing its transaction type", provider.name),
             )
         })?;
     let key = river::column(text);
-    let (label,direction,kind) = match key.as_str() {
+    let key = if provider.name == "Blockpit" {
+        match key.as_str() {
+            "trade" | "transfer" => key.as_str(),
+            "unlabeled deposit"
+            | "unlabeled incoming"
+            | "unlabeled (in)"
+            | "unlabeled incoming (deposit)"
+            | "fehlendes label (ein)"
+            | "deposit" => "deposit",
+            "non-taxable (in)" | "steuerfrei (ein)" | "gift (incoming)" | "gift (in)"
+            | "geschenk (ein)" => "gift / tip",
+            "airdrop" => "airdrop",
+            "bounty"
+            | "cashback"
+            | "income"
+            | "other income"
+            | "sonstiger ertrag"
+            | "masternode"
+            | "security token income"
+            | "security-token-ertrag" => "income",
+            "staking" => "staking",
+            "interest" | "zinsen" => "interest income",
+            "hard fork" | "hardfork" => "fork",
+            "mining" => "mining",
+            "unlabeled withdrawal"
+            | "unlabeled outgoing"
+            | "unlabeled (out)"
+            | "unlabeled outgoing (withdrawal)"
+            | "fehlendes label (aus)"
+            | "withdrawal" => "withdrawal",
+            "non-taxable (out)" | "steuerfrei (aus)" | "gift (outgoing)" | "gift (out)"
+            | "geschenk (aus)" => "gift",
+            "payment" | "zahlung" | "fee" | "gebühr" => "spend",
+            "lost" | "verloren" => "lost",
+            _ => "unsupported",
+        }
+    } else {
+        key.as_str()
+    };
+    let (label,direction,kind) = match key {
         "trade" if inbound => ("Buy","inbound",Some("buy")),
         "trade" => ("Sell","outbound",Some("sell")),
         "transfer" if inbound => ("Deposit","inbound",Some("deposit")),
@@ -139,6 +242,7 @@ fn mapped(
         "withdrawal" => ("Withdrawal","outbound",Some("withdrawal")),
         "gift / tip" | "gift/tip(in)" | "income (non taxable)" | "other income (non taxable)" | "airdrop (non taxable)" => ("Gift received","inbound",None),
         "mining" | "mining (commercial)" => ("Mining","inbound",Some("mining")),
+        "fork" if provider.name == "Blockpit" => ("Fork","inbound",Some("hardfork")),
         "staking" => ("Staking","inbound",Some("staking")),
         "airdrop" => ("Airdrop","inbound",Some("airdrop")),
         "lending income" => ("Lending Interest","inbound",Some("lending_interest")),
@@ -149,13 +253,15 @@ fn mapped(
         "gift" | "gift(out)" | "expense (non taxable)" => ("Gift sent","outbound",Some("gift")),
         "stolen" | "stolen / hacked / fraud" => ("Stolen","outbound",Some("stolen")),
         "lost" => ("Lost","outbound",Some("lost")),
-        _ => return Err(fail(format!("CoinTracking transaction type '{text}' needs review before import"),"This type has tax semantics Kassiber cannot safely infer. Filter it into a separate export or convert the reviewed row with the Generic ledger template.")),
+        _ => return Err(fail(format!("{} transaction type '{text}' needs review before import", provider.name),"This type has tax semantics Kassiber cannot safely infer. Filter it into a separate export or convert the reviewed row with the Generic ledger template.")),
     };
     Ok((label, direction, kind))
 }
-pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
+pub(super) fn load(file: &str, format: Format) -> Result<Vec<csv::Row>, AppError> {
+    let provider = platform(format);
     let (header, rows) = platform_csv::load(file)?;
-    let missing: Vec<_> = REQUIRED
+    let missing: Vec<_> = provider
+        .required
         .iter()
         .filter(|k| !header.iter().any(|h| river::column(h) == river::column(k)))
         .copied()
@@ -163,16 +269,20 @@ pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
     if !missing.is_empty() {
         return Err(fail(
             format!(
-                "CoinTracking CSV is missing required columns: {}",
+                "{} CSV is missing required columns: {}",
+                provider.name,
                 missing.join(", ")
             ),
-            "Export the full transaction history from CoinTracking, not a summary or tax-form CSV.",
+            &format!(
+                "Export the full transaction history from {}, not a summary or tax-form CSV.",
+                provider.name
+            ),
         ));
     }
     let mut occurrences = BTreeMap::<String, usize>::new();
     let mut result = vec![];
     for (index, row) in rows.into_iter().enumerate() {
-        if let Some(mut row) = record(row, index + 1)? {
+        if let Some(mut row) = record(row, index + 1, format)? {
             let payload = dict([
                 ("amount", number_float(&row.data["amount"])),
                 ("asset", s(text(&row.data, "asset"))),
@@ -188,7 +298,7 @@ pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
             let occurrence = occurrences.entry(digest.clone()).or_default();
             *occurrence += 1;
             row.data["_tax_platform_row_identity"] =
-                json!(format!("cointracking:{digest}:{occurrence}"));
+                json!(format!("{}:{digest}:{occurrence}", format.migration_kind()));
             result.push(row);
         }
     }
@@ -198,29 +308,31 @@ fn number_float(value: &Json) -> Py {
     let n: f64 = value.as_str().unwrap().parse().unwrap_or(f64::NAN);
     Py::Float(n)
 }
-fn record(row: csv::Row, index: usize) -> Result<Option<csv::Row>, AppError> {
+fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row>, AppError> {
+    let provider = platform(format);
+    let name = provider.name;
     let c = Columns::new(&row);
     let code = |names: &[&str]| c.opt(names).map(|v| asset(&v));
-    let incoming = code(&["Buy Currency"]);
-    let mut outgoing = code(&["Sell Currency"]);
+    let incoming = code(provider.incoming_asset);
+    let mut outgoing = code(provider.outgoing_asset);
     let inbound = exchange::bitcoin(incoming.as_deref());
     let mut outbound = exchange::bitcoin(outgoing.as_deref());
     if inbound.is_some() && outbound.is_some() {
         return Err(fail(
-            format!("CoinTracking row {index} has Bitcoin on both sides"),
+            format!("{name} row {index} has Bitcoin on both sides"),
             "Review BTC/LBTC swaps explicitly instead of importing them as a fiat trade.",
         ));
     }
-    let mut fee_code = code(&["Fee Currency", "Fee Cur."]);
-    let mut fee_raw = c.get(&["Fee", "Fee Amount"]);
+    let mut fee_code = code(provider.fee_asset);
+    let mut fee_raw = c.get(provider.fee_amount);
     let mut fee = number(
         fee_raw.clone(),
         "Fee Amount",
-        &format!("CoinTracking row {index}"),
+        &format!("{name} row {index}"),
     )?;
     let standalone =
         inbound.is_none() && outbound.is_none() && exchange::bitcoin(fee_code.as_deref()).is_some();
-    let mut sent_raw = c.get(&["Sell Amount"]);
+    let mut sent_raw = c.get(provider.outgoing_amount);
     if standalone {
         outgoing = fee_code.clone();
         outbound = exchange::bitcoin(outgoing.as_deref());
@@ -237,12 +349,12 @@ fn record(row: csv::Row, index: usize) -> Result<Option<csv::Row>, AppError> {
         &incoming
     };
     if let Some(code) = opposing.as_deref().filter(|v| !FIAT.contains(v)) {
-        return Err(fail(format!("CoinTracking row {index} trades Bitcoin against unsupported asset {code}"),"The provider CSV does not identify the currency behind its account-currency value columns. Review this cross-asset row with the Generic ledger and enter an explicit fiat currency and value."));
+        return Err(fail(format!("{name} row {index} trades Bitcoin against unsupported asset {code}"),"The provider CSV does not identify the currency behind its account-currency value columns. Review this cross-asset row with the Generic ledger and enter an explicit fiat currency and value."));
     }
     let (label, type_direction, mut kind) = if standalone {
         ("Spend", "outbound", Some("spend"))
     } else {
-        mapped(c.get(&["Type"]), inbound.is_some())?
+        mapped(c.get(provider.kind), inbound.is_some(), provider)?
     };
     let fiat = opposing.as_deref().filter(|v| FIAT.contains(v));
     let accepted_fee = exchange::bitcoin(fee_code.as_deref()).is_some()
@@ -256,13 +368,13 @@ fn record(row: csv::Row, index: usize) -> Result<Option<csv::Row>, AppError> {
             .transpose()?
             .unwrap_or(false)
         {
-            return Err(fail(format!("CoinTracking row {index} has a fee in unsupported asset {}",fee_code.as_deref().or(c.get(&["Fee Currency","Fee Cur."]).as_deref()).unwrap_or("None")),"Kassiber cannot safely convert a third-asset fee into the Bitcoin or fiat leg. Review this row with the Generic ledger template."));
+            return Err(fail(format!("{name} row {index} has a fee in unsupported asset {}",fee_code.as_deref().or(c.get(provider.fee_asset).as_deref()).unwrap_or("None")),"Kassiber cannot safely convert a third-asset fee into the Bitcoin or fiat leg. Review this row with the Generic ledger template."));
         }
         fee_raw = None;
     }
     let ledger = format!("Ledger row {index}");
     let received = if inbound.is_some() || fiat.is_some() {
-        number(c.get(&["Buy Amount"]), "Received Amount", &ledger)?
+        number(c.get(provider.incoming_amount), "Received Amount", &ledger)?
     } else {
         None
     };
@@ -322,21 +434,23 @@ fn record(row: csv::Row, index: usize) -> Result<Option<csv::Row>, AppError> {
     } else {
         None
     };
-    let occurred = date(c.get(&["Date"]), index)?;
-    if river::column(&c.get(&["Type"]).unwrap_or_default()) == "expense (non taxable)" {
+    let occurred = date(c.get(provider.date), index)?;
+    let source_type = river::column(&c.get(provider.kind).unwrap_or_default());
+    if format == Format::CoinTracking && source_type == "expense (non taxable)"
+        || format == Format::Blockpit
+            && ["non-taxable (out)", "steuerfrei (aus)"].contains(&source_type.as_str())
+    {
         kind = Some("expense_non_taxable");
     }
-    let counterparty = c
-        .opt(&["Exchange"])
-        .unwrap_or_else(|| "CoinTracking".into());
-    let note = [c.opt(&["Trade-Group"]), c.opt(&["Comment"])]
+    let counterparty = c.opt(provider.counterparty).unwrap_or_else(|| name.into());
+    let note = [c.opt(provider.note[0]), c.opt(provider.note[1])]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ");
-    let txid = c.opt(&["Tx-ID (optional)", "Tx-ID", "Trade ID"]);
+    let txid = c.opt(provider.txid);
     Ok(Some(csv::Row {
-        data: json!({"txid":txid.clone().unwrap_or_default(),"occurred_at":occurred,"direction":direction,"asset":inbound.or(outbound).unwrap(),"amount":repr(&amount),"fee":repr(&btc_fee),"fiat_value":value.as_ref().map(repr),"fiat_rate":rate.as_ref().map(repr),"fiat_currency":if priced { fiat } else { None },"pricing_source_kind":if priced {Some("exchange_execution")} else {None},"pricing_provider":if priced {Some(&counterparty)} else {None},"pricing_pair":if priced {Some(format!("{}-{}",inbound.or(outbound).unwrap(),fiat.unwrap()))} else {None},"pricing_method":"cointracking_csv","pricing_external_ref":txid,"pricing_quality":if priced {Some("exact")} else {None},"kind":kind,"description":if note.is_empty() {None} else {Some(note)},"counterparty":counterparty,"raw_json":config::stored_json(&c.json())}),
+        data: json!({"txid":txid.clone().unwrap_or_default(),"occurred_at":occurred,"direction":direction,"asset":inbound.or(outbound).unwrap(),"amount":repr(&amount),"fee":repr(&btc_fee),"fiat_value":value.as_ref().map(repr),"fiat_rate":rate.as_ref().map(repr),"fiat_currency":if priced { fiat } else { None },"pricing_source_kind":if priced {Some("exchange_execution")} else {None},"pricing_provider":if priced {Some(&counterparty)} else {None},"pricing_pair":if priced {Some(format!("{}-{}",inbound.or(outbound).unwrap(),fiat.unwrap()))} else {None},"pricing_method":format.name(),"pricing_external_ref":txid,"pricing_quality":if priced {Some("exact")} else {None},"kind":kind,"description":if note.is_empty() {None} else {Some(note)},"counterparty":counterparty,"raw_json":config::stored_json(&c.json())}),
         headers: vec![],
         rest: None,
         original: None,
@@ -406,7 +520,20 @@ pub(super) fn reconcile(
                     .and_then(|v| v.as_bool())
             });
     }
-    let tags = query(conn,"SELECT id,code FROM tags WHERE profile_id=? AND code IN ('cointracking-matched','cointracking-ambiguous')",&[Sql::Text(request.profile_id.clone())])?;
+    let prefix = request.format.migration_kind();
+    let name = platform(request.format).name;
+    let matched_code = format!("{prefix}-matched");
+    let ambiguous_code = format!("{prefix}-ambiguous");
+    let tag_args = [
+        Sql::Text(request.profile_id.clone()),
+        Sql::Text(matched_code),
+        Sql::Text(ambiguous_code),
+    ];
+    let tags = query(
+        conn,
+        "SELECT id,code FROM tags WHERE profile_id=? AND code IN (?,?)",
+        &tag_args,
+    )?;
     let mut tag_ids: BTreeMap<String, String> = tags
         .iter()
         .map(|r| (string(r, "code"), string(r, "id")))
@@ -498,7 +625,7 @@ pub(super) fn reconcile(
             "ambiguous" => ambiguous += 1,
             _ => unmatched += 1,
         };
-        let current = query(conn,"SELECT tags.code FROM transaction_tags tt JOIN tags ON tags.id=tt.tag_id WHERE tt.transaction_id=? AND tags.profile_id=? AND tags.code IN ('cointracking-matched','cointracking-ambiguous')",&[Sql::Text(id.clone()),Sql::Text(request.profile_id.clone())])?;
+        let current = query(conn,"SELECT tags.code FROM transaction_tags tt JOIN tags ON tags.id=tt.tag_id WHERE tt.transaction_id=? AND tags.profile_id=? AND tags.code IN (?,?)",&[Sql::Text(id.clone()),tag_args[0].clone(),tag_args[1].clone(),tag_args[2].clone()])?;
         let is_excluded = row.get("excluded") != Some(&Sql::Integer(0));
         let choice = authored.get(&id).copied().flatten();
         if status == "unmatched" {
@@ -522,15 +649,15 @@ pub(super) fn reconcile(
         }
         let desired = choice.unwrap_or(true);
         excluded += i64::from(desired);
-        let code = format!("cointracking-{status}");
+        let code = format!("{prefix}-{status}");
         if current.len() == 1 && string(&current[0], "code") == code && is_excluded == desired {
             continue;
         }
         for (suffix, label) in [
-            ("matched", "CoinTracking matched"),
-            ("ambiguous", "CoinTracking ambiguous"),
+            ("matched", format!("{name} matched")),
+            ("ambiguous", format!("{name} ambiguous")),
         ] {
-            let code = format!("cointracking-{suffix}");
+            let code = format!("{prefix}-{suffix}");
             if let std::collections::btree_map::Entry::Vacant(entry) = tag_ids.entry(code) {
                 let tag = ids.next(conn)?;
                 conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES(?,?,?,?,?,?)",params![tag,workspace,request.profile_id,entry.key(),label,ids.time(conn)?]).map_err(database_error)?;

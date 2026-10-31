@@ -353,14 +353,16 @@ projections stay Python. Progress and remaining work for this slice:
   Complete exchange-file batch 1; see the final checkpoint in plan 21.
 - [x] Port Ledger Live movement files with sanitized provenance, exact
   amounts/fees, complete book-dump/rollback parity and named mutation killers.
-  See the partial batch-2a checkpoint in plan 21; CoinTracking, Blockpit,
-  Binance supplemental and BTCPay file imports remain.
-- [ ] Finish CoinTracking batch-2a acceptance: the native parser/coordinator and
-  CLI now have frozen files, full-book parity and named mutation coverage; the
-  daemon remains gated on native local freshness/journal orchestration and
-  persistence. Add daemon wire/full-dump and SQLCipher parity before starting
-  Blockpit, Binance supplemental and BTCPay files. See the CoinTracking checkpoint
-  in plan 21. Batch 2b remains deferred.
+  See the partial batch-2a checkpoint in plan 21 and subsequent checkpoints below.
+- [x] Port CoinTracking core/CLI with frozen files, full-book parity and named
+  mutation coverage. See the CoinTracking checkpoint in plan 21.
+- [x] Port Blockpit core/CLI with localized labels and optional column aliases,
+  full-book/wire parity on SQLite and SQLCipher, transactional reconciliation
+  and named mutation killers. See the Blockpit checkpoint in plan 21.
+- [ ] Port Binance supplemental, BTCPay files, generic ledger, Wasabi, Samourai
+  and document ingestion at core/CLI level, one verified commit per importer.
+- [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
+  after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.

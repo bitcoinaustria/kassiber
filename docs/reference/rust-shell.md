@@ -2435,17 +2435,162 @@ The hybrid and file-import wire fixtures preserve the account `HOME` and redirec
 data/config/preferences and owner namespaces explicitly.
 
 
-This is a verified core/CLI checkpoint, **not completion of CoinTracking under
-the batch-2a daemon requirement**. `ui.wallets.import_file` stays unregistered:
-Python's handler also queues local freshness jobs and rebuilds journals, while
-native journal orchestration/persistence and that freshness path remain unported.
-Registering a reduced import-only handler would change its contract. Daemon
-CoinTracking served-by remains zero. Finish the native local refresh contract,
-then add daemon wire/full-dump and encrypted-book parity before starting Blockpit.
-Blockpit, Binance supplemental and BTCPay files have not been started; generic
-ledger, Wasabi, Samourai and document ingestion remain deferred. No Python
-production code beyond the requested reference cherry-pick, dependency, egress,
-sync route or AI projection changes are included.
+CoinTracking's core/CLI checkpoint is accepted under the current file-import
+scope. The [shared daemon follow-up](#shared-file-import-daemon-parity-pending)
+records the remaining transport work for every importer. Python production
+code, dependencies, egress, sync routes and AI projections are unchanged by
+this continuation.
+
+## Shared file-import daemon parity (pending)
+
+`ui.wallets.import_file` stays unregistered for every file importer. Python's
+handler also queues local freshness jobs and rebuilds journals; preserving
+that contract depends on native journal orchestration (R4-13) and the sync
+freshness work proceeding elsewhere. A reduced import-only handler would change
+the contract. Core and CLI checkpoints can proceed independently, one importer
+per commit. Once both prerequisites land, verify the complete handler's raw
+wire bytes and full book dumps on SQLite and SQLCipher before registration.
+All file-import daemon served-by counts remain zero. This is the single shared
+pending daemon-parity item for the importer continuation.
+
+## Blockpit core and CLI ingestion (R5 continuation)
+
+Native `wallets import-blockpit` shares tax-platform normalization and import
+coordination with CoinTracking. Provider specifications retain the required
+headers, optional manual-template columns, English/German labels, integration
+and source notes, private economic identities and original provider rows.
+Standalone Bitcoin fees become one spend. Unsupported types, cross-asset
+trades, mismatched legs and third-asset fees keep their reference refusals;
+non-taxable outflows retain the non-sale review kind.
+
+Dedicated-wallet admission precedes file reads. Reconciliation uses only the
+current profile's authoritative wallet kinds, canonical chain identities and
+conservative economic/source-collision holds. Blockpit tags stay separate from
+CoinTracking tags. Audited inclusion choices, occurrence-preserving ID promotion,
+enrichment, reimports, readiness and rollback use the shared transactional core.
+
+There are 365 Python-derived reference files, including 40 seeded dialect
+combinations. Native tests compare every normalized field and fingerprint.
+Hybrid tests compare full typed book dumps and assert native routing for every
+file and the coordinator sequence. Raw CLI bytes and full dumps, including
+rollback, are compared for every file on both SQLite and SQLCipher; additional
+sequences cover overlap, reimports, enrichment, ID promotion and failed imports.
+Encrypted/plaintext native tests also pin authored exclusions, provider tag
+isolation, canonical-id scope and late-run failure atomicity.
+
+The Python reader's bare-CR refusal also affects Blockpit. Frozen
+`blockpit:bare-cr` and `uv run --locked python -m tests.rust_port.repro_blockpit_cr`
+reproduce the exact `csv.Error`; the repro also proves equivalent CRLF input
+loads. Rust preserves the refusal. No Python production code is changed.
+
+The catalog adds 61 Blockpit entries to the retained 550 (611 total). Shared
+CoinTracking recipes are re-anchored to the parameterized core, and the shared
+atomic-import recipe also names the Blockpit late-failure witness. Each new
+entry has a named killer in `crates/wallets/scripts/mutations.json`. A fresh
+audit passes all 16 named baselines and kills all 100 selected entries: the 61
+new rules, 38 CoinTracking rules and inherited `W-import-atomic`. There are no
+survivors or build errors; the other 511 entries retain earlier kill evidence.
+Mutation source and build trees are removed after recording the summary.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-blockpit-headers` | `python_blockpit_import_vectors` |
+| `W-blockpit-decode-bom` | `python_blockpit_import_vectors` |
+| `W-blockpit-delimiter` | `python_blockpit_import_vectors` |
+| `W-blockpit-empty-header` | `python_blockpit_import_vectors` |
+| `W-blockpit-decimal-comma` | `python_blockpit_import_vectors` |
+| `W-blockpit-decimal-round` | `python_blockpit_import_vectors` |
+| `W-blockpit-both-sides` | `python_blockpit_import_vectors` |
+| `W-blockpit-scope` | `python_blockpit_import_vectors` |
+| `W-blockpit-standalone` | `python_blockpit_import_vectors` |
+| `W-blockpit-cross-asset` | `python_blockpit_import_vectors` |
+| `W-blockpit-type` | `python_blockpit_import_vectors` |
+| `W-blockpit-direction` | `python_blockpit_import_vectors` |
+| `W-blockpit-non-taxable` | `python_blockpit_import_vectors` |
+| `W-blockpit-fee-asset` | `python_blockpit_import_vectors` |
+| `W-blockpit-fee` | `python_blockpit_import_vectors` |
+| `W-blockpit-fiat-fee` | `python_blockpit_import_vectors` |
+| `W-blockpit-sell-net` | `python_blockpit_import_vectors` |
+| `W-blockpit-date` | `python_blockpit_import_vectors` |
+| `W-blockpit-id-namespace` | `python_blockpit_import_vectors` |
+| `W-blockpit-id-occurrence` | `python_blockpit_import_vectors` |
+| `W-blockpit-id-hash` | `python_blockpit_import_vectors` |
+| `W-blockpit-id-date` | `python_blockpit_import_vectors` |
+| `W-blockpit-raw` | `python_blockpit_import_vectors` |
+| `W-blockpit-method` | `python_blockpit_import_vectors` |
+| `W-blockpit-admission` | `blockpit_admission_and_late_failure_leave_every_write_uncommitted` |
+| `W-blockpit-atomic` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-source-collision` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-affected` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-authority` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-txid` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-economics` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-clear` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-reactivate` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-exclude` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+| `W-blockpit-authored` | `blockpit_authored_exclusions_survive_reconciliation_and_reactivation` |
+| `W-blockpit-authored-reactivation` | `blockpit_authored_exclusions_survive_reconciliation_and_reactivation` |
+| `W-blockpit-cr-refusal` | `python_blockpit_import_vectors` |
+| `W-blockpit-canonical-txid` | `blockpit_only_canonical_txids_establish_chain_identity` |
+| `W-blockpit-schema` | `python_blockpit_import_vectors` |
+| `W-blockpit-optional-fee-amount` | `python_blockpit_import_vectors` |
+| `W-blockpit-optional-fee-asset` | `python_blockpit_import_vectors` |
+| `W-blockpit-optional-txid` | `python_blockpit_import_vectors` |
+| `W-blockpit-optional-note` | `python_blockpit_import_vectors` |
+| `W-blockpit-source-note` | `python_blockpit_import_vectors` |
+| `W-blockpit-integration` | `python_blockpit_import_vectors` |
+| `W-blockpit-incoming-amount` | `python_blockpit_import_vectors` |
+| `W-blockpit-outgoing-amount` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-deposit` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-gift-in` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-airdrop` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-income` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-staking` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-interest` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-fork` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-mining` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-withdrawal` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-gift-out` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-payment` | `python_blockpit_import_vectors` |
+| `W-blockpit-label-loss` | `python_blockpit_import_vectors` |
+| `W-blockpit-provider-tags` | `blockpit_promotes_ids_without_losing_occurrences_or_provider_tags` |
+| `W-blockpit-tag-labels` | `blockpit_coordinator_reconciles_identity_economics_and_idless_collisions` |
+
+The focused hybrid run records these importer calls; setup and rollback commands
+are excluded:
+
+| CLI importer | Rust-served calls | Python importer fallbacks |
+| --- | ---: | ---: |
+| Blockpit | 373 | 0 |
+| CoinTracking | 309 | 0 |
+| Ledger Live | 175 | 0 |
+
+The focused Python run passes 12 tests and 1,592 subtests, including every
+Blockpit file's raw wire/full-state comparisons on both codecs, coordinator
+sequences, inherited importer regressions and frozen-vector regeneration.
+All 61 native file-import tests pass, and all 611 mutation recipes apply.
+Formatting, strict workspace/harness clippy and all 14 harness tests pass.
+The complete workspace attempt passes 1,481 tests; 58 tests cannot bind their
+owned loopback sockets in the sandbox (`EPERM`): 12 in `kassiber-chain`, 16 in
+`kassiber-net`, 11 in `kassiber-rates` and 19 transport/acquisition/scan cases in
+`kassiber-wallets`. Every failure reports `Operation not permitted`; all six
+Blockpit tests pass in this run. Exact names and a rerun command are retained
+in `target/r5-importers-7-artifacts/sandbox-blocked-tests.json`.
+
+The Python reference/rollback run passes 32 tests and 28 subtests. The required
+classifier update records 5,712 definitions, and all 57 preflight checks pass.
+The full Python/frontend quality gate, regtest and packaged/platform gates
+were not run.
+
+Verification summaries and logs are retained locally under
+`target/r5-importers-7-artifacts/`. Commands use the pinned mise toolchain,
+locked Python 3.11 and offline Cargo, with disposable roots under `target/`
+and the account `HOME` preserved. Mutation and verification build trees are
+removed after recording their results.
+
+No dependency, egress, sync route or AI projection is added. Remaining core/CLI
+importers are Binance supplemental, BTCPay files, generic ledger, Wasabi,
+Samourai and document ingestion.
 
 ## Daemon
 

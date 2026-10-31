@@ -113,7 +113,7 @@ def main() -> None:
             sys.stdout.buffer.write(sync_result.stdout)
             sys.stderr.buffer.write(sync_result.stderr)
             raise SystemExit(sync_result.returncode)
-        if command in {"wallets.import-csv", "wallets.import-phoenix", "wallets.import-json", "wallets.import-river", "wallets.import-bull", "wallets.import-bullbitcoin", "wallets.import-coinfinity", "wallets.import-21bitcoin", "wallets.import-pocket", "wallets.import-pocketbitcoin", "wallets.import-strike", "wallets.import-ledger-live", "wallets.import-cointracking"} and os.environ.get(IMPORT_ORACLE_ENV) == "1":
+        if command in {"wallets.import-csv", "wallets.import-phoenix", "wallets.import-json", "wallets.import-river", "wallets.import-bull", "wallets.import-bullbitcoin", "wallets.import-coinfinity", "wallets.import-21bitcoin", "wallets.import-pocket", "wallets.import-pocketbitcoin", "wallets.import-strike", "wallets.import-ledger-live", "wallets.import-cointracking", "wallets.import-blockpit"} and os.environ.get(IMPORT_ORACLE_ENV) == "1":
             # Direct script execution puts tests/rust_port first on sys.path.
             sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
             from tests.rust_port.file_import_oracle import run

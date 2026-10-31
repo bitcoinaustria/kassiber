@@ -49,6 +49,7 @@ pub enum Format {
     Pocket,
     LedgerLive,
     CoinTracking,
+    Blockpit,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -64,11 +65,12 @@ impl Format {
             Self::Pocket => "pocketbitcoin_csv",
             Self::LedgerLive => "ledgerlive_csv",
             Self::CoinTracking => "cointracking_csv",
+            Self::Blockpit => "blockpit_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
-            Self::CoinTracking => tax_platform::load(file),
+            Self::CoinTracking | Self::Blockpit => tax_platform::load(file, self),
             Self::Json => generic_json::load(file),
             Self::Csv => csv::load(file),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
@@ -83,6 +85,15 @@ impl Format {
     }
     fn evidence(self) -> bool {
         matches!(self, Self::Bull | Self::Coinfinity | Self::Pocket)
+    }
+    fn migration(self) -> bool {
+        matches!(self, Self::CoinTracking | Self::Blockpit)
+    }
+    fn migration_kind(self) -> &'static str {
+        match self {
+            Self::Blockpit => "blockpit",
+            _ => "cointracking",
+        }
     }
     fn active(self) -> bool {
         matches!(self, Self::TwentyOne | Self::Strike)
@@ -1185,15 +1196,15 @@ pub fn execute(
     } else {
         None
     };
-    if request.format == Format::CoinTracking {
+    if request.format.migration() {
         let wallet = wallet.as_ref().expect("migration wallet");
         let kind: String = conn
             .query_row("SELECT kind FROM wallets WHERE id=?", [&wallet.id], |r| {
                 r.get(0)
             })
             .map_err(database_error)?;
-        if kind != "cointracking" {
-            return Err(AppError::new("migration_wallet_kind_required", "cointracking_csv requires a dedicated cointracking wallet")
+        if kind != request.format.migration_kind() {
+            return Err(AppError::new("migration_wallet_kind_required", format!("{} requires a dedicated {} wallet", request.format.name(), request.format.migration_kind()))
                 .with_hint("Create the provider migration wallet first. Do not import provider history into a descriptor or other authoritative wallet.")
                 .with_details(dict([("wallet",s(wallet.label.as_str())),("wallet_kind",s(kind.as_str()))])));
         }
@@ -1492,7 +1503,7 @@ fn apply(
                 .1 = Py::Bool(true);
         }
     }
-    if request.format == Format::CoinTracking {
+    if request.format.migration() {
         tax_platform::reconcile(conn, request, wallet, ids, &mut result, invalidated)?;
     }
     if !inserted_ids.is_empty() {
