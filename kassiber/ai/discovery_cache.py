@@ -74,6 +74,16 @@ class ProviderDiscoveryCache:
             entry = self._entries.get(key)
             return entry.snapshot if entry else None
 
+    def seed(self, key: Hashable, snapshot: DiscoverySnapshot) -> None:
+        """Hold a saved snapshot for ``key`` without probing, already expired.
+
+        `peek` reports it, and the next `get` still probes; a failure there
+        then returns it marked stale, as for any earlier result.
+        """
+        with self._condition:
+            if key not in self._entries:
+                self._entries[key] = _CacheEntry(snapshot=snapshot, expires_at=0.0)
+
     def get(
         self,
         key: Hashable,

@@ -15,6 +15,7 @@
 import { Check, Loader2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { KassiberWorkingMark } from "@/components/kb/KassiberWordmark";
 import type { RouteProgressState } from "@/components/kb/progressIndicator";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,10 +119,7 @@ export function FirstSyncCard({
             {failed ? (
               <X className="h-5 w-5" aria-hidden="true" />
             ) : (
-              <Loader2
-                className="h-5 w-5 animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
+              <KassiberWorkingMark />
             )}
           </span>
           <div className="min-w-0 flex-1">

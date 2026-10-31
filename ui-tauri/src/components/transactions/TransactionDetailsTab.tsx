@@ -358,7 +358,7 @@ function Fact({
         {copyValue ? (
           <button
             type="button"
-            className="ml-auto rounded-sm text-muted-foreground hover:text-foreground"
+            className="rounded-sm text-muted-foreground hover:text-foreground"
             aria-label={t("infoHint.copy", { label })}
             onClick={() => copyText(copyValue)}
           >

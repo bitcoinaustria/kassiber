@@ -643,6 +643,7 @@ def build_swap_review_context_payload(
             if key in args and args[key] is not None
         },
         "counts": candidate_payload.get("counts", {}),
+        "exclusions": candidate_payload.get("exclusions", {}),
         "review_items": review_items,
         "active_pairs": active_pairs,
         "rules": rules,

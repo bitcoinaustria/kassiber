@@ -787,7 +787,9 @@
       "reasonField": "Reverted {{label}} from Activity",
       "reasonEvent": "Reverted Activity event",
       "title": "Edit reverted",
-      "body": "Kassiber wrote a new edit history entry with the reverted value."
+      "body": "Kassiber wrote a new edit history entry with the reverted value.",
+      "failedTitle": "Edit not reverted",
+      "failedBody": "Kassiber could not revert this edit. Nothing was changed."
     }
   },
   "egress": {

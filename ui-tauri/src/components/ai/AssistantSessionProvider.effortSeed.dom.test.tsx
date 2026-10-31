@@ -32,7 +32,7 @@ vi.mock("@/daemon/stream", () => ({
     messages: mocks.messages,
     isStreaming: false,
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     sessionId: null,
     send: mocks.send,
     sendConsent: vi.fn(),

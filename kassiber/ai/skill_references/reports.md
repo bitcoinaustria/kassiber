@@ -63,13 +63,13 @@ and pass the local ZIP, CSV, or extracted directory with
 pairs for v1, maps Kraken `XBT` filenames to `BTC-USD` / `BTC-EUR`, stores
 sparse rows only when Kraken reports a traded candle, and relies on
 re-ingesting the latest full or quarterly archive rather than fetching from
-Kraken automatically. The desktop Settings → Rate providers panel exposes the
-same local ingest as `Full history` and `Incremental update` actions; both use
+Kraken automatically. The desktop Settings → Market data page exposes the
+same local ingest as `Import full history` and `Import update` actions; both use
 the idempotent `kraken-csv` upsert path.
 
 When existing provider-derived prices look suspicious, use
 `kassiber rates rebuild --source coinbase-exchange --reprice-transactions` or
-Settings → Rate providers → Rebuild pricing cache. This clears Coinbase cache
+Settings → Market data → Rebuild pricing cache. This clears Coinbase cache
 rows, checked-empty minutes, and provider-generated transaction prices before
 fetching fresh one-minute samples and reprocessing journals. Manual overrides
 and imported exchange execution prices are preserved; large wallets can take a

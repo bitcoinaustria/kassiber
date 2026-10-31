@@ -530,40 +530,9 @@ finally:
         self.assertEqual(len(duplicate_results), 1)
         self.assertEqual(duplicate_results[0].get("reason"), "duplicate_tool_call_id")
 
-    def test_chat_default_core_tool_profile_keeps_provider_schema_small(self):
-        server = _start_tool_chat_server(
-            [
-                _chat_completion_response(
-                    {"role": "assistant", "content": "ok"},
-                ),
-            ]
-        )
-        try:
-            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
-                data_root = Path(tmp) / "data"
-                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
-                payload = _run_json(
-                    data_root,
-                    "chat",
-                    "--provider",
-                    "tool-local",
-                    "Summarise report blockers",
-                )
-        finally:
-            _stop_server(server)
-
-        self.assertEqual(payload["data"]["message"]["content"], "ok")
-        tool_names = {
-            tool["name"]
-            for tool in server.requests[0].get("tools", [])  # type: ignore[attr-defined]
-        }
-        self.assertIn("ui_reports_summary", tool_names)
-        self.assertIn("ui_journals_process", tool_names)
-        self.assertNotIn("ui_source_funds_sources_create", tool_names)
-        self.assertNotIn("ui_connections_node_snapshot", tool_names)
-        self.assertNotIn("timeout_seconds", server.requests[0])  # type: ignore[attr-defined]
-
-    def test_chat_full_tool_profile_exposes_specialist_catalog(self):
+    def test_chat_core_tool_profile_keeps_provider_schema_small(self):
+        # Every tool is the default; `--tool-profile core` narrows the schema
+        # for a small local model.
         server = _start_tool_chat_server(
             [
                 _chat_completion_response(
@@ -581,7 +550,42 @@ finally:
                     "--provider",
                     "tool-local",
                     "--tool-profile",
-                    "full",
+                    "core",
+                    "Summarise report blockers",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(payload["data"]["message"]["content"], "ok")
+        tool_names = {
+            tool["name"]
+            for tool in server.requests[0].get("tools", [])  # type: ignore[attr-defined]
+        }
+        self.assertIn("ui_reports_summary", tool_names)
+        self.assertIn("ui_journals_process", tool_names)
+        self.assertNotIn("ui_source_funds_sources_create", tool_names)
+        self.assertNotIn("ui_connections_node_snapshot", tool_names)
+        self.assertNotIn("timeout_seconds", server.requests[0])  # type: ignore[attr-defined]
+
+    def test_chat_default_tool_profile_exposes_the_full_catalog(self):
+        # Kassiber cannot tell how capable a model is, so every tool is
+        # offered unless the user narrows the profile.
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = _run_json(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
                     "Preview source funds",
                 )
         finally:

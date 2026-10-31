@@ -103,3 +103,5 @@ kassiber attachments gc
 ```
 
 Attachments are managed local files or literal URL references. Kassiber does not fetch and index URL attachments. Unnamed URL labels are derived for display and can be renamed without changing the URL target.
+
+In chat, a file the user attached (named `file-1`, `file-2`, ... in the turn's note) is kept as evidence with `ui_attachments_add_from_chat` after the user approves; it takes the file's id, never a path. Evidence documents a transaction; it does not change its accounting.

@@ -49,18 +49,71 @@ def _content_text(content: object) -> str:
     )
 
 
+_DATA_URL_PREFIX = "data:"
+
+
+def _content_images(content: object) -> list[dict[str, str]]:
+    """Inline images of a message as the broker carries them: type and base64.
+
+    Only data URLs: the daemon inlines every image it shows, and a remote URL
+    would let the provider fetch something the user never attached.
+    """
+    if not isinstance(content, list):
+        return []
+    images = []
+    for part in content:
+        if not isinstance(part, dict) or part.get("type") not in {"input_image", "image_url"}:
+            continue
+        # Responses parts carry the URL itself; Chat parts nest it.
+        url = part.get("image_url")
+        if isinstance(url, dict):
+            url = url.get("url")
+        if not isinstance(url, str) or not url.startswith(_DATA_URL_PREFIX):
+            continue
+        header, _, data = url[len(_DATA_URL_PREFIX):].partition(",")
+        media_type, _, encoding = header.partition(";")
+        if encoding == "base64" and media_type.startswith("image/") and data:
+            images.append({"media_type": media_type, "data": data})
+    return images
+
+
 def _broker_messages_for_context(
     context: ResponsesRequestContext,
-) -> list[dict[str, str]]:
-    messages: list[dict[str, str]] = []
+) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
     for item in context.input_items:
         if item.get("type") != "message":
             continue
         role = str(item.get("role") or "user")
         content = _content_text(item.get("content"))
-        if content:
-            messages.append({"role": role, "content": content})
+        images = _content_images(item.get("content")) if role == "user" else []
+        if content or images:
+            message: dict[str, Any] = {"role": role, "content": content}
+            if images:
+                message["images"] = images
+            messages.append(message)
     return messages
+
+
+def _broker_messages_for_chat(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Chat-style messages (no tools) for the broker, roles kept in place.
+
+    Content may be text and image parts; the text is joined and the images
+    travel separately, as for a tool turn.
+    """
+    broker_messages: list[dict[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role") or "user")
+        raw = message.get("content")
+        content = _content_text(raw) if isinstance(raw, list) else str(raw or "")
+        images = _content_images(raw) if role == "user" else []
+        entry: dict[str, Any] = {"role": role, "content": content}
+        if images:
+            entry["images"] = images
+        broker_messages.append(entry)
+    return broker_messages
 
 
 def _broker_tool_definitions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -530,14 +583,7 @@ class BrokerAIClient:
             broker_messages = (
                 _broker_messages_for_context(context)
                 if context is not None
-                else [
-                    {
-                        "role": str(message.get("role") or "user"),
-                        "content": str(message.get("content") or ""),
-                    }
-                    for message in (messages or [])
-                    if isinstance(message, dict)
-                ]
+                else _broker_messages_for_chat(messages or [])
             )
             request = {
                 "command": "chat",

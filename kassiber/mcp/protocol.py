@@ -30,6 +30,7 @@ _LEGACY_STRUCTURED_VERSIONS = frozenset({"2025-11-25", "2025-06-18"})
 META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion"
 META_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities"
 META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
+META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 META_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 
 PARSE_ERROR = -32700
@@ -42,9 +43,11 @@ UNSUPPORTED_PROTOCOL_VERSION = -32022
 SERVER_OVERLOADED = -32000
 
 MAX_MESSAGE_BYTES = 16 * 1024 * 1024
-# Tool definitions and instructions are static per server version and carry
-# no book data, so any client or cache may keep them.
-STATIC_LIST_TTL_MS = 3_600_000
+# Tool definitions and instructions carry no user data, so any client or
+# cache may keep them; they change only when the provider's configuration
+# does, so a short TTL lets a cached list catch up. Providers authorize each
+# call when it runs, never from the list.
+STATIC_LIST_TTL_MS = 60_000
 # Calls run one at a time; a client pipelining more than this many is refused
 # rather than queued without bound (each request may be megabytes).
 MAX_INFLIGHT_CALLS = 32
@@ -85,6 +88,7 @@ class ToolProvider(Protocol):
         name: str,
         arguments: dict[str, Any],
         cancelled: threading.Event,
+        client_name: str | None = None,
     ) -> ToolOutcome:
         ...
 
@@ -121,6 +125,8 @@ class McpServer:
         self._server_info = {"name": name, "version": version}
         self._lock = threading.Lock()
         self._legacy_version: str | None = None
+        # The legacy handshake's `clientInfo.name`: display-only attribution.
+        self._legacy_client_name: str | None = None
 
     # -- request handling -------------------------------------------------
 
@@ -281,8 +287,11 @@ class McpServer:
             if isinstance(requested, str) and requested in LEGACY_PROTOCOL_VERSIONS
             else LEGACY_PROTOCOL_VERSIONS[0]
         )
+        client_info = params.get("clientInfo")
+        client_name = client_info.get("name") if isinstance(client_info, dict) else None
         with self._lock:
             self._legacy_version = version
+            self._legacy_client_name = client_name if isinstance(client_name, str) else None
         result: dict[str, Any] = {
             "protocolVersion": version,
             "capabilities": {"tools": {}},
@@ -317,13 +326,30 @@ class McpServer:
             arguments = {}
         if not isinstance(arguments, dict):
             raise McpError(INVALID_PARAMS, "Tool arguments must be an object")
-        outcome = self._provider.call_tool(name, arguments, cancelled or threading.Event())
+        outcome = self._provider.call_tool(
+            name,
+            arguments,
+            cancelled or threading.Event(),
+            client_name=self._client_name(params, era),
+        )
         result: dict[str, Any] = {"content": [{"type": "text", "text": outcome.text}]}
         if era.modern or era.version in _LEGACY_STRUCTURED_VERSIONS:
             result["structuredContent"] = outcome.structured
         if outcome.is_error:
             result["isError"] = True
         return result
+
+
+    def _client_name(self, params: dict[str, Any], era: _Era) -> str | None:
+        """The host's self-reported name, if it sent one (never authority)."""
+
+        if era.modern:
+            meta = params.get("_meta")
+            info = meta.get(META_CLIENT_INFO) if isinstance(meta, dict) else None
+            name = info.get("name") if isinstance(info, dict) else None
+            return name if isinstance(name, str) else None
+        with self._lock:
+            return self._legacy_client_name
 
 
 def _reject_constant(name: str) -> Any:

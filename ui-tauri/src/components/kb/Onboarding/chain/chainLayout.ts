@@ -8,8 +8,8 @@
 
 /** Outer edge of one block. */
 export const BLOCK_SIZE = 1.6;
-/** Gap between neighbouring blocks in the chain. */
-export const BLOCK_GAP = 0.55;
+/** Leave clear space between neighbouring silhouettes after the 3D projection. */
+export const BLOCK_GAP = 1.35;
 /**
  * The chain recedes diagonally behind the next block (left and back), so the
  * newest block sits in front and the history trails away from it.

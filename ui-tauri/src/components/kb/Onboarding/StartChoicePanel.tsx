@@ -10,8 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { KassiberMark } from "@/components/kb/KassiberMark";
-import { Wordmark } from "@/components/kb/Wordmark";
+import { KassiberWordmark } from "@/components/kb/KassiberWordmark";
 import { Button } from "@/components/ui/button";
 
 import { ChainArtwork } from "./chain/ChainArtwork";
@@ -55,10 +54,7 @@ export function StartChoicePanel({
   return (
     <div className="mx-auto grid min-h-full w-full max-w-6xl content-center items-center gap-8 px-6 py-10 sm:px-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12">
       <div className="flex flex-col gap-9 animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
-        <div className="flex items-center gap-2.5">
-          <KassiberMark className="size-7" />
-          <Wordmark size={17} />
-        </div>
+        <KassiberWordmark cell={2} animate reveal="rain" />
 
         <header className="space-y-4">
           <p className="font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">

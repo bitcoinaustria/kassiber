@@ -159,7 +159,7 @@ async function talkInBookA(view: ReturnType<typeof render>) {
     "What did I buy in March?",
     "You bought 0.1 BTC from Bitstamp in March.",
   ]);
-  expect(session.attachment?.token).toBe("grant-book-a");
+  expect(session.attachments.map((file) => file.token)).toEqual(["grant-book-a"]);
 }
 
 /** Nothing of book A's conversation is in a request. */
@@ -203,7 +203,7 @@ describe("a conversation and its book", () => {
 
     expect(session.messages).toEqual([]);
     expect(session.sessionId).toBeNull();
-    expect(session.attachment).toBeNull();
+    expect(session.attachments).toEqual([]);
     // The user's own choices and typing stay.
     expect(session.incognito).toBe(true);
     expect(useAssistantDraftStore.getState().draft).toBe("How many are");
@@ -212,7 +212,7 @@ describe("a conversation and its book", () => {
     await act(async () => session.sendPrompt("How many are pending here?"));
     const args = lastChat();
     expect(args.messages).toEqual([{ role: "user", content: "How many are pending here?" }]);
-    expect(args.attachment).toBeUndefined();
+    expect(args.attachments).toBeUndefined();
     expect(args.expected_scope).toEqual(BOOK_B);
     expectNothingFromBookA(args);
   });
@@ -245,7 +245,7 @@ describe("a conversation and its book", () => {
     mocks.scope = BOOK_B;
     view.rerender(provider());
     expect(session.messages).toEqual([]);
-    expect(session.attachment).toBeNull();
+    expect(session.attachments).toEqual([]);
 
     await act(async () => session.sendPrompt("How many are pending here?"));
     expect(lastChat().expected_scope).toEqual(BOOK_B);
@@ -321,18 +321,18 @@ describe("a conversation and its book", () => {
     // A fresh conversation in book A: the file is the first thing in it.
     await act(async () => session.attachFile());
     view.rerender(provider());
-    expect(session.attachment?.token).toBe("grant-book-a");
+    expect(session.attachments.map((file) => file.token)).toEqual(["grant-book-a"]);
 
     // The user creates book B: the session counter stays, the ids change.
     mocks.scope = BOOK_B;
     view.rerender(provider());
-    expect(session.attachment).toBeNull();
+    expect(session.attachments).toEqual([]);
     expect(useUiStore.getState().notifications.at(0)?.body).toBe(
       "The file you attached in the other book was removed from this chat.",
     );
 
     await act(async () => session.sendPrompt("How many are pending here?"));
-    expect(lastChat().attachment).toBeUndefined();
+    expect(lastChat().attachments).toBeUndefined();
     expect(lastChat().expected_scope).toEqual(BOOK_B);
     expectNothingFromBookA(lastChat());
     // It was staged for book A only.
@@ -358,7 +358,7 @@ describe("a conversation and its book", () => {
       pick(PICKED);
       await attaching;
     });
-    expect(session.attachment).toBeNull();
+    expect(session.attachments).toEqual([]);
   });
 
   it("keeps a question in the composer when a book change refuses it at submit", () => {

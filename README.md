@@ -1,4 +1,9 @@
-# Kassiber
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kassiber-wordmark-on-dark.svg">
+    <img alt="Kassiber" src="docs/assets/kassiber-wordmark-on-light.svg" width="400" height="90">
+  </picture>
+</h1>
 
 Local-first Bitcoin accounting for individuals, businesses, and associations.
 Kassiber imports or syncs wallet transactions, supports review of transfers and

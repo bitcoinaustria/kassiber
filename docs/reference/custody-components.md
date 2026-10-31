@@ -341,7 +341,18 @@ The in-app assistant may draft the same typed document, but model output is not
 ownership evidence. It must call the plan tool first and
 present the validated effects. Creating or activating the final component stays
 behind the existing explicit-consent gate. A remote model may not infer a
-suspense residual or activate a bridge from amount similarity alone.
+suspense residual or activate a bridge from amount similarity alone. The
+assistant's plan/apply tools take the same five actions as the CLI; a
+conversion still stays a draft for human review.
+
+When an anchor already belongs to another active component, validation reports
+`active_transaction_membership_conflict` with a `remediation` naming the
+conflicting component and transaction ids. The normal fix for a wrong
+interpretation is `revise` of that component with `--activate` (or
+`activate: true`): the new revision may keep the same anchors, and activation
+supersedes the old revision atomically. `supersede` retires it without a
+replacement, after which its anchors book or quarantine as raw rows again.
+When several components conflict, supersede all but one and revise that one.
 
 Updates create immutable revisions. Competing active revisions (for example
 from an older book) stay visible and ineffective until the user resolves them.

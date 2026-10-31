@@ -132,6 +132,14 @@ counts—not a database path, passphrase, native lookup identifier, or key.
 
 ## Output modes
 
+Running bare `kassiber` in an interactive terminal prints the pixel wordmark
+and help, then exits successfully without opening books. The banner requires
+interactive stdin and stdout, at least 80 columns, a Unicode-capable output
+encoding, and a terminal other than `TERM=dumb`. Explicit commands, `--help`,
+machine output, redirected output, and non-interactive launches keep their
+existing output; a bare non-interactive invocation still reports a missing
+command with exit code 2.
+
 - `table` is for terminal reading
 - `plain` is compact key-value style output
 - `json` is the canonical machine-readable envelope

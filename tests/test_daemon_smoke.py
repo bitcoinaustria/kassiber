@@ -590,6 +590,7 @@ def _open_scoped_local_ai_runtime(data_root):
         main_thread_tasks=queue.Queue(),
         maintenance_state={
             "provider_kind": "local",
+            "provider_full_access": True,
             "scope_workspace_id": workspace["id"],
             "scope_profile_id": profile["id"],
         },
@@ -6357,20 +6358,20 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(decision, "allow_once")
             self.assertFalse(consent.has_session_allow(tool_name))
 
-    def test_ai_chat_omitted_tool_profile_is_scoped_not_full(self):
-        # The desktop Assistant never sent `tool_profile`, so it silently got
-        # `full`: 113 schemas and ~20k tokens on every turn, with capability
-        # scoping skipped entirely. Local models could not work under that.
+    def test_ai_chat_omitted_tool_profile_is_full_and_scoped_stays_narrower(self):
+        # Kassiber cannot tell how capable a model is, so an omitted profile
+        # offers every tool; the desktop sends the user's choice, and `scoped`
+        # keeps a small local model's context bounded.
         base = {
             "model": "local-model",
             "messages": [{"role": "user", "content": "What is my balance?"}],
             "tools_enabled": True,
         }
 
-        self.assertEqual(_ai_chat_args(base)["tool_profile"], "scoped")
+        self.assertEqual(_ai_chat_args(base)["tool_profile"], "full")
         self.assertEqual(
-            _ai_chat_args({**base, "tool_profile": "full"})["tool_profile"],
-            "full",
+            _ai_chat_args({**base, "tool_profile": "scoped"})["tool_profile"],
+            "scoped",
         )
 
         scoped = build_responses_tools(
@@ -13155,7 +13156,7 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             "tool_profile": "scoped",
             "tool_loop_max_iterations": 2,
             "screen_context": None,
-            "attachment": None,
+            "attachments": [],
         }
 
     def _run(self, active_ai_chats, client, seen_options):

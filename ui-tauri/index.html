@@ -42,15 +42,18 @@
        * before the lock screen materializes.
        *
        * React's createRoot replaces #root's children on first render, so
-       * the splash disappears as soon as the real UI takes over.
+       * the splash disappears as soon as the real UI takes over. These rules
+       * are unlayered, so the body keeps this background after the app's own
+       * stylesheet loads: the colours must stay the theme's canvas
+       * (`--background` in src/styles/globals.css).
        */
       :root {
         color-scheme: light dark;
-        --kb-boot-bg: #f8fafc;
-        --kb-boot-fg: #111827;
-        --kb-boot-muted: #374151;
-        --kb-boot-ring: rgba(17, 24, 39, 0.16);
-        --kb-boot-ring-active: #111827;
+        --kb-boot-bg: #fcfcfc;
+        --kb-boot-fg: #18181b;
+        --kb-boot-muted: #3f3f46;
+        --kb-boot-ring: rgba(24, 24, 27, 0.16);
+        --kb-boot-ring-active: #18181b;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -62,11 +65,11 @@
         }
       }
       html.light {
-        --kb-boot-bg: #f8fafc;
-        --kb-boot-fg: #111827;
-        --kb-boot-muted: #374151;
-        --kb-boot-ring: rgba(17, 24, 39, 0.16);
-        --kb-boot-ring-active: #111827;
+        --kb-boot-bg: #fcfcfc;
+        --kb-boot-fg: #18181b;
+        --kb-boot-muted: #3f3f46;
+        --kb-boot-ring: rgba(24, 24, 27, 0.16);
+        --kb-boot-ring-active: #18181b;
       }
       html.dark {
         --kb-boot-bg: #0a0a0a;

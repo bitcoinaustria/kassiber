@@ -11,8 +11,7 @@ import { cn } from "@/lib/utils";
 import type { Profile, ProfilesSnapshot, Workspace } from "@/mocks/profiles";
 import { useUiStore, type Identity } from "@/store/ui";
 
-import { KassiberMark } from "@/components/kb/KassiberMark";
-import { Wordmark } from "@/components/kb/Wordmark";
+import { KassiberWordmark } from "@/components/kb/KassiberWordmark";
 
 import { OnboardingStepPage } from "./frame";
 
@@ -123,10 +122,7 @@ export function ImportProjectPanel({
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-center gap-8 px-6 py-12">
-      <div className="flex items-center gap-2.5">
-        <KassiberMark className="size-8" />
-        <Wordmark size={18} />
-      </div>
+      <KassiberWordmark cell={2} />
       <OnboardingStepPage
         className="max-w-none"
         title={t("import.title")}

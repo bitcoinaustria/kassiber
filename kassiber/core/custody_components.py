@@ -30,7 +30,7 @@ import sqlite3
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 import uuid
 
-from ..errors import AppError
+from ..errors import AppError, build_remediation
 from ..time_utils import parse_iso_datetime_or_none, parse_timestamp
 from ..transfers import (
     LIGHTNING_INFERENCE_WALLET_KINDS,
@@ -2298,6 +2298,97 @@ def _active_membership_conflicts(
     ]
 
 
+def membership_conflict_remediation(
+    conflicts: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Name the active component(s) that already interpret these anchors.
+
+    Replacing a wrong interpretation is a new revision of the conflicting
+    lineage (``revise`` with ``activate``), which supersedes the old revision
+    atomically and may reuse the same anchors. ``supersede`` retires it without
+    a replacement. Either needs a plan and the user's consent.
+    """
+
+    component_ids = sorted(
+        {
+            str(component_id)
+            for conflict in conflicts
+            for component_id in (
+                [conflict["component_id"]]
+                if conflict.get("component_id")
+                else list(conflict.get("component_ids") or ())
+            )
+        }
+    )
+    transaction_ids = sorted(
+        {
+            str(conflict["transaction_id"])
+            for conflict in conflicts
+            if conflict.get("transaction_id")
+        }
+    )
+    first = component_ids[0] if component_ids else None
+    message = (
+        "These transactions already belong to an active custody component. To "
+        "replace that interpretation, revise the conflicting component (same "
+        "anchors allowed) with activate=true; to retire it without a "
+        "replacement, supersede it."
+    )
+    if len(component_ids) > 1:
+        message += (
+            " Several components conflict: supersede all but one, then revise "
+            "the remaining one to the full corrected interpretation."
+        )
+    return build_remediation(
+        "revise_conflicting_component",
+        target={
+            "component_ids": component_ids,
+            "transaction_ids": transaction_ids,
+        },
+        tool="ui_transfers_components_plan",
+        arguments_hint={
+            "action": "revise",
+            "component_id": first,
+            "activate": True,
+            "spec": {"legs": "<corrected legs>", "allocations": "<if N:M>"},
+        },
+        message=message,
+        alternatives=[
+            {
+                "action": "supersede",
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                    "action": "supersede",
+                    "component_id": first,
+                    "reason": "<why the old interpretation was wrong>",
+                },
+            }
+        ],
+    )
+
+
+def _membership_conflict_issue(
+    conflicts: Sequence[Mapping[str, Any]], message: str
+) -> dict[str, Any]:
+    return {
+        "code": "active_transaction_membership_conflict",
+        "message": message,
+        "conflicts": [dict(conflict) for conflict in conflicts],
+        "remediation": membership_conflict_remediation(conflicts),
+    }
+
+
+def issues_remediation(
+    issues: Iterable[Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    """The first remediation carried by a validation issue list."""
+
+    for issue in issues or ():
+        if isinstance(issue, Mapping) and isinstance(issue.get("remediation"), Mapping):
+            return dict(issue["remediation"])
+    return None
+
+
 def validate_component_plan(
     conn: sqlite3.Connection,
     *,
@@ -2408,11 +2499,9 @@ def validate_component_plan(
         validation["activatable"] = False
         validation["issues"] = [
             *validation["issues"],
-            {
-                "code": "active_transaction_membership_conflict",
-                "message": "a transaction belongs to another active component",
-                "conflicts": conflicts,
-            },
+            _membership_conflict_issue(
+                conflicts, "a transaction belongs to another active component"
+            ),
         ]
     return {
         "legs": normalized_legs,
@@ -2458,6 +2547,21 @@ def validate_planned_active_batch(
                     "message": "a transaction belongs to multiple planned active components",
                     "transaction_id": transaction_id,
                     "component_ids": sorted(component_ids),
+                    # These are ids of the same unsaved batch, so the fix is
+                    # in the submitted document, not a stored component.
+                    "remediation": build_remediation(
+                        "merge_planned_components",
+                        target={
+                            "transaction_ids": [transaction_id],
+                            "planned_component_ids": sorted(component_ids),
+                        },
+                        tool="ui_transfers_components_plan",
+                        message=(
+                            "One transaction is anchored by several components "
+                            "of this batch. Put all of its legs in one component "
+                            "and plan the batch again."
+                        ),
+                    ),
                 }
             )
 
@@ -3710,11 +3814,10 @@ def _materialize_component(
         validation["activatable"] = False
         validation["issues"] = [
             *validation["issues"],
-            {
-                "code": "active_transaction_membership_conflict",
-                "message": "a transaction belongs to another authored active component",
-                "conflicts": conflicts,
-            },
+            _membership_conflict_issue(
+                conflicts,
+                "a transaction belongs to another authored active component",
+            ),
         ]
     effective_state = (
         "active"
@@ -4165,13 +4268,17 @@ def update_component(
 
 
 def _activation_error(component: Mapping[str, Any]) -> AppError:
+    details: dict[str, Any] = {
+        "component_id": component["id"],
+        "validation": component["validation"],
+    }
+    remediation = issues_remediation(component["validation"].get("issues") or ())
+    if remediation is not None:
+        details["remediation"] = remediation
     return _error(
         "custody component is incomplete or does not conserve",
         "custody_component_incomplete",
-        details={
-            "component_id": component["id"],
-            "validation": component["validation"],
-        },
+        details=details,
     )
 
 
@@ -4228,11 +4335,10 @@ def validate_component_activation(
     if external_conflicts:
         validation["activatable"] = False
         validation["issues"].append(
-            {
-                "code": "active_transaction_membership_conflict",
-                "message": "a transaction belongs to another active component",
-                "conflicts": external_conflicts,
-            }
+            _membership_conflict_issue(
+                external_conflicts,
+                "a transaction belongs to another active component",
+            )
         )
     if not validation["activatable"]:
         failed = dict(component)

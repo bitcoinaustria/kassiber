@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createNewTransactionDraft,
   draftForTransaction,
   metadataUpdateArgs,
-  nextLabelForFlow,
   formatCounterDisplayMoney,
   formatDisplayMoney,
   formatSignedDisplayMoney,
   pricingCacheSummary,
+  pricingChoiceValue,
   pricingPriceMoment,
+  pricingSourceLabel,
+  pricingSourcePhrase,
   shouldShowSourceExternalId,
   type Transaction,
 } from "./model";
@@ -91,18 +92,6 @@ describe("metadataUpdateArgs review status", () => {
     expect(args).not.toHaveProperty("taxable");
     expect(args).not.toHaveProperty("at_regime");
     expect(args).not.toHaveProperty("at_category");
-  });
-});
-
-describe("nextLabelForFlow", () => {
-  it("does not sticker a new receipt as Income", () => {
-    expect(createNewTransactionDraft().label).toBe("Unlabeled");
-    // The label persists as a tag and a tag outranks the derived type on the
-    // chip, so auto-applying "Income" reproduces the exact contradiction the
-    // kind-derived label removes: chip says earnings, engine books a buy.
-    expect(nextLabelForFlow("incoming")).toBe("Unlabeled");
-    expect(nextLabelForFlow("transfer")).toBe("Transfer");
-    expect(nextLabelForFlow("outgoing")).toBe("Expense");
   });
 });
 
@@ -278,5 +267,29 @@ describe("source identifiers", () => {
         explorerId: "1641779af4",
       }),
     ).toBe(true);
+  });
+});
+
+describe("pricing choices", () => {
+  it("groups every source kind under one of the four choices, as the core does", () => {
+    expect(pricingChoiceValue("exchange_execution", "exact")).toBe("generic_import");
+    expect(pricingChoiceValue("wallet_export", "exact")).toBe("generic_import");
+    expect(pricingChoiceValue("btcpay_invoice", "exact")).toBe("generic_import");
+    expect(pricingChoiceValue("generic_import", "provider_sample")).toBe("generic_import");
+    expect(pricingChoiceValue("fmv_provider", "coarse_fallback")).toBe("fmv_provider");
+    expect(pricingChoiceValue("manual_rate_cache", "exact")).toBe("fmv_provider");
+    expect(pricingChoiceValue("manual_override", "exact")).toBe("manual_override");
+    expect(pricingChoiceValue("exchange_execution", "missing")).toBe("missing");
+    expect(pricingChoiceValue(null, "exact")).toBe("missing");
+  });
+
+  it("names a source kind outside the choices instead of showing its code", () => {
+    expect(pricingSourceLabel("exchange_execution", "exact")).toBe(
+      "transactions:pricingSourceKind.exchange_execution.label",
+    );
+    expect(pricingSourcePhrase("exchange_execution", "exact")).toBe(
+      "transactions:pricingSourceKind.exchange_execution.phrase",
+    );
+    expect(pricingSourcePhrase(null, "missing")).toBeNull();
   });
 });

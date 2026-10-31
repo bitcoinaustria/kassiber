@@ -296,14 +296,6 @@ export interface AiProvidersListData {
   secret_store_policy?: AiSecretStorePolicy;
 }
 
-export const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
-  local:
-    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  remote:
-    "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-};
-
 export function aiSecretStoreLabel(storeId: AiSecretStoreId | undefined): string {
   switch (storeId) {
     case "macos_keychain":
