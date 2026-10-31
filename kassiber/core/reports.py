@@ -5573,6 +5573,7 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
 def _export_csv_rows(path, rows):
     """Translate storage failures at every CSV export boundary."""
     try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         _write_csv_rows(path, rows)
     except OSError as exc:
         reason = os.strerror(exc.errno) if exc.errno is not None else "I/O error"
@@ -5749,8 +5750,6 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
         report_context=report_context,
     )
     directory = Path(dir_path).expanduser()
-    directory.mkdir(parents=True, exist_ok=True)
-
     files = []
 
     def write_file(sheet_name, filename, rows):
@@ -6470,7 +6469,6 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     sections = _generic_report_section_specs(context)
     rows = _generic_report_csv_rows(context, sections)
     path = Path(file_path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
     _export_csv_rows(path, rows)
     result = {
         "file": str(path.resolve()),
@@ -7020,7 +7018,6 @@ def export_transactions_csv_report(
     )
     spec = context["spec"]
     path = Path(file_path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
     _export_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
     result = {
         "file": str(path.resolve()),
