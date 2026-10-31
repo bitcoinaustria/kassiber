@@ -153,7 +153,7 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ],
   // Complete quotes run first. Never reprocess their redacted output here.
   [
-    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])(?!\[redacted\])[^\s]*`, "gi"),
+    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])(?!\[redacted\])[^\r\n]*`, "gi"),
     "$1$2$3[redacted]",
   ],
 ];

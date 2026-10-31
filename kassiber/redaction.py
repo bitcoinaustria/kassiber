@@ -60,9 +60,8 @@ _SECRET_KEY_NAME = (
     r"sp[_-]?descriptor|spscan|spspend|token|xprv)"
 )
 _QUOTED_SECRET_VALUE = r'''(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')'''
-# A truncated diagnostic may end before the closing quote. In that case only
-# the first token is known to be the secret; do not retain it verbatim.
-_UNTERMINATED_SECRET_VALUE = r'''["'][^\s]*'''
+# A truncated quoted value may contain spaces. Fail closed through end of line.
+_UNTERMINATED_SECRET_VALUE = r'''["'][^\r\n]*'''
 _ASSIGNED_SECRET_RE = re.compile(
     rf"(?P<key>['\"]?\b{_SECRET_KEY_NAME}\b['\"]?)"
     r"(?P<sep>\s*[:=]\s*)"

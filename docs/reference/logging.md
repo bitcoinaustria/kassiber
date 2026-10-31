@@ -90,7 +90,7 @@ escaped quotes. The Rust redactors must adopt the shared credential corpus
 during Rust integration.
 
 Complete quoted values are scrubbed across line breaks. If the closing quote
-is missing, the floor scrubs through the next whitespace or end of line. Python
+is missing, the floor scrubs the entire remaining line, including spaces. Python
 and the webview share exact expected outputs in
 `tests/fixtures/secret_redaction_cases.json`, including truncated diagnostics.
 The corpus also covers URL userinfo, Silent Payments scan keys, prefixed
