@@ -421,8 +421,11 @@ Python.
   safe desktop projection, exact filters/pagination and read-only DB parity.
 - [x] Port gaps list/review with their desktop kinds, version-bound cursor pages,
   canonical freshness/blockers, historical reviews and unchanged database parity.
-- [ ] Port review cases/plan/apply after complete current-state ledger composition
-  is available; retain readiness barriers rather than reading stale journals.
+- [ ] Port review cases/plan/apply through the shared journal service: r7 has
+  pure custody/fusion and a render checkpoint, but still needs the native SQL
+  snapshot/ownership loader, complete build-state assembly and journal writer.
+  Retain readiness barriers rather than reading stale journals; see the
+  [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the
   matcher/rules/bulk implementation and its oracle/mutation evidence; R4-13 and
   R4-15 still need to integrate its atomic journal boundary for journal processing.

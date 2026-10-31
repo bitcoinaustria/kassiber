@@ -66,6 +66,7 @@ REVIEWS = {
     "tests/test_rust_wallet_acquisition.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed"}},
     "tests/test_rust_bitcoin_records.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares pure Bitcoin normalized records, shared-observer composition, retraction vetoes and private provenance mappings against Python with no consent or transport; no atomic apply or product sync is claimed"}},
     "tests/test_rust_observer_state.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares inert BDK aggregate JSON and private observer snapshot/reuse reads against unmodified Python; checks complete books remain unchanged, without claiming native sync or post-sync dump parity"}},
+    "tests/test_rust_pairing_commands.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "Compares pairing CLI and daemon wire bytes with Python, checks complete unchanged read/dry-run rows and Python projections of Rust writes, and requires zero hybrid fallbacks"}},
     "tests/test_rust_transfer_reads.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "Compares CLI and daemon component/gap read bytes, complete unchanged database rows, private evidence projections and hybrid Rust routing"}},
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
     "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
@@ -304,6 +305,5 @@ REVIEWS["tests/test_review_regressions.py"] = {
         "disposition": "rust-test", "group": "secrets-backup",
         "reason": "Rust replacements: all_text_rules_match_python_bytes, every_sensitive_key_matches_python, recursive_details_shapes_match_python, every_argument_class_matches_python in crates/diagnostics/tests",
     },
-    "tests/test_rust_pairing_commands.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "Compares pairing CLI and daemon wire bytes with Python, checks complete unchanged read/dry-run rows and Python projections of Rust writes, and requires zero hybrid fallbacks"}},
 
 }

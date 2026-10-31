@@ -2217,6 +2217,9 @@
       "test_force_rebuild_keeps_epoch_and_old_book_ordinary_refresh_refuses": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares inert BDK aggregate JSON and private observer snapshot/reuse reads against unmodified Python; checks complete books remain unchanged, without claiming native sync or post-sync dump parity", "reviewed": true, "tests": 1},
       "test_current_rows_match_python_after_restart_edits_shared_sources_and_exclusions": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "compares inert BDK aggregate JSON and private observer snapshot/reuse reads against unmodified Python; checks complete books remain unchanged, without claiming native sync or post-sync dump parity", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_pairing_commands.py": {
+      "RustPairingCommandsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "Compares pairing CLI and daemon wire bytes with Python, checks complete unchanged read/dry-run rows and Python projections of Rust writes, and requires zero hybrid fallbacks", "reviewed": true, "tests": 2}
+    },
     "tests/test_rust_rates_candidate.py": {
       "test_all_six_cli_leaves_are_served_by_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
       "test_native_daemon_reads_and_validation_match_python_bytes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},

@@ -24,11 +24,10 @@ verification, including per-command Rust routing counts.
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
-| `crates/wallets` | local public descriptor parsing, derivation and preview |
+| `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
+| `crates/journals` | unregistered custody/fusion pipeline and R4-11 rendering checkpoint; production snapshot loading and journal persistence remain unported |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
-
-| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
 | `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV artifacts, and append-only saved/filed snapshot markers |
 
 ## Command line
@@ -5789,3 +5788,207 @@ custody product API still explicitly skips interpretation, quantity and finalize
 projection. That current-ledger dependency must be ported before these routes
 can satisfy parity. AI projections remain Python. The full transfers/review
 service slice is incomplete.
+
+### R7 transfer route integration (R5 transfers-9, partial)
+
+`t3code/r5-transfers-9` starts at `dd433e4e`. Pairing library commit
+`7150d69a` is already integrated on that base and was skipped; the requested
+route/read commits were applied locally as `d2023f2a3` (`f445e6dd`),
+`e9806ca51` (`b3cf7796`) and `15c320977` (`6c7f8bb0`). Conflict resolution
+preserves the integrated custody, wallet, journal and test-inventory work.
+The supported boundary remains **26/29 CLI leaves and 25/28 corresponding
+daemon kinds**. Python product code and AI projections are unchanged.
+
+The preceding transfers-8 dependency statement is historical. R7 includes
+all pure custody stages, in-process fusion and the tax engine through
+`kassiber_journals::compute`, and the separate R4-11 render/join checkpoint.
+It does **not** include a native database-to-journal service:
+
+| Required shared boundary | Evidence / remaining work |
+| --- | --- |
+| SQL snapshot, ownership and receipt-source loading | R4-9 in [the pipeline plan](r4-journal-pipeline.md#migration-path); `compute` accepts an already loaded snapshot document |
+| Complete canonical build-state assembly and rendering admission | [R4-11 remaining gates](r4-journal-render-checkpoint.md#remaining-acceptance-work); the renderer accepts an already composed custody projection and is explicitly unregistered |
+| Canonical journal persistence | [R4-12 handoff](r4-journal-render-checkpoint.md#r4-12-handoff); no native `store_ledger_state` service exists, including compact calculations, deterministic entry/tie-group writes, quantity rows, freshness and filed-report impacts |
+| Review cases/plan/apply | Reuse those shared boundaries for current cases, isolated before/after simulation, writer-locked revalidation, metadata/component/unpair operations, idempotent receipts and complete late-failure rollback |
+
+Consequently `review cases|plan|apply` and
+`ui.review.cases|plan|apply` remain unregistered. Stored journals cannot
+supply their fresh accounting state. No second composition path, shell-out,
+synthetic successful response or new dependency was introduced. This is an
+integration checkpoint, **not completed transfers-slice acceptance**.
+
+#### R7 verification evidence
+
+The frozen corpora compare ordered Python result/error bytes and all application
+table rows, with deterministic identities and clocks. Reads must preserve the
+entire database. The current R7 Python reference regenerates pairing exactly.
+Component and gap captures required only the additional
+`custody-partial-payout-pricing-v1` migration-audit seed (51 and 94 rows,
+respectively); every captured result remained identical. Those generated seed
+changes are retained explicitly rather than masking migration history.
+
+| Boundary | Books | Operations | Successes / refusals | Comparison |
+| --- | ---: | ---: | ---: | --- |
+| Pairing services and command dispatch | 255 | 1,860 | 1,779 / 81 | Ordered outputs and complete post-operation rows |
+| Component reads | 51 | 1,394 | 633 / 761 | Ordered outputs and complete unchanged rows |
+| Gap snapshots | 94 | 1,351 | 652 / 699 | Ordered outputs and complete unchanged rows |
+
+All four process modules pass: `test_rust_transfer_services.py`,
+`test_rust_gap_services.py`, `test_rust_pairing_commands.py` and
+`test_rust_transfer_reads.py` (**19 tests**). Their identity/clock binding and
+Python-only traceback normalization follow the preceding checkpoint contracts;
+fixed-source native corpora independently pin every stored scalar and byte.
+The unchanged Python projections consume native pairing and authoring rows.
+
+| Routing witness | Rust | Python fallbacks | Coverage |
+| --- | ---: | ---: | --- |
+| Hybrid CLI calls | 461 | 0 | All 26 supported CLI leaves |
+| Hybrid daemon sessions | 29 | 0 | Explicit native-daemon routing |
+| Native daemon requests, excluding shutdown | 513 | 0 | All 25 supported kinds, including direct and hybrid sessions |
+
+All counts below are Rust-served; every corresponding fallback count is zero.
+
+| CLI leaf | CLI calls | Daemon kind | Requests |
+| --- | ---: | --- | ---: |
+| `transfers.list` | 78 | `ui.transfers.list` | 1 |
+| `transfers.pair` | 2 | `ui.transfers.pair` | 4 |
+| `transfers.unpair` | 2 | `ui.transfers.unpair` | 2 |
+| `transfers.update` | 2 | `ui.transfers.update` | 4 |
+| `transfers.payouts.list` | 1 | `ui.transfers.payouts.list` | 1 |
+| `transfers.payouts.create` | 4 | `ui.transfers.payouts.create` | 4 |
+| `transfers.payouts.delete` | 3 | `ui.transfers.payouts.delete` | 6 |
+| `transfers.suggest` | 44 | `ui.transfers.suggest` | 33 |
+| `transfers.bulk-pair` | 22 | `ui.transfers.bulk_pair` | 33 |
+| `transfers.rules.list` | 79 | `ui.transfers.rules.list` | 1 |
+| `transfers.rules.create` | 2 | `ui.transfers.rules.create` | 3 |
+| `transfers.rules.delete` | 1 | `ui.transfers.rules.delete` | 1 |
+| `transfers.rules.enable`, `transfers.rules.disable` | 1 each | `ui.transfers.rules.set_enabled` | 2 |
+| `transfers.rules.apply` | 22 | `ui.transfers.rules.apply` | 33 |
+| `transfers.dismiss` | 2 | `ui.transfers.dismiss` | 3 |
+| `transfers.components.list` | 42 | `ui.transfers.components.list` | 72 |
+| `transfers.components.show` | 44 | `ui.transfers.components.get` | 42 |
+| `transfers.components.plan` | 13 | `ui.transfers.components.plan` | 7 |
+| `transfers.components.apply` | 8 | `ui.transfers.components.apply` | 4 |
+| `transfers.gaps.history` | 1 | `ui.custody.gaps.history` | 3 |
+| `transfers.gaps.list` | 50 | `ui.custody.gaps.list` | 72 |
+| `transfers.gaps.review` | 24 | `ui.custody.gaps.review_context` | 72 |
+| `transfers.gaps.plan` | 6 | `ui.custody.review.plan` | 42 |
+| `transfers.gaps.apply` | 6 | `ui.custody.review.apply` | 66 |
+| `review.receipt` | 1 | `ui.review.receipt` | 2 |
+| **Total** | **461** | **25 kinds** | **513** |
+
+Every supported route occurs in the retained process evidence; no missing
+route is inferred from the registry. Journal invalidation, savepoint rollback,
+outer transaction ownership and late failure also pass in the workspace's
+transfer tests, including `pair_final_invalidation_refusals_are_atomic`,
+`pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback`,
+`component_apply_rolls_back_late_failure_and_preserves_outer_transaction` and
+`gap_apply_rolls_back_late_failure_and_preserves_outer_transaction`.
+
+Workspace fmt and workspace/all-target plus harness-feature clippy pass with
+`-D warnings`. The complete offline workspace run passes **1,505 Rust tests**,
+with zero failures or ignored tests. All **five affected native read tests**
+also pass after the migration-audit seed refresh; all three corpora now
+regenerate byte-identically from the current Python reference.
+
+All **65 newly imported mutations** (19 pairing, 17 component reads and 29
+gap/Unicode entries) build and are killed by their named witnesses after
+**10 unmutated baselines** pass. No mutation survives or fails to compile.
+The complete 280-entry transfer catalog and separate 35-entry pairing catalog
+pass applicability checks; the inherited entries retain their earlier kill
+evidence and are not claimed as fresh kills in this integration run.
+
+The required `classify_tests update` completes with **5,690 inventoried tests**;
+`python_test_shards.py run preflight --ci` passes all **57 checks**. All commands
+use locked Python 3.11 and Rust 1.99.1 with offline Cargo. Verification runs
+serially on disposable data roots with the real `HOME` inherited. No test
+remains blocked by sandbox restrictions. Owned mutation and verification build
+trees are removed after writing the summaries; only small logs and routing
+records remain under `target/r5-transfers9`. No job from this run remains active.
+
+#### Review integration handoff
+
+The owner confirmed that R4-9 (`t3code/r4-9-loader`) and R4-12
+(`t3code/r4-12-persist`) are parallel, unavailable prerequisites; neither is
+implemented here. The following are requested adapter signatures, **not
+existing exports**. They use the current snapshot and render types so the
+workers can supply thin adapters around their eventual typed interfaces:
+
+```rust
+use kassiber_custody::snapshot::Snapshot;
+use kassiber_envelope::AppError;
+use kassiber_journals::JournalState;
+use kassiber_pyjson::Value;
+use kassiber_store::rusqlite::Connection;
+
+// R4-9: load all facts from this exact connection and its current transaction.
+fn load_custody_snapshot(
+    conn: &Connection,
+    profile: &Value,
+    as_of: &str,
+) -> Result<Snapshot, AppError>;
+
+// R4-12: store this composed state in the caller's transaction; never commit.
+// Return the same summary as Python store_ledger_state, including processed_at.
+fn store_ledger_state(
+    conn: &Connection,
+    profile: &Value,
+    state: &JournalState<'_>,
+    created_at: &str,
+    uuid: &mut dyn FnMut() -> Result<String, AppError>,
+) -> Result<Value, AppError>;
+```
+
+Both boundaries must preserve every SQLite storage class and exact scalar.
+Loading includes book-network admission facts, full ownership/receipt-source
+facts and the ordered bounded gap worklist. It must see uncommitted operations
+on the supplied connection. It must neither bootstrap another connection nor
+repair, sync, price, auto-pair or write. Compose through the existing custody,
+fusion and renderer once those are joined; keep the custody projection alive
+while the borrowed `JournalState` is used. Retain the existing fail-closed
+render admission rather than making a lossy state conversion.
+
+The review adapter must deduplicate quarantines with Python's primary-reason
+precedence and remove synthetic/non-live transaction IDs before building cases
+or economic effects. Its canonical state must retain entries, whole-book
+holdings/tax summary, component blockers and quantity decisions, including each
+suspense decision's component provenance. Acquisition operations additionally
+need policy-bound economic effects. A count-only projection is insufficient.
+
+Transaction ownership must follow `core/review_workflow.py`:
+
+1. Cases use a consistent read transaction, rolling back only one they own.
+   Cursor scope includes profile, input version and `last_processed_at`.
+2. Plan makes a same-binding in-memory backup, with an ephemeral SQLCipher
+   destination key when needed. Reject an active source write transaction
+   without committing it. All operation writes and rebuilds target the clone;
+   the live connection's rows and `total_changes` stay unchanged.
+3. Apply acquires `BEGIN IMMEDIATE` only if it owns the transaction, enters a
+   savepoint and reserves the writer with the profile's no-op version update.
+   An existing idempotency key is checked before input freshness: the same
+   digest returns its historical receipt, while another digest is refused.
+4. Recompute before effects, apply ordered operations, recompute after effects,
+   compare the reviewed artifact, call the canonical writer, then insert the
+   receipt in that same savepoint. Preserve an outer caller transaction and
+   roll back every domain/journal/audit/impact/receipt row on any late failure.
+   Any scoped journal cache-size adjustment must be restored after success or
+   failure. Commit only at the owning service boundary.
+
+A single captured before/after ledger pair cannot implement all batch paths.
+`_apply_operations` rebuilds again when a non-unpair operation precedes an
+unpair, then reads the new pair fingerprint and the component's live suspense
+decisions. Sibling unpairs retain the original baseline while their shared
+component is re-sliced. A snapshot-only shim would either miss that transition
+or require an unimplemented composer callback. Applied database parity also
+needs the real writer's rows and failure points; replaying expected writes
+would not prove its behavior. The owner-authorized stop-after-registration
+fallback is used here: **no review-only library port or parity claim is made**.
+
+The follow-up must capture Python states at each real `_build` invocation and
+compare artifacts, cursor pages, economic digests, refusal precedence and
+complete normalized DB dumps. Include mixed metadata/component batches,
+interleaved unpairs, stale fingerprints/effects, SQLCipher clone isolation,
+idempotent retries after book changes, caller-owned transactions, and injected
+failures during operation N, journal storage and receipt insertion. AI
+projections must read the resulting native history/receipts unchanged. Only
+then register the three review leaves and their three daemon kinds.

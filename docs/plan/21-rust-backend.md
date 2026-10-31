@@ -2459,3 +2459,21 @@ requires `review_workflow._build` and a fresh `custody_journal.build_ledger_stat
 including live before/after simulation and locked apply revalidation. This
 base's Rust custody API explicitly skips interpretation, quantity and finalized
 projection; reading stored journals would violate the current-state contract.
+
+### R5 transfers on the R7 integration base (partial)
+
+`t3code/r5-transfers-9` starts at `dd433e4e`, skips the already integrated
+pairing-library import and applies the transfers-8 pairing registration,
+component reads and gap snapshots. It serves **26/29 CLI leaves and 25/28
+corresponding daemon kinds**. Integrated custody/wallet/journal work and all
+test-inventory entries are retained.
+
+R7 supersedes the transfers-8 statement about absent pure custody stages:
+custody, fusion, tax computation and a render checkpoint are now present.
+The shared native SQL snapshot/ownership loader (R4-9), complete canonical
+build-state assembly/render acceptance (R4-11), and journal persistence
+(R4-12) still remain. `review cases|plan|apply` and their three daemon kinds
+are not implemented; their fresh simulation and atomic verified persistence
+cannot use stored journal projections. The [integration checkpoint](../reference/rust-shell.md#r7-transfer-route-integration-r5-transfers-9-partial)
+records evidence and the precise remaining boundaries. This does not complete
+the transfers/review service slice. Python and AI projections are unchanged.
