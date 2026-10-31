@@ -1325,6 +1325,7 @@ def test_native_review_activation_failure_leaves_no_committed_draft(tmp_path, fa
     before = list(conn.iterdump())
     with pytest.raises((AppError, ValueError)):
         create_transaction_pair(conn, "ws", "profile", "out", "in")
+    assert list(conn.iterdump()) == before
     conn.rollback()
     assert list(conn.iterdump()) == before
     # The common native entry point also serves payout and revision callers;
@@ -1348,6 +1349,7 @@ def test_native_review_activation_failure_leaves_no_committed_draft(tmp_path, fa
             created_at=NOW,
             authored_source="cli",
         )
+    assert list(conn.iterdump()) == before
     conn.rollback()
     assert list(conn.iterdump()) == before
     conn.close()
@@ -1376,6 +1378,9 @@ def test_pair_invalidation_failure_keeps_complete_database_unchanged(tmp_path, o
                 update_transaction_pair(conn, "ws", "profile", pair["id"], notes="revised")
             else:
                 delete_transaction_pair(conn, "ws", "profile", pair["id"])
+    # Operation-level rollback must finish before the caller cleans up its
+    # transaction; otherwise a later caller commit could retain partial work.
+    assert list(conn.iterdump()) == before
     conn.rollback()
     assert list(conn.iterdump()) == before
     conn.close()
