@@ -4898,8 +4898,8 @@
     "format": "bullbitcoin_csv",
     "text": "ORDER_STATUS,PAYIN_STATUS,PAYOUT_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),SENT_AT (UTC),CREATED_AT (UTC),TRANSACTION_ID,EXCHANGE_RATE_AMOUNT,ORDER_ID,ORDER_NUMBER,PAYIN_METHOD,PAYOUT_METHOD\r\ncompleted,completed,completed,100.00,EUR,1e309,BTC,2025-01-02T01:02:03+01:00,,,abababababababababababababababababababababababababababababababab,,order-1,number-1,wire,onchain\r\n",
     "error": {
-      "code": "internal_error",
-      "message": "Python int too large to convert to SQLite INTEGER",
+      "code": "validation",
+      "message": "fiat_rate is outside the supported decimal range",
       "hint": null
     }
   },
@@ -4965,9 +4965,9 @@
           "fee": 0,
           "amount_includes_fee": 0,
           "fiat_currency": "EUR",
-          "fiat_rate": -0.0,
+          "fiat_rate": 0.0,
           "fiat_value": 100.0,
-          "fiat_rate_exact": "-0",
+          "fiat_rate_exact": "0",
           "fiat_value_exact": "100.00",
           "fiat_price_source": "import",
           "pricing_source_kind": "exchange_execution",
