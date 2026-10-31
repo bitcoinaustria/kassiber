@@ -821,34 +821,35 @@ def _migrate_tax_engine_semantics(conn) -> int:
     return 1
 
 
-AT_FEE_REGIME_SEMANTICS_MIGRATION = "at-fee-consumed-regime-v1"
+AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION = "at-outflow-consumed-regime-v2"
 
 
-def _migrate_at_fee_regime_semantics(conn) -> int:
-    """Require one rebuild of AT fees whose old markers described input intent."""
+def _migrate_at_outflow_regime_semantics(conn) -> int:
+    """Require stamped v2 journals for AT outflows with consumed-lot regimes."""
     if conn.execute(
         "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
-        (AT_FEE_REGIME_SEMANTICS_MIGRATION,),
+        (AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,),
     ).fetchone():
         return 0
     affected = """lower(trim(tax_country)) = 'at' AND EXISTS (
         SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
-        AND entry_type IN ('fee', 'transfer_fee'))"""
+        AND entry_type IN ('disposal', 'fee', 'transfer_fee'))"""
     count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
     inserted = conn.execute(
         """INSERT OR IGNORE INTO schema_migration_audits
            (id, migration_name, schema_version, impact_json, created_at)
            VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
-        (AT_FEE_REGIME_SEMANTICS_MIGRATION, AT_FEE_REGIME_SEMANTICS_MIGRATION,
-         json.dumps({"schema_version": 1, "migration": AT_FEE_REGIME_SEMANTICS_MIGRATION,
-                     "affected_profile_count": count}, sort_keys=True)),
+        (AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION, AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count,
+                     "required_journal_semantics_version": 2}, sort_keys=True)),
     )
     if int(inserted.rowcount or 0) == 0:
         return 0
     conn.execute(f"""UPDATE profiles SET last_processed_at = NULL,
         last_processed_tx_count = 0, journal_input_version = journal_input_version + 1,
         ownership_review_counts_json = NULL,
-        required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+        required_journal_semantics_version = MAX(required_journal_semantics_version, 2)
         WHERE {affected}""")
     return 1
 
@@ -972,6 +973,51 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
+<<<<<<< HEAD
+=======
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 2
+JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
+
+
+def _migrate_journal_semantics_adoption(conn) -> int:
+    """Require stamped rebuilds of retained journals once, with a local audit.
+
+    The audit, rather than column creation, keys adoption so books opened by
+    the earlier unaudited implementation acquire the same durable sentinel.
+    The caller commits the audit and requirement together.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (JOURNAL_SEMANTICS_ADOPTION_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+    )"""
+    affected_count = int(conn.execute(
+        f"SELECT COUNT(*) FROM profiles WHERE {affected}"
+    ).fetchone()[0])
+    impact = {
+        "schema_version": 1,
+        "migration": JOURNAL_SEMANTICS_ADOPTION_MIGRATION,
+        "required_journal_semantics_version": 1,
+        "affected_profile_count": affected_count,
+        "explanation": "Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.",
+    }
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (JOURNAL_SEMANTICS_ADOPTION_MIGRATION, JOURNAL_SEMANTICS_ADOPTION_MIGRATION,
+         json.dumps(impact, sort_keys=True, separators=(",", ":"))),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles
+        SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+        WHERE {affected}""")
+    return 1
+>>>>>>> 91cc18ce1 (Require version 2 journal semantics for consumed regimes)
 
 
 def _migrate_partial_payout_semantics(conn) -> int:
@@ -5497,9 +5543,13 @@ def ensure_schema_compat(conn):
         conn.commit()
     if _migrate_custody_hold_semantics(conn):
         conn.commit()
+<<<<<<< HEAD
     if _migrate_tax_engine_semantics(conn):
         conn.commit()
     if _migrate_at_fee_regime_semantics(conn):
+=======
+    if _migrate_at_outflow_regime_semantics(conn):
+>>>>>>> 91cc18ce1 (Require version 2 journal semantics for consumed regimes)
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")

@@ -32,14 +32,20 @@ Primary automated coverage:
 - `tests/test_samourai_import.py`
 - `tests/test_legacy_ledger.py`
 
-## Dependency-origin correction
+## Austrian consumed-regime journal migration
 
-The `at-fee-consumed-regime-v1` semantic migration marks Austrian books with
-retained fee/transfer-fee journal rows stale once. A rebuild records the regime
-of the lots RP2 actually consumed, rather than the input wallet-regime marker.
-Generic books and books without fee journals are unaffected. The migration
-retains observations, custody evidence, journal rows and saved/filed artifacts;
-only journal processing replaces the derived projection.
+The `at-outflow-consumed-regime-v2` semantic migration supersedes the earlier
+`at-fee-consumed-regime-v1` correction. It marks Austrian books with retained
+disposal, fee or transfer-fee rows stale once and requires calculation semantics
+version 2. A rebuild records the regime RP2 consumed before any taxability or
+category overrides, splitting mixed regimes into separate rows. Books with
+disposals but no fees are included. The migration retains observations, custody
+evidence, journal rows and saved/filed artifacts; only processing replaces the
+derived projection. Generic books receive no migration input-version bump.
+The global semantics check also refuses older stamped builds; an audit alone
+cannot make journals rebuilt by an older writer fresh.
+
+## Dependency-origin correction
 
 The custody dependency-origin fixed-point correction changes only the
 `blocked_by_transaction_ids` explanation stored in `journal_quarantines`:
@@ -105,6 +111,42 @@ then name a previously omitted blocker. Saved exports and filed snapshots
 are not rewritten.
 
 ## Intentionally not inferred during upgrade
+
+### Journal calculation semantics and older writers
+
+Journal builds now stamp `profiles.journal_semantics_version` separately after
+publishing their input markers. A trigger clears that stamp whenever a writer
+updates the processing markers, including an older binary that cannot stamp
+its semantics. The update also requires a stamp for an older binary's first
+build in a new book. Required semantics survive that update. Report builders
+refuse unstamped or incompatible journals even when input versions and counts match.
+Graph readers mark retained custody edges stale, and diagnostics count these
+books as stale. Daemon report reads and maintenance rebuild locally through the
+same canonical freshness check; they do not acquire network consent by doing so.
+A reader missing either semantics column fails closed. Rebuilding with current
+Kassiber restores freshness. First-upgrade adoption is keyed on the
+`journal-calculation-semantics-adoption-v1` audit, independently of whether the
+stamp columns already exist. It records the affected book count and required
+version, and requires a stamped rebuild of previously processed books, because
+the earlier custody-hold correction applied to every such book. Adoption leaves
+unprocessed books alone and preserves input markers. Raw observations, authored
+reviews, retained journals and filed snapshots are not rewritten by this guard.
+
+This protects reopen after an older binary rebuilds; it cannot make an older
+binary's own reports correct. Use the current binary for accounting. The exact
+`ca9a672f` partial-payout fixture covers older publication both before and after
+a current rebuild, including repeated publication at an identical timestamp.
+
+The existing `wages-acquisition-semantics-v1`, `rp2-pool-basis-semantics-v1`,
+`custody-fail-closed-holds-v1`, `at-acquisition-valuation-support-v1`, and
+`custody-partial-payout-pricing-v1` migrations require stamped semantics
+version 1; `at-outflow-consumed-regime-v2` requires version 2 for their affected books. Their
+one-shot audits still record the upgrade, but are no longer the only protection
+against accepting an older calculation. Future calculation changes must bump
+the build semantics version and set the required version for affected books;
+an audit sentinel alone cannot establish what generated retained journals.
+
+### Retained authored facts
 
 - Direct payout decimal precision lost through historical float conversion
   cannot be recovered. Existing authored terms are read as stored, including
