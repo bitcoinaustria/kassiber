@@ -132,6 +132,7 @@ def test_invalid_legacy_payout_list_and_delete(tmp_path, surface):
 
 @pytest.mark.parametrize('policy,asset', [('taxable', 'EUR'), ('carrying-value', 'LBTC')])
 def test_split_payout_fails_closed(book, monkeypatch, policy, asset):
+    from tests.custody_engine_compare import injected_stage_failure
     create_direct_swap_payout(book, 'Books', 'Book', 'out', payout_asset=asset, payout_amount='0.0000004',
                              payout_fiat_value='10', out_amount='0.0000004', policy=policy)
     original = ctp.compile_finalized_tax_projection
@@ -151,8 +152,12 @@ def test_split_payout_fails_closed(book, monkeypatch, policy, asset):
         try:
             return original(profile, rows, state, **kwargs)
         except AppError as error:
-            if error.code == 'validation' and str(error) == 'Transaction out: split payout allocation requires review':
-                injections.enter_context(injected_stage_failure('finalized_projection', error))
+            assert error.code == 'validation'
+            assert str(error) == 'Transaction out: split payout allocation requires review'
+            # This test splits Python's computed state after snapshot loading.
+            # Native replay sees the original snapshot, so declare only this
+            # exact injected failure while the outer build compares outcomes.
+            injections.enter_context(injected_stage_failure('finalized_projection', error))
             raise
     monkeypatch.setattr(ctp, 'compile_finalized_tax_projection', split)
     with ExitStack() as injections, pytest.raises(AppError, match='out: split payout'):

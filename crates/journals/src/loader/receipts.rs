@@ -33,8 +33,7 @@ fn source(
     let id = text(get(wallet, "id"));
     let config = config(wallet)?;
     let native = kassiber_custody::codec::to_json(get(&config, "deprecated"));
-    let deprecated = kassiber_wallets::config::boolean(Some(&native))
-        .map_err(|_| Error::Invalid("deprecated boolean".into()))?;
+    let deprecated = kassiber_wallets::config::boolean(Some(&native)).map_err(app_refusal)?;
     Ok(dict([
         ("profile_id", Value::from(profile)),
         ("wallet_id", Value::from(id.clone())),
@@ -73,10 +72,17 @@ fn source(
         ("address_index", Value::Null),
     ]))
 }
-pub(super) fn load(conn: &Connection, profile_id: &str, rows: &[Value]) -> Result<Vec<Value>> {
+pub(super) fn load(
+    conn: &Connection,
+    profile_id: &str,
+    rows: &[kassiber_custody::snapshot::Record],
+) -> Result<Vec<Value>> {
     let mut groups =
         std::collections::BTreeMap::<_, (BTreeSet<String>, Vec<serde_json::Value>)>::new();
     for row in rows {
+        if !may_have_txid(row) {
+            continue;
+        }
         // Scope needs only identity/graph/network facts, not the wide SQL row.
         let native = serde_json::Value::Object(
             [
@@ -90,7 +96,12 @@ pub(super) fn load(conn: &Connection, profile_id: &str, rows: &[Value]) -> Resul
                 "asset",
             ]
             .into_iter()
-            .map(|key| (key.into(), kassiber_custody::codec::to_json(get(row, key))))
+            .map(|key| {
+                (
+                    key.into(),
+                    row.get(key).cloned().unwrap_or(serde_json::Value::Null),
+                )
+            })
             .collect(),
         );
         if let Some(scope) = kassiber_custody::journal_support::onchain_scope(&native) {
@@ -98,8 +109,12 @@ pub(super) fn load(conn: &Connection, profile_id: &str, rows: &[Value]) -> Resul
                 continue;
             }
             let (wallets, group) = groups.entry(scope).or_default();
-            if get(row, "direction") == &Value::from("inbound") {
-                wallets.insert(text(get(row, "wallet_id")));
+            if row.get("direction").and_then(serde_json::Value::as_str) == Some("inbound") {
+                wallets.insert(
+                    row.get("wallet_id")
+                        .map(kassiber_custody::codec::pystr)
+                        .unwrap_or_default(),
+                );
             }
             group.push(native);
         }
@@ -171,14 +186,37 @@ pub(super) fn load(conn: &Connection, profile_id: &str, rows: &[Value]) -> Resul
     for row in query(conn,"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index",[profile_id])? {
         if let (Some(branch),Some(index))=(integer(get(&row,"branch_index")).and_then(|i|u32::try_from(i).ok()),integer(get(&row,"max_index"))) { maxes.entry(text(get(&row,"wallet_id"))).or_default().insert(branch,index); }
     }
+    let mut checkpoints = HashMap::<String, HashMap<u32, kassiber_pyjson::BigInt>>::new();
     for row in query(conn,"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_key LIKE ?",[profile_id,"onchain_wallet:%"])? {
-        let config=parsed(get(&row,"checkpoint_json"));
-        if let Value::Dict(values)=get(&config,"highest_used") {
-            let id=text(get(&row,"source_key")); let id=id.strip_prefix("onchain_wallet:").unwrap_or(&id).to_owned();
+        let config = parsed(get(&row,"checkpoint_json"));
+        if let Value::Dict(values) = get(&config,"highest_used") {
+            let id = text(get(&row,"source_key"));
+            let id = id.strip_prefix("onchain_wallet:").unwrap_or(&id).to_owned();
+            let mut branches = HashMap::new();
             for (key,value) in values {
-                let Key::Str(key)=key else { continue; };
-                if let (Some(branch),Some(index))=(key.as_str().and_then(|s|kassiber_pytext::parse_int(s).ok()).and_then(|i|u32::try_from(i).ok()),integer(value)) { maxes.entry(id.clone()).or_default().entry(branch).and_modify(|n|*n=n.clone().max(index.clone())).or_insert(index); }
+                let Key::Str(key) = key else { continue; };
+                if let (Some(branch),Some(index)) = (key.as_str().and_then(|s|kassiber_pytext::parse_int(s).ok()).and_then(|i|u32::try_from(i).ok()),integer(value)) {
+                    // Python's int-normalized aliases and duplicate source
+                    // rows use the last value before merging source classes.
+                    branches.insert(branch,index);
+                }
             }
+            if !branches.is_empty() { checkpoints.insert(id,branches); }
+        }
+    }
+    for (id, branches) in checkpoints {
+        for (branch, index) in branches {
+            maxes
+                .entry(id.clone())
+                .or_default()
+                .entry(branch)
+                .and_modify(|n| *n = n.clone().max(index.clone()))
+                .or_insert(index);
+        }
+    }
+    for branches in maxes.values_mut() {
+        for index in branches.values_mut() {
+            *index = index.clone().max((-1).into());
         }
     }
     for wallet in &wallets {
@@ -230,4 +268,73 @@ pub(super) fn load(conn: &Connection, profile_id: &str, rows: &[Value]) -> Resul
         .into_iter()
         .filter(|source| scripts.contains(&text(get(source, "script_pubkey"))))
         .collect())
+}
+
+// A canonical identity must contain 64 consecutive ASCII hex digits either
+// in external_id or in the decoded graph. Escaped JSON takes the full parser;
+// this is only a negative lexical filter, never identity/ownership admission.
+fn may_have_txid(row: &kassiber_custody::snapshot::Record) -> bool {
+    fn run(value: &str) -> bool {
+        let mut count = 0;
+        value.bytes().any(|b| {
+            count = if b.is_ascii_hexdigit() { count + 1 } else { 0 };
+            count >= 64
+        })
+    }
+    let external = row.get("external_id").unwrap_or(&serde_json::Value::Null);
+    if external
+        .as_str()
+        .map(run)
+        .unwrap_or_else(|| external.is_number() && run(&external.to_string()))
+    {
+        return true;
+    }
+    match row.get("raw_json") {
+        Some(serde_json::Value::String(raw)) => raw.contains('\\') || run(raw),
+        Some(serde_json::Value::Object(_) | serde_json::Value::Array(_)) => true,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_loader_receipt_filter_never_rejects_possible_identities() {
+        use serde_json::{json, Value as J};
+        let txid = "a".repeat(64);
+        let check = |external: J, raw: J| {
+            may_have_txid(
+                &json!({"external_id": external, "raw_json": raw})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+        };
+        assert!(check(json!(txid), J::Null));
+        assert!(check(
+            json!("invoice"),
+            json!(format!("{{\"txid\":\"{txid}\"}}"))
+        ));
+        assert!(check(J::Null, json!(r#"{"txid":"\u0061"}"#)));
+        assert!(check(J::Null, json!({"txid": txid})));
+        assert!(check(J::Null, json!([{"txid": txid}])));
+        assert!(check(
+            serde_json::from_str(&"1".repeat(64)).unwrap(),
+            J::Null
+        ));
+        for (external, raw) in [
+            (J::Null, J::Null),
+            (json!(false), json!(0)),
+            (json!("invoice"), json!("{}")),
+            (json!("a".repeat(63)), json!("a".repeat(63))),
+            (
+                json!(format!("{}z{}", "a".repeat(32), "a".repeat(32))),
+                J::Null,
+            ),
+        ] {
+            assert!(!check(external, raw));
+        }
+    }
 }

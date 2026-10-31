@@ -81,6 +81,7 @@ jobs:
       # missing from the tax-shadow overlay (docs/reference/testing.md).
       KASSIBER_TEST_TAX_ENGINE: census
       KASSIBER_TEST_CUSTODY_ENGINE: census
+      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
     strategy:
       fail-fast: false
       matrix:
@@ -115,6 +116,9 @@ jobs:
 
       - name: Sync dependencies
         run: uv sync --locked
+
+      - name: Build native custody loader byte gate
+        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
 
       - name: Build Rust shell for subprocess parity
         if: matrix.shard == 'serial-daemon'
@@ -238,6 +242,8 @@ jobs:
 
   custody-shadow:
     name: Custody shadow (${{ matrix.shard }})
+    env:
+      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -276,6 +282,9 @@ jobs:
 
       - name: Sync dependencies
         run: uv sync --locked
+
+      - name: Build native custody loader byte gate
+        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
 
       - name: Compare pure production with frozen SQL composition
         shell: bash

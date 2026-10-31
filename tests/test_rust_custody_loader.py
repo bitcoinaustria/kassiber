@@ -236,3 +236,158 @@ def test_loader_opens_sqlcipher_through_store(tmp_path):
         conn.rollback()
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("checkpoint,output_index,inventory_index", [
+    ({"0": -99}, 1, None),
+    ({"0": 5, "00": 0}, 3, None),
+    ({"0": "3", "bad": 999}, 4, None),
+    ({"0": 2.9}, 4, None),
+    ({"0": None}, 1, None),
+    ({"0": -99}, 3, 3),
+])
+def test_loader_receipt_high_water_precedence(loose_book, checkpoint, output_index, inventory_index):
+    from tests.test_source_overlap import _descriptor_target
+    conn, helper = loose_book
+    config = _descriptor_config(2)
+    target = _descriptor_target(config, output_index)
+    conn.execute("UPDATE wallets SET kind='descriptor',config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-b'", (json.dumps({"chain": "bitcoin", "network": "main"}),))
+    insert(conn, "freshness_source_states", "checkpoint", source_key="onchain_wallet:wallet-a",
+           checkpoint_json=json.dumps({"highest_used": checkpoint}))
+    if inventory_index is not None:
+        insert(conn, "wallet_utxos", "inventory", wallet_id="wallet-a", chain="bitcoin", network="main",
+               txid="aa" * 32, vout=0, address=None, script_pubkey=target.script_pubkey,
+               branch_index=0, branch_label="receive", address_index=inventory_index, raw_json="{}")
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, "0014" + "ab" * 20, 200000)],
+                   outputs=[(target.script_pubkey, 100000)])
+    for wallet in ("wallet-a", "wallet-b"):
+        _native_leg(conn, helper, wallet, target.script_pubkey, graph)
+    check(conn)
+
+
+@pytest.mark.parametrize("scan,used,history_floor,index", [
+    (-2, None, 502, 502),
+    ("505", None, 0, 505),
+    (False, 501, 0, 503),
+    ("invalid", 501, "invalid", 503),
+])
+def test_loader_owned_high_water_and_retired_floor(loose_book, scan, used, history_floor, index):
+    from tests.test_source_overlap import _descriptor_target
+    conn, helper = loose_book
+    config = {**_descriptor_config(2), "ownership_scan_to_index": scan}
+    target = _descriptor_target(config, index)
+    conn.execute("UPDATE wallets SET kind='descriptor',config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    for ordinal, status in enumerate(("retired", "active")):
+        insert(conn, "wallet_policy_epochs", f"history-{ordinal}", wallet_id="wallet-a", status=status,
+               private_material_json=json.dumps({**config, "scan_to_index": history_floor}),
+               chain="bitcoin", network="main", created_at=f"2025-0{ordinal+1}-01")
+    if used is not None:
+        insert(conn, "wallet_utxos", "high-water", wallet_id="wallet-a", chain="bitcoin", network="main",
+               txid="aa" * 32, vout=0, address=ADDR_A, script_pubkey=SCRIPT_A,
+               branch_label="change", branch_index=1, address_index=used, raw_json="{}")
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, target.script_pubkey, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    check(conn)
+
+
+@pytest.mark.parametrize("prior", ["receipt", "network", "tax", "component"])
+def test_loader_receipt_error_precedence(loose_book, prior):
+    conn, helper = loose_book
+    config = {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A], "deprecated": "invalid"}
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, "0014" + "ab" * 20, 200000)],
+                   outputs=[(SCRIPT_A, 100000)])
+    for wallet in ("wallet-a", "wallet-b"):
+        _native_leg(conn, helper, wallet, SCRIPT_A, graph)
+    if prior == "network":
+        insert(conn, "book_network_bindings", "binding", environment="test", chain_instance_id=None)
+    if prior == "tax":
+        conn.execute("UPDATE profiles SET tax_country='invalid'")
+    if prior == "component":
+        insert(conn, "custody_components", "invalid-component", revision=None,
+               component_type="manual_bridge", conservation_mode="quantity", state="active",
+               expected_leg_count=0, expected_allocation_count=0, expected_economic_term_count=0,
+               expected_evidence_count=0, supersedes_component_id=None, superseded_by_component_id=None,
+               conversion_policy="carrying-value", conversion_reviewed=0)
+    profile = dict(_profile(conn))
+    with pytest.raises(Exception) as caught:
+        load_custody_snapshot(conn, profile, as_of=AS_OF)
+    expected = {"family": type(caught.value).__name__, "message": str(caught.value),
+                "code": getattr(caught.value, "code", None)}
+    assert expected["family"] == ("ValueError" if prior == "tax" else "TypeError" if prior == "component" else "AppError")
+    request = {"sql": "\n".join(conn.iterdump()), "profile": profile, "as_of": AS_OF}
+    result = subprocess.run([BINARY], input=json.dumps(request).encode(), capture_output=True,
+                            check=True, timeout=120)
+    assert not result.stderr
+    actual = json.loads(result.stdout)
+    assert {key: actual.get("refusal", {}).get(key) for key in expected} == expected
+
+
+@pytest.mark.parametrize("escaped", [False, True])
+def test_loader_receipt_identity_from_graph_without_external_txid(loose_book, escaped):
+    conn, helper = loose_book
+    config = {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B]}
+    conn.execute("UPDATE wallets SET config_json=?", (json.dumps(config),))
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, "0014" + "ab" * 20, 200000)],
+                   outputs=[(SCRIPT_A, 100000), (SCRIPT_B, 100000)])
+    for wallet in ("wallet-a", "wallet-b"):
+        _native_leg(conn, helper, wallet, SCRIPT_A, graph)
+    conn.execute("UPDATE transactions SET external_id='invoice-reference'")
+    if escaped:
+        for row in conn.execute("SELECT id,raw_json FROM transactions").fetchall():
+            # Erase every literal hex run without changing the decoded graph.
+            raw = row["raw_json"].replace("d", "\\u0064").replace("c", "\\u0063")
+            conn.execute("UPDATE transactions SET raw_json=? WHERE id=?", (raw, row["id"]))
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert snapshot["receipt_sources"]
+    check(conn)
+
+
+@pytest.mark.parametrize("script,raw,address,deprecated,expected_count", [
+    (None, {}, None, "invalid", 0),
+    (None, {"script_pubkey": SCRIPT_A}, None, False, 1),
+    ("", {}, ADDR_A, False, 1),
+    (" \t", {"script_pubkey": SCRIPT_A}, None, False, 1),
+])
+def test_loader_receipt_inventory_script_fallback(loose_book, script, raw, address, deprecated, expected_count):
+    conn, helper = loose_book
+    config = {"chain": "bitcoin", "network": "main", "deprecated": deprecated}
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'", (json.dumps(config),))
+    insert(conn, "wallet_utxos", "fallback", wallet_id="wallet-a", chain="bitcoin", network="main",
+           txid="aa" * 32, vout=0, script_pubkey=script, raw_json=json.dumps(raw), address=address,
+           branch_index=0, branch_label="receive", address_index=0)
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, "0014" + "ab" * 20, 200000)],
+                   outputs=[(SCRIPT_A, 100000)])
+    for wallet in ("wallet-a", "wallet-b"):
+        _native_leg(conn, helper, wallet, SCRIPT_A, graph)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert len(snapshot["receipt_sources"]) == expected_count
+    check(conn)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_loader_descriptor_cache_separates_policies_and_wallet_facts(loose_book, reverse):
+    from tests.test_source_overlap import _descriptor_target
+    conn, helper = loose_book
+    first = _descriptor_config(2)
+    second = {**first, "descriptor": first["descriptor"].replace("/0/*", "/2/*"),
+              "change_descriptor": first["change_descriptor"].replace("/1/*", "/3/*")}
+    if reverse:
+        first, second = second, first
+    for wallet, config in (("wallet-a", first), ("wallet-b", second)):
+        conn.execute("UPDATE wallets SET kind='descriptor',config_json=? WHERE id=?", (json.dumps(config), wallet))
+    insert(conn, "wallet_policy_epochs", "shared-history", wallet_id="wallet-a", status="retired",
+           private_material_json=json.dumps(second), chain="bitcoin", network="main", created_at="2025-01-01")
+    a, b = _descriptor_target(first), _descriptor_target(second)
+    assert a.script_pubkey != b.script_pubkey
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, a.script_pubkey, 50005),
+                                     ("ee" * 32, 0, b.script_pubkey, 50005)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    matches = snapshot["owned_index"]["by_script"][b.script_pubkey]
+    assert {(item["wallet_id"], item["source"]) for item in matches} == {
+        ("wallet-a", "derived_history"), ("wallet-b", "derived")}
+    check(conn)

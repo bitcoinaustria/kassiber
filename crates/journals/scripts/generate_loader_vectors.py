@@ -51,7 +51,24 @@ def vectors():
                 ("legacy-rates", cases.test_loader_supports_missing_network_table_and_legacy_rate_columns, ()),
                 ("retired-policies", cases.test_loader_preserves_retired_policies_warnings_and_core_outpoints, ()),
                 *[("owned-" + str(descriptor), cases.test_loader_owns_inventory_addresses_and_descriptors, (descriptor,)) for descriptor in (False, True)],
+                *[("owned-cache-" + str(reverse), cases.test_loader_descriptor_cache_separates_policies_and_wallet_facts, (reverse,)) for reverse in (False, True)],
                 *[("receipts-" + str(descriptor), cases.test_loader_reads_receipt_sources, (descriptor,)) for descriptor in (False, True)],
+                *[("receipts-identity-" + str(escaped), cases.test_loader_receipt_identity_from_graph_without_external_txid, (escaped,)) for escaped in (False, True)],
+                *[("inventory-fallback-" + str(i), cases.test_loader_receipt_inventory_script_fallback, args) for i, args in enumerate((
+                    (None, {}, None, "invalid", 0),
+                    (None, {"script_pubkey": cases.SCRIPT_A}, None, False, 1),
+                    ("", {}, cases.ADDR_A, False, 1),
+                    (" \t", {"script_pubkey": cases.SCRIPT_A}, None, False, 1),
+                ))],
+                *[("receipt-horizon-" + str(i), cases.test_loader_receipt_high_water_precedence, args) for i, args in enumerate((
+                    ({"0": -99}, 1, None), ({"0": 5, "00": 0}, 3, None),
+                    ({"0": "3", "bad": 999}, 4, None), ({"0": 2.9}, 4, None),
+                    ({"0": None}, 1, None), ({"0": -99}, 3, 3),
+                ))],
+                *[("owned-horizon-" + str(i), cases.test_loader_owned_high_water_and_retired_floor, args) for i, args in enumerate((
+                    (-2, None, 502, 502), ("505", None, 0, 505),
+                    (False, 501, 0, 503), ("invalid", 501, "invalid", 503),
+                ))],
                 *[("config-" + str(i), cases.test_loader_normalizes_config_and_preserves_storage, (config,))
                   for i, config in enumerate(cases.CONFIGS)],
             ]
@@ -67,6 +84,44 @@ def vectors():
     return result
 
 
+def error_vectors():
+    from types import SimpleNamespace
+    result = []
+    current_name = None
+
+    def oracle_run(_command, *, input, **_kwargs):
+        request = json.loads(input)
+        conn = __import__("sqlite3").connect(":memory:")
+        conn.row_factory = __import__("sqlite3").Row
+        conn.executescript(request["sql"])
+        try:
+            load_custody_snapshot(conn, request["profile"], as_of=request["as_of"])
+        except Exception as error:
+            refusal = {"family": type(error).__name__, "message": str(error),
+                       "code": getattr(error, "code", None)}
+        else:
+            raise AssertionError("expected receipt-source refusal")
+        finally:
+            conn.close()
+        result.append({"name": current_name, **request, "expected": refusal})
+        return SimpleNamespace(stderr=b"", stdout=json.dumps({"refusal": refusal}).encode())
+
+    with tempfile.TemporaryDirectory(prefix="custody-loader-refusals-") as directory, patch(
+        "kassiber.core.chain_observer.provenance.now_iso", return_value=cases.AS_OF
+    ), patch.object(cases.subprocess, "run", side_effect=oracle_run):
+        source = open_db(Path(directory))
+        helper = OwnershipDeriverHandlerTest()
+        helper._seed(source)
+        for current_name in ("receipt", "network", "tax", "component"):
+            book = cases.loose_book.__wrapped__((source, helper))
+            try:
+                cases.test_loader_receipt_error_precedence(next(book), current_name)
+            finally:
+                book.close()
+        source.close()
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -77,7 +132,14 @@ def main():
             raise SystemExit("native custody loader vectors differ from Python")
     else:
         DEST.write_text(text)
-    print(f"{len(json.loads(text))} native loader vectors match Python")
+    errors = json.dumps(error_vectors(), ensure_ascii=True, indent=2) + "\n"
+    error_dest = DEST.with_name("loader_errors.json")
+    if args.check:
+        if error_dest.read_text() != errors:
+            raise SystemExit("native custody loader refusal vectors differ from Python")
+    else:
+        error_dest.write_text(errors)
+    print(f"{len(json.loads(text))} native loader vectors and {len(json.loads(errors))} refusals match Python")
 
 
 if __name__ == "__main__":

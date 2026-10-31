@@ -110,6 +110,19 @@ pub fn parse(request: &str) -> Result<snapshot::BookSnapshot, Refusal> {
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))
 }
 
+/// The Python loader preserves these earlier refusals when receipt-source
+/// acquisition fails. Do not run rates, evidence or interpretation here.
+pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {
+    let typed = snapshot
+        .typed()
+        .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
+    gates::require_accounting(&typed)
+        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    components::compute(snapshot)
+        .map_err(|error| Refusal::new("components", error.code, error.message))?;
+    Ok(())
+}
+
 /// Admission and every stage, in Python's order. The first refusal ends the
 /// operation; decision-only operations skip finalization.
 pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages, Refusal> {

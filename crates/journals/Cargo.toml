@@ -31,6 +31,11 @@ serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtri
 [lints.rust]
 unsafe_code = "forbid"
 
+# std has no process CPU clock. Reuse the workspace's nix release for the
+# local benchmark probe, without adding a crate to the lockfile.
+[target.'cfg(unix)'.dev-dependencies]
+nix = { version = "0.30", features = ["resource"] }
+
 [features]
 timing = ["kassiber-custody/timing"]
 test-harness = []

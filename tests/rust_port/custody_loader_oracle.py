@@ -51,4 +51,13 @@ def compare(conn, profile, snapshot, *, binary=None):
         at = next((i for i, (a, b) in enumerate(zip(actual["v1"], expected)) if a != b),
                   min(len(actual["v1"]), len(expected)))
         raise AssertionError(f"native custody loader v1 differs at byte {at}")
+    # Keep a count across Python children without retaining SQL or snapshot
+    # bytes. The census session owns this disposable owner-only records file.
+    records = os.environ.get("KASSIBER_TEST_CUSTODY_RECORDS")
+    if records:
+        fd = os.open(records + ".loader", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, b"equal\n")
+        finally:
+            os.close(fd)
     return actual

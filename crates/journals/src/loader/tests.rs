@@ -89,12 +89,8 @@ fn native_loader_keeps_sql_values_and_refuses_blob_coercion() {
         query(&conn, "SELECT x'ff' AS blob", []),
         Err(Error::Unsupported(_))
     ));
-    let snapshot = LoadedSnapshot {
-        facts: dict([("float", Value::Float(f64::INFINITY))]),
-    };
-    assert_eq!(snapshot.v1().unwrap(), "{\"float\": Infinity}");
     assert!(matches!(
-        snapshot.into_custody(),
+        super::direct::scalar(ValueRef::Real(f64::INFINITY)),
         Err(Error::Unsupported(_))
     ));
 }
@@ -134,5 +130,70 @@ fn native_loader_bounds_gap_worklist() {
         );
         assert_eq!(rows.len() - outbound.len(), 512);
         assert_eq!(text(get(&rows[0], "id")), "in-000");
+    }
+}
+
+#[test]
+fn native_loader_preserves_receipt_error_precedence() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader_errors.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    for case in cases {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&text(get(&case, "sql"))).unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let changes = conn.total_changes();
+        let result = load(
+            &conn,
+            get(&case, "profile").clone(),
+            &text(get(&case, "as_of")),
+        );
+        let Err(Error::Reference(refusal)) = result else {
+            panic!("expected reference refusal: {}", text(get(&case, "name")))
+        };
+        let actual = serde_json::to_value(refusal).unwrap();
+        let expected = convert(get(&case, "expected").clone()).unwrap();
+        for key in ["family", "message", "code"] {
+            assert_eq!(
+                actual[key],
+                expected[key],
+                "{}: {key}",
+                text(get(&case, "name"))
+            );
+        }
+        assert!(!conn.is_autocommit());
+        assert_eq!(changes, conn.total_changes());
+        conn.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
+fn native_loader_selects_bounded_worklist_from_active_count() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "config-0")
+        .unwrap();
+    for excluded in [0, 1] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&text(get(case, "sql"))).unwrap();
+        conn.execute_batch(&format!("WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<50000) INSERT INTO transactions(id,profile_id,wallet_id,excluded) SELECT 'orphan-'||i,'profile-1','absent',{excluded} FROM n")).unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let snapshot = load(
+            &conn,
+            get(case, "profile").clone(),
+            &text(get(case, "as_of")),
+        )
+        .unwrap()
+        .into_custody()
+        .unwrap();
+        assert_eq!(snapshot.gap_worklist.large_book, excluded == 0);
+        conn.execute_batch("ROLLBACK").unwrap();
     }
 }

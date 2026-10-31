@@ -352,6 +352,10 @@ def _finish_custody_session(session):
         return
     from tests import custody_engine_compare as compare
     _CUSTODY_REPORT = compare.session_report(compare.read_records(os.environ[compare.RECORDS_ENV]))
+    if os.environ.get("KASSIBER_TEST_CUSTODY_LOADER_BIN"):
+        loader_records = Path(os.environ[compare.RECORDS_ENV] + ".loader")
+        count = len(loader_records.read_text().splitlines()) if loader_records.exists() else 0
+        _CUSTODY_REPORT[0].append(f"native loader: {count} exact v1 byte matches")
     if _CUSTODY_REPORT[1] and session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 

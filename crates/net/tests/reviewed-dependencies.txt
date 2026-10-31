@@ -26,7 +26,7 @@ kassiber-store test-hooks
 kassiber-tax-core
 keyring-core
 libc
-nix user fs feature
+nix user fs feature resource
 num-bigint
 num-integer
 num-traits

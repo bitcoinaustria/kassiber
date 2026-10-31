@@ -378,8 +378,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   close the write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
-  R4-9 has a test-only native-loader checkpoint; its ordered-value prototype
-  missed the 0.30 s target and remains unaccepted pending typed production and
+  R4-9's test-only loader now constructs the current custody records directly;
+  generic 20k still takes 0.505 s CPU / 0.509 s wall against 0.30 s. It remains
+  unaccepted pending the typed consumer boundary, full legacy fidelity and
   complete parity/mutation gates
   ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):

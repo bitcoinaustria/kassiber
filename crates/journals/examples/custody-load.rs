@@ -11,6 +11,23 @@ use std::{
     time::Instant,
 };
 
+#[cfg(unix)]
+fn cpu() -> (f64, f64) {
+    use nix::sys::{
+        resource::{getrusage, UsageWho},
+        time::TimeValLike,
+    };
+    let usage = getrusage(UsageWho::RUSAGE_SELF).expect("process CPU clock");
+    (
+        usage.user_time().num_microseconds() as f64 / 1e6,
+        usage.system_time().num_microseconds() as f64 / 1e6,
+    )
+}
+#[cfg(not(unix))]
+fn cpu() -> (f64, f64) {
+    (0.0, 0.0)
+}
+
 fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let field = |key| get(input, key).unwrap_or(&Value::Null);
     let book;
@@ -41,24 +58,54 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     };
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let before = conn.total_changes();
+    if field("sql_floor") == &Value::Bool(true) {
+        let profile = py_str(get(field("profile"), "id").unwrap_or(&Value::Null));
+        let mut timings = vec![];
+        for sql in loader::floor_queries() {
+            let mut stmt = conn.prepare_cached(sql)?;
+            let clock = cpu();
+            let start = Instant::now();
+            let mut rows = stmt.query([&profile])?;
+            let mut count = 0;
+            while rows.next()?.is_some() {
+                count += 1;
+            }
+            let wall = start.elapsed().as_secs_f64();
+            let end = cpu();
+            timings
+                .push(json!({"wall":wall,"user":end.0-clock.0,"sys":end.1-clock.1,"rows":count}));
+        }
+        conn.execute_batch("ROLLBACK")?;
+        return Ok(json!({"sql_floor":timings}));
+    }
+    let clock = cpu();
     let start = Instant::now();
-    let snapshot = loader::load(conn, field("profile").clone(), &py_str(field("as_of")))
-        .map_err(|error| error.to_string())?;
+    let snapshot = match loader::load(conn, field("profile").clone(), &py_str(field("as_of"))) {
+        Ok(snapshot) => snapshot,
+        Err(loader::Error::Reference(refusal)) => {
+            conn.execute_batch("ROLLBACK")?;
+            return Ok(json!({"error":"custody snapshot reference refused","refusal":refusal}));
+        }
+        Err(error) => return Err(error.to_string().into()),
+    };
     let seconds = start.elapsed().as_secs_f64();
+    let load_cpu = cpu();
     let v1 = if field("timing_only") == &Value::Bool(true) {
         None
     } else {
         Some(snapshot.v1()?)
     };
     let start = Instant::now();
+    let adapter_cpu = cpu();
     let snapshot = snapshot.into_custody();
     let adapter_seconds = start.elapsed().as_secs_f64();
+    let end_cpu = cpu();
     assert_eq!(before, conn.total_changes(), "loader wrote rows");
     assert!(!conn.is_autocommit(), "loader ended caller transaction");
     conn.execute_batch("ROLLBACK")?;
     Ok(match snapshot {
         Ok(snapshot) => {
-            json!({"v1":v1,"seconds":seconds,"adapter_seconds":adapter_seconds,"transactions":snapshot.transactions.len()})
+            json!({"v1":v1,"seconds":seconds,"adapter_seconds":adapter_seconds,"user":load_cpu.0-clock.0,"sys":load_cpu.1-clock.1,"adapter_user":end_cpu.0-adapter_cpu.0,"adapter_sys":end_cpu.1-adapter_cpu.1,"transactions":snapshot.transactions.len()})
         }
         Err(_) => {
             json!({"v1":v1,"seconds":seconds,"adapter_seconds":adapter_seconds,"adapter_error":"custody snapshot admission refused"})

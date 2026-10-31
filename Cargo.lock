@@ -1697,6 +1697,7 @@ dependencies = [
  "kassiber-store",
  "kassiber-tax-core",
  "kassiber-wallets",
+ "nix",
  "serde",
  "serde_json",
 ]

@@ -1434,6 +1434,25 @@ snapshots and mismatch artifacts are created with mode 0600.
 The CI matrix uses `run-custody-shadow <shard> --ci` and the same disjoint
 overlay and distribution policy as tax shadow; ordered modules run serially.
 
+Both CI lanes and the local quality gate build the test-only native loader in
+release mode and set `KASSIBER_TEST_CUSTODY_LOADER_BIN` to `custody-load`. Every
+successfully loaded database snapshot also passes its exact v1 byte comparison,
+including pending caller writes. Pure stage tests with no connection have no
+database to compare. The terminal summary counts native matches; only an
+`equal` marker is appended to the disposable census records path plus `.loader`.
+The loader hook does not add another Python journal build, so the observation
+read-budget test remains enabled in census and retains its shadow exclusion.
+Tests that deliberately alter computed Python state after loading, such as the
+split-payout refusal regression, declare the exact stage and exception through
+`injected_stage_failure`. Their snapshot still passes the loader byte gate;
+the summary explicitly counts the injected build's skipped stage comparisons.
+Recorder audit tests inject omitted ownership matches at the recorded-artifact
+boundary, after comparing the canonical snapshot and production stages.
+To reproduce locally, build with `cargo build --release --offline --locked -p
+kassiber-journals --example custody-load --features test-harness`, set the hook
+to the absolute binary path, then run the existing shard command. See the
+[loader checkpoint](r4-native-loader-checkpoint.md) for remaining acceptance gaps.
+
 Run a focused comparison with `KASSIBER_TEST_CUSTODY_ENGINE=shadow uv run --locked
 python -m pytest tests/test_custody_generated_books.py tests/test_custody_shadow_harness.py -q`.
 The seeded comparison covers at least 2,000 raw requests. The [custody engine

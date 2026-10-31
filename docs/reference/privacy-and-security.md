@@ -884,6 +884,11 @@ written as a fixture or diagnostic, and assertion failures expose only a byte
 offset. The `custody-load` example requires the `test-harness` feature and has no
 product, daemon or AI route. Its root mode opens plaintext/SQLCipher books through
 `crates/store`; SQL-copy mode is solely a disposable verification fixture.
+CI census/shadow jobs and the local quality gate explicitly enable this hook
+on disposable books. Its match counter appends only `equal` to a mode-0600
+disposable records file; no SQL, descriptor, snapshot or refusal payload is
+retained there. Structured reference refusals are returned only on the local
+probe pipe for exact exceptional-path tests, never as public diagnostics.
 
 The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
 BTCPay and local Core-detection tests through the reviewed network gate.

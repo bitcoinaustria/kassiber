@@ -1,7 +1,7 @@
 [
   {
     "id": "JL-write-lock",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write",
     "replace": "conn.transaction_state(Some(\"main\"))? == rusqlite::TransactionState::Write",
     "expect_failing": [
@@ -41,7 +41,7 @@
   },
   {
     "id": "JL-active-components",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "state='active'",
     "replace": "state='superseded'",
     "expect_failing": [
@@ -51,9 +51,9 @@
   },
   {
     "id": "JL-leg-order",
-    "file": "crates/journals/src/loader.rs",
-    "find": "sql.push_str(\" ORDER BY ordinal,id\");",
-    "replace": "sql.push_str(\" ORDER BY ordinal DESC,id\");",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "custody_component_legs WHERE component_id=? ORDER BY ordinal,id",
+    "replace": "custody_component_legs WHERE component_id=? ORDER BY ordinal DESC,id",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -61,9 +61,9 @@
   },
   {
     "id": "JL-anchor-lookup",
-    "file": "crates/journals/src/loader.rs",
-    "find": "WHERE t.id=?\",[&id]",
-    "replace": "WHERE t.id=? AND t.excluded=0\",[&id]",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "WHERE t.id=?\",[&id],true",
+    "replace": "WHERE t.id=? AND t.excluded=0\",[&id],true",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -71,7 +71,7 @@
   },
   {
     "id": "JL-loan-deletion",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "deleted_at IS NULL",
     "replace": "deleted_at IS NOT NULL",
     "expect_failing": [
@@ -81,7 +81,7 @@
   },
   {
     "id": "JL-evidence-subject",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "subject_kind='custody_component'",
     "replace": "subject_kind='other'",
     "expect_failing": [
@@ -91,7 +91,7 @@
   },
   {
     "id": "JL-migration-resolution",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "resolved_at IS NULL",
     "replace": "resolved_at IS NOT NULL",
     "expect_failing": [
@@ -101,7 +101,7 @@
   },
   {
     "id": "JL-latest-review",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "MAX(revision)",
     "replace": "MIN(revision)",
     "expect_failing": [
@@ -111,7 +111,7 @@
   },
   {
     "id": "JL-channel-kind",
-    "file": "crates/journals/src/loader.rs",
+    "file": "crates/journals/src/loader/direct.rs",
     "find": "r.record_type='channel'",
     "replace": "r.record_type='payment'",
     "expect_failing": [
@@ -248,5 +248,345 @@
       "native_loader_keeps_sql_values_and_refuses_blob_coercion"
     ],
     "rule": "A legacy blob is never coerced to a null fact."
+  },
+  {
+    "id": "JL-direct-null",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Null => J::Null,",
+    "replace": "ValueRef::Null => J::Bool(false),",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve SQL NULL."
+  },
+  {
+    "id": "JL-direct-integer",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Integer(value) => J::Number(value.into()),",
+    "replace": "ValueRef::Integer(value) => J::String(value.to_string()),",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve SQL INTEGER exactly."
+  },
+  {
+    "id": "JL-direct-real",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "kassiber_pyjson::float_repr(value)\n                .parse()",
+    "replace": "value.to_string()\n                .parse()",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve integral REAL spelling."
+  },
+  {
+    "id": "JL-direct-blob",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Blob(_) => {\n            return Err(Error::Unsupported(\n                \"custody snapshot v1 cannot serialize SQLite BLOB\",\n            ))\n        }",
+    "replace": "ValueRef::Blob(_) => J::Null,",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Refuse BLOB coercion at the current adapter seam."
+  },
+  {
+    "id": "JL-direct-nonfinite",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Real(_) => {\n            return Err(Error::Unsupported(\n                \"custody adapter cannot represent nonfinite SQLite REAL\",\n            ))\n        }",
+    "replace": "ValueRef::Real(_) => J::Null,",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Refuse nonfinite REAL coercion at the current adapter seam."
+  },
+  {
+    "id": "JL-direct-duplicate",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".filter(|(_, name)| seen.insert(*name))",
+    "replace": ".filter(|(_, name)| { seen.insert(*name); true })",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Keep the first duplicate SQL column, as sqlite Row does."
+  },
+  {
+    "id": "JL-column-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.gate.columns.insert(path, order);",
+    "replace": "order.reverse(); self.gate.columns.insert(path, order);",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Retain prepared SQL column order for the byte gate."
+  },
+  {
+    "id": "JL-config-cache-hit",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "hit.clone()",
+    "replace": "(\"{}\".into(), false)",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "A config cache hit retains normalization and the marker."
+  },
+  {
+    "id": "JL-config-cache-insert",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.configs.insert(raw.into(), normalized.clone());",
+    "replace": "self.configs.remove(raw);",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Repeated private config text is normalized once per load."
+  },
+  {
+    "id": "JL-config-nontext",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "normalize(sql_value(raw)?)?",
+    "replace": "(\"changed\".into(), false)",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Nontext wallet config retains Python normalization."
+  },
+  {
+    "id": "JL-config-direct-marker",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "J::Bool(mentions)));",
+    "replace": "J::Bool(!mentions)));",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "The directly produced config marker matches the cold normalization."
+  },
+  {
+    "id": "JL-direct-threshold",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if count <= 50_000 {",
+    "replace": "if count <= 500_000 {",
+    "expect_failing": [
+      "native_loader_selects_bounded_worklist_from_active_count"
+    ],
+    "rule": "Use the bounded worklist for more than 50k active observations."
+  },
+  {
+    "id": "JL-direct-active-count",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0",
+    "replace": "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=1",
+    "expect_failing": [
+      "native_loader_selects_bounded_worklist_from_active_count"
+    ],
+    "rule": "Included observations select the bounded worklist; excluded observations cannot substitute for them."
+  },
+  {
+    "id": "JL-receipt-precedence",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "kassiber_custody::receipt_source_error_precedence(&snapshot)",
+    "replace": "Ok::<(), kassiber_custody::Refusal>(())",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Earlier accounting and component refusals precede receipt-source errors."
+  },
+  {
+    "id": "JL-receipt-error-family",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "[\"ValueError\", \"TypeError\", \"KeyError\"].contains(&prior.code.as_str())",
+    "replace": "[\"ValueError\", \"KeyError\"].contains(&prior.code.as_str())",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Preserve Python TypeError family on malformed component revisions."
+  },
+  {
+    "id": "JL-receipt-alias-last",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "branches.insert(branch,index);",
+    "replace": "branches.entry(branch).and_modify(|n: &mut kassiber_pyjson::BigInt| *n=n.clone().max(index.clone())).or_insert(index);",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Int-normalized branch aliases use the final checkpoint value."
+  },
+  {
+    "id": "JL-receipt-negative-floor",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "*index = index.clone().max((-1).into());",
+    "replace": "*index = index.clone().max((-20).into());",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Clamp a known negative high-water to Python's minus-one floor."
+  },
+  {
+    "id": "JL-receipt-horizon",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": ".map(|n| n + plan.gap_limit + 1_u32)",
+    "replace": ".map(|n| n + plan.gap_limit)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Include the last high-water-derived receipt target."
+  },
+  {
+    "id": "JL-receipt-empty-candidate",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if !candidate {",
+    "replace": "if candidate {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Only duplicated inbound custody scopes trigger receipt-source loading."
+  },
+  {
+    "id": "JL-receipt-lexical-admission",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if !may_have_txid(row) {",
+    "replace": "if may_have_txid(row) {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "The lexical filter must admit possible identities."
+  },
+  {
+    "id": "JL-receipt-escaped-json",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "raw.contains('\\\\') || run(raw)",
+    "replace": "run(raw)",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "Escaped graph identities must take the full parser."
+  },
+  {
+    "id": "JL-receipt-identity-length",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "count >= 64",
+    "replace": "count >= 63",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "Reject a hex run shorter than a transaction id."
+  },
+  {
+    "id": "JL-receipt-identity-reset",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "count + 1 } else { 0 }",
+    "replace": "count + 1 } else { count }",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "A nonhex byte resets the consecutive identity run."
+  },
+  {
+    "id": "JL-receipt-numeric-id",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "external.is_number() && run(&external.to_string())",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "A numeric legacy identity takes the conservative full parser."
+  },
+  {
+    "id": "JL-receipt-object-graph",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "Some(serde_json::Value::Object(_) | serde_json::Value::Array(_)) => true,",
+    "replace": "Some(serde_json::Value::Object(_) | serde_json::Value::Array(_)) => false,",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "Decoded legacy graph containers take the full parser."
+  },
+  {
+    "id": "JL-owned-used-horizon",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".max(used + plan.gap_limit + 1_u32)",
+    "replace": ".max(used + 1_u32)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Inventory high-water plus the descriptor gap limit extends ownership scanning."
+  },
+  {
+    "id": "JL-owned-cache-horizon",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".entry((plan.fingerprint.clone(), ceiling))",
+    "replace": ".entry((plan.fingerprint.clone(), 0))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Shared current and retired descriptors retain distinct scan horizons."
+  },
+  {
+    "id": "JL-direct-utf8",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "std::str::from_utf8(value)\n                .map_err(|_| Error::Unsupported(\"SQLite TEXT is not UTF-8\"))?\n                .into(),",
+    "replace": "String::from_utf8_lossy(value).into_owned(),",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Invalid UTF-8 cannot become replacement-character facts."
+  },
+  {
+    "id": "JL-direct-text",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Text(value) => J::String(\n            std::str::from_utf8(value)",
+    "replace": "ValueRef::Text(value) => J::String(\n            std::str::from_utf8(value).map(|_| \"changed\")",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve decoded Unicode SQL TEXT."
+  },
+  {
+    "id": "JL-receipt-accounting-precedence",
+    "file": "crates/custody/src/lib.rs",
+    "find": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {\n    gates::require_accounting(snapshot)\n        .map_err(|(code, message)| Refusal::new(\"components\", code, message))?;",
+    "replace": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Network and tax admission errors precede receipt acquisition failure."
+  },
+  {
+    "id": "JL-receipt-component-precedence",
+    "file": "crates/custody/src/lib.rs",
+    "find": "    components::compute(snapshot)\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;",
+    "replace": "",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Component errors precede receipt acquisition failure."
+  },
+  {
+    "id": "JL-receipt-empty-script-fallback",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if value.is_empty() || !value.len().is_multiple_of(2) {",
+    "replace": "if !value.len().is_multiple_of(2) {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "An empty inventory script permits raw-script/address fallback and cannot create a deprecated source."
+  },
+  {
+    "id": "JL-existing-config-marker",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "*value = J::Bool(mentions);",
+    "replace": "*value = J::Bool(!mentions);",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Normalize an existing config marker in place, retaining SQL column order."
+  },
+  {
+    "id": "JL-owned-cache-descriptor",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".entry((plan.fingerprint.clone(), ceiling))",
+    "replace": ".entry((String::new(), ceiling))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Distinct descriptor policies at the same scan horizon must not share derived targets or wallet facts."
   }
 ]

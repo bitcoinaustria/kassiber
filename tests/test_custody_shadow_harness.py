@@ -294,6 +294,7 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
                         'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
     if rust_refuses:
         monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'TypeError' if rust_refuses == 'wrong_code' else 'ValueError', 'stage': 'gaps' if rust_refuses == 'wrong_stage' else stage}}))
+    previous = compare._INSTALLED_MODE
     compare.install_custody_mode(mode)
     conn = open_db(tmp_path / 'book')
     try:
@@ -305,6 +306,9 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
     finally:
         conn.close()
         compare.uninstall_custody_mode()
+        if previous:
+            compare.install_custody_mode(previous)
+    assert compare._INSTALLED_MODE == previous
     rows = compare.read_records(records)
     assert rows[-1]['outcome'] == ('error' if rust_refuses is True else 'difference')
     if rust_refuses is True:

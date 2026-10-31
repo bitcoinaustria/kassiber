@@ -233,23 +233,25 @@ def test_recordings_are_owner_only_even_with_permissive_umask(owned_book, record
 
 
 def test_recorder_detects_a_match_omitted_from_restricted_index(owned_book, recorder_dir, monkeypatch):
-    from kassiber.core import custody_snapshot as product
-    from tests import custody_engine_compare
-    # Deliberately corrupt the request's index to test the recorder audit.
-    # The frozen-flow comparison would correctly reject that injected fault.
-    if custody_engine_compare._INSTALLED_MODE == "shadow":
-        monkeypatch.setattr(custody_engine_compare, "_INSTALLED_MODE", "census")
-    original = product.encode_owned_index
-    def omit(index, rows):
-        encoded = original(index, rows)
-        if encoded is not None:
-            encoded["by_script"] = {}
-            encoded["by_outpoint"] = {}
-            encoded["by_scoped_outpoint"] = []
-            encoded["txid_wallets"] = {}
-            encoded["txid_wallets_by_scope"] = []
-        return encoded
-    monkeypatch.setattr(product, "encode_owned_index", omit)
+    original = custody_snapshot.SnapshotRecorder._document
+
+    def omit(recorder, **result):
+        document = original(recorder, **result)
+        snapshot = document["input"]
+        encoded = snapshot["owned_index"]
+        assert encoded["by_script"]
+        # Corrupt only the artifact being audited. The loader and frozen-flow
+        # gates still compare the valid production snapshot and computation.
+        document["input"] = {**snapshot, "owned_index": {
+            **encoded, "by_script": {}, "by_outpoint": {}, "by_scoped_outpoint": [],
+            "txid_wallets": {}, "txid_wallets_by_scope": [],
+        }}
+        document["input_digest"] = custody_snapshot.digest({
+            key: value for key, value in document["input"].items() if key != "as_of"
+        })
+        return document
+
+    monkeypatch.setattr(custody_snapshot.SnapshotRecorder, "_document", omit)
     _build(owned_book)
     (document,) = [custody_snapshot.load(path) for path in _snapshots(recorder_dir)]
     assert custody_snapshot.uncovered_lookups(document)

@@ -81,7 +81,9 @@ pub(super) fn normalized_script(value: &Value) -> Option<String> {
         String::new()
     };
     let value = kassiber_pytext::strip(&raw).to_lowercase();
-    if !value.len().is_multiple_of(2) {
+    // Python's callers use `normalized_script_hex(...) or ...`: an empty
+    // result must allow raw-script/address fallback, never create a source.
+    if value.is_empty() || !value.len().is_multiple_of(2) {
         return None;
     }
     let mut bytes = value.bytes();
@@ -279,12 +281,12 @@ impl Index {
 pub(super) fn load(
     conn: &Connection,
     profile_id: &str,
-    rows: &[Value],
+    rows: &[kassiber_custody::snapshot::Record],
 ) -> Result<(Value, Vec<Value>)> {
-    if !rows
-        .iter()
-        .any(|row| get(row, "observation_authority_version") != &Value::Null)
-    {
+    if !rows.iter().any(|row| {
+        row.get("observation_authority_version")
+            .is_some_and(|v| !v.is_null())
+    }) {
         return Ok((Value::Null, vec![]));
     }
     let wallets=query(conn,"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC",[profile_id])?;
@@ -295,6 +297,10 @@ pub(super) fn load(
     let mut index = Index::default();
     let mut warnings = vec![];
     let mut highest = HashMap::<String, BTreeMap<String, BigInt>>::new();
+    // One batch per canonical descriptor and horizon, shared by current and
+    // retired policies and wallets. Keep wallet-specific facts out of the memo.
+    let mut derived =
+        HashMap::<(String, u32), std::result::Result<Vec<serde_json::Value>, String>>::new();
     for row in query(conn,"SELECT wallet_id,txid,vout,address,script_pubkey,branch_label,branch_index,address_index,chain,network FROM wallet_utxos WHERE profile_id=?",[profile_id])? {
         let wallet_id=text(get(&row,"wallet_id"));
         if !wallets.is_empty() && !summaries.contains_key(&wallet_id) { continue; }
@@ -395,14 +401,14 @@ pub(super) fn load(
             let ceiling = (scan.clone().max(floor) + 1_u32)
                 .max(used + plan.gap_limit + 1_u32)
                 .clamp(1.into(), 20_001.into());
-            let targets = match plan.derive(
-                None,
-                0,
-                u32::try_from(ceiling).map_err(|_| Error::Invalid("derivation ceiling".into()))?,
-            ) {
+            let ceiling =
+                u32::try_from(ceiling).map_err(|_| Error::Invalid("derivation ceiling".into()))?;
+            let targets = match derived
+                .entry((plan.fingerprint.clone(), ceiling))
+                .or_insert_with(|| plan.derive(None, 0, ceiling).map_err(|e| e.into_app().code))
+            {
                 Ok(targets) => targets,
-                Err(error) => {
-                    let code = error.into_app().code;
+                Err(code) => {
                     warnings.push(Value::from(format!(
                         "Wallet '{}': descriptor not scanned ({code})",
                         text(get(wallet, "label"))
@@ -455,8 +461,7 @@ pub(super) fn load(
     }
     let mut references = BTreeSet::new();
     for row in rows {
-        let native =
-            serde_json::json!({"raw_json":kassiber_custody::codec::to_json(get(row,"raw_json"))});
+        let native = serde_json::json!({"raw_json":row.get("raw_json")});
         if let Some(graph) =
             kassiber_custody::journal_support::parsed(&native).map_err(Error::Invalid)?
         {

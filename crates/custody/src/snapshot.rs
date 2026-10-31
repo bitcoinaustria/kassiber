@@ -72,9 +72,12 @@ impl StageSnapshot {
 
     /// Test-only legacy constructors receive the same typed schema admission.
     pub fn validate(&self) -> Result<(), String> {
+        self.typed()?.validate()
+    }
+
+    /// Compatibility records cross the same typed boundary as v1 text.
+    pub fn typed(&self) -> Result<BookSnapshot, String> {
         let text = serde_json::to_string(self).map_err(|e| e.to_string())?;
-        serde_json::from_str::<BookSnapshot>(&text)
-            .map_err(|e| e.to_string())?
-            .validate()
+        serde_json::from_str::<BookSnapshot>(&text).map_err(|e| e.to_string())
     }
 }

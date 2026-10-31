@@ -3,7 +3,7 @@
 
 Build custody-load with --release --features test-harness --offline first.
 Times exclude open/BEGIN and v1 serialization; the native total includes its
-temporary text-free conversion to today's custody snapshot. Every book first
+admission check on the directly constructed custody snapshot. Every book first
 passes the complete v1 byte comparison. Above load 8, alternate five pairs.
 """
 from __future__ import annotations
@@ -13,6 +13,7 @@ import gc
 import hashlib
 import json
 import os
+import resource
 from pathlib import Path
 import subprocess
 import sys
@@ -36,16 +37,19 @@ def measure(book: Path, binary: Path, as_of: str):
         def python():
             conn.execute("BEGIN IMMEDIATE")
             try:
+                before = resource.getrusage(resource.RUSAGE_SELF)
                 start = time.perf_counter()
                 snapshot = load_custody_snapshot(conn, profile, as_of=as_of)
                 seconds = time.perf_counter() - start
-                return seconds, snapshot
+                after = resource.getrusage(resource.RUSAGE_SELF)
+                return {"wall": seconds, "user": after.ru_utime-before.ru_utime,
+                        "sys": after.ru_stime-before.ru_stime}, snapshot
             finally:
                 conn.rollback()
 
-        def rust(timing_only=True):
+        def rust(timing_only=True, sql_floor=False):
             request = {"root": str(root), "profile": profile, "as_of": as_of,
-                       "timing_only": timing_only}
+                       "timing_only": timing_only, "sql_floor": sql_floor}
             result = subprocess.run([str(binary)], input=json.dumps(request).encode() + b"\n",
                                     capture_output=True, check=True, timeout=120)
             if result.stderr:
@@ -70,18 +74,25 @@ def measure(book: Path, binary: Path, as_of: str):
             load = os.getloadavg()
             if index % 2:
                 native = rust()
-                seconds, snapshot = python()
+                python_time, snapshot = python()
             else:
-                seconds, snapshot = python()
+                python_time, snapshot = python()
                 native = rust()
             del snapshot
             gc.collect()
-            pair = {"load": load, "python": seconds, "rust": native["seconds"],
+            pair = {"load": load, "python": python_time["wall"],
+                    "python_user": python_time["user"], "python_sys": python_time["sys"],
+                    "python_cpu": python_time["user"] + python_time["sys"],
+                    "rust_user": native["user"], "rust_sys": native["sys"],
+                    "rust_cpu": native["user"] + native["sys"],
+                    "adapter_cpu": native["adapter_user"] + native["adapter_sys"],
+                    "total_cpu": native["user"] + native["sys"] + native["adapter_user"] + native["adapter_sys"], "rust": native["seconds"],
                     "adapter": native["adapter_seconds"],
                     "total": native["seconds"] + native["adapter_seconds"]}
             pairs.append(pair)
             print(json.dumps({"book": book.name, **pair}), flush=True)
-        return {"kind": metadata["kind"], "transactions": metadata["transactions"],
+        floors = [rust(sql_floor=True)["sql_floor"] for _ in range(5)]
+        return {"sql_floors": floors, "kind": metadata["kind"], "transactions": metadata["transactions"],
                 "book": metadata,
                 "byte_equal": True, "sha256": digest, "bytes": size, "pairs": pairs}
     finally:
