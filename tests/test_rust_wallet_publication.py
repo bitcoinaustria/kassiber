@@ -248,12 +248,8 @@ def test_publication_preserves_saved_reports_and_current_journals(tmp_path, prot
                 assert result["journal_invalidated"] == bool(result["records_fetched"])
     final = dump(rust_book)
     assert final["filed_report_chain_dependencies"]
-    # The unchanged Python Esplora compatibility cache misses this same-stats
-    # reorg. Pin its current outcome; the separate repro shows force-full repair.
-    if fixture in {"retraction", "mempool"} or (fixture == "reorg" and protocol == "electrum"):
+    if fixture in {"retraction", "mempool", "reorg"}:
         assert final["filed_report_chain_impacts"], "changed saved evidence must append a report impact"
-    elif fixture == "reorg":
-        assert not final["filed_report_chain_impacts"], "preserve the Python Esplora cache miss"
     elif fixture == "authority" and protocol == "esplora":
         # Its cache hit leaves the removed closed authority absent. Reports
         # must expose that change even though no transaction was fetched.

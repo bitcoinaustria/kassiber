@@ -75,10 +75,11 @@ def commands_describe() -> bytes:
             "sys.addaudithook(deny)\n",
             encoding="utf-8",
         )
-        env = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR") if key in os.environ}
+        env = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR", "HOME") if key in os.environ}
         env.update({
-            "HOME": directory, "USERPROFILE": directory,
+            "USERPROFILE": directory, "TMPDIR": directory,
             "LOCALAPPDATA": directory, "XDG_DATA_HOME": directory,
+            "XDG_CONFIG_HOME": directory, "XDG_STATE_HOME": directory,
             "PYTHONPATH": directory, "PYTHONIOENCODING": "utf-8",
             "KASSIBER_NO_EGRESS": "1", "KASSIBER_DISABLE_UPDATE_CHECK": "1",
             "KASSIBER_OFFLINE_PREFERENCE_FILE": str(root / "offline.json"),

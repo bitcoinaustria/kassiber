@@ -188,5 +188,135 @@
       "acquisition_invalid_proxy_types_refuse_instead_of_selecting_direct"
     ],
     "rule": "A configured proxy with an invalid type must fail closed instead of selecting a direct route."
+  },
+  {
+    "id": "acquisition-esplora-tip-reuse",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if same_tip\n                && cache::esplora_reusable(",
+    "replace": "if cache::esplora_reusable(",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "Unchanged statistics cannot reuse evidence across a changed or missing tip anchor."
+  },
+  {
+    "id": "acquisition-esplora-tip-save",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"esplora_tip_hash\"] = json!(tip_hash);",
+    "replace": "cp[\"esplora_tip_hash\"] = Value::Null;",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "The successful Esplora tip anchor must survive restart in the checkpoint."
+  },
+  {
+    "id": "acquisition-electrum-tip-reuse",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "same_tip\n        && crate::scan::integer",
+    "replace": "(same_tip || true)\n        && crate::scan::integer",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "A stable Electrum status cannot authorize reuse after a changed tip."
+  },
+  {
+    "id": "acquisition-electrum-tip-entries",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if same_tip {\n                    &c.checkpoint[\"electrum_history_entries\"][h]",
+    "replace": "if true {\n                    &c.checkpoint[\"electrum_history_entries\"][h]",
+    "expect_failing": [
+      "compatibility_tip_change_refreshes_history_and_headers_but_reuses_valid_graphs"
+    ],
+    "rule": "Unchanged history rows are refreshed when their confirming block can change."
+  },
+  {
+    "id": "acquisition-electrum-tip-headers",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let mut headers = if same_tip {",
+    "replace": "let mut headers = if true {",
+    "expect_failing": [
+      "compatibility_tip_change_refreshes_history_and_headers_but_reuses_valid_graphs"
+    ],
+    "rule": "A changed or missing tip invalidates cached block timestamps."
+  },
+  {
+    "id": "acquisition-electrum-tip-save",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"electrum_tip_fingerprint\"] = json!(tip_fingerprint);",
+    "replace": "cp[\"electrum_tip_fingerprint\"] = Value::Null;",
+    "expect_failing": [
+      "compatibility_cached_electrum_skips_history_graph_headers_and_inventory"
+    ],
+    "rule": "The full-header anchor is persisted for the next compatibility round."
+  },
+  {
+    "id": "acquisition-tip-header-length",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "(raw.len() >= 80).then(|| {",
+    "replace": "(!raw.is_empty()).then(|| {",
+    "expect_failing": [
+      "compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors"
+    ],
+    "rule": "Malformed short Electrum headers cannot anchor caches."
+  },
+  {
+    "id": "acquisition-tip-header-identity",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "Sha256::digest(raw)",
+    "replace": "Sha256::digest(&raw[..68])",
+    "expect_failing": [
+      "compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors"
+    ],
+    "rule": "The anchor commits to every header byte, including timestamp and suffix."
+  },
+  {
+    "id": "acquisition-tip-header-height",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "Value::Number(n) if n.to_string().bytes().all(|b| b.is_ascii_digit()) => {}",
+    "replace": "Value::Number(_) => {}",
+    "expect_failing": [
+      "compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors"
+    ],
+    "rule": "Only a nonnegative integer Electrum tip height can accompany an anchor."
+  },
+  {
+    "id": "acquisition-tip-hash-shape",
+    "file": "crates/chain/src/http.rs",
+    "find": "text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit())",
+    "replace": "text.len() == 64",
+    "expect_failing": [
+      "esplora_tip_hash_is_optional_canonical_and_consent_bound"
+    ],
+    "rule": "Malformed Esplora tip hashes disable cache reuse."
+  },
+  {
+    "id": "acquisition-cache-integer-sats",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "output[\"value\"] = graph_sats(&output[\"value_sats\"])?;",
+    "replace": "output[\"value\"] = output[\"value_sats\"].clone();",
+    "rule": "Reused decoded graphs normalize cached float fields back to integer sats.",
+    "expect_failing": [
+      "acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts"
+    ]
+  },
+  {
+    "id": "acquisition-cache-existing-prevout",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if input[\"prevout\"].is_object() {",
+    "replace": "if false && input[\"prevout\"].is_object() {",
+    "rule": "Validated inline previous outputs survive cache normalization without another lookup.",
+    "expect_failing": [
+      "acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts"
+    ]
+  },
+  {
+    "id": "acquisition-cache-sat-rounding",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "to_fixed_places(0, Rounding::HalfEven)",
+    "replace": "to_fixed_places(0, Rounding::HalfUp)",
+    "rule": "Electrum graph sat normalization retains the reference half-even integral conversion.",
+    "expect_failing": [
+      "acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts"
+    ]
   }
 ]

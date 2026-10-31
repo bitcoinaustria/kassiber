@@ -1,11 +1,11 @@
-"""Reproduce the Python Esplora same-stats reorg cache bug on disposable books.
+"""Verify the resolved Esplora same-statistics reorg cache bug on disposable books.
 
 Run with an owned loopback socket available:
     uv run --locked python -m tests.rust_port.repro_esplora_reorg_cache
 
-No reference implementation is changed. The incremental sync reports success
-without refreshing changed confirmation evidence or saved-report impacts;
-force-full observes the change. Scratch stays under the worktree's target/.
+The reference fix is ec49bf25. Incremental sync must refresh changed
+confirmation evidence and saved-report impacts; a subsequent force-full sync
+adds no duplicate impact. Scratch stays under the worktree's target/.
 """
 import json
 import os
@@ -52,7 +52,7 @@ def main():
         finally:
             conn.close()
     result = {
-        "reference_bug": "Esplora compatibility cache misses a reorg when script statistics are unchanged",
+        "reference_fix": "ec49bf25: refresh evidence after a tip identity change",
         "incremental_records_fetched": incremental["records_fetched"],
         "incremental_saved_report_impacts": incremental["saved_report_impacts"],
         "incremental_keeps_stale_confirmation": cached_confirmation == initial_confirmation,
@@ -60,12 +60,12 @@ def main():
         "force_full_saved_report_impacts": forced["saved_report_impacts"],
         "force_full_refreshes_confirmation": refreshed_confirmation != cached_confirmation,
     }
-    assert result["incremental_records_fetched"] == 0
-    assert result["incremental_saved_report_impacts"] == 0
-    assert result["incremental_keeps_stale_confirmation"]
+    assert result["incremental_records_fetched"] == 1
+    assert result["incremental_saved_report_impacts"] == 1
+    assert not result["incremental_keeps_stale_confirmation"]
     assert result["force_full_records_fetched"] == 1
-    assert result["force_full_saved_report_impacts"] == 1
-    assert result["force_full_refreshes_confirmation"]
+    assert result["force_full_saved_report_impacts"] == 0
+    assert not result["force_full_refreshes_confirmation"]
     print(json.dumps(result, indent=2))
 
 

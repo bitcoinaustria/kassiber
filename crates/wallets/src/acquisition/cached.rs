@@ -137,6 +137,11 @@ impl Acquisition {
         c: &CacheInput,
     ) -> Result<Value> {
         let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
+        cancel.check(deadline)?;
+        let tip_hash = client.esplora_tip_hash(Some(consent), deadline);
+        let same_tip = tip_hash
+            .as_ref()
+            .is_some_and(|tip| c.checkpoint["esplora_tip_hash"] == *tip);
         let key = cache::esplora_key(&c.config, &identity(self, c));
         let prior = cache::memberships(&c.checkpoint["esplora_history_memberships"], &key);
         let mut cp = checkpoint(&c.checkpoint);
@@ -156,11 +161,13 @@ impl Acquisition {
             let dirty = mempool > 0.into();
             highest(&mut cp, target, total > 0.into())?;
             stats.insert(hash.clone(),json!({"fingerprint":fingerprint,"tx_count":integer_json(total),"mempool_tx_count":integer_json(mempool),"mempool_dirty":dirty}));
-            if cache::esplora_reusable(
-                &c.checkpoint["esplora_scripthashes"][&hash],
-                prior.get(&hash),
-                &fingerprint,
-            ) {
+            if same_tip
+                && cache::esplora_reusable(
+                    &c.checkpoint["esplora_scripthashes"][&hash],
+                    prior.get(&hash),
+                    &fingerprint,
+                )
+            {
                 members.insert(hash.clone(), prior[&hash].clone());
                 scripts.push(json!({"target":target,"before":before,"reused":true}));
                 continue;
@@ -213,6 +220,7 @@ impl Acquisition {
             }
         }
         cp["backend"] = identity(self, c);
+        cp["esplora_tip_hash"] = json!(tip_hash);
         cp["esplora_scripthashes"] = Value::Object(stats);
         let (membership, retracted, complete) = finish_members(&prior, members, &key);
         cp["esplora_history_memberships"] = membership;
@@ -231,6 +239,11 @@ impl Acquisition {
     ) -> Result<Value> {
         let mut client =
             ElectrumClient::connect(self.backend.clone(), gate, Some(consent.clone()), deadline)?;
+        cancel.check(deadline)?;
+        let tip_fingerprint = client.tip_fingerprint(deadline);
+        let same_tip = tip_fingerprint
+            .as_ref()
+            .is_some_and(|tip| c.checkpoint["electrum_tip_fingerprint"] == *tip);
         let hashes = self
             .targets
             .iter()
@@ -251,7 +264,7 @@ impl Acquisition {
         for ((target, hash), status) in self.targets.iter().zip(&hashes).zip(statuses) {
             next_status.insert(hash.clone(), status.clone());
             highest(&mut cp, target, !status.is_null())?;
-            let reused = cache::electrum_reusable(&c.checkpoint, hash, &status);
+            let reused = cache::electrum_reusable(&c.checkpoint, hash, &status, same_tip);
             if reused {
                 entries.insert(
                     hash.clone(),
@@ -287,8 +300,14 @@ impl Acquisition {
             } else {
                 history
             };
-            let (current, changes, needs_recheck) =
-                cache::changed_entries(&history, &c.checkpoint["electrum_history_entries"][h])?;
+            let (current, changes, needs_recheck) = cache::changed_entries(
+                &history,
+                if same_tip {
+                    &c.checkpoint["electrum_history_entries"][h]
+                } else {
+                    &Value::Null
+                },
+            )?;
             entries.insert(h.clone(), current);
             if needs_recheck {
                 dirty.insert(h.clone());
@@ -345,7 +364,11 @@ impl Acquisition {
             normalize_graph(&mut tx, &transactions)?;
             transactions.insert(id.clone(), tx);
         }
-        let mut headers = normalized_headers(&c.checkpoint["electrum_headers"]);
+        let mut headers = if same_tip {
+            normalized_headers(&c.checkpoint["electrum_headers"])
+        } else {
+            Map::new()
+        };
         let heights: BTreeSet<_> = txids
             .values()
             .filter_map(|h| positive_height(&h["height"]))
@@ -380,6 +403,7 @@ impl Acquisition {
         }
         cp.as_object_mut().unwrap().remove("electrum_known_txids");
         cp["backend"] = identity(self, c);
+        cp["electrum_tip_fingerprint"] = json!(tip_fingerprint);
         cp["electrum_stored_graph_version"] = json!(1);
         cp["electrum_scripthash_statuses"] = Value::Object(next_status);
         cp["electrum_history_entries"] = Value::Object(entries);
@@ -514,13 +538,29 @@ mod tests {
         let stats = json!({"chain_stats":{"tx_count":1},"mempool_stats":{"tx_count":0}});
         let tx = json!({"txid":"a".repeat(64),"vin":[],"vout":[{"scriptpubkey":"51","value":1}]});
         let server = FakeProvider::replies(vec![
+            (200, "a".repeat(64)),
             (200, stats.to_string()),
-            (200, json!([tx]).to_string()),
+            (200, json!([tx.clone()]).to_string()),
             (200, "[]".into()),
             (200, stats.to_string()),
             (200, "12".into()),
             (200, "[]".into()),
+            (200, "a".repeat(64)),
             (200, stats.to_string()),
+            (200, "b".repeat(64)),
+            (200, stats.to_string()),
+            (200, json!([tx.clone()]).to_string()),
+            (200, "[]".into()),
+            (200, stats.to_string()),
+            (200, "12".into()),
+            (200, "[]".into()),
+            (200, "b".repeat(64)),
+            (200, stats.to_string()),
+            (200, json!([tx.clone()]).to_string()),
+            (200, "[]".into()),
+            (200, stats.to_string()),
+            (200, "12".into()),
+            (200, "[]".into()),
         ])
         .unwrap();
         let backend = json!({"kind":"esplora","name":"fixture","url":server.base()});
@@ -544,8 +584,8 @@ mod tests {
         assert_eq!(first["scripts_changed"], 1);
         assert_eq!(first["utxos_skipped_unchanged"], false);
         assert_eq!(first["tip_height"], 12);
-        assert!(server.requests()[4].starts_with("GET /blocks/tip/height "));
-        assert!(server.requests()[5].contains("/utxo "));
+        assert!(server.requests()[5].starts_with("GET /blocks/tip/height "));
+        assert!(server.requests()[6].contains("/utxo "));
         let a = Acquisition::new_cached(
             scope(),
             &backend,
@@ -560,8 +600,32 @@ mod tests {
         assert_eq!(second["scripts_changed"], 0);
         assert_eq!(second["scripts_unchanged"], 1);
         assert_eq!(second["utxos_skipped_unchanged"], true);
-        assert_eq!(server.requests().len(), 7);
+        assert_eq!(server.requests().len(), 9);
         assert_eq!(second["freshness_checkpoint"], *checkpoint);
+        for mut saved in [checkpoint.clone(), checkpoint.clone()] {
+            if server.requests().len() > 9 {
+                saved.as_object_mut().unwrap().remove("esplora_tip_hash");
+            }
+            let a = Acquisition::new_cached(
+                scope(),
+                &backend,
+                &targets(),
+                "fixture",
+                &saved,
+                &json!({}),
+                "main",
+            )
+            .unwrap();
+            let refreshed = run(&a).unwrap();
+            assert_eq!(refreshed["scripts_changed"], 1);
+            assert_eq!(refreshed["utxos_skipped_unchanged"], false);
+            assert_eq!(
+                refreshed["freshness_checkpoint"]["esplora_tip_hash"],
+                "b".repeat(64)
+            );
+            assert_eq!(refreshed["transactions"]["a".repeat(64)], tx);
+        }
+        assert_eq!(server.requests().len(), 23);
         let prior = BTreeMap::from([(
             "omitted".into(),
             json!({"txids":["a".repeat(64)],"complete":true}),
@@ -588,13 +652,14 @@ mod tests {
         let reply = |id, v| format!("{}\n", json!({"id":id,"result":v}));
         let server = FakeElectrum::script(vec![
             (1, reply(1, json!(["fixture", "1.6"]))),
-            (1, reply(2, json!("status"))),
-            (1, reply(3, json!([{"tx_hash":id,"height":0}]))),
+            (1, reply(2, json!({"height":5,"hex":"00".repeat(80)}))),
+            (1, reply(3, json!("status"))),
+            (1, reply(4, json!([{"tx_hash":id,"height":0}]))),
             (
                 1,
-                reply(4, json!(bitcoin::consensus::encode::serialize_hex(&tx))),
+                reply(5, json!(bitcoin::consensus::encode::serialize_hex(&tx))),
             ),
-            (1, reply(5, json!([]))),
+            (1, reply(6, json!([]))),
         ])
         .unwrap();
         let a = Acquisition::new_cached(
@@ -620,11 +685,12 @@ mod tests {
         let response = |id, v| format!("{}\n", json!({"id":id,"result":v}));
         let server = FakeElectrum::script(vec![
             (1, response(1, json!(["fixture", "1.6"]))),
-            (1, response(2, json!("status"))),
+            (1, response(2, json!({"height":5,"hex":"00".repeat(80)}))),
+            (1, response(3, json!("status"))),
         ])
         .unwrap();
         let hash = script_hash("51").unwrap();
-        let checkpoint = json!({"electrum_stored_graph_version":1,"electrum_scripthash_statuses":{hash.clone():"status"},"electrum_history_entries":{hash:{}},"electrum_headers":{"5":123},"electrum_known_txids":["legacy"]});
+        let checkpoint = json!({"electrum_tip_fingerprint":"5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8", "electrum_stored_graph_version":1,"electrum_scripthash_statuses":{hash.clone():"status"},"electrum_history_entries":{hash:{}},"electrum_headers":{"5":123},"electrum_known_txids":["legacy"]});
         let a = Acquisition::new_cached(
             scope(),
             &json!({"kind":"electrum","url":server.url()}),
@@ -639,12 +705,63 @@ mod tests {
         assert_eq!(p["scripts_changed"], 0);
         assert_eq!(p["utxos_skipped_unchanged"], true);
         assert_eq!(p["transactions_fetched"], 0);
-        assert_eq!(server.requests().len(), 2);
+        assert_eq!(server.requests().len(), 3);
         assert!(p["freshness_checkpoint"]
             .get("electrum_known_txids")
             .is_none());
         assert_eq!(p["freshness_checkpoint"]["electrum_headers"]["5"], 123);
+        assert_eq!(
+            p["freshness_checkpoint"]["electrum_tip_fingerprint"],
+            checkpoint["electrum_tip_fingerprint"]
+        );
     }
+    #[test]
+    fn compatibility_tip_change_refreshes_history_and_headers_but_reuses_valid_graphs() {
+        for saved_tip in [Value::Null, json!("old-tip")] {
+            let id = "a".repeat(64);
+            let hash = script_hash("51").unwrap();
+            let header = format!("{}{}{}", "00".repeat(68), "00f15365", "00".repeat(8));
+            let history = json!([{"tx_hash":id,"height":5}]);
+            let checkpoint = json!({"electrum_tip_fingerprint":saved_tip,
+                "electrum_stored_graph_version":1,"electrum_scripthash_statuses":{hash.clone():"status"},
+                "electrum_history_entries":{hash.clone():{id.clone():history[0]}},"electrum_headers":{"5":123}});
+            let graph = json!({id.clone():{"txid":id,"vin":[],"vout":[{"script_hex":"51","value_sats":1}],
+                "_kassiber_electrum_graph":{"kind":"bitcoin_electrum","version":1}}});
+            let response = |id, result| format!("{}\n", json!({"id":id,"result":result}));
+            let server = FakeElectrum::script(vec![
+                (1, response(1, json!(["fixture", "1.6"]))),
+                (1, response(2, json!({"height":5,"hex":"00".repeat(80)}))),
+                (1, response(3, json!("status"))),
+                (1, response(4, history)),
+                (1, response(5, json!(header))),
+                (1, response(6, json!([]))),
+            ])
+            .unwrap();
+            let a = Acquisition::new_cached(
+                scope(),
+                &json!({"kind":"electrum","url":server.url()}),
+                &targets(),
+                "fixture",
+                &checkpoint,
+                &graph,
+                "main",
+            )
+            .unwrap();
+            let actual = run(&a).unwrap();
+            assert_eq!(actual["scripts_changed"], 1);
+            assert_eq!(actual["transactions_fetched"], 0);
+            assert_eq!(actual["header_cache_hits"], 0);
+            assert_eq!(actual["utxos_skipped_unchanged"], false);
+            assert_eq!(
+                actual["freshness_checkpoint"]["electrum_headers"]["5"],
+                1_700_000_000
+            );
+            assert_eq!(actual["transactions"][&id]["vout"][0]["value"], 1);
+            assert_eq!(actual["transactions"][&id]["vout"][0]["scriptpubkey"], "51");
+            assert_eq!(server.requests().len(), 6);
+        }
+    }
+
     #[test]
     fn compatibility_cached_paths_require_bound_consent_and_online() {
         for (kind, url) in [

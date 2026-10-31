@@ -71,7 +71,9 @@ def _server(protocol, targets, *, empty=False, reorg=False, mempool=False, coinb
         def do_GET(self):
             hits.append(self.path)
             parts = self.path.strip("/").split("/")
-            if parts == ["blocks", "tip", "height"]:
+            if parts == ["blocks", "tip", "hash"]:
+                body = b"a" * 64
+            elif parts == ["blocks", "tip", "height"]:
                 body = b"102"
             else:
                 assert parts[0] == "scripthash"
@@ -106,7 +108,7 @@ def _server(protocol, targets, *, empty=False, reorg=False, mempool=False, coinb
                 if method == "server.version":
                     result = ["fixture", "1.6"]
                 elif method == "blockchain.headers.subscribe":
-                    result = {"height": 102}
+                    result = {"height": 102, "hex": header}
                 elif method == "blockchain.block.header":
                     assert params == [height]
                     result = header

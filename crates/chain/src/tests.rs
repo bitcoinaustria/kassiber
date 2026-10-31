@@ -54,6 +54,7 @@ fn every_client_refuses_without_consent_and_offline_before_any_attempt() {
                             .code,
                         expected
                     );
+                    assert_eq!(http.esplora_tip_hash(consent, deadline()), None);
                     assert_eq!(
                         http.probe(consent, deadline()).err().unwrap().code,
                         expected
@@ -661,4 +662,28 @@ fn saved_core_config_url_override_cannot_forward_saved_credentials() {
         .unwrap()
         .contains("requires USERNAME/PASSWORD"));
     assert!(server.requests().is_empty());
+}
+
+#[test]
+fn esplora_tip_hash_is_optional_canonical_and_consent_bound() {
+    for (status, text, expected) in [
+        (
+            200,
+            format!(" \n{}\t", "AB".repeat(32)),
+            Some("ab".repeat(32)),
+        ),
+        (200, "00".repeat(31), None),
+        (200, "gg".repeat(32), None),
+        (404, "missing".into(), None),
+    ] {
+        let server = FakeProvider::replies(vec![(status, text)]).unwrap();
+        let backend = backend(server.base(), false);
+        let proof = Consent::explicit_trigger(backend.request());
+        let http = HttpClient::new(backend, gate(Offline::Online), "test");
+        assert_eq!(http.esplora_tip_hash(None, deadline()), None);
+        assert!(server.requests().is_empty());
+        assert_eq!(http.esplora_tip_hash(Some(&proof), deadline()), expected);
+        assert_eq!(server.requests().len(), 1);
+        assert!(server.requests()[0].starts_with("GET /blocks/tip/hash "));
+    }
 }

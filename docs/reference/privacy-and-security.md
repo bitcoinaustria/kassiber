@@ -930,3 +930,11 @@ offline mode refuse before traffic. Other source shapes refuse before egress.
 The guarded test driver can publish the completed fetch to a disposable book;
 no CLI/daemon/AI route is enabled. See the
 [native fetch checkpoint](rust-shell.md#bitcoin-native-fetch-assembly-r5).
+
+The Rust compatibility fetch adapters use the same explicit-sync tip anchors:
+Esplora's `/blocks/tip/hash` and Electrum's full header subscription execute
+only inside the existing consent-bound acquisition action. Optional tip failure
+disables reuse and does not bypass the return-time consent/offline/cancellation
+fence. The no-consent HTTP regression includes the tip-hash path, with empty
+attempt and egress buffers. No new connector, background job or AI projection
+is introduced; the four product sync routes remain unregistered.

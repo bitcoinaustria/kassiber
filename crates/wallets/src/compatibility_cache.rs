@@ -120,13 +120,19 @@ pub(crate) fn esplora_reusable(
         && !crate::descriptors::truthy(&previous["mempool_dirty"])
         && membership.is_some_and(|m| m["complete"] == true && m["fingerprint"] == fingerprint)
 }
-pub(crate) fn electrum_reusable(checkpoint: &Value, hash: &str, status: &Value) -> bool {
+pub(crate) fn electrum_reusable(
+    checkpoint: &Value,
+    hash: &str,
+    status: &Value,
+    same_tip: bool,
+) -> bool {
     let previous = &checkpoint["electrum_scripthash_statuses"][hash];
     if status.is_null() && previous.is_null() {
         return true;
     }
-    crate::scan::integer(&checkpoint["electrum_stored_graph_version"])
-        .is_some_and(|n| n >= 1.into())
+    same_tip
+        && crate::scan::integer(&checkpoint["electrum_stored_graph_version"])
+            .is_some_and(|n| n >= 1.into())
         && status == previous
         && !checkpoint["electrum_dirty_scripthashes"]
             .as_array()
@@ -326,15 +332,17 @@ mod tests {
             assert_ne!(esplora_key(&other, &identity), key);
         }
         let cp = json!({"electrum_stored_graph_version":1,"electrum_scripthash_statuses":{"h":"s"},"electrum_history_entries":{"h":{}},"electrum_dirty_scripthashes":[]});
-        assert!(electrum_reusable(&cp, "h", &json!("s")));
-        assert!(!electrum_reusable(&cp, "h", &json!("changed")));
+        assert!(electrum_reusable(&cp, "h", &json!("s"), true));
+        assert!(!electrum_reusable(&cp, "h", &json!("s"), false));
+        assert!(electrum_reusable(&json!({}), "empty", &Value::Null, false));
+        assert!(!electrum_reusable(&cp, "h", &json!("changed"), true));
         let mut old = cp.clone();
         old["electrum_stored_graph_version"] = json!(0);
-        assert!(!electrum_reusable(&old, "h", &json!("s")));
+        assert!(!electrum_reusable(&old, "h", &json!("s"), true));
         let mut dirty = cp.clone();
         dirty["electrum_dirty_scripthashes"] = json!(["h"]);
-        assert!(!electrum_reusable(&dirty, "h", &json!("s")));
-        assert!(electrum_reusable(&json!({}), "empty", &Value::Null));
+        assert!(!electrum_reusable(&dirty, "h", &json!("s"), true));
+        assert!(electrum_reusable(&json!({}), "empty", &Value::Null, true));
     }
     #[test]
     fn compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries() {

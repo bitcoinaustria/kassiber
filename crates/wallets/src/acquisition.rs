@@ -87,8 +87,9 @@ fn field<'a>(config: &'a Value, name: &str) -> Option<&'a Value> {
 }
 
 impl Acquisition {
-    /// No connection or descriptor interpretation. The future coordinator must
-    /// perform book-network and source-overlap preflight before this seam.
+    /// No connection or descriptor interpretation. The coordinator must perform
+    /// book-network and source-overlap preflight before this seam. Compatibility
+    /// cache anchors are read only in `run`, after its exact-action consent fence.
     pub fn new(scope: Scope, backend: &Value, targets: &[Value], version: &str) -> Result<Self> {
         let mut config = backend.clone();
         if let Some(raw) = config.get("config_json").and_then(Value::as_str) {
@@ -548,10 +549,15 @@ fn normalize_graph(tx: &mut Value, lookup: &Map<String, Value>) -> Result<()> {
     tx["_kassiber_electrum_graph"] = json!({"kind":"bitcoin_electrum","version":1});
     for output in tx["vout"].as_array_mut().ok_or_else(invalid)? {
         output["scriptpubkey"] = output["script_hex"].clone();
-        output["value"] = output["value_sats"].clone();
+        // Cached decoder fields have passed through Python json_ready and can
+        // be floats. Normalized graph values remain integer sats on reuse.
+        output["value"] = graph_sats(&output["value_sats"])?;
     }
     for input in tx["vin"].as_array_mut().ok_or_else(invalid)? {
         if coinbase_input(input) {
+            continue;
+        }
+        if input["prevout"].is_object() {
             continue;
         }
         let prev = lookup
@@ -561,11 +567,27 @@ fn normalize_graph(tx: &mut Value, lookup: &Map<String, Value>) -> Result<()> {
             .as_u64()
             .and_then(|n| prev["vout"].get(n as usize))
         {
-            input["prevout"] =
-                json!({"scriptpubkey":output["script_hex"],"value":output["value_sats"]});
+            input["prevout"] = json!({"scriptpubkey":output["script_hex"],"value":graph_sats(&output["value_sats"])?});
         }
     }
     Ok(())
+}
+fn graph_sats(value: &Value) -> Result<Value> {
+    use kassiber_pydecimal::{Decimal, Rounding};
+    let text = value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string());
+    let value = kassiber_pytext::strip(&text)
+        .parse::<Decimal>()
+        .map_err(|_| invalid())?;
+    let rounded = value
+        .to_fixed_places(0, Rounding::HalfEven)
+        .map_err(|_| invalid())?;
+    let integer = rounded
+        .parse::<kassiber_pyjson::BigInt>()
+        .map_err(|_| invalid())?;
+    serde_json::from_str(&integer.to_string()).map_err(|_| invalid())
 }
 fn coinbase_input(input: &Value) -> bool {
     input["txid"] == "0".repeat(64) && input["vout"] == u32::MAX

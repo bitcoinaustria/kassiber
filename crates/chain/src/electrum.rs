@@ -13,6 +13,14 @@ pub struct ElectrumClient {
     pub server_version: Value,
 }
 impl ElectrumClient {
+    /// Full-header anchor for compatibility history and timestamp caches.
+    /// Height alone cannot distinguish a same-height reorg.
+    pub fn tip_fingerprint(&mut self, deadline: Instant) -> Option<String> {
+        let tip = self
+            .call("blockchain.headers.subscribe", Some(&json!([])), deadline)
+            .ok()?;
+        tip_fingerprint(&tip)
+    }
     pub fn batch_size(&self) -> usize {
         self.backend.batch_size
     }
@@ -198,5 +206,69 @@ fn validate_method(method: &str) -> Result<()> {
             "validation",
             "Unsupported watch-only Electrum method",
         ))
+    }
+}
+
+fn tip_fingerprint(tip: &Value) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    match tip.get("height")? {
+        Value::Number(n) if n.to_string().bytes().all(|b| b.is_ascii_digit()) => {}
+        _ => return None,
+    }
+    let text = tip.get("hex")?.as_str()?;
+    // CPython bytes.fromhex permits ASCII whitespace between whole bytes.
+    let mut raw = Vec::new();
+    for pair in text.split([' ', '\t', '\n', '\r', '\x0b', '\x0c']) {
+        if !pair.len().is_multiple_of(2) {
+            return None;
+        }
+        for digits in pair.as_bytes().as_chunks::<2>().0 {
+            let digits = std::str::from_utf8(digits).ok()?;
+            raw.push(u8::from_str_radix(digits, 16).ok()?);
+        }
+    }
+    (raw.len() >= 80).then(|| {
+        Sha256::digest(raw)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    })
+}
+
+#[cfg(test)]
+mod tip_tests {
+    use super::*;
+    #[test]
+    fn compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors() {
+        let header = "00".repeat(80);
+        let expected = "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8";
+        assert_eq!(
+            tip_fingerprint(&json!({"height":5,"hex":header})).as_deref(),
+            Some(expected)
+        );
+        assert_eq!(
+            tip_fingerprint(&json!({"height":6,"hex":"00 ".repeat(80)})).as_deref(),
+            Some(expected)
+        );
+        for changed in [format!("01{}", "00".repeat(79)), "00".repeat(81)] {
+            assert_ne!(
+                tip_fingerprint(&json!({"height":5,"hex":changed})).as_deref(),
+                Some(expected)
+            );
+        }
+        for unknown in [
+            json!(null),
+            json!({}),
+            json!({"height":true,"hex":header}),
+            json!({"height":5.0,"hex":header}),
+            json!({"height":-1,"hex":header}),
+            json!({"height":"5","hex":header}),
+            json!({"height":5,"hex":"00".repeat(79)}),
+            json!({"height":5,"hex":"0 0".repeat(80)}),
+            json!({"height":5,"hex":"gg".repeat(80)}),
+            json!({"height":5,"hex":false}),
+        ] {
+            assert_eq!(tip_fingerprint(&unknown), None, "{unknown}");
+        }
     }
 }

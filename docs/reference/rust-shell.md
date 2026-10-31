@@ -6133,3 +6133,113 @@ product routing boundary.
 Liquid, Core RPC, Lightning, Silent Payments and additional-wallet overlap
 semantics remain unported. Native preparation/publication parity alone does
 not establish that product acceptance.
+
+### Bitcoin compatibility tip-cache continuation (R5)
+
+Branch `t3code/r5-sync-12` starts at integrated tip `dd433e4e`, then applies
+native fetch assembly (`6507d31d`) and the separate Python reference fix
+(`ec49bf25`). The fetch cherry-pick preserves both integrated and incoming
+plan text; disposition counts are regenerated from the combined inventory.
+
+Rust now matches the reference cache-anchor policy. Esplora reads a canonical
+`/blocks/tip/hash` before script statistics and saves `esplora_tip_hash`.
+Electrum subscribes to the tip before script statuses and saves SHA-256 of the
+full header as `electrum_tip_fingerprint`. Changed, missing and invalid anchors
+force evidence refresh despite identical statistics, subscription status or
+history heights. Electrum clears timestamp caches and reprocesses unchanged
+history entries, retaining validated transaction graphs. Its null/null empty
+status exception remains the reference's behavior.
+
+The added cache/reorg oracle exposed another native mismatch: re-normalizing
+cached decoder floats changed stored integer-sat `value` fields to JSON floats.
+Acquisition now converts those values to integral sats with half-even rounding
+and preserves existing inline previous outputs, matching Python. A pure Rust
+witness checks normalization twice, ties, zero and retained prevouts. Live
+compatibility rounds prove that the cached wallet transaction is not fetched
+again while an uncached foreign parent can still be fetched.
+
+Publication fixtures, frozen full-book vectors and the local reference repro
+now require the resolved Esplora reorg outcome: incremental sync refreshes the
+confirmation and appends one saved-report impact; subsequent force-full does
+not append a duplicate. All 51 Esplora frozen rounds change under the reference
+fix; all 51 Electrum frozen rounds remain byte-identical.
+
+The corpus retains the following independent native preparation/publication
+comparisons, including every table's canonical logical rows, typed numbers,
+ordered arrays, deterministic publication identities/times and subprocess
+restarts. These remain helper-boundary proofs, not CLI/daemon product parity.
+
+| Corpus | Electrum rounds | Esplora rounds |
+| --- | ---: | ---: |
+| Ten fixtures (empty, receive/change, checkpoint, multi-script, fixed, gap-one, reorg, retraction, mempool, coinbase) | 15 | 15 |
+| Eight three-round sequences (reanchor, reorg-drop, preflight-race, mempool-drop-return, replacement, height-change, force-full, force-without-state) | 24 | 24 |
+| Reviewed checkpoint, reorg, retraction, mempool and missing-authority books | 12 | 12 |
+| Total | 51 | 51 |
+
+No new connector or dependency is introduced. Optional anchor reads use only
+the existing `kassiber-net` clients after the acquisition action's exact
+consent/scope/cancellation/offline fences. The no-consent HTTP regression now
+also exercises the tip-hash path and requires empty attempt/egress buffers.
+Malformed/failed anchors disable reuse; they never grant absence authority.
+
+The unified sync catalog contains 501 recipes: 452 inherited publication/sync,
+36 fetch-assembly and 13 new tip-cache/integer-graph rules. The separate twelve
+descriptor recipes remain a distinct selection. Build failures and empty test
+selections are errors, never mutation kills.
+
+Product services remain the next boundary. No `IMPLEMENTED` entry changes, and
+no native product-route acceptance is claimed:
+
+| Route | Successful native product calls |
+| --- | ---: |
+| `wallets.sync` | 0 |
+| `ui.wallets.sync` | 0 |
+| `ui.freshness.run` | 0 |
+| `ui.workspace.freshness.run` | 0 |
+
+Remaining implementation is the shared CLI/daemon sync/freshness coordinator,
+including freshness queue/state/output parity and current policy; request-bound
+consent and current scope revalidation; product offline/no-egress and
+cancellation/early-cancel handling; unsupported whole-invocation hybrid routing
+before bootstrap/database/secret consumption; then registration of all four
+routes. A native failure must never retry through Python. Product-boundary
+fixture/sequence/reviewed-book comparisons and zero-fallback hybrid runs for
+those four routes must pass before enabling them. Internal helper capability
+refusals and the corpus above do not establish that product boundary. Liquid,
+Core RPC, Lightning, Silent Payments and additional-wallet overlap remain
+outside the supported assembler scope.
+
+The final cache-parity gate passes formatting and production/harness workspace
+clippy with warnings denied. The production workspace passes 1,508 tests with
+no ignored tests; the network observer passes 63, strict chain observer 22,
+and strict fetch checks eight. All seven sync parity suites pass 206 tests
+without skips. The separate resolved-reorg repro confirms one incremental
+saved-report impact, no retained stale confirmation, and zero additional
+impacts from the subsequent force-full refresh.
+
+All 122 named sync mutation baselines pass, then all 501 recipes are killed:
+452 inherited sync/publication, 36 fetch assembly and 13 tip-cache/integer-graph.
+All four separate descriptor baselines pass and all twelve descriptor recipes
+are killed. Neither execution reports survivors, build errors or empty test
+selections. Both isolated source/build trees are removed after their summaries
+are recorded. Mutation builds use offline Cargo, two build jobs and incremental
+compilation only in their disposable target trees.
+
+The wallets-sync shard passes 716 tests plus 126 subtests; serial-network passes
+198 tests plus 41 subtests. The required classifier update/check records 5,692
+definitions. The required `python_test_shards.py run preflight --ci` passes all
+57 tests. Its initial contract failure was reviewed as source-location changes
+only in the error-code index after the Python reference cherry-pick; error
+contents, commands, daemon kinds and environment snapshots remain identical.
+The catalog fixture now preserves account `HOME` and redirects its preferences
+and temporary files to disposable roots. Verification summaries and logs remain
+under `target/r5-sync-12-artifacts/`; completed verification builds and disposable
+books are removed. No requested cache-parity check remains sandbox-blocked.
+
+This commit stops at the verified cache-parity boundary. Product-boundary and
+zero-fallback hybrid acceptance remain unrun because the services and route
+registrations listed above are unimplemented. The full Python/frontend quality
+gate, tax/custody shadow overlays, Docker regtest and packaged/platform gates
+were not run. Successful native product calls remain zero for all four routes;
+fallback counts are unmeasured. Internal publication refusals never authorize
+retrying a started native invocation through Python.

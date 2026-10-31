@@ -689,3 +689,22 @@ the named compatibility route on Esplora. Its complete native preparation and
 publication match Python across the existing fixture/restart/reviewed corpus.
 Shared product services and route acceptance remain pending; see the
 [native fetch handoff](rust-shell.md#bitcoin-native-fetch-assembly-r5).
+
+### Rust compatibility cache anchors
+
+The native compatibility adapters also apply the tip-identity rule above.
+Esplora reads `/blocks/tip/hash` before history statistics and persists its
+canonical hash in the private checkpoint. Electrum subscribes to the current
+header before script statuses and persists SHA-256 of the full header.
+Changed, unavailable or malformed anchors disable reuse of nonempty histories;
+Electrum additionally clears header timestamps and republishes unchanged
+history rows while retaining validated transaction graphs. Empty Electrum
+histories remain reusable under the reference's null-status rule. Reused graph
+normalization retains integral sat fields and existing inline previous outputs,
+including when decoder fields were serialized as JSON floats.
+
+These reads use only the existing `kassiber-net` HTTP/Electrum routes after the
+acquisition action's consent, scope, cancellation and offline checks. A tip
+failure grants no absence authority. No product route or background feature is
+enabled by the cache change. The live compatibility sequence oracle covers
+same-height reorgs, unchanged tips and missing legacy anchors on both protocols.

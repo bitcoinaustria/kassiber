@@ -583,3 +583,32 @@ fn acquisition_rechecks_offline_before_returning_observed_facts() {
     assert_eq!(error.code, "network_egress_disabled");
     assert_eq!(server.requests().len(), 5);
 }
+
+#[test]
+fn acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts() {
+    for (value, expected) in [
+        (json!(20_000.0), json!(20_000)),
+        (json!("2.5"), json!(2)),
+        (json!("3.5"), json!(4)),
+        (json!("-0.0"), json!(0)),
+    ] {
+        let mut tx = json!({"vin":[{"txid":"a".repeat(64),"vout":0,
+            "prevout":{"scriptpubkey":"52","value":21_000}}],
+            "vout":[{"script_hex":"51","value_sats":value}]});
+        normalize_graph(&mut tx, &Map::new()).unwrap();
+        assert_eq!(tx["vout"][0]["value"], expected);
+        assert!(tx["vout"][0]["value"]
+            .as_number()
+            .unwrap()
+            .to_string()
+            .bytes()
+            .all(|b| b.is_ascii_digit()));
+        assert_eq!(
+            tx["vin"][0]["prevout"],
+            json!({"scriptpubkey":"52","value":21_000})
+        );
+        let once = tx.clone();
+        normalize_graph(&mut tx, &Map::new()).unwrap();
+        assert_eq!(tx, once);
+    }
+}

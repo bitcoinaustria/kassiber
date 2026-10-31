@@ -114,7 +114,5 @@ def test_native_fetch_preserves_saved_reports_and_current_journals(tmp_path, pro
                 mutate()
             _round(tmp_path, chain, protocol, url, python_book, rust_book, index=index,
                    reviewed=True, clear_authority=fixture == "authority")
-    if fixture in {"retraction", "mempool"} or (fixture == "reorg" and protocol == "electrum"):
+    if fixture in {"retraction", "mempool", "reorg"}:
         assert dump(rust_book)["filed_report_chain_impacts"]
-    elif fixture == "reorg":
-        assert not dump(rust_book)["filed_report_chain_impacts"], "keep matching the known Python cache bug"

@@ -323,7 +323,9 @@ def esplora_round_server(targets, remote):
         def do_GET(self):
             hits.append(self.path)
             parts = self.path.strip("/").split("/")
-            if parts == ["blocks", "tip", "height"]:
+            if parts == ["blocks", "tip", "hash"]:
+                body = f"{remote.get('round', 0):064x}".encode()
+            elif parts == ["blocks", "tip", "height"]:
                 body = b"102"
             else:
                 assert parts[0] == "scripthash"
@@ -403,3 +405,58 @@ def test_esplora_absence_sequences_match_python_source_bound_completeness(tmp_pa
                 expected_ids = [remote["original"], "b" * 64] if sequence == "partial" else [remote["original"]]
                 assert actual["observer_retracted_external_ids"] == sorted(expected_ids)
             checkpoint = expected["freshness_checkpoint"]
+
+
+@pytest.mark.parametrize("protocol", ["esplora", "electrum"])
+def test_compatibility_tip_changes_refresh_evidence_without_refetching_valid_graphs(tmp_path, protocol):
+    from tests.rust_sync_chain import Chain, serve
+
+    plan = load_descriptor_plan(_config("wpkh", 1))
+    targets = [reference.sync_target_from_derived(t)
+               for t in derive_descriptor_targets(plan, start=0, end=1)][:1]
+    chain = Chain()
+    txid, _ = chain.fund(targets[0]["script_pubkey"], 20_000, height=14)
+    checkpoint, history_cache = {}, {}
+    observed_times = []
+    with serve(chain, protocol) as url:
+        backend = {"name": "fixture", "kind": protocol, "url": url, "batch_size": 2}
+        for index in range(4):
+            if index == 2:
+                # The subscription status, history heights and Esplora statistics
+                # stay identical while the confirming block identity/time changes.
+                chain.reorg(14)
+            if index == 3:
+                # Pre-upgrade/unknown anchors cannot authorize cache reuse.
+                checkpoint.pop("esplora_tip_hash" if protocol == "esplora" else "electrum_tip_fingerprint", None)
+            state = WalletSyncState(chain="bitcoin", network="main", descriptor_plan=plan, policy_asset_id="",
+                                    targets=targets, tracked_scripts={t["script_pubkey"]: t for t in targets},
+                                    checkpoint=checkpoint, history_cache=history_cache)
+            records, meta = getattr(reference, f"compatibility_{protocol}_sync_adapter")(backend, {}, state)
+            native_start = len(chain.hits)
+            actual = acquisition(tmp_path, backend, targets, cached=True, checkpoint=checkpoint,
+                                 history_cache=history_cache)["result"]
+            assert actual["freshness_checkpoint"] == meta["freshness_checkpoint"]
+            for key in ("scripts_changed", "scripts_unchanged", "transactions_fetched", "header_cache_hits"):
+                if key in meta:
+                    assert actual[key] == meta[key]
+            assert actual["utxos_skipped_unchanged"] == meta.get("utxos_skipped_unchanged", False)
+            assert actual["utxos_skipped_unchanged"] == (index == 1)
+            if index in {2, 3} and protocol == "electrum":
+                fetched = [hit["params"][0] for hit in chain.hits[native_start:]
+                           if hit["method"] == "blockchain.transaction.get"]
+                assert txid not in fetched  # The foreign parent is not in the persisted history cache.
+                assert actual["transactions_fetched"] == len(fetched)
+                assert actual["header_cache_hits"] == 0
+            for record in records:
+                payload = {"tx": actual["transactions"][record["txid"]],
+                           "scripts": [t["script_pubkey"] for t in targets],
+                           "txid": record["txid"], "occurred_at": record["occurred_at"]}
+                assert project(tmp_path, [{"operation": protocol, "input": payload}]) == json.loads(
+                    json.dumps([{"result": record}], default=str))
+                observed_times.append(record["occurred_at"])
+                decoded = json.loads(record["raw_json"]) if isinstance(record["raw_json"], str) else record["raw_json"]
+                decoded["txid"] = record["txid"]
+                history_cache[record["txid"]] = json.dumps(decoded)
+            checkpoint = meta["freshness_checkpoint"]
+    assert txid in history_cache
+    assert observed_times[0] != observed_times[-1]

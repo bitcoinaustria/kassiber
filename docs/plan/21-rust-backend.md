@@ -2504,3 +2504,31 @@ fences, unsupported hybrid fallback and a zero-fallback hybrid workload remain.
 The Python same-statistics Esplora reorg-cache bug remains an external
 dependency; this checkpoint preserves its existing stale-evidence outcome.
 See the [native fetch handoff](../reference/rust-shell.md#bitcoin-native-fetch-assembly-r5).
+
+### R5 Bitcoin sync: compatibility tip-cache continuation
+
+The separate Python reference fix `ec49bf25` is integrated. Rust compatibility
+fetches now bind cache reuse to Esplora's canonical tip hash or SHA-256 of
+Electrum's full header. Changed, missing or malformed anchors refresh evidence
+when statistics/status/heights alone are unchanged. Electrum discards stale
+header timestamps and reprocesses history entries while retaining validated
+stored transaction graphs. Optional anchor reads use the existing gated
+clients inside exact-action acquisition consent.
+
+Publication vectors and reviewed-book assertions now require the corrected
+same-statistics Esplora reorg outcome. The native preparation/publication and
+compatibility oracles compare against this updated reference, including
+restart checkpoints and legacy checkpoints without anchors. Thirteen additional
+named mutation recipes cover the new cache rules and idempotent integer-sat
+normalization of reused Electrum graphs. See the
+[tip-cache handoff](../reference/rust-shell.md#bitcoin-compatibility-tip-cache-continuation-r5)
+for verification and remaining product-service work. The four sync routes are
+still unregistered; this is a cache-parity boundary, not R5 slice acceptance.
+
+The cache boundary passes 1,508 workspace tests, all 206 tests in the seven sync
+parity suites, network/strict observer checks, the wallets-sync and serial-network
+shards, and all 57 preflight tests after inventory and source-location snapshot
+refresh. All 501 sync mutations (452 inherited, 36 fetch, 13 new) and the separate
+twelve descriptor mutations are rerun and killed. No product-route acceptance
+is claimed; shared services, product fences, pre-bootstrap fallback and all four
+registrations remain pending as detailed in the handoff.

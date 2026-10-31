@@ -447,14 +447,14 @@
       }
     },
     {
-      "at": "kassiber/core/sync_backends.py:2860",
+      "at": "kassiber/core/sync_backends.py:2875",
       "name": "asset_code",
       "value": {
         "expression": "liquid_asset_code(asset_id, policy_asset_id)"
       }
     },
     {
-      "at": "kassiber/core/sync_backends.py:3270",
+      "at": "kassiber/core/sync_backends.py:3293",
       "name": "rpc_code",
       "value": {
         "expression": "error.get('code') if isinstance(error, dict) else None"
@@ -14089,39 +14089,25 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2060",
+      "at": "kassiber/core/sync_backends.py:2075",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2064",
+      "at": "kassiber/core/sync_backends.py:2079",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
-    },
-    {
-      "at": "kassiber/core/sync_backends.py:2221",
-      "callee": "AppError",
-      "code": "silent_payment_scanner_unavailable",
-      "form": "call",
-      "retryable": true
     },
     {
       "at": "kassiber/core/sync_backends.py:2236",
       "callee": "AppError",
       "code": "silent_payment_scanner_unavailable",
       "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/core/sync_backends.py:2244",
-      "callee": "AppError",
-      "code": "silent_payment_scanner_unavailable",
-      "form": "call",
-      "retryable": false
+      "retryable": true
     },
     {
       "at": "kassiber/core/sync_backends.py:2251",
@@ -14131,91 +14117,105 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2282",
+      "at": "kassiber/core/sync_backends.py:2259",
       "callee": "AppError",
       "code": "silent_payment_scanner_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2311",
+      "at": "kassiber/core/sync_backends.py:2266",
+      "callee": "AppError",
+      "code": "silent_payment_scanner_unavailable",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/sync_backends.py:2297",
+      "callee": "AppError",
+      "code": "silent_payment_scanner_unavailable",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/sync_backends.py:2326",
       "callee": "AppError",
       "code": "silent_payment_scanner_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2316",
+      "at": "kassiber/core/sync_backends.py:2331",
       "callee": "AppError",
       "code": "silent_payment_scanner_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2330",
+      "at": "kassiber/core/sync_backends.py:2345",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2679",
+      "at": "kassiber/core/sync_backends.py:2694",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2687",
+      "at": "kassiber/core/sync_backends.py:2702",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2697",
+      "at": "kassiber/core/sync_backends.py:2712",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2699",
+      "at": "kassiber/core/sync_backends.py:2714",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2709",
+      "at": "kassiber/core/sync_backends.py:2724",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:2801",
+      "at": "kassiber/core/sync_backends.py:2816",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3205",
+      "at": "kassiber/core/sync_backends.py:3228",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3241",
+      "at": "kassiber/core/sync_backends.py:3264",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3248",
+      "at": "kassiber/core/sync_backends.py:3271",
       "code": {
         "expression": "error['code']"
       },
@@ -14223,42 +14223,42 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/sync_backends.py:3272",
+      "at": "kassiber/core/sync_backends.py:3295",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3277",
+      "at": "kassiber/core/sync_backends.py:3300",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3304",
+      "at": "kassiber/core/sync_backends.py:3327",
       "callee": "AppError",
       "code": "bitcoinrpc_unexpected_response",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/core/sync_backends.py:3362",
+      "at": "kassiber/core/sync_backends.py:3385",
       "callee": "AppError",
       "code": "bitcoinrpc_birthday_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3410",
+      "at": "kassiber/core/sync_backends.py:3433",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3491",
+      "at": "kassiber/core/sync_backends.py:3514",
       "callee": "AppError",
       "code": {
         "expression": "'bitcoinrpc_pruned_below_birthday' if pruned else 'bitcoinrpc_rescan_failed'"
@@ -14269,21 +14269,21 @@
       }
     },
     {
-      "at": "kassiber/core/sync_backends.py:3513",
+      "at": "kassiber/core/sync_backends.py:3536",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:3886",
+      "at": "kassiber/core/sync_backends.py:3909",
       "callee": "AppError",
       "code": "bitcoinrpc_inconsistent_wallet_details",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/sync_backends.py:5185",
+      "at": "kassiber/core/sync_backends.py:5239",
       "callee": "AppError",
       "code": "validation",
       "form": "call",

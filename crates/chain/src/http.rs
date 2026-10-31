@@ -28,6 +28,13 @@ impl HttpClient {
     pub fn backend(&self) -> &Backend {
         &self.backend
     }
+    /// Optional cache anchor, read only under the caller's exact sync grant.
+    /// A missing or malformed tip disables reuse; it never means an empty chain.
+    pub fn esplora_tip_hash(&self, consent: Option<&Consent>, deadline: Instant) -> Option<String> {
+        let text = self.get_text("blocks/tip/hash", consent, deadline).ok()?;
+        let text = kassiber_pytext::strip(&text).to_ascii_lowercase();
+        (text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit())).then_some(text)
+    }
     pub fn get_json(
         &self,
         path: &str,

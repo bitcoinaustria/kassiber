@@ -4,8 +4,9 @@
 //! `sync_wallet_from_backend` → `_mark_wallet_synced_from_results` does, under
 //! one savepoint. Preparation (all network I/O) must finish before entry, and
 //! no progress callback runs inside it. Unsupported wallet shapes, routes and
-//! repairs refuse with `native_fallback_required`, rolling back, so a caller
-//! can route them to the Python reference instead of guessing.
+//! repairs refuse with `native_fallback_required`, rolling back. This internal
+//! refusal never authorizes a Python retry after native execution starts. The
+//! product router must select an unsupported whole invocation before bootstrap.
 use super::row::{field, first, or_text, rows, Result};
 use super::{insert, inventory, policy, provenance, reports};
 use crate::{database_error, observer_apply};

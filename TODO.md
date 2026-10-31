@@ -165,11 +165,11 @@ through the shared setup crate.
   This is an unregistered preparation seam; see the native fetch handoff.
 - [ ] Connect native preparation/publication to shared CLI/daemon wallet and
   freshness services, retaining pre-egress refusal of unsupported shapes.
-- [ ] Resolve the Python reference's Esplora compatibility-cache reorg miss when
-  script statistics are unchanged, in separate work. The disposable repro is
-  `tests/rust_port/repro_esplora_reorg_cache.py`; incremental sync leaves saved
-  confirmation evidence stale until force-full refresh. See the publication
-  handoff in `docs/reference/rust-shell.md`.
+- [x] Integrate the separate Python tip-cache fix and match it in Rust:
+  Esplora/Electrum compatibility evidence refreshes after a changed or missing
+  block-identity anchor even when script statistics, status and heights match.
+  Retain validated Electrum graphs while refreshing header timestamps; rerun
+  fixture, restart-sequence and reviewed-book preparation/publication parity.
 - [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
   hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
   Silent Payments sync remain `not_implemented` in the Rust binary.
