@@ -222,3 +222,134 @@ uv run --locked python scripts/benchmark-journal-render.py --probe PROBE --snaps
 uv run --locked python -m tests.rust_port.classify_tests update
 uv run --locked python scripts/python_test_shards.py run preflight --ci
 ```
+
+## Fourth continuation: exact source reuse
+
+This local continuation starts at `197f6cdec` on `t3code/r4-11-render-4`.
+**R4-11 remains unaccepted.** This is a verified source-reuse checkpoint;
+neither the CPU budget nor the remaining scalar and campaign gates are closed.
+
+The controlled comparison reconstructs the pre-repair renderer and joins from
+`b5eb38ea8`, retaining the current boundary adapter, and alternates that probe
+with the unmodified `197f6cdec` probe on identical copied 20k operands. All book
+states match before timing. Best of five process CPU seconds are:
+
+| Book | Before boundary repairs | With boundary repairs | One-minute load range |
+| --- | ---: | ---: | ---: |
+| Generic 20k | 0.225057 | 0.387696 | 56.20–58.18 |
+| Multi-wallet 20k | 0.425683 | 0.390397 | 53.84–58.92 |
+
+Individual samples overlap substantially. For example, the generic pre-repair
+probe ranges from 0.225057 to 0.421134 s. These results do not isolate the cause
+of the historical regression or establish that the boundary repairs explain
+it. The unmodified Python/Rust matrix separately measures 0.155323 s generic
+and 0.298810 s multi-wallet. These are separate runs, not paired improvement
+claims. Historical wall-clock measurements remain insufficient CPU evidence.
+
+A 500-sample gdb profile contains 315 samples inside `boundary::build`.
+Source construction appears in 126 of those samples (40.0%), entry heads in
+49 (15.6%), balance comparison in 28 (8.9%), and holdings-key validation in
+three (1.0%); inclusive counts overlap. Generic 20k renders 39,976 fragment
+sources from 19,989 distinct source rows. Response decoding is outside the
+render timer and excluded from those 315 samples.
+
+The renderer now shares an immutable `Source` for repeated uses of a row only
+when asset, spot price, fiat fee and crypto fee match exactly. Decimal matching
+includes sign, coefficient and exponent. Changed values replace the cached
+source without modifying previously rendered fragments. Event and lot fields
+hold `Arc<Source>` with transparent serialization. The existing provenance
+cache, UUID consumption and refusal order are preserved. Entry hashability
+validation no longer constructs and discards an allocated holdings key.
+`render_ledger` and `boundary::finish` retain their signatures.
+
+Thirteen new Python-generated successful states cover event and lot value
+changes, equal-valued Decimal representations and asset changes. All original
+366 records are unchanged. The complete frozen corpus now has 379 cases:
+219 states and 160 refusals, with exact UUID-tape consumption. Five new mutation
+recipes cover the cache guards; the entry-key recipe moves to the equivalent
+hashability check. All inherited recipes remain.
+
+### Fresh verification
+
+- All 34 journal crate tests pass with all features in release mode, including
+  the existing logical SQLite/SQLCipher dump and rollback fixtures. Formatting,
+  all-target/all-feature clippy with denied warnings, six Python oracle tests
+  and deterministic regeneration of all 379 vectors pass.
+- One complete scenario cycle across the twelve generators matches 508 render
+  states; three pre-render refusals are separate. Tax-corpus replay matches
+  145 cases, including 25 rendering refusals, with 21 pre-render refusals separate.
+- Focused census and custody shadow each pass 108 tests and 12 subtests, compare
+  all seven stages on 65 builds, and observe 128 production tax calls. Both
+  fresh capture directories match all 65 render states, each exercising two
+  ownership candidates.
+- Recorded custody and rendering replay matches all 318 inputs: 159 original
+  recordings and 159 permutations, including 3,076 entries and 750 quarantines.
+- The resumable, source-bound mutation shard kills all ten selected recipes
+  after two passing named baselines. `ledger_rendering_matches_python` kills
+  the three retained source recipes and all five new cache recipes;
+  `legacy_boundary_values_and_refusal_order_match_python` kills
+  `JR-holding-unhashable` and `JR-entry-key-hash`. Logs are incremental and
+  the shard build tree is deleted. Applicability checks pass for all 139 journal
+  recipes (88 renderer, 51 persistence) and 2,327 custody recipes. Applicability
+  is not kill evidence for the unexecuted recipes.
+
+The boundary reproducer still fails actual surrogate-scalar decoding. It now
+also retains a malformed engine decimal, `00E-1`, whose native decoder returns
+`EngineContractError` instead of Python's `ValueError`. Nonfinite detail and
+malformed payout integer cases match. These two known differences remain
+explicit failures, not passing corpus comparisons. No Python reference bug or
+Python product-source change is introduced.
+
+The final original/new probe comparison alternates five pairs per book:
+
+| Book | Original CPU (s) | Source reuse CPU (s) | One-minute load range |
+| --- | ---: | ---: | ---: |
+| Generic 20k | 0.456467 | 0.435943 | 72.66–78.72 |
+| Multi-wallet 20k | 0.423680 | 0.394396 | 83.42–89.83 |
+
+The separate final Python/Rust matrix alternates five pairs for every book,
+after comparing complete state bytes. Best process CPU seconds are:
+
+| Book | Python CPU (s) | Rust CPU (s) | Load at best Rust trial | All-trial load range |
+| --- | ---: | ---: | ---: | ---: |
+| Generic 2k | 0.160682 | 0.022427 | 93.34 | 93.02–93.34 |
+| Generic 20k | 1.466747 | 0.208215 | 71.90 | 71.90–75.06 |
+| Multi-wallet 2k | 0.108363 | 0.022381 | 69.26 | 69.26–69.26 |
+| Multi-wallet 20k | 1.382334 | 0.201380 | 48.54 | 48.54–51.10 |
+
+Both 20k books still **fail the 0.15 s CPU budget**. Shared-host load is context,
+not an exemption. These timings exclude custody, engine computation, response
+decoding, canonical serialization and persistence on both sides.
+
+Raw operands, all five trials, stack samples, logs and source/probe digests
+remain under `target/r4-render-4/`; `verification-index.json` binds the evidence.
+The final classifier update leaves the disposition inventory unchanged, and
+CI preflight passes all 57 tests. Manual second review checks cache identity,
+immutable sharing, serialization and refusal order against the corpus.
+Mutation and verification build trees are removed after their summaries.
+
+### Still required for acceptance
+
+1. Isolate the remaining regression and meet 0.15 s CPU on both 20k books after
+   final typed-stage integration, preserving the existing `boundary::finish`
+   handoff to the concurrent conversion and orchestration work.
+2. Carry actual surrogate scalars throughout inputs, entries, provenance,
+   response decoding and joins. Complete raw nonfinite, carried-rate and audit
+   fidelity; malformed row/list/dict parity, lazy refusal order, graph error
+   families and remaining panic paths stay open. The malformed canonical-decimal
+   repro above is an additional concrete witness.
+3. Complete the exhaustive renderer branch audit: component exclusions,
+   ambiguous script owners, scope/txid filtering, amount tolerance and graph
+   refusal propagation remain open. Rerun the other 78 renderer recipes,
+   all 51 persistence recipes and all 2,327 custody recipes
+   in resumable shards with named kills and build-tree deletion. The ten kills
+   above do not substitute for this gate.
+4. Run the full 25,030-input generated campaign, complete census/shadow lanes
+   and additional fresh recordings against the final integrated renderer.
+   The scenario cycle and focused captures above do not certify those gates.
+5. Run complete integrated logical SQLite/SQLCipher campaigns and the repository
+   quality gate, then write production acceptance. Existing persistence fixtures
+   do not certify that integrated campaign.
+
+No push, pull request or external comment is performed. Python retains production
+accounting authority.

@@ -60,8 +60,22 @@ pub struct Fragment {
     pub acquisition_basis_exact: Option<String>,
     pub acquisition_quantity_msat: Option<Value>,
     pub acquisition_quantity_msat_exact: Option<String>,
-    pub event: Source,
-    pub lot: Option<Source>,
+    #[serde(serialize_with = "serialize_source")]
+    pub event: std::sync::Arc<Source>,
+    #[serde(serialize_with = "serialize_optional_source")]
+    pub lot: Option<std::sync::Arc<Source>>,
+}
+fn serialize_source<S: Serializer>(
+    source: &std::sync::Arc<Source>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    source.as_ref().serialize(serializer)
+}
+fn serialize_optional_source<S: Serializer>(
+    source: &Option<std::sync::Arc<Source>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    source.as_deref().serialize(serializer)
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Source {

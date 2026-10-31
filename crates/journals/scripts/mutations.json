@@ -1302,8 +1302,8 @@
   {
     "id": "JR-entry-key-hash",
     "file": "crates/journals/src/render.rs",
-    "find": "holding_key(&wallet_id)?;",
-    "replace": "let _ = holding_key(&wallet_id);",
+    "find": "ensure_hashable(&wallet_id)?;",
+    "replace": "let _ = ensure_hashable(&wallet_id);",
     "expect_failing": [
       "legacy_boundary_values_and_refusal_order_match_python"
     ],
@@ -1338,5 +1338,55 @@
       "legacy_boundary_values_and_refusal_order_match_python"
     ],
     "rule": "Entry UUID generation precedes a missing-workspace refusal and consumes the exact tape."
+  },
+  {
+    "id": "JR-source-cache-spot",
+    "file": "crates/journals/src/render.rs",
+    "find": "&& cached.spot.same_representation(spot)",
+    "replace": "&& cached.spot.same_representation(&cached.spot)",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Reused fragment sources retain the exact spot representation."
+  },
+  {
+    "id": "JR-source-cache-fee",
+    "file": "crates/journals/src/render.rs",
+    "find": "&& cached.fee.same_representation(fee)",
+    "replace": "&& cached.fee.same_representation(&cached.fee)",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Reused fragment sources retain the exact fee representation."
+  },
+  {
+    "id": "JR-source-cache-crypto",
+    "file": "crates/journals/src/render.rs",
+    "find": "&& cached.crypto.same_representation(crypto)",
+    "replace": "&& cached.crypto.same_representation(&cached.crypto)",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Reused fragment sources retain the exact crypto representation."
+  },
+  {
+    "id": "JR-source-cache-asset",
+    "file": "crates/journals/src/render.rs",
+    "find": "cached.source.asset == asset",
+    "replace": "cached.source.asset == cached.source.asset",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Cached source assets follow each rendered entry even when the source row is reused."
+  },
+  {
+    "id": "JR-source-cache-fee-representation",
+    "file": "crates/journals/src/render.rs",
+    "find": "cached.fee.same_representation(fee)",
+    "replace": "cached.fee == *fee",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "A numerically equal fee with a different sign or exponent keeps its exact text."
   }
 ]

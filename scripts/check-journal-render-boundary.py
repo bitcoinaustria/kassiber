@@ -7,6 +7,7 @@ operand still differs from Python; these are not passing parity witnesses.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -43,6 +44,12 @@ def operands():
     )])
     yield 'malformed-integer', capture_projection(
         book['profile'], malformed, response_override=response,
+    )
+    malformed_response = deepcopy(response)
+    entry = next(e for e in malformed_response['entries'] if e.get('fragments'))
+    entry['fragments'][0]['lot']['fiat_fee'] = '00E-1'
+    yield 'malformed-canonical-decimal', capture_projection(
+        book['profile'], custody, response_override=malformed_response,
     )
 
 

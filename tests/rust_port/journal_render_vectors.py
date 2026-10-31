@@ -1,5 +1,6 @@
 """Rebuild immutable synthetic R4-11 build-state vectors (explicit --accept)."""
 from dataclasses import replace
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -118,6 +119,28 @@ def vectors():
         replace(base, wallet_refs_by_id=wallets), response, group='ledger')
 
     normal_response = capture_projection(snapshot(0)['profile'], base)['response']
+    realized = next(e for e in normal_response['entries'] if e.get('fragments'))
+    fragment = realized['fragments'][0]
+    for source in ('event', 'lot'):
+        values = [(field, value, field) for field, value in
+                  [('spot_price', '123E1'), ('fiat_fee', '-0E-2'), ('crypto_fee', '1E-8')]]
+        for field in ('spot_price', 'fiat_fee', 'crypto_fee'):
+            coefficient, exponent = fragment[source][field].split('E')
+            shifted = coefficient if coefficient in ('0', '-0') else coefficient + '0'
+            values.append((field, f'{shifted}E{int(exponent)-1}', f'{field}-representation'))
+        for field, value, name in values:
+            response = deepcopy(normal_response)
+            entry = next(e for e in response['entries'] if e.get('fragments'))
+            changed = deepcopy(fragment)
+            changed[source][field] = value
+            entry['fragments'] = [deepcopy(fragment), changed, deepcopy(fragment)]
+            add(f'source-cache-{source}-{name}', snapshot(0)['profile'], base, response)
+    response = deepcopy(normal_response)
+    entry = next(e for e in response['entries'] if e.get('fragments'))
+    other_asset = deepcopy(entry)
+    other_asset['asset'] = 'LBTC'
+    response['entries'] += [other_asset, deepcopy(entry)]
+    add('source-cache-asset', snapshot(0)['profile'], base, response)
     for name, anchor in [('null', None), ('number', 123)]:
         rows = tuple(dict(row, journal_transaction_id=anchor)
                      for row in base.finalized_tax_projection.rows)

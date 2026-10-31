@@ -143,6 +143,13 @@ struct Reader<'a> {
     iso: HashMap<String, String>,
     utc_dates: HashMap<String, bool>,
     sources: Vec<Option<std::sync::Arc<SourceProvenance>>>,
+    source_values: Vec<Option<SourceValue>>,
+}
+struct SourceValue {
+    spot: Decimal,
+    fee: Decimal,
+    crypto: Decimal,
+    source: std::sync::Arc<Source>,
 }
 impl Reader<'_> {
     fn iso(&mut self, raw: &Value) -> Result<String, Refusal> {
@@ -203,8 +210,17 @@ impl Reader<'_> {
         spot: &Decimal,
         fee: &Decimal,
         crypto: &Decimal,
-    ) -> Result<Source, Refusal> {
+    ) -> Result<std::sync::Arc<Source>, Refusal> {
         let slot = self.rows.get(id).copied();
+        if let Some(cached) = slot.and_then(|slot| self.source_values[slot].as_ref()) {
+            if cached.source.asset == asset
+                && cached.spot.same_representation(spot)
+                && cached.fee.same_representation(fee)
+                && cached.crypto.same_representation(crypto)
+            {
+                return Ok(cached.source.clone());
+            }
+        }
         let provenance = if let Some(p) = slot.and_then(|slot| self.sources[slot].as_ref()) {
             p.clone()
         } else {
@@ -226,14 +242,23 @@ impl Reader<'_> {
             provenance
         };
         let amount = msat(crypto)?;
-        Ok(Source {
+        let source = std::sync::Arc::new(Source {
             provenance,
             asset: asset.into(),
             spot_price_exact: fixed(spot)?,
             fiat_fee_exact: fixed(fee)?,
             crypto_fee_msat_exact: amount.to_string(),
             crypto_fee_msat: amount,
-        })
+        });
+        if let Some(slot) = slot {
+            self.source_values[slot] = Some(SourceValue {
+                spot: spot.clone(),
+                fee: fee.clone(),
+                crypto: crypto.clone(),
+                source: source.clone(),
+            });
+        }
+        Ok(source)
     }
     fn fragment(&mut self, asset: &str, f: &FragmentOut) -> Result<Fragment, Refusal> {
         let amount = msat(&f.crypto_amount.0)?;
@@ -290,7 +315,7 @@ impl Reader<'_> {
         ids: &mut impl FnMut() -> String,
     ) -> Result<JournalEntryRow, Refusal> {
         let wallet_id = required(wallet, "id")?.clone();
-        holding_key(&wallet_id)?;
+        ensure_hashable(&wallet_id)?;
         let profile_id = required(self.inputs.profile, "id")?.clone();
         let id = ids();
         Ok(JournalEntryRow {
@@ -488,6 +513,9 @@ pub fn render_ledger(
         row_values[rows[id.as_str()]] = row;
     }
     let sources = vec![None; row_values.len()];
+    let source_values = std::iter::repeat_with(|| None)
+        .take(row_values.len())
+        .collect();
     let labels = inputs
         .wallets
         .iter()
@@ -502,6 +530,7 @@ pub fn render_ledger(
         iso: HashMap::new(),
         utc_dates: HashMap::new(),
         sources,
+        source_values,
     };
     drop(span);
     let span = kassiber_custody::timing::span("render.audit");
@@ -802,6 +831,21 @@ enum HoldingKey {
     Float(u64),
     String(String),
 }
+fn unhashable(value: &Value) -> Refusal {
+    Refusal::new(
+        "TypeError",
+        format!(
+            "unhashable type: '{}'",
+            if value.is_array() { "list" } else { "dict" }
+        ),
+    )
+}
+fn ensure_hashable(value: &Value) -> Result<(), Refusal> {
+    if value.is_array() || value.is_object() {
+        return Err(unhashable(value));
+    }
+    Ok(())
+}
 fn holding_key(value: &Value) -> Result<HoldingKey, Refusal> {
     Ok(match value {
         Value::Null => HoldingKey::Null,
@@ -820,15 +864,7 @@ fn holding_key(value: &Value) -> Result<HoldingKey, Refusal> {
             }
         }
         Value::String(text) => HoldingKey::String(text.clone()),
-        _ => {
-            return Err(Refusal::new(
-                "TypeError",
-                format!(
-                    "unhashable type: '{}'",
-                    if value.is_array() { "list" } else { "dict" }
-                ),
-            ));
-        }
+        _ => return Err(unhashable(value)),
     })
 }
 fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
