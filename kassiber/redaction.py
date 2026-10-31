@@ -49,7 +49,7 @@ _SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstu
 _SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
-_URL_CREDENTIALS_RE = re.compile(r'''\b((?:https?|tcp|ssl|socks5h?|wss?)://)([^/\s@\\"'<>?#]+)@''', re.IGNORECASE)
+_URL_CREDENTIALS_RE = re.compile(r'''\b((?:https?|tcp|ssl|socks5h?|wss?)://)((?:[^/\s@]*:[^/\s@]*|[^/\s@\\"'<>?#]+))@''', re.IGNORECASE)
 _AUTHORIZATION_RE = re.compile(r"(\bAuthorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)", re.IGNORECASE)
 _SECRET_KEY_NAME = (
     r"(?:[A-Za-z0-9]*[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|"
