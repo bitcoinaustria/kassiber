@@ -27,3 +27,17 @@ def test_secret_redaction_shared_corpus(case):
     'Authorization', 'rune', 'bitcoin.rpcpassword'])
 def test_rpc_and_lightning_secret_fields(key):
     assert redaction.redact_secret_value({key: 'private'}) == {key: '[redacted]'}
+
+
+@pytest.mark.parametrize('separator', ['-', '.'])
+def test_long_identifier_redaction_is_linear(separator):
+    # Isolate the deadline so a regression cannot stall the entire test shard.
+    import subprocess
+    import sys
+    import time
+
+    text = ('word' + separator) * 20000
+    script = 'from kassiber.redaction import redact_secret_text; import sys; s=sys.stdin.read(); assert redact_secret_text(s)==s'
+    start = time.perf_counter()
+    subprocess.run([sys.executable, '-c', script], input=text, text=True, check=True, timeout=0.8)
+    assert time.perf_counter() - start < 0.8
