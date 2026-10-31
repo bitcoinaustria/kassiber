@@ -387,9 +387,17 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     if revision_ids.iter().any(revisions::Reference::is_text)
         && revision_ids.iter().any(|id| !id.is_text())
     {
-        return Err(Error::Unsupported(
-            "custody revision reference is not SQLite TEXT",
-        ));
+        // Python sorts a set here, so hash randomization can reverse the
+        // comparison operands. Keep one deterministic observed variant until
+        // the reference's ordering is made deterministic separately.
+        let numeric = revision_ids.iter().find(|id| !id.is_text()).unwrap();
+        return Err(Error::Reference(crate::Refusal::new(
+            "TypeError",
+            format!(
+                "'<' not supported between instances of '{}' and 'str'",
+                numeric.python_type()
+            ),
+        )));
     }
     for id in revision_ids {
         revision_headers.extend(reader.rows(

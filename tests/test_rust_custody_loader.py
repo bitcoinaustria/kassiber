@@ -22,6 +22,33 @@ pytestmark = pytest.mark.skipif(not Path(BINARY).is_file(), reason="requires cus
 AS_OF = "2026-10-31T12:00:00Z"
 
 
+def test_loader_seed_variants_require_observed_complete_refusal_pairs():
+    from crates.journals.scripts.audit_loader_storage import (
+        classify, classify_projection, mixed_revision_refusal,
+    )
+    first = exception_boundaries(TypeError("'<' not supported between instances of 'str' and 'float'"))
+    second = exception_boundaries(TypeError("'<' not supported between instances of 'float' and 'str'"))
+    reference = {"phase": "load", "refusal": {"family": "TypeError", "message": first["cli"]["message"]},
+                 "boundaries": first}
+    actual = {"boundaries": second}
+    assert classify(reference, actual) == "different_refusal"
+    assert classify(reference, actual, [first, second]) == "equal_refusal"
+    assert classify_projection(reference, actual, [first, second]) == "equal_projection_refusal"
+    assert classify_projection(reference, {"value": {}}, [first, second]) == "native_admitted_refused_projection"
+    wrong_code = {key: {**value, "code": "validation"} for key, value in second.items()}
+    assert classify_projection(reference, {"boundaries": wrong_code}, [first, second]) == "different_projection_refusal"
+    unknown_message = exception_boundaries(TypeError("unobserved sort refusal"))
+    assert classify_projection(reference, {"boundaries": unknown_message}, [first, second]) == "different_projection_refusal"
+    for table, column, storage, eligible in [
+        ("custody_components", "supersedes_component_id", "real", True),
+        ("custody_components", "superseded_by_component_id", "integer", True),
+        ("custody_components", "created_at", "real", False),
+        ("transactions", "supersedes_component_id", "real", False),
+        ("custody_components", "supersedes_component_id", "blob", False),
+    ]:
+        assert mixed_revision_refusal(reference, table, column, storage) is eligible
+
+
 def test_loader_projection_audit_keeps_transport_and_product_outcomes_distinct():
     from crates.journals.scripts.audit_loader_storage import classify_projection, summarize
     refusal = exception_boundaries(ValueError("synthetic downstream refusal"))

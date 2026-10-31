@@ -101,23 +101,32 @@ fn native_loader_refuses_mixed_revision_references_before_output() {
         .find(|case| text(get(case, "name")) == "structural-columns")
         .unwrap();
     for field in ["supersedes_component_id", "superseded_by_component_id"] {
-        for scalar in ["7", "1.5"] {
+        for (scalar, kind) in [
+            ("7", "int"),
+            ("1.5", "float"),
+            ("1e999", "float"),
+            ("-1e999", "float"),
+        ] {
             let conn = Connection::open_in_memory().unwrap();
             let sql = text(get(case, "sql"))
                 .replace(&format!("\"{field}\" TEXT"), &format!("\"{field}\""));
             conn.execute_batch(&sql).unwrap();
             conn.execute_batch(&format!("BEGIN IMMEDIATE; UPDATE custody_components SET {field}={scalar} WHERE id='active-a'" )).unwrap();
             let changes = conn.total_changes();
-            assert!(matches!(
-                load(
+            for _ in 0..2 {
+                let Err(Error::Reference(refusal)) = load(
                     &conn,
                     get(case, "profile").clone(),
-                    &text(get(case, "as_of"))
-                ),
-                Err(Error::Unsupported(
-                    "custody revision reference is not SQLite TEXT"
-                ))
-            ));
+                    &text(get(case, "as_of")),
+                ) else {
+                    panic!("expected reference sort refusal")
+                };
+                assert_eq!(refusal.family, "TypeError");
+                assert_eq!(
+                    refusal.message,
+                    format!("'<' not supported between instances of '{kind}' and 'str'")
+                );
+            }
             assert_eq!(changes, conn.total_changes());
             assert!(!conn.is_autocommit());
             conn.execute_batch("ROLLBACK").unwrap();

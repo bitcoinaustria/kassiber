@@ -414,16 +414,15 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
   R4-9's test-only loader shares column layouts across native custody rows.
-  Loader-7 closes 216/232 non-BLOB composed-audit gaps, preserving raw quantities
-  until the reference-equivalent consumer and exact infinite-rate validation
-  messages. Its 16,384-case non-BLOB audit proves zero writes and zero native
-  admissions of Python-refused projections. Sixteen mixed numeric/TEXT revision
-  sort messages remain unresolved; Python's operand order can vary by hash seed.
-  Paired 20k CPU is 0.280 s generic and 0.424 s multi-wallet, within the 5% budget.
-  The 4,446 BLOB corruption-class gaps are set aside **pending an owner decision**,
-  with the loader-6 inventory retained. Finish the mixed-reference fidelity,
-  exhaustive branch mutation map, full 2,292-entry custody campaign and final
-  generated/permutation/replay/census/shadow gates before acceptance
+  Loader-8's 16,384-case non-BLOB audit exits 0 with zero writes and zero native
+  admissions of Python-refused projections. Its sixteen mixed revision-reference
+  refusals match measured Python hash-seed variants, remain deterministic in
+  Rust, and are **pending Python determinism fix**. The 4,446 BLOB corruption-class
+  gaps remain **pending an owner decision**, with the loader-6 inventory unchanged.
+  Paired 20k CPU is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7.
+  The loader catalogue has 136 entries and remains partial. Finish the exhaustive
+  branch mutation map, full 2,292-entry custody campaign and final generated/
+  permutation/replay/census/shadow gates before acceptance
   ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations

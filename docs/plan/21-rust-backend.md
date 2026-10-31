@@ -2291,22 +2291,25 @@ Loader-7 closes 216 of the 232 non-BLOB composed audit gaps: component integer
 messages, early amount/fee admission and component timestamp sorting. Native
 loading retains database scalars for the reference-equivalent consuming stage;
 the JSON adapter keeps its strict signed-64 quantity contract. Infinite rates
-now retain the exact downstream finite-decimal validation message.
+retain the exact downstream finite-decimal validation message.
 
-The non-BLOB audit covers 16,384 cases over the same 23 tables/360 columns,
-with zero writes and zero native admissions of Python-refused projections.
-Sixteen mixed numeric/TEXT revision sort messages remain unresolved, including
-Python hash-seed-dependent operand order. No reference-bug waiver is claimed.
-At the owner's direction, the 4,446 BLOB corruption-class gaps are set aside
-and remain **pending an owner decision**, with their loader-6 inventory retained.
+Loader-8 applies the owner's seed-variant matching rule to the remaining 16
+mixed numeric/TEXT revision-reference sort refusals. Its non-BLOB audit exits 0:
+all 16,384 cases over the same 23 tables/360 columns match, with zero writes and
+zero native admissions of Python-refused projections. Each of the sixteen
+records includes the measured variant set and per-seed CLI/daemon pairs. Native
+refusals are deterministic; the cases remain **pending Python determinism fix**.
+The 4,446 BLOB corruption-class gaps remain **pending an owner decision**,
+unchanged, with their loader-6 inventory retained.
 
 The exhaustive branch map, full 2,292-entry custody mutation campaign and final
-generated/permutation/replay/census/shadow gates remain open. R4-9 is not
-accepted; the acceptance-except-BLOB wording is conditional on completing all
-other requirements. Python retains production journal authority. Loader-7's
-paired 20k CPU totals including admission are 0.279943 s generic and 0.424456 s
-multi-wallet, both within 5% of the supplied loader-6 baselines; the checkpoint
-owns the full timing and verification evidence.
+generated/permutation/replay/census/shadow gates remain open. The partial loader
+catalogue has 136 entries. R4-9 is not accepted; the acceptance wording with both
+pending classes is conditional on completing those requirements. Python retains
+production journal authority. Loader-8's paired 20k CPU totals including
+admission are 0.288331 s generic and 0.428645 s multi-wallet, both within 5% of
+loader-7. The checkpoint owns the timing and verification evidence; inherited
+complete-campaign counts do not imply fresh reruns.
 
 ### R4-0 integrated stack
 

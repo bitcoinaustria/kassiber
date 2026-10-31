@@ -82,17 +82,23 @@ def expected(conn, profile, *, project=False):
                 **projection}
 
 
-def classify(reference, actual):
+def boundaries_match(reference, actual, variants=()):
+    # Compare the complete CLI/daemon pair: never independently combine codes
+    # or messages from different runs, and never relax a successful outcome.
+    return actual == reference or any(actual == variant for variant in variants)
+
+
+def classify(reference, actual, variants=()):
     if "refusal" in reference:
         if "v1" in actual:
             return "native_admitted_refused_value"
-        return "equal_refusal" if actual.get("boundaries") == reference["boundaries"] else "different_refusal"
+        return "equal_refusal" if boundaries_match(reference["boundaries"], actual.get("boundaries"), variants) else "different_refusal"
     if actual.get("v1") == reference["v1"]:
         return "equal_value"
     return "native_refused_value" if "error" in actual else "different_value"
 
 
-def classify_projection(reference, actual):
+def classify_projection(reference, actual, variants=()):
     """No snapshot acceptance or later unrelated refusal substitutes for parity."""
     reference = reference.get("projection", reference)
     actual = actual.get("projection", actual)
@@ -103,8 +109,53 @@ def classify_projection(reference, actual):
                 else "different_projection")
     if "value" in actual:
         return "native_admitted_refused_projection"
-    return ("equal_projection_refusal" if actual.get("boundaries") == reference.get("boundaries")
+    return ("equal_projection_refusal" if boundaries_match(reference.get("boundaries"), actual.get("boundaries"), variants)
             else "different_projection_refusal")
+
+
+def mixed_revision_refusal(reference, table, column, stored_type):
+    return (table == "custody_components"
+            and column in ("supersedes_component_id", "superseded_by_component_id")
+            and stored_type in ("integer", "real")
+            and reference.get("phase") == "load"
+            and reference.get("refusal", {}).get("family") == "TypeError"
+            and reference["refusal"]["message"].startswith("'<' not supported between instances of "))
+
+
+def reference_seed_variants(request):
+    """Measure this exact synthetic case in fresh Python processes, not a whitelist."""
+    by_seed = {}
+    variants = []
+    for seed in ("1", "2", "3", "4"):
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--reference-worker"],
+            input=json.dumps(request, ensure_ascii=True), capture_output=True, text=True,
+            env={**os.environ, "PYTHONHASHSEED": seed}, timeout=120, check=True,
+        )
+        outcome = json.loads(result.stdout)
+        if (result.stderr or outcome.get("phase") != "load"
+                or outcome.get("refusal", {}).get("family") != "TypeError"
+                or not outcome["refusal"]["message"].startswith("'<' not supported between instances of ")):
+            raise RuntimeError("mixed revision seed probe did not reproduce a load TypeError")
+        boundary = outcome["boundaries"]
+        by_seed[seed] = boundary
+        if boundary not in variants:
+            variants.append(boundary)
+    return {"status": "pending Python determinism fix", "boundaries_by_hash_seed": by_seed,
+            "boundary_variants": variants}
+
+
+def reference_worker():
+    request = json.load(sys.stdin)
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        conn.executescript(request["sql"])
+        before = conn.total_changes
+        outcome = expected(conn, request["profile"], project=request["project"])
+        if conn.total_changes != before:
+            raise RuntimeError("Python seed probe wrote rows")
+        print(json.dumps({key: outcome[key] for key in ("phase", "refusal", "boundaries") if key in outcome}))
+    return 0
 
 
 def projection_text(value):
@@ -130,6 +181,11 @@ def summarize(result):
     ).items()))
     if result.get("projection"):
         summary["zero_write_cases"] = sum(record.get("writes") == 0 for record in result["cases"])
+    summary["pending_python_determinism_cases"] = [
+        {key: record[key] for key in ("fixture", "affinity", "table", "column", "rowid", "storage", "python_seed_variants")}
+        for record in result["cases"] if "python_seed_variants" in record
+    ]
+    summary["pending_python_determinism_count"] = len(summary["pending_python_determinism_cases"])
     summary["limitations"] = [
         "A predicate/join mutation can exclude the changed row; equality then proves filtering, not downstream scalar handling.",
         "Both declared-affinity and no-affinity variants record actual typeof(); requested classes are never counted as stored classes.",
@@ -137,6 +193,7 @@ def summarize(result):
         "Every physical row of the small synthetic fixtures is audited, including inactive/foreign rows; this does not exhaust combinations of corrupted cells.",
         "Load and v1 serialization phases are distinguished; native custody admission is recorded separately.",
         "Projection mode compares the native in-process custody stages with Python through finalized projection, including exact CLI/daemon refusal code/message and zero writes. It does not run the unrouted R4 journal command or ledger persistence.",
+        "Mixed numeric/TEXT revision-reference load TypeErrors match only a complete CLI/daemon code/message pair observed for that exact case under Python hash seeds 1, 2, 3 and 4; these cases remain pending Python determinism fix.",
     ]
     failures = {}
     for record in result["cases"]:
@@ -261,7 +318,10 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
                                             actual = json.loads(response)
                                             if "text" in actual.get("projection", {}):
                                                 actual["projection"] = {"value": json.loads(actual["projection"]["text"])}
-                                            status = classify(reference, actual)
+                                            seed_record = (reference_seed_variants(request)
+                                                           if mixed_revision_refusal(reference, table, column, stored_type) else None)
+                                            variants = seed_record["boundary_variants"] if seed_record else ()
+                                            status = classify(reference, actual, variants)
                                             record = {"fixture": fixture, "affinity": affinity,
                                                       "table": table, "column": column, "rowid": rowid,
                                                       "storage": storage, "stored_type": stored_type,
@@ -269,7 +329,7 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
                                                       "read_in_baseline": (table, column) in columns,
                                                       "status": status}
                                             if project:
-                                                record["projection_status"] = classify_projection(reference, actual)
+                                                record["projection_status"] = classify_projection(reference, actual, variants)
                                                 record["python_projection"] = outcome_record(reference.get("projection", reference))
                                                 record["native_projection"] = outcome_record(actual.get("projection", actual))
                                                 record["writes"] = actual.get("writes")
@@ -280,6 +340,8 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
                                                 record["python_boundaries"] = reference["boundaries"]
                                             else:
                                                 record["python_v1_sha256"] = hashlib.sha256(reference["v1"].encode("ascii")).hexdigest()
+                                            if seed_record:
+                                                record["python_seed_variants"] = seed_record
                                             if "refusal" in actual:
                                                 record["native"] = actual["refusal"]
                                                 record["native_boundaries"] = actual.get("boundaries")
@@ -348,6 +410,8 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
 
 
 def main():
+    if sys.argv[1:] == ["--reference-worker"]:
+        return reference_worker()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)

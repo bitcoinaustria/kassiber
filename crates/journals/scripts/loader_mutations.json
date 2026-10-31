@@ -1017,7 +1017,7 @@
     "expect_failing": [
       "native_loader_refuses_mixed_revision_references_before_output"
     ],
-    "rule": "Keep mixed text/numeric revision references fail closed pending exact Python sort refusal parity."
+    "rule": "Refuse mixed text/numeric revision references before output, preserving the caller transaction."
   },
   {
     "id": "JL-negative-nonfinite",
@@ -1298,5 +1298,65 @@
       "finalized_price_errors_keep_field_code_and_message"
     ],
     "rule": "Finalized decimal errors retain the validation code."
+  },
+  {
+    "id": "JL-revision-message-family",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"TypeError\",\n            format!(",
+    "replace": "\"ValueError\",\n            format!(",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Preserve the Python mixed-reference TypeError family."
+  },
+  {
+    "id": "JL-revision-message-text",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "'<' not supported between instances of '{}' and 'str'",
+    "replace": "'<' not supported between instances of '{}' and 'text'",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Emit one deterministic observed Python sort message."
+  },
+  {
+    "id": "JL-revision-message-int",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "SqlValue::Integer(_) => \"int\",",
+    "replace": "SqlValue::Integer(_) => \"float\",",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Render SQLite INTEGER revision references as Python int."
+  },
+  {
+    "id": "JL-revision-message-real",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "SqlValue::Real(_) => \"float\",",
+    "replace": "SqlValue::Real(_) => \"int\",",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Render SQLite REAL revision references as Python float, including infinities."
+  },
+  {
+    "id": "JL-audit-seed-variants",
+    "file": "crates/journals/scripts/audit_loader_storage.py",
+    "find": "any(actual == variant for variant in variants)",
+    "replace": "False",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+    ],
+    "rule": "Match a complete refusal variant observed under another Python seed."
+  },
+  {
+    "id": "JL-audit-seed-code",
+    "file": "crates/journals/scripts/audit_loader_storage.py",
+    "find": "actual == variant for variant in variants",
+    "replace": "actual is not None for variant in variants",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+    ],
+    "rule": "Reject unobserved codes and messages despite the Python determinism exception."
   }
 ]

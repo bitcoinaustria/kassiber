@@ -1,20 +1,19 @@
 # R4-9 native custody loader checkpoint
 
-This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-7
-continues `39de991a3` (loader-6) and closes 216 of the 232 non-BLOB composed
-audit gaps. Sixteen mixed revision-reference sort refusals remain unresolved.
-The owner has explicitly set aside the 4,446 BLOB corruption-class gaps pending
-an owner decision; they are not waived or counted as resolved. Python retains
-every production load and journal route. The earlier sections retain their
-historical evidence.
+This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-8
+continues `efcbb7af7` (loader-7) and applies the owner's hash-seed variant rule
+to the remaining 16 mixed revision-reference refusals. The 16,384-case non-BLOB
+audit now exits 0, with zero writes and zero native admissions of
+Python-refused projections. The 16 cases remain **pending Python determinism
+fix**; this does not claim that Python has become deterministic. The 4,446
+BLOB corruption-class gaps remain **pending an owner decision**, unchanged.
+Python retains every production load and journal route. Earlier sections retain
+their historical evidence.
 
-Loader-7 retains the 0.30 s target at **0.280 s process CPU / 0.282 s wall**,
-including admission. Multi-wallet 20k measures **0.424 / 0.432 s**. Both CPU
-measurements remain within 5% of the supplied loader-6 baselines. Historical
-timing and verification sections below retain their own evidence; they do not
-imply fresh reruns of their complete gates.
-Exhaustive loader mutations, lossless legacy values/refusals and the complete
-custody campaign still keep R4-9 open.
+Exhaustive loader branch mutations, the full 2,292-entry custody mutation
+campaign and the final generated/permutation/replay/census/shadow gates still
+keep R4-9 open. The acceptance wording with both pending classes is conditional
+on those remaining gates; this checkpoint does not claim acceptance.
 
 ## Representation and authority
 
@@ -44,8 +43,9 @@ The generic-20k transactions, rate and gap projections previously owned
 column layouts. Network observations still materialize JSON objects for the
 existing network consumer. This is a transitional row representation, not the
 plan's eventual lossless `SqlValue`/`BookSnapshot` boundary. INTEGER and REAL
-remain distinct. Mixed revision-reference refusals and the pending BLOB
-corruption class retain the fidelity gaps described below.
+remain distinct. Mixed revision-reference refusals now use a deterministic
+observed Python message under the owner's seed-variant rule. The pending Python
+fix and BLOB corruption class remain explicit exceptions described below.
 
 Admission memoizes only successfully checked, identical configuration strings
 within one validation call. Every different string and every object still goes
@@ -710,24 +710,123 @@ the standalone probe, synthetic books, scripts, full audit cases and logs remain
 under `target/r4-loader-7`. No background job remains at handoff. This is a local
 checkpoint with no push, PR, external comment or production routing change.
 
+## Loader-8 seed-variant audit rule (unaccepted)
+
+The owner authorizes matching these mixed numeric/TEXT revision-reference
+refusals when the native code equals Python's and the native message is one
+Python produces across hash seeds. Native loading remains deterministic: it
+always renders the numeric operand first, using `int` for SQLite INTEGER and
+`float` for SQLite REAL, including both infinity signs. The mixed population
+still refuses before revision queries or snapshot output, without writes or
+ending the caller's transaction. No Python production implementation changes.
+
+The audit measures each eligible synthetic case in fresh CPython 3.11 processes
+under `PYTHONHASHSEED=1,2,3,4`. It retains each complete CLI/daemon code/message
+pair by seed and the deduplicated variant set. Only numeric values in the two
+revision-reference columns, producing a load-time sort TypeError, qualify.
+Successful projections, other columns, other exception families, unobserved
+messages and different codes retain the strict comparison. Matching never
+combines the CLI half of one run with the daemon half of another.
+
+The [loader-8 non-BLOB audit](r4-native-loader-8-storage-audit.json) records:
+
+| Loader plus finalized projection | Cases |
+| --- | ---: |
+| Equal successful projection, preserving numeric types | 5,308 |
+| Matching CLI/daemon refusal code and rendered message | 11,076 |
+| Different refusal or successful projection | 0 |
+| Native admission of a Python-refused projection | 0 |
+| Cases proving zero writes | 16,384 |
+| Matching mixed revision-reference cases, pending Python determinism fix | 16 |
+
+The same 23 tables, 360 columns, physical rows and both affinity modes are
+covered. BLOB expressions remain excluded with `--non-blob`; the 4,446 pending
+BLOB gaps and the loader-6 inventory are unchanged. Full synthetic cases append
+to `target/r4-loader-8/storage-audit.jsonl`; the complete JSON and run log are
+beside it. The sixteen pending cases, variant sets and per-seed pairs are
+included in the committed summary with their pending status.
+
+The updated native regression repeats every refusal, tests both revision columns
+with INTEGER, REAL and both infinity signs, and checks transaction ownership and
+zero writes. The audit regression rejects unobserved codes/messages and proves
+that a native successful projection cannot use the variant exception.
+
+Six new recipes extend the partial loader catalogue from 130 to 136:
+
+| Contract | Mutation IDs | Named witness |
+| --- | --- | --- |
+| Mixed-reference refusal family and deterministic message | `JL-revision-message-family`, `JL-revision-message-text` | `native_loader_refuses_mixed_revision_references_before_output` |
+| INTEGER/REAL Python type names | `JL-revision-message-int`, `JL-revision-message-real` | `native_loader_refuses_mixed_revision_references_before_output` |
+| Measured variant equality, including negative code/message checks | `JL-audit-seed-variants`, `JL-audit-seed-code` | `test_loader_seed_variants_require_observed_complete_refusal_pairs` |
+
+### Loader-8 timing and verification
+
+The [paired benchmark](r4-native-loader-8-bench.json) uses disposable copies of
+loader-7's seed-verified 20k books. Both pass the complete v1 byte gate before
+five alternating Python/native pairs. Native total includes admission and
+excludes book open, BEGIN and serialization; wall is paired with the best
+complete CPU sample, using the same method as loader-7.
+
+| Book | Native CPU / wall | Loader-7 CPU | CPU change |
+| --- | ---: | ---: | ---: |
+| generic 20,000 | 0.288331 / 0.291505 s | 0.279943 s | +3.00% |
+| multi-wallet 20,000 | 0.428645 / 0.432649 s | 0.424456 s | +0.99% |
+
+Both stay inside the owner's 5% CPU budget. The benchmark and audit record the
+same standalone probe SHA-256
+`c8d26ddea18093b66e4164559692d96a8a804793da399e9eeabe6c5ef76c7489`.
+
+All seven selected mutations (the six new recipes plus the existing mixed
+population guard) build and are killed, with zero survivors and runner errors.
+Both named witness filters pass before mutation. This is a fresh seven-entry
+shard, not a fresh run of all 136 loader entries or the full custody catalogue.
+Its incremental log and machine-readable summary remain under
+`target/r4-loader-8/mutations-loader/`; the shard build/scratch trees are deleted.
+The local `run-mutants.py` wrapper there supports resumable shards bound to
+catalogue/source fingerprints and checks the kill list against every selected shard manifest.
+
+All **628 custody/journals Rust tests** and **206 live Python loader tests** pass.
+A separate final-code seed probe repeats all sixteen cases under four Python
+hash seeds (64 fresh reference processes) and repeats each native request twice,
+proving stable observed refusals and zero writes. Its synthetic cases and log
+remain under `target/r4-loader-8/mixed-revision-seeds.json` and `logs/`.
+Offline release/all-target clippy for both crates with `test-harness` and
+`-D warnings`, Rust formatting and `git diff --check` pass.
+
+Both catalogues pass applicability: **136 loader entries** and **2,292 custody
+entries**. The required test inventory update adds the seed-rule oracle and
+refreshes the disposition totals; CI preflight passes all **57 tests**. A manual
+second pass reviews the deterministic mixed-reference guard, measured variant
+scope, code/message pairing, success/refusal separation, mutation witnesses,
+zero-write checks and the unchanged BLOB boundary.
+
+Verification uses Rust 1.99.1, locked Python 3.11, offline Cargo and
+`MATURIN_NO_INSTALL_RUST=1`, without changing `HOME`. Scratch remains under
+this worktree's `target`, with one test job at a time. Verification build trees
+and the copied uv cache are deleted after summarizing; standalone probe,
+synthetic books, incremental logs, seed records and scripts remain under
+`target/r4-loader-8`. No background job remains at handoff. This is a local
+checkpoint with no push, PR, external comment or production routing change.
+
+This extends the named contracts but does not finish the exhaustive branch map.
+No full custody mutation, generator, replay or census/shadow rerun is claimed
+here. The inherited complete-campaign evidence remains historical.
+
 ## Remaining acceptance work
 
-1. Resolve the 16 non-BLOB mixed revision-reference sort refusals, preserving
-   the reference's exact boundary outcome without hardcoding a fixture's
-   comparison direction. Preserve the downstream scalar/message fixes above.
-   Keep the 4,446 BLOB corruption-class gaps listed separately as **pending an
-   owner decision**; do not work on or waive that class without that decision.
-2. Finish the exhaustive branch-to-named-mutation map. The loader catalogue is
-   still partial. Then run the full 2,292-entry custody campaign in resumable
-   shards, with incremental logs and fresh build trees deleted after each
-   summarized shard; resolve survivors and runner errors.
-3. Rerun all 24,000 generated books and 1,030 permutations, all 159 retained
+1. Finish the exhaustive branch-to-named-mutation map. The 136-entry loader
+   catalogue remains partial. Then run the full 2,292-entry custody campaign in
+   resumable shards, with incremental logs and fresh build trees deleted after
+   each summarized shard; resolve survivors and runner errors.
+2. Rerun all 24,000 generated books and 1,030 permutations, all 159 retained
    replays at `/home/tg/.cache/kassiber-verify/custody-recordings/`, and focused
    census/shadow. Earlier full-campaign counts remain historical.
-4. Write acceptance and update plan 21/TODO only after all non-BLOB requirements
-   and the remaining gates pass. The permitted wording is "accepted except the
-   BLOB corruption class, pending an owner decision" only when those conditions
-   hold. Python keeps production authority until its separate integration gate.
+3. Write acceptance and update plan 21/TODO only after those requirements pass.
+   The owner-authorized wording is "accepted except the BLOB corruption class
+   (pending owner decision) and 16 seed-dependent messages (pending Python fix)".
+   Until then R4-9 remains unaccepted. Keep both exceptions explicit; do not
+   resolve or waive the BLOB class without an owner decision. Python keeps
+   production authority until its separate integration gate.
 
 ## R4-13 integration contract
 

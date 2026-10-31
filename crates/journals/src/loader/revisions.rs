@@ -30,6 +30,15 @@ impl Reference {
     pub(super) fn is_text(&self) -> bool {
         matches!(self.0, SqlValue::Text(_))
     }
+
+    pub(super) fn python_type(&self) -> &'static str {
+        match self.0 {
+            SqlValue::Text(_) => "str",
+            SqlValue::Integer(_) => "int",
+            SqlValue::Real(_) => "float",
+            _ => unreachable!("revision reference scalar"),
+        }
+    }
 }
 
 // A float cast loses integer identity near 2^53. Compare against the float's
@@ -133,6 +142,12 @@ mod tests {
         let numeric = Reference::from_json(&json!(1)).unwrap();
         assert!(text.is_text());
         assert!(!numeric.is_text());
+        assert_eq!(text.python_type(), "str");
+        assert_eq!(numeric.python_type(), "int");
+        assert_eq!(
+            Reference::from_json(&json!(1.5)).unwrap().python_type(),
+            "float"
+        );
         assert_ne!(text, numeric);
         assert!(numeric < text);
         assert!(text > numeric);
