@@ -1,11 +1,111 @@
 # R4-13 journal process checkpoint
 
-This is a **test-only, unregistered checkpoint** on
-`t3code/r4-13-journals-process`, based on `b5eb38ea8` with loader rounds 3–8
-(`0b78605a0..c5966c1ff`) integrated. It does not complete R4-13 or switch
+This is a **test-only, unregistered checkpoint**. The original
+`t3code/r4-13-journals-process` starts at `b5eb38ea8` with loader rounds 3–8
+(`0b78605a0..c5966c1ff`) integrated; the continuation
+`t3code/r4-13-journals-process-2` starts at `925800ebe`. It does not complete R4-13 or switch
 production authority. CLI `journals process`, `--auto-pair`, daemon
 `ui.journals.process`, desktop refresh and AI mutations retain their existing
 routing.
+
+## Continuation stage snapshot
+
+The local continuation `t3code/r4-13-journals-process-2` starts at
+`925800ebe`. Its initial handoff snapshot is:
+
+| Stage branch | Committed tip inspected | Integration |
+| --- | --- | --- |
+| `t3code/r4-9-loader-9` | `c5966c1ff5bbb1bbad1a4b073adf2d10f468dc81` | Already inherited through loader-8; `loader-8..loader-9` is empty. |
+| `t3code/r4-10-prebuild` and `t3code/r4-10-prebuild-2` | `bc9e126d3739b15945ba67542cdc5e30bd09abab` | Cherry-picked cached pricing; no later committed handoff was available. |
+| `t3code/r4-11-render-3` | `197f6cdecc2a8ed12f1ee78a32ef92264bc15c25` | Cherry-picked boundary hardening, preserving newer loader representation and process mutation recipes. |
+| `t3code/r4-12-persist-2` | `b5eb38ea8cb764675322e61e9b957a57deb947c6` | Already an ancestor; no new committed persistence changes. |
+
+The pricing cherry-pick retains the continuation's newer shared-column loader,
+admission tests, process example and checkpoint documentation. Its older
+loader build fixes do not replace loader rounds 3–8. No new dependencies or
+lockfile changes are needed. Cached pricing alone does not implement either
+source-overlap repair or drifted legacy-pair refresh; neither may be silently
+omitted from a registered command.
+
+The subsequently requested R4-14 handoff
+`c4745075705ced90febdbb02ab0eab9684607eb8` is also cherry-picked. Its
+`kassiber_transfers::pairing::auto_pair_before_journals` leaves successful
+writes pending for the journal caller. Integration adapts transfer authoring's
+snapshot constructor to the inherited shared-column `Record` representation
+and private row cache; it does not revert the loader representation. The
+[pairing handoff](rust-pairing.md#callers-and-integration) remains the contract
+for the refresh coordinator; importing the stage does not register a route.
+
+The renderer continuation adds 101 frozen cases and a separate native finish
+entry. Its actual surrogate scalar and malformed/lossless boundary gaps remain
+open, as recorded in the [handoff](r4-journal-render-boundary-checkpoint.md).
+Inherited rendering campaigns are not full process/persistence verification.
+
+## Continuation verification and routing prerequisites
+
+The continuation imports pricing as `c0f8f4dcd`, pairing as `658e91260`, and
+renderer hardening as `664d867bc`. The fresh integrated all-feature native run
+passes **677 tests** across custody and journals; workspace formatting passes.
+The R4-14 service run passes all **seven tests**, including full SQLCipher
+service/dump parity and caller-savepoint rollback of both repeated passes.
+
+The test-only process adapter now optionally runs real native cached pricing.
+Its `cached_pricing: true` mode requires `prepared_repairs_noop: true`; it never
+supplies production resolution or either missing repair. The original
+`prepared_noop: true` benchmark interface remains available. Live fixtures
+check that Python's real resolution and repairs perform no writes before
+allowing that prepared seam. The expanded process suite has 24 successful
+comparisons (both codecs, generic/Austrian profiles, unchanged/changed/blocked/
+empty/cached-price/legacy-price) and 12 refusal/recovery comparisons. Recovery
+kills the native writer after writes 1, 8 and 15 on SQLite and SQLCipher,
+reopens the book, checks integrity, and compares every stored scalar with the
+starting book. Fault injection and pause controls exist only in the unpackaged
+example; every paused child is killed and reaped by its supervising test.
+
+The fresh focused live census passes **250 tests**, including all 36 process
+cases. It records 76 exact comparisons for each of components, evidence,
+interpretation, gaps, quantity, finalized projection and fusion (zero skipped),
+147 native-loader v1 byte matches, and 270 production tax calls. Frozen pricing
+regeneration matches all **53 complete dumps/refusals**. The frozen renderer
+regeneration and persistence replay are included in that live run. Logs are
+incremental under `target/r4-13/logs/`; these are focused fixture checks, not
+the 24,000-book generated or 159-recording full-pipeline gates.
+
+Production registration still requires the following concrete work:
+
+- R4-10 must supply scope/profile resolution and both real repairs:
+  `handlers._repair_journal_source_overlaps` (including warning construction,
+  metadata history, address-list trimming and invalidation) and
+  `custody_authored_migration.refresh_drifted_legacy_pair_components` (including
+  refreshed profile state). Neither implementation is present in the committed
+  pricing handoff. A no-op implementation would change accounting.
+- Finish the lossless stage boundary and exact refusal handling recorded by
+  R4-9/R4-11. In particular, `process::stage_value` still explicitly refuses
+  NaN, actual surrogate scalars and non-string keys; importing the renderer
+  continuation does not remove those refusals.
+- Implement Python's `refresh_journals_step` around the real R4-14 entry. A
+  stale projection rebuild commits before pairing. Successful pairing leaves
+  writes pending; the second rebuild must commit them together or roll them
+  all back on failure/cancellation. Preserve skipped-pairing summaries,
+  candidate-cache commits, `rebuilt`, skip-current behavior and phase order.
+  The current plain native process rejects pending caller transactions and
+  cannot simply be called after pairing without reconciling ownership.
+- Register CLI plain and `--auto-pair` only after the integrated full-pipeline
+  gates, then prove exact envelopes and zero Python fallback. Pairing is now
+  available natively; keeping the flag on Python is no longer a scope rule.
+- Register desktop processing with pairing and the internal AI mutation with
+  pairing disabled. The latter has **no separate public route**: both use the
+  name `ui.journals.process`, but AI dispatch runs inside `ai.chat` via
+  `_execute_mutating_ai_tool` and `_run_scoped_ai_mutation`. Preserve its
+  consent, input-version/book binding, main-thread execution and cancellation.
+  Named reference tests include
+  `DaemonSmokeTest::test_journal_process_tool_uses_daemon_main_thread_connection`
+  and `DaemonSmokeTest::test_ai_mutation_rejects_book_changed_while_waiting_for_consent`.
+
+The inherited verification, mutation and performance sections below describe
+the original checkpoint. Continuation evidence is reported separately; none
+of the inherited generated/rendering campaign results is a complete native
+process/persistence campaign.
 
 ## Native composition
 
@@ -170,9 +270,9 @@ authority switch is claimed.
 3. Run all full-pipeline generated, replay, frozen, census/shadow, codec and
    rollback gates and the entire inherited mutation catalog. Complete wiring
    branch/mutation coverage and close performance gaps.
-4. Register plain CLI `journals process`, verify its exact envelope, routing
-   and zero fallback, and commit that boundary. Keep `--auto-pair` on Python
-   until the R4-14 contract is integrated.
+4. Register CLI `journals process` with and without `--auto-pair`, verify exact
+   envelopes, routing and zero fallback, and commit that boundary. The native
+   R4-14 stage is imported; its refresh coordinator still needs integration.
 5. Register daemon processing only after reconciling the pairing contract and
    proving exact payload/event-stream parity, cancellation/scope and fallback
    behavior; commit separately. The current desktop kind accepts no arguments
@@ -180,6 +280,6 @@ authority switch is claimed.
    The scoped AI path explicitly passes `False`. A non-pairing replacement
    cannot silently stand in for both. R4-14 and the existing consent boundary
    must be preserved.
-6. Measure the registered command from process start to exit and meet the
-   owner's 4× end-to-end target and the four design budgets; then address
-   R4-15/R4-16 authority work.
+6. Keep performance acceptance on the separate worker track: measure the
+   registered command from process start to exit against the owner's 4× target
+   and four design budgets, then address R4-15/R4-16 authority work.

@@ -463,6 +463,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   automatic pairing, the freshness journal job and the authority switch.
   R4-13's [test-only composition](docs/reference/r4-journal-process-checkpoint.md)
   wires native load through persistence, ordered progress and outer rollback.
+  The continuation imports cached pricing, R4-14 pairing and renderer boundary
+  hardening; it adds real-pricing and abrupt-death recovery probes. Production
+  resolution and both repair stages are still missing from the committed handoff.
   Integrate real R4-10 pre-build, close full-pipeline parity/mutation and speed
   gates, then register CLI and daemon in separate verified commits. Reconcile
   the desktop daemon's pairing default with R4-14 before changing its route;
