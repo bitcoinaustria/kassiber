@@ -139,7 +139,7 @@ fn exact(row: &Value, exact: &str, fallback: &str) -> Result<Decimal> {
 }
 
 /// `current_report_summaries`: bounded exact summaries of the current journals.
-pub(crate) fn summaries(
+pub fn summaries(
     conn: &Connection,
     profile_id: &str,
     start: i64,

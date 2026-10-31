@@ -34,6 +34,9 @@ Transfer authoring reuses it for exact BTC-to-msat conversion and the existing
 locked `bitcoin_hashes` SHA-1 implementation for Python-compatible UUIDv5 review
 identities; the standard library has no SHA-1 implementation. Canonical
 commitments reuse the internal custody and `kassiber-pyjson` crates.
+Journal persistence reuses the same locked `bitcoin_hashes` SHA-1 primitive
+for filed-impact UUIDv5 identities, the store's bundled SQLCipher driver,
+and the internal rates timestamp parser. No package version changes.
 The Rust setup services reuse the internal store, envelope, and Python-compatible
 JSON/text crates for existing book formats. Network partitions add `age` for
 the existing passphrase-encrypted backup format and `tar` for its archive;

@@ -13,6 +13,14 @@ kassiber-custody = { path = "../custody" }
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-tax-core = { path = "../../tax-engine/core" }
+# Reuse the book's SQLCipher driver and existing Python-compatible timestamp
+# parser; neither the standard library nor the renderer supplies these.
+kassiber-store = { path = "../store" }
+kassiber-rates = { path = "../rates" }
+kassiber-reports = { path = "../reports" }
+kassiber-wallets = { path = "../wallets" }
+# UUIDv5 resolution identities need SHA-1; reuse the locked Bitcoin hash crate.
+bitcoin_hashes = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
 

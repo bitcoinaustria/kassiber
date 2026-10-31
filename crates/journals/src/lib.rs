@@ -1,10 +1,12 @@
-//! R4-11: pure rendering and joins. No persistence, clock, entropy or network I/O.
-//! The caller supplies fresh UUIDs. Raw custody rows use transitional JSON values;
-//! the engine result and rendered entries have native types. Not registered in
-//! any production command; see the R4-11 checkpoint for remaining parity gates.
+//! Journal rendering, joins and caller-owned persistence (R4-11/R4-12).
+//! No clock, entropy or network I/O. Raw custody operands retain the transitional
+//! JSON boundary; the engine result and rendered entries have native types.
+//! No production command is registered; checkpoint references own acceptance.
 pub mod boundary;
 mod model;
+pub mod persistence;
 mod render;
+pub mod storage;
 pub use model::*;
 pub use render::{enrich_quarantine_detail, render_ledger, LedgerInputs, LedgerState};
 use serde_json::Value;

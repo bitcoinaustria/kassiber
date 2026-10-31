@@ -554,7 +554,9 @@
     "file": "crates/journals/src/boundary/joins.rs",
     "find": "if !blocked.values().any(|reason| pairable(reason)) {",
     "replace": "if blocked.values().any(|reason| pairable(reason)) {",
-    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
     "rule": "The lazy ownership shortcut may not discard pairable quarantine reasons."
   },
   {
@@ -562,7 +564,9 @@
     "file": "crates/journals/src/boundary/joins.rs",
     "find": "if !pairable(&reason) {",
     "replace": "if pairable(&reason) {",
-    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
     "rule": "Ownership sources are selected from the pairable reason allowlist."
   },
   {
@@ -570,7 +574,9 @@
     "file": "crates/journals/src/boundary/joins.rs",
     "find": "if scope.is_some() && !physical_groups_built {",
     "replace": "if false && scope.is_some() && !physical_groups_built {",
-    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
     "rule": "Scoped fallback sources need the physical group index before destination selection."
   },
   {
@@ -578,7 +584,9 @@
     "file": "crates/journals/src/boundary/joins.rs",
     "find": "if scope.is_none() && !legacy_groups_built {",
     "replace": "if false && scope.is_none() && !legacy_groups_built {",
-    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
     "rule": "Unscoped fallback sources retain their literal legacy transaction groups."
   },
   {
@@ -586,7 +594,9 @@
     "file": "crates/journals/src/boundary/joins.rs",
     "find": "if exact.is_empty() {",
     "replace": "if !exact.is_empty() {",
-    "expect_failing": ["ownership_reviews_and_reconciliations_match_python"],
+    "expect_failing": [
+      "ownership_reviews_and_reconciliations_match_python"
+    ],
     "rule": "Exact ownership matches take precedence; compatible candidates remain the fallback."
   },
   {
@@ -594,7 +604,519 @@
     "file": "crates/journals/src/boundary/joins.rs",
     "find": "(current_text(&key[0]), current_text(&key[3]))",
     "replace": "(text(&key[0]), text(&key[3]))",
-    "expect_failing": ["balance_current_keys_preserve_python_stringification"],
+    "expect_failing": [
+      "balance_current_keys_preserve_python_stringification"
+    ],
     "rule": "Current balance keys preserve str() for falsey legacy wallet identities."
+  },
+  {
+    "id": "JP-uuid-version",
+    "file": "crates/journals/src/storage.rs",
+    "find": "hex[12] = b'8';",
+    "replace": "hex[12] = b'4';",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Entry identities use UUIDv8."
+  },
+  {
+    "id": "JP-uuid-variant",
+    "file": "crates/journals/src/storage.rs",
+    "find": "(variant & 3) | 8",
+    "replace": "(variant & 3) | 12",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Entry identities set the RFC variant."
+  },
+  {
+    "id": "JP-clock-repeat",
+    "file": "crates/journals/src/storage.rs",
+    "find": "current <= prior",
+    "replace": "current < prior",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Repeated clocks must expire explanations."
+  },
+  {
+    "id": "JP-clock-successor",
+    "file": "crates/journals/src/storage.rs",
+    "find": "format(prior + 1)",
+    "replace": "format(prior + 2)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "The marker advances by exactly one microsecond."
+  },
+  {
+    "id": "JP-calculation-version",
+    "file": "crates/journals/src/storage.rs",
+    "find": "Some(json!([2,",
+    "replace": "Some(json!([1,",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Compact calculations use format v2."
+  },
+  {
+    "id": "JP-source-dedupe",
+    "file": "crates/journals/src/storage.rs",
+    "find": "positions.entry(encoded.to_string())",
+    "replace": "positions.entry(format!(\"{}:{next}\",encoded))",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Equal fragment sources share their dictionary index."
+  },
+  {
+    "id": "JP-legacy-fallback",
+    "file": "crates/journals/src/storage.rs",
+    "find": "Some(pyjson(value, false)?)",
+    "replace": "Some(pyjson(value, true)?)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Fallback JSON retains legacy separator bytes."
+  },
+  {
+    "id": "JP-same-column-tuple",
+    "file": "crates/journals/src/storage.rs",
+    "find": "new[..N - 1].iter()",
+    "replace": "new[..N - 2].iter()",
+    "expect_failing": [
+      "mixed_timestamps_and_signed_zero_force_entry_rewrites"
+    ],
+    "rule": "Compare every stored column except created_at."
+  },
+  {
+    "id": "JP-signed-zero",
+    "file": "crates/journals/src/storage.rs",
+    "find": "a.is_sign_negative() != b.is_sign_negative()",
+    "replace": "false",
+    "expect_failing": [
+      "mixed_timestamps_and_signed_zero_force_entry_rewrites"
+    ],
+    "rule": "Signed-zero changes require a rewrite."
+  },
+  {
+    "id": "JP-duplicate-postings",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if wanted.len() != rows.len() {",
+    "replace": "if false && wanted.len() != rows.len() {",
+    "expect_failing": [
+      "posting_deltas_reject_duplicates_and_keep_unchanged_rows"
+    ],
+    "rule": "Duplicate ids refuse before modifying rows."
+  },
+  {
+    "id": "JP-entry-tie",
+    "file": "crates/journals/src/storage.rs",
+    "find": "Some(6),",
+    "replace": "None,",
+    "expect_failing": [
+      "entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids"
+    ],
+    "rule": "A changed entry dirties the whole timestamp group."
+  },
+  {
+    "id": "JP-mixed-stamps",
+    "file": "crates/journals/src/storage.rs",
+    "find": "s.len() > 1",
+    "replace": "s.len() > 2",
+    "expect_failing": [
+      "mixed_timestamps_and_signed_zero_force_entry_rewrites"
+    ],
+    "rule": "Mixed old timestamps force group replacement."
+  },
+  {
+    "id": "JP-delete-removed",
+    "file": "crates/journals/src/storage.rs",
+    "find": "!wanted.contains_key(id.as_str()) || changed.contains(&id)",
+    "replace": "changed.contains(&id)",
+    "expect_failing": [
+      "entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids"
+    ],
+    "rule": "Disappeared rows are deleted."
+  },
+  {
+    "id": "JP-cache-size",
+    "file": "crates/journals/src/storage.rs",
+    "find": "\"cache_size\", -131072",
+    "replace": "\"cache_size\", -65536",
+    "expect_failing": [
+      "scoped_cache_and_checkpoint_restore_exact_settings"
+    ],
+    "rule": "The rebuild cache is 128 MiB."
+  },
+  {
+    "id": "JP-wal-disable",
+    "file": "crates/journals/src/storage.rs",
+    "find": "\"wal_autocheckpoint\", 0",
+    "replace": "\"wal_autocheckpoint\", 1",
+    "expect_failing": [
+      "wal_checkpoint_waits_for_commit_and_retains_active_readers"
+    ],
+    "rule": "Automatic checkpoints stay disabled during the write."
+  },
+  {
+    "id": "JP-wal-passive",
+    "file": "crates/journals/src/storage.rs",
+    "find": "PRAGMA wal_checkpoint(PASSIVE)",
+    "replace": "PRAGMA wal_checkpoint(TRUNCATE)",
+    "expect_failing": [
+      "wal_checkpoint_waits_for_commit_and_retains_active_readers"
+    ],
+    "rule": "The deferred checkpoint leaves pinned readers undisturbed."
+  },
+  {
+    "id": "JP-caller-transaction",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "if conn.is_autocommit() {",
+    "replace": "if false && conn.is_autocommit() {",
+    "expect_failing": [
+      "persistence_refuses_without_a_caller_transaction"
+    ],
+    "rule": "Never write outside the caller transaction."
+  },
+  {
+    "id": "JP-rollback",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "ROLLBACK TO r4_journal_store; RELEASE r4_journal_store",
+    "replace": "RELEASE r4_journal_store",
+    "expect_failing": [
+      "every_write_failure_and_panic_rolls_back_the_journal"
+    ],
+    "rule": "Every error and panic rolls back all journal writes."
+  },
+  {
+    "id": "JP-freshness-count",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "profile_id=? AND excluded=0",
+    "replace": "profile_id=? AND excluded=1",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "The freshness count excludes excluded observations."
+  },
+  {
+    "id": "JP-freshness-version",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "last_processed_input_version=journal_input_version",
+    "replace": "last_processed_input_version=0",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "The successful marker binds the current input version."
+  },
+  {
+    "id": "JP-pricing",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "source,\n            quality,",
+    "replace": "quality,\n            source,",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Enrichment stores source and quality in their own columns."
+  },
+  {
+    "id": "JP-holding-quantity",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "amount(&h.quantity)?",
+    "replace": "Sql::Integer(0)",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Holding quantities are exact integer msat."
+  },
+  {
+    "id": "JP-entry-type",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "t(e.entry_type),",
+    "replace": "t(\"income\"),",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Entry type survives typed binding."
+  },
+  {
+    "id": "JP-impact-barrier",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "&& quarantines.is_empty()",
+    "replace": "&& true",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Quarantines prevent resolving pending filed impacts."
+  },
+  {
+    "id": "JP-quarantine-root",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "downstream(&old.reason) && !downstream(&q.reason)",
+    "replace": "false",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Preserve Python quarantine merge and enrichment bytes."
+  },
+  {
+    "id": "JP-quarantine-duplicates",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "if old.reason == q.reason && old.detail_json == q.detail_json {",
+    "replace": "if false && old.reason == q.reason && old.detail_json == q.detail_json {",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Preserve Python quarantine merge and enrichment bytes."
+  },
+  {
+    "id": "JP-quarantine-carried",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "additional.extend(carried);",
+    "replace": "additional.extend(carried.into_iter().take(0));",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Preserve Python quarantine merge and enrichment bytes."
+  },
+  {
+    "id": "JP-quarantine-enrichment",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "if !candidates.is_empty() {",
+    "replace": "if false && !candidates.is_empty() {",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Preserve Python quarantine merge and enrichment bytes."
+  },
+  {
+    "id": "JP-quarantine-compact",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "dump(&Py::Dict(detail), true)",
+    "replace": "dump(&Py::Dict(detail), false)",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Preserve Python quarantine merge and enrichment bytes."
+  },
+  {
+    "id": "JP-impact-uuid",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "(h[6] & 15) | 80",
+    "replace": "(h[6] & 15) | 64",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Filed resolutions preserve deterministic identity and exact amendment status."
+  },
+  {
+    "id": "JP-impact-filed",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "state==\"filed\"",
+    "replace": "state==\"saved\"",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Filed resolutions preserve deterministic identity and exact amendment status."
+  },
+  {
+    "id": "JP-impact-gain",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "before_gain != after_gain",
+    "replace": "false",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Filed resolutions preserve deterministic identity and exact amendment status."
+  },
+  {
+    "id": "JP-quantity-absent",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if q.is_null() {",
+    "replace": "if false && q.is_null() {",
+    "expect_failing": [
+      "absent_quantity_preserves_quantity_rows_and_clears_reconciliations"
+    ],
+    "rule": "Missing quantity leaves the old quantity projection intact."
+  },
+  {
+    "id": "JP-quantity-clear",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "w.clear(table, pid)?;",
+    "replace": "let _ = (table, pid);",
+    "expect_failing": [
+      "repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions"
+    ],
+    "rule": "Replace small quantity tables before reinsertion."
+  },
+  {
+    "id": "JP-quantity-balance",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "*balances.entry(key).or_default() += i128::from(amount);",
+    "replace": "*balances.entry(key).or_default() += i128::from(amount) + 1;",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Quantity balances sum exact posting deltas."
+  },
+  {
+    "id": "JP-quantity-observation",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "bind(&o[\"anchor_transaction_id\"])?",
+    "replace": "Sql::Null",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Postings preserve observation transaction provenance."
+  },
+  {
+    "id": "JP-decision-eligibility",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if eligible.contains(d) {",
+    "replace": "if false && eligible.contains(d) {",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Basis eligibility follows the finalized decision set."
+  },
+  {
+    "id": "JP-decision-id",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "canonical-custody-decision-v1",
+    "replace": "canonical-custody-decision-v2",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Decision commitment identity retains its namespace."
+  },
+  {
+    "id": "JP-reconciliation-selected",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if d[\"state\"] == \"internal_verified\"",
+    "replace": "if d[\"state\"] == \"internal_reviewed\"",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Only selected native verified claims admit reconciliation."
+  },
+  {
+    "id": "JP-reconciliation-amount",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "!= i128::from(pair[1].as_i64().unwrap_or(-1))",
+    "replace": "== i128::from(pair[1].as_i64().unwrap_or(-1))",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Selected quantities must match every certificate claim."
+  },
+  {
+    "id": "JP-relation-id",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "canonical-custody-economic-relation-v3",
+    "replace": "canonical-custody-economic-relation-v2",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Economic relation ids retain the v3 namespace."
+  },
+  {
+    "id": "JP-relation-conversion",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "(\"conversion\", &q[\"reviewed_conversion_pairs\"])",
+    "replace": "(\"conversion\", &Value::Null)",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Persist reviewed conversions."
+  },
+  {
+    "id": "JP-relation-payout",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "(\"direct_payout\", &q[\"reviewed_direct_payouts\"])",
+    "replace": "(\"direct_payout\", &Value::Null)",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Persist reviewed direct payouts."
+  },
+  {
+    "id": "JP-relation-eligibility",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "t(if eligible {",
+    "replace": "t(if false && eligible {",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Economic basis eligibility follows selected slices."
+  },
+  {
+    "id": "JP-relation-source",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "bind(&source_amount)?",
+    "replace": "Sql::Integer(1)",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Preserve reviewed source msat."
+  },
+  {
+    "id": "JP-relation-target",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "bind(&target_amount)?",
+    "replace": "Sql::Integer(1)",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Preserve reviewed payout msat."
+  },
+  {
+    "id": "JP-live-quarantines",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "quarantines.retain(|q| live.contains(&string(&q.transaction_id)));",
+    "replace": "quarantines.retain(|q| {let _ = (&live,q);true});",
+    "expect_failing": [
+      "synthetic_quarantines_are_filtered_before_readiness"
+    ],
+    "rule": "Only real live transactions may be quarantined."
+  },
+  {
+    "id": "JP-compact-ascii",
+    "file": "crates/journals/src/storage.rs",
+    "find": "&kassiber_pyjson::Options::new().compact()",
+    "replace": "&kassiber_pyjson::Options::new().compact().ensure_ascii(false)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Compact storage uses ASCII JSON escapes."
+  },
+  {
+    "id": "JP-compact-null",
+    "file": "crates/journals/src/storage.rs",
+    "find": "Value::Null => out.push_str(\"null\")",
+    "replace": "Value::Null => out.push_str(\"0\")",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Null tuple fields remain null."
+  },
+  {
+    "id": "JP-compact-separator",
+    "file": "crates/journals/src/storage.rs",
+    "find": "out.push(',');",
+    "replace": "out.push(';');",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Compact tuples use JSON separators."
+  },
+  {
+    "id": "JP-basis-barrier",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "bind(&barrier(q, source))?",
+    "replace": "Sql::Null",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Persist the first pool basis barrier."
   }
 ]

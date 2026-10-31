@@ -162,7 +162,7 @@ fn unavailable(reason: &str) -> Value {
 }
 
 /// `filed_report_chain._current(conn, dependency)`.
-fn current(conn: &Connection, dependency: &Value) -> Result<Value> {
+pub fn current(conn: &Connection, dependency: &Value) -> Result<Value> {
     let profile = py_str(field(dependency, "profile_id"));
     let guarded = dict([
         ("chain", field(dependency, "chain").clone()),
@@ -225,7 +225,7 @@ fn current(conn: &Connection, dependency: &Value) -> Result<Value> {
     }
 }
 
-fn last_observation(conn: &Connection, dependency: &Value) -> Result<Value> {
+pub fn last_observation(conn: &Connection, dependency: &Value) -> Result<Value> {
     let row = first(
         conn,
         "SELECT inbox.observation_json FROM filed_report_chain_impacts impact

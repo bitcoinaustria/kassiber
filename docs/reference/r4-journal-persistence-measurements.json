@@ -1,0 +1,1512 @@
+{
+  "schema": "kassiber.r4-journal-persistence-checkpoint.v1",
+  "date": "2026-10-31",
+  "baseline_commit": "4f6ca7d06545eced9a1d30f8396758b3cb4d4af1",
+  "acceptance": "open",
+  "timing_seconds_include": [
+    "persistence",
+    "commit"
+  ],
+  "timing_seconds_exclude": [
+    "render",
+    "request_decode",
+    "dump_compare",
+    "deferred_checkpoint"
+  ],
+  "trials_per_mode": 5,
+  "order": "alternate Python/Rust; prepared DML floor follows each pair",
+  "books": {
+    "generic": {
+      "schema": "kassiber.journals-bench-book.v1",
+      "kind": "generic",
+      "transactions": 20000,
+      "seed": 1,
+      "csv_sha256": {
+        "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+      },
+      "pegs": 0,
+      "pegs_paired": 0,
+      "journals": {
+        "entries_created": 20000,
+        "quarantined": 0,
+        "cross_asset_pairs": 0,
+        "processed_transactions": 20000
+      },
+      "built_by": "4f6ca7d06545eced9a1d30f8396758b3cb4d4af1",
+      "build_seconds": 22.4
+    },
+    "multi-wallet": {
+      "schema": "kassiber.journals-bench-book.v1",
+      "kind": "multi-wallet",
+      "transactions": 20000,
+      "seed": 7,
+      "csv_sha256": {
+        "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+        "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+        "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+        "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+      },
+      "pegs": 3306,
+      "pegs_paired": 300,
+      "journals": {
+        "entries_created": 19983,
+        "quarantined": 17,
+        "cross_asset_pairs": 300,
+        "processed_transactions": 20000
+      },
+      "built_by": "4f6ca7d06545eced9a1d30f8396758b3cb4d4af1",
+      "build_seconds": 925.5
+    }
+  },
+  "timings": {
+    "generic": [
+      {
+        "mode": "fresh",
+        "transactions": 20000,
+        "best": {
+          "python": 1.325211681003566,
+          "rust": 1.389373159,
+          "floor": 0.665849011
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.325211681003566,
+              "load1": 20.65478515625
+            },
+            "rust": {
+              "seconds": 1.496111696,
+              "load1": 21.2431640625
+            },
+            "floor": {
+              "seconds": 0.700204493,
+              "load1": 20.4228515625
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.389373159,
+              "load1": 20.4228515625
+            },
+            "python": {
+              "seconds": 1.3590009499966982,
+              "load1": 20.068359375
+            },
+            "floor": {
+              "seconds": 0.721923234,
+              "load1": 19.58203125
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.387798477000615,
+              "load1": 19.58203125
+            },
+            "rust": {
+              "seconds": 1.515246887,
+              "load1": 19.58203125
+            },
+            "floor": {
+              "seconds": 0.721667396,
+              "load1": 19.21484375
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.496950749,
+              "load1": 19.21484375
+            },
+            "python": {
+              "seconds": 1.8737658240061137,
+              "load1": 18.716796875
+            },
+            "floor": {
+              "seconds": 0.665849011,
+              "load1": 18.0986328125
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.3883555860011256,
+              "load1": 18.0986328125
+            },
+            "rust": {
+              "seconds": 1.450975636,
+              "load1": 18.6513671875
+            },
+            "floor": {
+              "seconds": 0.720658517,
+              "load1": 18.6513671875
+            }
+          }
+        ],
+        "over_floor": 0.723524148
+      },
+      {
+        "mode": "unchanged",
+        "transactions": 20000,
+        "best": {
+          "python": 1.0546794629990472,
+          "rust": 0.988387305,
+          "floor": 0.027395923
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.0546794629990472,
+              "load1": 17.52392578125
+            },
+            "rust": {
+              "seconds": 1.039689504,
+              "load1": 17.48193359375
+            },
+            "floor": {
+              "seconds": 0.034262118,
+              "load1": 16.88232421875
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.021587356,
+              "load1": 16.88232421875
+            },
+            "python": {
+              "seconds": 1.6467172749980818,
+              "load1": 16.88232421875
+            },
+            "floor": {
+              "seconds": 0.322414985,
+              "load1": 16.5712890625
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.8185825079999631,
+              "load1": 16.5712890625
+            },
+            "rust": {
+              "seconds": 0.988387305,
+              "load1": 16.125
+            },
+            "floor": {
+              "seconds": 0.027395923,
+              "load1": 16.125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 0.988576947,
+              "load1": 16.125
+            },
+            "python": {
+              "seconds": 1.597720780999225,
+              "load1": 16.275390625
+            },
+            "floor": {
+              "seconds": 0.040906723,
+              "load1": 16.0927734375
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.1146891300013522,
+              "load1": 16.0927734375
+            },
+            "rust": {
+              "seconds": 1.154113318,
+              "load1": 16.0927734375
+            },
+            "floor": {
+              "seconds": 0.030025382,
+              "load1": 15.8447265625
+            }
+          }
+        ],
+        "over_floor": 0.960991382
+      },
+      {
+        "mode": "appended",
+        "transactions": 20000,
+        "best": {
+          "python": 1.7253850470006,
+          "rust": 0.986117006,
+          "floor": 0.034397184
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.7253850470006,
+              "load1": 15.40234375
+            },
+            "rust": {
+              "seconds": 1.210104313,
+              "load1": 14.9697265625
+            },
+            "floor": {
+              "seconds": 0.037261732,
+              "load1": 15.69287109375
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.687330174,
+              "load1": 15.69287109375
+            },
+            "python": {
+              "seconds": 2.967518946999917,
+              "load1": 18.2001953125
+            },
+            "floor": {
+              "seconds": 0.034397184,
+              "load1": 20.2666015625
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.8287312309985282,
+              "load1": 20.2666015625
+            },
+            "rust": {
+              "seconds": 1.630156344,
+              "load1": 22.75341796875
+            },
+            "floor": {
+              "seconds": 0.038213405,
+              "load1": 24.294921875
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.761446176,
+              "load1": 24.294921875
+            },
+            "python": {
+              "seconds": 1.96861563299899,
+              "load1": 25.552734375
+            },
+            "floor": {
+              "seconds": 0.123496645,
+              "load1": 26.3896484375
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.9861426259958535,
+              "load1": 26.3896484375
+            },
+            "rust": {
+              "seconds": 0.986117006,
+              "load1": 27.07958984375
+            },
+            "floor": {
+              "seconds": 0.036425195,
+              "load1": 26.03173828125
+            }
+          }
+        ],
+        "over_floor": 0.9517198219999999
+      },
+      {
+        "mode": "changed",
+        "transactions": 20000,
+        "best": {
+          "python": 1.2082191970039275,
+          "rust": 1.14265326,
+          "floor": 0.187284474
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.2082191970039275,
+              "load1": 21.46533203125
+            },
+            "rust": {
+              "seconds": 1.14265326,
+              "load1": 21.107421875
+            },
+            "floor": {
+              "seconds": 0.187284474,
+              "load1": 21.17919921875
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.22914051,
+              "load1": 21.17919921875
+            },
+            "python": {
+              "seconds": 1.301298026002769,
+              "load1": 21.17919921875
+            },
+            "floor": {
+              "seconds": 0.200848248,
+              "load1": 20.60400390625
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.256613165998715,
+              "load1": 20.60400390625
+            },
+            "rust": {
+              "seconds": 1.1754063399999999,
+              "load1": 19.83447265625
+            },
+            "floor": {
+              "seconds": 0.19919844,
+              "load1": 21.68994140625
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.160700818,
+              "load1": 21.68994140625
+            },
+            "python": {
+              "seconds": 1.3237988309992943,
+              "load1": 21.68994140625
+            },
+            "floor": {
+              "seconds": 0.244603933,
+              "load1": 21.31396484375
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.8992157610045979,
+              "load1": 21.31396484375
+            },
+            "rust": {
+              "seconds": 1.221469108,
+              "load1": 20.72802734375
+            },
+            "floor": {
+              "seconds": 0.201275927,
+              "load1": 20.830078125
+            }
+          }
+        ],
+        "over_floor": 0.9553687859999999
+      }
+    ],
+    "multi-wallet": [
+      {
+        "mode": "fresh",
+        "transactions": 20000,
+        "best": {
+          "python": 1.6362005830014823,
+          "rust": 1.539972957,
+          "floor": 0.837604412
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 2.4767838879997726,
+              "load1": 19.015625
+            },
+            "rust": {
+              "seconds": 1.679811456,
+              "load1": 18.53369140625
+            },
+            "floor": {
+              "seconds": 0.845715419,
+              "load1": 18.01025390625
+            }
+          },
+          {
+            "rust": {
+              "seconds": 2.04223927,
+              "load1": 18.01025390625
+            },
+            "python": {
+              "seconds": 1.9385158799996134,
+              "load1": 17.28857421875
+            },
+            "floor": {
+              "seconds": 0.859037388,
+              "load1": 18.06640625
+            }
+          },
+          {
+            "python": {
+              "seconds": 2.0500783560055424,
+              "load1": 18.06640625
+            },
+            "rust": {
+              "seconds": 1.539972957,
+              "load1": 17.66064453125
+            },
+            "floor": {
+              "seconds": 0.882338946,
+              "load1": 18.96923828125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.5454802220000001,
+              "load1": 18.8916015625
+            },
+            "python": {
+              "seconds": 1.6362005830014823,
+              "load1": 18.8916015625
+            },
+            "floor": {
+              "seconds": 0.837604412,
+              "load1": 18.81982421875
+            }
+          },
+          {
+            "python": {
+              "seconds": 2.2755336970003555,
+              "load1": 18.81982421875
+            },
+            "rust": {
+              "seconds": 1.632622607,
+              "load1": 19.07470703125
+            },
+            "floor": {
+              "seconds": 0.839630817,
+              "load1": 19.86962890625
+            }
+          }
+        ],
+        "over_floor": 0.702368545
+      },
+      {
+        "mode": "unchanged",
+        "transactions": 20000,
+        "best": {
+          "python": 1.185057611000957,
+          "rust": 1.038578628,
+          "floor": 0.039319691
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.2627868389972718,
+              "load1": 25.73974609375
+            },
+            "rust": {
+              "seconds": 1.155675459,
+              "load1": 25.73974609375
+            },
+            "floor": {
+              "seconds": 0.241551744,
+              "load1": 24.87939453125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.06457424,
+              "load1": 24.87939453125
+            },
+            "python": {
+              "seconds": 1.798140381994017,
+              "load1": 24.087890625
+            },
+            "floor": {
+              "seconds": 0.129113478,
+              "load1": 23.43994140625
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.8509981069946662,
+              "load1": 23.43994140625
+            },
+            "rust": {
+              "seconds": 1.060900095,
+              "load1": 23.43994140625
+            },
+            "floor": {
+              "seconds": 0.047502584,
+              "load1": 22.923828125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.038578628,
+              "load1": 22.923828125
+            },
+            "python": {
+              "seconds": 1.1948967029966298,
+              "load1": 22.369140625
+            },
+            "floor": {
+              "seconds": 0.048811888,
+              "load1": 21.77880859375
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.185057611000957,
+              "load1": 21.77880859375
+            },
+            "rust": {
+              "seconds": 1.082694703,
+              "load1": 21.77880859375
+            },
+            "floor": {
+              "seconds": 0.039319691,
+              "load1": 21.15576171875
+            }
+          }
+        ],
+        "over_floor": 0.999258937
+      },
+      {
+        "mode": "appended",
+        "transactions": 20000,
+        "best": {
+          "python": 1.2126777980010957,
+          "rust": 1.039324656,
+          "floor": 0.032751698
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.8709672120021423,
+              "load1": 21.984375
+            },
+            "rust": {
+              "seconds": 1.079469831,
+              "load1": 21.7451171875
+            },
+            "floor": {
+              "seconds": 0.04248463,
+              "load1": 21.7451171875
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.095638772,
+              "load1": 21.20458984375
+            },
+            "python": {
+              "seconds": 1.2126777980010957,
+              "load1": 21.20458984375
+            },
+            "floor": {
+              "seconds": 0.032751698,
+              "load1": 20.86767578125
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.3631274530052906,
+              "load1": 20.86767578125
+            },
+            "rust": {
+              "seconds": 1.039324656,
+              "load1": 22.72021484375
+            },
+            "floor": {
+              "seconds": 0.041067263,
+              "load1": 22.1015625
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.074801868,
+              "load1": 22.1015625
+            },
+            "python": {
+              "seconds": 1.7789277710035094,
+              "load1": 22.1015625
+            },
+            "floor": {
+              "seconds": 0.064225691,
+              "load1": 21.61279296875
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.8631324390007649,
+              "load1": 21.61279296875
+            },
+            "rust": {
+              "seconds": 1.040233876,
+              "load1": 20.7626953125
+            },
+            "floor": {
+              "seconds": 0.036889013,
+              "load1": 20.7626953125
+            }
+          }
+        ],
+        "over_floor": 1.006572958
+      },
+      {
+        "mode": "changed",
+        "transactions": 20000,
+        "best": {
+          "python": 1.3365963230025955,
+          "rust": 1.191395575,
+          "floor": 0.191914107
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.4672894460018142,
+              "load1": 18.8671875
+            },
+            "rust": {
+              "seconds": 1.3483947490000001,
+              "load1": 18.71728515625
+            },
+            "floor": {
+              "seconds": 0.191914107,
+              "load1": 18.33935546875
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.191395575,
+              "load1": 18.33935546875
+            },
+            "python": {
+              "seconds": 1.3365963230025955,
+              "load1": 18.15185546875
+            },
+            "floor": {
+              "seconds": 0.19560542,
+              "load1": 18.15185546875
+            }
+          },
+          {
+            "python": {
+              "seconds": 2.0106199200017727,
+              "load1": 18.15185546875
+            },
+            "rust": {
+              "seconds": 1.260010834,
+              "load1": 17.8994140625
+            },
+            "floor": {
+              "seconds": 0.259236057,
+              "load1": 17.5869140625
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.21394424,
+              "load1": 17.5869140625
+            },
+            "python": {
+              "seconds": 2.0819380340035423,
+              "load1": 18.3408203125
+            },
+            "floor": {
+              "seconds": 0.230083653,
+              "load1": 18.3408203125
+            }
+          },
+          {
+            "python": {
+              "seconds": 2.07878929200524,
+              "load1": 18.3408203125
+            },
+            "rust": {
+              "seconds": 1.27261017,
+              "load1": 17.9130859375
+            },
+            "floor": {
+              "seconds": 0.210673381,
+              "load1": 17.6796875
+            }
+          }
+        ],
+        "over_floor": 0.999481468
+      }
+    ],
+    "cipher": [
+      {
+        "mode": "fresh",
+        "transactions": 20000,
+        "best": {
+          "python": 1.6138617300020996,
+          "rust": 1.582221042,
+          "floor": 0.784623002
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.7019661119993543,
+              "load1": 17.70556640625
+            },
+            "rust": {
+              "seconds": 1.688839744,
+              "load1": 17.70556640625
+            },
+            "floor": {
+              "seconds": 0.809795022,
+              "load1": 17.48876953125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.582221042,
+              "load1": 17.369140625
+            },
+            "python": {
+              "seconds": 1.6879423159989528,
+              "load1": 17.369140625
+            },
+            "floor": {
+              "seconds": 0.827239381,
+              "load1": 17.17919921875
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.6138617300020996,
+              "load1": 17.17919921875
+            },
+            "rust": {
+              "seconds": 1.594782283,
+              "load1": 17.5654296875
+            },
+            "floor": {
+              "seconds": 0.784623002,
+              "load1": 17.6005859375
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.598265123,
+              "load1": 17.6005859375
+            },
+            "python": {
+              "seconds": 1.6712613859999692,
+              "load1": 17.55224609375
+            },
+            "floor": {
+              "seconds": 0.78561608,
+              "load1": 17.427734375
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.694918601999234,
+              "load1": 17.427734375
+            },
+            "rust": {
+              "seconds": 1.6507726740000002,
+              "load1": 17.23291015625
+            },
+            "floor": {
+              "seconds": 0.786506645,
+              "load1": 17.1337890625
+            }
+          }
+        ],
+        "over_floor": 0.79759804
+      },
+      {
+        "mode": "unchanged",
+        "transactions": 20000,
+        "best": {
+          "python": 1.2661655210031313,
+          "rust": 1.127561135,
+          "floor": 0.070324835
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.8036682790043415,
+              "load1": 15.2373046875
+            },
+            "rust": {
+              "seconds": 1.203099324,
+              "load1": 15.298828125
+            },
+            "floor": {
+              "seconds": 0.083448331,
+              "load1": 15.298828125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.1928163569999999,
+              "load1": 15.51513671875
+            },
+            "python": {
+              "seconds": 1.2784112689987523,
+              "load1": 15.51513671875
+            },
+            "floor": {
+              "seconds": 0.144189221,
+              "load1": 15.55419921875
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.2661655210031313,
+              "load1": 15.55419921875
+            },
+            "rust": {
+              "seconds": 1.187372256,
+              "load1": 15.59033203125
+            },
+            "floor": {
+              "seconds": 0.079070418,
+              "load1": 15.59033203125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.127561135,
+              "load1": 15.62353515625
+            },
+            "python": {
+              "seconds": 1.7905606700005592,
+              "load1": 15.62353515625
+            },
+            "floor": {
+              "seconds": 0.070324835,
+              "load1": 15.5732421875
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.2742585910018533,
+              "load1": 15.5732421875
+            },
+            "rust": {
+              "seconds": 1.15761126,
+              "load1": 15.607421875
+            },
+            "floor": {
+              "seconds": 0.078710048,
+              "load1": 15.607421875
+            }
+          }
+        ],
+        "over_floor": 1.0572363
+      },
+      {
+        "mode": "appended",
+        "transactions": 20000,
+        "best": {
+          "python": 1.2444023069983814,
+          "rust": 1.095607186,
+          "floor": 0.066551475
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.2894129889973556,
+              "load1": 14.88671875
+            },
+            "rust": {
+              "seconds": 1.225483097,
+              "load1": 14.88671875
+            },
+            "floor": {
+              "seconds": 0.072830365,
+              "load1": 15.21630859375
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.160443897,
+              "load1": 15.21630859375
+            },
+            "python": {
+              "seconds": 1.9190327770047588,
+              "load1": 15.599609375
+            },
+            "floor": {
+              "seconds": 0.066551475,
+              "load1": 15.9521484375
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.2633546699944418,
+              "load1": 15.9521484375
+            },
+            "rust": {
+              "seconds": 1.095607186,
+              "load1": 15.87548828125
+            },
+            "floor": {
+              "seconds": 0.070455033,
+              "load1": 15.87548828125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.118525816,
+              "load1": 15.87548828125
+            },
+            "python": {
+              "seconds": 1.2444023069983814,
+              "load1": 16.0458984375
+            },
+            "floor": {
+              "seconds": 0.070492643,
+              "load1": 15.6416015625
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.8327666940022027,
+              "load1": 15.6416015625
+            },
+            "rust": {
+              "seconds": 1.179264782,
+              "load1": 15.83056640625
+            },
+            "floor": {
+              "seconds": 0.071007877,
+              "load1": 15.83056640625
+            }
+          }
+        ],
+        "over_floor": 1.029055711
+      },
+      {
+        "mode": "changed",
+        "transactions": 20000,
+        "best": {
+          "python": 1.7092447730028653,
+          "rust": 1.551335761,
+          "floor": 0.465619086
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.7092447730028653,
+              "load1": 14.271484375
+            },
+            "rust": {
+              "seconds": 1.587565667,
+              "load1": 14.16943359375
+            },
+            "floor": {
+              "seconds": 0.465619086,
+              "load1": 13.91552734375
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.551335761,
+              "load1": 13.91552734375
+            },
+            "python": {
+              "seconds": 1.7107794580006157,
+              "load1": 14.00244140625
+            },
+            "floor": {
+              "seconds": 0.493923093,
+              "load1": 14.00244140625
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.7795150270030717,
+              "load1": 14.32275390625
+            },
+            "rust": {
+              "seconds": 1.973176898,
+              "load1": 14.32275390625
+            },
+            "floor": {
+              "seconds": 0.787597005,
+              "load1": 14.61767578125
+            }
+          },
+          {
+            "rust": {
+              "seconds": 1.667172203,
+              "load1": 16.890625
+            },
+            "python": {
+              "seconds": 1.7390526730014244,
+              "load1": 16.73876953125
+            },
+            "floor": {
+              "seconds": 0.508437675,
+              "load1": 16.73876953125
+            }
+          },
+          {
+            "python": {
+              "seconds": 1.7808808499976294,
+              "load1": 16.83984375
+            },
+            "rust": {
+              "seconds": 2.83558593,
+              "load1": 16.83984375
+            },
+            "floor": {
+              "seconds": 0.488218629,
+              "load1": 19.49560546875
+            }
+          }
+        ],
+        "over_floor": 1.085716675
+      }
+    ]
+  },
+  "dump_parity": {
+    "totals": {
+      "samples/channel-channel_snapshot": {
+        "compared": 32,
+        "matched": 32,
+        "writes": 800,
+        "table:journal_quantity_postings": 32,
+        "table:journal_custody_reconciliations": 32,
+        "table:profiles": 32,
+        "table:journal_custody_decisions": 32,
+        "table:journal_quantity_issues": 32,
+        "table:journal_quantity_balances": 32,
+        "table:journal_custody_economic_relations": 32,
+        "table:journal_tax_summary": 32,
+        "table:journal_wallet_holdings": 32,
+        "table:journal_quarantines": 32,
+        "table:journal_account_holdings": 32,
+        "table:journal_custody_gap_inputs": 32,
+        "table:journal_entries": 3
+      },
+      "samples/fanout-fanout_snapshot": {
+        "compared": 43,
+        "matched": 43,
+        "writes": 1065,
+        "table:journal_quantity_postings": 39,
+        "table:journal_custody_reconciliations": 43,
+        "table:profiles": 43,
+        "table:journal_custody_decisions": 43,
+        "table:journal_quantity_issues": 43,
+        "table:journal_quantity_balances": 43,
+        "table:journal_custody_economic_relations": 43,
+        "table:journal_tax_summary": 43,
+        "table:journal_wallet_holdings": 43,
+        "table:journal_quarantines": 43,
+        "table:journal_account_holdings": 43,
+        "table:journal_custody_gap_inputs": 43
+      },
+      "samples/gap-snapshot": {
+        "compared": 32,
+        "matched": 32,
+        "writes": 3441,
+        "table:journal_quantity_postings": 31,
+        "table:journal_custody_reconciliations": 32,
+        "table:profiles": 32,
+        "table:journal_custody_decisions": 32,
+        "table:journal_quantity_issues": 32,
+        "table:journal_quantity_balances": 32,
+        "table:journal_custody_economic_relations": 32,
+        "table:journal_tax_summary": 32,
+        "table:journal_wallet_holdings": 32,
+        "table:journal_quarantines": 32,
+        "table:journal_account_holdings": 32,
+        "table:journal_custody_gap_inputs": 32,
+        "table:journal_entries": 3
+      },
+      "samples/graph-graph_snapshot": {
+        "compared": 8,
+        "matched": 8,
+        "writes": 162,
+        "table:journal_quantity_postings": 8,
+        "table:journal_custody_reconciliations": 8,
+        "table:profiles": 8,
+        "table:journal_custody_decisions": 8,
+        "table:journal_quantity_issues": 8,
+        "table:journal_quantity_balances": 8,
+        "table:journal_custody_economic_relations": 8,
+        "table:journal_tax_summary": 8,
+        "table:journal_wallet_holdings": 8,
+        "table:journal_quarantines": 8,
+        "table:journal_account_holdings": 8,
+        "table:journal_custody_gap_inputs": 8
+      },
+      "samples/interpretation-recorded_snapshot": {
+        "compared": 45,
+        "matched": 45,
+        "writes": 1019,
+        "table:journal_quantity_postings": 42,
+        "table:journal_custody_reconciliations": 45,
+        "table:profiles": 45,
+        "table:journal_custody_decisions": 45,
+        "table:journal_quantity_issues": 45,
+        "table:journal_quantity_balances": 45,
+        "table:journal_custody_economic_relations": 45,
+        "table:journal_tax_summary": 45,
+        "table:journal_wallet_holdings": 45,
+        "table:journal_quarantines": 45,
+        "table:journal_account_holdings": 45,
+        "table:journal_custody_gap_inputs": 45,
+        "table:journal_entries": 17
+      },
+      "samples/interpretation-samourai_snapshot": {
+        "compared": 34,
+        "matched": 34,
+        "writes": 765,
+        "table:journal_quantity_postings": 34,
+        "table:journal_custody_reconciliations": 34,
+        "table:profiles": 34,
+        "table:journal_custody_decisions": 34,
+        "table:journal_quantity_issues": 34,
+        "table:journal_quantity_balances": 34,
+        "table:journal_custody_economic_relations": 34,
+        "table:journal_tax_summary": 34,
+        "table:journal_wallet_holdings": 34,
+        "table:journal_quarantines": 34,
+        "table:journal_account_holdings": 34,
+        "table:journal_custody_gap_inputs": 34,
+        "table:journal_entries": 1
+      },
+      "samples/native-native_snapshot": {
+        "compared": 48,
+        "matched": 48,
+        "writes": 1045,
+        "table:journal_quantity_postings": 48,
+        "table:journal_custody_reconciliations": 48,
+        "table:profiles": 48,
+        "table:journal_custody_decisions": 48,
+        "table:journal_quantity_issues": 48,
+        "table:journal_quantity_balances": 48,
+        "table:journal_custody_economic_relations": 48,
+        "table:journal_tax_summary": 48,
+        "table:journal_wallet_holdings": 48,
+        "table:journal_quarantines": 48,
+        "table:journal_account_holdings": 48,
+        "table:journal_custody_gap_inputs": 48,
+        "table:journal_entries": 20
+      },
+      "samples/pipeline-pipeline_snapshot": {
+        "compared": 12,
+        "matched": 12,
+        "writes": 302,
+        "table:journal_quantity_postings": 12,
+        "table:journal_custody_reconciliations": 12,
+        "table:profiles": 12,
+        "table:journal_custody_decisions": 12,
+        "table:journal_quantity_issues": 12,
+        "table:journal_quantity_balances": 12,
+        "table:journal_custody_economic_relations": 12,
+        "table:journal_tax_summary": 12,
+        "table:journal_wallet_holdings": 12,
+        "table:journal_quarantines": 12,
+        "table:journal_account_holdings": 12,
+        "table:journal_custody_gap_inputs": 12
+      },
+      "samples/reconciliation-snapshot": {
+        "compared": 25,
+        "matched": 25,
+        "writes": 678,
+        "table:journal_quantity_postings": 25,
+        "table:journal_custody_reconciliations": 25,
+        "table:profiles": 25,
+        "table:journal_custody_decisions": 25,
+        "table:journal_quantity_issues": 25,
+        "table:journal_quantity_balances": 25,
+        "table:journal_custody_economic_relations": 25,
+        "table:journal_tax_summary": 25,
+        "table:journal_wallet_holdings": 25,
+        "table:journal_quarantines": 25,
+        "table:journal_account_holdings": 25,
+        "table:journal_custody_gap_inputs": 25,
+        "table:journal_entries": 10
+      },
+      "samples/safety-safety_snapshot": {
+        "compared": 39,
+        "matched": 39,
+        "writes": 910,
+        "table:journal_quantity_postings": 39,
+        "table:journal_custody_reconciliations": 39,
+        "table:profiles": 39,
+        "table:journal_custody_decisions": 39,
+        "table:journal_quantity_issues": 39,
+        "table:journal_quantity_balances": 39,
+        "table:journal_custody_economic_relations": 39,
+        "table:journal_tax_summary": 39,
+        "table:journal_wallet_holdings": 39,
+        "table:journal_quarantines": 39,
+        "table:journal_account_holdings": 39,
+        "table:journal_custody_gap_inputs": 39,
+        "table:journal_entries": 3
+      },
+      "samples/snapshot-component_snapshot": {
+        "compared": 156,
+        "matched": 156,
+        "writes": 4597,
+        "table:journal_quantity_postings": 155,
+        "table:journal_custody_reconciliations": 156,
+        "table:profiles": 156,
+        "table:journal_custody_decisions": 156,
+        "table:journal_quantity_issues": 156,
+        "table:journal_quantity_balances": 156,
+        "table:journal_custody_economic_relations": 156,
+        "table:journal_tax_summary": 156,
+        "table:journal_wallet_holdings": 156,
+        "table:journal_quarantines": 156,
+        "table:journal_account_holdings": 156,
+        "table:journal_custody_gap_inputs": 156
+      },
+      "samples/snapshot-snapshot": {
+        "compared": 28,
+        "matched": 28,
+        "writes": 564,
+        "table:journal_quantity_postings": 22,
+        "table:journal_custody_reconciliations": 28,
+        "table:profiles": 28,
+        "table:journal_custody_decisions": 28,
+        "table:journal_quantity_issues": 28,
+        "table:journal_quantity_balances": 28,
+        "table:journal_custody_economic_relations": 28,
+        "table:journal_entries": 10,
+        "table:journal_tax_summary": 28,
+        "table:journal_wallet_holdings": 28,
+        "table:journal_quarantines": 28,
+        "table:journal_account_holdings": 28,
+        "table:journal_custody_gap_inputs": 28
+      },
+      "payouts/payouts": {
+        "compared": 10,
+        "matched": 10,
+        "writes": 204,
+        "table:journal_quantity_postings": 10,
+        "table:journal_custody_reconciliations": 10,
+        "table:profiles": 10,
+        "table:journal_custody_decisions": 10,
+        "table:journal_quantity_issues": 10,
+        "table:journal_quantity_balances": 10,
+        "table:journal_custody_economic_relations": 10,
+        "table:journal_tax_summary": 10,
+        "table:journal_wallet_holdings": 10,
+        "table:journal_quarantines": 10,
+        "table:journal_account_holdings": 10,
+        "table:journal_custody_gap_inputs": 10
+      },
+      "census": {
+        "compared": 69,
+        "matched": 69,
+        "writes": 1649,
+        "table:journal_quantity_postings": 65,
+        "table:journal_custody_reconciliations": 69,
+        "table:profiles": 69,
+        "table:journal_custody_decisions": 69,
+        "table:journal_quantity_issues": 69,
+        "table:journal_quantity_balances": 69,
+        "table:journal_custody_economic_relations": 69,
+        "table:journal_entries": 59,
+        "table:journal_tax_summary": 69,
+        "table:journal_wallet_holdings": 69,
+        "table:journal_quarantines": 69,
+        "table:journal_account_holdings": 69,
+        "table:journal_custody_gap_inputs": 69,
+        "table:filed_report_chain_resolutions": 6
+      },
+      "shadow": {
+        "compared": 75,
+        "matched": 75,
+        "writes": 1797,
+        "table:journal_quantity_postings": 71,
+        "table:journal_custody_reconciliations": 75,
+        "table:profiles": 75,
+        "table:journal_custody_decisions": 75,
+        "table:journal_quantity_issues": 75,
+        "table:journal_quantity_balances": 75,
+        "table:journal_custody_economic_relations": 75,
+        "table:journal_entries": 61,
+        "table:journal_tax_summary": 75,
+        "table:journal_wallet_holdings": 75,
+        "table:journal_quarantines": 75,
+        "table:journal_account_holdings": 75,
+        "table:journal_custody_gap_inputs": 75,
+        "table:filed_report_chain_resolutions": 6
+      },
+      "frozen": {
+        "compared": 26,
+        "matched": 26,
+        "writes": 604,
+        "table:journal_quantity_postings": 14,
+        "table:journal_custody_reconciliations": 26,
+        "table:profiles": 26,
+        "table:journal_custody_decisions": 26,
+        "table:journal_quantity_issues": 26,
+        "table:journal_quantity_balances": 26,
+        "table:journal_custody_economic_relations": 26,
+        "table:journal_entries": 8,
+        "table:journal_tax_summary": 26,
+        "table:journal_wallet_holdings": 26,
+        "table:journal_quarantines": 26,
+        "table:journal_account_holdings": 26,
+        "table:journal_custody_gap_inputs": 26,
+        "table:custody_filed_report_impact_resolutions": 5,
+        "table:filed_report_chain_resolutions": 1
+      }
+    },
+    "failures": []
+  },
+  "failure_injection": {
+    "frozen_cases": 26,
+    "frozen_write_positions": 604,
+    "modes": [
+      "error",
+      "panic"
+    ],
+    "physical_cipher_write_positions": 19,
+    "total_injections": 1246
+  },
+  "source_sha256": {
+    "crates/journals/src/lib.rs": "12b7e7cd204a7ffd36643b62a3b05fe5fee6c557838713a9e665a51279994260",
+    "crates/journals/src/persistence/filed.rs": "ba5e5f16065308ebbaeebbd1153f74e094cab4be61c7050e57135893598b6dbe",
+    "crates/journals/src/persistence/quantity.rs": "85c931d09675800d5a63e66ebd843883abc027f6b6448cb7ff0b22630c11289a",
+    "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+    "crates/journals/src/persistence.rs": "5c186a231d25d05b3234c9fadaefbd85cf4924c836ad60c2fd3e25d2346cb410",
+    "crates/journals/src/storage.rs": "486b6fc5fd605ac13a0212e4d09bfc506e086cd60eba6c71c3fba5ff874b9942",
+    "crates/reports/src/export_completion.rs": "1f95052f9e140fc611371fd5d5f5a459711b75acb8d48e2ef6a686a387d96bd2",
+    "crates/wallets/src/publication/reports.rs": "1a83a521bb497d9b6f8a913ad2cb9de0d3aa6e7c21d2df541ebaec477c2fe0c8",
+    "crates/journals/examples/journal-persist.rs": "8e539d48e12eb389fc81e918165c5bc1b118caad2e123261329594d4bcebeaef",
+    "crates/journals/tests/support/mod.rs": "24e8a3fb52acc2ea33c31d88c309b4a4d54176c60b37125be53c1a1513cd9d83",
+    "scripts/benchmark-journal-persistence.py": "31661378e261a9f784bd3ba0488e750a6c0f3d74be9bf5cfd5cacda17463f7c6",
+    "tests/rust_port/journal_persistence_oracle.py": "435a1a98fbfa26b1ffe8736e37cf4e3775cb3f76fb175019cdf47e7a397f3c62",
+    "scripts/capture-journal-persistence-samples.py": "725991d736065174d8b2d0ff226744203b1792a30ec6856d81b954ca87ed8475",
+    "scripts/verify-journal-persistence.py": "0d9f5e5538590c954e28b91e150c8e9a3fdccddedb04408e57b30c058e4a11d4"
+  },
+  "mutations": {
+    "catalog": "crates/journals/scripts/mutations.json",
+    "catalog_sha256": "5e2ae4103aff896cdfb90f185eb2868874579d430df96810e9237a913a4d6c6e",
+    "baseline_named_filters": 20,
+    "inherited": 61,
+    "persistence": 51,
+    "killed": [
+      "JR-round-half-up",
+      "JR-sub-msat",
+      "JR-decimal-context",
+      "JR-signed-msat",
+      "JR-source-id",
+      "JR-source-spot",
+      "JR-source-fee",
+      "JR-fragment-proceeds",
+      "JR-basis-override",
+      "JR-basis-lot",
+      "JR-basis-income",
+      "JR-anchor",
+      "JR-unit-cost",
+      "JR-disposal-fiat",
+      "JR-kennzahl-gain",
+      "JR-kennzahl-loss",
+      "JR-kennzahl-old",
+      "JR-method",
+      "JR-transfer-sign",
+      "JR-carry-quality",
+      "JR-carry-method",
+      "JR-holdings-add",
+      "JR-summary-term",
+      "JR-summary-basis",
+      "JR-quarantine-reason",
+      "JR-quarantine-sort",
+      "JR-enrichment-key",
+      "JR-enrichment-layout",
+      "JR-native-asdict",
+      "JR-loan-reason",
+      "JR-lightning-reason",
+      "JR-legacy-identity",
+      "JR-owned-amount",
+      "JR-review-kind",
+      "JR-review-fee",
+      "JR-review-confidence",
+      "JR-refusal-code",
+      "JR-refusal-cause",
+      "JR-refusal-wrapper",
+      "JR-machine-coefficient",
+      "JR-machine-rounding",
+      "JR-machine-sign",
+      "JR-machine-scale",
+      "JR-utc-hour",
+      "JR-utc-minute",
+      "JR-utc-second",
+      "JR-utc-date",
+      "JR-utc-zone",
+      "JR-iso-unhashable",
+      "JR-source-slot",
+      "JR-carry-slot",
+      "JR-balance-small-add",
+      "JR-balance-wide-add",
+      "JR-balance-wallet-kind",
+      "JR-balance-reason",
+      "JR-review-pairable-early",
+      "JR-review-pairable-filter",
+      "JR-review-physical-group",
+      "JR-review-legacy-group",
+      "JR-review-prefer-exact",
+      "JR-balance-current-key",
+      "JP-uuid-version",
+      "JP-uuid-variant",
+      "JP-clock-repeat",
+      "JP-clock-successor",
+      "JP-calculation-version",
+      "JP-source-dedupe",
+      "JP-legacy-fallback",
+      "JP-same-column-tuple",
+      "JP-signed-zero",
+      "JP-duplicate-postings",
+      "JP-entry-tie",
+      "JP-mixed-stamps",
+      "JP-delete-removed",
+      "JP-cache-size",
+      "JP-wal-disable",
+      "JP-wal-passive",
+      "JP-caller-transaction",
+      "JP-rollback",
+      "JP-freshness-count",
+      "JP-freshness-version",
+      "JP-pricing",
+      "JP-holding-quantity",
+      "JP-entry-type",
+      "JP-impact-barrier",
+      "JP-quarantine-root",
+      "JP-quarantine-duplicates",
+      "JP-quarantine-carried",
+      "JP-quarantine-enrichment",
+      "JP-quarantine-compact",
+      "JP-impact-uuid",
+      "JP-impact-filed",
+      "JP-impact-gain",
+      "JP-quantity-absent",
+      "JP-quantity-clear",
+      "JP-quantity-balance",
+      "JP-quantity-observation",
+      "JP-decision-eligibility",
+      "JP-decision-id",
+      "JP-reconciliation-selected",
+      "JP-reconciliation-amount",
+      "JP-relation-id",
+      "JP-relation-conversion",
+      "JP-relation-payout",
+      "JP-relation-eligibility",
+      "JP-relation-source",
+      "JP-relation-target",
+      "JP-live-quarantines",
+      "JP-compact-ascii",
+      "JP-compact-null",
+      "JP-compact-separator",
+      "JP-basis-barrier"
+    ],
+    "survivors": [],
+    "build_errors": [],
+    "exhaustive_branch_audit": "open"
+  },
+  "workspace_tests": {
+    "passed": 1510,
+    "failed": 0,
+    "ignored": 0,
+    "test_binaries_and_doctests": 116,
+    "socket_permission_retry": true
+  },
+  "checks": {
+    "fmt": "pass",
+    "clippy_workspace_all_targets_deny_warnings": "pass",
+    "journal_tests_passed": 24,
+    "python_oracles_passed": 8,
+    "classify_update": "pass",
+    "preflight_passed": 57,
+    "helper_syntax_and_path_guards": "pass",
+    "preflight_error_index_offsets_refreshed": 8
+  }
+}

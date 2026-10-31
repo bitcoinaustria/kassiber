@@ -19,7 +19,7 @@ from unittest.mock import patch
 from kassiber.core import custody_journal
 from kassiber.core.custody_compute import compute_custody_projection
 from kassiber.core.custody_snapshot import encode_owned_index
-from kassiber.core.engines import ledger
+from kassiber.core.engines import ledger, ledger_response
 from tests.custody_snapshot import to_jsonable
 
 CLOCK = '2026-10-30T12:00:00Z'
@@ -59,12 +59,21 @@ def capture_build(builder):
         record['response'] = response
         start = time.perf_counter()
         try:
-            with patch.object(uuid, 'uuid4', identity):
+            with patch.object(uuid, 'uuid4', identity), \
+                 patch.object(ledger_response, 'journal_entry_id', entry_identity):
                 return original_reader(profile, inputs, response)
         finally:
             elapsed[0] += time.perf_counter() - start
 
     original_uuid4 = uuid.uuid4
+    original_entry_id = ledger_response.journal_entry_id
+
+    def entry_identity(*args):
+        # Observe each id at generation, including builds that later refuse.
+        text = original_entry_id(*args)
+        record['entry_ids'].append(text)
+        record['uuid_mapping'].append({'python': text, 'rust': text})
+        return text
 
     def identity():
         generated = original_uuid4()

@@ -66,7 +66,7 @@ the classifier's `summary` output and is checked by preflight.
 | custody | 0 | 38 | 389 | 106 | 1 | 534 |
 | journals | 4 | 14 | 183 | 120 | 8 | 329 |
 | imports | 67 | 33 | 170 | 0 | 0 | 270 |
-| reports | 56 | 23 | 182 | 17 | 0 | 278 |
+| reports | 56 | 23 | 183 | 17 | 0 | 279 |
 | chain/sync | 38 | 76 | 1277 | 35 | 0 | 1426 |
 | network/egress | 7 | 15 | 79 | 0 | 10 | 111 |
 | transactions/metadata/transfers/reviews | 46 | 102 | 540 | 21 | 0 | 709 |

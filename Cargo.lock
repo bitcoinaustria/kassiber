@@ -1686,10 +1686,15 @@ dependencies = [
 name = "kassiber-journals"
 version = "0.1.0"
 dependencies = [
+ "bitcoin_hashes",
  "kassiber-custody",
  "kassiber-pydecimal",
  "kassiber-pyjson",
+ "kassiber-rates",
+ "kassiber-reports",
+ "kassiber-store",
  "kassiber-tax-core",
+ "kassiber-wallets",
  "serde",
  "serde_json",
 ]

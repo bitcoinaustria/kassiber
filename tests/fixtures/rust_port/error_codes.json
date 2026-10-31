@@ -12307,7 +12307,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:626",
+      "at": "kassiber/core/review_workflow.py:629",
       "callee": "_error",
       "code": "review_artifact_invalid",
       "form": "call",
@@ -12315,7 +12315,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:628",
+      "at": "kassiber/core/review_workflow.py:631",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -12323,7 +12323,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:632",
+      "at": "kassiber/core/review_workflow.py:634",
       "callee": "_error",
       "code": "review_artifact_invalid",
       "form": "call",
@@ -12331,7 +12331,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:633",
+      "at": "kassiber/core/review_workflow.py:636",
       "callee": "_error",
       "code": "review_scope_mismatch",
       "form": "call",
@@ -12347,7 +12347,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:638",
+      "at": "kassiber/core/review_workflow.py:641",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -12355,7 +12355,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:653",
+      "at": "kassiber/core/review_workflow.py:656",
       "callee": "_error",
       "code": "review_idempotency_conflict",
       "form": "call",
@@ -12363,7 +12363,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:662",
+      "at": "kassiber/core/review_workflow.py:665",
       "callee": "_error",
       "code": "review_plan_stale",
       "form": "call",
@@ -12371,7 +12371,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/review_workflow.py:668",
+      "at": "kassiber/core/review_workflow.py:671",
       "callee": "_error",
       "code": "review_plan_stale",
       "form": "call",

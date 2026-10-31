@@ -2181,6 +2181,10 @@
     "tests/test_rust_hybrid_candidate.py": {
       "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 9}
     },
+    "tests/test_rust_journal_persistence.py": {
+      "test_storage_vectors_rebuild_from_python_reference": {"disposition": "oracle", "flags": [], "group": "journals", "reason": "regenerates exact storage encodings and replays complete frozen database snapshots through unchanged Python; native tests persist the same stage and ledger inputs and compare every stored scalar, id, timestamp and rowid", "reviewed": true, "tests": 1},
+      "test_python_replays_frozen_complete_persistence_dumps": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "regenerates exact storage encodings and replays complete frozen database snapshots through unchanged Python; native tests persist the same stage and ledger inputs and compare every stored scalar, id, timestamp and rowid", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_journal_render.py": {
       "test_render_vectors_rebuild_from_python_build": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "regenerates complete pre-persistence build-state vectors from unchanged Python and proves every rendered UUID has a declared bijection; native journal tests compare all state and refusal bytes", "reviewed": true, "tests": 1},
       "test_uuid_tapes_are_bijections_and_cover_every_rendered_identity": {"disposition": "oracle", "flags": [], "group": "journals", "reason": "regenerates complete pre-persistence build-state vectors from unchanged Python and proves every rendered UUID has a declared bijection; native journal tests compare all state and refusal bytes", "reviewed": true, "tests": 1},

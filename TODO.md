@@ -374,6 +374,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   budgets and the no-engine-slowdown gate remain open.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
+- [ ] Finish the [R4-12 persistence checkpoint](docs/reference/r4-journal-persistence-checkpoint.md):
+  close the write-floor budget, exhaustive persistence mutations and inherited
+  campaign gates before wiring production in R4-13. The unregistered service,
+  complete dump oracle and caller-owned storage scopes are implemented.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations
   and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
