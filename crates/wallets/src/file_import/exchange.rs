@@ -379,11 +379,12 @@ pub(super) fn enrich(
         ("skipped_unmatched", Py::from(unmatched)),
         ("skipped_ambiguous", Py::from(ambiguous)),
     ];
-    if !updated.is_empty() {
-        result.push(("updated", Py::from(updated.len() as i64)));
+    let updated_count = updated.len() as i64;
+    result.push(("updated_records", Py::List(updated)));
+    if updated_count > 0 {
+        result.push(("updated", Py::from(updated_count)));
     }
     result.extend([
-        ("updated_records", Py::List(updated)),
         ("mode", s("relevant")),
         (request.format.provider().2, Py::from(rows.len() as i64)),
         ("input_format", s(request.format.name())),

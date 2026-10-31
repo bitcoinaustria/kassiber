@@ -2172,6 +2172,44 @@ Remaining core/CLI slices, each requiring its own verified commit, are Binance
 supplemental, BTCPay files, generic ledger, Wasabi, Samourai and document
 ingestion. No dependency, egress, sync route or AI projection is added.
 
+### R5 file-import continuation: Binance supplemental core/CLI checkpoint
+
+Native `wallets import-binance-supplemental` parses autoinvest and dividend
+CSV files through the shared local file service. Exact fiat-funded buys,
+fee-inclusive acquisition value, BTC/LBTC normalization, dividend millisecond
+timestamps and mining/income classification follow Python. Both full and
+relevant modes retain profile-scoped commercial matching, fee precedence,
+provider tags, excluded evidence rows, enrichment, import runs and rollback.
+Supplemental identifiers stay namespaced source references; they never promote
+a transaction into an authoritative chain identity.
+
+The reused enrichment coordinator also corrects an inherited response-key order
+mismatch. Bull, Coinfinity and Pocket now have relevant-mode wire regressions
+on both codecs; NaN timestamp payloads retain Python's exact refusal.
+
+The corpus freezes 253 Python-derived files. Native field/fingerprint tests,
+hybrid full-book comparisons and every file's raw CLI bytes/full typed dumps
+on SQLite and SQLCipher cover the boundary. Coordinator sequences exercise
+overlap, identity-promotion refusal, enrichment, reimports, price/schema/input
+refusals, default wallet creation and rollback. Python's conflicting-base-symbol,
+row-index and Decimal-scale identity quirks are retained with an offline repro.
+The [Binance checkpoint](../reference/rust-shell.md#binance-supplemental-core-and-cli-ingestion-r5-continuation)
+records served-by counts, mutation killers and final verification.
+
+The hybrid run records 261 native Binance imports and zero importer fallbacks.
+All 66 native file-import tests pass. The catalog contains 648 entries; the
+fresh audit passes 11 named baselines and kills all 37 new entries plus the
+shared atomic-import rule, without survivors or build errors.
+
+Formatting, strict workspace/harness Clippy, all 14 harness tests and all 57
+CI preflight tests pass. The inventory records 5,722 Python tests. The workspace
+run has 1,485 passes, 58 sandbox socket denials and one backup assertion that
+passes both isolated and original-binary rechecks; the shell checkpoint records
+the complete result and retained diagnostics rather than claiming a green gate.
+
+The remaining core/CLI importers are BTCPay files, generic ledger, Wasabi,
+Samourai and document ingestion, each requiring its own verified commit.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

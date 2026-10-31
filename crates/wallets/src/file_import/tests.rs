@@ -467,6 +467,7 @@ fn assert_import_vectors(cases: &Json) {
             "ledgerlive_csv" => Format::LedgerLive,
             "cointracking_csv" => Format::CoinTracking,
             "blockpit_csv" => Format::Blockpit,
+            "binance_supplemental_csv" => Format::Binance,
             "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
@@ -3075,4 +3076,286 @@ fn blockpit_only_canonical_txids_establish_chain_identity() {
             );
         }
     }
+}
+
+#[test]
+fn python_binance_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_binance_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+const BINANCE_AUTO: &str = "timestamp UTC,base asset symbol,quote asset amount + symbol,trading fee (in quote asset),base asset amount + symbol,source of funds\n2025-01-02 03:04:05,BTC,100.00 EUR,1.00 EUR,0.002 BTC,Spot Wallet\n";
+const BINANCE_REF: &str = "binance-supplemental:2025-01-02 03:04:05:autoinvest:BTC:0.002:1";
+fn binance_import(
+    conn: &Connection,
+    content: &str,
+    mode: &str,
+    wallet: &str,
+) -> Result<Py, AppError> {
+    let file = std::env::temp_dir().join(format!(
+        "binance-coordinator-{}-{:?}.csv",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::write(&file, content).unwrap();
+    let result = execute(
+        conn,
+        Request {
+            profile_id: "p".into(),
+            wallet: wallet.into(),
+            file: file.to_str().unwrap().into(),
+            format: Format::Binance,
+            mode: Some(mode.into()),
+        },
+        None,
+    );
+    std::fs::remove_file(file).unwrap();
+    result
+}
+#[test]
+fn binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('chain','ws','p','Observed','descriptor','{}','2025-01-01');").unwrap();
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('observed','ws','p','chain',?,'observed','2025-01-01T00:00:00Z','inbound','BTC',200000000,1,'2025-01-01')", [BINANCE_REF]).unwrap();
+        let first = binance_import(&conn, BINANCE_AUTO, "full", "Source").unwrap();
+        for (key, value) in [
+            ("imported", 1),
+            ("matched", 1),
+            ("unmatched", 0),
+            ("ambiguous", 0),
+        ] {
+            assert_eq!(
+                kassiber_envelope::get(&first, key),
+                Some(&Py::from(value)),
+                "{key}"
+            );
+        }
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE wallet_id='wallet' AND excluded=1 AND external_id_kind IS NULL"),1);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM tags WHERE code='binance-matched' AND label='Binance matched'"),1);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM tags WHERE code='binance-wallet-gap' AND label='Binance wallet gap'"),1);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM tags WHERE code='binance-ambiguous' AND label='Binance ambiguous'"),1);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE wallet_id='chain' AND fiat_value_exact IS NULL AND fee=1"),1);
+        let repeated = binance_import(&conn, BINANCE_AUTO, "full", "Source").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "imported"),
+            Some(&Py::from(0))
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='binance_supplemental_csv'"),1);
+        let enriched = binance_import(
+            &conn,
+            &BINANCE_AUTO.replace("100.00 EUR", "200.00 EUR"),
+            "full",
+            "Source",
+        )
+        .unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&enriched, "imported"),
+            Some(&Py::from(0))
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE wallet_id='wallet' AND fiat_value_exact='201.00' AND fiat_rate_exact='100500'"),1);
+        conn.execute(
+            "UPDATE transactions SET external_id_kind='txid' WHERE wallet_id='chain'",
+            [],
+        )
+        .unwrap();
+        binance_import(&conn, BINANCE_AUTO, "full", "Source").unwrap();
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE wallet_id='wallet' AND external_id_kind IS NULL"),1);
+        conn.execute("DELETE FROM transactions WHERE wallet_id='chain'", [])
+            .unwrap();
+        let unmatched = binance_import(&conn, BINANCE_AUTO, "full", "Source").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&unmatched, "unmatched"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='binance-wallet-gap'"),1);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='binance-matched'"),0);
+        let scaled = BINANCE_AUTO.replace("0.002 BTC", "0.0020 BTC");
+        assert_eq!(
+            kassiber_envelope::get(
+                &binance_import(&conn, &scaled, "full", "Source").unwrap(),
+                "imported"
+            ),
+            Some(&Py::from(1))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE external_id_kind='txid'"
+            ),
+            0
+        );
+        let dividend = format!(
+            "id,amount,asset,divTime\n{},0.00001,BTC,1735776000123\n",
+            "ab".repeat(32)
+        );
+        binance_import(&conn, &dividend, "full", "Source").unwrap();
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE external_id LIKE 'binance:%' AND external_id_kind IS NULL"),1);
+    }
+}
+#[test]
+fn binance_relevant_coordinator_matches_scope_fee_precedence_and_price_refusals() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        assert_eq!(
+            kassiber_envelope::get(
+                &binance_import(&conn, BINANCE_AUTO, "relevant", "").unwrap(),
+                "skipped_unmatched"
+            ),
+            Some(&Py::from(1))
+        );
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        import(
+            &conn,
+            &format!("date,txid,amount,fee\n2025-01-01,{BINANCE_REF},0.002,0.00001\n"),
+        )
+        .unwrap();
+        let result = binance_import(&conn, BINANCE_AUTO, "relevant", "Source").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&result, "matched"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&result, "binance_rows"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE fee=1000000 AND fiat_value_exact='101.00' AND external_id_kind IS NULL"),1);
+        let Py::Dict(entries) = &result else {
+            panic!("enrichment response must be a dict")
+        };
+        let position = |key: &str| {
+            entries
+                .iter()
+                .position(|(k, _)| *k == kassiber_pyjson::Key::from(key))
+                .unwrap()
+        };
+        assert!(position("updated_records") < position("updated"));
+        let version = scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'",
+        );
+        let repeated = binance_import(&conn, BINANCE_AUTO, "relevant", "Source").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "journal_invalidated"),
+            Some(&Py::Bool(true))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            version + 1
+        );
+        conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT 'copy',workspace_id,profile_id,'other',external_id,'copy',occurred_at,direction,asset,amount,fee,created_at FROM transactions LIMIT 1;").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(
+                &binance_import(&conn, BINANCE_AUTO, "relevant", "").unwrap(),
+                "skipped_ambiguous"
+            ),
+            Some(&Py::from(1))
+        );
+        conn.execute("UPDATE transactions SET fee=0 WHERE id='copy'", [])
+            .unwrap();
+        assert_eq!(
+            kassiber_envelope::get(
+                &binance_import(&conn, BINANCE_AUTO, "relevant", "").unwrap(),
+                "matched"
+            ),
+            Some(&Py::from(1))
+        );
+        conn.execute("UPDATE transactions SET profile_id='q' WHERE id='copy'", [])
+            .unwrap();
+        conn.execute("UPDATE profiles SET fiat_currency='USD' WHERE id='p'", [])
+            .unwrap();
+        let error = binance_import(&conn, BINANCE_AUTO, "relevant", "").unwrap_err();
+        assert_eq!(error.code, "validation");
+        assert!(error.message.contains("currency EUR does not match"));
+    }
+}
+#[test]
+fn binance_late_failure_rolls_back_records_flags_runs_and_readiness() {
+    for encrypted in [false, true] {
+        for value in ["NaN123", "-NaN42", "NaN１２３", "+NaN0001"] {
+            let conn = fixture_codec(encrypted);
+            let body = format!("id,amount,asset,divTime\nreward,0.00001,BTC,{value}\n");
+            let error = binance_import(&conn, &body, "full", "Source").unwrap_err();
+            assert_eq!(error.message, "Invalid value NaN (not a number)");
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+        }
+        for mode in ["full", "relevant"] {
+            let conn = fixture_codec(encrypted);
+            conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+                .unwrap();
+            if mode == "full" {
+                conn.execute_batch("CREATE TRIGGER refuse_binance BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'denied');END;").unwrap();
+            } else {
+                import(
+                    &conn,
+                    &format!("date,txid,amount\n2025-01-01,{BINANCE_REF},0.002\n"),
+                )
+                .unwrap();
+                conn.execute_batch("CREATE TRIGGER refuse_binance BEFORE UPDATE OF journal_input_version ON profiles BEGIN SELECT RAISE(ABORT,'denied');END;").unwrap();
+            }
+            let before = scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'",
+            );
+            let count = scalar(&conn, "SELECT count(*) FROM transactions");
+            let runs = scalar(&conn, "SELECT count(*) FROM import_batches");
+            assert!(binance_import(&conn, BINANCE_AUTO, mode, "Source").is_err());
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), count);
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), runs);
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT count(*) FROM transactions WHERE fiat_value_exact IS NOT NULL"
+                ),
+                0
+            );
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 0);
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 0);
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT journal_input_version FROM profiles WHERE id='p'"
+                ),
+                before
+            );
+        }
+    }
+}
+#[test]
+fn binance_default_wallet_and_admission_follow_reference_order() {
+    let conn = fixture();
+    conn.execute_batch("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01');").unwrap();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    binance_import(&conn, BINANCE_AUTO, "full", "").unwrap();
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM wallets WHERE label='Binance' AND kind='binance' AND config_json='{\"source_format\": \"binance_supplemental_csv\"}'"),1);
+    assert_eq!(
+        kassiber_envelope::get(
+            &binance_import(&conn, BINANCE_AUTO, "full", "").unwrap(),
+            "imported"
+        ),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        binance_import(&conn, BINANCE_AUTO, "bad", "missing")
+            .unwrap_err()
+            .code,
+        "validation"
+    );
+    assert_eq!(
+        binance_import(&conn, BINANCE_AUTO, "full", "missing")
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
 }

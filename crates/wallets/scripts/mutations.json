@@ -635,7 +635,8 @@
       "strike_late_failure_rolls_back_observations_runs_and_readiness",
       "twentyone_legacy_reactivation_rolls_back_when_invalidation_fails",
       "cointracking_admission_and_late_failure_leave_every_write_uncommitted",
-      "blockpit_admission_and_late_failure_leave_every_write_uncommitted"
+      "blockpit_admission_and_late_failure_leave_every_write_uncommitted",
+      "binance_late_failure_rolls_back_records_flags_runs_and_readiness"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -6127,5 +6128,375 @@
       "blockpit_coordinator_reconciles_identity_economics_and_idless_collisions"
     ],
     "rule": "Reconciliation tag labels identify the source provider."
+  },
+  {
+    "id": "W-binance-auto-header",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "    \"timestamp utc\",\n",
+    "replace": "    \"unsupported timestamp\",\n",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Require the documented autoinvest schema."
+  },
+  {
+    "id": "W-binance-dividend-header",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "&[\"id\", \"amount\", \"asset\", \"divtime\"]",
+    "replace": "&[\"id\", \"amount\", \"asset\", \"wrong\"]",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Require the documented dividend schema."
+  },
+  {
+    "id": "W-binance-schema",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if !autoinvest && !has(DIVIDENDS) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Refuse unsupported supplemental exports."
+  },
+  {
+    "id": "W-binance-precedence",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if autoinvest {",
+    "replace": "if !autoinvest {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Prefer autoinvest when both schemas are present."
+  },
+  {
+    "id": "W-binance-split",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if parts.len() < 2 {",
+    "replace": "if parts.is_empty() {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Refuse amount cells without an asset."
+  },
+  {
+    "id": "W-binance-split-currency",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "currency(Some(parts[1].into()))",
+    "replace": "Some(parts[1].into())",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Normalize split asset spellings before matching."
+  },
+  {
+    "id": "W-binance-fallback",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "exchange::bitcoin(base.as_deref()).or_else(|| exchange::bitcoin(parsed.as_deref()))",
+    "replace": "exchange::bitcoin(base.as_deref())",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Use the amount symbol when the declared base is not Bitcoin."
+  },
+  {
+    "id": "W-binance-base-precedence",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "exchange::bitcoin(base.as_deref()).or_else(|| exchange::bitcoin(parsed.as_deref()))",
+    "replace": "exchange::bitcoin(parsed.as_deref()).or_else(|| exchange::bitcoin(base.as_deref()))",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Preserve the reference declared-base precedence even on conflicting symbols."
+  },
+  {
+    "id": "W-binance-fiat",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if !fiat.as_deref().is_some_and(|f| FIAT.contains(&f)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Refuse crypto-funded autoinvest rows."
+  },
+  {
+    "id": "W-binance-fee-asset",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if fee_asset.is_some() && fee_asset != fiat {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Refuse a fee denominated in another asset."
+  },
+  {
+    "id": "W-binance-fee-placeholder",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "None | Some(\"--\" | \"-\") =>",
+    "replace": "None | Some(\"--\") =>",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Accept both reference fee placeholders."
+  },
+  {
+    "id": "W-binance-quote-absolute",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "&abs(quote)?",
+    "replace": "&quote",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Use absolute quoted principal before including fees."
+  },
+  {
+    "id": "W-binance-fee-absolute",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "&abs(fee.filter(truth).unwrap_or_else(zero))?",
+    "replace": "&fee.filter(truth).unwrap_or_else(zero)",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Use the absolute fiat fee."
+  },
+  {
+    "id": "W-binance-fee-value",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "fee.filter(truth).unwrap_or_else(zero)",
+    "replace": "Some(fee).flatten().filter(|_| false).unwrap_or_else(zero)",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Include the fiat fee in acquisition value."
+  },
+  {
+    "id": "W-binance-base-absolute",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "let amount = abs(amount)?;",
+    "replace": "let amount = amount;",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Normalize the signed base amount after forming the private reference."
+  },
+  {
+    "id": "W-binance-rate",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "Some(arithmetic(&value, &amount, '/')?)",
+    "replace": "Some(arithmetic(&value, &amount, '*')?)",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Derive exact unit price from fee-inclusive cash value."
+  },
+  {
+    "id": "W-binance-zero-base",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if truth(&amount) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Retain a zero-base row without dividing by zero."
+  },
+  {
+    "id": "W-binance-index",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "investment(&columns, index + 1)",
+    "replace": "investment(&columns, index)",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Use one-based source occurrence identities."
+  },
+  {
+    "id": "W-binance-reference-scale",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "        repr(&amount)\n",
+    "replace": "        repr(&abs(amount.clone())?)\n",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Form autoinvest references from the original signed unrounded Decimal."
+  },
+  {
+    "id": "W-binance-epoch-unit",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "dec(\"1000\")?",
+    "replace": "dec(\"1\")?",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Interpret dividend timestamps as milliseconds."
+  },
+  {
+    "id": "W-binance-epoch-rounding",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "(value.fract() * 1_000_000.).round_ties_even()",
+    "replace": "(value.fract() * 1_000_000.).trunc()",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Preserve CPython microsecond rounding before dropping fractional seconds."
+  },
+  {
+    "id": "W-binance-epoch-negative",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "(micros / 1_000_000.).floor()",
+    "replace": "(micros / 1_000_000.).trunc()",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Use the preceding second for negative fractional timestamps."
+  },
+  {
+    "id": "W-binance-epoch-nan",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if value.is_nan() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Retain the reference NaN timestamp refusal."
+  },
+  {
+    "id": "W-binance-epoch-range",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "format!(\"year {year} is out of range\")",
+    "replace": "format!(\"invalid year {year}\")",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Retain exact out-of-range year errors."
+  },
+  {
+    "id": "W-binance-dividend-scope",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "exchange::bitcoin(currency.as_deref())",
+    "replace": "Some(\"BTC\")",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Skip non-Bitcoin dividend assets before parsing amounts."
+  },
+  {
+    "id": "W-binance-dividend-zero",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if !truth(&amount) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Skip zero dividend rows."
+  },
+  {
+    "id": "W-binance-dividend-id",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "format!(\"binance:{reference}\")",
+    "replace": "format!(\"{reference}\")",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Namespace dividend references without promoting them to chain ids."
+  },
+  {
+    "id": "W-binance-dividend-fallback-id",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "unwrap_or_else(|| index.to_string())",
+    "replace": "unwrap_or_else(|| \"0\".into())",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Use source position for blank dividend identities."
+  },
+  {
+    "id": "W-binance-dividend-kind",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "river::column(s).contains(\"mining\")",
+    "replace": "false && river::column(s).contains(\"mining\")",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Retain mining classification from the casefolded source description."
+  },
+  {
+    "id": "W-binance-raw",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "\"raw_json\":config::stored_json(&c.json())}),\n    }))\n}\nfn epoch",
+    "replace": "\"raw_json\":\"{}\"}),\n    }))\n}\nfn epoch",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Preserve the complete original autoinvest row for audit."
+  },
+  {
+    "id": "W-binance-income-raw",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "|s|format!(\"Binance income - {s}\")),\"counterparty\":\"Binance\",\"raw_json\":config::stored_json(&c.json())",
+    "replace": "|s|format!(\"Binance income - {s}\")),\"counterparty\":\"Binance\",\"raw_json\":\"{}\"",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Preserve the complete original dividend row for audit."
+  },
+  {
+    "id": "W-binance-bom",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),",
+    "replace": "Self::Binance => binance::parse(csv::rows(&csv::read_text(file)?)?),",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Read Binance supplemental UTF-8 with its optional BOM."
+  },
+  {
+    "id": "W-binance-evidence",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Self::Bull | Self::Coinfinity | Self::Pocket | Self::Binance",
+    "replace": "Self::Bull | Self::Coinfinity | Self::Pocket",
+    "expect_failing": [
+      "binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports"
+    ],
+    "rule": "Coordinate Binance files as commercial evidence."
+  },
+  {
+    "id": "W-binance-tags",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Self::Binance => (\"Binance\", \"binance\", \"binance_rows\"),",
+    "replace": "Self::Binance => (\"Binance\", \"bullbitcoin\", \"binance_rows\"),",
+    "expect_failing": [
+      "binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports"
+    ],
+    "rule": "Keep Binance reconciliation tags distinct from other providers."
+  },
+  {
+    "id": "W-binance-epoch-platform-range",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "if !(i64::from(i32::MIN) + 1900..=i64::from(i32::MAX) + 1900).contains(&year) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_binance_import_vectors"
+    ],
+    "rule": "Retain the platform time conversion overflow refusal for extreme dividend timestamps."
+  },
+  {
+    "id": "W-binance-epoch-nan-payload",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "PriceNumber::Special(v) if v.contains(\"NaN\") => f64::NAN,",
+    "replace": "PriceNumber::Special(v) if v.contains(\"NaN\") => f64::INFINITY,",
+    "expect_failing": [
+      "binance_late_failure_rolls_back_records_flags_runs_and_readiness"
+    ],
+    "rule": "Coerce Decimal NaN payloads to float NaN before timestamp refusal."
+  },
+  {
+    "id": "W-binance-relevant-wire-order",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "    let updated_count = updated.len() as i64;\n    result.push((\"updated_records\", Py::List(updated)));\n    if updated_count > 0 {\n        result.push((\"updated\", Py::from(updated_count)));\n    }",
+    "replace": "    let updated_count = updated.len() as i64;\n    if updated_count > 0 {\n        result.push((\"updated\", Py::from(updated_count)));\n    }\n    result.push((\"updated_records\", Py::List(updated)));",
+    "expect_failing": [
+      "binance_relevant_coordinator_matches_scope_fee_precedence_and_price_refusals"
+    ],
+    "rule": "Emit updated_records before the conditional updated count in enrichment replies."
   }
 ]

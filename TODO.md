@@ -359,8 +359,12 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port Blockpit core/CLI with localized labels and optional column aliases,
   full-book/wire parity on SQLite and SQLCipher, transactional reconciliation
   and named mutation killers. See the Blockpit checkpoint in plan 21.
-- [ ] Port Binance supplemental, BTCPay files, generic ledger, Wasabi, Samourai
-  and document ingestion at core/CLI level, one verified commit per importer.
+- [x] Port Binance supplemental autoinvest/dividend core/CLI ingestion with
+  frozen Python files, SQLite/SQLCipher full-book/wire parity, commercial
+  coordination, reference-bug repros and named mutation killers. See the
+  Binance checkpoint in plan 21.
+- [ ] Port BTCPay files, generic ledger, Wasabi, Samourai and document ingestion
+  at core/CLI level, one verified commit per importer.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,

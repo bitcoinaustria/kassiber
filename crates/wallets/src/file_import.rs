@@ -1,4 +1,5 @@
 //! User-triggered, local file ingestion. No provider, transport or AI dispatch.
+mod binance;
 mod bull;
 mod coinfinity;
 mod csv;
@@ -50,6 +51,7 @@ pub enum Format {
     LedgerLive,
     CoinTracking,
     Blockpit,
+    Binance,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -66,6 +68,7 @@ impl Format {
             Self::LedgerLive => "ledgerlive_csv",
             Self::CoinTracking => "cointracking_csv",
             Self::Blockpit => "blockpit_csv",
+            Self::Binance => "binance_supplemental_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
@@ -73,6 +76,7 @@ impl Format {
             Self::CoinTracking | Self::Blockpit => tax_platform::load(file, self),
             Self::Json => generic_json::load(file),
             Self::Csv => csv::load(file),
+            Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
@@ -84,7 +88,10 @@ impl Format {
         }
     }
     fn evidence(self) -> bool {
-        matches!(self, Self::Bull | Self::Coinfinity | Self::Pocket)
+        matches!(
+            self,
+            Self::Bull | Self::Coinfinity | Self::Pocket | Self::Binance
+        )
     }
     fn migration(self) -> bool {
         matches!(self, Self::CoinTracking | Self::Blockpit)
@@ -100,6 +107,7 @@ impl Format {
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
+            Self::Binance => ("Binance", "binance", "binance_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),

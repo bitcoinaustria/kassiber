@@ -39,7 +39,8 @@ pub fn execute(
         | "import-strike"
         | "import-ledger-live"
         | "import-cointracking"
-        | "import-blockpit" => {
+        | "import-blockpit"
+        | "import-binance-supplemental" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,
                 wallet,
@@ -56,6 +57,9 @@ pub fn execute(
                     Some("import-strike") => kassiber_wallets::file_import::Format::Strike,
                     Some("import-cointracking") => {
                         kassiber_wallets::file_import::Format::CoinTracking
+                    }
+                    Some("import-binance-supplemental") => {
+                        kassiber_wallets::file_import::Format::Binance
                     }
                     Some("import-blockpit") => kassiber_wallets::file_import::Format::Blockpit,
                     Some("import-ledger-live") => kassiber_wallets::file_import::Format::LedgerLive,

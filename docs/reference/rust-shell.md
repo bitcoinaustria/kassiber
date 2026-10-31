@@ -109,7 +109,7 @@ The initial shell checkpoint implemented `init`, `status`, `daemon`, `commands d
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix` `import-river` and supported Bitcoin `sync`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix`, `import-river`, `import-binance-supplemental` and supported Bitcoin `sync`,
 the [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
 report snapshot/CSV export leaves, transaction CSV/XLSX and
 [Austrian XLSX](#austrian-xlsx-service-checkpoint-r5-twelfth-reports-continuation-partial), and every leaf of
@@ -2350,14 +2350,8 @@ ID promotion, enrichment, reimports, refusals and rollback. Raw wire bytes and
 complete state are compared on both SQLite and SQLCipher books. Native encrypted
 coordinator/fault tests also pin authored exclusions and once-only invalidation.
 
-The reference also refuses valid exports using bare CR record separators because
-`_read_generic_ledger_csv` wraps the file in `io.StringIO(text)` without a
-newline override. The complete `cointracking:seeded-dialect-15` file is a frozen
-reproduction: `load_cointracking_csv_records` raises `csv.Error` with
-`new-line character seen in unquoted field - do you need to open the file with newline=''?`.
-The native parser preserves that refusal; Python is not corrected in this slice.
-An offline minimal reproduction also verifies that equivalent CRLF input loads:
-`uv run --locked python -m tests.rust_port.repro_cointracking_cr`.
+The [shared CSV reference refusal](#shared-csv-reference-refusal) records the
+bare-CR behavior retained by this checkpoint.
 
 The catalog contains 38 new CoinTracking mutations, each with a named killer in
 `crates/wallets/scripts/mutations.json`; the combined catalog has 550 entries,
@@ -2441,6 +2435,22 @@ records the remaining transport work for every importer. Python production
 code, dependencies, egress, sync routes and AI projections are unchanged by
 this continuation.
 
+## Shared CSV reference refusal
+
+The generic-ledger CSV reader, reused by CoinTracking and Blockpit, wraps text
+in `io.StringIO(text)` without a newline override. Bare CR record separators
+therefore raise `csv.Error` with
+`new-line character seen in unquoted field - do you need to open the file with newline=''?`.
+Rust preserves this refusal once in `file_import/platform_csv.rs`; the later
+mirror of Python fix `90f488e81` changes that shared parser. The fix is under
+review and is deliberately not included here. Binance uses the distinct
+`newline=""` CSV reader and already accepts bare CR, matching Python.
+
+Frozen `cointracking:seeded-dialect-15` and `blockpit:bare-cr` are complete
+reproductions. Run `uv run --locked python -m tests.rust_port.repro_cointracking_cr`
+and `uv run --locked python -m tests.rust_port.repro_blockpit_cr` offline to
+verify the exact refusal and successful equivalent CRLF input.
+
 ## Shared file-import daemon parity (pending)
 
 `ui.wallets.import_file` stays unregistered for every file importer. Python's
@@ -2478,10 +2488,8 @@ sequences cover overlap, reimports, enrichment, ID promotion and failed imports.
 Encrypted/plaintext native tests also pin authored exclusions, provider tag
 isolation, canonical-id scope and late-run failure atomicity.
 
-The Python reader's bare-CR refusal also affects Blockpit. Frozen
-`blockpit:bare-cr` and `uv run --locked python -m tests.rust_port.repro_blockpit_cr`
-reproduce the exact `csv.Error`; the repro also proves equivalent CRLF input
-loads. Rust preserves the refusal. No Python production code is changed.
+The [shared CSV reference refusal](#shared-csv-reference-refusal) also applies
+here. The native parser retains it without changing Python production code.
 
 The catalog adds 61 Blockpit entries to the retained 550 (611 total). Shared
 CoinTracking recipes are re-anchored to the parameterized core, and the shared
@@ -2591,6 +2599,132 @@ removed after recording their results.
 No dependency, egress, sync route or AI projection is added. Remaining core/CLI
 importers are Binance supplemental, BTCPay files, generic ledger, Wasabi,
 Samourai and document ingestion.
+
+## Binance supplemental core and CLI ingestion (R5 continuation)
+
+`wallets import-binance-supplemental` now uses the native file-import service.
+Autoinvest schema wins over dividend schema when both are present. The reader
+retains BOM handling, CSV quoting, header normalization and original provider
+rows. Fiat-funded autoinvest buys retain exact fee-inclusive cash values and
+unit rates; crypto funding and mismatched fee assets keep the reference
+refusals. Dividend rows retain namespaced identities, millisecond timestamps,
+Bitcoin-family filtering and mining/income kinds.
+
+Both `full` and `relevant` modes reuse the commercial coordinator. Full imports
+create or select the Binance wallet, retain excluded evidence rows and apply
+Binance-specific matched/gap/ambiguous tags. Relevant imports enrich only a
+unique matching transaction in the active profile. Fee precedence, raw observer
+commitments, source metadata, pricing rank and rollback remain shared rules.
+Binance supplemental files contain source references, so identity-promotion
+cases prove that even a chain-like dividend id or an already-promoted matching
+observation cannot promote the supplemental copy to a chain txid.
+
+There are 253 Python-derived reference files. Native tests compare every
+normalized field and fingerprint; hybrid scenarios compare complete typed
+book dumps after every call and assert Rust routing. Every frozen file also
+compares raw CLI bytes and full dumps, including rollback, on SQLite and
+SQLCipher. Coordinator scenarios add overlap, enrichment, reimports, promotion
+refusals, failed batches, price-currency refusals and default wallet creation.
+Native late-failure tests cover observations, reconciliation tags, run records
+and journal readiness on both codecs.
+
+Reused enrichment replies now emit `updated_records` before the conditional
+`updated` count, matching Python's byte order. Binance's relevant-mode wire test
+caught this inherited coordinator mismatch; Bull, Coinfinity and Pocket add
+SQLite/SQLCipher wire regressions through the same helper. Decimal NaN timestamp
+payloads also retain Python's exact refusal, with dedicated wire/state tests.
+
+The following reference quirks are intentionally retained:
+
+- A declared BTC base wins over a conflicting amount symbol (`0.002 ETH`).
+- An autoinvest identity includes its one-based CSV row number, so repeated
+  identical source rows have different identities.
+- The original Decimal spelling enters that identity: `0.002 BTC` and
+  `0.0020 BTC` have equal amounts and distinct source references.
+
+Run `uv run --locked python -m tests.rust_port.repro_binance_reference` offline
+for all three reproductions. The frozen files also pin these cases. Repeated
+priced imports retain Python's existing journal-invalidation behavior.
+
+The mutation catalog adds 37 Binance rules to the retained 611 (648 total).
+`W-import-atomic` also names the Binance late-failure witness. The new mappings
+are checked into `crates/wallets/scripts/mutations.json`:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-binance-auto-header` | `python_binance_import_vectors` |
+| `W-binance-dividend-header` | `python_binance_import_vectors` |
+| `W-binance-schema` | `python_binance_import_vectors` |
+| `W-binance-precedence` | `python_binance_import_vectors` |
+| `W-binance-split` | `python_binance_import_vectors` |
+| `W-binance-split-currency` | `python_binance_import_vectors` |
+| `W-binance-fallback` | `python_binance_import_vectors` |
+| `W-binance-base-precedence` | `python_binance_import_vectors` |
+| `W-binance-fiat` | `python_binance_import_vectors` |
+| `W-binance-fee-asset` | `python_binance_import_vectors` |
+| `W-binance-fee-placeholder` | `python_binance_import_vectors` |
+| `W-binance-quote-absolute` | `python_binance_import_vectors` |
+| `W-binance-fee-absolute` | `python_binance_import_vectors` |
+| `W-binance-fee-value` | `python_binance_import_vectors` |
+| `W-binance-base-absolute` | `python_binance_import_vectors` |
+| `W-binance-rate` | `python_binance_import_vectors` |
+| `W-binance-zero-base` | `python_binance_import_vectors` |
+| `W-binance-index` | `python_binance_import_vectors` |
+| `W-binance-reference-scale` | `python_binance_import_vectors` |
+| `W-binance-epoch-unit` | `python_binance_import_vectors` |
+| `W-binance-epoch-rounding` | `python_binance_import_vectors` |
+| `W-binance-epoch-negative` | `python_binance_import_vectors` |
+| `W-binance-epoch-nan` | `python_binance_import_vectors` |
+| `W-binance-epoch-range` | `python_binance_import_vectors` |
+| `W-binance-dividend-scope` | `python_binance_import_vectors` |
+| `W-binance-dividend-zero` | `python_binance_import_vectors` |
+| `W-binance-dividend-id` | `python_binance_import_vectors` |
+| `W-binance-dividend-fallback-id` | `python_binance_import_vectors` |
+| `W-binance-dividend-kind` | `python_binance_import_vectors` |
+| `W-binance-raw` | `python_binance_import_vectors` |
+| `W-binance-income-raw` | `python_binance_import_vectors` |
+| `W-binance-bom` | `python_binance_import_vectors` |
+| `W-binance-evidence` | `binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports` |
+| `W-binance-tags` | `binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports` |
+| `W-binance-epoch-nan-payload` | `binance_late_failure_rolls_back_records_flags_runs_and_readiness` |
+| `W-binance-relevant-wire-order` | `binance_relevant_coordinator_matches_scope_fee_precedence_and_price_refusals` |
+| `W-binance-epoch-platform-range` | `python_binance_import_vectors` |
+
+The hybrid scenarios record these importer calls; setup and rollback calls are
+excluded from the routing count:
+
+| CLI importer | Rust-served calls | Python importer fallbacks |
+| --- | ---: | ---: |
+| Binance supplemental | 261 | 0 |
+
+Every frozen file passes raw CLI wire and complete typed book-dump comparisons
+on SQLite and SQLCipher. The subsequent relevant-mode and NaN payload run
+passes five tests and 16 subtests, including the inherited evidence providers.
+All 66 native file-import tests pass. The offline reference repro passes, and
+all 648 mutation recipes apply to the final source.
+The fresh mutation audit passes all 11 named baselines and kills all 38 selected
+entries: the 37 new rules and inherited `W-import-atomic`, now including Binance.
+There are no survivors or build errors. The other 610 entries retain their prior
+kill evidence; the scratch mutation source tree is removed after the run.
+
+Rust formatting and strict workspace/harness Clippy checks pass offline. The
+classification inventory includes all ten new Python tests (5,722 total).
+The required CI preflight passes all 57 tests, and the harness suite passes all
+14 tests. The workspace run records 1,485 passes and 59 failures: 58 socket
+binds are denied by this sandbox with explicit `EPERM` (12 chain, 16 network,
+11 rates, 19 wallets). The remaining backup test,
+`desktop::tests::close_refuses_busy_wal_readers_before_retiring_connection`,
+observes `stale_backup_preview` instead of `project_in_use`; both its isolated
+Cargo rerun and an exact rerun of the original workspace binary pass. This is
+recorded as an unreproduced failure, not a green workspace gate. All 66
+file-import tests pass within that workspace run as well.
+
+Local logs and the exact sandbox-denied test names are retained in
+`target/r5-importers-8-artifacts/workspace-results.json`. The mutation and
+verification build trees are removed after summarizing. No Python production
+code, dependency, schema, egress, sync route or AI projection changes in this
+checkpoint. BTCPay files, generic ledger, Wasabi, Samourai and document ingestion
+remain separate core/CLI commits.
 
 ## Daemon
 

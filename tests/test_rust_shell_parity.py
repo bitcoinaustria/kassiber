@@ -1281,7 +1281,7 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None):
+    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source"):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
@@ -1308,9 +1308,9 @@ class RustRealStoreParityTest(_Roots):
             "import sys; from pathlib import Path; from types import SimpleNamespace; "
             "from kassiber.operator import project; "
             "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
-            "from kassiber.core import imports,import_batches,metadata; from kassiber.cli import handlers; "
-            f"ids=iter({identities!r}); imports.uuid=import_batches.uuid=metadata.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
-            f"imports.now_iso=import_batches.now_iso=handlers.now_iso=lambda:{fixed_time!r}; "
+            "from kassiber.core import imports,import_batches,metadata,wallets; from kassiber.cli import handlers; "
+            f"ids=iter({identities!r}); wallets.uuid=imports.uuid=import_batches.uuid=metadata.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
+            f"wallets.now_iso=imports.now_iso=import_batches.now_iso=handlers.now_iso=lambda:{fixed_time!r}; "
             "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
         )
 
@@ -1334,7 +1334,7 @@ class RustRealStoreParityTest(_Roots):
                                     conn.execute(sql)
                                 conn.commit()
                         file.write_bytes(content.encode() if isinstance(content, str) else content)
-                        args = ["wallets", command, "--wallet", "Import source", "--file", str(file), *extra]
+                        args = ["wallets", command, *(["--wallet", wallet_ref] if wallet_ref else []), "--file", str(file), *extra]
                         if rust:
                             result = self.call(True, args, secret=secret)
                         else:
@@ -1489,6 +1489,65 @@ class RustRealStoreParityTest(_Roots):
             + f"Deposit,0.003,BTC,,,,,2025-01-03,{txid}\n"
             + "Deposit,0.004,BTC,,,,,2025-01-04,\n" * 2,
         ], fiat_currency="EUR", wallet_kind="cointracking", seed=seed)
+
+    def test_binance_reference_files_wire_bytes_full_state_and_rollback(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_binance_imports.json").read_text())
+        self._file_import_parity("import-binance-supplemental", [
+            bytes(case["bytes"]) if "bytes" in case else case["text"] for case in cases
+        ], fiat_currency="EUR")
+
+    def test_binance_nan_payload_timestamp_wire_bytes_full_state_and_rollback(self):
+        self._file_import_parity("import-binance-supplemental", [
+            f"id,amount,asset,divTime\nreward,0.00001,BTC,{value}\n"
+            for value in ("NaN123", "-NaN42", "NaN１２３", "+NaN0001")
+        ], fiat_currency="EUR")
+
+    def test_binance_default_wallet_wire_bytes_full_state_and_rollback(self):
+        from crates.wallets.scripts.generate_binance_vectors import inputs
+        self._file_import_parity("import-binance-supplemental", [[
+            inputs()['autoinvest'], inputs()['autoinvest'], inputs()['partial-failure'],
+        ]], fiat_currency="EUR", wallet_ref=None)
+
+    def test_binance_coordinator_wire_bytes_full_state_and_rollback(self):
+        from crates.wallets.scripts.generate_binance_vectors import inputs
+        body = inputs()['autoinvest']
+        reference = 'binance-supplemental:2025-01-02 03:04:05:autoinvest:BTC:0.002:1'
+        def seed(conn):
+            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) SELECT 'chain',workspace_id,profile_id,'Observed','descriptor','{}','2025-01-01' FROM wallets LIMIT 1")
+            conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT 'observed',workspace_id,profile_id,id,?,'observed','2025-01-01T00:00:00Z','inbound','BTC',200000000,1,'2025-01-01' FROM wallets WHERE id='chain'", (reference,))
+        self._file_import_parity("import-binance-supplemental", [[
+            body, body, (body.replace('100.00 EUR', '200.00 EUR'), []),
+            (body, ["UPDATE transactions SET external_id_kind='txid' WHERE wallet_id='chain'"]),
+            inputs()['partial-failure'], (body, ["DELETE FROM transactions WHERE wallet_id='chain'"]), body,
+        ]], fiat_currency="EUR", seed=seed)
+
+    def test_binance_relevant_coordinator_wire_bytes_full_state_and_rollback(self):
+        from crates.wallets.scripts.generate_binance_vectors import inputs
+        body = inputs()['autoinvest']
+        reference = 'binance-supplemental:2025-01-02 03:04:05:autoinvest:BTC:0.002:1'
+        def seed(conn):
+            conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT 'observed',workspace_id,profile_id,id,?,'observed','2025-01-01T00:00:00Z','inbound','BTC',200000000,1,'2025-01-01' FROM wallets LIMIT 1", (reference,))
+        self._file_import_parity("import-binance-supplemental", [[
+            body, body, body.replace('100.00 EUR', '200.00 EUR'), inputs()['partial-failure'],
+            (body, ["UPDATE profiles SET fiat_currency='USD'"]),
+        ]], extra=("--mode", "relevant"), fiat_currency="EUR", seed=seed)
+
+    def _evidence_relevant_wire_order(self, command, vector_name):
+        cases = json.loads((ROOT / f"crates/wallets/tests/vectors/python_{vector_name}_imports.json").read_text())
+        case = next(case for case in cases if case.get("records") and case["records"][0]["fields"].get("fiat_currency") == "EUR")
+        fields = case["records"][0]["fields"]
+        def seed(conn):
+            conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) SELECT 'observed',workspace_id,profile_id,id,?,'observed',?,?,?,?,?,'2025-01-01' FROM wallets LIMIT 1", (fields['external_id'], fields['occurred_at'], fields['direction'], fields['asset'], fields['amount'], fields['fee']))
+        self._file_import_parity(command, [[case['text'], case['text']]], extra=("--mode", "relevant"), fiat_currency="EUR", seed=seed)
+
+    def test_bull_relevant_wire_order_and_full_state(self):
+        self._evidence_relevant_wire_order("import-bull", "bull")
+
+    def test_coinfinity_relevant_wire_order_and_full_state(self):
+        self._evidence_relevant_wire_order("import-coinfinity", "coinfinity")
+
+    def test_pocket_relevant_wire_order_and_full_state(self):
+        self._evidence_relevant_wire_order("import-pocket", "pocket")
 
     def test_blockpit_reference_files_wire_bytes_full_state_and_rollback(self):
         cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_blockpit_imports.json").read_text())
@@ -1701,6 +1760,7 @@ class RustShellDriftTest(unittest.TestCase):
         self.check("crates/wallets/scripts/generate_ledgerlive_vectors.py")
         self.check("crates/wallets/scripts/generate_cointracking_vectors.py")
         self.check("crates/wallets/scripts/generate_blockpit_vectors.py")
+        self.check("crates/wallets/scripts/generate_binance_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

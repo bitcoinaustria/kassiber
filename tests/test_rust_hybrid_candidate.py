@@ -695,6 +695,52 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-blockpit"]
         self.assertEqual(calls, [{"command": "wallets.import-blockpit", "served_by": "rust"}] * 8)
 
+    def test_binance_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "Binance source", "--kind", "binance"))
+        source = self.data_root.parent / "binance.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_binance_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-binance-supplemental", "--wallet", "Binance source", "--file", str(source))
+                    self.assertIn(result.returncode, (0, 1), (result.stdout, result.stderr))
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-binance-supplemental"]
+        self.assertEqual(calls, [{"command": "wallets.import-binance-supplemental", "served_by": "rust"}] * len(cases))
+
+    def test_binance_coordinator_reimports_enrichment_refusals_and_rollback_match_dump(self):
+        from crates.wallets.scripts.generate_binance_vectors import inputs
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "Binance source", "--kind", "binance"))
+        source = self.data_root.parent / "binance.csv"
+        args = ("wallets", "import-binance-supplemental", "--wallet", "Binance source", "--file", str(source))
+        body = inputs()['autoinvest']
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            source.write_text(body)
+            first = self.ok(self.cli(*args))["data"]
+            self.assertEqual(first["imported"], 1)
+            self.assertEqual(self.ok(self.cli(*args))["data"]["imported"], 0)
+            self.assertEqual(self.ok(self.cli(*args, "--mode", "relevant"))["data"]["matched"], 1)
+            source.write_text(body.replace('100.00 EUR', '200.00 EUR'))
+            self.assertEqual(self.ok(self.cli(*args))["data"]["imported"], 0)
+            source.write_text(inputs()['partial-failure'])
+            self.assertEqual(self.cli(*args).returncode, 1)
+            self.ok(self.cli("imports", "rollback", "--batch", first["import_batch_id"], "--confirm"))
+            source.write_text(body)
+            self.assertEqual(self.ok(self.cli(*args))["data"]["imported"], 1)
+            self.assertEqual(self.cli("wallets", "import-binance-supplemental", "--wallet", "missing", "--file", str(source)).returncode, 1)
+            self.assertEqual(self.cli("wallets", "import-binance-supplemental", "--wallet", "Binance source", "--file", str(source.parent / "missing.csv")).returncode, 1)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-binance-supplemental"]
+        self.assertEqual(calls, [{"command": "wallets.import-binance-supplemental", "served_by": "rust"}] * 8)
+
 
 if __name__ == "__main__":
     unittest.main()
