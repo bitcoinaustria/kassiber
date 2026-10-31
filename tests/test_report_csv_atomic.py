@@ -310,3 +310,46 @@ def test_csv_directory_fsync_handles_platform_limits_and_reports_io_errors(tmp_p
         _write_csv_rows(target, [['new']])
     assert target.read_bytes() == b'new\r\n'
     assert list(tmp_path.iterdir()) == [target]
+
+
+@pytest.mark.parametrize('error_number', [errno.EACCES, errno.ENOENT, errno.ENOSPC, errno.EROFS])
+def test_staging_error_names_requested_destination(tmp_path, monkeypatch, error_number):
+    target = tmp_path / 'report.csv'
+    real_open = os.open
+    def refuse(path, flags, *args, **kwargs):
+        if flags & os.O_CREAT:
+            raise OSError(error_number, os.strerror(error_number), str(path))
+        return real_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, 'open', refuse)
+    with pytest.raises(OSError) as caught:
+        _write_csv_rows(target, [['header']])
+    assert caught.value.filename == str(target)
+    assert '.kassiber-' not in str(caught.value)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('error_number', [errno.EACCES, errno.ENOENT, errno.ENOSPC])
+def test_cli_staging_error_is_typed_and_hides_private_stage(tmp_path, monkeypatch, capsys, error_number):
+    from kassiber.cli.main import main
+    from kassiber.db import open_db
+    from tests.test_custody_authored_migration import _scope, _tx, NOW
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, 'out', 'btc', 'outbound', 'BTC', 100000, NOW)
+    conn.commit()
+    conn.close()
+    target = tmp_path / 'report.csv'
+    real_open = os.open
+    def refuse(path, flags, *args, **kwargs):
+        if '.kassiber-' in str(path):
+            raise OSError(error_number, os.strerror(error_number), str(path))
+        return real_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, 'open', refuse)
+    assert main(['--machine', '--data-root', str(tmp_path), 'transactions', 'export',
+        '--workspace', 'Books', '--profile', 'Book', '--export-format', 'csv', '--file', str(target)]) == 1
+    output = capsys.readouterr().out
+    error = json.loads(output)['error']
+    assert error['code'] == 'export_write_failed'
+    assert str(target) in error['message']
+    assert error['details'] == {'destination': str(target), 'errno': error_number}
+    assert '.kassiber-' not in output
