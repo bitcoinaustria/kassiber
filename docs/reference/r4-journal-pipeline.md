@@ -8,7 +8,9 @@ components/evidence rewrite is not implemented. The subsequent
 meets both stage CPU targets while retaining the existing representations. The R4-7 typed finalized-output probe also missed its targets and was withdrawn
 ([probe](#r4-7-finalized-projection-target-probe)). The R4-11 renderer has a
 [partial checkpoint](r4-journal-render-checkpoint.md); production acceptance
-remains open. [Storage-format speedups](#storage-format-speedups) run Python
+remains open. A subsequent [projection and fusion kernel checkpoint](#projection-and-fusion-kernel-checkpoint)
+keeps the existing stage models; its performance targets remain open.
+[Storage-format speedups](#storage-format-speedups) run Python
 first; compact calculations are implemented with the Rust schema mirror.
 The [R7 integration audit](rust-backend-r7-integration.md) records the linear
 restack and its verification. The separate [tax-engine speed pass](tax-engine.md#ledger-performance-checkpoint-r4-2026-10-30)
@@ -1034,6 +1036,199 @@ Remaining R4-7 work:
 
 This target miss stops the implementation run; no R4-7 acceptance or typed
 fusion handoff is claimed.
+
+### Projection and fusion kernel checkpoint
+
+Local branch `t3code/custody-perf-projection` starts at `dd433e4e` with the
+R4-1 records and R4-7 instrumentation cherry-picked as `cf2d4a1b7` and
+`25b87bfc8`. This pass retains every stage's existing input/output model and
+the request-text route into the ledger. It does not deliver the typed fusion
+handoff in the original R4-8 row. **Both performance targets remain unmet.**
+The implementation checkpoint is `78df09179`.
+
+The implementation removes work within the existing kernels:
+
+- Finalized composition borrows observations and decisions instead of cloning
+  them. Observation sort keys are cached, and barrier event order is built
+  only when barriers exist. Completed JSON strings and containers move into
+  the existing Python-value output instead of being copied again.
+- The runtime selects only observation, decision and event fields that the
+  compiler reads. It still checks the complete supplied value for lossless
+  admission, including unused fields; uncertain operands retain the exact
+  original round trip and refusal order.
+- Fusion retains the decimal values already admitted by its invariant pass,
+  defers Python repr construction until a refusal needs it, moves completed
+  values into request maps, and uses the plain-string fast path for `str()`.
+- A conservative graph-absence proof skips physical hold detection only for
+  graphless `custody-tax:` slices. Other synthetic prefixes, graph arrays,
+  malformed raw JSON and raw hex retain the original detectors. Asset groups
+  keep their first-seen order, including groups containing only skipped rows.
+- Request serialization writes the existing ordered schema directly. Wide
+  integers and floats still use the CPython scalar codec, preserving exact
+  engine refusal text and its wire positions.
+
+#### CPU and wall measurements
+
+`target/projection-perf/pairs.jsonl` contains five alternating before/after
+pairs for each book in each clock mode: 80 process runs in total. Both saved
+executables use Rust 1.99.1 release builds. Normal runs record wall spans;
+separate runs preload a scratch-only `clock_gettime` adapter that maps Rust's
+monotonic clock to `CLOCK_PROCESS_CPUTIME_ID`, measuring user plus system CPU
+across all threads. Child `getrusage` independently records complete process
+CPU. No clock adapter enters product code or the binding.
+
+The table uses the fastest complete pipeline run of each binary in each clock
+mode, retaining all its spans together. Process CPU includes oracle encoding,
+hashing and destruction; `compute` excludes that oracle work. Nested spans
+overlap and must not be summed. Every pair preserves the custody response,
+ledger request and complete ledger response SHA-256. These synthetic snapshots
+are the inherited performance books, rather than fresh Python timing runs.
+
+| Book | Span | Before CPU / wall (s) | After CPU / wall (s) |
+| --- | --- | ---: | ---: |
+| generic 2k | finalized input | 0.1322 / 0.0394 | 0.0747 / 0.0209 |
+| generic 2k | finalized compose | 0.1474 / 0.1276 | 0.0677 / 0.0760 |
+| generic 2k | finalized stage | 0.3065 / 0.2065 | 0.1757 / 0.1224 |
+| generic 2k | fusion input | 0.0972 / 0.0521 | 0.1030 / 0.0703 |
+| generic 2k | fusion request | 0.1575 / 0.1226 | 0.0485 / 0.0426 |
+| generic 2k | fusion text | 0.0445 / 0.0310 | 0.0152 / 0.0146 |
+| generic 2k | engine | 0.0918 / 0.0908 | 0.0807 / 0.0804 |
+| generic 2k | custody total | 1.3015 / 0.7647 | 1.0722 / 0.5532 |
+| generic 2k | compute | 1.7636 / 1.1340 | 1.4026 / 0.8343 |
+| generic 2k | process | 2.1263 / 1.3708 | 1.7631 / 1.0308 |
+| multi-wallet 2k | finalized input | 0.1573 / 0.0335 | 0.0873 / 0.0168 |
+| multi-wallet 2k | finalized compose | 0.1630 / 0.1131 | 0.0642 / 0.0590 |
+| multi-wallet 2k | finalized stage | 0.3435 / 0.1800 | 0.1708 / 0.0952 |
+| multi-wallet 2k | fusion input | 0.0813 / 0.0498 | 0.1090 / 0.0654 |
+| multi-wallet 2k | fusion request | 0.1255 / 0.1535 | 0.0440 / 0.0438 |
+| multi-wallet 2k | fusion text | 0.0300 / 0.0359 | 0.0155 / 0.0148 |
+| multi-wallet 2k | engine | 0.1795 / 0.2429 | 0.1983 / 0.1896 |
+| multi-wallet 2k | custody total | 1.9113 / 0.9225 | 1.7514 / 0.9134 |
+| multi-wallet 2k | compute | 2.4097 / 1.4833 | 2.1981 / 1.3112 |
+| multi-wallet 2k | process | 2.7424 / 1.7264 | 2.6289 / 1.4744 |
+| generic 20k | finalized input | 1.5912 / 0.2639 | 0.7258 / 0.1464 |
+| generic 20k | finalized compose | 1.7616 / 1.2599 | 0.6935 / 0.6165 |
+| generic 20k | finalized stage | 3.6747 / 1.8085 | 1.6327 / 0.9632 |
+| generic 20k | fusion input | 0.6770 / 0.3953 | 0.8184 / 0.5273 |
+| generic 20k | fusion request | 1.0654 / 0.8421 | 0.4274 / 0.5161 |
+| generic 20k | fusion text | 0.2836 / 0.1940 | 0.1439 / 0.1611 |
+| generic 20k | engine | 0.7385 / 0.8055 | 0.7591 / 0.9346 |
+| generic 20k | custody total | 12.8663 / 6.4674 | 11.2254 / 5.0284 |
+| generic 20k | compute | 16.2562 / 9.3678 | 14.0516 / 7.8472 |
+| generic 20k | process | 19.1004 / 10.8117 | 16.8343 / 9.2510 |
+| multi-wallet 20k | finalized input | 1.3759 / 0.2455 | 0.7208 / 0.1310 |
+| multi-wallet 20k | finalized compose | 1.6120 / 1.0377 | 0.6587 / 0.7244 |
+| multi-wallet 20k | finalized stage | 3.2369 / 1.5565 | 1.5618 / 1.0726 |
+| multi-wallet 20k | fusion input | 0.6819 / 0.4147 | 0.8959 / 0.4875 |
+| multi-wallet 20k | fusion request | 1.4170 / 0.7931 | 0.4438 / 0.4191 |
+| multi-wallet 20k | fusion text | 0.3200 / 0.1968 | 0.1342 / 0.1322 |
+| multi-wallet 20k | engine | 1.9020 / 1.9779 | 2.0798 / 2.0117 |
+| multi-wallet 20k | custody total | 16.9069 / 8.0735 | 15.2602 / 7.4156 |
+| multi-wallet 20k | compute | 21.9168 / 12.1418 | 19.5237 / 11.1495 |
+| multi-wallet 20k | process | 24.8033 / 13.5524 | 22.4439 / 12.6048 |
+
+One-minute load ranges were 32.45–36.20, 33.89–35.95, 27.73–33.89 and
+22.36–29.02 for those four books, respectively. The full finalized stage
+saves 52–56% CPU at 20k, and the request builder saves 60–69%. This does not
+meet projection at one quarter of baseline or the 0.10 s request budget.
+
+Five additional CPU pairs per 20k book reverse executable order. Loads are
+17.46–21.45. Best individual engine spans still increase: generic
+0.7110 → 0.7655 s and multi-wallet 1.8119 → 1.9083 s. Engine code and request
+bytes are unchanged, but the no-engine-slowdown gate is not established.
+The unchanged fusion input text round trip also costs more CPU in this
+process layout. Neither increase is hidden in the kernel savings.
+
+Two preliminary follow-ups were removed. Distributing owned output conversion
+over worker threads increased projection CPU substantially and did not remove
+the engine increase. Compiled field selectors and additional scalar fast paths
+did not show a consistent aggregate CPU improvement across the two 20k books.
+Their probe logs remain under `target/projection-perf/`; neither is in
+the implementation checkpoint.
+
+#### Verification and remaining work
+
+The complete generated campaign compares baseline and optimized custody
+response bytes, independently recomputes Python stages and fusion, and
+compares the complete ledger response bytes: **24,000 books plus 1,030
+permutations, zero differences**. The per-suite activity counts match the
+[fusion campaign](custody-engine.md#fusion-generated-campaign-and-bounded-mutation-rerun):
+16,227 active distinct seed inputs, with every seed's own count retained in
+`target/projection-perf/activity.jsonl`. A deliberately vacuous seed is
+rejected even when its companion has an active request. Read-only retained
+replay passes 159 requests plus 159 permutations, including byte comparison.
+The 311 frozen builder/fusion vectors include 67 builder refusals and 30 exact
+engine refusals across all six refusing ledger stages.
+Direct baseline/current probe output also matches for all 311 fusion vectors,
+including the 67 builder refusals, and all 243 complete ledger response strings.
+The same control matches 340 projection primitive vectors and 17 raw projection
+vectors. Rust frozen adapter tests additionally compare encoded result bytes,
+including the lossless diagnostic seam.
+
+Eight recipes move to equivalent mutants:
+
+| Recipe | Equivalent mutation at the new anchor |
+| --- | --- |
+| `projection8-observations` | Replace the selected observation input with an empty list |
+| `projection8-decisions` | Replace the selected decision input with an empty list |
+| `projection8-events` | Replace the selected event input with an empty list |
+| `FUSION-FIELD-rate` | Reverse exact/fallback rate precedence in the retained invariant result |
+| `FUSION-OMISSION-chain` | Rename the emitted `chain_order` field so the contract field is absent |
+| `FUSION-WIRE-ORDER` | Reverse schema-key traversal |
+| `FUSION-WIRE-FIELD` | Change Unicode escaping to `ensure_ascii(true)` |
+| `FUSION-WIRE-OMISSION` | Skip the first schema key |
+
+Two new graphless-hold recipes preserve synthetic-prefix scope and the
+conservative graph gate. The catalog grows from **2,292 to 2,294**.
+All **143** recipes in the five touched Rust files build and are killed:
+65 composition, 32 quarantine, 25 runtime, 12 fee and 9 fusion recipes.
+The 26 unmutated test groups pass first. The fresh kill-ID set exactly equals
+the selected catalog, with no missing, extra or duplicate kills; all inherited
+recipe IDs remain in the full catalog. This does not claim a fresh rerun of
+all 2,294 recipes. The single mutation build tree is removed after the run.
+
+Core-accounting census completes with 2,031 passes, 75 skips and 460 successful
+subtests, plus two failures in `test_pyfix_review.py::test_split_payout_fails_closed`
+(taxable/EUR and carrying-value/LBTC). Both failures reproduce against the saved
+baseline binding in fresh census and shadow controls. These tests monkeypatch
+Python's finalized compiler to split already-loaded decisions; Rust receives
+the unmodified raw snapshot, so the
+comparison harness expects a Python-only injected refusal from an unchanged
+Rust input. The run compares 260 custody snapshots and 254 fusion outcomes.
+This records an existing harness mismatch, rather than a passing census gate.
+
+Core-accounting custody-shadow likewise reports those two failures, with 679
+passes, 40 skips and 231 successful subtests. It compares 254 custody snapshots,
+252 frozen Python results and 248 fusion outcomes. Reports-contracts census
+reports 2,471 passes, 10 skips and 2,824 successful subtests, with four harness
+self-test failures caused by an in-checkout temporary directory rendering
+relative paths where the assertions expect absolute paths. All four pass when
+rerun with an external disposable temporary root. The full reports census
+compares 224 custody snapshots and 196 fusion outcomes; its original command
+is not recorded as green. Subsequent checks use the external disposable root.
+Reports-contracts custody-shadow passes: 1,875 tests, 10 skips and 146 successful
+subtests; 217 custody snapshots, 214 frozen Python comparisons and 194 fusion
+comparisons, with zero differences.
+
+Rust formatting, workspace/all-target clippy with `-D warnings`, and workspace
+tests pass (1,495 tests, zero failures). All 2,294 catalog recipes apply, and
+all 145 ledger feature-contract outputs remain byte-identical with and without
+custody's serde features. `classify_tests update` produces no inventory diff.
+The required preflight shard passes: 57 tests and 60 successful subtests.
+
+The final SHA and fresh generated/replay/frozen byte-check results are retained
+in `target/projection-perf/final-verification.json`, alongside the raw paired
+measurements, baseline binary hashes, `mutation-audit.json`, shard logs and
+individual gate results. Comparison helpers and disposable test data stay
+outside product code. Build trees are removed after their summaries are saved.
+
+Remaining CPU is in generic field selection, per-row JSON construction/destruction,
+timestamp rendering and the retained fusion input round trip. The 240-sample
+fusion profile still
+shows map indexing and allocation throughout the row constructor and
+invariant pass; 43.8% of self samples are unresolved, so it is not a precise
+cost attribution. Finish the performance targets and investigate the engine
+and fusion-input increases before claiming R4-7/R4-8 acceptance.
 
 ## Authority switch (R4-16)
 

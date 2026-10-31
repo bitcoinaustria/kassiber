@@ -363,6 +363,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   R4-7's finalized-output prototype also stopped: compute was 0.525 s generic
   and 1.135 s multi-wallet against 0.263/0.290 s limits; the typed rewrite is
   withdrawn pending [re-planning](docs/reference/r4-journal-pipeline.md#r4-7-finalized-projection-target-probe).
+  A [projection/fusion kernel checkpoint](docs/reference/r4-journal-pipeline.md#projection-and-fusion-kernel-checkpoint)
+  keeps stage models unchanged and reduces CPU, but the projection/request
+  budgets and the no-engine-slowdown gate remain open.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
