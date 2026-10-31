@@ -223,6 +223,11 @@ is excluded (tax-free). `--destination eu_eea` reports the tax as assessed but
 deferred (Nichtfestsetzung); `third_country` reports it as due immediately. The
 amount is the same; only the collection timing differs. Estimate only — it
 requires processed journals and is a draft for a Steuerberater, not a filing.
+The method is the book's selected algorithm. Inventory and wallet quantities
+use the departure cutoff; FMV uses only cached or transaction prices at or
+before it and discloses their actual source timestamps. Quarantines and missing
+prices leave an incomplete estimate. Exit-tax exports intentionally create no
+ordinary realized-report snapshot.
 See `docs/plan/11-exit-tax-deemed-disposal.md`.
 
 ## Journal entries
