@@ -1416,7 +1416,7 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         self.assertEqual(summary["summary"]["schema_migration_audit_count"], 8)
         migration_names = [audit["migration_name"] for audit in summary["schema_migration_audits"]]
-        self.assertIn("at-fee-consumed-regime-v1", migration_names)
+        self.assertIn("at-outflow-consumed-regime-v2", migration_names)
         self.assertIn("custody-fail-closed-holds-v1", migration_names)
         self.assertIn("custody-partial-payout-pricing-v1", migration_names)
         valuation_migration_audit = next(

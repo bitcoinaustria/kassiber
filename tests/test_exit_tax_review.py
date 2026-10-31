@@ -164,13 +164,13 @@ def test_reviewer_headline_also_accounts_for_the_consumed_alt_fee(engine_book):
 
 @pytest.mark.parametrize("country", ("at", "generic"))
 def test_old_fee_journals_require_one_rebuild_without_rewriting_evidence(engine_book, tmp_path, country):
-    from kassiber.db import AT_FEE_REGIME_SEMANTICS_MIGRATION
+    from kassiber.db import AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION
     from kassiber.errors import AppError
 
     conn = engine_book(regime_rows(), country=country, pair=True)
     old_profile = dict(conn.execute("SELECT * FROM profiles").fetchone())
     retained = [tuple(r) for r in conn.execute("SELECT * FROM journal_entries ORDER BY id")]
-    conn.execute("DELETE FROM schema_migration_audits WHERE migration_name=?", (AT_FEE_REGIME_SEMANTICS_MIGRATION,))
+    conn.execute("DELETE FROM schema_migration_audits WHERE migration_name=?", (AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,))
     conn.commit()
     conn.close()
     for _ in range(2):
@@ -367,3 +367,69 @@ def test_disposal_override_keeps_separate_consumed_regime_rows(engine_book, cate
     assert report["totals"]["neuQuantitySats"] == 30_000_000
     assert report["totals"]["neuCostBasis"] == 12000
     assert report["totals"]["estimatedTax"] == 2062.50
+
+
+@pytest.mark.parametrize("fees", (False, True))
+def test_at_outflow_semantics_upgrade_includes_disposals_without_fees(engine_book, tmp_path, fees):
+    AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION = "at-outflow-consumed-regime-v2"
+    from kassiber.errors import AppError
+    rows = regime_rows()
+    if not fees:
+        rows = [(*r[:5], 0, *r[6:]) for r in rows]
+    conn = engine_book(rows, pair=True)
+    retained = [tuple(r) for r in conn.execute("SELECT * FROM journal_entries ORDER BY id")]
+    raw = [tuple(r) for r in conn.execute("SELECT * FROM transactions ORDER BY id")]
+    old_version = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+    # Both round-6 and round-6b writers stamp version 1. Keep the already
+    # applied fee-v1 audit to prove the new migration is independently keyed.
+    conn.execute("INSERT OR IGNORE INTO schema_migration_audits VALUES(?, ?, 1, '{}', 'now')",
+                 ("at-fee-consumed-regime-v1", "at-fee-consumed-regime-v1"))
+    conn.execute("DELETE FROM schema_migration_audits WHERE migration_name=?", (AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,))
+    conn.execute("UPDATE profiles SET required_journal_semantics_version=1,journal_semantics_version=1")
+    conn.commit()
+    conn.close()
+    for _ in range(2):
+        with open_db(tmp_path / "engine-0") as reopened:
+            p = reopened.execute("SELECT * FROM profiles").fetchone()
+            assert p["required_journal_semantics_version"] == 2
+            assert p["journal_input_version"] == old_version + 1
+            assert [tuple(r) for r in reopened.execute("SELECT * FROM journal_entries ORDER BY id")] == retained
+            assert [tuple(r) for r in reopened.execute("SELECT * FROM transactions ORDER BY id")] == raw
+            with pytest.raises(AppError, match="fresh journals"):
+                reports.report_exit_tax(reopened, "W", "P", handlers._report_hooks())
+        reopened.close()
+    with open_db(tmp_path / "engine-0") as rebuilt:
+        handlers.process_journals(rebuilt, "W", "P")
+        assert rebuilt.execute("SELECT journal_semantics_version FROM profiles").fetchone()[0] == 2
+        reports.report_exit_tax(rebuilt, "W", "P", handlers._report_hooks())
+    rebuilt.close()
+
+
+@pytest.mark.parametrize("fees", (False, True))
+def test_downgrade_and_rebuild_cannot_reuse_outflow_semantics(engine_book, monkeypatch, tmp_path, fees):
+    from kassiber.core import custody_journal
+    from kassiber.errors import AppError
+    rows = regime_rows() if fees else [(*r[:5], 0, *r[6:]) for r in regime_rows()]
+    conn = engine_book(rows, pair=True, quotes=[("2024-03-31T12:00:00Z", 65000)])
+    initial = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+    # A real rebuild using the version-1 writer publication protocol, after a
+    # current rebuild and after the migration sentinel is already present.
+    # No report, journal builder, or RP2 computation is stubbed.
+    with monkeypatch.context() as old_writer:
+        old_writer.setattr(custody_journal, "JOURNAL_CALCULATION_SEMANTICS_VERSION", 1)
+        conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1")
+        conn.commit()
+        handlers.process_journals(conn, "W", "P")
+    p = conn.execute("SELECT * FROM profiles").fetchone()
+    assert p["journal_semantics_version"] == 1
+    assert p["journal_input_version"] == p["last_processed_input_version"]
+    conn.close()
+    with open_db(tmp_path / "engine-0") as reopened:
+        assert not custody_journal.projection_freshness(reopened, p["id"])["is_current"]
+        with pytest.raises(AppError, match="fresh journals"):
+            reports.report_exit_tax(reopened, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+        handlers.process_journals(reopened, "W", "P")
+        assert custody_journal.projection_freshness(reopened, p["id"])["is_current"]
+        corrected = reports.report_exit_tax(reopened, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+        assert corrected["totals"] == initial["totals"]
+    reopened.close()
