@@ -74,3 +74,34 @@ def test_sql_predicate_matches_shared_evaluator(tmp_path, change):
         assert bool(actual) == custody_journal.projection_freshness(conn, 'profile')['is_current']
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize('flow', ['incoming', 'outgoing', 'transfer', 'swap'])
+def test_flow_filter_evaluates_freshness_once(tmp_path, flow):
+    from kassiber.cli.handlers import list_transactions
+
+    conn = open_db(tmp_path)
+    try:
+        _scope(conn)
+        for i in range(1000):
+            _tx(conn, f'tx-{i}', 'btc', 'inbound' if i % 2 else 'outbound', 'BTC', 1000, NOW)
+        conn.execute("UPDATE transactions SET kind='receive'")
+        conn.execute("""UPDATE profiles SET last_processed_at=?, last_processed_tx_count=1000,
+            last_processed_input_version=journal_input_version""", (NOW,))
+        conn.execute("UPDATE profiles SET journal_semantics_version=?", (JOURNAL_CALCULATION_SEMANTICS_VERSION,))
+        assert custody_journal.projection_freshness(conn, "profile")["is_current"]
+        # VM work, rather than a machine-dependent time budget, catches a
+        # correlated count while allowing normal filtering/sorting work.
+        ticks = 0
+        def progress():
+            nonlocal ticks
+            ticks += 1
+            return ticks > 500
+        conn.set_progress_handler(progress, 1000)
+        items, result = list_transactions(conn, 'Books', 'Book', flow=flow, limit=50)
+        conn.set_progress_handler(None, 0)
+        assert result['total'] == (500 if flow in {'incoming', 'outgoing'} else 0)
+        assert len(items) == (50 if flow in {'incoming', 'outgoing'} else 0)
+    finally:
+        conn.set_progress_handler(None, 0)
+        conn.close()
