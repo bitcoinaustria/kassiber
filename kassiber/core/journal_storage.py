@@ -11,6 +11,7 @@ import math
 import sqlite3
 import uuid
 from collections.abc import Sequence
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
@@ -115,3 +116,18 @@ def replace_journal_entries(conn: sqlite3.Connection, profile_id: str, rows: Seq
 def replace_quantity_postings(conn: sqlite3.Connection, profile_id: str, rows: Sequence[tuple[Any, ...]]) -> None:
     """Write only changed postings in projection order, with no timestamp tie rule."""
     _replace_rows(conn, profile_id, rows, table="journal_quantity_postings", columns=POSTING_COLUMNS)
+
+
+@contextmanager
+def journal_write_cache(conn: sqlite3.Connection):
+    """Use 128 MiB while rebuilding; restore the connection's exact cache setting.
+
+    Journal mode, synchronous level and explicit spill settings are untouched. The
+    caller owns its transaction, including any savepoints and commit policy.
+    """
+    previous = conn.execute("PRAGMA cache_size").fetchone()[0]
+    conn.execute("PRAGMA cache_size = -131072")
+    try:
+        yield
+    finally:
+        conn.execute(f"PRAGMA cache_size = {int(previous)}")

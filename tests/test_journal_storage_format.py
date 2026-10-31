@@ -724,3 +724,116 @@ def test_quarantine_freshness_compares_fractional_processing_markers_as_instants
             assert (error["code"] if error else None) == expected
     finally:
         conn.close()
+def _cache_settings(conn):
+    return tuple(conn.execute(f"PRAGMA {name}").fetchone()[0]
+                 for name in ("cache_size", "journal_mode", "synchronous"))
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+def test_process_scopes_the_write_cache_and_restores_exact_driver_settings(tmp_path, encrypted, fail):
+    conn = _book(tmp_path / 'data', passphrase='synthetic cache test' if encrypted else None)
+    try:
+        conn.execute('PRAGMA cache_size = 73')
+        expected = _cache_settings(conn)
+        entries = _stored_rows(conn)
+        profile = tuple(_profile(conn))
+        observed = []
+        def progress(update):
+            observed.append(_cache_settings(conn))
+            if fail and update['phase'] == 'storing':
+                raise RuntimeError('injected cache scope failure')
+        def process():
+            return custody_journal.process_journals(
+                conn, 'W', 'P', repair_source_overlaps=lambda *_: None,
+                source_overlap_warning=lambda *_: None, auto_price=lambda *_: 0,
+                progress_observer=progress,
+            )
+        if fail:
+            with pytest.raises(RuntimeError, match='cache scope failure'):
+                process()
+            assert tuple(_profile(conn)) == profile
+            assert _stored_rows(conn) == entries
+        else:
+            assert process()['entries_created'] == len(entries)
+        assert observed and all(settings == (-131072, *expected[1:]) for settings in observed)
+        assert _cache_settings(conn) == expected
+        assert not conn.in_transaction
+    finally:
+        conn.close()
+
+
+def test_nested_journal_cache_restores_each_scope_after_an_exception(tmp_path):
+    from kassiber.core.journal_storage import journal_write_cache
+
+    conn = open_db(tmp_path / 'data')
+    try:
+        conn.execute('PRAGMA cache_size = -64000')
+        conn.execute('PRAGMA cache_spill = OFF')
+        expected = _cache_settings(conn)
+        with pytest.raises(RuntimeError, match='outer'):
+            with journal_write_cache(conn):
+                assert _cache_settings(conn) == (-131072, *expected[1:])
+                assert conn.execute('PRAGMA cache_spill').fetchone()[0] == 0
+                with pytest.raises(RuntimeError, match='inner'):
+                    with journal_write_cache(conn):
+                        raise RuntimeError('inner')
+                assert _cache_settings(conn) == (-131072, *expected[1:])
+                raise RuntimeError('outer')
+        assert _cache_settings(conn) == expected
+        assert conn.execute('PRAGMA cache_spill').fetchone()[0] == 0
+        assert not conn.in_transaction
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+def test_review_cache_preserves_caller_transaction_and_commit_false(tmp_path, monkeypatch, encrypted, fail):
+    from kassiber.cli.handlers import _metadata_hooks
+    from kassiber.core import review_workflow as review
+    from tests.test_review_workflow import ReviewWorkflowTest
+
+    conn = open_db(tmp_path / 'data', passphrase='synthetic review cache' if encrypted else None)
+    try:
+        ReviewWorkflowTest.seed(conn)
+        profile = _profile(conn)
+        hooks = review.ReviewHooks(metadata=_metadata_hooks())
+        artifact = review.plan_review(
+            conn, profile,
+            operations=[{'type':'price_override','transaction_id':'a','fiat_rate':'20000','reason':'Synthetic receipt'}],
+            expected_input_version=0, hooks=hooks,
+        )
+        conn.execute('PRAGMA cache_size = 97')
+        expected = _cache_settings(conn)
+        original = custody_journal.store_ledger_state
+        calls = []
+        def store(*args, **kwargs):
+            calls.append(_cache_settings(conn))
+            if fail:
+                raise RuntimeError('injected review cache failure')
+            return original(*args, **kwargs)
+        monkeypatch.setattr(custody_journal, 'store_ledger_state', store)
+        conn.execute('BEGIN')
+        conn.execute("UPDATE transactions SET note='caller-owned' WHERE id='a'")
+        def apply():
+            return review.apply_review(conn, profile, artifact=artifact, idempotency_key='cache', hooks=hooks, commit=False)
+        if fail:
+            with pytest.raises(RuntimeError, match='review cache failure'):
+                apply()
+            assert conn.execute('SELECT count(*) FROM review_workflow_receipts').fetchone()[0] == 0
+            assert conn.execute('SELECT count(*) FROM transaction_edit_events').fetchone()[0] == 0
+        else:
+            assert apply()['status'] == 'verified'
+            assert conn.execute('SELECT count(*) FROM review_workflow_receipts').fetchone()[0] == 1
+        assert calls == [(-131072, *expected[1:])]
+        assert _cache_settings(conn) == expected
+        assert conn.in_transaction
+        assert conn.execute("SELECT note FROM transactions WHERE id='a'").fetchone()[0] == 'caller-owned'
+        conn.rollback()
+        assert conn.execute('SELECT count(*) FROM review_workflow_receipts').fetchone()[0] == 0
+        assert conn.execute('SELECT count(*) FROM transaction_edit_events').fetchone()[0] == 0
+        assert conn.execute('SELECT count(*) FROM journal_entries').fetchone()[0] == 0
+        assert conn.execute("SELECT note FROM transactions WHERE id='a'").fetchone()[0] is None
+    finally:
+        conn.close()
