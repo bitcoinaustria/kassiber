@@ -312,6 +312,11 @@ Quarantine causes typically include:
   double-spend siblings; verify or resync them from a chain-backed wallet before
   treating competing histories as settled.
 
+The full-report XLSX `Verify!B2` banner caches the verdict of the same cached
+Control and Disposals checks written to the workbook. A cached failing check
+therefore displays a mismatch even in viewers that do not recalculate formulas;
+the live formula remains available for later spreadsheet edits.
+
 ## Rates and tax input quality
 
 CSV exports stage ordinary files in the destination directory, preserve file
