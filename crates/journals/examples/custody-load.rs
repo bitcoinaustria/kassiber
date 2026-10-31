@@ -84,7 +84,7 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         Ok(snapshot) => snapshot,
         Err(loader::Error::Reference(refusal)) => {
             conn.execute_batch("ROLLBACK")?;
-            return Ok(json!({"error":"custody snapshot reference refused","refusal":refusal}));
+            return Ok(reference_refusal(refusal));
         }
         Err(error) => return Err(error.to_string().into()),
     };
@@ -111,6 +111,26 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
             json!({"v1":v1,"seconds":seconds,"adapter_seconds":adapter_seconds,"adapter_error":"custody snapshot admission refused"})
         }
     })
+}
+
+fn reference_refusal(refusal: kassiber_journals::Refusal) -> serde_json::Value {
+    let code = refusal.code.as_deref().unwrap_or("internal_error");
+    let cli =
+        kassiber_envelope::build_error_envelope(code, &refusal.message, None, None, false, None);
+    let daemon = kassiber_envelope::build_error_envelope(
+        code,
+        &kassiber_envelope::redaction::redact_secret_text(&refusal.message),
+        None,
+        None,
+        false,
+        None,
+    );
+    let project = |value: Value| {
+        let error = get(&value, "error").unwrap();
+        json!({"code":py_str(get(error,"code").unwrap()), "message":py_str(get(error,"message").unwrap())})
+    };
+    json!({"error":"custody snapshot reference refused","refusal":refusal,
+           "boundaries":{"cli":project(cli),"daemon":project(daemon)}})
 }
 fn main() {
     for line in io::stdin().lock().lines() {

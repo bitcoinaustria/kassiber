@@ -154,13 +154,6 @@ impl Reader {
     ) -> Result<Vec<Record>> {
         let mut statement = conn.prepare_cached(sql)?;
         let mut seen = BTreeSet::new();
-        let discarded: Vec<_> = statement
-            .column_names()
-            .iter()
-            .enumerate()
-            .filter(|(_, name)| safe && **name == "_closed_confirmation_observation")
-            .map(|(index, _)| index)
-            .collect();
         let columns: Vec<_> = statement
             .column_names()
             .into_iter()
@@ -168,6 +161,9 @@ impl Reader {
             .filter(|(_, name)| seen.insert(*name))
             .filter(|(_, name)| !safe || *name != "_closed_confirmation_observation")
             .map(|(i, key)| (i, key.to_owned()))
+            .collect();
+        let discarded: Vec<_> = (0..statement.column_count())
+            .filter(|index| !columns.iter().any(|(selected, _)| selected == index))
             .collect();
         let mut order: Vec<_> = columns.iter().map(|(_, key)| key.clone()).collect();
         let has_config = safe && columns.iter().any(|(_, key)| key == "config_json");
@@ -197,53 +193,56 @@ impl Reader {
         let mut cursor = statement.query(params)?;
         let mut result = Vec::with_capacity(self.capacity);
         while let Some(row) = cursor.next()? {
-            for index in &discarded {
-                if let ValueRef::Text(bytes) = row.get_ref(*index)? {
-                    sql_value(ValueRef::Text(bytes))?;
-                }
-            }
-            let mut record = Vec::with_capacity(columns.len() + usize::from(has_config));
-            let mut mentions = None;
-            for (i, key) in &columns {
-                let raw = row.get_ref(*i)?;
-                let value = if safe && ["config_json", "wallet_config_json"].contains(&key.as_str())
-                {
-                    // Borrow SQLite TEXT for memo lookup. Do not allocate the
-                    // raw private config only to replace it with sanitized facts.
-                    let normalized = if let ValueRef::Text(bytes) = raw {
-                        let raw = std::str::from_utf8(bytes)
-                            .map_err(|_| Error::Unsupported("SQLite TEXT is not UTF-8"))?;
-                        if let Some(hit) = self.configs.get(raw) {
-                            hit.clone()
-                        } else {
-                            let normalized = normalize(sql_value(ValueRef::Text(bytes))?)?;
-                            self.configs.insert(raw.into(), normalized.clone());
-                            normalized
-                        }
-                    } else {
-                        normalize(sql_value(raw)?)?
-                    };
-                    if key == "config_json" {
-                        mentions = Some(normalized.1);
+            let record = (|| -> Result<Record> {
+                for index in &discarded {
+                    if let ValueRef::Text(bytes) = row.get_ref(*index)? {
+                        sql_value(ValueRef::Text(bytes))?;
                     }
-                    J::String(normalized.0)
-                } else {
-                    scalar(raw)?
-                };
-                record.push(value);
-            }
-            if let Some(mentions) = mentions {
-                let index = mentions_index.expect("config mention column");
-                if columns
-                    .iter()
-                    .any(|(_, key)| key == "config_text_mentions_samourai")
-                {
-                    record[index] = J::Bool(mentions);
-                } else {
-                    record.insert(index, J::Bool(mentions));
                 }
-            }
-            let record = Record::new(layout.clone(), record);
+                let mut record = Vec::with_capacity(columns.len() + usize::from(has_config));
+                let mut mentions = None;
+                for (i, key) in &columns {
+                    let raw = row.get_ref(*i)?;
+                    let value =
+                        if safe && ["config_json", "wallet_config_json"].contains(&key.as_str()) {
+                            // Borrow SQLite TEXT for memo lookup. Do not allocate the
+                            // raw private config only to replace it with sanitized facts.
+                            let normalized = if let ValueRef::Text(bytes) = raw {
+                                let raw = std::str::from_utf8(bytes)
+                                    .map_err(|_| Error::Unsupported("SQLite TEXT is not UTF-8"))?;
+                                if let Some(hit) = self.configs.get(raw) {
+                                    hit.clone()
+                                } else {
+                                    let normalized = normalize(sql_value(ValueRef::Text(bytes))?)?;
+                                    self.configs.insert(raw.into(), normalized.clone());
+                                    normalized
+                                }
+                            } else {
+                                normalize(sql_value(raw)?)?
+                            };
+                            if key == "config_json" {
+                                mentions = Some(normalized.1);
+                            }
+                            J::String(normalized.0)
+                        } else {
+                            scalar(raw)?
+                        };
+                    record.push(value);
+                }
+                if let Some(mentions) = mentions {
+                    let index = mentions_index.expect("config mention column");
+                    if columns
+                        .iter()
+                        .any(|(_, key)| key == "config_text_mentions_samourai")
+                    {
+                        record[index] = J::Bool(mentions);
+                    } else {
+                        record.insert(index, J::Bool(mentions));
+                    }
+                }
+                Ok(Record::new(layout.clone(), record))
+            })()
+            .map_err(|error| row_error(row, error))?;
             result.push(record);
         }
         Ok(result)
@@ -277,6 +276,37 @@ fn native_rows(value: Value) -> Result<Vec<Record>> {
         .collect()
 }
 
+fn confirmation_quantity_refusals(rows: &[Record]) -> Result<()> {
+    for row in rows {
+        let version = row.get("observation_authority_version").unwrap_or(&J::Null);
+        if version.is_null() {
+            continue;
+        }
+        let version = kassiber_custody::codec::from_json(version).map_err(Error::Invalid)?;
+        if ownership::integer(&version) != Some(1.into()) {
+            continue;
+        }
+        let raw = row.get("raw_json").unwrap_or(&J::Null);
+        let hash = kassiber_custody::evidence::graph_hash(raw)
+            .map_err(|error| Error::Invalid(error.to_string()))?
+            .0;
+        let observed = row.get("observation_graph_hash").unwrap_or(&J::Null);
+        if !kassiber_custody::codec::truth(observed)
+            || kassiber_custody::codec::pystr(observed) != hash
+        {
+            continue;
+        }
+        for field in ["amount", "fee"] {
+            let value = row.get(field).unwrap_or(&J::Null);
+            if kassiber_custody::codec::truth(value) {
+                let value = kassiber_custody::codec::from_json(value).map_err(Error::Invalid)?;
+                ownership::outpoint_integer(&value)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Reads pending writes under the caller's write lock; never repairs or commits.
 #[allow(clippy::field_reassign_with_default)] // Snapshot owns a private memo field.
 pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnapshot> {
@@ -304,6 +334,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     };
     let network = network(conn, &profile_id, &mut reader)?;
     let transactions = reader.rows(conn, "transactions[]", TRANSACTIONS, [&profile_id], true)?;
+    confirmation_quantity_refusals(&transactions)?;
     reader.capacity = 0;
     let wallets = reader.rows(conn,"wallets[]","SELECT w.id,w.label,w.kind,w.config_json,w.account_id AS wallet_account_id,COALESCE(a.code,'treasury') AS account_code,COALESCE(a.label,'Treasury') AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=?",[&profile_id],true)?;
     let (owned, warnings) = ownership::load(conn, &profile_id, &transactions)?;
@@ -311,6 +342,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     let mut anchor_ids = BTreeSet::new();
     let mut wallet_ids = BTreeSet::new();
     let mut revision_ids = BTreeSet::new();
+    let mut nontext_revision_reference = false;
     for header in reader.rows(conn,"components[].header","SELECT * FROM custody_components WHERE profile_id=? AND state='active' ORDER BY created_at,revision,id",[&profile_id],false)? {
         let id = string(&header,"id");
         let legs = reader.rows(conn,"components[].legs[]","SELECT * FROM custody_component_legs WHERE component_id=? ORDER BY ordinal,id",[&id],false)?;
@@ -318,7 +350,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
             for key in ["transaction_id","anchor_transaction_id"] { if leg.get(key).is_some_and(|v| !v.is_null()) { anchor_ids.insert(string(leg,key)); } }
             if leg.get("wallet_id").is_some_and(|v| !v.is_null()) { wallet_ids.insert(string(leg,"wallet_id")); }
         }
-        for key in ["supersedes_component_id","superseded_by_component_id"] { if header.get(key).is_some_and(|v| !v.is_null()) { revision_ids.insert(string(&header,key)); } }
+        for key in ["supersedes_component_id","superseded_by_component_id"] { if let Some(value) = header.get(key).filter(|v| !v.is_null()) { nontext_revision_reference |= !value.is_string(); revision_ids.insert(string(&header,key)); } }
         components.push(Component {
             header, legs,
             allocations: reader.rows(conn,"components[].allocations[]","SELECT * FROM custody_component_allocations WHERE component_id=? ORDER BY ordinal,id",[&id],false)?,
@@ -342,6 +374,11 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
         )?);
     }
     let mut revision_headers = vec![];
+    if nontext_revision_reference {
+        return Err(Error::Unsupported(
+            "custody revision reference is not SQLite TEXT",
+        ));
+    }
     for id in revision_ids {
         revision_headers.extend(reader.rows(
             conn,
@@ -582,7 +619,7 @@ mod tests {
                 [],
                 true,
             ),
-            Err(Error::Unsupported(_))
+            Err(Error::Reference(_))
         ));
         let safe = safe_row(
             dict([
@@ -615,16 +652,22 @@ mod tests {
             )
             .unwrap();
         assert_eq!(kassiber_pyjson::dumps(&value,&Options::new()).unwrap(),"[{\"n\": null, \"i\": 9223372036854775807, \"f\": 1.0, \"s\": \"\\u94b1\", \"duplicate\": 1}]");
-        for sql in [
-            "SELECT x'ff' AS b",
-            "SELECT CAST(x'ff' AS TEXT) AS t",
-            "SELECT 1e999 AS f",
-        ] {
+        for sql in ["SELECT x'ff' AS b", "SELECT 1e999 AS f"] {
             assert!(matches!(
                 reader.rows(&conn, "rows[]", sql, [], false),
                 Err(Error::Unsupported(_))
             ));
         }
+        assert!(matches!(
+            reader.rows(
+                &conn,
+                "rows[]",
+                "SELECT CAST(x'ff' AS TEXT) AS t",
+                [],
+                false
+            ),
+            Err(Error::Reference(_))
+        ));
         // Both a cold and a memoized configuration use identical sanitized facts.
         let rows=reader.rows(&conn,"rows[]","SELECT '{\"chain\":\"bitcoin\",\"private\":\"samourai\"}' AS config_json UNION ALL SELECT '{\"chain\":\"bitcoin\",\"private\":\"samourai\"}'",[],true).unwrap();
         assert_eq!(rows.len(), 2);
@@ -653,7 +696,7 @@ mod tests {
                 [],
                 true
             ),
-            Err(Error::Unsupported(_))
+            Err(Error::Reference(_))
         ));
     }
 }

@@ -898,5 +898,125 @@
       "native_loader_outpoint_integer_preserves_python_refusals"
     ],
     "rule": "The numeric prefix is validated before selecting the exact integer refusal."
+  },
+  {
+    "id": "JL-utf8-column",
+    "file": "crates/journals/src/loader.rs",
+    "find": "message.extend(c_string(column.as_bytes()));",
+    "replace": "message.extend(b\"column\");",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-limit",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".take(198)",
+    "replace": ".take(199)",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-nul",
+    "file": "crates/journals/src/loader.rs",
+    "find": "s.split(|b| *b == 0).next().unwrap_or_default().to_vec()",
+    "replace": "s.to_vec()",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-ascii",
+    "file": "crates/journals/src/loader.rs",
+    "find": "b.is_ascii()",
+    "replace": "true",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-physical-order",
+    "file": "crates/journals/src/loader.rs",
+    "find": "for index in 0..row.as_ref().column_count() {",
+    "replace": "for index in (0..row.as_ref().column_count()).rev() {",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-auxiliary-validation",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".map_err(|error| row_error(row, error))?",
+    "replace": "?",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-confirmation-capture",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "confirmation_quantity_refusals(&transactions)?;",
+    "replace": "",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-confirmation-version",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ownership::integer(&version) != Some(1.into())",
+    "replace": "ownership::integer(&version) != Some(2.into())",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-confirmation-graph",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "kassiber_custody::codec::pystr(observed) != hash",
+    "replace": "kassiber_custody::codec::pystr(observed) == hash",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-confirmation-field-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "for field in [\"amount\", \"fee\"]",
+    "replace": "for field in [\"fee\", \"amount\"]",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-utf8-review-fallback",
+    "file": "crates/journals/src/loader.rs",
+    "find": "|| matches!(error, Error::Reference(refusal) if refusal.family == \"OperationalError\")",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_loader_utf8_optional_reviews_preserve_python_fallback"
+    ],
+    "rule": "Optional review decoding errors take the same empty-list fallback as Python sqlite3.OperationalError."
+  },
+  {
+    "id": "JL-revision-reference-storage",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if nontext_revision_reference {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_refuses_nontext_revision_references_before_output"
+    ],
+    "rule": "Fail closed before snapshot output instead of stringifying numeric revision references that Python may refuse."
   }
 ]

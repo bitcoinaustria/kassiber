@@ -193,6 +193,44 @@ fn sql_value(value: ValueRef<'_>) -> Result<Value> {
         }
     })
 }
+
+fn sqlite_text<'a>(bytes: &'a [u8], column: &str) -> Result<&'a str> {
+    std::str::from_utf8(bytes).map_err(|_| {
+        let c_string = |s: &[u8]| {
+            let s = &s[..s.len().min(198)];
+            s.split(|b| *b == 0).next().unwrap_or_default().to_vec()
+        };
+        let mut message = b"Could not decode to UTF-8 column '".to_vec();
+        message.extend(c_string(column.as_bytes()));
+        message.extend(b"' with text '");
+        message.extend(c_string(bytes));
+        message.push(b'\'');
+        let message: String = message
+            .into_iter()
+            .take(198)
+            .map(|b| {
+                if b.is_ascii() {
+                    char::from(b)
+                } else {
+                    '\u{fffd}'
+                }
+            })
+            .collect();
+        Error::Reference(crate::Refusal::new("OperationalError", message))
+    })
+}
+
+fn row_error(row: &rusqlite::Row<'_>, error: Error) -> Error {
+    for index in 0..row.as_ref().column_count() {
+        if let Ok(ValueRef::Text(bytes)) = row.get_ref(index) {
+            if let Err(error) = sqlite_text(bytes, row.as_ref().column_name(index).unwrap_or("")) {
+                return error;
+            }
+        }
+    }
+    error
+}
+
 fn query(conn: &Connection, sql: &str, parameters: impl Params) -> Result<Vec<Value>> {
     let mut statement = conn.prepare_cached(sql)?;
     let mut seen = BTreeSet::new();
@@ -203,16 +241,28 @@ fn query(conn: &Connection, sql: &str, parameters: impl Params) -> Result<Vec<Va
         .filter(|(_, name)| seen.insert(*name))
         .map(|(index, name)| (index, Key::from(name)))
         .collect();
+    let discarded: Vec<_> = (0..statement.column_count())
+        .filter(|index| !columns.iter().any(|(selected, _)| selected == index))
+        .collect();
     let mut cursor = statement.query(parameters)?;
     let mut values = vec![];
     while let Some(row) = cursor.next()? {
-        // sqlite3.Row's name lookup uses the first duplicate column. Keep its
-        // insertion position, just as dict(row) does.
-        let mut record = Vec::with_capacity(columns.len());
-        for (index, key) in &columns {
-            record.push((key.clone(), sql_value(row.get_ref(*index)?)?));
-        }
-        values.push(Value::Dict(record));
+        let record = (|| -> Result<Value> {
+            for index in &discarded {
+                if let ValueRef::Text(bytes) = row.get_ref(*index)? {
+                    sql_value(ValueRef::Text(bytes))?;
+                }
+            }
+            // sqlite3.Row's name lookup uses the first duplicate column. Keep its
+            // insertion position, just as dict(row) does.
+            let mut record = Vec::with_capacity(columns.len());
+            for (index, key) in &columns {
+                record.push((key.clone(), sql_value(row.get_ref(*index)?)?));
+            }
+            Ok(Value::Dict(record))
+        })()
+        .map_err(|error| row_error(row, error))?;
+        values.push(record);
     }
     Ok(values)
 }
@@ -226,6 +276,7 @@ fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
 }
 fn operational(error: &Error) -> bool {
     matches!(error, Error::Database(rusqlite::Error::SqliteFailure(code,_) | rusqlite::Error::SqlInputError{error:code,..}) if code.code == rusqlite::ErrorCode::Unknown)
+        || matches!(error, Error::Reference(refusal) if refusal.family == "OperationalError")
 }
 
 fn safe_row(mut row: Value, configs: &mut HashMap<String, (String, bool)>) -> Result<Value> {

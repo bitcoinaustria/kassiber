@@ -17,6 +17,7 @@ from kassiber.core.custody_snapshot import load_custody_snapshot
 from kassiber.db import open_db
 from tests import test_rust_custody_loader as cases
 from tests.test_rp2_ownership_transfers import OwnershipDeriverHandlerTest
+from tests.rust_port.custody_loader_oracle import exception_boundaries
 
 DEST = ROOT / "crates/journals/tests/data/loader.json"
 
@@ -47,6 +48,8 @@ def vectors():
             helper = OwnershipDeriverHandlerTest()
             helper._seed(source)
             selected = [
+                *[("stale-confirmation-" + stale, cases.test_loader_skips_confirmation_quantity_when_authority_is_stale, (stale,))
+                  for stale in ("version", "graph")],
                 ("structural-columns", cases.test_loader_covers_every_structural_table_column_and_filter, ()),
                 ("legacy-rates", cases.test_loader_supports_missing_network_table_and_legacy_rate_columns, ()),
                 *[("closed-confirmation-" + str(i), cases.test_loader_drops_closed_confirmation_from_safe_rows, (storage,))
@@ -107,12 +110,13 @@ def error_vectors():
         except Exception as error:
             refusal = {"family": type(error).__name__, "message": str(error),
                        "code": getattr(error, "code", None)}
+            boundaries = exception_boundaries(error)
         else:
             raise AssertionError("expected receipt-source refusal")
         finally:
             conn.close()
         result.append({"name": current_name, **request, "expected": refusal})
-        return SimpleNamespace(stderr=b"", stdout=json.dumps({"refusal": refusal}).encode())
+        return SimpleNamespace(stderr=b"", stdout=json.dumps({"refusal": refusal, "boundaries": boundaries}).encode())
 
     with tempfile.TemporaryDirectory(prefix="custody-loader-refusals-") as directory, patch(
         "kassiber.core.chain_observer.provenance.now_iso", return_value=cases.AS_OF
@@ -121,6 +125,15 @@ def error_vectors():
         helper = OwnershipDeriverHandlerTest()
         helper._seed(source)
         selected = [
+            *[("confirmation-quantity-" + str(i), cases.test_loader_refuses_confirmation_quantity_before_output, args)
+              for i, args in enumerate((("legacy scalar", 0), (100000000, "legacy scalar"),
+                                       ("bad amount", "bad fee"), ("", "bad fee")))],
+            *[("utf8-" + str(i), cases.test_loader_utf8_refusal_matches_product_boundaries, args)
+              for i, args in enumerate((
+                  ("note", b"\xff\x00"), ("note", b"a" * 250 + b"\xff"),
+                  ("note", "钱".encode() * 100 + b"\xff"),
+                  ("_closed_confirmation_observation", b"\xff"), ("钱包", b"\xff"),
+              ))],
             *[(name, cases.test_loader_receipt_error_precedence, (name,))
               for name in ("receipt", "network", "tax", "component")],
             *[("ownership-config-" + str(i), cases.test_loader_ownership_config_scalar_refusals, (config,))

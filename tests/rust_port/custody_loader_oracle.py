@@ -16,6 +16,32 @@ from sqlite3.dump import _iterdump
 ENV = "KASSIBER_TEST_CUSTODY_LOADER_BIN"
 
 
+def exception_boundaries(error):
+    """The non-debug code/message actually rendered by each product boundary.
+
+    cli.main.main and daemon.run wrap unexpected loader/serializer exceptions
+    in internal_error. The daemon additionally redacts the rendered message.
+    Debug traceback/class details are deliberately outside this comparison.
+    """
+    from kassiber.daemon import _error_envelope
+    from kassiber.envelope import build_error_envelope
+    from kassiber.errors import AppError
+
+    if isinstance(error, AppError):
+        cli_code = error.code or "app_error"
+        daemon_code = error.code or "app_error"
+        message = str(error)
+    else:
+        cli_code = daemon_code = "internal_error"
+        message = str(error) or type(error).__name__
+    return {
+        "cli": {key: value for key, value in build_error_envelope(cli_code, message)["error"].items()
+                if key in ("code", "message")},
+        "daemon": {key: value for key, value in _error_envelope(daemon_code, message)["error"].items()
+                   if key in ("code", "message")},
+    }
+
+
 def compare(conn, profile, snapshot, *, binary=None):
     binary = binary or os.environ.get(ENV)
     if not binary:

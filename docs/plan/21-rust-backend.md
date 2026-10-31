@@ -2285,16 +2285,22 @@ remain open.
 
 ### R4-9 loader continuation (unaccepted)
 
-The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) fixes the
-physical safe-row column omission, selected ownership configuration/address and
-output-index refusals, and the distinct inventory label rules. Frozen coverage
-grows to 59 byte fixtures and 22 exact refusals, with expanded descriptor and
-source-index cases. All 90 loader mutations are killed, and final 20k paired timings including
-admission are 0.290 s CPU generic / 0.439 s multi-wallet, within 5% of loader-3.
-An executable per-column SQLite storage audit records 777 remaining mismatches.
-R4-9 remains unaccepted and test-only pending a lossless boundary,
-complete branch-to-mutation coverage, the full custody mutation campaign and
-remaining parity/review gates. Python retains production journal authority.
+The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) now compares
+corruption refusals at the CLI/daemon code and rendered-message boundary.
+Loader-5 fixes UTF-8 rendering/order and confirmation-quantity refusals and
+closes numeric revision-reference admissions. Its 61 byte fixtures and 31
+refusals supplement a 22,528-case audit of all 360 physical columns in the
+23-table manifest, every synthetic row and both declared/no-affinity schemas.
+All 102 loader catalogue entries are killed; the branch map remains partial.
+Loader-5's 20k paired CPU totals including admission are 0.289819 s generic /
+0.442404 s multi-wallet, both within 5% of loader-4. The expanded audit retains
+5,746 unresolved cases, with zero admissions of Python-refused values.
+BLOB/nonfinite downstream outcomes, numeric revision identity/refusal parity,
+complete branch-to-mutation coverage, the full
+2,292-entry custody campaign and final corpus/replay/census/shadow gates still
+block R4-9 acceptance. Infinite transaction rates are refused by Python's
+downstream finite-decimal barrier; no Python reference-bug waiver is claimed.
+Python retains production journal authority.
 
 ### R4-0 integrated stack
 

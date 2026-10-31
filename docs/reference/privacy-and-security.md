@@ -893,8 +893,10 @@ product, daemon or AI route. Its root mode opens plaintext/SQLCipher books throu
 CI census/shadow jobs and the local quality gate explicitly enable this hook
 on disposable books. Its match counter appends only `equal` to a mode-0600
 disposable records file; no SQL, descriptor, snapshot or refusal payload is
-retained there. Structured reference refusals are returned only on the local
-probe pipe for exact exceptional-path tests, never as public diagnostics.
+retained there. Structured reference refusals and their test-only CLI/daemon
+code/message projections are returned only on the local probe pipe for exact
+exceptional-path tests, never as public diagnostics. The scalar audit retains
+only synthetic fixture records under the disposable verification root.
 
 The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
 BTCPay and local Core-detection tests through the reviewed network gate.

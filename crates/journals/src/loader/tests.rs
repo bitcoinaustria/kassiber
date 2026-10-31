@@ -1,6 +1,131 @@
 use super::*;
 
 #[test]
+fn native_loader_utf8_refusals_preserve_python_column_order_and_message() {
+    let conn = Connection::open_in_memory().unwrap();
+    let refusal = |sql: &str, direct: bool| {
+        let error = if direct {
+            super::direct::Reader::default()
+                .rows(&conn, "rows[]", sql, [], true)
+                .unwrap_err()
+        } else {
+            query(&conn, sql, []).unwrap_err()
+        };
+        let Error::Reference(refusal) = error else {
+            panic!("expected reference refusal")
+        };
+        assert_eq!(refusal.family, "OperationalError");
+        refusal.message.clone()
+    };
+    for direct in [false, true] {
+        for (sql, expected) in [
+            (
+                "SELECT CAST(x'ff00' AS TEXT) AS note",
+                "Could not decode to UTF-8 column 'note' with text '�'",
+            ),
+            (
+                "SELECT CAST(x'ff' AS TEXT) AS z, CAST(x'fe' AS TEXT) AS a",
+                "Could not decode to UTF-8 column 'z' with text '�'",
+            ),
+            (
+                "SELECT 'first' AS duplicate, CAST(x'ff' AS TEXT) AS duplicate",
+                "Could not decode to UTF-8 column 'duplicate' with text '�'",
+            ),
+            (
+                "SELECT CAST(x'61626300ff' AS TEXT) AS x",
+                "Could not decode to UTF-8 column 'x' with text 'abc'",
+            ),
+            (
+                "SELECT CAST(x'ff' AS TEXT) AS 钱",
+                "Could not decode to UTF-8 column '���' with text '�'",
+            ),
+            (
+                "SELECT CAST(x'ff' AS TEXT) AS _closed_confirmation_observation",
+                "Could not decode to UTF-8 column '_closed_confirmation_observation' with text '�'",
+            ),
+        ] {
+            assert_eq!(refusal(sql, direct), expected);
+        }
+        let sql = format!("SELECT CAST(x'{}ff' AS TEXT) AS x", "61".repeat(250));
+        assert_eq!(
+            refusal(&sql, direct),
+            format!(
+                "Could not decode to UTF-8 column 'x' with text '{}",
+                "a".repeat(150)
+            )
+        );
+    }
+}
+
+#[test]
+fn native_loader_utf8_optional_reviews_preserve_python_fallback() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(&text(get(case, "sql"))).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE; UPDATE custody_gap_reviews SET reason=CAST(x'ff00' AS TEXT) WHERE revision=2").unwrap();
+    let changes = conn.total_changes();
+    let mut expected = kassiber_pytext::loads(&text(get(case, "expected"))).unwrap();
+    set(&mut expected, "gap_reviews", list(vec![]));
+    let snapshot = load(
+        &conn,
+        get(case, "profile").clone(),
+        &text(get(case, "as_of")),
+    )
+    .unwrap();
+    assert_eq!(
+        snapshot.v1().unwrap(),
+        kassiber_pyjson::dumps(&expected, &Options::new().allow_nan(true)).unwrap()
+    );
+    assert_eq!(changes, conn.total_changes());
+    assert!(!conn.is_autocommit());
+    conn.execute_batch("ROLLBACK").unwrap();
+}
+
+#[test]
+fn native_loader_refuses_nontext_revision_references_before_output() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    for field in ["supersedes_component_id", "superseded_by_component_id"] {
+        for scalar in ["7", "1.5"] {
+            let conn = Connection::open_in_memory().unwrap();
+            let sql = text(get(case, "sql"))
+                .replace(&format!("\"{field}\" TEXT"), &format!("\"{field}\""));
+            conn.execute_batch(&sql).unwrap();
+            conn.execute_batch(&format!("BEGIN IMMEDIATE; UPDATE custody_components SET {field}={scalar} WHERE id='active-a'" )).unwrap();
+            let changes = conn.total_changes();
+            assert!(matches!(
+                load(
+                    &conn,
+                    get(case, "profile").clone(),
+                    &text(get(case, "as_of"))
+                ),
+                Err(Error::Unsupported(
+                    "custody revision reference is not SQLite TEXT"
+                ))
+            ));
+            assert_eq!(changes, conn.total_changes());
+            assert!(!conn.is_autocommit());
+            conn.execute_batch("ROLLBACK").unwrap();
+        }
+    }
+}
+
+#[test]
 fn native_loader_matches_python_database_bytes() {
     let Value::List(cases) =
         kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()

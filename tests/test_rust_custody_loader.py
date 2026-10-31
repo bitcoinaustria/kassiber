@@ -9,6 +9,7 @@ import pytest
 
 from kassiber.core.custody_snapshot import load_custody_snapshot
 from tests.rust_port.custody_loader_oracle import compare
+from tests.rust_port.custody_loader_oracle import exception_boundaries
 from tests.test_custody_observation_consistency import (
     SCRIPT_A, SCRIPT_B, _graph, _native_leg, _profile, _source_inventory,
     custody_book,  # noqa: F401
@@ -19,6 +20,114 @@ ROOT = Path(__file__).resolve().parents[1]
 BINARY = os.environ.get("KASSIBER_TEST_CUSTODY_LOADER_BIN", str(ROOT / "target/debug/examples/custody-load"))
 pytestmark = pytest.mark.skipif(not Path(BINARY).is_file(), reason="requires custody-load test-harness example")
 AS_OF = "2026-10-31T12:00:00Z"
+
+
+@pytest.mark.parametrize("error", [
+    ValueError("invalid literal for int() with base 10: 'legacy scalar'"),
+    TypeError("Object of type bytes is not JSON serializable"),
+    sqlite3.OperationalError("Could not decode to UTF-8 column 'note' with text '�'"),
+    ValueError("password=synthetic-private-value"),
+])
+def test_loader_refusal_oracle_matches_cli_and_daemon_envelopes(tmp_path, monkeypatch, capsys, error):
+    import importlib
+    import io
+    from types import SimpleNamespace
+    from kassiber import daemon
+
+    main = importlib.import_module("kassiber.cli.main")
+
+    def refuse(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(main, "dispatch", refuse)
+    monkeypatch.setattr(main, "write_error_diagnostics", lambda *_a, **_kw: None)
+    monkeypatch.setattr(main, "_configure_cli_logging", lambda _a: None)
+    assert main.main(["--machine", "--data-root", str(tmp_path), "mcp", "status"]) == 1
+    cli = json.loads(capsys.readouterr().out)["error"]
+    monkeypatch.setattr(daemon, "handle_request", refuse)
+    output = io.StringIO()
+    args = SimpleNamespace(data_root=tmp_path, runtime_config={})
+    assert daemon.run(None, args, stdin=io.StringIO('{"kind":"status"}\n'), stdout=output) == 0
+    rendered = json.loads(output.getvalue().splitlines()[-1])["error"]
+    actual = {"cli": {k: cli[k] for k in ("code", "message")},
+              "daemon": {k: rendered[k] for k in ("code", "message")}}
+    assert actual == exception_boundaries(error)
+
+
+@pytest.mark.parametrize("column,payload", [
+    ("note", b"\xff\x00"),
+    ("note", b"a" * 250 + b"\xff"),
+    ("note", "钱".encode() * 100 + b"\xff"),
+    ("_closed_confirmation_observation", b"\xff"),
+    ("钱包", b"\xff"),
+])
+def test_loader_utf8_refusal_matches_product_boundaries(loose_book, column, payload):
+    conn, helper = loose_book
+    for tx_id in ("first", "second"):
+        helper._tx(conn, tx_id=tx_id, wallet_id="wallet-a", direction="inbound",
+                   amount=1000, external_id="acq", raw_json="{}")
+    if column != "note":
+        conn.execute(f'ALTER TABLE transactions ADD COLUMN "{column}"')
+    sql = "\n".join(conn.iterdump())
+    mutation = f'UPDATE transactions SET "{column}"=CAST(x\'{payload.hex()}\' AS TEXT) WHERE id=\'second\''
+    conn.execute(mutation)
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    response = subprocess.run(
+        [BINARY], input=json.dumps({"sql": sql + ";\n" + mutation + ";",
+                                   "profile": dict(_profile(conn)), "as_of": AS_OF}).encode(),
+        capture_output=True, check=True, timeout=120,
+    )
+    assert not response.stderr
+    actual = json.loads(response.stdout)
+    assert actual["boundaries"] == exception_boundaries(caught.value)
+    assert "v1" not in actual
+
+
+@pytest.mark.parametrize("amount,fee", [
+    ("legacy scalar", 0), (100000000, "legacy scalar"),
+    ("bad amount", "bad fee"), ("", "bad fee"),
+])
+def test_loader_refuses_confirmation_quantity_before_output(loose_book, amount, fee):
+    conn, helper = loose_book
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    conn.execute("UPDATE transactions SET amount=?,fee=? WHERE id='wallet-b-leg'", (amount, fee))
+    _check_refusal(conn)
+
+
+@pytest.mark.parametrize("stale", ["version", "graph"])
+def test_loader_skips_confirmation_quantity_when_authority_is_stale(loose_book, stale):
+    conn, helper = loose_book
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    if stale == "version":
+        conn.execute("UPDATE chain_observation_provenance SET authority_version=2")
+    else:
+        conn.execute("UPDATE chain_observation_provenance SET graph_hash='stale'")
+    conn.execute("UPDATE transactions SET amount='legacy scalar'")
+    check(conn)
+
+
+def test_loader_utf8_optional_reviews_preserve_python_fallback(loose_book):
+    conn, helper = loose_book
+    helper._tx(conn, tx_id="included", wallet_id="wallet-a", direction="inbound",
+               amount=1000, external_id="acq", raw_json="{}")
+    insert(conn, "custody_gap_reviews", "review", gap_id="gap", revision=2)
+    sql = "\n".join(conn.iterdump())
+    mutation = "UPDATE custody_gap_reviews SET reason=CAST(x'ff00' AS TEXT)"
+    conn.execute(mutation)
+    expected = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert expected["gap_reviews"] == []
+    response = subprocess.run(
+        [BINARY], input=json.dumps({"sql": sql + ";\n" + mutation + ";",
+                                   "profile": dict(_profile(conn)), "as_of": AS_OF}).encode(),
+        capture_output=True, check=True, timeout=120,
+    )
+    assert not response.stderr
+    assert json.loads(response.stdout)["v1"] == json.dumps(expected, ensure_ascii=True, allow_nan=True)
 
 
 def check(conn):
@@ -345,6 +454,8 @@ def test_loader_receipt_error_precedence(loose_book, prior):
     assert not result.stderr
     actual = json.loads(result.stdout)
     assert {key: actual.get("refusal", {}).get(key) for key in expected} == expected
+    assert actual.get("boundaries") == exception_boundaries(caught.value)
+    assert "v1" not in actual
 
 
 @pytest.mark.parametrize("escaped", [False, True])
@@ -427,6 +538,8 @@ def _check_refusal(conn):
     assert not result.stderr
     actual = json.loads(result.stdout)
     assert {key: actual.get("refusal", {}).get(key) for key in expected} == expected
+    assert actual.get("boundaries") == exception_boundaries(caught.value)
+    assert "v1" not in actual
 
 
 @pytest.mark.parametrize("config", ["null", "[]", "[1]", "true", "false", "42", "1.5", '"scalar"'])

@@ -74,7 +74,7 @@ pub(super) fn integer(value: &Value) -> Option<BigInt> {
         _ => None,
     }
 }
-fn outpoint_integer(value: &Value) -> Result<BigInt> {
+pub(super) fn outpoint_integer(value: &Value) -> Result<BigInt> {
     if let Value::Str(value) = value {
         let raw = value
             .as_str()

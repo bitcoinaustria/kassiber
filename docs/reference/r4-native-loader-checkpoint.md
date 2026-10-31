@@ -1,10 +1,11 @@
 # R4-9 native custody loader checkpoint
 
-This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-4
-continues `e8387a966` (loader-3), fixes the physical safe-row column omission,
-and expands scalar refusals and descriptor/source-index witnesses. Its storage
-audit still demonstrates acceptance-blocking legacy mismatches. Python retains
-every production load and journal route.
+This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-5
+continues `05b0d32d4` (loader-4), compares corruption refusals at the CLI/daemon
+envelope boundary, fixes UTF-8 messages and confirmation-quantity refusals,
+and closes newly discovered numeric revision-reference admissions. Its expanded
+storage audit still blocks acceptance. Python retains every production load
+and journal route. The loader-3/4 sections below are historical evidence.
 
 Final loader-4 measurements retain the 0.30 s target at **0.290 s process CPU /
 0.293 s wall**, including admission. Multi-wallet 20k measures **0.439 / 0.444 s**.
@@ -310,21 +311,158 @@ Verification and mutation build trees are removed after summarizing; only the
 standalone probe, synthetic books and local evidence remain under
 `target/r4-loader-4`. No background test job remains at handoff.
 
+## Loader-5 corruption boundary and audit
+
+Acceptance compares the CLI and daemon envelope **code and rendered message**,
+not internal exception classes or tracebacks. `cli.main.main` wraps unexpected
+exceptions in `internal_error` before calling `core.runtime.emit_error`;
+`daemon.run` uses the same code and also redacts the message through
+`daemon._error_envelope`. The live oracle exercises both actual product wrappers,
+including a message containing synthetic secret material. The native probe
+renders its own boundary projections through `crates/envelope`; the audit does
+not manufacture native envelopes using Python.
+
+Native UTF-8 refusals now preserve Python's physical result-column order,
+including duplicate and discarded columns. Error rendering follows CPython
+sqlite3's 198-byte payload limit, C-string NUL termination and per-byte ASCII
+replacement, including Unicode column names and truncated long values.
+Physical-column scanning runs only on refusals, retaining the original fast
+decoder and row allocation on valid books. Optional gap-review
+decoding failures retain Python's empty-list fallback.
+
+The loader checks current confirmation quantities after reading the complete
+transaction result, before loading the wallet list and ownership index. It uses
+the shared graph hash and Python-compatible integer parser, preserves amount/fee
+precedence, and skips stale authority versions or graph hashes. The two old
+TEXT amount/fee admissions now refuse before snapshot output. Non-TEXT revision
+references also fail closed before revision-header lookup, closing eight more
+admissions exposed by the expanded audit. This last guard is conservative:
+Python's mixed-type sort refusal and all-numeric accepted identities still need
+lossless representation and envelope parity; the guard is not acceptance.
+
+The new audit covers all **360 physical columns of 23 loader tables**, including
+columns discarded by projections, every physical row of both small synthetic
+fixtures, and both declared-affinity and no-affinity schemas. Eleven scalar
+expressions produce **22,528 populated cases**, with `typeof()` recorded for
+each. Every physical column has a populated representative; authorizer reads
+must be a subset of the explicit table/column manifest. Safe/raw physical
+confirmation columns are included. BLOB integer and JSON contents supplement
+opaque BLOBs. A predicate or join change can still exclude the mutated row;
+such equality establishes filtering, not downstream scalar support. Competing
+corrupt cells and every optional historical schema remain further work.
+
+| Expanded populated-row result | Cases |
+| --- | ---: |
+| Exact v1 value | 15,308 |
+| Exact CLI/daemon refusal code and rendered message | 1,474 |
+| Different refusal | 3,414 |
+| Native refusal of a Python-serializable value | 2,332 |
+| Native admission of a Python-refused value | 0 |
+| Different v1 value | 0 |
+
+The **5,746 unresolved cases** still block acceptance. All 2,048 invalid-UTF-8
+cases match, including filtered rows. For the 2,332 native-refused Python values,
+Python's downstream projection refuses 1,372 and accepts 960; these outcomes
+do not match the native boundary and are not waived. Restricting the expanded
+run to the original nine expressions, declared affinities, baseline-read columns
+and first physical rows leaves **425 of the original 777 mismatches**: 262
+different refusals and 163 native refusals of Python-serializable values.
+Actual stored classes across the expanded run are 6,144 BLOB, 1,175 INTEGER,
+2,048 NULL, 3,565 REAL and 9,596 TEXT. No physical column lacks a populated case.
+
+Detailed cases append incrementally to `target/r4-loader-5/storage-audit.jsonl`;
+the committed [summary](r4-native-loader-5-storage-audit.json) contains the
+inventory, actual storage-class totals and remaining failures. Python-accepted
+values that native refuses also record the pure Python downstream projection
+outcome. A later refusal counts as equivalent only if both boundary projections
+match. Snapshot acceptance alone never establishes a Python reference bug.
+
+In particular, a synthetic one-BTC buy with infinite `transactions.fiat_rate`
+loads and serializes in Python and enters its transaction-derived rate map as
+`Decimal('Infinity')`, but both finalized projection and ledger building refuse
+with `validation: transaction nonfinite-rate: fiat_rate must be a finite decimal number`
+(also for negative infinity). No unsafe Python tax output was demonstrated;
+this is a native downstream-refusal parity gap, not a justified exception.
+Other Python-accepted BLOB/nonfinite cases still need individual downstream
+resolution. No Python reference-bug waiver is claimed at this checkpoint.
+
+The frozen corpus now contains **61 byte fixtures and 31 refusals**. The
+catalogue has **102 applicable loader mutations**; these added/updated contracts
+are not a complete loader branch inventory:
+
+| Contract | Mutation IDs | Named witness |
+| --- | --- | --- |
+| UTF-8 column/message rendering, length, NUL and replacement | `JL-utf8-column`, `JL-utf8-limit`, `JL-utf8-nul`, `JL-utf8-ascii` | `native_loader_utf8_refusals_preserve_python_column_order_and_message` |
+| Physical order and auxiliary decoding | `JL-utf8-physical-order`, `JL-utf8-auxiliary-validation` | `native_loader_utf8_refusals_preserve_python_column_order_and_message` |
+| Discarded column decoding | `JL-dropped-text-validation` (re-anchored) | `native_loader_filters_only_safe_confirmation_columns` |
+| Optional review fallback | `JL-utf8-review-fallback` | `native_loader_utf8_optional_reviews_preserve_python_fallback` |
+| Confirmation capture, authority guards and field precedence | `JL-confirmation-capture`, `JL-confirmation-version`, `JL-confirmation-graph`, `JL-confirmation-field-order` | `native_loader_preserves_receipt_error_precedence` |
+| Revision reference storage guard | `JL-revision-reference-storage` | `native_loader_refuses_nontext_revision_references_before_output` |
+
+## Loader-5 timing and verification
+
+The [paired timing record](r4-native-loader-5-bench.json) uses copies of the same
+seed-1 generic and seed-7 multi-wallet books, five alternating Python/native
+pairs per book, and five SQL-floor repetitions. All four retain the exact
+loader-4 byte lengths and hashes. The timer still includes native admission and
+excludes open/BEGIN and the test-only v1 serializer.
+
+| Book | Python CPU / wall | Native load CPU / wall | Admission CPU / wall | Native total CPU / wall |
+| --- | ---: | ---: | ---: | ---: |
+| generic 2,000 | 0.111 / 0.112 | 0.028 / 0.028 | 0.001 / 0.001 | **0.029 / 0.029** |
+| multi-wallet 2,000 | 0.154 / 0.156 | 0.053 / 0.053 | 0.002 / 0.002 | **0.055 / 0.056** |
+| generic 20,000 | 1.160 / 1.170 | 0.281 / 0.283 | 0.009 / 0.009 | **0.290 / 0.292** |
+| multi-wallet 20,000 | 1.414 / 1.430 | 0.418 / 0.425 | 0.024 / 0.024 | **0.442 / 0.449** |
+
+Unrounded 20k totals are **0.289819 s CPU / 0.292004258 s wall** and
+**0.442404 / 0.449338750 s**. Relative to the supplied 0.290/0.439 s baselines,
+CPU changes are **-0.06% / +0.78%**, within 5%; generic retains the 0.30 s target.
+Shared-host load during these pairs is recorded in the artifact. Final numbers
+use the original row allocation and fast decoder; error-order scanning runs
+only when a row refuses.
+
+The final-code custody/journals suite passes **619 Rust tests** and the live
+Python loader oracle passes **100 tests**, including actual CLI/daemon wrappers
+and refusal assertions at their code/message boundary. All **61 byte fixtures
+and 31 refusals** regenerate under `PYTHONHASHSEED=1` and `2`. The final decoder
+also passes all **13 focused loader tests** and all-target offline clippy with
+`-D warnings`. The required test-inventory update and CI preflight run again
+before the checkpoint commit; all **57 preflight tests** pass. Rust formatting,
+manual second review and `git diff --check` pass. The full generated/replay/
+census/shadow campaigns have not been rerun at this checkpoint; their earlier
+counts above remain historical.
+
+All **102 loader catalogue entries build and are killed**: **102 killed, zero
+survivors, zero runner errors**. All 15 unmutated witness filters pass first.
+The complete run uses a fresh build tree, records each entry incrementally in
+`target/r4-loader-5/loader-mutations-final.log`, and removes its scratch and build
+trees afterward. It does not replace the missing exhaustive branch inventory
+or the full 2,292-entry custody campaign, which has not been run for loader-5.
+
+The standalone probe remains at `target/r4-loader-5/custody-load`; its SHA-256
+matches both committed timing and storage-audit records. The verification build
+tree and disposable test scratch are removed after summarizing, preserving the
+synthetic books, audit JSON/JSONL and verification logs. No background job remains
+at handoff.
+
 ## Remaining acceptance work
 
-1. Finish named mutation kills and an explicit map for every loader branch;
-   90 entries are still a partial catalogue. Repeat the full 2,292-entry custody
-   mutation campaign after all remaining behavior changes.
-2. Finish lossless legacy `SqlValue` storage and exact refusal order/family/
-   message, including BLOB, nonfinite REAL, invalid UTF-8 and unusual SQLite
-   storage/config/descriptor scalars across every read column, unused or
-   overwritten fields, and competing invalid rows. Existing early
-   adapter refusals do not establish Python fidelity. The physical safe-row
-   omission and the ordinary label discrepancies above are fixed; the column
-   storage audit is an executable inventory of remaining gaps.
+1. Finish lossless legacy `SqlValue` storage and product-boundary refusal
+   code/message parity, including BLOB, nonfinite REAL and numeric revision
+   identities, ignored/overwritten fields and competing invalid rows. Match
+   Python-accepted values' downstream outcomes; document a Python reference bug
+   with a repro only when unsafe output is demonstrated. The expanded audit
+   remains an executable inventory of open gaps, not an acceptance result.
+2. Finish an explicit branch-to-named-mutation map; 102 applicable entries are
+   still a partial catalogue. Run the full 2,292-entry custody campaign after
+   behavior is settled, in resumable shards with incremental per-entry logs and
+   fresh build trees, deleting each shard's build tree after summarizing.
 3. Complete the remaining parity/review gates after the lossless boundary and
-   exhaustive mutations are implemented. The inherited generated/replay and
-   census/shadow counts above remain historical evidence until rerun.
+   exhaustive mutations are implemented: 24,000 generated books plus 1,030
+   permutations, the 159 retained replays under
+   `/home/tg/.cache/kassiber-verify/custody-recordings/`, and the census/shadow
+   gates. Those inherited counts remain historical evidence until rerun.
+   Finalize acceptance and update plan 21/TODO only after these gates pass.
 
 ## R4-13 integration contract
 
