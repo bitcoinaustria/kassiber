@@ -41,3 +41,19 @@ def test_long_identifier_redaction_is_linear(separator):
     start = time.perf_counter()
     subprocess.run([sys.executable, '-c', script], input=text, text=True, check=True, timeout=0.8)
     assert time.perf_counter() - start < 0.8
+
+
+def test_adversarial_secret_shapes_keep_a_bounded_deadline():
+    import subprocess
+    import sys
+
+    recipes = Path(__file__).parent / 'fixtures/secret_redaction_stress_cases.json'
+    script = """
+import json, sys
+from kassiber.redaction import redact_secret_text
+for case in json.load(sys.stdin):
+    text = case['prefix'] + (case['repeat'] * (40000 // len(case['repeat']) + 1)) + case['suffix']
+    redact_secret_text(text)
+"""
+    subprocess.run([sys.executable, '-c', script], input=recipes.read_text(),
+                   text=True, check=True, timeout=2)

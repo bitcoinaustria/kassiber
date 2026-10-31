@@ -71,11 +71,20 @@ _ASSIGNED_SECRET_RE = re.compile(
     rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE}{_AMBIGUOUS_QUOTED_TAIL})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
     re.IGNORECASE,
 )
-_ESCAPED_ASSIGNED_SECRET_RE = re.compile(
-    rf'(?<![A-Za-z0-9_.-])(?P<key>\\"{_SECRET_KEY_NAME}\b\\")(?P<sep>\s*[:=]\s*)'
-    r'(?:(?P<quoted>\\"(?:\\\\\\\\|\\\\\\"|\\\\[^\\]|[^\\]|\\(?!["\\]))*\\")|(?P<unterminated>\\"[^\r\n]*))',
-    re.IGNORECASE,
-)
+
+def _escaped_secret_pattern(depth: int) -> re.Pattern[str]:
+    quote = re.escape("\\" * (2 ** depth - 1) + '"')
+    unit = re.escape("\\" * (2 ** depth))
+    content = rf'(?:{unit}{unit}|{unit}{quote}|{unit}[^\\]|[^\\]|\\(?!["\\]))*'
+    return re.compile(
+        rf'(?<![A-Za-z0-9_.-])(?P<key>{quote}{_SECRET_KEY_NAME}\b{quote})(?P<sep>\s*[:=]\s*)'
+        rf'(?:(?P<quoted>{quote}{content}{quote})|(?P<unterminated>{quote}[^\r\n]*))',
+        re.IGNORECASE,
+    )
+
+
+# Fixed passes, deepest first: ordinary JSON plus two enclosing string layers.
+_ESCAPED_ASSIGNED_SECRET_RES = [(depth, _escaped_secret_pattern(depth)) for depth in (2, 1)]
 
 _RECOVERY_ASSIGNMENT_RE = re.compile(
     r"(?<![A-Za-z0-9_.-])(?P<key>(?:[A-Za-z0-9]*[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
@@ -219,9 +228,12 @@ def is_sensitive_key(key: str) -> bool:
 def redact_secret_text(value: str) -> str:
     """Redact secret-shaped material from text that may cross a trust boundary."""
 
-    text = _ESCAPED_ASSIGNED_SECRET_RE.sub(
-        lambda m: f"{m['key']}{m['sep']}" + '\\"[redacted]' + ('\\"' if m['quoted'] else ''), value,
-    )
+    text = value
+    for depth, pattern in _ESCAPED_ASSIGNED_SECRET_RES:
+        quote = "\\" * (2 ** depth - 1) + '"'
+        text = pattern.sub(
+            lambda m: f"{m['key']}{m['sep']}{quote}[redacted]" + (quote if m['quoted'] else ''), text,
+        )
     text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>[redacted]", text)
     text = _URL_CREDENTIALS_RE.sub(r"\1[redacted-credentials]@", text)
     text = _AUTHORIZATION_RE.sub(r"\1[redacted]", text)
