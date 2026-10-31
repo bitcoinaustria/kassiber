@@ -1,10 +1,12 @@
 # R4 journal pipeline design
 
-**Status:** R4-0 integrated, 2026-10-30; the R4-1 bench harness is committed
-and records the baseline; R4-2 onward remains design. The
-[Storage-format speedups](#storage-format-speedups) are designed for Python first, with R4-12 mirroring them.
-[R6 integration audit](rust-backend-r6-integration.md) records the linear restack
-and its verification. This document plans stage R4 of
+**Status:** R4-0 round 4 integrated, 2026-10-31; the R4-1 bench harness is
+committed and its accepted baseline remains open. The R4-11 renderer has a
+[partial checkpoint](r4-journal-render-checkpoint.md); production acceptance
+remains open. [Storage-format speedups](#storage-format-speedups) run Python
+first; compact calculations are implemented with the Rust schema mirror.
+The [R7 integration audit](rust-backend-r7-integration.md) records the linear
+restack and its verification. This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
 [custody engine](custody-engine.md) (R2, including the R2g fusion boundary and
@@ -459,9 +461,9 @@ The lines map the profile onto the pipeline. Python's paths are under
 | Persistence | `store` | — |
 | JSON parse and admission | — | `parse`, `admission` (the R4-2 target) |
 
-Records of the synthetic books are committed in
-[`r4-bench-records.jsonl`](r4-bench-records.jsonl); evidence of each run
-stays with the step's local verification.
+Accepted baseline records will be committed as `r4-bench-records.jsonl`;
+no accepted record is checked in yet. Evidence of each run stays with the
+step's local verification.
 
 ## Authority switch (R4-16)
 

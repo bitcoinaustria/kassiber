@@ -320,13 +320,17 @@ The [R4 journal pipeline design](docs/reference/r4-journal-pipeline.md) holds
 the measured phase profile, the typed architecture, the performance budget
 and the owner decisions it needs.
 
-- [ ] Get the owner's decisions on the design's six open questions.
+- [ ] Get the owner's remaining decisions on book-open cost and the allocator;
+  decisions 1–4 are recorded in the design.
 - [x] R4-0: integrate custody, projection fixes, performance, fusion and the
   service/reference fixes on the R5 stack; see the
   [R6 integration audit](docs/reference/rust-backend-r6-integration.md) for the
-  linear replay and completed custody, parity and mutation gates.
+  linear replay and completed custody, parity and mutation gates. Round 4 adds
+  the R5/R4 continuations in the
+  [R7 integration audit](docs/reference/rust-backend-r7-integration.md).
 - [ ] R4-1: commit the Rust end-to-end bench, bench-book generators and the
-  regression record; record the baseline.
+  regression record; record the baseline. The harness, generators and record
+  format are integrated; the accepted baseline remains to be recorded.
 - [ ] R4-2 to R4-8: typed rows, custody stages and fusion, one step per run,
   each with the full mutation catalog rerun and before/after timings.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,

@@ -2053,10 +2053,10 @@ and the parse and serialization alone cost Rust 0.8–0.9 s and Python 1.9–2.2
 20,000. SQLite's own write floor (1.25–1.7 s plaintext, about 3 s SQLCipher at
 20,000) caps end-to-end gains under byte parity. The design therefore targets
 10× for custody and at least 4× end to end, guarded by deterministic counters
-and a ratio gate in CI and a local 20,000-transaction gate. Its open owner
-decisions cover an early PyO3 production path, the targets and a tax-engine
-performance slice, automatic pairing, persisted-shape changes beyond parity,
-the book-open cost and the allocator.
+and a ratio gate in CI and a local 20,000-transaction gate. The owner decisions
+on production routing, performance targets, automatic pairing and persisted
+shapes are recorded in the design. Book-open cost and allocator decisions
+remain open.
 
 ### R4-0 integrated stack
 
@@ -2064,8 +2064,13 @@ The local `t3code/rust-backend-r6` stack integrates the R2 custody, projection
 review, performance and fusion lines with R5 reads, diagnostics and the shipped
 Python corrections. The [integration audit](../reference/rust-backend-r6-integration.md)
 records the linear picks, skips, conflict resolutions, custody campaigns,
-hybrid parity and full mutation rerun. R4-0 is complete; R4-1 onward and the
-production journal authority switch remain planned.
+hybrid parity and full mutation rerun. The round-4 local
+`t3code/rust-backend-r7` stack adds the transaction page index, shipped Python
+fixes, transfers/review, pairing library, report exports, sync/importer
+checkpoints, owner decisions, bench harness, rendering and compact storage.
+Its [integration audit](../reference/rust-backend-r7-integration.md) records
+the ordered replay and verification. R4-0 is complete; the remaining R4
+acceptance gates and production journal authority switch stay open.
 
 ### R5 transfers/review stored-read checkpoint
 
