@@ -57,7 +57,7 @@ pub fn load_schema(c: &Connection, dump: &Value, schema: &Value) {
     let objects = schema
         .as_array()
         .unwrap_or_else(|| manifest["objects"].as_array().unwrap());
-    c.execute_batch("PRAGMA foreign_keys=OFF;BEGIN").unwrap();
+    c.execute_batch("PRAGMA foreign_keys=OFF;PRAGMA ignore_check_constraints=ON;BEGIN").unwrap();
     for o in objects.iter().filter(|o| o[0] == "table") {
         c.execute_batch(o[3].as_str().unwrap()).unwrap();
     }
@@ -86,7 +86,8 @@ pub fn load_schema(c: &Connection, dump: &Value, schema: &Value) {
             }
         }
     }
-    c.execute_batch("COMMIT;PRAGMA foreign_keys=ON").unwrap();
+    c.execute_batch("COMMIT;PRAGMA foreign_keys=ON;PRAGMA ignore_check_constraints=OFF")
+        .unwrap();
 }
 pub fn snapshot(c: &Connection) -> Value {
     let tables: Vec<(String, String)> = c

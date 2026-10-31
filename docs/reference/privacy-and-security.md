@@ -881,6 +881,17 @@ These local parity fixtures can contain private book facts and must stay in a
 disposable worktree data root. Nothing is redacted for parity; they are not
 diagnostic exports or AI projections. The checked-in corpus is synthetic.
 
+The explicit pytest plugin `tests.rust_port.journal_prebuild_recorder` likewise
+copies the complete current schema and logical database, including pending
+caller writes, through a guarded native child pipe. With `--prebuild-binary`
+and `--prebuild-recordings`, it also stores complete local parity operands in
+mode-0600 files in the requested disposable worktree `target/` directory.
+Existing recording paths are refused.
+Those files can include private wallet/provider configuration and must remain
+ephemeral; they are neither product logs nor redacted diagnostics. Only synthetic
+scenario operands are checked in. The plugin is never installed by the product,
+daemon or AI, and grants no network consent.
+
 The experimental R4-9 test-only `KASSIBER_TEST_CUSTODY_LOADER_BIN` hook adds a
 native snapshot byte comparison to custody census/shadow runs when explicitly
 set. It sends a complete `iterdump` of the caller's current connection through

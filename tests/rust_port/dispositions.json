@@ -1342,6 +1342,10 @@
     "tests/test_integration_harness_safety.py": {
       "IntegrationHarnessSafetyTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 8}
     },
+    "tests/test_journal_prebuild_campaign.py": {
+      "test_prebuild_recorder_preserves_pending_caller_writes": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "retains complete scenario-vector regeneration from unchanged Python and the rollback-only recorder transaction contract for native whole-stage comparison", "reviewed": true, "tests": 1},
+      "test_prebuild_campaign_scenario_vectors_reproduce": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "retains complete scenario-vector regeneration from unchanged Python and the rollback-only recorder transaction contract for native whole-stage comparison", "reviewed": true, "tests": 1}
+    },
     "tests/test_journal_storage_format.py": {
       "test_realized_entries_store_compact_calculations_that_restore_legacy_bytes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
       "test_explanations_and_event_reads_are_identical_for_compact_and_legacy_rows": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},

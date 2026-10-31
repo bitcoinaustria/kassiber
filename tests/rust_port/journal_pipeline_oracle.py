@@ -7,6 +7,8 @@ from dataclasses import asdict, replace
 import json
 import sqlite3
 import uuid
+import itertools
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from kassiber.cli import handlers
@@ -35,19 +37,21 @@ def restore(conn, before):
     conn.commit()
 
 
-def capture(conn, name, profile_id):
-    conn.commit()
+def capture(conn, name, profile_id, *, pending=False):
+    if not pending:
+        conn.commit()
     before = dump(conn)
     profile = dict(conn.execute("SELECT * FROM profiles WHERE id=?", (profile_id,)).fetchone())
     initial_profile = profile
-    conn.execute("BEGIN IMMEDIATE")
+    if not pending:
+        conn.execute("BEGIN IMMEDIATE")
     conn.execute("SAVEPOINT pipeline_oracle")
     ticks = []
     def clock():
-        now = f"2026-10-31T12:00:{len(ticks):02}Z"
+        now = (datetime(2026, 10, 31, 12, tzinfo=timezone.utc) + timedelta(seconds=len(ticks))).isoformat().replace('+00:00', 'Z')
         ticks.append(now)
         return now
-    ids = iter(uuid.UUID(int=i) for i in range(1, 1000))
+    ids = (uuid.UUID(int=i) for i in itertools.count(1))
     result = error = wire_fields = None
     durable_ids = []
     def read_ids():
@@ -85,9 +89,11 @@ def capture(conn, name, profile_id):
             error = refusal(exc)
             read_ids()
             conn.execute("ROLLBACK TO pipeline_oracle")
-    conn.execute("RELEASE pipeline_oracle")
     expected = dump(conn)
-    conn.rollback()
+    conn.execute("ROLLBACK TO pipeline_oracle")
+    conn.execute("RELEASE pipeline_oracle")
+    if not pending:
+        conn.rollback()
     return dict(name=name, before=before, expected=expected, result=result, error=error,
                 profile=initial_profile, ids=durable_ids, ticks=ticks, wire_fields=wire_fields)
 

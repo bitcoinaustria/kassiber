@@ -9,6 +9,7 @@ use kassiber_journals::prebuild::{
 use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 
 #[cfg(unix)]
@@ -25,7 +26,7 @@ fn cpu() -> f64 {
     0.0
 }
 
-fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
+fn open(v: &Value) -> Result<Connection, Box<dyn std::error::Error>> {
     let conn = match v["database"].as_str() {
         Some(path) => Connection::open(path)?,
         None => Connection::open_in_memory()?,
@@ -33,8 +34,50 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     if let Some(passphrase) = v["passphrase"].as_str() {
         conn.pragma_update(None, "key", passphrase)?;
     }
+    Ok(conn)
+}
+
+fn clear(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    conn.pragma_update(None, "foreign_keys", "OFF")?;
+    conn.pragma_update(None, "synchronous", "OFF")?;
+    conn.execute_batch("BEGIN")?;
+    for kind in ["trigger", "view", "table"] {
+        let names = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type=? AND sql IS NOT NULL")?
+            .query_map([kind], |r| r.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        for name in names {
+            conn.execute_batch(&format!("DROP {kind} \"{}\"", name.replace('"', "\"\"")))?;
+        }
+    }
+    conn.execute_batch("COMMIT")?;
+    conn.pragma_update(None, "synchronous", "FULL")?;
+    Ok(())
+}
+
+fn run(
+    v: &Value,
+    connections: &mut BTreeMap<(String, String), Connection>,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let reuse = v["reuse"].as_bool().unwrap_or(false);
+    let private = if reuse { None } else { Some(open(v)?) };
+    let conn = if let Some(conn) = private.as_ref() {
+        conn
+    } else {
+        let key = (v["database"].to_string(), v["passphrase"].to_string());
+        match connections.entry(key) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::btree_map::Entry::Vacant(entry) => entry.insert(open(v)?),
+        }
+    };
     if !v["before"].is_null() {
-        support::load(&conn, &v["before"]);
+        conn.pragma_update(None, "synchronous", "OFF")?;
+        if !v["schema"].is_null() {
+            support::load_schema(conn, &v["before"], &v["schema"]);
+        } else {
+            support::load(conn, &v["before"]);
+        }
+        conn.pragma_update(None, "synchronous", "FULL")?;
     }
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let before = cpu();
@@ -61,14 +104,14 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     let mut projection_wire = Value::Null;
     let result = if v["stage"] == "sources" {
         repair_journal_source_overlaps(
-            &conn,
+            conn,
             v["profile_id"].as_str().unwrap_or("pf"),
             &mut clock,
             &mut identity,
         )
         .and_then(|repair| {
             let warning = source_overlap_warning(
-                &conn,
+                conn,
                 v["profile_id"].as_str().unwrap_or("pf"),
                 repair.as_ref(),
             )?;
@@ -81,7 +124,7 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
             Ok(json!({"repair":repair,"warning":warning}))
         })
     } else if v["stage"] == "pipeline" {
-        prepare_journals(&conn, &v["profile"], Context::new(32, Rounding::HalfEven), &mut clock, &mut identity).and_then(|p| {
+        prepare_journals(conn, &v["profile"], Context::new(32, Rounding::HalfEven), &mut clock, &mut identity).and_then(|p| {
             projection_wire = json!(kassiber_pyjson::dumps(&p.repaired.result_fields()?, &kassiber_pyjson::Options::new())
                 .map_err(|e| kassiber_journals::Refusal::from(e.to_string()))?);
             let r = p.repaired;
@@ -90,12 +133,12 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
                 "profile":r.profile,"auto_priced":p.auto_priced}))
         })
     } else if v["stage"] == "legacy" {
-        refresh_drifted_legacy_pair_components(&conn, &v["profile"], &mut clock).map(|result| {
+        refresh_drifted_legacy_pair_components(conn, &v["profile"], &mut clock).map(|result| {
             json!({"consolidation":{"activated":result.consolidation.activated,"unchanged":result.consolidation.unchanged,"skipped":result.consolidation.skipped},"profile":result.profile})
         })
     } else {
         auto_price_transactions_from_rates_cache(
-            &conn,
+            conn,
             &PricingScope {
                 profile_id: v["profile_id"].as_str().unwrap_or("p"),
                 fiat_currency: v["fiat_currency"].as_str().unwrap_or("EUR"),
@@ -106,6 +149,10 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     };
     let wall_seconds = start.elapsed().as_secs_f64();
     let cpu_seconds = cpu() - before;
+    if v["stage"] == "pipeline" {
+        assert!(ids.next().is_none(), "unused source audit identity");
+        assert!(ticks.next().is_none(), "unused pre-build clock tick");
+    }
     let (count, error) = match result {
         Ok(count) => (Some(count), Value::Null),
         Err(error) => (None, serde_json::to_value(error)?),
@@ -114,25 +161,29 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
         Value::Null
     } else {
         Value::Bool(support::logical_equal(
-            &support::snapshot(&conn),
+            &support::snapshot(conn),
             &v["expected"],
         ))
     };
     let dump = v["dump"]
         .as_bool()
         .unwrap_or(false)
-        .then(|| support::snapshot(&conn));
+        .then(|| support::snapshot(conn));
     conn.execute_batch("ROLLBACK")?;
+    if reuse {
+        clear(conn)?;
+    }
     Ok(
         json!({"name":v["name"],"count":count,"result":count,"projection_wire":projection_wire,"error":error,"verified":verified,"dump":dump,"cpu_seconds":cpu_seconds,"wall_seconds":wall_seconds}),
     )
 }
 
 fn main() {
+    let mut connections = BTreeMap::new();
     for line in io::stdin().lock().lines() {
         let result = (|| {
             let v: Value = serde_json::from_str(&line?)?;
-            run(&v)
+            run(&v, &mut connections)
         })();
         match result {
             Ok(reply) => println!("{reply}"),

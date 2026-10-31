@@ -33,7 +33,15 @@ fn projection(p: &Prepared) -> Value {
 
 #[test]
 fn prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields() {
-    let v = vectors();
+    check_pipeline(vectors());
+}
+
+#[test]
+fn prebuild_campaign_matches_stored_generator_scenarios() {
+    check_pipeline(serde_json::from_str(include_str!("data/prebuild-campaign.json")).unwrap());
+}
+
+fn check_pipeline(v: Value) {
     for case in v["cases"].as_array().unwrap() {
         let c = Connection::open_in_memory().unwrap();
         let before = expand(&v, case, "before");

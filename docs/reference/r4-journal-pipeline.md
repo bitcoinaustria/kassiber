@@ -488,6 +488,8 @@ these bounded decimal and timestamp fixtures; complete the inherited census,
 shadow, frozen-vector and whole-catalog mutation gates. The pricing-only
 fixtures and bounded mutation catalog do not establish those broader gates or
 the complete pre-build CPU target. No production route calls this checkpoint.
+The later [scenario replay checkpoint](#r4-10-scenario-replay-checkpoint)
+adds bounded whole-stage coverage without closing those acceptance gates.
 
 ### R4-10 source-overlap checkpoint
 
@@ -674,6 +676,62 @@ coverage campaign. The required classifier refresh leaves no inventory delta,
 and all **57 Python preflight checks** pass before this checkpoint commit.
 [Checkpoint evidence](r4-prebuild-pipeline-results.json)
 records this scope.
+
+### R4-10 scenario replay checkpoint
+
+The whole-stage corpus now includes **505 stored database scenarios** drawn
+from all twelve custody generators, with one frozen operand per representable
+scenario. Python regenerates every before/after table, rowid, scalar, result,
+refusal and serialized optional result field. The native test replays the same
+operands, checks callback consumption, and retains the existing caller rollback
+checks. These are scenario representatives, not the 24,000-book campaign.
+
+`tests.rust_port.journal_prebuild_campaign` explicitly adapts snapshot columns
+to database operands. It omits snapshot-only joins, ownership indexes and receipt
+projections; it creates no inventory or legacy pair links from them. It adds
+synthetic stored cache rates and required scope/identity metadata, and records
+omitted columns plus label/fingerprint adjustments. Legacy malformed CHECK
+values can be loaded with checks temporarily disabled during fixture creation;
+checks are enabled again before pre-build. Ten scenarios cannot be stored
+because of uniqueness or required-field constraints. Their named schema refusals
+are frozen separately and do not count as native pre-build comparisons. This
+adapter does not prove an exact custody snapshot round trip or new source/legacy
+activity; the activity matrix reports those distinctions.
+
+All **1,010 complete-dump file comparisons** pass: these 505 operands on both
+plaintext SQLite and SQLCipher files, under the native socket syscall guard.
+The probe reuses a connection per driver to avoid repeated key derivation,
+recreates each fixture, restores FULL synchronization before the stage, and
+rolls back the tested stage. Fixture setup and cleanup have no durability claim.
+The existing separate-stage fresh-open evidence remains separate.
+
+`scripts/check-journal-prebuild-campaign.py` supports the exhaustive generated
+campaign, frozen operands and complete full-book recordings. `--files` selects
+both real file drivers; without it comparisons use the native driver in memory.
+Completed summaries are explicitly marked complete; an interrupted run cannot
+supply acceptance evidence. The all-file and all-seed generated campaigns were
+interrupted at this checkpoint and are **not passed gates**.
+
+The opt-in pytest plugin `tests.rust_port.journal_prebuild_recorder` captures the
+whole ordered stage before the original source repair runs. It copies the actual
+schema and every stored row, including pending caller writes, to the guarded
+native probe. Its oracle uses a rollback-only savepoint, leaves the caller's
+transaction open, and never commits pending work. Recordings require an explicit
+disposable directory below this checkout's `target/`; each file is private.
+Comparison failures also fail the pytest session if a tested handler catches the
+assertion. This is local verification tooling with no product or AI route.
+
+The [coverage record](r4-prebuild-campaign-results.json) gives the measured
+scope and per-scenario activity. R4-10 remains unaccepted: exhaustive generated
+and historical recorded replay, broader legacy/refusal inputs, the complete
+branch mutation campaign, whole-stage 20k CPU profiling/cache optimization, and
+the final acceptance record remain open. The Python `L-BTC` omission and
+fractional-msat fingerprint truncation remain unchanged.
+
+The checkpoint passes all **62 journal Rust tests**, two Python corpus/transaction
+tests, release all-target Clippy with warnings denied, and Rust formatting.
+The final inventory update records the two Python oracle tests, and the required
+CI preflight passes **57 tests**.
 
 ## Performance budget
 

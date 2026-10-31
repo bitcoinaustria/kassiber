@@ -425,6 +425,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   with profile reload have unregistered native interfaces and complete-dump
   oracles. The combined stage and split repair/price interface for R4-13 retain
   whole-pipeline rollback after later build/persistence failures.
+  The [scenario replay checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-scenario-replay-checkpoint)
+  freezes 505 stored scenarios from the twelve generators and passes 1,010
+  plaintext/SQLCipher file comparisons; ten schema refusals are tracked
+  separately. The exhaustive generated campaign is still incomplete.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;
