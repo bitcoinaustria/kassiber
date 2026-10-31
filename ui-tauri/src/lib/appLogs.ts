@@ -156,8 +156,8 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     "[redacted-silent-payment-address]",
   ],
   [
-    /\b(wpkh|sh|wsh|tr|pkh|combo|sp)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
-    (match) => maskDescriptor(match),
+    /\b(wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,400}\)/gi,
+    "[redacted-descriptor]",
   ],
   [/\b(Authorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)/gi, "$1[redacted]"],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
