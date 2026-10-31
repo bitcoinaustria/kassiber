@@ -8999,5 +8999,55 @@
       "source_funds_stored_reads_pin_editor_disclosure_scope_order_and_pagination"
     ],
     "rule": "Python int conversion discards the negative sign when a stored fractional amount truncates to zero."
+  },
+  {
+    "id": "sof-debug-presence",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kassiber_envelope::set(&mut fields, \"debug\", s(\"\"));",
+    "replace": "kassiber_envelope::set(&mut fields, \"debug\", Value::Null);",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "Unhandled source-funds errors include an honest empty native debug string instead of a missing traceback field."
+  },
+  {
+    "id": "sof-debug-internal-only",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if error.code == \"internal_error\"",
+    "replace": "if true",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "Typed source-funds refusals keep null debug while uncaught reference failures include native debug."
+  },
+  {
+    "id": "sof-debug-family-boundary",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
+    "replace": "kind.starts_with(\"ui.\") && reports::KINDS.contains(&kind)",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "The source-funds diagnostic contract does not alter unrelated report kinds."
+  },
+  {
+    "id": "sof-debug-registered-only",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "kind.starts_with(\"ui.source_funds.\") && reports::KINDS.contains(&kind)",
+    "replace": "kind.starts_with(\"ui.source_funds.\")",
+    "expect_failing": [
+      "source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction"
+    ],
+    "rule": "Only admitted native source-funds routes receive the native internal-failure diagnostic contract."
+  },
+  {
+    "id": "sof-debug-normalization-scope",
+    "file": "tests/test_rust_source_funds_reads.py",
+    "find": "return line.replace(field, b'\"debug\":\"<native-stack>\"', 1)",
+    "replace": "return json.dumps({**envelope, \"error\": {**envelope[\"error\"], \"message\": \"<native-message>\", \"debug\": \"<native-stack>\"}}, separators=(\",\", \":\")).encode()",
+    "expect_failing": [
+      "tests/test_rust_source_funds_reads.py::test_source_funds_internal_debug_normalization_preserves_other_wire_bytes"
+    ],
+    "rule": "The approved native-stack difference permits normalization of error.debug only; message changes remain byte differences."
   }
 ]

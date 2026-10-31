@@ -1253,15 +1253,24 @@ listing kinds alongside the existing 15 report and two transaction export
 kinds. PDF and PDF-containing bundle routes remain Python by owner decision.
 There are no source-funds workbook exports in this stored-list boundary.
 
-This is not completion of the read family. Python's internal-error traceback
-diagnostics still differ from the Rust shell and block full wire acceptance;
-the checkpoint records the exact limitation rather than normalizing it away.
-The ordered remainder is report traversal/disclosure, review-context/request-input,
-coverage and suggest/assemble
-dry runs; case saving; source mutations; link mutations including batch review
-and persisted suggest/assemble; then recipient mutations. Each family requires
-its own verified commit. Mutation families must retain consent, once-only
-execution and SQLite/SQLCipher rollback.
+This is not completion of the read family. The diagnostic continuation on
+`t3code/r5-sof-reads` preserves the approved native-stack contract: uncaught
+source-funds daemon failures carry an empty native `error.debug` string, typed
+refusals retain null, and Rust invents no Python frames or stderr traceback.
+The two former strict-xfail witnesses now compare every non-debug response byte,
+pin debug presence and reference redaction, and verify all 112 tables and native
+routing. Only the debug value and Python-only stderr traceback differ.
+The diagnostic continuation passes 239 parity tests, including 148 native CLI
+calls and 214 source-funds requests across six native daemon sessions with
+zero fallbacks. Five new diagnostic mutations are killed by named tests;
+the 24 stored-list mutations retain their prior evidence. See the
+[diagnostic checkpoint](../reference/rust-shell.md#source-funds-native-diagnostic-checkpoint-r5-partial).
+The read continuation owns report traversal/disclosure and diagrams,
+review-context/request-input, coverage and suggest/assemble dry runs, in that
+order. The parallel `t3code/r5-sof-mutations` worker owns case saving, source
+mutations, link mutations including batch review and persisted suggest/assemble,
+and recipient mutations. Each family requires its own verified commit. Mutation
+families must retain consent, once-only execution and SQLite/SQLCipher rollback.
 The Lightning and year-handoff/platform/privacy workers retain their separate
 ownership. The [stored-list checkpoint](../reference/rust-shell.md#source-funds-stored-list-checkpoint-r5-partial)
 records the verification and preserved Python quirks. Python product code,

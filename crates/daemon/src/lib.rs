@@ -267,20 +267,30 @@ pub fn error_envelope(
     )
 }
 
-fn app_error_envelope(error: &AppError, request_id: &RequestId) -> Value {
+fn app_error_envelope(error: &AppError, request_id: &RequestId, kind: Option<&str>) -> Value {
     let code = if error.code.is_empty() {
         "app_error"
     } else {
         &error.code
     };
-    error_envelope(
+    let mut envelope = error_envelope(
         code,
         &error.message,
         request_id,
         error.details.as_ref(),
         error.hint.as_deref(),
         error.retryable,
-    )
+    );
+    if error.code == "internal_error"
+        && kind.is_some_and(|kind| {
+            kind.starts_with("ui.source_funds.") && reports::KINDS.contains(&kind)
+        })
+    {
+        let mut fields = get(&envelope, "error").unwrap().clone();
+        kassiber_envelope::set(&mut fields, "debug", s(""));
+        kassiber_envelope::set(&mut envelope, "error", fields);
+    }
+    envelope
 }
 
 /// `_locked_envelope(scope, label, request_id)`.
@@ -466,7 +476,14 @@ impl Daemon {
                 Ok(Err(Failure::App(error))) => {
                     self.rollback();
                     (
-                        Some(app_error_envelope(&error, &RequestId::or_null(&request))),
+                        Some(app_error_envelope(
+                            &error,
+                            &RequestId::or_null(&request),
+                            get(&request, "kind").and_then(|kind| match kind {
+                                Value::Str(kind) => kind.as_str(),
+                                _ => None,
+                            }),
+                        )),
                         false,
                     )
                 }

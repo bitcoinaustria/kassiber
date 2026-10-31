@@ -457,14 +457,19 @@ registers them; exit-tax preserves its reference no-registration boundary.
   desktop evidence listing, preserving full editor metadata, frozen case
   recipient fields and unchanged accounting state. This is a partial boundary;
   see the [stored-list checkpoint](docs/reference/rust-shell.md#source-funds-stored-list-checkpoint-r5-partial).
-- [ ] Match Python's source-funds internal-error traceback/debug diagnostics;
-  current service refusal codes/messages agree, but full process wire acceptance
-  remains blocked on this Rust shell gap.
+- [x] Accept source-funds internal-error diagnostics under plan 21's honest
+  native-stack contract: native debug strings are empty for uncaught failures
+  and null for typed refusals; both former xfail witnesses pass with every
+  non-debug response byte, all 112 tables and native routing checked. The
+  [diagnostic checkpoint](docs/reference/rust-shell.md#source-funds-native-diagnostic-checkpoint-r5-partial)
+  records 239 passing parity tests, zero fallbacks and five new mutation kills.
 - [ ] Finish source-funds report traversal/disclosure, review-context/request-input,
-  coverage and suggest/assemble dry runs, then case saving, source mutations,
-  link mutations/batch review (including persisted suggest/assemble) and recipient
-  mutations in separate verified commits. Preserve consent, once-only execution
-  and SQLite/SQLCipher rollback.
+  coverage and suggest/assemble dry runs in separate verified commits on
+  `t3code/r5-sof-reads`; include diagrams and non-PDF output with report traversal.
+- [ ] Port source-funds case saving, source mutations, link mutations/batch review
+  (including persisted suggest/assemble) and recipient mutations in separate
+  verified commits on `t3code/r5-sof-mutations`. Preserve consent, once-only
+  execution and SQLite/SQLCipher rollback.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

@@ -167,12 +167,39 @@ def test_source_funds_stored_daemon_bytes_all_tables_and_zero_fallbacks(tmp_path
     assert served == [dict(command='daemon', served_by='rust')]
 
 
-class _InternalErrorWireMismatch(Exception):
-    pass
+def native_debug_wire(line):
+    envelope = json.loads(line)
+    assert envelope['kind'] == 'error'
+    assert envelope['error']['code'] == 'internal_error'
+    debug = envelope['error']['debug']
+    assert isinstance(debug, str)
+    field = b'"debug":' + json.dumps(debug).encode()
+    assert line.count(field) == 1
+    return line.replace(field, b'"debug":"<native-stack>"', 1)
+
+
+def test_source_funds_internal_debug_normalization_preserves_other_wire_bytes():
+    envelope = dict(kind='error', schema_version=1, error=dict(
+        code='internal_error', message='planted', hint=None, details={'planted':True},
+        retryable=False, debug='stack'), request_id='cursor')
+    wire = lambda value: json.dumps(value, separators=(',', ':')).encode()
+    expected = native_debug_wire(wire(envelope))
+    for key in ['message', 'hint', 'details', 'retryable']:
+        changed = json.loads(wire(envelope))
+        changed['error'][key] = 'changed'
+        assert native_debug_wire(wire(changed)) != expected
+    for key in ['schema_version', 'request_id']:
+        changed = {**envelope, key:'changed'}
+        assert native_debug_wire(wire(changed)) != expected
+    for key, value in [('debug', None), ('code', 'validation')]:
+        changed = json.loads(wire(envelope))
+        changed['error'][key] = value
+        with pytest.raises(AssertionError):
+            native_debug_wire(wire(changed))
+    assert native_debug_wire(wire(envelope).replace(b',', b', ', 1)) != expected
 
 
 @pytest.mark.skipif(not RUST_BIN, reason='requires Rust test-harness binary')
-@pytest.mark.xfail(strict=True, raises=_InternalErrorWireMismatch, reason='unaccepted Rust shell gap: Python internal-error stderr traceback and error.debug are missing')
 @pytest.mark.parametrize('cursor', ['²', '0'*4301], ids=['nondecimal-digit', 'oversized-integer'])
 def test_source_funds_stored_internal_error_wire_parity(tmp_path, monkeypatch, cursor):
     root, _, env, call = book(tmp_path, monkeypatch, 'ready')
@@ -186,7 +213,16 @@ def test_source_funds_stored_internal_error_wire_parity(tmp_path, monkeypatch, c
     assert state(root) == before
     served = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
     assert served == [dict(command='daemon', served_by='rust')]
-    actual = (native.returncode, native.stderr, native.stdout.splitlines()[1:])
-    expected = (reference.returncode, reference.stderr, reference.stdout.splitlines()[1:])
-    if actual != expected:
-        raise _InternalErrorWireMismatch((actual, expected))
+    assert native.returncode == reference.returncode == 0
+    assert native.stderr == b''
+    assert reference.stderr.startswith(b'Traceback (most recent call last):\n')
+    assert b'ValueError:' in reference.stderr
+    actual = native.stdout.splitlines()[1:]
+    expected = reference.stdout.splitlines()[1:]
+    assert len(actual) == len(expected) == 2
+    assert json.loads(actual[0])['error']['debug'] == ''
+    from kassiber.log_ring import sanitize_traceback_text
+    assert json.loads(expected[0])['error']['debug'] == sanitize_traceback_text(reference.stderr.decode())
+    assert str(ROOT) not in json.loads(expected[0])['error']['debug']
+    assert native_debug_wire(actual[0]) == native_debug_wire(expected[0])
+    assert actual[1] == expected[1]

@@ -361,6 +361,45 @@ mod tests {
         }
     }
     #[test]
+    fn source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction() {
+        let id = crate::output::RequestId::Value(s("cursor"));
+        let error = AppError::new("internal_error", "invalid literal for int()");
+        for kind in KINDS
+            .iter()
+            .filter(|kind| kind.starts_with("ui.source_funds."))
+        {
+            let envelope = crate::app_error_envelope(&error, &id, Some(kind));
+            let fields = get(&envelope, "error").unwrap();
+            assert_eq!(get(fields, "debug"), Some(&s("")));
+            assert_eq!(get(fields, "code"), Some(&s("internal_error")));
+            assert_eq!(get(fields, "message"), Some(&s(error.message.as_str())));
+            assert_eq!(get(&envelope, "request_id"), Some(&s("cursor")));
+            let typed = AppError::new("validation", "cursor is invalid");
+            let envelope = crate::app_error_envelope(&typed, &id, Some(kind));
+            assert_eq!(
+                get(get(&envelope, "error").unwrap(), "debug"),
+                Some(&Value::Null)
+            );
+        }
+        for kind in [
+            None,
+            Some("ui.reports.summary"),
+            Some("ui.source_funds.unregistered"),
+        ] {
+            let envelope = crate::app_error_envelope(&error, &id, kind);
+            assert_eq!(
+                get(get(&envelope, "error").unwrap(), "debug"),
+                Some(&Value::Null)
+            );
+        }
+        let secret = AppError::new("internal_error", "Bearer planted-secret-value");
+        let envelope =
+            crate::app_error_envelope(&secret, &id, Some("ui.source_funds.evidence.list"));
+        assert!(!kassiber_pyjson::dumps(&envelope, &Default::default())
+            .unwrap()
+            .contains("planted-secret-value"));
+    }
+    #[test]
     fn source_funds_stored_daemon_preserves_arguments_and_registers_only_lists() {
         let args = dict([
             ("target_transaction", s(" external-in ")),

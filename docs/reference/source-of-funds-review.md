@@ -139,3 +139,7 @@ establish provenance, ownership or tax facts. Report traversal, review/input
 handoffs, coverage, suggest/assemble dry runs and all source-funds mutations
 remain pending in Rust. PDF rendering and PDF-containing bundles remain in
 Python by the owner's decision; their routes are not registered natively.
+
+Uncaught failures on the native source-funds daemon reads include an empty
+native debug string; typed refusals retain null. Python-only traceback frames
+and stderr are not fabricated. Non-debug response fields retain exact parity.

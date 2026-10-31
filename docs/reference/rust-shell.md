@@ -5798,9 +5798,10 @@ mise exec rust@1.99.1 uv@latest -- uv run --locked python \
   -m crates.reports.scripts.repro_python_source_funds_reads
 ```
 
-**Unaccepted diagnostic gap:** Python's uncaught internal exceptions emit a
-traceback on stderr and a redacted traceback in `error.debug`. The Rust shell
-currently returns the same error code/message without that Python traceback.
+**Diagnostic gap at this checkpoint (resolved by the continuation below):**
+Python's uncaught internal exceptions emit a traceback on stderr and a redacted
+traceback in `error.debug`. At this checkpoint the Rust shell returned the same
+error code/message without that Python traceback.
 The initial process campaign exposed this gap in all four daemon scenarios;
 those failures are retained in the local verification log. Internal refusals
 are compared as structured service outcomes in the 227-case frozen corpus,
@@ -5808,8 +5809,8 @@ while the process acceptance scenarios cover normal results and typed
 `AppError` refusals with literal bytes. No trace/debug normalization is used.
 Two strict-xfail process witnesses retain the nondecimal and oversized cursor
 reproductions in `test_source_funds_stored_internal_error_wire_parity`; they do
-not count as acceptance. Full source-funds wire acceptance remains blocked on
-this diagnostic gap.
+not count as acceptance at this historical checkpoint. The continuation below
+resolves the gap under the approved native diagnostic contract.
 
 The final process suite passes 236 tests, with those two diagnostic witnesses
 expected to fail. Their marker is limited to the final wire mismatch; setup,
@@ -5889,6 +5890,76 @@ SQLite/SQLCipher rollback verification. All these
 unported routes remain Python in the hybrid candidate; their fallback is not
 counted as acceptance. The Lightning and year-handoff/platform/privacy branches
 retain their separate ownership.
+
+## Source-funds native diagnostic checkpoint (R5 partial)
+
+`t3code/r5-sof-reads` starts at `a99fa77c8`. The owner clarified that the
+existing honest-native-stack contract governs the two internal-error witnesses.
+Python source paths and frames must never be invented. Registered source-funds
+daemon reads now return an empty native `error.debug` string for uncaught
+reference failures, while typed refusals keep null. Rust emits no fabricated
+Python stderr traceback. Error code, message, envelope shape, request identity
+and every other response byte retain parity.
+
+Both former strict-xfail cases are ordinary passing contract tests. Their only
+response normalization replaces the encoded `error.debug` value in the original
+compact JSON bytes. A separate test proves that message, hint, details,
+retryability, schema version, request identity and whitespace differences remain
+visible, and that null debug or a typed refusal cannot enter this normalization.
+The witnesses check Python's redacted debug against its stderr traceback and
+require Rust's debug and stderr to be empty. They still compare all 112 tables
+and require native daemon routing.
+
+The final locked Python 3.11.17 process suite passes all 239 tests, with no
+expected failures or skips. It compares all 227 frozen service cases, ten
+SQLCipher service calls, 148 CLI calls, 16 output files and 214 source-funds
+requests across six native daemon sessions, including the two diagnostic
+witnesses. Every comparison retains all 112 tables and there are zero
+in-scope fallbacks. Native CLI served-by counts are 28 source listings,
+64 link listings, 28 case listings and 28 recipient listings. Raw route logs,
+the six session counts and output-file hashes are retained in
+`target/r5-sof-reads/routing/` and `routing-summary.json`.
+
+All 760 catalog entries apply. The five appended diagnostic mutations pass
+their unmutated baselines and are killed by these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_internal_diagnostics_preserve_native_debug_presence_and_redaction` | 4 |
+| `test_source_funds_internal_debug_normalization_preserves_other_wire_bytes` | 1 |
+
+The 755 inherited entries retain their prior evidence and were not rerun.
+The isolated mutation source and build trees were removed, and the real probes
+were rebuilt after the campaign. Per-entry evidence is retained in
+`target/r5-sof-reads/mutation-summary.json`.
+
+Rust 1.99.1 offline/locked verification passes formatting, production and
+harness workspace/all-target clippy with `-D warnings`, 60 focused daemon/CLI
+tests and 14 guarded binary tests. A broader workspace test run was
+intentionally interrupted during slow inherited report tests; it is not
+accepted as a pass. The frozen generator verifies all 227 cases, and the
+unchanged Python reference repro passes all 11 assertions.
+
+The required classifier update records 5,715 definitions, and required CI
+preflight passes all 57 tests. `target/r5-sof-reads/verification-summary.json`
+records the gates, routing, named mutation kills and remaining boundaries.
+The initial failed process campaign and interrupted workspace campaign are
+retained separately and excluded from passing evidence. Verification preserves
+account `HOME`, uses eight Cargo jobs, isolates both Cargo output directories
+and all disposable roots under this worktree's `target/`, and removes owned
+build/data trees after summarizing. Logs and summaries remain. The full
+Python/frontend quality gate, Docker regtest and packaged/platform checks are
+not claimed.
+
+The service, CLI and daemon registrations remain at four source-funds CLI
+listings and five daemon reads, within the existing 157 native CLI leaves.
+There is no new acquisition, evidence-file access, journal refresh, provenance
+mutation, ownership inference or tax interpretation. Report traversal,
+disclosure, diagrams and non-PDF output remain the next verified boundary,
+followed by review-context/request-input, coverage and suggest/assemble dry runs.
+Case saving and source/link/recipient mutations belong to the parallel
+`t3code/r5-sof-mutations` worker. PDF rendering and PDF-containing bundles remain
+Python; their native routes stay unregistered.
 
 ## Not yet ported
 
