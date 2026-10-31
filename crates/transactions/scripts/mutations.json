@@ -1832,8 +1832,8 @@
   {
     "id": "document-exact-fiat",
     "file": "crates/transactions/src/documents.rs",
-    "find": "decimal(v)?\n        .to_fixed_string()",
-    "replace": "decimal(&s(\"0\"))?\n        .to_fixed_string()",
+    "find": "kassiber_pydecimal::finite_price(&py_str(v))",
+    "replace": "kassiber_pydecimal::finite_price(\"0\")",
     "expect_failing": [
       "document_registration_preserves_exact_values_refusals_scope_and_order"
     ],
