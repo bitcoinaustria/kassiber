@@ -68,7 +68,10 @@ anchor to that exact block (and the exact timestamp-supplying Electrum header).
 Checkpoints predating this bound rebuild once. An identical tip
 permits the existing counter/status cache checks. On a taller tip, the observer
 checks that the previously saved tip block still belongs to the current chain;
-Esplora also binds its new tip height to the observed hash. Proven extensions
+Esplora also binds its new tip height to the observed hash. When unchanged histories
+allow UTXO membership reuse, sync derives current confirmation counts from
+the proven height locally, scoped to that wallet/backend/chain/network. This
+does not refresh output observation timestamps or create network traffic. Proven extensions
 reuse unchanged history and confirmation timestamps on Bitcoin and Liquid.
 A changed, missing or invalid anchor (including legacy checkpoints without a
 height) refreshes histories and Electrum confirmation timestamps, so unchanged
