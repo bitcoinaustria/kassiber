@@ -9,7 +9,7 @@ authors.workspace = true
 publish.workspace = true
 
 [features]
-test-harness = []
+test-harness = ["dep:kassiber-journals", "kassiber-journals/test-harness"]
 
 [[example]]
 name = "review-cases"
@@ -20,6 +20,8 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-store = { path = "../store" }
+# Join the existing native assembler only in the unregistered review harness.
+kassiber-journals = { path = "../journals", optional = true }
 # Reuse the ported custody validator and exact decimal/JSON boundaries. UUIDv5
 # identities require SHA-1, supplied by the already locked Bitcoin hash library.
 kassiber-custody = { path = "../custody" }

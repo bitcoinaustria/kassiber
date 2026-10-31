@@ -1,5 +1,21 @@
 [
   {
+    "id": "RVC-native-live-connection",
+    "file": "crates/transfers/src/review_workflow.rs",
+    "find": "let prepared = Prepared::load(live, profile.clone(), as_of)?;",
+    "replace": "let clone = kassiber_journals::pipeline::memory_snapshot(live, || Ok(\"synthetic-mutation-key\".into()))?; let _ = clone.execute_batch(\"BEGIN\"); let prepared = Prepared::load(&clone, profile.clone(), as_of)?;",
+    "expect_failing": ["native_review_cases_build_on_the_live_connection_and_preserve_pending_caller_edits"],
+    "rule": "Case assembly reads the caller's live connection, including pending writer edits, without backup or transaction replacement."
+  },
+  {
+    "id": "RVC-native-refusal-fields",
+    "file": "crates/transfers/src/review_workflow.rs",
+    "find": "let prepared = Prepared::load(live, profile.clone(), as_of)?;",
+    "replace": "let prepared = Prepared::load(live, profile.clone(), as_of).map_err(|error| AppError::new(\"internal_error\", error.message.clone()))?;",
+    "expect_failing": ["native_review_cases_refuse_cursors_before_loading_and_preserve_build_refusals"],
+    "rule": "Assembler refusal families and attributes survive the case composition boundary intact."
+  },
+  {
     "id": "RVC-cursor-unicode",
     "file": "crates/transfers/src/review_cases.rs",
     "find": "fn decode(raw: &str) -> Option<Vec<u8>> {",

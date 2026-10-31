@@ -8831,6 +8831,46 @@ mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scrip
 mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/repro_pair_residual_fee.py
 ```
 
+### Live native review-case assembly (R5 transfers-12, partial)
+
+`t3code/r5-transfers-12` starts at `c7e16d1d7`. The unregistered
+`review_workflow::cases` now joins the reader directly to `Prepared::load` and
+`Prepared::review_state` on the reader's live connection and freshly resolved
+profile. Cursor refusals still precede loading. A typed composition error keeps
+the assembler's exception family, cause and every refusal attribute intact.
+The test feature links the existing internal journal crate; no external package,
+version, runtime requirement or production route is added.
+
+The case driver no longer accepts quarantine rows from Python or the separate
+native build driver. Every valid inspection rebuilds from that same connection.
+The independent build driver still compares all eighteen state fields. The
+fourteen synthetic books yield **56/56 complete builds and 2,850/2,850 live case
+results matching Python** in plaintext/SQLCipher and autocommit/caller-read/
+caller-writer modes. Comparisons retain all fields and numeric representations.
+Native witnesses additionally verify unchanged typed logical rows, `total_changes`
+and transaction ownership. A pending caller exclusion is visible to assembly and
+remains rollbackable; malformed cursors precede corrupt observation loading, and
+assembler failures preserve the caller's pending edits.
+
+Verification logs and the machine-readable comparison summary are under
+`target/r5-evidence/`. Reproduce with the previous checkpoint's pinned toolchain,
+offline Cargo, eight build jobs and scratch/build roots under `target/`, using
+the same build, case-comparison and case-test commands. The case mutation
+catalogue adds `RVC-native-live-connection` and `RVC-native-refusal-fields`.
+All 48 native transfer tests pass. Both new mutations are killed after their
+two unmutated witnesses pass; the inherited eleven kills are not rerun here.
+
+This closes live case-reader composition only. Operation normalization,
+artifacts/digests, policy effects, ordered planning/validation, writer-locked
+apply, historical idempotency, canonical journal persistence, filed impacts and
+receipts remain open. Full envelope/authorship parity, caller transaction/cache
+restoration, late-failure rollback, AI once-only consent and zero-fallback route
+witnesses still gate all six routes. Counts remain **26/29 CLI leaves and 25/28
+daemon kinds**. Both loader-9 and loader-blob refs still point at `c5966c1ff` at
+this checkpoint; their final acceptance records/fixes remain dependencies, with
+the inherited lossless/refusal barriers and explicit pending exceptions intact.
+The separate-fee pair-authoring Python repro remains unchanged.
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements

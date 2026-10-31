@@ -2,7 +2,7 @@
 use kassiber_envelope::{dict, get, py_str, s, AppError};
 use kassiber_pyjson::{dumps, Options, Value};
 use kassiber_store::rusqlite::{types::Value as SqlValue, Connection};
-use kassiber_transfers::{review_cases, Scope};
+use kassiber_transfers::{review_cases, review_workflow, Scope};
 use std::collections::BTreeMap;
 
 fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
@@ -147,6 +147,138 @@ fn assert_cases(encrypted: bool) {
         }
     }
     assert!(successes > 100 && refusals > 100 && pairs > 0);
+}
+
+fn native_cases(conn: &Connection, scenario: &Value, args: &Value) -> Value {
+    let build = field(scenario, "build");
+    let mut ids = list(field(build, "entry_ids")).iter();
+    let page = review_workflow::cases(
+        conn,
+        &Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        },
+        args,
+        &py_str(field(build, "as_of")),
+        || py_str(ids.next().expect("native entry identity tape")),
+    )
+    .unwrap();
+    assert!(
+        ids.next().is_none(),
+        "native build consumes the identity tape"
+    );
+    page
+}
+
+#[test]
+fn native_review_cases_build_on_the_live_connection_and_preserve_pending_caller_edits() {
+    let fixture = fixture();
+    for encrypted in [false, true] {
+        for scenario in list(field(&fixture, "scenarios")) {
+            let conn = seed(&fixture, scenario, encrypted);
+            let before = dump(&conn);
+            let changes = conn.total_changes();
+            let case = list(field(scenario, "cases"))
+                .iter()
+                .find(|case| get(case, "result").is_some())
+                .unwrap();
+            for transaction in [None, Some("BEGIN"), Some("BEGIN IMMEDIATE")] {
+                if let Some(transaction) = transaction {
+                    conn.execute_batch(transaction).unwrap();
+                }
+                assert_eq!(
+                    bytes(&native_cases(&conn, scenario, field(case, "args"))),
+                    bytes(field(case, "result")),
+                    "{:?}",
+                    field(scenario, "name")
+                );
+                assert_eq!(conn.is_autocommit(), transaction.is_none());
+                assert_eq!(conn.total_changes(), changes);
+                assert_eq!(dump(&conn), before);
+                if transaction.is_some() {
+                    conn.execute_batch("ROLLBACK").unwrap();
+                }
+            }
+        }
+        let scenario = &list(field(&fixture, "scenarios"))[0];
+        let conn = seed(&fixture, scenario, encrypted);
+        let original = dump(&conn);
+        conn.execute_batch(
+            "BEGIN IMMEDIATE; UPDATE transactions SET excluded=1,note='pending caller edit'",
+        )
+        .unwrap();
+        let pending = dump(&conn);
+        let changes = conn.total_changes();
+        let page = review_workflow::cases(
+            &conn,
+            &Scope {
+                workspace_id: "w",
+                profile_id: "p",
+            },
+            &dict::<&str>([]),
+            &py_str(field(field(scenario, "build"), "as_of")),
+            || panic!("excluded observations produce no entries"),
+        )
+        .unwrap();
+        assert!(list(field(&page, "cases")).is_empty());
+        assert!(!conn.is_autocommit());
+        assert_eq!(conn.total_changes(), changes);
+        assert_eq!(dump(&conn), pending);
+        conn.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(dump(&conn), original);
+    }
+}
+
+#[test]
+fn native_review_cases_refuse_cursors_before_loading_and_preserve_build_refusals() {
+    let fixture = fixture();
+    let scenario = &list(field(&fixture, "scenarios"))[0];
+    for encrypted in [false, true] {
+        let conn = seed(&fixture, scenario, encrypted);
+        conn.execute_batch(
+            "BEGIN IMMEDIATE; UPDATE transactions SET amount='invalid' WHERE id='a'",
+        )
+        .unwrap();
+        let before = dump(&conn);
+        let changes = conn.total_changes();
+        let scope = Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        };
+        let as_of = py_str(field(field(scenario, "build"), "as_of"));
+        let error =
+            review_workflow::cases(&conn, &scope, &dict([("cursor", s("bad"))]), &as_of, || {
+                panic!("invalid cursor cannot build")
+            })
+            .unwrap_err();
+        let review_workflow::Error::Service(error) = error else {
+            panic!("cursor validation must precede corrupt amount loading")
+        };
+        assert_eq!(error.code, "validation");
+        assert_eq!(error.message, "Review cursor is malformed");
+        let error = review_workflow::cases(&conn, &scope, &dict::<&str>([]), &as_of, || {
+            panic!("invalid amount cannot render")
+        })
+        .unwrap_err();
+        let review_workflow::Error::Build(error) = error else {
+            panic!("retain full assembler refusal")
+        };
+        let expected = kassiber_journals::pipeline::Prepared::load(
+            &conn,
+            field(field(scenario, "build"), "profile").clone(),
+            &as_of,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
+        assert!(!conn.is_autocommit());
+        assert_eq!(conn.total_changes(), changes);
+        assert_eq!(dump(&conn), before);
+        conn.execute_batch("ROLLBACK").unwrap();
+    }
 }
 
 #[test]

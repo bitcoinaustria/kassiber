@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compare complete native builds and all case pages on the same synthetic books.
+"""Compare complete native builds and live-connection native case inspection.
 
-The drivers remain separate test-only seams. This verifies their exact joined
-data, not a product route, live callback integration or workflow acceptance.
+No Python quarantines or native-build outputs are supplied to the case reader.
+The build driver independently pins every field of the complete journal state.
 """
 import argparse
 import json
@@ -10,6 +10,10 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def invoke(binary, requests):
@@ -34,18 +38,16 @@ def verify(build_binary, case_binary):
     expected = []
     for request, response in zip(builds, responses):
         assert response == request["expected"], (request["name"], response, request["expected"])
-        state = json.loads(response["state"])
-        # Pass the native builder's quarantines, with no fields masked.
         for transaction in (("read", "autocommit") if not request["writer"] else ("write",)):
             cases=request["scenario"]["cases"]
             requests.append(dict(sql=request["sql"], profile=request["profile"], cases=[case["args"] for case in cases],
                                  encrypted=request["encrypted"], transaction=transaction,
-                                 quarantines=state["quarantines"]))
-            expected.append([dict(output={key:value for key,value in case.items() if key in ("result","error")},
-                                  build_calls=case["build_calls"]) for case in cases])
+                                 as_of=request["as_of"], entry_ids=request["entry_ids"]))
+            expected.append([{key:value for key,value in case.items() if key in ("result","error")}
+                             for case in cases])
     responses = invoke(case_binary, requests)
     for index, (actual, wanted) in enumerate(zip(responses, expected)):
-        assert actual == wanted, (index, requests[index]["cases"], actual, wanted)
+        assert canonical(actual) == canonical(wanted), (index, requests[index]["cases"], actual, wanted)
     comparisons=sum(len(group) for group in expected)
     print(json.dumps(dict(builds=len(builds), case_comparisons=comparisons, matched=comparisons)))
 

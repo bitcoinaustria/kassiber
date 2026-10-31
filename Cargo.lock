@@ -1917,6 +1917,7 @@ dependencies = [
  "bitcoin_hashes",
  "kassiber-custody",
  "kassiber-envelope",
+ "kassiber-journals",
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",

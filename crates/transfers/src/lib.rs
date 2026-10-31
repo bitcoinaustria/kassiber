@@ -19,6 +19,8 @@ mod payout_delete;
 mod records;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod review_cases;
+#[cfg(feature = "test-harness")]
+pub mod review_workflow;
 mod rules;
 mod sql;
 

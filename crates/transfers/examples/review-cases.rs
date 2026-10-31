@@ -1,8 +1,8 @@
 //! Differential driver only; the product exposes no SQL or build dispatch.
-use kassiber_envelope::{dict, get, py_str, s, AppError};
+use kassiber_envelope::{dict, get, py_str, s};
 use kassiber_pyjson::{dumps, Options, Value};
 use kassiber_store::rusqlite::Connection;
-use kassiber_transfers::{review_cases, Scope};
+use kassiber_transfers::{review_workflow, Scope};
 use std::io::{self, BufRead, Write};
 
 fn run(input: &Value) -> Result<Value, Box<dyn std::error::Error>> {
@@ -29,28 +29,25 @@ fn run(input: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     };
     let mut outputs = Vec::new();
     for args in cases {
-        let mut calls = 0usize;
-        let result = review_cases::inspect(
+        let Value::List(tape) = field("entry_ids") else {
+            return Err("entry ids must be a list".into());
+        };
+        let mut ids = tape.iter();
+        let result = review_workflow::cases(
             &conn,
             &Scope {
                 workspace_id: &workspace,
                 profile_id: &profile_id,
             },
             args,
-            |conn, _| {
-                assert!(!conn.is_autocommit());
-                calls += 1;
-                match field("quarantines") {
-                    Value::List(rows) => Ok(rows.clone()),
-                    _ => Err(AppError::new("probe_error", "quarantines must be a list")),
-                }
-            },
+            &py_str(field("as_of")),
+            || py_str(ids.next().expect("entry identity tape exhausted")),
         );
         assert_eq!(conn.total_changes(), changes);
         assert_eq!(conn.is_autocommit(), owns);
         let result = match result {
             Ok(result) => dict([("result", result)]),
-            Err(error) => dict([(
+            Err(review_workflow::Error::Service(error)) => dict([(
                 "error",
                 dict([
                     ("code", s(error.code)),
@@ -59,8 +56,12 @@ fn run(input: &Value) -> Result<Value, Box<dyn std::error::Error>> {
                     ("details", error.details.unwrap_or(Value::Null)),
                 ]),
             )]),
+            Err(review_workflow::Error::Build(error)) => dict([(
+                "build_error",
+                kassiber_pytext::loads(&serde_json::to_string(&error)?)?,
+            )]),
         };
-        outputs.push(dict([("output", result), ("build_calls", calls.into())]));
+        outputs.push(result);
     }
     Ok(Value::List(outputs))
 }

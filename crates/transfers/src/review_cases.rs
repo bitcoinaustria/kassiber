@@ -532,6 +532,16 @@ pub fn inspect(
     args: &Value,
     build: impl FnOnce(&Connection, &Value) -> Result<Vec<Value>>,
 ) -> Result<Value> {
+    inspect_with_error(conn, scope, args, build)
+}
+
+/// Retain the assembler's full refusal without flattening it into AppError.
+pub(crate) fn inspect_with_error<E: From<AppError>>(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    build: impl FnOnce(&Connection, &Value) -> std::result::Result<Vec<Value>, E>,
+) -> std::result::Result<Value, E> {
     // Transaction's Drop also rolls back an owned read when a build unwinds.
     let read = if conn.is_autocommit() {
         Some(conn.unchecked_transaction().map_err(sql::error)?)
@@ -541,7 +551,7 @@ pub fn inspect(
     let result = (|| {
         let limit = get(args, "limit").cloned().unwrap_or(20.into());
         if !matches!(&limit,Value::Int(n) if n>=&1.into() && n<=&100.into()) {
-            return Err(validation("Review limit must be between 1 and 100"));
+            return Err(validation("Review limit must be between 1 and 100").into());
         }
         let limit = usize::try_from(integer(&limit)?).expect("bounded limit");
         let profile = rows(
