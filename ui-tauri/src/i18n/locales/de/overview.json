@@ -382,5 +382,16 @@
       "stale": "Der Journalstand ist veraltet. Verarbeite die Journale neu, um aktuelle Anschaffungskosten zu sehen.",
       "unavailable": "Es gibt keinen Marktkurs, daher zeigt Kassiber keinen aktuellen Wert an."
     }
+  },
+  "exitTaxFmv": {
+    "title": "Marktwert",
+    "asOf": "Stand:",
+    "unavailable": "Nicht verfügbar",
+    "source": {
+      "cache": "Cache",
+      "transaction": "Transaktion",
+      "missing": "Fehlend"
+    },
+    "incomplete": "Schätzung unvollständig: kein verwendbarer Marktwertkurs für {{assets}}."
   }
 }

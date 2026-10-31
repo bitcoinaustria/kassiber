@@ -62,7 +62,7 @@ export interface ExitTaxReport {
   walletHoldings: ExitTaxWalletHolding[];
   assumptions: string[];
   reviewGate: string;
-  status: { needsJournals: boolean; quarantines: number };
+  status: { needsJournals: boolean; quarantines: number; missingFmvAssets: string[] };
 }
 
 const REVIEW_GATE =
@@ -73,7 +73,7 @@ const REVIEW_GATE =
 const BASE_ASSUMPTIONS = [
   "EXIT: Altbestand (acquired before 2021-03-01 Europe/Vienna) is treated as tax-free and excluded from the deemed-disposal base; only Neubestand unrealized gains are taxed.",
   "EXIT-002: Neubestand gains estimated at the 27.5% Sondersteuersatz (§ 27a EStG). Loss offset beyond the same income type is out of scope.",
-  "EXIT-005: Fair market value uses the best available cached rate at or before the departure date, falling back to a transaction price at or before that cutoff; it does not imply intraday coverage.",
+  "EXIT-005: Fair market value uses the best available cached rate at or before the departure date, falling back to a transaction price within the 24 hours before the exclusive departure cutoff; older transaction prices leave the asset unpriced. It does not imply intraday coverage.",
 ];
 
 const DEFERRAL_NOTE: Record<ExitTaxDestination, string> = {
@@ -156,6 +156,6 @@ export function buildExitTaxFixture(
     ],
     assumptions,
     reviewGate: REVIEW_GATE,
-    status: { needsJournals: false, quarantines: 0 },
+    status: { needsJournals: false, quarantines: 0, missingFmvAssets: [] },
   };
 }

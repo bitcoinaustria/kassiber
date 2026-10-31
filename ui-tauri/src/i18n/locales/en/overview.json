@@ -382,5 +382,16 @@
       "stale": "Journals are outdated. Reprocess them to see current cost basis.",
       "unavailable": "No market rate is available, so Kassiber shows no current value."
     }
+  },
+  "exitTaxFmv": {
+    "title": "Fair market value",
+    "asOf": "As of:",
+    "unavailable": "Unavailable",
+    "source": {
+      "cache": "Cache",
+      "transaction": "Transaction",
+      "missing": "Missing"
+    },
+    "incomplete": "Estimate incomplete: no usable FMV quote for {{assets}}."
   }
 }

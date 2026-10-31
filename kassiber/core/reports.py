@@ -7499,6 +7499,8 @@ def _exit_tax_xlsx_specs(report):
             "note": f"{report['status']['quarantines']} quarantined transaction(s) — "
                     "estimate is incomplete until resolved."
         })
+    if report["status"].get("missingFmvAssets"):
+        notes.append({"note": "Incomplete estimate: missing FMV for " + ", ".join(report["status"]["missingFmvAssets"])})
     notes.extend({"note": note} for note in report["assumptions"])
     notes.append({"note": report["reviewGate"]})
     return [
@@ -7507,6 +7509,14 @@ def _exit_tax_xlsx_specs(report):
             "title": f"Exit-tax estimate — {report['profile']}",
             "headers": ["field", "value"],
             "rows": overview,
+        },
+        {
+            "sheet_name": "FMV quotes",
+            "title": "Fair market value quotes",
+            "headers": ["asset", "pair", "rate", "source", "as_of"],
+            "rows": [{"asset": quote["asset"], "pair": quote["pair"],
+                      "rate": quote["rate"], "source": quote["source"],
+                      "as_of": quote["asOf"]} for quote in report["fmvSource"]],
         },
         {
             "sheet_name": "Deemed disposal",

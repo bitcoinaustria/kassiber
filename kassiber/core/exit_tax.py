@@ -60,6 +60,10 @@ from ..msat import dec
 # in TaxPolicy, because it is presentation/estimate logic, not engine tax math.
 AT_SONDERSTEUERSATZ = Decimal("0.275")
 
+# No shared historical quote-age policy exists. This conservative fallback
+# bound is measured from the exclusive departure cutoff, not from wall time.
+TRANSACTION_FMV_MAX_AGE_SECONDS = 24 * 60 * 60
+
 DESTINATION_EU_EEA = "eu_eea"
 DESTINATION_THIRD_COUNTRY = "third_country"
 
@@ -130,8 +134,9 @@ _ASSUMPTION_DEFERRAL_THIRD = (
 )
 _ASSUMPTION_FMV = (
     "EXIT-005: Fair market value uses the best available cached rate at or before "
-    "the departure date, falling back to a transaction price at or before that "
-    "cutoff; it does not imply intraday coverage."
+    "the departure date, falling back to a transaction price within the 24 hours "
+    "before the exclusive departure cutoff; older transaction prices leave the "
+    "asset unpriced. It does not imply intraday coverage."
 )
 _ASSUMPTION_FUTURE_TIGHTENING = (
     "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains "
@@ -248,7 +253,14 @@ def _fmv_at(
     fallback = fallback_quotes.get(asset)
     if fallback is not None:
         fallback_dec = dec(fallback["rate"])
-        if fallback_dec > 0:
+        quote_instant = timestamp_microseconds(fallback["timestamp"])
+        cutoff_instant = timestamp_microseconds(target_iso)
+        if (
+            fallback_dec > 0
+            and quote_instant is not None
+            and cutoff_instant is not None
+            and 0 < cutoff_instant - quote_instant <= TRANSACTION_FMV_MAX_AGE_SECONDS * 1_000_000
+        ):
             return fallback_dec, {
                 "asset": asset,
                 "rate": float(fallback_dec),
@@ -260,7 +272,7 @@ def _fmv_at(
         "asset": asset,
         "rate": None,
         "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-        "asOf": target_iso,
+        "asOf": None,
         "source": "missing",
     }
 
@@ -409,7 +421,9 @@ def compute_deemed_disposal(
     fmv_source: list[dict[str, Any]] = []
     fmv_by_asset: dict[str, Optional[Decimal]] = {}
     wallet_assets = {key[2] for key, qty in wallet_quantities.items() if qty > 0}
-    for asset in sorted(set(assets) | wallet_assets):
+    held_assets = {asset for asset, regimes in assets.items()
+                   if any(bucket.clamped()[0] > 0 for bucket in regimes.values())} | wallet_assets
+    for asset in sorted(held_assets):
         rate, source = _fmv_at(conn, asset, fiat_currency, cutoff, fallback_quotes)
         fmv_by_asset[asset] = rate
         fmv_source.append(source)
@@ -533,6 +547,7 @@ def compute_deemed_disposal(
         )
 
     quarantines = list(state.get("quarantines") or ())
+    missing_fmv_assets = [source["asset"] for source in fmv_source if source["source"] == "missing"]
 
     return {
         "workspace": profile.get("workspace_label") or profile.get("workspace_id"),
@@ -562,6 +577,7 @@ def compute_deemed_disposal(
         "status": {
             "needsJournals": not bool(entries),
             "quarantines": len(quarantines),
+            "missingFmvAssets": missing_fmv_assets,
         },
     }
 
@@ -644,6 +660,14 @@ def format_exit_tax_lines(report: Mapping[str, Any]) -> list[str]:
     lines.append(f"Exit-tax estimate — {report['profile']} ({report['jurisdictionCode']})")
     lines.append(f"Departure date: {report['departureDate']}    Destination: {report['destination']}")
     lines.append(f"Accounting method: {report['method']}")
+    lines.append("FMV quotes:")
+    for quote in report["fmvSource"]:
+        lines.append(
+            f"  {quote['asset']} ({quote['pair']}): {_fmt_eur(quote['rate'], ccy)}; "
+            f"source: {quote['source']}; as of: {quote['asOf'] or 'unavailable'}"
+        )
+    if report["status"].get("missingFmvAssets"):
+        lines.append("Incomplete estimate: missing FMV for " + ", ".join(report["status"]["missingFmvAssets"]))
     lines.append("")
     lines.append("Deemed disposal at fair market value:")
     lines.append(

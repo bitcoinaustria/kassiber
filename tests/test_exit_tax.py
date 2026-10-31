@@ -260,7 +260,9 @@ class ExitTaxComputeTests(unittest.TestCase):
 
     def test_fmv_fallback_when_rate_cache_empty(self):
         conn = _conn_with_rate(None)  # empty rates_cache -> latest_rates fallback
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
+        state = _state()
+        state["latest_rate_timestamps"] = {"BTC": "2026-06-16T12:00:00Z"}
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         self.assertEqual(report["totals"]["neuMarketValue"], 24000.0)
         self.assertTrue(any(s["source"] == "transaction" for s in report["fmvSource"]))
 
