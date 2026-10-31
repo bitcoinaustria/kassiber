@@ -207,6 +207,15 @@ def matrix(monkeypatch):
                                  subscribe=lambda: {'height': 900000, 'hex': W.bhex(900000)})
                     real_hash = W.bhash
                     W.lie['block_hash'] = lambda h: 'ff' * 32 if h == 900001 else real_hash(h)
+                    reads = 0
+                    def raced_header(height):
+                        nonlocal reads
+                        header = W.bhex(height)
+                        if height == 900001 and not reads:
+                            reads += 1
+                            W.reorg(2, 2, 'b')
+                        return header
+                    W.lie['header'] = raced_header
                 else:
                     W.hook = (1, reorg)
                 if invalid_proof:
@@ -335,3 +344,21 @@ def test_esplora_checks_every_raced_block(matrix):
     steps, _ = run3('esplora', 'bitcoin', first_sync=True, lower_fork=True)
     assert steps[0]['checkpoint']['esplora_tip_height'] is None
     assert steps[1]['history_reqs'] > 0
+
+
+@pytest.mark.parametrize('chain', ['bitcoin', 'liquid'])
+def test_electrum_checks_every_raced_header(matrix, chain):
+    _, _, run3 = matrix
+    steps, truth = run3('electrum', chain, first_sync=True, lower_fork=True)
+    assert steps[0]['checkpoint']['electrum_tip_height'] is None
+    assert steps[1]['history_reqs'] > 0
+    assert steps[1]['checkpoint']['electrum_headers']['900001'] == truth
+
+
+@pytest.mark.parametrize('chain', ['bitcoin', 'liquid'])
+def test_electrum_version_two_anchor_is_rebuilt(matrix, chain):
+    run, scenarios, _ = matrix
+    config = {**scenarios['same_tip'], 'cp': lambda cp: {
+        **cp, 'compatibility_history_anchor_version': 2,
+    }}
+    assert run('electrum', chain, config)['history_reqs'] > 0
