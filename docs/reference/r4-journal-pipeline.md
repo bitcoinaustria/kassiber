@@ -26,6 +26,10 @@ The [R4-14 pairing stage](rust-pairing.md) reuses the native transfer library;
 its 20k process CPU acceptance is 13.02× generic and 11.75× multi-wallet.
 Journal route activation remains with R4-13/R4-15/R4-16.
 Evidence inherited from t3code/r4-14-auto-pair@c47450757; pending fresh r9 verification.
+R4-13 has a [test-only composition checkpoint](r4-journal-process-checkpoint.md):
+native load through persistence with transactional rollback and progress, an
+explicit missing R4-10 seam, and no CLI or daemon registration. Its prepared
+probe does not close whole-pipeline parity or performance acceptance.
 This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
@@ -366,8 +370,8 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Combined interface](#r4-10-combined-pre-build-contract) and later-failure rollback are implemented; campaign and CPU acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), [boundary continuation](r4-journal-render-boundary-checkpoint.md); acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Continuation plaintext 20k fresh CPU: Python 1.504 / 1.553; floor 0.854 / 0.951; native 0.931 / 1.117. Unchanged CPU 0.770 / 0.453 still misses. | ≤ floor + 0.15 s |
-| R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
 | R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path; [stage accepted](rust-pairing.md), journal routing awaits R4-13/R4-15/R4-16 | Python 3.44 / 4.74 historical; CPU remeasured 4.710 / 5.823 | 10× Python CPU; native 0.362 / 0.495, **13.02× / 11.75×** |
+| R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing. [Test-only composition checkpoint](r4-journal-process-checkpoint.md); R4-10 and registration/acceptance gates remain open. | — | End-to-end targets below |
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 

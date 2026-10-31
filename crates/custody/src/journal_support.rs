@@ -4,6 +4,10 @@ use serde_json::Value;
 
 pub type Scope = (String, String, String, String);
 
+pub fn require_tax_processing(profile: &Value) -> Result<(), (&'static str, String)> {
+    crate::gates::require_tax_country(&profile["tax_country"])
+}
+
 pub fn onchain_scope(row: &Value) -> Option<Scope> {
     graph::onchain_scope(row)
 }

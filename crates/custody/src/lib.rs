@@ -158,6 +158,44 @@ pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages,
     let snapshot = snapshot.stages();
     let snapshot = &snapshot;
     drop(boundary);
+    run_admitted(snapshot, finalized, projection_rows)
+}
+
+/// Native loader admission preserves legacy scalars until their consumer.
+/// Typed accounting gates share the JSON adapter's implementation; stages
+/// retain the original shared-column rows rather than round-tripping them.
+pub fn run_loaded(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stages, Refusal> {
+    let _total = timing::span("custody.total");
+    struct Memos;
+    impl Drop for Memos {
+        fn drop(&mut self) {
+            codec::clear_memos();
+        }
+    }
+    let _memos = Memos;
+    let admission = timing::span("admission");
+    snapshot
+        .validate_loaded()
+        .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
+    let typed = snapshot
+        .typed()
+        .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
+    gates::require_accounting(&typed)
+        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    let projection_rows = finalized_projection::runtime::typed_confirmations(&typed)
+        .map_err(|code| Refusal::code("components", code))?;
+    gates::require_rates(&typed)
+        .map_err(|(code, message)| Refusal::new("components", code, message))?;
+    interpretation::admit_channels(snapshot).map_err(|code| Refusal::code("components", code))?;
+    drop(admission);
+    run_admitted(snapshot, finalized, projection_rows)
+}
+
+fn run_admitted(
+    snapshot: &snapshot::Snapshot,
+    finalized: bool,
+    projection_rows: Vec<serde_json::Value>,
+) -> Result<Stages, Refusal> {
     let span = timing::span("components+migration");
     let components = components::compute(snapshot)
         .map_err(|error| Refusal::new("components", error.code, error.message))?;

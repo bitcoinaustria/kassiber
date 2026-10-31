@@ -401,27 +401,42 @@ pub fn authority(row: &Value) -> Result<Value, Error> {
 
 const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
 pub trait RowRecord: Sync {
-    fn record_view(&self) -> &serde_json::Map<String, Value>;
+    fn field(&self, key: &str) -> Option<&Value>;
+    fn fields(&self) -> impl Iterator<Item = (&String, &Value)>;
 }
 impl RowRecord for Value {
-    fn record_view(&self) -> &serde_json::Map<String, Value> {
-        self.as_object().expect("snapshot row")
+    fn field(&self, key: &str) -> Option<&Value> {
+        self.get(key)
+    }
+    fn fields(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.as_object().expect("snapshot row").iter()
     }
 }
 impl RowRecord for serde_json::Map<String, Value> {
-    fn record_view(&self) -> &serde_json::Map<String, Value> {
-        self
+    fn field(&self, key: &str) -> Option<&Value> {
+        self.get(key)
+    }
+    fn fields(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.iter()
+    }
+}
+impl RowRecord for crate::snapshot::Record {
+    fn field(&self, key: &str) -> Option<&Value> {
+        self.get(key)
+    }
+    fn fields(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.iter()
     }
 }
 pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
     let fields: BTreeSet<&str> = FIELDS.split_whitespace().collect();
     // Rows are enriched independently; keep them, or the first refusal, in order.
     let enrich = |value: &R| -> Result<Value, Error> {
-        let row = value.record_view();
+        let row = value;
         // Indexing a JSON object yields null for an absent field.
-        let original = |key: &str| row.get(key).unwrap_or(&Value::Null);
+        let original = |key: &str| row.field(key).unwrap_or(&Value::Null);
         let mut item = Value::Object(
-            row.iter()
+            row.fields()
                 .filter(|(key, _)| fields.contains(key.as_str()))
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),

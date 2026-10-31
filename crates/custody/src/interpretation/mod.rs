@@ -43,6 +43,24 @@ pub fn admit_channels(snapshot: &Snapshot) -> Result<(), String> {
     channels::compute(snapshot).map(|_| ())
 }
 
+pub fn journal_context(
+    snapshot: &Snapshot,
+    stages: &crate::Stages,
+) -> Result<(Value, Vec<String>, Vec<String>), String> {
+    let roles = channels::compute(snapshot)?["roles"].clone();
+    let (ignored, accounting) = gap_ignored_ids(
+        snapshot,
+        &stages.components,
+        &stages.evidence,
+        &stages.interpretation,
+    )?;
+    Ok((
+        roles,
+        ignored.into_iter().collect(),
+        accounting.into_iter().collect(),
+    ))
+}
+
 /// Channel context remains an unported neighbour; empty channel populations
 /// require no row materialization. Nonempty contexts retain their exact reader.
 pub fn admit_typed_channels(snapshot: &crate::snapshot::BookSnapshot) -> Result<(), String> {

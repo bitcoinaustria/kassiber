@@ -2128,5 +2128,85 @@
       "binding_refusals_precede_decimal_formatting_and_roll_back_every_write"
     ],
     "rule": "Validate metadata and quantity bindings before decimal formatting, preserving the reference refusal order and rollback."
+  },
+  {
+    "id": "JPROCESS-writer-lock",
+    "file": "crates/journals/src/process.rs",
+    "find": "\"BEGIN IMMEDIATE\"",
+    "replace": "\"BEGIN\"",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Reserve the writer before the first profile read."
+  },
+  {
+    "id": "JPROCESS-outer-rollback",
+    "file": "crates/journals/src/process.rs",
+    "find": "self.0.execute_batch(\"ROLLBACK\")",
+    "replace": "self.0.execute_batch(\"SELECT 1\")",
+    "expect_failing": [
+      "process_prebuild_refusals_and_phase_panics_restore_the_entire_book"
+    ],
+    "rule": "A refused build rolls back pre-build mutations and restores autocommit."
+  },
+  {
+    "id": "JPROCESS-commit",
+    "file": "crates/journals/src/process.rs",
+    "find": "\"RELEASE journals_process; COMMIT\"",
+    "replace": "\"RELEASE journals_process\"",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Publish a completed projection only after commit."
+  },
+  {
+    "id": "JPROCESS-repair",
+    "file": "crates/journals/src/process.rs",
+    "find": "let repairs = prebuild.repair(conn, &mut profile)?;",
+    "replace": "let repairs = Repairs::default();",
+    "expect_failing": [
+      "process_commits_repairs_and_pricing_with_the_projection"
+    ],
+    "rule": "Run repairs in the same transaction as the projection."
+  },
+  {
+    "id": "JPROCESS-pricing",
+    "file": "crates/journals/src/process.rs",
+    "find": "let auto_priced = prebuild.price(conn, &profile)?;",
+    "replace": "let auto_priced = 0;",
+    "expect_failing": [
+      "process_commits_repairs_and_pricing_with_the_projection"
+    ],
+    "rule": "Run pricing before snapshot acquisition."
+  },
+  {
+    "id": "JPROCESS-tax-before-repair",
+    "file": "crates/journals/src/process.rs",
+    "find": "require_tax_processing(&profile)",
+    "replace": "require_tax_processing(&Value::Null)",
+    "expect_failing": [
+      "process_refuses_tax_policy_before_prebuild_and_rolls_back_fusion_refusals"
+    ],
+    "rule": "Reject unsupported tax policy during preparing before any repair."
+  },
+  {
+    "id": "JPROCESS-all-counters",
+    "file": "crates/journals/src/process.rs",
+    "find": "serde_json::to_value(&stored.quantity_counts)",
+    "replace": "serde_json::to_value(&std::collections::HashMap::<String,usize>::new())",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Forward every custody counter including economic relations."
+  },
+  {
+    "id": "JPROCESS-stale-marker",
+    "file": "crates/journals/src/process.rs",
+    "find": "\"processed_at\": stored.processed_at,",
+    "replace": "\"processed_at\": clock,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Use the persisted monotonic processing marker rather than the original clock."
   }
 ]

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run journal mutations in the shared disposable-tree checker."""
 import importlib.util
+import os
 from pathlib import Path
 import sys
 
@@ -9,8 +10,10 @@ spec = importlib.util.spec_from_file_location('tax_mutation_check', ROOT / 'tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ('-p', 'kassiber-journals')
+checker.ENGINE_PACKAGES = ('-p', 'kassiber-journals', '--features', 'test-harness')
 checker.MUTATIONS = Path(__file__).with_name('mutations.json')
+if target := os.environ.get('CARGO_TARGET_DIR'):
+    os.environ.setdefault('CARGO_BUILD_BUILD_DIR', target)
 
 # Keep the shared runner offline, including its build-only mutation probes.
 _run = checker._run

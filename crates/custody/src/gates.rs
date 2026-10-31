@@ -115,6 +115,10 @@ fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
 pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
     network::require(snapshot)?;
     let original = snapshot.profile.get("tax_country").unwrap_or(&Value::Null);
+    require_tax_country(original)
+}
+
+pub(crate) fn require_tax_country(original: &Value) -> Result<(), Error> {
     let country = normalized(original);
     if !["", "generic", "at"].contains(&country.as_str()) {
         // normalize_tax_country currently raises ValueError before AppError.

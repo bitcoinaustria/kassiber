@@ -46,5 +46,9 @@ name = "journal-prebuild"
 required-features = ["test-harness"]
 
 [[example]]
+name = "journal-process"
+required-features = ["test-harness"]
+
+[[example]]
 name = "journals-bench"
 required-features = ["timing"]

@@ -30,6 +30,12 @@ impl SqlValue {
         match self {
             Self::Null => Value::Null,
             Self::Int(v) => Value::from(*v),
+            Self::Real(v) if v.is_infinite() => serde_json::from_str(if v.is_sign_negative() {
+                "-1e999"
+            } else {
+                "1e999"
+            })
+            .expect("infinite SQLite scalar transport"),
             Self::Real(v) => Value::from(*v),
             Self::Text(v) => Value::String(v.to_string()),
             Self::Identifier(v) => Value::String(v.as_str().to_owned()),
@@ -274,12 +280,12 @@ macro_rules! row {
         impl $name {
             /// Explicit adapter for a neighbour whose rows are not typed yet.
             pub fn record(&self) -> Record {
-                let mut row = Record::new();
+                let mut row = serde_json::Map::new();
                 $(if let Some(v) = &self.$field.0 { row.insert(stringify!($field).into(), v.json()); })*
                 row.extend(self.extra.iter().map(|(k, v)| (k.to_string(), v.json())));
-                row
+                row.into()
             }
-            pub fn json(&self) -> Value { Value::Object(self.record()) }
+            pub fn json(&self) -> Value { Value::Object(self.record().into_map()) }
         }
     };
 }

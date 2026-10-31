@@ -461,6 +461,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   reaches 13.02× / 11.75× Python at 20k. Journal routes remain Python.
 - [ ] R4-13, R4-15 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing, the freshness journal job and the authority switch.
+  R4-13's [test-only composition](docs/reference/r4-journal-process-checkpoint.md)
+  wires native load through persistence, ordered progress and outer rollback.
+  Integrate real R4-10 pre-build, close full-pipeline parity/mutation and speed
+  gates, then register CLI and daemon in separate verified commits. Reconcile
+  the desktop daemon's pairing default with R4-14 before changing its route;
+  prepared-book probe results do not authorize production routing.
 
 ## Rust backend R5 transfers and review
 

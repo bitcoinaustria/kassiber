@@ -202,7 +202,11 @@ impl BookSnapshot {
             // reads it; the lossless facts remain on BookSnapshot for the oracle.
             book_network: None,
             wallets: self.wallets.iter().map(WalletRef::record).collect(),
-            transactions: self.transactions.iter().map(TxRow::json).collect(),
+            transactions: self
+                .transactions
+                .iter()
+                .map(|row| row.json().as_object().cloned().unwrap().into())
+                .collect(),
             rate_rows: self.rate_rows.iter().map(RateRow::record).collect(),
             owned_index: (*self.owned_index).clone(),
             ownership_warnings: (*self.ownership_warnings).clone(),

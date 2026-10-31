@@ -21,14 +21,7 @@ impl LoadedSnapshot {
     pub fn project(
         &self,
     ) -> std::result::Result<kassiber_custody::Stages, kassiber_custody::Refusal> {
-        self.snapshot
-            .validate_loaded()
-            .map_err(|message| kassiber_custody::Refusal {
-                stage: "snapshot",
-                code: "custody_snapshot_invalid".into(),
-                message,
-            })?;
-        kassiber_custody::run(&self.snapshot, true)
+        kassiber_custody::run_loaded(&self.snapshot, true)
     }
 
     pub fn into_custody(self) -> Result<Snapshot> {

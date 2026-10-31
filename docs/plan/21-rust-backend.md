@@ -2663,6 +2663,18 @@ zero-fallback hybrid workloads remain before registration. See the
 [publication handoff](../reference/rust-shell.md#bitcoin-atomic-publication-verification-r5)
 for exact verification and mutation results.
 
+### R4-13 process composition checkpoint (partial)
+
+The [test-only pipeline](../reference/r4-journal-process-checkpoint.md) composes
+the native loader, custody kernels, fusion/engine, rendering and persistence
+under one writer transaction. It pins non-pairing progress, complete prepared
+book dumps and rollback behavior. R4-10 remains a mandatory, explicitly missing
+pre-build seam. Neither CLI nor daemon routing changes, and the transitional
+JSON boundaries remain. Full campaign, envelope/event-stream, mutation and
+performance acceptance still precede production registration. The existing
+desktop daemon path enables pairing by default, while scoped AI processing
+disables it; registration must preserve both contracts with R4-14.
+
 ### R4-11 rendering checkpoint (partial)
 
 `crates/journals` renders the typed tax-engine `LedgerResponse` and joins the

@@ -82,6 +82,7 @@ jobs:
       KASSIBER_TEST_TAX_ENGINE: census
       KASSIBER_TEST_CUSTODY_ENGINE: census
       KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
+      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
     strategy:
       fail-fast: false
       matrix:
@@ -117,8 +118,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
-      - name: Build native custody loader byte gate
-        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
+      - name: Build native journal pipeline probes
+        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --example journal-process --features test-harness
 
       - name: Build Rust shell for subprocess parity
         if: matrix.shard == 'serial-daemon'
@@ -246,6 +247,7 @@ jobs:
     name: Custody shadow (${{ matrix.shard }})
     env:
       KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
+      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -285,8 +287,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
-      - name: Build native custody loader byte gate
-        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
+      - name: Build native journal pipeline probes
+        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --example journal-process --features test-harness
 
       - name: Compare pure production with frozen SQL composition
         shell: bash
@@ -439,10 +441,10 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Lint
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --features kassiber-journals/test-harness --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --features kassiber-journals/test-harness --locked
 
       - name: Verify ledger bytes under custody JSON features
         run: python3 crates/custody/scripts/check_ledger_features.py

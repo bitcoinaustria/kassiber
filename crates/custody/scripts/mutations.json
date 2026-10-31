@@ -12976,8 +12976,8 @@
   {
     "id": "GAP-120",
     "file": "crates/custody/src/gaps/mod.rs",
-    "find": "|row| normalize::leg(row, &BTreeSet::new()),\n        snapshot.gap_worklist.large_book,",
-    "replace": "|row| normalize::leg(row, &ignored.intersection(&accounting).cloned().collect()),\n        snapshot.gap_worklist.large_book,",
+    "find": "|row| normalize::leg(&Value::Object(row.clone().into_map()), &BTreeSet::new()),\n        snapshot.gap_worklist.large_book,",
+    "replace": "|row| normalize::leg(&Value::Object(row.clone().into_map()), &ignored.intersection(&accounting).cloned().collect()),\n        snapshot.gap_worklist.large_book,",
     "rule": "Normalize all raw worklist rows before applying ignored ids.",
     "expect_failing": [
       "gaps_operation_vectors"

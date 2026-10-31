@@ -542,8 +542,8 @@
   {
     "id": "JL-receipt-accounting-precedence",
     "file": "crates/custody/src/lib.rs",
-    "find": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {\n    let typed = snapshot\n        .typed()\n        .map_err(|message| Refusal::new(\"snapshot\", \"custody_snapshot_invalid\", message))?;\n    gates::require_accounting(&typed)\n        .map_err(|(code, message)| Refusal::new(\"components\", code, message))?;",
-    "replace": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {",
+    "find": "    gates::require_accounting(&typed)\n        .map_err(|(code, message)| Refusal::new(\"components\", code, message))?;\n    components::compute(snapshot)",
+    "replace": "    components::compute(snapshot)",
     "expect_failing": [
       "native_loader_preserves_receipt_error_precedence"
     ],
@@ -1241,9 +1241,9 @@
   },
   {
     "id": "JL-projection-loaded-admission",
-    "file": "crates/journals/src/loader/direct.rs",
-    "find": ".validate_loaded()\n            .map_err",
-    "replace": ".validate()\n            .map_err",
+    "file": "crates/custody/src/lib.rs",
+    "find": ".validate_loaded()\n        .map_err",
+    "replace": ".validate()\n        .map_err",
     "expect_failing": [
       "native_loader_legacy_scalars_keep_downstream_admission"
     ],

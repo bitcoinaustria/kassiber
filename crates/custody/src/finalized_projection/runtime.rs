@@ -169,7 +169,7 @@ pub fn stage_with_confirmations(
     captured: Vec<Value>,
     quantity: &Py,
     interpreter: &Py,
-) -> Result<Py, String> {
+) -> Result<Py, super::Error> {
     let mut rows = Map::new();
     for (row, confirmation) in snapshot.transactions.iter().zip(captured) {
         let mut row = Value::Object(row.clone().into_map());

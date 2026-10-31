@@ -9,6 +9,8 @@ pub mod loader;
 mod model;
 pub mod persistence;
 pub mod prebuild;
+#[cfg(any(test, feature = "test-harness"))]
+pub mod process;
 mod render;
 pub mod storage;
 pub use model::*;

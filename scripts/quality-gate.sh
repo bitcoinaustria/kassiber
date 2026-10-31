@@ -46,8 +46,8 @@ py() {
 }
 
 run cargo fmt --all --check
-run cargo clippy --workspace --all-targets --locked -- -D warnings
-run cargo test --workspace --locked
+run cargo clippy --workspace --all-targets --features kassiber-journals/test-harness --locked -- -D warnings
+run cargo test --workspace --features kassiber-journals/test-harness --locked
 run py crates/custody/scripts/mutation_check.py --check
 run py crates/secrets/scripts/mutation_check.py --check
 run py crates/backup/scripts/mutation_check.py --check
@@ -64,8 +64,9 @@ run cargo build -p kassiber-wallets --example bdk_fixture --features test-harnes
 run cargo build -p kassiber-wallets --example records_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example sync_fixture --features test-harness --offline --locked
-run cargo build --release --offline --locked -p kassiber-journals --example custody-load --features test-harness
+run cargo build --release --offline --locked -p kassiber-journals --example custody-load --example journal-process --features test-harness
 export KASSIBER_TEST_CUSTODY_LOADER_BIN="$ROOT/target/release/examples/custody-load"
+export KASSIBER_TEST_JOURNAL_PROCESS_BIN="$ROOT/target/release/examples/journal-process"
 run py crates/wallets/scripts/discovery_mutation_check.py --check
 run py crates/wallets/scripts/acquisition_mutation_check.py --check
 run py crates/wallets/scripts/observer_mutation_check.py --check
