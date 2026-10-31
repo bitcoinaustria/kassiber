@@ -63,12 +63,15 @@ Esplora remains on the compatibility route with per-request cancellation checks.
 
 Compatibility Esplora and Electrum history caches are bound to the observed
 chain tip, including block identity rather than height alone. An identical tip
-permits the existing counter/status cache checks. A changed, missing or invalid
-tip (including legacy checkpoints without an anchor) refreshes histories and
-Electrum confirmation timestamps, so unchanged statistics cannot hide a reorg
-from transaction evidence or saved-report impacts. This conservatively refreshes
-on ordinary block advances too; validated Electrum transaction graphs remain
-reusable. Tip reads occur only within the requested wallet sync.
+permits the existing counter/status cache checks. On a taller tip, the observer
+checks that the previously saved tip block still belongs to the current chain;
+Esplora also binds its new tip height to the observed hash. Proven extensions
+reuse unchanged history and confirmation timestamps on Bitcoin and Liquid.
+A changed, missing or invalid anchor (including legacy checkpoints without a
+height) refreshes histories and Electrum confirmation timestamps, so unchanged
+statistics cannot hide a reorg from transaction evidence or saved-report
+impacts. Validated Bitcoin Electrum transaction graphs remain reusable during
+that refresh. Tip and ancestry reads occur only within the requested wallet sync.
 
 Widened discovery runs only for a provable inventory deficit. Missing occurrence
 times and equal-time movements cannot acquire an order from row IDs or import

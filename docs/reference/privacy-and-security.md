@@ -18,6 +18,9 @@ current behavior, not a long-term contract.
 
 Compatibility wallet sync reads Esplora's `blocks/tip/hash` or Electrum's
 `blockchain.headers.subscribe` to bind local history caches to block identity.
+During that same sync, Esplora tip-height and block-at-height reads or Electrum
+header-at-height reads prove that a taller tip extends the previously observed
+chain before reusing unchanged histories.
 These reads use the selected backend's existing authenticated transport and
 proxy policy during that sync; configuration, launch and display do not trigger
 them.

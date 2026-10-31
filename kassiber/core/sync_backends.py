@@ -2058,6 +2058,19 @@ def _esplora_tip_hash(
     return canonical_txid(value)
 
 
+def _esplora_block_hash(base_url, height, **kwargs):
+    try:
+        return canonical_txid(http_get_text(
+            append_url_path(base_url, f"block-height/{height}"), **kwargs,
+        ).strip())
+    except AppError:
+        return None
+
+
+def _cache_anchor_height(value):
+    return value if type(value) is int and 0 <= value <= 0xFFFFFFFF else None
+
+
 def _esplora_tip_height(
     base_url, timeout=30, *, headers=None, proxy_url=None, ssl_context=None
 ):
@@ -2996,6 +3009,20 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                                proxy_url=proxy_url, ssl_context=ssl_context),
     )
     same_tip = tip_hash is not None and checkpoint.get("esplora_tip_hash") == tip_hash
+    previous_height = _cache_anchor_height(checkpoint.get("esplora_tip_height"))
+    tip_height = previous_height if same_tip else None
+    if tip_hash is not None and tip_height is None:
+        kwargs = _esplora_call_kwargs(timeout=timeout, headers=headers,
+                                     proxy_url=proxy_url, ssl_context=ssl_context)
+        observed_height = _cache_anchor_height(_esplora_tip_height(backend["url"], **kwargs))
+        # Bind height to the actual observed hash, including a racing tip read.
+        if observed_height is not None and _esplora_block_hash(
+            backend["url"], observed_height, **kwargs,
+        ) == tip_hash:
+            tip_height = observed_height
+            if previous_height is not None and tip_height > previous_height:
+                previous_hash = _esplora_block_hash(backend["url"], previous_height, **kwargs)
+                same_tip = previous_hash is not None and previous_hash == checkpoint.get("esplora_tip_hash")
     # Bind the complete private transport configuration, not just the backend
     # name. This digest remains inside the local-only freshness checkpoint.
     # A different endpoint, credential, route or TLS policy cannot inherit
@@ -3237,6 +3264,7 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         {
             "backend": _backend_identity(backend, sync_state),
             "esplora_tip_hash": tip_hash,
+            "esplora_tip_height": tip_height,
             "esplora_scripthashes": dict(sorted(next_stats.items())),
             "esplora_history_memberships": membership_checkpoint,
             "highest_used": dict(sorted(highest_used.items())),
@@ -4786,7 +4814,7 @@ def _electrum_utxo_status(raw_utxo, header_timestamps):
     }
 
 
-def _electrum_tip_fingerprint(client):
+def _electrum_tip_fingerprint(client, *, anchor=None):
     """Anchor history and timestamp caches to the full header, not its height."""
     try:
         tip = client.call("blockchain.headers.subscribe", [])
@@ -4794,7 +4822,12 @@ def _electrum_tip_fingerprint(client):
         return None
     if not isinstance(tip, dict) or type(tip.get("height")) is not int or tip["height"] < 0:
         return None
-    header = tip.get("hex")
+    if anchor is not None:
+        anchor["height"] = _cache_anchor_height(tip["height"])
+    return _electrum_header_fingerprint(tip.get("hex"))
+
+
+def _electrum_header_fingerprint(header):
     if not isinstance(header, str):
         return None
     try:
@@ -4988,11 +5021,23 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     changed_scripts = 0
     header_cache_hits = 0
     with _electrum_client_context(backend) as client:
-        tip_fingerprint = _electrum_tip_fingerprint(client)
+        tip_anchor = {}
+        tip_fingerprint = _electrum_tip_fingerprint(client, anchor=tip_anchor)
+        tip_height = tip_anchor.get("height")
         same_tip = (
             tip_fingerprint is not None
             and checkpoint.get("electrum_tip_fingerprint") == tip_fingerprint
         )
+        previous_height = _cache_anchor_height(checkpoint.get("electrum_tip_height"))
+        if (not same_tip and tip_fingerprint is not None and previous_height is not None
+                and tip_height is not None and tip_height > previous_height):
+            try:
+                previous_header = client.call("blockchain.block.header", [previous_height])
+            except AppError:
+                previous_header = None
+            previous_fingerprint = _electrum_header_fingerprint(previous_header)
+            same_tip = (previous_fingerprint is not None and previous_fingerprint
+                        == checkpoint.get("electrum_tip_fingerprint"))
         if not same_tip:
             # Subscription statuses contain txids/heights, not block identity.
             # Even identical history entries can have new confirmation times.
@@ -5261,6 +5306,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         {
             "backend": _backend_identity(backend, sync_state),
             "electrum_tip_fingerprint": tip_fingerprint,
+            "electrum_tip_height": tip_height,
             "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
             "electrum_headers": {
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)

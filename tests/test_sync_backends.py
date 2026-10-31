@@ -419,10 +419,13 @@ class SyncBackendsTest(unittest.TestCase):
     def setUp(self):
         # These protocol fixtures model an unchanged chain unless a test
         # explicitly exercises the real tip readers.
-        for name in ("_esplora_tip_hash", "_electrum_tip_fingerprint"):
+        for name in ("_esplora_tip_hash", "_electrum_tip_fingerprint", "_esplora_block_hash"):
             anchor = patch.object(sb, name, return_value="ab" * 32)
             anchor.start()
             self.addCleanup(anchor.stop)
+        height = patch.object(sb, "_esplora_tip_height", return_value=None)
+        height.start()
+        self.addCleanup(height.stop)
 
     def test_bitcoinrpc_http500_preserves_typed_rpc_error_without_payload(self):
         secret = "private-core-error-secret"
@@ -5909,7 +5912,7 @@ class EsploraHistoryRetractionTest(unittest.TestCase):
 
         with patch.object(sb, "esplora_scripthash_stats", side_effect=read_stats), patch.object(
             sb, "fetch_esplora_scripthash_transactions", side_effect=lambda _url, script, **_kwargs: by_script[script],
-        ) as history, patch.object(sb, "_esplora_tip_hash", return_value="ab" * 32):
+        ) as history, patch.object(sb, "_esplora_tip_hash", return_value="ab" * 32), patch.object(sb, "_esplora_tip_height", return_value=None):
             records, meta = sb.compatibility_esplora_records_for_wallet(
                 {"name": "node", "kind": "esplora", "url": "https://node.example", **(backend or {})},
                 WalletSyncState(chain="bitcoin", network=network, descriptor_plan=None,
