@@ -32,6 +32,41 @@ Primary automated coverage:
 - `tests/test_samourai_import.py`
 - `tests/test_legacy_ledger.py`
 
+## Dependency-origin correction
+
+The `at-fee-consumed-regime-v1` semantic migration marks Austrian books with
+retained fee/transfer-fee journal rows stale once. A rebuild records the regime
+of the lots RP2 actually consumed, rather than the input wallet-regime marker.
+Generic books and books without fee journals are unaffected. The migration
+retains observations, custody evidence, journal rows and saved/filed artifacts;
+only journal processing replaces the derived projection.
+
+The custody dependency-origin fixed-point correction changes only the
+`blocked_by_transaction_ids` explanation stored in `journal_quarantines`:
+previous builds could omit a connected explicit root depending on Python's
+hash seed. Selected rows, blocked transaction membership, journal amounts and
+report-readiness barriers are unchanged. No schema migration or automatic
+journal invalidation is needed. Existing stored explanations remain until
+`journals process` rebuilds them; review evidence and the displayed root may
+then name a previously omitted blocker. Saved exports and filed snapshots
+are not rewritten.
+
+## Custody authoring transaction compatibility
+
+The savepoint atomicity fix changes transaction ownership, not the schema or
+existing authored revisions. Low-level component and legacy consolidation
+helpers leave persistence to their caller; database initialization explicitly
+commits consolidation changes, journal processing owns its writer transaction,
+and review/component/gap authoring boundaries commit their completed operation.
+No caller in these paths requires an outermost savepoint release to persist it.
+
+`tests/test_custody_authoring_atomicity.py` injects late failures and compares
+all persisted tables after rollback, including input versions, memberships and
+audit records. It also pins rollback of successful `commit=False` applies.
+There is no reliable historical failed-request marker from which to reconstruct
+an owner's intended review. Opening an existing book does not silently repair
+or replay authoring; see [recovery](custody-components.md#authoring-transactions-and-recovery).
+
 ## Compact retained calculations
 
 Opening a book adds the nullable `journal_entries.calculation_compact` column

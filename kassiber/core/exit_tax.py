@@ -200,12 +200,12 @@ def _entry_is_alt(entry: Mapping[str, Any]) -> bool:
     honor that marker before falling back to the acquisition-date cutoff.
     """
 
+    category = entry.get("at_category")
+    if dec(entry.get("quantity") or 0) < 0 and category:
+        return str(category).startswith("alt")
     marker = _description_at_regime(entry.get("description"))
     if marker is not None:
         return marker == "alt"
-    category = entry.get("at_category")
-    if category:
-        return str(category).startswith("alt")
     occurred_at = entry.get("occurred_at")
     if occurred_at:
         return infer_regime_from_timestamp(str(occurred_at)) == "alt"

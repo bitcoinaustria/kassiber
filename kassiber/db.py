@@ -821,6 +821,38 @@ def _migrate_tax_engine_semantics(conn) -> int:
     return 1
 
 
+AT_FEE_REGIME_SEMANTICS_MIGRATION = "at-fee-consumed-regime-v1"
+
+
+def _migrate_at_fee_regime_semantics(conn) -> int:
+    """Require one rebuild of AT fees whose old markers described input intent."""
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (AT_FEE_REGIME_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """lower(trim(tax_country)) = 'at' AND EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+        AND entry_type IN ('fee', 'transfer_fee'))"""
+    count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (AT_FEE_REGIME_SEMANTICS_MIGRATION, AT_FEE_REGIME_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": AT_FEE_REGIME_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count}, sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles SET last_processed_at = NULL,
+        last_processed_tx_count = 0, journal_input_version = journal_input_version + 1,
+        ownership_review_counts_json = NULL,
+        required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+        WHERE {affected}""")
+    return 1
+
+
 STORED_ERROR_CREDENTIALS_MIGRATION = "stored-error-credentials-v1"
 # Columns where a failed sync or provider check kept error text that a server
 # could have filled with a credential it echoed. ``*_json`` columns hold JSON.
@@ -5466,6 +5498,8 @@ def ensure_schema_compat(conn):
     if _migrate_custody_hold_semantics(conn):
         conn.commit()
     if _migrate_tax_engine_semantics(conn):
+        conn.commit()
+    if _migrate_at_fee_regime_semantics(conn):
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")

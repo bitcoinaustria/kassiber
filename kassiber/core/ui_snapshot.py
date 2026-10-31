@@ -3917,14 +3917,14 @@ def _entry_alt_flow_msat(entry: dict[str, Any], marker: str) -> int | None:
 
 
 def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
+    category = entry.get("at_category")
+    if dec(entry.get("quantity") or 0) < 0 and category:
+        return str(category).startswith("alt")
     marker = _entry_at_regime_marker(entry)
     if marker == "alt":
         return True
     if marker == "neu":
         return False
-    category = entry.get("at_category")
-    if category:
-        return str(category).startswith("alt")
     occurred_at = entry.get("occurred_at")
     if not occurred_at:
         return False
