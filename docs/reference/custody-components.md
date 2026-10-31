@@ -374,7 +374,11 @@ PDF/CSV/XLSX report, summary PDF, and Austrian E 1kv PDF/XLSX/CSV bundle.
 Read-only previews, transaction-ledger exports, and valuation-as-of exit-tax
 estimates do not create markers. Exit tax needs a separate replayable valuation
 recipe; recording ordinary realized-journal totals against it would create false
-amendment evidence. Export is evidence that a report was saved, not that it was
+amendment evidence. As an interim manual freshness check, exit-tax PDF/XLSX
+drafts stamp the journal input version and every FMV quote's source and `asOf`.
+Compare those stamps with a newly generated draft after a rebuild or rate
+change; they are not a registered snapshot or automatic amendment detection.
+Export is evidence that a report was saved, not that it was
 legally filed, so only an explicit user action may create a `filed` marker.
 
 The marker stores the report kind and period, an application-computed SHA-256

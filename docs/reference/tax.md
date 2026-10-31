@@ -349,6 +349,22 @@ acquisition bucket, keeps market-value, gain and estimated-tax totals null;
 known quantities and basis remain available for review.
 Exit-tax exports remain valuation drafts outside the ordinary realized-report
 snapshot system; see [saved and filed report impact](custody-components.md#saved-and-filed-report-impact).
+PDF/XLSX drafts stamp the journal input version alongside the FMV quotes for
+manual comparison after changes; this does not register a saved/filed snapshot.
+
+### Exit-tax cutoff timezone: owner decision pending
+
+The departure day currently means the UTC calendar day. Austrian Alt/Neu
+classification uses the Europe/Vienna calendar. Keep that policy unchanged
+until the owner chooses whether to retain a clearly labelled UTC day, use the
+book jurisdiction's civil day (with DST-aware midnight bounds), or accept an
+explicit departure timezone/instant. Any change must apply to inventory and
+FMV together and be visible on the handoff.
+
+For departure 2024-12-31, a receipt at 2025-01-01 00:30 Europe/Vienna is
+2024-12-31 23:30Z: the current UTC day includes it although the Vienna departure
+day has ended. In summer, 2024-04-01 00:30 Europe/Vienna is 2024-03-31 22:30Z.
+The 22:30Z conversion is the summer case; winter uses UTC+1.
 
 ## Rates and tax input quality
 

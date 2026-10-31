@@ -259,3 +259,38 @@ def test_unpriced_wallet_only_rail_keeps_all_valuation_totals_incomplete(engine_
     assert report["status"]["missingFmvAssets"] == ["LBTC"]
     for field in ("neuMarketValue", "altMarketValue", "neuGain", "taxableGain", "estimatedTax"):
         assert report["totals"][field] is None
+
+
+@pytest.mark.parametrize("format", ("pdf", "xlsx"))
+def test_handoff_stamps_current_input_version_and_quotes_without_snapshot(engine_book, tmp_path, format):
+    at = "2024-12-31T12:34:56Z"
+    conn = engine_book([("buy", "Cold", at, "inbound", BTC, 0, 30000, "buy")], quotes=[(at, 65000)])
+    exporter = getattr(reports, f"export_exit_tax_{format}_report")
+    versions = []
+    for revision in range(2):
+        if revision:
+            conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1")
+            conn.commit()
+            handlers.process_journals(conn, "W", "P")
+        version = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+        report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+        assert report["journalInputVersion"] == version
+        artifact = tmp_path / f"exit-{revision}.{format}"
+        exporter(conn, "W", "P", artifact, handlers._report_hooks(), departure_date="2024-12-31")
+        if format == "pdf":
+            text = artifact.read_bytes().decode("latin1")
+            assert f"Journal input version: {version}" in text
+            assert "source: cache" in text and f"as of: {at}" in text
+        else:
+            workbook = openpyxl.load_workbook(artifact)
+            try:
+                overview = {row[0].value: row[1].value for row in workbook["Overview"]}
+                assert overview["Journal input version"] == version
+                quotes = [cell.value for row in workbook["FMV quotes"] for cell in row]
+                assert at in quotes and "cache" in quotes
+            finally:
+                workbook.close()
+        versions.append(version)
+        assert conn.execute("SELECT COUNT(*) FROM filed_report_snapshots").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM filed_report_chain_captures").fetchone()[0] == 0
+    assert versions[1] == versions[0] + 1

@@ -561,6 +561,10 @@ def compute_deemed_disposal(
         "departureDate": day,
         "destination": dest,
         "method": method,
+        "journalInputVersion": (
+            int(profile["journal_input_version"])
+            if profile.get("journal_input_version") is not None else None
+        ),
         "fmvSource": fmv_source,
         "totals": {
             "neuQuantitySats": _sats(neu_qty_total),
@@ -664,6 +668,8 @@ def format_exit_tax_lines(report: Mapping[str, Any]) -> list[str]:
     lines.append(f"Exit-tax estimate — {report['profile']} ({report['jurisdictionCode']})")
     lines.append(f"Departure date: {report['departureDate']}    Destination: {report['destination']}")
     lines.append(f"Accounting method: {report['method']}")
+    version = report.get("journalInputVersion")
+    lines.append(f"Journal input version: {version if version is not None else 'unavailable'}")
     lines.append("FMV quotes:")
     for quote in report["fmvSource"]:
         lines.append(

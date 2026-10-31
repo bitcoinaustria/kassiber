@@ -7465,6 +7465,7 @@ def _exit_tax_xlsx_specs(report):
         {"field": "Destination", "value": report["destination"]},
         {"field": "Collection timing", "value": totals["collectionTiming"]},
         {"field": "Accounting method", "value": report["method"]},
+        {"field": "Journal input version", "value": report["journalInputVersion"]},
         {"field": f"Neubestand gain ({ccy})", "value": totals["neuGain"]},
         {"field": f"Taxable gain ({ccy})", "value": totals["taxableGain"]},
         {"field": "Rate", "value": totals["estimatedTaxRate"]},

@@ -37,16 +37,18 @@ jurisdiction shape the seam (tracked as future work, not v1).
 The deemed disposal is "what your capital-gains report would show if you sold
 everything at FMV on the departure date" — so it must agree with the engine's
 own tax math. v1 achieves that **without re-running the engine or synthesizing
-rows**: it reads the journal state RP2 already computed
-(`hooks.build_ledger_state`) and rebuilds the remaining inventory + cost basis
+rows**: it reads the stored journal projection RP2 already computed
+(`custody_journal.load_stored_ledger_state`) and rebuilds the remaining inventory + cost basis
 **per regime, directly from those entries**:
 
 1. Walk journal entries strictly before the next day's `00:00:00Z`, including
    fractional seconds at the end of the UTC departure day and comparing
    instants rather than stored timestamp text.
-2. Acquisitions/income **add** quantity + cost (acquisition-date regime via
-   `infer_regime_from_timestamp`); disposals **subtract** quantity + their
-   engine-computed consumed cost basis (regime from the entry's `at_category`).
+2. Acquisitions **add** quantity + cost (regime marker, then acquisition date).
+   Income rows annotate the same receipt and are not counted twice. Disposals
+   and fees **subtract** quantity + engine-computed consumed cost basis.
+   Outflow `at_category` takes precedence over input regime markers; fee rows
+   use the regime of RP2's consumed lots.
 3. Internal transfers (`transfer_in` / `transfer_out`) create no
    acquisition/disposal entry, so they never touch the global pool — the split
    is transfer-invariant and needs no pair reconstruction.
@@ -70,8 +72,8 @@ No new tax math — the report reads the engine's own numbers.
 
 | Need | Source used |
 |---|---|
-| Remaining inventory + cost basis per regime | journal entries from `hooks.build_ledger_state` (acquisition `fiat_value`, disposal `cost_basis`), walked in `compute_deemed_disposal` |
-| Alt/Neu attribution | disposal `at_category` prefix; acquisition `occurred_at` vs `AT_NEU_CUTOFF` via `infer_regime_from_timestamp()` |
+| Remaining inventory + cost basis per regime | stored journal projection (acquisition `fiat_value`, outflow `cost_basis`), walked in `compute_deemed_disposal` |
+| Alt/Neu attribution | outflow `at_category` prefix first; otherwise regime marker, then `occurred_at` via `infer_regime_from_timestamp()`; fee markers reflect consumed lots |
 | FMV at the departure date | `rates_cache` lookup strictly before the cutoff + transaction-price fallback within the preceding 24 hours, disclosing source and actual quote timestamp (`_fmv_at`) |
 | 27.5% rate, Kennzahl mapping | `AT_SONDERSTEUERSATZ` (estimate constant) + `kennzahl_for_disposal_category()` |
 | PDF / XLSX adviser handoff | `hooks.write_text_pdf` + the generic XLSX writer in `kassiber/core/reports.py` |
@@ -157,7 +159,7 @@ defaults it invoked.
 | EXIT-007 | Deemed-disposal losses on Neu lots | net within the exit computation per Austrian capital-income loss rules; multi-year carryforward stays out of scope (see 06) | review required |
 | EXIT-008 | Departure date, DTA tie-breaker, dual residence | taken as user input; Kassiber does not determine residency facts | adviser determines; out of scope |
 | EXIT-009 | Neubestand basis when Alt+Neu coexist | v1 sums Neu-only inflow cost minus Neu-only disposal basis from journal entries; if rp2's `moving_average_at` blends Alt acquisitions into the Neu pool, the entries walk may diverge slightly | the synthetic-disposal precision path (forced `at_regime_override` legs) closes this; review |
-| EXIT-010 | Regime of a non-reportable disposal | a disposal the user marked non-reportable (`taxability_override=0`) carries no `at_category`, so the entries walk infers its regime from the disposal date — may misattribute Altbestand sold after the cutoff | surfaced as an assumption note when such rows exist; the synthetic-disposal path would also resolve it; review |
+| EXIT-010 | Regime of a non-reportable disposal | without `at_category`, use its regime marker; without either, fall back to the disposal date, which may misattribute Altbestand | missing category and marker surface as an assumption note; review |
 
 ## Gotchas
 
@@ -178,7 +180,8 @@ defaults it invoked.
   XLSX and the desktop FMV card disclose every quote's source and `asOf`.
 - **Export history:** exit-tax estimates intentionally do not register ordinary
   realized-journal snapshots or chain dependency captures. A replayable
-  valuation recipe is needed first; see
+  valuation recipe is needed first. PDF/XLSX stamp the journal input version
+  and FMV source/`asOf` for interim manual freshness comparisons; see
   [saved and filed report impact](../reference/custody-components.md#saved-and-filed-report-impact).
 - **Re-run journals first.** The estimate is only trustworthy after journals are
   processed; the daemon auto-processes for `exit_tax_preview`, and the CLI/report
