@@ -104,16 +104,26 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
   ]);
 
 // Keep assignment names aligned with Python and the shared exact-output corpus.
-const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]+[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)`;
+const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]*[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*`;
 const SECRET_ASSIGNMENT = String.raw`(?<![A-Za-z0-9_.-])(["']?\b${SECRET_KEY_NAME}\b["']?)(\s*[:=]\s*)`;
 
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
+  // One JSON-escaped layer: delimiters are \" and escaped inner quotes
+  // belong to the value. Keep the surrounding diagnostic representation.
   [
-    /(?<![A-Za-z0-9_.-])\b((?:[A-Za-z0-9]+[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
+    new RegExp(String.raw`(?<![A-Za-z0-9_.-])(\\"\b${SECRET_KEY_NAME}\b\\")(\s*[:=]\s*)\\"(?:\\\\[\s\S]|[^\\]|\\(?!["\\]))*\\"`, "gi"),
+    String.raw`$1$2\"[redacted]\"`,
+  ],
+  [
+    new RegExp(String.raw`(?<![A-Za-z0-9_.-])(\\"\b${SECRET_KEY_NAME}\b\\")(\s*[:=]\s*)\\"(?!\[redacted\])[^\r\n]*`, "gi"),
+    String.raw`$1$2\"[redacted]`,
+  ],
+  [
+    /(?<![A-Za-z0-9_.-])\b((?:[A-Za-z0-9]*[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
     "$1$2[redacted]",
   ],
   [
-    /\b((?:https?|tcp|ssl):\/\/)([^/\s:@]+):([^@\s/]+)@/gi,
+    /\b((?:https?|tcp|ssl|socks5h?|wss?):\/\/)([^/\s@\\"'<>?#]+)@/gi,
     "$1[redacted-credentials]@",
   ],
   ...BARE_BIP39_WORD_RUN_PATTERNS,
@@ -141,7 +151,7 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     /\b(wpkh|sh|wsh|tr|pkh|combo|sp)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
     (match) => maskDescriptor(match),
   ],
-  [/\b(Authorization\s*[:=]\s*)(?:Basic|Bearer)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]"],
+  [/\b(Authorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)/gi, "$1[redacted]"],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
     new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3`, "gi"),
