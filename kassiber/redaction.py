@@ -49,15 +49,15 @@ _SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstu
 _SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
-_URL_CREDENTIALS_RE = re.compile(r"\b((?:https?|tcp|ssl)://)([^/\s:@]+):([^@\s/]+)@", re.IGNORECASE)
-_AUTHORIZATION_RE = re.compile(r"(\bAuthorization\s*[:=]\s*)(?:Basic|Bearer)\s+[A-Za-z0-9._~+/-]+=*", re.IGNORECASE)
+_URL_CREDENTIALS_RE = re.compile(r'''\b((?:https?|tcp|ssl|socks5h?|wss?)://)([^/\s@\\"'<>?#]+)@''', re.IGNORECASE)
+_AUTHORIZATION_RE = re.compile(r"(\bAuthorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)", re.IGNORECASE)
 _SECRET_KEY_NAME = (
-    r"(?:[A-Za-z0-9]+[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|"
+    r"(?:[A-Za-z0-9]*[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|"
     r"blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|"
     r"rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|"
     r"rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|"
     r"silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|"
-    r"sp[_-]?descriptor|spscan|spspend|token|xprv)"
+    r"sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*"
 )
 _QUOTED_SECRET_VALUE = r'''(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')'''
 # A truncated quoted value may contain spaces. Fail closed through end of line.
@@ -68,8 +68,14 @@ _ASSIGNED_SECRET_RE = re.compile(
     rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
     re.IGNORECASE,
 )
+_ESCAPED_ASSIGNED_SECRET_RE = re.compile(
+    rf'(?<![A-Za-z0-9_.-])(?P<key>\\"\b{_SECRET_KEY_NAME}\b\\")(?P<sep>\s*[:=]\s*)'
+    r'(?:(?P<quoted>\\"(?:\\\\[\s\S]|[^\\]|\\(?!["\\]))*\\")|(?P<unterminated>\\"[^\r\n]*))',
+    re.IGNORECASE,
+)
+
 _RECOVERY_ASSIGNMENT_RE = re.compile(
-    r"(?<![A-Za-z0-9_.-])(?P<key>\b(?:[A-Za-z0-9]+[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
+    r"(?<![A-Za-z0-9_.-])(?P<key>\b(?:[A-Za-z0-9]*[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
     r"(?P<sep>\s*[:=]\s*)"
     # Quoted values belong to the escape-aware assignment parser below.
     r"(?=[^'\"\s])(?P<value>[^,;}{\r\n]*?)"
@@ -210,7 +216,10 @@ def is_sensitive_key(key: str) -> bool:
 def redact_secret_text(value: str) -> str:
     """Redact secret-shaped material from text that may cross a trust boundary."""
 
-    text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>[redacted]", value)
+    text = _ESCAPED_ASSIGNED_SECRET_RE.sub(
+        lambda m: f"{m['key']}{m['sep']}" + '\\"[redacted]' + ('\\"' if m['quoted'] else ''), value,
+    )
+    text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>[redacted]", text)
     text = _URL_CREDENTIALS_RE.sub(r"\1[redacted-credentials]@", text)
     text = _AUTHORIZATION_RE.sub(r"\1[redacted]", text)
     text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)

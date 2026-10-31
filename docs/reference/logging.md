@@ -96,7 +96,12 @@ and the webview share exact expected outputs in
 The corpus also covers URL userinfo, Silent Payments scan keys, prefixed
 credential names, Basic authorization, Core Lightning runes, and escaped quotes
 in recovery material. Quoted recovery values use the same escape-aware parser
-as passwords; underscore/dot prefixes do not hide a credential name.
+as passwords; repeated underscore/dot/dash prefixes and versioned or trailing
+underscore suffixes do not hide a credential name. URL userinfo is scrubbed for
+HTTP(S), TCP/TLS, SOCKS5(H), and WS(S), including empty usernames and token-only
+userinfo. Token and Digest authorization and one JSON-escaped assignment layer
+are covered by the same Python/webview corpus. Credential matching starts only
+at full identifier boundaries to keep long diagnostic lines linear.
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
