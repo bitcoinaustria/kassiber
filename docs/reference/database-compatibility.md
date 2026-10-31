@@ -137,6 +137,9 @@ stamp columns already exist. It records the affected book count and required
 version, and requires a stamped rebuild of previously processed books, because
 the earlier custody-hold correction applied to every such book. Adoption leaves
 unprocessed books alone and preserves input markers. Raw observations, authored
+Kassiber restores freshness. The first upgrade also
+requires a stamped rebuild of previously processed books, because the earlier
+custody-hold correction applied to every such book. Raw observations, authored
 reviews, retained journals and filed snapshots are not rewritten by this guard.
 
 This protects reopen after an older binary rebuilds; it cannot make an older
