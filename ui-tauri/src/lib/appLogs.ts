@@ -107,17 +107,25 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
 const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]*[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*`;
 const SECRET_ASSIGNMENT = String.raw`(?<![A-Za-z0-9_.-])(["']?${SECRET_KEY_NAME}\b["']?)(\s*[:=]\s*)`;
 
+// A fixed number of deterministic passes keeps nested JSON handling linear.
+function escapedSecretPatterns(depth: number): Array<[RegExp, TextBackstopReplacement]> {
+  const slash = String.raw`\\`;
+  const delimiter = `${slash.repeat(2 ** depth - 1)}"`;
+  const unit = slash.repeat(2 ** depth);
+  const quote = `${"\\".repeat(2 ** depth - 1)}"`;
+  const assignment = String.raw`(?<![A-Za-z0-9_.-])(${delimiter}${SECRET_KEY_NAME}\b${delimiter})(\s*[:=]\s*)`;
+  const content = String.raw`(?:${unit}${unit}|${unit}${delimiter}|${unit}[^\\]|[^\\]|\\(?!["\\]))*`;
+  return [
+    [new RegExp(`${assignment}${delimiter}${content}${delimiter}`, "gi"),
+      (_match, key, sep) => `${key}${sep}${quote}[redacted]${quote}`],
+    [new RegExp(String.raw`${assignment}${delimiter}(?!\[redacted\])[^\r\n]*`, "gi"),
+      (_match, key, sep) => `${key}${sep}${quote}[redacted]`],
+  ];
+}
+
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
-  // One JSON-escaped layer: delimiters are \" and escaped inner quotes
-  // belong to the value. Keep the surrounding diagnostic representation.
-  [
-    new RegExp(String.raw`(?<![A-Za-z0-9_.-])(\\"${SECRET_KEY_NAME}\b\\")(\s*[:=]\s*)\\"(?:\\\\\\\\|\\\\\\"|\\\\[^\\]|[^\\]|\\(?!["\\]))*\\"`, "gi"),
-    String.raw`$1$2\"[redacted]\"`,
-  ],
-  [
-    new RegExp(String.raw`(?<![A-Za-z0-9_.-])(\\"${SECRET_KEY_NAME}\b\\")(\s*[:=]\s*)\\"(?!\[redacted\])[^\r\n]*`, "gi"),
-    String.raw`$1$2\"[redacted]`,
-  ],
+  ...escapedSecretPatterns(2),
+  ...escapedSecretPatterns(1),
   [
     /(?<![A-Za-z0-9_.-])((?:[A-Za-z0-9]*[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
     "$1$2[redacted]",

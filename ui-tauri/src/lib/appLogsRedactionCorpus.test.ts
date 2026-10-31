@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import corpus from "../../../tests/fixtures/operational_redaction_cases.json";
+import stress from "../../../tests/fixtures/secret_redaction_stress_cases.json";
 import secrets from "../../../tests/fixtures/secret_redaction_cases.json";
 
 let logs: typeof import("./appLogs");
@@ -39,5 +40,13 @@ it.each(["-", "."])("redacts 100k characters in well under a second (%s)", (sepa
   const start = performance.now();
   const record = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
   expect(record!.msg).toBe(text);
+  expect(performance.now() - start).toBeLessThan(500);
+});
+
+
+it.each(stress)("keeps adversarial secret shape $name within the deadline", (testCase) => {
+  const text = testCase.prefix + testCase.repeat.repeat(Math.floor(40_000 / testCase.repeat.length) + 1) + testCase.suffix;
+  const start = performance.now();
+  logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
   expect(performance.now() - start).toBeLessThan(500);
 });

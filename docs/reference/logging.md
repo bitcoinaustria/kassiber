@@ -99,9 +99,13 @@ in recovery material. Quoted recovery values use the same escape-aware parser
 as passwords; repeated underscore/dot/dash prefixes and versioned or trailing
 underscore suffixes do not hide a credential name. URL userinfo is scrubbed for
 HTTP(S), TCP/TLS, SOCKS5(H), and WS(S), including empty usernames and token-only
-userinfo. Token and Digest authorization and one JSON-escaped assignment layer
-are covered by the same Python/webview corpus. Credential matching starts only
-at full identifier boundaries to keep long diagnostic lines linear.
+userinfo. Token and Digest authorization and two JSON-escaped assignment layers
+are covered by the same Python/webview corpus. A normal JSON object and up to
+two enclosing JSON strings (triple encoding)
+retain their representation while redacting assigned values. Deeper encoding
+is outside this textual backstop; emit structured secret fields instead.
+Credential matching starts only at full identifier boundaries, including
+leading dash/dot runs, to keep long diagnostic lines linear.
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
