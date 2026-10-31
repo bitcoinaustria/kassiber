@@ -104,8 +104,11 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
   ]);
 
 // Keep assignment names aligned with Python and the shared exact-output corpus.
-const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]*[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*`;
+const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]*[_.-])*[0-9]*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*`;
 const SECRET_ASSIGNMENT = String.raw`(?<![A-Za-z0-9_.-])(["']?${SECRET_KEY_NAME}\b["']?)(\s*[:=]\s*)`;
+
+// Assignment separators belong to the preceding assignment pass.
+const SECRET_FLAG = String.raw`(?<![A-Za-z0-9_.-])(-{1,2}${SECRET_KEY_NAME}\b)([ \t]+)(?![:=])`;
 
 // A fixed number of deterministic passes keeps nested JSON handling linear.
 function escapedSecretPatterns(depth: number): Array<[RegExp, TextBackstopReplacement]> {
@@ -123,11 +126,29 @@ function escapedSecretPatterns(depth: number): Array<[RegExp, TextBackstopReplac
   ];
 }
 
+function assignedSecretPatterns(prefix: string): Array<[RegExp, TextBackstopReplacement]> {
+  return [
+    [
+      new RegExp(String.raw`${prefix}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3(?:[^\s,;}\])][^\r\n]*)?`, "gi"),
+      "$1$2$3[redacted]$3",
+    ],
+    [
+      new RegExp(String.raw`${prefix}([^\s,;}"']+)`, "gi"),
+      "$1$2[redacted]",
+    ],
+    // Complete quotes run first. Never reprocess their redacted output here.
+    [
+      new RegExp(String.raw`${prefix}(["'])(?!\[redacted\])[^\r\n]*`, "gi"),
+      "$1$2$3[redacted]",
+    ],
+  ];
+}
+
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ...escapedSecretPatterns(2),
   ...escapedSecretPatterns(1),
   [
-    /(?<![A-Za-z0-9_.-])((?:[A-Za-z0-9]*[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
+    /(?<![A-Za-z0-9_.-])((?:[A-Za-z0-9]*[_.-])*[0-9]*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
     "$1$2[redacted]",
   ],
   [
@@ -161,19 +182,8 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ],
   [/\b(Authorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)/gi, "$1[redacted]"],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
-  [
-    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3(?:[^\s,;}\])][^\r\n]*)?`, "gi"),
-    "$1$2$3[redacted]$3",
-  ],
-  [
-    new RegExp(String.raw`${SECRET_ASSIGNMENT}([^\s,;}"']+)`, "gi"),
-    "$1$2[redacted]",
-  ],
-  // Complete quotes run first. Never reprocess their redacted output here.
-  [
-    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])(?!\[redacted\])[^\r\n]*`, "gi"),
-    "$1$2$3[redacted]",
-  ],
+  ...assignedSecretPatterns(SECRET_ASSIGNMENT),
+  ...assignedSecretPatterns(SECRET_FLAG),
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =
