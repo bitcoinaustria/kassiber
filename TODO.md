@@ -470,6 +470,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   (including persisted suggest/assemble) and recipient mutations in separate
   verified commits on `t3code/r5-sof-mutations`. Preserve consent, once-only
   execution and SQLite/SQLCipher rollback.
+  A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
+  now prepares the two-row case/snapshot write; full case saving still needs the
+  parallel native report/review producers, transport registration and consent.
+  Newly served native mutation CLI/daemon counts remain zero.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

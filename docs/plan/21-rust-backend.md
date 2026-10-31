@@ -1276,6 +1276,31 @@ ownership. The [stored-list checkpoint](../reference/rust-shell.md#source-funds-
 records the verification and preserved Python quirks. Python product code,
 dependencies, lockfiles, schema and tax rules are unchanged.
 
+### R5 source-funds mutation persistence foundation (partial)
+
+`t3code/r5-sof-mutations`, based on `a99fa77c8`, adds a native frozen-case
+persistence helper with the reference's two identities, timestamp, exact msat,
+frozen recipient/external metadata, JSON bytes and snapshot commitment. Both
+rows share a savepoint; late insert/commit failure rolls back the save, while
+an enclosing reviewed operation retains its transaction and commit authority.
+The unchanged Python primitive's missing local rollback has a synthetic repro.
+Three focused Rust tests and all 74 SQLite/SQLCipher process comparisons pass,
+with exact receipt encodings and all 112 tables. All 21 new mutation entries
+are killed by named tests. Formatting, report all-target clippy, the required
+classifier update and all 57 CI preflight tests pass.
+
+This does not complete case saving or enable a mutation route. Native report
+composition, diagrams and fingerprint recomputation are dependencies owned by
+the parallel read branch. CLI/daemon registration, consent and once-only
+execution remain pending. Newly served mutation calls/requests are both zero;
+the inventory remains 157 CLI leaves and five source-funds listing kinds.
+No fallback contributes mutation acceptance. The ordered remaining work is
+case saving end to end, source mutations/attachment, link mutations/attachment,
+batch review and persisted suggest/assemble, then recipient mutations.
+The [persistence checkpoint](../reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
+records the exact boundary and verification. PDF-containing bundles stay Python;
+no dependencies, lockfiles, schema, tax rules or Python product code change.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

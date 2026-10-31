@@ -5960,6 +5960,100 @@ followed by review-context/request-input, coverage and suggest/assemble dry runs
 Case saving and source/link/recipient mutations belong to the parallel
 `t3code/r5-sof-mutations` worker. PDF rendering and PDF-containing bundles remain
 Python; their native routes stay unregistered.
+## Source-funds frozen-case persistence foundation (R5 partial)
+
+`t3code/r5-sof-mutations` starts at `a99fa77c8`. The native
+`source_funds_cases::save_snapshot` helper accepts an already composed
+`FrozenCase`; it does not accept a report recipe or establish review approval.
+It preserves the two distinct UUIDs, one timestamp, exact integer target msat,
+null/empty distinctions, frozen external/recipient fields, sorted spaced
+snapshot JSON and the SHA-256 of separately sorted compact JSON. Decimal
+values use shared `json_ready` conversion before either serialization.
+The case and immutable snapshot carry identical payloads and commitments.
+No attachment files are read, copied or written by this persistence step.
+Stored evidence and diagrams remain frozen data, without granting ownership,
+basis or tax authority.
+
+A savepoint owns both inserts and rolls back failures, including a refused
+snapshot insert and a deferred foreign-key or busy refusal at commit. A failed
+standalone commit uses full rollback; nested statement failures roll back the
+helper's savepoint while retaining the caller's pending work. Python's raw
+helper commits its caller's transaction; this composable
+helper leaves a nested caller to commit the complete reviewed operation.
+The eventual reviewed operation must acquire the write lock, recompute
+the native report/fingerprint, call this helper and commit under that same
+lock, rolling back the outer transaction if it fails. This helper alone
+cannot perform those admission checks.
+
+The raw Python `save_case_snapshot` helper leaves a pending case row after
+a later snapshot insert fails. Its caller must roll back. The differential
+oracle performs that caller rollback on errors; Python product code is
+unchanged. The synthetic reproduction is:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_cases
+```
+
+The reference corpus contains 37 cases: 29 saves and eight refusals. It covers
+Unicode/surrogate JSON, nested ordering, float/Decimal conversion, non-finite
+snapshot values, exact msat extremes, disclosure modes, recipient rename and
+deletion, literal evidence metadata, identity collisions, insert failures and
+deferred commit refusal. Receipt success envelopes are compared in their
+complete CLI and compact daemon encodings. Those encodings are helper tests,
+not registered transport acceptance. Internal failures remain structured
+service comparisons; the existing traceback/debug wire gap is not waived.
+
+All three focused Rust tests pass. The native process oracle passes all 74
+comparisons, 37 each on SQLite and SQLCipher, checking receipt bytes and every
+one of the 112 tables after each operation. Separate disk-backed tests prove
+outer-transaction preservation and rollback after a busy commit refusal on
+both stores. The generator checks cleanly and the reference repro passes all
+five assertions.
+
+All 776 mutation entries apply. The 21 new entries are killed by these named
+tests; their three unmutated baselines pass, with no survivors, build errors or
+empty selections. The 755 inherited entries retain their previous evidence.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables` | 17 |
+| `source_funds_case_snapshot_preserves_outer_transaction_and_late_rollback` | 2 |
+| `source_funds_case_snapshot_rolls_back_commit_busy_on_both_stores` | 2 |
+
+Rust 1.99.1 offline/locked formatting and report-package all-target clippy with
+warnings denied pass. The required classifier update records 5,715 definitions
+and the new retained persistence oracle; required CI preflight passes all 57
+tests. The optional full report-package rerun was interrupted during inherited
+durable export-completion fixtures and is not acceptance evidence. Full
+workspace/frontend, regtest and packaged/platform checks are not claimed.
+
+`target/r5-sof-mutations/verification-summary.json` and `mutation-summary.json`
+retain counts, per-entry killers, source/probe hashes, the reference repro and
+the explicit transport limitation. The completed mutation campaign uses an
+isolated source copy and Cargo tree, restricted to its named integration-test
+target; neither interrupted broad attempt contributes passing evidence.
+Account `HOME` is preserved, with eight Cargo jobs, no incremental/debug
+output and scratch/data roots under `target/`. The verification and mutation
+build trees total 2.6 GB before removal. Owned build/data trees are removed
+after summarizing; logs and summaries remain. Verification is Linux-only.
+
+This foundation does **not** complete the requested case-saving vertical slice.
+The base contains only stored listings. Native report traversal/disclosure,
+diagrams and review-fingerprint recomputation belong to the parallel
+`t3code/r5-sof-reads` branch. Case-saving CLI and daemon registration must wait
+for those producers, with native consent and once-only tool execution and
+full process/state comparisons. There are zero newly served native mutation
+CLI calls and zero mutation daemon requests. The inventory remains 157 native
+CLI leaves and five source-funds listing daemon kinds; no mutation fallback
+is counted as acceptance.
+
+The ordered remainder is complete case saving through both transports and AI
+consent; source creation/evidence attachment; link creation/review/attachment,
+batch review and persisted suggest/assemble; then recipient mutations. Each
+requires its own verified boundary, exact attachment placement/hashes where
+applicable, all-table parity and SQLite/SQLCipher late-failure rollback.
+PDF rendering and PDF-containing bundles remain Python.
 
 ## Not yet ported
 

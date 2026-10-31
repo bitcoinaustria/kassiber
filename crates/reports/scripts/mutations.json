@@ -9049,5 +9049,215 @@
       "tests/test_rust_source_funds_reads.py::test_source_funds_internal_debug_normalization_preserves_other_wire_bytes"
     ],
     "rule": "The approved native-stack difference permits normalization of error.debug only; message changes remain byte differences."
+  },
+  {
+    "id": "sof-case-json-ready",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "kassiber_envelope::json_ready(case.snapshot.clone())",
+    "replace": "case.snapshot.clone()",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Snapshot Decimals use the shared JSON-ready float conversion before storage and hashing."
+  },
+  {
+    "id": "sof-case-stored-order",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "&kassiber_pyjson::Options::new().sort_keys(true))",
+    "replace": "&kassiber_pyjson::Options::new().sort_keys(false))",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Stored snapshot JSON sorts nested keys while retaining Python default spacing."
+  },
+  {
+    "id": "sof-case-hash-order",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "&kassiber_pyjson::Options::new().sort_keys(true).compact()",
+    "replace": "&kassiber_pyjson::Options::new().sort_keys(false).compact()",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Snapshot digests sort keys independently of the authored insertion order."
+  },
+  {
+    "id": "sof-case-hash-spacing",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "&kassiber_pyjson::Options::new().sort_keys(true).compact()",
+    "replace": "&kassiber_pyjson::Options::new().sort_keys(true)",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Snapshot digests hash compact JSON rather than the spaced stored encoding."
+  },
+  {
+    "id": "sof-case-hash-payload",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "Sha256::digest(compact.as_bytes())",
+    "replace": "Sha256::digest(stored.as_bytes())",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "The case commitment uses the compact payload, not stored JSON bytes."
+  },
+  {
+    "id": "sof-case-distinct-identities",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "let snapshot_id = sources.uuid(conn)?;",
+    "replace": "let snapshot_id = case_id.clone();",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Case and snapshot consume separate identities in reference order."
+  },
+  {
+    "id": "sof-case-exact-msat",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "case.target_amount_msat,case.asset",
+    "replace": "case.target_amount_msat/1000,case.asset",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Target quantities remain exact integer msat without satoshi truncation."
+  },
+  {
+    "id": "sof-case-external-snapshot",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "case.target_external_id,case.target_amount_msat",
+    "replace": "Option::<&str>::None,case.target_amount_msat",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "The target external identifier is frozen exactly, including null and empty distinctions."
+  },
+  {
+    "id": "sof-case-case-label",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "case.asset,case.label,case.reveal_mode",
+    "replace": "case.asset,Option::<&str>::None,case.reveal_mode",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Authored case labels are retained without normalization."
+  },
+  {
+    "id": "sof-case-recipient-id",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "created_at,case.recipient_id,case.recipient_label_snapshot",
+    "replace": "created_at,Option::<&str>::None,case.recipient_label_snapshot",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "The case retains its recipient identity separately from frozen disclosure fields."
+  },
+  {
+    "id": "sof-case-recipient-label",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "case.recipient_id,case.recipient_label_snapshot,case.recipient_kind_snapshot",
+    "replace": "case.recipient_id,case.label,case.recipient_kind_snapshot",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Recipient labels come from the reviewed snapshot rather than the case label or live recipient."
+  },
+  {
+    "id": "sof-case-recipient-kind",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "case.recipient_label_snapshot,case.recipient_kind_snapshot,case.recipient_reveal_mode_snapshot",
+    "replace": "case.recipient_label_snapshot,Option::<&str>::None,case.recipient_reveal_mode_snapshot",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Frozen recipient kind is preserved even after recipient deletion."
+  },
+  {
+    "id": "sof-case-recipient-reveal",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "case.recipient_kind_snapshot,case.recipient_reveal_mode_snapshot]",
+    "replace": "case.recipient_kind_snapshot,Some(case.reveal_mode)]",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Recipient default disclosure remains distinct from the selected report disclosure."
+  },
+  {
+    "id": "sof-case-snapshot-parent",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "params![snapshot_id,case_id,digest,stored,created_at]",
+    "replace": "params![snapshot_id,snapshot_id,digest,stored,created_at]",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "The immutable snapshot belongs to the newly saved case."
+  },
+  {
+    "id": "sof-case-snapshot-hash",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "params![snapshot_id,case_id,digest,stored,created_at]",
+    "replace": "params![snapshot_id,case_id,\"wrong\",stored,created_at]",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "Both persisted rows carry the same exact snapshot commitment."
+  },
+  {
+    "id": "sof-case-receipt-status",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "(\"status\", s(case.status))",
+    "replace": "(\"status\", s(\"blocked\"))",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "The persistence receipt returns the composed report status."
+  },
+  {
+    "id": "sof-case-rollback",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "committed: false,",
+    "replace": "committed: true,",
+    "expect_failing": [
+      "source_funds_case_snapshot_pins_json_hash_receipt_and_all_112_tables"
+    ],
+    "rule": "A failed later insert or commit rolls back both rows."
+  },
+  {
+    "id": "sof-case-outer-rollback",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "\"ROLLBACK TO source_funds_case_write; RELEASE source_funds_case_write\"",
+    "replace": "\"ROLLBACK\"",
+    "expect_failing": [
+      "source_funds_case_snapshot_preserves_outer_transaction_and_late_rollback"
+    ],
+    "rule": "A failed nested save rolls back its own rows while preserving the enclosing reviewed transaction."
+  },
+  {
+    "id": "sof-case-outer-commit",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "conn.execute_batch(\"RELEASE source_funds_case_write\")",
+    "replace": "conn.execute_batch(\"COMMIT\")",
+    "expect_failing": [
+      "source_funds_case_snapshot_preserves_outer_transaction_and_late_rollback"
+    ],
+    "rule": "Nested persistence cannot commit the caller's review lock or other pending work."
+  },
+  {
+    "id": "sof-case-commit-refusal",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "conn.execute_batch(\"RELEASE source_funds_case_write\")\n        .map_err(sql_error)?;",
+    "replace": "let _ = conn.execute_batch(\"RELEASE source_funds_case_write\");",
+    "expect_failing": [
+      "source_funds_case_snapshot_rolls_back_commit_busy_on_both_stores"
+    ],
+    "rule": "A late busy refusal must return an error and roll back the pending case and snapshot."
+  },
+  {
+    "id": "sof-case-owned-rollback",
+    "file": "crates/reports/src/source_funds_cases.rs",
+    "find": "if self.owns_transaction {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_case_snapshot_rolls_back_commit_busy_on_both_stores"
+    ],
+    "rule": "After an outermost commit is refused as busy, cleanup uses full rollback rather than another release that can fail as busy again."
   }
 ]

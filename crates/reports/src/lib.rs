@@ -35,6 +35,7 @@ mod privacy_hygiene;
 pub mod lightning;
 mod snapshot_write;
 mod snapshots;
+pub mod source_funds_cases;
 mod source_funds_reads;
 mod sql;
 mod standalone_csv;
