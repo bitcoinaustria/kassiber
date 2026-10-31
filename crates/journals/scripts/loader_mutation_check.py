@@ -10,7 +10,7 @@ spec = importlib.util.spec_from_file_location("tax_mutation_check", ROOT / "tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-journals")
+checker.ENGINE_PACKAGES = ("-p", "kassiber-journals", "-p", "kassiber-custody")
 checker.MUTATIONS = Path(__file__).with_name("loader_mutations.json")
 
 # A machine-wide build-dir template would create a separate intermediate tree

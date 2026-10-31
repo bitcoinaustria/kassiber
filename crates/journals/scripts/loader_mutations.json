@@ -352,8 +352,8 @@
   {
     "id": "JL-config-direct-marker",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "J::Bool(mentions)));",
-    "replace": "J::Bool(!mentions)));",
+    "find": "record.insert(index, J::Bool(mentions));",
+    "replace": "record.insert(index, J::Bool(!mentions));",
     "expect_failing": [
       "native_loader_reads_direct_columns_without_conversion"
     ],
@@ -572,8 +572,8 @@
   {
     "id": "JL-existing-config-marker",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "*value = J::Bool(mentions);",
-    "replace": "*value = J::Bool(!mentions);",
+    "find": "record[index] = J::Bool(mentions);",
+    "replace": "record[index] = J::Bool(!mentions);",
     "expect_failing": [
       "native_loader_reads_direct_columns_without_conversion"
     ],
@@ -588,5 +588,105 @@
       "native_loader_matches_python_database_bytes"
     ],
     "rule": "Distinct descriptor policies at the same scan horizon must not share derived targets or wallet facts."
+  },
+  {
+    "id": "JL-shared-column-order",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "pair[0] >= pair[1]",
+    "replace": "pair[0] <= pair[1]",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Sorted column layouts preserve field lookup."
+  },
+  {
+    "id": "JL-shared-column-unique",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "pair[0] >= pair[1]",
+    "replace": "pair[0] > pair[1]",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Column layouts reject duplicate names."
+  },
+  {
+    "id": "JL-shared-column-reuse",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "Self { columns, values }",
+    "replace": "Self { columns: Columns(columns.0.iter().cloned().collect()), values }",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Rows share the same prepared layout without per-row key copies."
+  },
+  {
+    "id": "JL-shared-get-position",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "&self.values[index]",
+    "replace": "&self.values[(index + 1) % self.values.len()]",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Column lookups select the corresponding value."
+  },
+  {
+    "id": "JL-shared-contains",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "self.get(key).is_some()",
+    "replace": "self.get(key).is_none()",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Membership distinguishes missing fields."
+  },
+  {
+    "id": "JL-shared-map-values",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": ".zip(self.values)",
+    "replace": ".zip(self.values.into_iter().rev())",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Compatibility maps preserve each column value."
+  },
+  {
+    "id": "JL-shared-serialize",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "map.serialize_entry(key, value)?;",
+    "replace": "map.serialize_entry(key, &Value::Null)?;",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Record serialization preserves values and SQLite classes."
+  },
+  {
+    "id": "JL-config-memo-admission",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": "value.as_str().is_some_and(|text| checked.contains(text))",
+    "replace": "!checked.is_empty()",
+    "expect_failing": [
+      "shared_snapshot_config_admission_checks_every_population"
+    ],
+    "rule": "A previous valid configuration cannot admit a different invalid configuration."
+  },
+  {
+    "id": "JL-config-second-column",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": "let names = [\"config_json\", \"wallet_config_json\"];",
+    "replace": "let names = [\"config_json\", \"config_json\"];",
+    "expect_failing": [
+      "shared_snapshot_config_admission_checks_every_population"
+    ],
+    "rule": "Both configuration columns retain admission checks."
+  },
+  {
+    "id": "JL-config-anchor-admission",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": ".filter_map(Value::as_object)",
+    "replace": ".filter_map(|_| None::<&Map<String, Value>>)",
+    "expect_failing": [
+      "shared_snapshot_config_admission_checks_every_population"
+    ],
+    "rule": "Anchor configurations retain admission checks."
   }
 ]

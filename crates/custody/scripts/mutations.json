@@ -22316,7 +22316,7 @@
   {
     "id": "projection8-profile-field",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    input.insert(\"profile\".into(), Value::Object(snapshot.profile.clone()));",
+    "find": "    input.insert(\n        \"profile\".into(),\n        Value::Object(snapshot.profile.clone().into_map()),\n    );",
     "replace": "    input.insert(\"profile\".into(), json!({}));",
     "expect_failing": [
       "projection_adapter_input_families"

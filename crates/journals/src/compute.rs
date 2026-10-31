@@ -54,7 +54,9 @@ fn fuse(snapshot: &Snapshot, projection: &kassiber_pyjson::Value) -> Fusion {
         .expect("computed finalized projection");
     let projection = codec::to_json(&codec::loads(&text).expect("finalized projection text"));
     let python = |record: &kassiber_custody::snapshot::Record| {
-        codec::to_json(&codec::from_json(&Value::Object(record.clone())).expect("admitted record"))
+        codec::to_json(
+            &codec::from_json(&Value::Object(record.clone().into_map())).expect("admitted record"),
+        )
     };
     let profile = python(&snapshot.profile);
     let wallets = snapshot

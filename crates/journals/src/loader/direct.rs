@@ -1,6 +1,6 @@
 //! Direct SQLite -> custody records. Ordering metadata never holds row values.
 use super::*;
-use kassiber_custody::snapshot::{Component, GapWorklist, Record, Snapshot};
+use kassiber_custody::snapshot::{Columns, Component, GapWorklist, Record, Snapshot};
 use serde_json::Value as J;
 
 #[derive(Default)]
@@ -170,11 +170,21 @@ impl Reader {
         {
             order.push("config_text_mentions_samourai".into());
         }
-        // Map's BTreeMap consumer owns its keys. Sort the prepared layout once
-        // so collecting each row can bulk-build that map instead of doing a
-        // tree search and node split for every SQL column.
         let mut columns = columns;
         columns.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+        let mut names: Vec<String> = columns.iter().map(|(_, key)| key.clone()).collect();
+        if has_config
+            && !names
+                .iter()
+                .any(|key| key == "config_text_mentions_samourai")
+        {
+            names.push("config_text_mentions_samourai".into());
+            names.sort_unstable();
+        }
+        let mentions_index = names
+            .iter()
+            .position(|key| key == "config_text_mentions_samourai");
+        let layout = Columns::new(names).map_err(Error::Invalid)?;
         self.gate.columns.insert(path, order);
         let mut cursor = statement.query(params)?;
         let mut result = Vec::with_capacity(self.capacity);
@@ -207,19 +217,20 @@ impl Reader {
                 } else {
                     scalar(raw)?
                 };
-                record.push((key.clone(), value));
+                record.push(value);
             }
             if let Some(mentions) = mentions {
-                if let Some((_, value)) = record
-                    .iter_mut()
-                    .find(|(key, _)| key == "config_text_mentions_samourai")
+                let index = mentions_index.expect("config mention column");
+                if columns
+                    .iter()
+                    .any(|(_, key)| key == "config_text_mentions_samourai")
                 {
-                    *value = J::Bool(mentions);
+                    record[index] = J::Bool(mentions);
                 } else {
-                    record.push(("config_text_mentions_samourai".into(), J::Bool(mentions)));
+                    record.insert(index, J::Bool(mentions));
                 }
             }
-            let record = record.into_iter().collect();
+            let record = Record::new(layout.clone(), record);
             result.push(record);
         }
         Ok(result)
@@ -245,7 +256,7 @@ fn native_rows(value: Value) -> Result<Vec<Record>> {
         .into_iter()
         .map(|v| {
             if let J::Object(row) = v {
-                Ok(row)
+                Ok(row.into())
             } else {
                 Err(Error::Invalid("row".into()))
             }
@@ -304,7 +315,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     }
     let mut anchors = serde_json::Map::new();
     for id in anchor_ids {
-        let row=reader.rows(conn,"anchors.*","SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id=?",[&id],true)?.into_iter().next().map(J::Object).unwrap_or(J::Null);
+        let row=reader.rows(conn,"anchors.*","SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id=?",[&id],true)?.into_iter().next().map(|row| J::Object(row.into_map())).unwrap_or(J::Null);
         anchors.insert(id, row);
     }
     let mut anchor_wallets = vec![];
@@ -354,7 +365,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     snapshot.schema_version = 1;
     snapshot.operation = "custody".into();
     snapshot.as_of = as_of.into();
-    snapshot.profile = profile;
+    snapshot.profile = profile.into();
     snapshot.book_network = network;
     snapshot.wallets = wallets;
     snapshot.transactions = transactions.into_iter().map(J::Object).collect();
@@ -432,7 +443,7 @@ fn network(conn: &Connection, profile: &str, reader: &mut Reader) -> Result<Opti
         )?
         .into_iter()
         .next()
-        .map(J::Object)
+        .map(|row| J::Object(row.into_map()))
         .unwrap_or(J::Null);
     let observations = reader.rows(conn,"book_network.observations[]","SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? ORDER BY t.id",[profile],true)?;
     let mut references = vec![];
@@ -495,7 +506,12 @@ fn network(conn: &Connection, profile: &str, reader: &mut Reader) -> Result<Opti
             ("binding".into(), binding),
             (
                 "observations".into(),
-                J::Array(observations.into_iter().map(J::Object).collect()),
+                J::Array(
+                    observations
+                        .into_iter()
+                        .map(|row| J::Object(row.into_map()))
+                        .collect(),
+                ),
             ),
             ("references".into(), references),
         ]
@@ -518,7 +534,14 @@ mod tests {
         assert_eq!(rows[0]["duplicate"], J::from(1));
         let value = reader
             .gate
-            .encode(&J::Array(rows.into_iter().map(J::Object).collect()), "rows")
+            .encode(
+                &J::Array(
+                    rows.into_iter()
+                        .map(|row| J::Object(row.into_map()))
+                        .collect(),
+                ),
+                "rows",
+            )
             .unwrap();
         assert_eq!(kassiber_pyjson::dumps(&value,&Options::new()).unwrap(),"[{\"n\": null, \"i\": 9223372036854775807, \"f\": 1.0, \"s\": \"\\u94b1\", \"duplicate\": 1}]");
         for sql in [

@@ -5,7 +5,7 @@ use super::*;
 use kassiber_custody::{
     codec,
     components::review,
-    snapshot::{Component, Snapshot},
+    snapshot::{Component, Record, Snapshot},
 };
 use kassiber_envelope::{set, truthy};
 use kassiber_pyjson::{BigInt, Key, PyStr};
@@ -1101,11 +1101,11 @@ fn row(c: &Connection, id: &str) -> Result<Value> {
 /// Load a stored component outside the profile snapshot (cross-profile reads fail later).
 fn load(c: &Connection, header: &Value) -> Result<Component> {
     let record = |v: &Value| match to_json(v) {
-        serde_json::Value::Object(m) => m,
-        _ => serde_json::Map::new(),
+        serde_json::Value::Object(m) => Record::from(m),
+        _ => Record::default(),
     };
     let id = text(header, "id");
-    let child = |table: &str| -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
+    let child = |table: &str| -> Result<Vec<Record>> {
         Ok(rows(
             c,
             &format!("SELECT * FROM {table} WHERE component_id=? ORDER BY ordinal,id"),

@@ -309,7 +309,8 @@ mod tests {
                 &json!({"external_id": external, "raw_json": raw})
                     .as_object()
                     .unwrap()
-                    .clone(),
+                    .clone()
+                    .into(),
             )
         };
         assert!(check(json!(txid), J::Null));

@@ -172,7 +172,7 @@ pub fn stage_with_confirmations(
 ) -> Result<Py, String> {
     let mut rows = Map::new();
     for (row, confirmation) in snapshot.transactions.iter().zip(captured) {
-        let mut row = row.clone();
+        let mut row = Value::Object(row.clone().into_map());
         row["_closed_confirmation_observation"] = confirmation;
         let id = if codec::truth(&row["id"]) {
             codec::pystr(&row["id"])
@@ -240,7 +240,10 @@ pub fn stage_with_rows(
     // order, so the first refusal is unchanged and nothing is copied twice.
     let mut input = Map::new();
     input.insert("op".into(), json!("finalize"));
-    input.insert("profile".into(), Value::Object(snapshot.profile.clone()));
+    input.insert(
+        "profile".into(),
+        Value::Object(snapshot.profile.clone().into_map()),
+    );
     input.insert("rows".into(), rows);
     input.insert(
         "observations".into(),

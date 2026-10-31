@@ -990,7 +990,7 @@ fn batch_issues(
             }) else {
                 unreachable!()
             };
-            snapshot.anchor_wallets.push(record);
+            snapshot.anchor_wallets.push(record.into());
         }
     }
     let routes = review::planned_batch_routes(&snapshot, &legs, &allocations, &candidates)

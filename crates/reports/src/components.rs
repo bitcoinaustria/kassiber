@@ -60,7 +60,7 @@ fn records(conn: &Connection, query: &str, id: &str) -> Result<Vec<Record>> {
                     row.insert(key.into(), Json::String(Json::Object(facts).to_string()));
                 }
             }
-            Ok(row)
+            Ok(row.into())
         })
         .collect()
 }
@@ -114,7 +114,11 @@ pub fn blockers(conn: &Connection, profile: &Value) -> Result<Vec<Value>> {
     let mut anchors = Map::new();
     for id in anchor_ids {
         let row = records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id=?",&id)?.into_iter().next();
-        anchors.insert(id, row.map(Json::Object).unwrap_or(Json::Null));
+        anchors.insert(
+            id,
+            row.map(|row| Json::Object(row.into_map()))
+                .unwrap_or(Json::Null),
+        );
     }
     let mut anchor_wallets = Vec::new();
     for id in wallet_ids {
@@ -132,18 +136,17 @@ pub fn blockers(conn: &Connection, profile: &Value) -> Result<Vec<Value>> {
             &id,
         )?);
     }
-    let snapshot = Snapshot {
-        schema_version: 1,
-        operation: "custody".into(),
-        as_of: "report-read".into(),
-        profile: json_value(profile)?.as_object().cloned().unwrap(),
-        components,
-        anchors,
-        anchor_wallets,
-        revision_headers,
-        transactions: records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",&id)?.into_iter().map(serde_json::Value::Object).collect(),
-        ..Default::default()
-    };
+    // Start with an empty cache; transaction views are initialized by custody.
+    let mut snapshot = Snapshot::default();
+    snapshot.schema_version = 1;
+    snapshot.operation = "custody".into();
+    snapshot.as_of = "report-read".into();
+    snapshot.profile = json_value(profile)?.as_object().cloned().unwrap().into();
+    snapshot.components = components;
+    snapshot.anchors = anchors;
+    snapshot.anchor_wallets = anchor_wallets;
+    snapshot.revision_headers = revision_headers;
+    snapshot.transactions = records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",&id)?;
     // Python admission uses include_local_evidence=False.
     let computed = kassiber_custody::components::compute(&snapshot)
         .map_err(|e| AppError::new("internal_error", e.message))?;

@@ -14,7 +14,7 @@ use kassiber_pyjson::BigInt;
 fn big(v: &Value) -> BigInt {
     exact(v).expect("converted component integer")
 }
-use crate::snapshot::{Component, Snapshot};
+use crate::snapshot::{Component, Record, Snapshot};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -154,12 +154,7 @@ fn raw_order(a: &Value, b: &Value) -> std::cmp::Ordering {
         _ => pystr(a).cmp(&pystr(b)),
     }
 }
-fn project(
-    row: &Map<String, Value>,
-    fields: &str,
-    ints: &[&str],
-    nullable: &[&str],
-) -> Result<Value, Error> {
+fn project(row: &Record, fields: &str, ints: &[&str], nullable: &[&str]) -> Result<Value, Error> {
     let mut result = Map::new();
     for key in fields.split_whitespace() {
         let mut v = row.get(key).ok_or_else(|| Error::missing(key))?.clone();
@@ -218,13 +213,18 @@ impl<'a> Shared<'a> {
         let mut headers: BTreeMap<String, Value> = snapshot
             .components
             .iter()
-            .map(|c| (text(&c.header["id"]), Value::Object(c.header.clone())))
+            .map(|c| {
+                (
+                    text(&c.header["id"]),
+                    Value::Object(c.header.clone().into_map()),
+                )
+            })
             .collect();
         headers.extend(
             snapshot
                 .revision_headers
                 .iter()
-                .map(|r| (text(&r["id"]), Value::Object(r.clone()))),
+                .map(|r| (text(&r["id"]), Value::Object(r.clone().into_map()))),
         );
         let mut lineages: HashMap<String, Vec<String>> = HashMap::new();
         for (key, o) in &headers {
@@ -317,7 +317,7 @@ fn lineage(shared: &Shared, h: &Value) -> Result<Vec<Value>, Error> {
     Ok(issues)
 }
 // COALESCE distinguishes a null anchor from an empty authored anchor.
-fn membership_anchor(l: &Map<String, Value>) -> Value {
+fn membership_anchor(l: &Record) -> Value {
     if l["anchor_transaction_id"].is_null() {
         l["transaction_id"].clone()
     } else {
@@ -358,14 +358,14 @@ fn materialize(
     routes: &[Value],
     native: &commitments::Native,
 ) -> Result<Value, Error> {
-    let mut h = Value::Object(c.header.clone());
+    let mut h = Value::Object(c.header.clone().into_map());
     let stored = legs(c)?;
     let allocs = allocations(c)?;
     let terms: Vec<_> = c
         .economic_terms
         .iter()
         .map(|r| {
-            let mut r = r.clone();
+            let mut r = r.clone().into_map();
             for k in [
                 "reviewed_source_amount_msat",
                 "swap_fee_msat",
@@ -441,7 +441,7 @@ fn materialize(
         .iter()
         .filter(|r| r.get("profile_id") == h.get("profile_id"))
         .map(|r| {
-            let mut v = Value::Object(r.clone());
+            let mut v = Value::Object(r.clone().into_map());
             if !h["expected_evidence_count"].is_null() {
                 v["ordinal"] = integer(&v["ordinal"])?;
             }

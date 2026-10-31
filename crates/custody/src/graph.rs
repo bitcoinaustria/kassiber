@@ -808,7 +808,7 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
                             && wallets.contains(&text(s.get("wallet_id").unwrap_or(&Value::Null)))
                     })
                     .cloned()
-                    .map(Value::Object)
+                    .map(|row| Value::Object(row.into_map()))
                     .collect()
             })
             .collect();

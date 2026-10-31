@@ -3,7 +3,7 @@ use super::*;
 use kassiber_custody::{
     codec,
     components::review,
-    snapshot::{Component, Snapshot},
+    snapshot::{Component, Record, Snapshot},
 };
 use kassiber_envelope::{set, truthy};
 use kassiber_pyjson::{dumps, Options};
@@ -26,9 +26,9 @@ pub(super) fn hash(v: &Value, ascii: bool) -> Result<String> {
         .map(|x| x.0)
         .map_err(|e| AppError::new("internal_error", e))
 }
-fn record(v: &Value) -> Result<serde_json::Map<String, serde_json::Value>> {
+fn record(v: &Value) -> Result<Record> {
     match codec::to_json(v) {
-        serde_json::Value::Object(m) => Ok(m),
+        serde_json::Value::Object(m) => Ok(m.into()),
         _ => Err(AppError::new("internal_error", "expected record")),
     }
 }
@@ -36,7 +36,7 @@ fn records(
     c: &Connection,
     q: &str,
     p: impl kassiber_store::rusqlite::Params,
-) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
+) -> Result<Vec<Record>> {
     rows(c, q, p)?.iter().map(record).collect()
 }
 fn convert_error(e: kassiber_custody::components::Error) -> AppError {
@@ -75,7 +75,7 @@ pub(super) fn snapshot(c: &Connection, scope: &Scope<'_>) -> Result<Snapshot> {
         .map(|r| {
             (
                 r["id"].as_str().unwrap().to_string(),
-                serde_json::Value::Object(r.clone()),
+                serde_json::Value::Object(r.clone().into_map()),
             )
         })
         .collect();

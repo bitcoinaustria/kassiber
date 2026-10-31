@@ -54,7 +54,7 @@ pub fn activation_evidence(
     let shared = Shared::new(snapshot);
     let mut snapshots = commitments::current(
         &shared,
-        &Value::Object(component.header.clone()),
+        &Value::Object(component.header.clone().into_map()),
         &legs(component)?,
     )?;
     snapshots.sort_by_key(|s| (pystr(&s["quantity_hash"]), pystr(&s["detail_hash"])));
@@ -73,12 +73,12 @@ pub fn component_evidence_status(
     let shared = Shared::new(snapshot);
     commitments::evidence_status(
         &shared,
-        &Value::Object(component.header.clone()),
+        &Value::Object(component.header.clone().into_map()),
         &legs(component)?,
         &component
             .commitments
             .iter()
-            .map(|r| Value::Object(r.clone()))
+            .map(|r| Value::Object(r.clone().into_map()))
             .collect::<Vec<_>>(),
     )
 }

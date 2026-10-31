@@ -12,13 +12,13 @@ pub use rows::{Column, NetworkRow, RateRow, SqlValue, TxRow, WalletRef, Worklist
 /// Compatibility model for stages and native callers awaiting their typed slice.
 /// Text parsing and admission use `BookSnapshot` directly.
 pub type Snapshot = StageSnapshot;
+mod record;
+pub use record::{Columns, Record};
 
 /// Exact signed-64 database quantity. Never a binary float or decimal BTC.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Msat(pub i64);
-
-pub type Record = Map<String, Value>;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -46,7 +46,7 @@ pub struct StageSnapshot {
     pub profile: Record,
     pub book_network: Option<Value>,
     pub wallets: Vec<Record>,
-    pub transactions: Vec<Value>,
+    pub transactions: Vec<Record>,
     pub rate_rows: Vec<Record>,
     pub owned_index: Option<Value>,
     pub ownership_warnings: Vec<String>,
@@ -62,12 +62,21 @@ pub struct StageSnapshot {
     pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,
+    #[serde(skip)]
+    pub(crate) rows: std::sync::OnceLock<Vec<Value>>,
 }
 
 impl StageSnapshot {
     /// The one explicit JSON boundary for neighbours awaiting their typed slice.
     pub fn rows(&self) -> &[Value] {
-        &self.transactions
+        self.rows.get_or_init(|| {
+            crate::par::map(&self.transactions, |row| {
+                Value::Object(row.clone().into_map())
+            })
+            .into_iter()
+            .map(crate::par::unwrap)
+            .collect()
+        })
     }
 
     /// Test-only legacy constructors receive the same typed schema admission.
@@ -79,5 +88,81 @@ impl StageSnapshot {
     pub fn typed(&self) -> Result<BookSnapshot, String> {
         let text = serde_json::to_string(self).map_err(|e| e.to_string())?;
         serde_json::from_str::<BookSnapshot>(&text).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn admitted() -> Snapshot {
+        Snapshot {
+            schema_version: 1,
+            operation: "custody".into(),
+            as_of: "2026-10-31T12:00:00Z".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn shared_snapshot_config_admission_checks_every_population() {
+        let valid = json!({"config_json": "{\"chain\": \"bitcoin\"}"});
+        for group in 0..6 {
+            for key in ["config_json", "wallet_config_json"] {
+                for invalid in [
+                    json!("{broken"),
+                    json!("null"),
+                    json!("[]"),
+                    json!(42),
+                    json!({"secret": "private"}),
+                    json!({"samourai": {"secret": "private"}}),
+                    json!("{\"samourai\": {\"secret\": \"private\"}}"),
+                ] {
+                    let mut snapshot = admitted();
+                    let record: Record = serde_json::from_value(valid.clone()).unwrap();
+                    snapshot.wallets = vec![record.clone(), record];
+                    let invalid = json!({key: invalid});
+                    let row = serde_json::from_value(invalid.clone()).unwrap();
+                    match group {
+                        0 => snapshot.wallets.push(row),
+                        1 => snapshot.transactions.push(row),
+                        2 => snapshot.anchor_wallets.push(row),
+                        3 => snapshot.channel_records.push(row),
+                        4 => snapshot.gap_worklist.rows.push(row),
+                        5 => {
+                            snapshot.anchors.insert("anchor".into(), invalid);
+                        }
+                        _ => unreachable!(),
+                    }
+                    assert!(snapshot.validate().is_err(), "{group} {key}");
+                }
+            }
+        }
+        let mut snapshot = admitted();
+        snapshot.wallets = [valid.clone(), valid, json!({"config_json": null}), json!({"wallet_config_json": {"samourai": {"role": "postmix", "group_id": "g", "section": "s"}}})]
+            .into_iter().map(|v| serde_json::from_value(v).unwrap()).collect();
+        assert!(snapshot.validate().is_ok());
+    }
+
+    #[test]
+    fn shared_snapshot_keeps_exact_msat_admission() {
+        for field in ["amount", "fee"] {
+            for (text, valid) in [
+                ("null", true),
+                ("0", true),
+                ("-9223372036854775808", true),
+                ("9223372036854775807", true),
+                ("1.0", false),
+                ("\"1\"", false),
+                ("true", false),
+                ("9223372036854775808", false),
+            ] {
+                let mut snapshot = admitted();
+                snapshot.transactions =
+                    vec![serde_json::from_str(&format!("{{\"{field}\":{text}}}")).unwrap()];
+                assert_eq!(snapshot.validate().is_ok(), valid, "{field} {text}");
+            }
+        }
     }
 }

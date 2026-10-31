@@ -17,7 +17,8 @@ restack and its verification. The separate [tax-engine speed pass](tax-engine.md
 measures 2.03–3.96× faster `ledger` calls with byte-identical responses; its
 timings supersede the engine line in this design's original measurements.
 R4-9 has a [test-only loader checkpoint](r4-native-loader-checkpoint.md)
-that misses its 0.30 s target and remains unaccepted and unrouted.
+whose shared-column loader meets its 0.30 s target on the loader branch;
+integrated typed admission remains unaccepted and unrouted.
 This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
@@ -267,7 +268,7 @@ and `Decimal` text). Shared building blocks:
 
 | Stage | Type | Replaces |
 | --- | --- | --- |
-| Load | `BookSnapshot { profile, book_network, wallets: Vec<WalletRef>, transactions: Vec<TxRow>, rate_rows: Vec<RateRow>, owned_index: Option<OwnedIndex>, components: Vec<AuthoredComponent>, anchors, anchor_wallets, revision_headers, receipt_sources, channel_records, loan_legs, evidence_snapshots, migration_issues, gap_reviews, pair_dismissals, gap_worklist }` | `load_custody_snapshot` dicts; `Snapshot` with `Record = Map<String, Value>` |
+| Load | `BookSnapshot { profile, book_network, wallets: Vec<WalletRef>, transactions: Vec<TxRow>, rate_rows: Vec<RateRow>, owned_index: Option<OwnedIndex>, components: Vec<AuthoredComponent>, anchors, anchor_wallets, revision_headers, receipt_sources, channel_records, loan_legs, evidence_snapshots, migration_issues, gap_reviews, pair_dismissals, gap_worklist }` | `load_custody_snapshot` dicts; `Snapshot` with shared-column `Record` and transitional JSON values |
 | Components | `Vec<MaterializedComponent>`, `Vec<ComponentBlocker>`, `Vec<MigrationQuarantine>` | `components` stage `Value` |
 | Evidence | `Evidence { enriched_rows: Vec<EnrichedRow>, canonical: CanonicalInput { observations: Vec<QuantityObservation>, events, issues }, native_non_event_ids }` | `evidence` stage `Value` |
 | Interpretation | `InterpreterCompilation { claims: Vec<QuantityClaim>, quarantines, blocked_transaction_ids, non_event_transaction_ids, native_audits, native_component_reconciliations, … }` | `pyjson::Value` |
@@ -354,7 +355,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-6 | Typed quantity state; remove the Python-model conversion | 1.58 / 1.82 | ≤ 1/4 |
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
-| R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python; [direct-load checkpoint](r4-native-loader-checkpoint.md): generic 20k 0.505 s CPU / 0.509 s wall including admission, target missed, acceptance remains open | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
+| R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python; [direct-load checkpoint](r4-native-loader-checkpoint.md): shared-column generic 20k 0.289 s CPU / 0.291 s wall including admission, speed target met; legacy fidelity, adversarial coverage and complete mutation/parity gates remain open | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
