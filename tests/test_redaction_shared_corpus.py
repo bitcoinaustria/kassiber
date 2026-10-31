@@ -22,6 +22,8 @@ def test_secret_redaction_shared_corpus(case):
     assert redaction.redact_secret_value({'message': case['input']}) == {'message': case['expected']}
 
 
-@pytest.mark.parametrize('key', ['rpcauth', 'rpc_auth', 'rpc-auth', 'macaroon', 'rpcpassword', 'cookie'])
+@pytest.mark.parametrize('key', ['rpcauth', 'rpc_auth', 'rpc-auth', 'macaroon', 'rpcpassword', 'cookie',
+    'scan_key', 'BITCOIN_RPC_PASSWORD', 'LND_MACAROON', 'macaroon_hex', 'db_passphrase',
+    'Authorization', 'rune', 'bitcoin.rpcpassword'])
 def test_rpc_and_lightning_secret_fields(key):
     assert redaction.redact_secret_value({key: 'private'}) == {key: '[redacted]'}
