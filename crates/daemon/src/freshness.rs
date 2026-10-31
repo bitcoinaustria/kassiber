@@ -1,3 +1,6 @@
+#[cfg(feature = "test-kinds")]
+pub(crate) mod product;
+
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -354,6 +357,9 @@ impl Daemon {
                 "status"
                     | "ui.network.offline"
                     | "ui.network.offline.set"
+                    | "ui.freshness.cancel"
+                    | "ui.freshness.pause"
+                    | "ui.freshness.resume"
                     | "test.freshness.cancel"
                     | "test.freshness.pause"
                     | "test.freshness.resume"
@@ -417,6 +423,12 @@ impl Daemon {
             &mut config,
         )?;
         let plan = book.freshness_plan(request)?;
+        if kind == "ui.wallets.sync" && !plan.supports_wallets_sync() {
+            return Err(AppError::new(
+                "native_fallback_required",
+                "Wallet sync requires its direct-sync reference path",
+            ));
+        }
         let consent = Arc::new(Consent::explicit_trigger(&plan));
         let cancel = Cancellation::default();
         if get(args, "revoke") == Some(&Value::Bool(true)) {

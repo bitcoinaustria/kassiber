@@ -60,6 +60,33 @@ fn sync_sources() -> (Box<dyn kassiber_wallets::publication::wallet::Sources>, u
     )
 }
 
+#[cfg(feature = "test-harness")]
+struct FixedGraphSources {
+    prefix: String,
+}
+#[cfg(feature = "test-harness")]
+impl kassiber_wallets::publication::wallet::Sources for FixedGraphSources {
+    fn id(&mut self) -> String {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static IDS: AtomicU64 = AtomicU64::new(0);
+        format!(
+            "{}-{:04}",
+            self.prefix,
+            IDS.fetch_add(1, Ordering::Relaxed) + 1
+        )
+    }
+    fn now(&mut self) -> String {
+        "2030-01-01T00:00:01Z".into()
+    }
+}
+fn graph_sources() -> Box<dyn kassiber_wallets::publication::wallet::Sources> {
+    #[cfg(feature = "test-harness")]
+    if let Ok(prefix) = std::env::var("KASSIBER_RUST_TEST_GRAPH_PREFIX") {
+        return Box::new(FixedGraphSources { prefix });
+    }
+    sync_sources().0
+}
+
 #[derive(Default)]
 pub struct RealStore {
     auth: Mutex<()>,
@@ -1347,7 +1374,7 @@ impl Book for RealBook {
             .as_mut()
             .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
             .connection_mut();
-        let (mut sources, _) = sync_sources();
+        let mut sources = graph_sources();
         kassiber_wallets::freshness::graph::followup(
             conn,
             grant,

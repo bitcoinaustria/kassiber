@@ -132,6 +132,7 @@ pub struct Plan {
     connection: usize,
     database: String,
     database_identity: Option<Value>,
+    wallet_sync_compatible: bool,
 }
 
 fn identity(conn: &Connection) -> Result<Option<Value>> {
@@ -210,7 +211,20 @@ impl Plan {
                 &mut backend,
             )?);
         }
+        let mut wallet_sync_compatible = !captured.profiles.is_empty();
+        for (profile, specs) in captured.profiles.iter().zip(&captured.specs) {
+            wallet_sync_compatible &= !specs.is_empty();
+            for spec in specs {
+                if first(conn,
+                    "SELECT paused FROM freshness_source_states WHERE profile_id=? AND source_key=?",
+                    [or_text(field(profile, "id")), or_text(field(spec, "source_key"))])?
+                    .is_some_and(|state| truthy(field(&state, "paused"))) {
+                    wallet_sync_compatible = false;
+                }
+            }
+        }
         Ok(Self {
+            wallet_sync_compatible,
             _execution: execution,
             request: request.clone(),
             captured,
@@ -220,6 +234,10 @@ impl Plan {
             database: conn.path().unwrap_or("").into(),
             database_identity: identity(conn)?,
         })
+    }
+
+    pub fn supports_wallets_sync(&self) -> bool {
+        self.wallet_sync_compatible
     }
 
     pub fn validate(

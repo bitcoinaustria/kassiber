@@ -15,12 +15,14 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 14] = [
+pub const KINDS: [&str; 16] = [
     "test.stream",
     "test.emit_event",
     "test.late",
     "test.secret_store",
     "test.freshness.plan",
+    "test.freshness.select",
+    "test.freshness.invoke",
     "test.freshness.execute",
     "test.freshness.product.execute",
     "test.freshness.cancel",
@@ -59,6 +61,43 @@ pub(crate) fn handle(
     }
     let args = get(request, "args");
     Some(match kind {
+        "test.freshness.select" | "test.freshness.invoke" => (|| {
+            let product_kind = arg_text(args, "kind");
+            if !crate::freshness::product::RUN_KINDS.contains(&product_kind.as_str()) {
+                return Err(
+                    AppError::new("validation", "Expected a freshness product kind").into(),
+                );
+            }
+            let product_args = args.and_then(|args| get(args, "args"));
+            let product_id = if let Some(request) = args.and_then(|args| get(args, "request")) {
+                RequestId::of(request)
+            } else {
+                args.and_then(|args| get(args, "request_id"))
+                    .map_or(request_id.clone(), |id| RequestId::Value(id.clone()))
+            };
+            if kind == "test.freshness.invoke" {
+                daemon.freshness_before_request(&product_kind)?;
+                return crate::freshness::product::handle(
+                    daemon,
+                    &product_kind,
+                    product_args,
+                    &product_id,
+                );
+            }
+            let supported = crate::freshness::product::supported(
+                daemon,
+                &product_kind,
+                product_args,
+                &product_id,
+            )?;
+            Ok((
+                Some(with_request_id(
+                    success(kind, dict([("supported", Value::Bool(supported))])),
+                    request_id,
+                )),
+                false,
+            ))
+        })(),
         "test.freshness.plan" | "test.freshness.execute" | "test.freshness.product.execute" => {
             (|| {
                 use kassiber_wallets::freshness::planning::{Request, Scope};

@@ -47,6 +47,7 @@ REVIEWS = {
             "reason": "Direct coordinator regression against seeded legacy flags; native replacement is twentyone_legacy_reactivation_invalidates_ready_journals_once in crates/wallets/src/file_import/tests.rs, with full-book CLI parity in test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump.",
         },
     },
+    "tests/test_rust_freshness_product.py": {"*": {"disposition": "oracle", "group": "daemon-runtime", "reason": "compares complete product freshness envelopes, event sequences and every logical table with Python across disposable Electrum/Esplora fixture, restart and reviewed books; pins inert whole-invocation selection and argument validation"}},
     "tests/test_rust_freshness_graph.py": {
         "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded connection-owning graph worker on disposable loopback books to pin grant, request, lifecycle, output and SQLCipher fences and unsolicited redacted events; preserves subprocess witnesses without claiming automatic startup or product registration"},
         "test_reference_electrum_mismatched_transaction_repro_and_native_refusal": {"disposition": "oracle", "group": "daemon-runtime", "reason": "reproduces Python caching different Electrum transaction bytes under the requested ID and pins native computed-ID refusal; retains the reference bug without changing Python or claiming product parity"},

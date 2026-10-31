@@ -206,10 +206,13 @@ through the shared setup crate.
   complete product graph/event/restart/reviewed-book acceptance. Automatic
   arming and both source-control boundaries are verified through the guarded
   product-lifecycle seam; product registration remains pending.
-- [ ] Validate complete product argument shapes and protocol request IDs, add
-  inert whole-invocation selection for explicit no-refresh variants, then
-  register only shapes passing full envelope/event/table parity with zero
-  served-shape fallbacks. All three daemon product served-by counts remain zero.
+- [x] Validate product argument shapes and protocol request IDs through the
+  guarded adapter, with inert admitted-book selection for explicit no-refresh
+  variants. Selection never opens or migrates a database and refuses defaults,
+  unsupported sources and wallet sync's distinct direct-sync paths.
+- [ ] Register only no-refresh shapes passing full envelope/event/table parity
+  with zero served-shape fallbacks. All three daemon product served-by counts
+  remain zero; the complete fixture/restart/reviewed-book corpus is prepared.
 - [ ] Reject mismatched Electrum raw-transaction IDs in Python graph lookup.
   `test_reference_electrum_mismatched_transaction_repro_and_native_refusal`
   demonstrates the reference bug; native decoding already refuses the response.

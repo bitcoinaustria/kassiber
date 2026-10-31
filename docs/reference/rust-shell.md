@@ -8263,3 +8263,39 @@ Command logs and the mutation summary remain under
 `target/r5-sync-22-artifacts/`. Mutation build trees are removed by the runner.
 Product validation/selection and full product parity remain unaccepted at this
 commit boundary; the following continuation must register only passing shapes.
+
+### Bitcoin wallet-sync product selection (R5, partial)
+
+The guarded product adapter parses the three product run kinds without
+registering them. Selection requires an explicit boolean `process_journals:false`
+for `ui.wallets.sync`, or `journals:false` for the freshness kinds, and a
+nonempty UTF-8 string request ID. Missing, null, numeric, boolean, container,
+empty and lone-surrogate IDs decline the entire invocation. Defaults decline
+even when another argument is invalid. Selection requires an already opened
+daemon book; unopened, missing and locked books decline without opening,
+creating or migrating a database. On admitted current-schema books, selection
+changes no logical rows and initiates no backend traffic.
+
+The parser retains the product routes' different argument contracts: wallet
+sync ignores unknown arguments and validates its boolean flags; freshness
+rejects unknown arguments, validates wallet/auto-pair/force-full, and retains
+Python truthiness for all/run/rates and omitted or falsy limits. Truthy limits
+currently admit only integer and boolean representations. Expected scope is
+checked separately and removed before argument validation. Enabled unported sources decline before consent;
+disabled rate policy remains effective even with `rates:true`. Wallet sync also
+declines paused or empty source selections because Python can use its separate
+direct-sync path in those cases. Execution never retries through Python.
+
+The guarded invocation seam exercises product envelopes and automatic graph
+arming. Full product fixture/restart/reviewed-book acceptance and registration
+remain the next boundary. Native product served-by counts remain 0/0/0;
+default journal refresh still requires the native R4-13 service.
+
+Verification passes 66 distinct focused cases without skips: six guarded
+empty-chain product executions over both protocols, 42 inert refusal/fresh-root
+cases, 14 argument-error comparisons and four direct-sync/reference-input
+cases. The latter include a disposable repro for Python's `all:false` without
+a wallet: both active-book routes dereference `None` instead of returning a
+typed error. Native selection declines this unserved shape; Python is unchanged.
+The product corpus clones immutable disposable seed books per configuration;
+each case still owns its books and compares every normalized table.
