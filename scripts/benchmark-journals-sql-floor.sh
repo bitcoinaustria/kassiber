@@ -6,9 +6,10 @@
 # Runs on a copy of <book-dir>/data/kassiber.sqlite3 (plaintext, already
 # processed once) with the sqlite3 shell, so no Python or Rust row handling is
 # included. Reads are the journal snapshot's largest queries with output
-# discarded; writes replace every stored journal table with the rows the last
-# build stored, in one transaction, as store_ledger_state does. Times are
-# observations for the R4 performance budget, not pass/fail thresholds.
+# discarded; writes fully replace every stored journal table with the rows the
+# last build stored. This measures the original full-rewrite floor; the current
+# writer retains unchanged entries and quantity postings. It does not measure
+# that no-op path. Times are observations for R4, not pass/fail thresholds.
 set -euo pipefail
 book=$1
 scratch=${2:-$(dirname "$0")/../target/r4-bench/sql-floor}

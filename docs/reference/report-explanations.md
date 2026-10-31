@@ -30,6 +30,11 @@ canonical eligible custody moves back through the result wallet history to the
 earliest retained engine source. Later moves and unrelated wallet branches are
 excluded. These links describe custody context, not physical ownership of tax lots.
 
+Stable entry ids do not keep an explanation reference current after a rebuild.
+The profile's processed marker advances even when the build clock repeats or
+moves backward; a repeated marker becomes its previous instant plus one
+microsecond. Unchanged journal rows retain their creation times independently.
+
 CLI: use `kassiber --machine reports capital-gains`, then pass a row's exact
 `explanation_reference` JSON to
 `kassiber --machine reports explain-capital-gain --reference '<JSON>'`.

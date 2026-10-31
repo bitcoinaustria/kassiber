@@ -9043,28 +9043,28 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_quantity_store.py:1148",
+      "at": "kassiber/core/custody_quantity_store.py:1140",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_quantity_store.py:1165",
+      "at": "kassiber/core/custody_quantity_store.py:1157",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_quantity_store.py:1196",
+      "at": "kassiber/core/custody_quantity_store.py:1188",
       "callee": "AppError",
       "code": "custody_quantity_state_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/custody_quantity_store.py:1336",
+      "at": "kassiber/core/custody_quantity_store.py:1328",
       "code": "external_custody_presumed",
       "form": "record",
       "retryable": null
@@ -9627,7 +9627,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/engines/ledger_response.py:423",
+      "at": "kassiber/core/engines/ledger_response.py:424",
       "callee": "AppError",
       "code": "internal",
       "form": "call",
@@ -11243,7 +11243,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/quarantine_review.py:278",
+      "at": "kassiber/core/quarantine_review.py:284",
       "code": {
         "expression": "str(source.get('last_error_code') or 'journal_refresh_failed')"
       },
@@ -14947,112 +14947,112 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4194",
+      "at": "kassiber/core/ui_snapshot.py:4198",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4202",
+      "at": "kassiber/core/ui_snapshot.py:4206",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4219",
+      "at": "kassiber/core/ui_snapshot.py:4223",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4553",
+      "at": "kassiber/core/ui_snapshot.py:4557",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4561",
+      "at": "kassiber/core/ui_snapshot.py:4565",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4584",
+      "at": "kassiber/core/ui_snapshot.py:4588",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4818",
+      "at": "kassiber/core/ui_snapshot.py:4822",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:4826",
+      "at": "kassiber/core/ui_snapshot.py:4830",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5276",
+      "at": "kassiber/core/ui_snapshot.py:5280",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5320",
+      "at": "kassiber/core/ui_snapshot.py:5324",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5329",
+      "at": "kassiber/core/ui_snapshot.py:5333",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5334",
+      "at": "kassiber/core/ui_snapshot.py:5338",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5611",
+      "at": "kassiber/core/ui_snapshot.py:5615",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5671",
+      "at": "kassiber/core/ui_snapshot.py:5675",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5679",
+      "at": "kassiber/core/ui_snapshot.py:5683",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5907",
+      "at": "kassiber/core/ui_snapshot.py:5911",
       "code": {
         "expression": "str(row['kennzahl'])"
       },
@@ -15060,56 +15060,56 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6024",
+      "at": "kassiber/core/ui_snapshot.py:6028",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6026",
+      "at": "kassiber/core/ui_snapshot.py:6030",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6525",
+      "at": "kassiber/core/ui_snapshot.py:6529",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6534",
+      "at": "kassiber/core/ui_snapshot.py:6538",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6542",
+      "at": "kassiber/core/ui_snapshot.py:6546",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6668",
+      "at": "kassiber/core/ui_snapshot.py:6672",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6678",
+      "at": "kassiber/core/ui_snapshot.py:6682",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6950",
+      "at": "kassiber/core/ui_snapshot.py:6954",
       "code": {
         "expression": "row['account_code'] or ''"
       },
@@ -15117,28 +15117,28 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7008",
+      "at": "kassiber/core/ui_snapshot.py:7012",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7015",
+      "at": "kassiber/core/ui_snapshot.py:7019",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7048",
+      "at": "kassiber/core/ui_snapshot.py:7052",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7237",
+      "at": "kassiber/core/ui_snapshot.py:7241",
       "code": {
         "expression": "wallet['account_code'] or ''"
       },
@@ -15146,75 +15146,75 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7320",
+      "at": "kassiber/core/ui_snapshot.py:7324",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7333",
+      "at": "kassiber/core/ui_snapshot.py:7337",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7571",
+      "at": "kassiber/core/ui_snapshot.py:7575",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7580",
+      "at": "kassiber/core/ui_snapshot.py:7584",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7587",
+      "at": "kassiber/core/ui_snapshot.py:7591",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7656",
+      "at": "kassiber/core/ui_snapshot.py:7660",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7868",
+      "at": "kassiber/core/ui_snapshot.py:7872",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8103",
+      "at": "kassiber/core/ui_snapshot.py:8107",
       "code": "silent_payment_scan_pending",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8125",
+      "at": "kassiber/core/ui_snapshot.py:8129",
       "code": "silent_payment_scan_incomplete",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8573",
+      "at": "kassiber/core/ui_snapshot.py:8577",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8583",
+      "at": "kassiber/core/ui_snapshot.py:8587",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -23521,28 +23521,28 @@
       "retryable": false
     },
     {
-      "at": "kassiber/time_utils.py:51",
+      "at": "kassiber/time_utils.py:53",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/time_utils.py:60",
+      "at": "kassiber/time_utils.py:62",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/time_utils.py:147",
+      "at": "kassiber/time_utils.py:149",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/time_utils.py:193",
+      "at": "kassiber/time_utils.py:195",
       "callee": "AppError",
       "code": "validation",
       "form": "call",

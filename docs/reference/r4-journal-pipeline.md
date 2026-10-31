@@ -43,6 +43,9 @@ implementation approach:
 
 ## Measured phase profile
 
+This profile describes the pipeline before the storage-format speedups. The
+implementation measurements below record the compact and changed-row writers.
+
 ### Method
 
 - Python: [`scripts/benchmark-journals-phases.py`](../../scripts/benchmark-journals-phases.py)
@@ -1485,15 +1488,18 @@ it. A fresh schema places the column after `calculation_json`.
 - **Id.** `journal_entries.id` is a UUIDv8 (RFC 9562) built from the first
   16 bytes of SHA-256 over
   `["kassiber-journal-entry-v1", profile_id, transaction_id, wallet_id, entry_type, asset, ordinal]`
-  (compact JSON, ASCII).
+  (compact JSON, ASCII). Set byte 6 to `(byte & 0x0f) | 0x80` and byte 8 to
+  `(byte & 0x3f) | 0x80`, then emit the lowercase, hyphenated UUID string.
 - **Ordinal.** The ordinal counts earlier entries of the same build with the
-  same four values, in the engine's entry order.
+  same four values, in the engine's entry order, starting at zero.
 - **Shape.** Ids keep today's 36-character shape. Nothing parses them as
   UUIDs.
 
 A build reads the profile's rows and compares them with the new rows on
-their stored values. REAL columns compare the sign of zero as well, because
-Python treats `0.0 == -0.0` as equal.
+the explicit `ENTRY_COLUMNS` / `POSTING_COLUMNS` in
+`kassiber/core/journal_storage.py`, excluding `created_at`. Entry REAL columns
+`fiat_value`, `unit_cost`, `cost_basis`, `proceeds` and `gain_loss` compare the
+sign of zero as well, because Python treats `0.0 == -0.0` as equal.
 
 - Rows the build no longer produces are deleted.
 - A tie group is every row with the same `occurred_at`. If any of its rows
@@ -1515,9 +1521,10 @@ Python treats `0.0 == -0.0` as equal.
 `posting_id`s and holds about 30% of the journal bytes written. It gets the
 same changed-row write. Nothing reads its `created_at` or orders by it, so it
 needs no tie rule. The other journal tables are small and keep full
-replacement and uuid4 ids: quarantines, tax summary, holdings, quantity
-issues and balances, custody decisions, relations, reconciliations and gap
-inputs.
+replacement and their existing identity rules: quarantines, tax summary,
+holdings, quantity issues and balances, custody decisions, relations,
+reconciliations and gap inputs. Tax summaries and holdings keep uuid4 ids;
+canonical custody decisions, issues and relations already have deterministic ids.
 
 **Migration.** No schema change. The first build after the upgrade matches
 none of the old uuid4 ids and rewrites every row, as every build does
@@ -1560,13 +1567,21 @@ row.
    `ui.audit.changes_since_last_answer` changes with it:
    - `counts_since.journal_entries` counts rewritten entries only;
    - `latest.journal_entries` is the last time an entry changed;
-   - a rebuild that changes no entry no longer sets `changed` by itself;
+   - unchanged entries no longer set `changed`; other rewritten tables,
+     including quarantines, still contribute their own counts;
    - `latest.journals_processed_at` still reports the build.
 4. Explanation references still expire with every rebuild, because they bind
-   `processed_at`. A list cursor now survives a rebuild that leaves its rows
-   unchanged.
+   `processed_at`. When the build clock is no later than the persisted profile
+   marker, the new marker is the previous instant plus one microsecond, emitted
+   in UTC with six fractional digits. Otherwise it is the supplied build clock.
+   If either timestamp is absent or unparsable, the supplied text is retained.
+   This preserves expiry even for same-second rebuilds and clock rollback.
+   Row `created_at` and filed-impact `rebuilt_at` still use the supplied clock.
+   Quarantine freshness compares these markers as parsed instants, so an earlier
+   error in the same second does not outlive a successful rebuild.
+   A list cursor now survives a rebuild that leaves its rows unchanged.
 
-Values, every other column, report totals, freshness and filed-report
+Entry values, report totals, freshness and filed-report
 impact resolution are unchanged.
 
 **Risks:**
@@ -1585,17 +1600,26 @@ impact resolution are unchanged.
   transaction. The desktop daemon, the freshness journal job and review
   apply all call the same function.
 - **Unordered reads.** Readers without `ORDER BY` are counts, sets and
-  per-transaction sums. Physical row order now follows write history
+  per-transaction sums. The desktop's yearly realized-gain SUM now explicitly
+  orders its inputs by `occurred_at, created_at, id`, matching the chronological
+  index scan it previously used without relying on the query planner.
+  Physical row order now follows write history
   between tie groups. Within a group it follows engine order, as a build
   from scratch would.
 
 **R4-12 mirror.**
 
 - The same id derivation, with ordinals in engine order.
+- Entry construction consumes no uuid4 values. Other generated identities
+  retain their existing call order.
 - The same read, compare and tie-group rule.
 - Deletes before inserts, with inserts in engine order.
 - The same signed-zero REAL comparison.
 - The posting changed-row write.
+- Reject duplicate input ids even when they match retained rows. Posting ids
+  are keyed by `(profile_id, posting_id)`; entry ids have the global primary key.
+- Read the previous processing marker from the database, not the caller's
+  potentially stale profile, and apply the microsecond successor rule above.
 
 Both runtimes then leave identical database state from one starting copy
 and clock. R4-12's dump comparison needs no id mapping for these two tables.
@@ -1729,6 +1753,78 @@ target here left a stale store artifact until `cargo clean -p kassiber-store`
 and a fresh build. The recorded Rust gates use that fresh current store.
 The pinned error/environment indexes are refreshed for the compact change's
 source-line shifts; their error policies and environment reads are unchanged.
+
+### Changed-row implementation measurements
+
+These compare the compact baseline at `3c6c324c` (the `6a94f676` writer plus
+the audit reader correction) with deterministic ids and changed-row writes,
+before the cache change. Each real Python CLI command
+rebuilds an unchanged, primed disposable book; before/after runs alternate
+AB/BA, with five samples per version. These are end-to-end times, including
+imports, book open, commit and close.
+
+| Book | Plaintext, before → after (s) | SQLCipher, before → after (s) |
+| --- | ---: | ---: |
+| generic 2k | 1.914 → 1.844 | 2.224 → 2.113 |
+| generic 20k | 12.682 → 12.133 | 14.220 → 12.367 |
+| multi-wallet 2k | 2.296 → 2.299 | 2.672 → 2.552 |
+| multi-wallet 20k | 21.762 → 21.035 | 24.072 → 21.820 |
+
+Load ranged from 1.65 to 3.01. At 20k, SQLCipher improves 13.0% on generic
+and 9.4% on multi-wallet; plaintext improves 4.3% and 3.3%. Multi-wallet 2k
+plaintext is unchanged. Compare each pair within this table: host load is
+lower than in the earlier compact-storage measurements, so joining the two
+tables' endpoints would overstate the combined gain.
+
+The report comparison canonicalizes the approved id and tie-order changes
+in the baseline entry reader before comparing output. It also removes that
+reader's per-entry uuid4 consumption so unrelated generated artifact ids
+remain aligned. It freezes clocks and artifact identities; it does not claim
+raw old uuid4 exports equal new UUIDv8 exports. No output fields or numeric
+values are discarded from the comparison. No-op audit/cursor behavior and
+same-second explanation expiry have separate regressions.
+
+All ten book/encryption cases match across 54 captured sections each: every
+report command, generated file and workbook/archive member, audit evidence,
+audit package, retained calculations and 16 redacted AI projections. As in the
+compact comparison, commands missing required bench inputs match their errors;
+their success paths depend on the accounting/report shards. Full compressed
+dumps remain under `target/r4-storage/results/dumps/changed-*`; their hashes,
+raw timing samples and coexistence checks are in
+[the recorded results](r4-journal-storage-results.json).
+
+Plaintext and SQLCipher coexistence checks show an older compact Python writer
+replacing UUIDv8 with uuid4, current Python restoring the same UUIDv8 ids, and
+the next current no-op preserving every rowid and stored column. The current
+Rust store reads both books. The compact section's pre-column Rust refusal
+and old Python legacy-calculation rules still apply.
+
+The final reader review found that the yearly realized-gain aggregate lacked
+an explicit input order. A scan-direction regression changed its floating sum
+from 0 to 1e-16, even with SQLite's compensated SUM. Its ordered subquery now
+keeps journal order on either driver, independently of physical write history.
+The bench's 2024 dates do not exercise the real-clock YTD window; this dedicated
+regression uses future dates to cover that gap.
+
+The fractional-marker reader review also found a text comparison in quarantine
+freshness. A same-second error incorrectly survived a successful rebuild whose
+marker had a fractional successor. Its regression fails before the correction;
+parsed timestamp comparisons now clear the earlier error and keep later errors.
+
+The required report, CLI/daemon and security shards pass. Core accounting with
+the tax/custody census passes 1,951 tests (393 tax calls, 288 custody snapshots;
+285 fusion comparisons and three narrow fixture exceptions); the custody-shadow
+lane passes 601 tests with 393 tax calls. All three Rust store manifests, the
+offline Rust workspace and the Rust read/interoperability/migration matrix pass.
+The latter passes 381 tests (two skipped). The final storage, explanation and
+quarantine probes pass 85 tests, including encrypted backup/restore.
+The final inventory and source-contract refresh and preflight pass. The storage
+and explanation probes also cover repeated input ids, cross-profile posting
+keys, global entry-id collision rollback, no-op cursors, retained audit times,
+and same-second or backward-clock explanation expiry. Two old test expectations
+were updated for UUIDv8 and retained posting creation times; frozen accounting
+vectors are unchanged.
+
 
 ## Decisions for the owner
 

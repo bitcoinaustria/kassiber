@@ -62,6 +62,14 @@ Important behavior:
 
 After any transaction change, metadata change, exclusion change, transfer pair change, quarantine resolution, rate sync, or manual rate override, journals must be reprocessed before reports are trusted again.
 
+Entry ids are stable across rebuilds. Unchanged entries and quantity postings
+retain their `created_at`; changed entries rewrite their whole `occurred_at`
+group so same-timestamp reads remain in id order. `processed_at` identifies every
+rebuild, including a no-op, and advances by one microsecond if the clock has not
+advanced. Explanation references expire on every rebuild, while list cursors
+can survive one that leaves their rows unchanged. See the
+[storage contract](r4-journal-pipeline.md#2-deterministic-entry-ids-and-changed-row-writes).
+
 ## Transfers
 
 Cross-wallet self-transfers are auto-detected when both legs share the same
