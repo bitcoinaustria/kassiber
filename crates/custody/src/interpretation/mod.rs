@@ -1,6 +1,6 @@
 //! Complete interpreter compilation from raw snapshots and Rust stages.
 //! Python remains authoritative; these results are comparison-only.
-mod channels;
+pub(crate) mod channels;
 mod chronology;
 mod claims;
 mod consolidation;

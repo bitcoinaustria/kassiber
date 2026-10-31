@@ -647,7 +647,7 @@ The [partial checkpoint](docs/reference/rust-shell.md#transfers-and-review-class
 serves all five stored reads, fourteen authoring commands (rule CRUD/toggles,
 dismissals, pair/unpair/update, payout create/delete, component and gap plan/apply),
 suggestions/bulk pairing/rule application, component list/show, and gap list/review:
-26/29 CLI leaves and 25 desktop kinds. Full
+**26/29 CLI leaves and 25/28 desktop kinds**. Full
 normalized authoring row parity is pinned for that subset; AI projections remain
 Python.
 
@@ -671,9 +671,16 @@ Python.
   safe desktop projection, exact filters/pagination and read-only DB parity.
 - [x] Port gaps list/review with their desktop kinds, version-bound cursor pages,
   canonical freshness/blockers, historical reviews and unchanged database parity.
-- [ ] Port review cases/plan/apply through the shared journal service: r7 has
-  pure custody/fusion and a render checkpoint, but still needs the native SQL
-  snapshot/ownership loader, complete build-state assembly and journal writer.
+- [ ] Port review cases/plan/apply through the shared journal service. The
+  `b5eb38ea8` base contains the native SQL snapshot/ownership loader and journal
+  writer checkpoints. Transfers-10 joins loading, custody, fusion and rendering
+  behind `test-harness`, with complete build-state comparisons and RAM-only
+  SQLite/SQLCipher planning snapshots. Production counts remain **26/29 CLI
+  leaves and 25/28 daemon kinds**. Finish lossless/refusal admission, current-case
+  pagination and waiting roots, exact artifacts/economic effects, ordered mixed
+  operations and writer-locked apply/receipts before registering the three
+  routes. Prove full DB/filed-impact parity, late rollback, idempotent retries,
+  caller-owned transactions, CLI/daemon envelopes and AI once-only consent.
   Retain readiness barriers rather than reading stale journals; see the
   [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the

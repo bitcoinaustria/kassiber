@@ -17690,16 +17690,94 @@
       "test_loader_blob_consumers_match_composed_and_transport_outcomes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares actual SQLite BLOB consumers and JSON serialization refusals with Python at complete CLI/daemon and finalized projection boundaries, recording typeof and zero writes on disposable books", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_cln_acquisition.py": {
-      "test_cln_report_real_process_transport_matches_python_without_fallback": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_cln_report_process_policy_refusals_make_no_hits": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_cln_report_transport_failure_optional_resources_and_secret_free_errors": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_cln_report_acquisition_vectors_match_unchanged_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_cln_reference_quirks_and_error_disclosure_remain_reproducible": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1}
+      "test_cln_report_real_process_transport_matches_python_without_fallback": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_cln_report_process_policy_refusals_make_no_hits": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_cln_report_transport_failure_optional_resources_and_secret_free_errors": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_cln_report_acquisition_vectors_match_unchanged_python": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_cln_reference_quirks_and_error_disclosure_remain_reproducible": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_cross_check.py": {
-      "test_cross_check_service_bytes_workbooks_and_all_database_tables": {"disposition": "oracle", "flags": ["mock", "sql", "subprocess"], "group": "reports", "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary", "reviewed": true, "tests": 1},
-      "test_cross_check_cli_bytes_workbooks_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary", "reviewed": true, "tests": 1},
-      "test_cross_check_daemon_bytes_workbooks_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary", "reviewed": true, "tests": 1}
+      "test_cross_check_service_bytes_workbooks_and_all_database_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_cross_check_cli_bytes_workbooks_all_tables_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_cross_check_daemon_bytes_workbooks_all_tables_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_diagnostics.py": {
       "test_normalization_changes_only_named_runtime_and_stack_values": {
@@ -19218,9 +19296,41 @@
       }
     },
     "tests/test_rust_gain_reads.py": {
-      "test_gain_service_bytes_and_every_database_table": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered", "reviewed": true, "tests": 1},
-      "test_gain_cli_bytes_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered", "reviewed": true, "tests": 1},
-      "test_gain_daemon_bytes_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered", "reviewed": true, "tests": 1}
+      "test_gain_service_bytes_and_every_database_table": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_gain_cli_bytes_all_tables_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_gain_daemon_bytes_all_tables_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_gap_services.py": {
       "RustGapServicesTest": {
@@ -19397,17 +19507,98 @@
       }
     },
     "tests/test_rust_lightning_acquisition.py": {
-      "test_lnd_ancillary_real_process_refusals_match_reference_request_order": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_lnd_tls_and_explicit_proxy_process_matrix": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_lnd_process_errors_preserve_codes_and_discard_raw_responses": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_lnd_report_real_transport_processes_match_python_without_fallback": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_lnd_report_process_product_no_egress_offline_and_missing_consent_have_zero_hits": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_lnd_report_acquisition_vectors_match_unchanged_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1},
-      "test_lnd_reference_error_disclosure_remains_reproducible": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered", "reviewed": true, "tests": 1}
+      "test_lnd_ancillary_real_process_refusals_match_reference_request_order": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lnd_tls_and_explicit_proxy_process_matrix": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lnd_process_errors_preserve_codes_and_discard_raw_responses": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lnd_report_real_transport_processes_match_python_without_fallback": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lnd_report_process_product_no_egress_offline_and_missing_consent_have_zero_hits": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lnd_report_acquisition_vectors_match_unchanged_python": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lnd_reference_error_disclosure_remains_reproducible": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_lightning_reports.py": {
-      "test_lightning_report_kernel_vectors_match_unchanged_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred", "reviewed": true, "tests": 1},
-      "test_lightning_report_kernel_reference_quirks_remain_reproducible": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred", "reviewed": true, "tests": 1}
+      "test_lightning_report_kernel_vectors_match_unchanged_python": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_lightning_report_kernel_reference_quirks_remain_reproducible": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {
@@ -19506,9 +19697,41 @@
       }
     },
     "tests/test_rust_platform_csv.py": {
-      "test_platform_csv_service_bytes_metadata_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing", "reviewed": true, "tests": 1},
-      "test_platform_csv_cli_bytes_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing", "reviewed": true, "tests": 1},
-      "test_platform_csv_daemon_bytes_collisions_validation_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing", "reviewed": true, "tests": 1}
+      "test_platform_csv_service_bytes_metadata_and_all_112_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_platform_csv_cli_bytes_and_native_routing": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_platform_csv_daemon_bytes_collisions_validation_and_native_routing": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native CoinTracking/Blockpit CSV bytes, metadata/error bytes and all 112 tables against unchanged Python with explicit Rust-only CLI/daemon routing",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_rates_candidate.py": {
       "test_all_six_cli_leaves_are_served_by_rust": {
@@ -20019,15 +20242,85 @@
       }
     },
     "tests/test_rust_source_funds_case_writes.py": {
-      "test_frozen_case_persistence_bytes_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares the native frozen-case persistence helper with unchanged Python using exact receipt envelope encodings and all 112 tables on SQLite and SQLCipher, including late insert/commit refusals and caller rollback; this helper is not registered as a CLI/daemon mutation and does not claim report composition, consent, once-only tool execution or diagnostic wire acceptance", "reviewed": true, "tests": 1}
+      "test_frozen_case_persistence_bytes_and_all_112_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares the native frozen-case persistence helper with unchanged Python using exact receipt envelope encodings and all 112 tables on SQLite and SQLCipher, including late insert/commit refusals and caller rollback; this helper is not registered as a CLI/daemon mutation and does not claim report composition, consent, once-only tool execution or diagnostic wire acceptance",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_source_funds_reads.py": {
-      "test_source_funds_stored_service_bytes_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending", "reviewed": true, "tests": 1},
-      "test_source_funds_stored_sqlcipher_bytes_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending", "reviewed": true, "tests": 1},
-      "test_source_funds_stored_cli_bytes_output_files_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending", "reviewed": true, "tests": 1},
-      "test_source_funds_stored_daemon_bytes_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending", "reviewed": true, "tests": 1},
-      "test_source_funds_internal_debug_normalization_preserves_other_wire_bytes": {"disposition": "oracle", "flags": [], "group": "reports", "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending", "reviewed": true, "tests": 1},
-      "test_source_funds_stored_internal_error_wire_parity": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending", "reviewed": true, "tests": 1}
+      "test_source_funds_stored_service_bytes_and_all_112_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_source_funds_stored_sqlcipher_bytes_and_all_112_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_source_funds_stored_cli_bytes_output_files_all_tables_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_source_funds_stored_daemon_bytes_all_tables_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_source_funds_internal_debug_normalization_preserves_other_wire_bytes": {
+        "disposition": "oracle",
+        "flags": [],
+        "group": "reports",
+        "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_source_funds_stored_internal_error_wire_parity": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native stored source, link, case, recipient and evidence listings with unchanged Python, including structured service results, normal/AppError CLI/daemon bytes, output-file bytes, SQLCipher and all 112 tables; requires zero stored-list fallbacks and preserves frozen case metadata, editor disclosure and reference cursor/amount quirks; internal-error witnesses compare every non-debug wire byte and verify redacted reference diagnostics plus honest native debug presence under the approved native-stack contract; report traversal, dry runs and mutations remain pending",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_store_interop.py": {
       "test_python_created_books_rust_reads_and_writes": {
@@ -21939,9 +22232,43 @@
       }
     },
     "tests/test_rust_year_handoff.py": {
-      "test_year_handoff_service_content_errors_and_all_112_tables": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "reports", "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing", "reviewed": true, "tests": 1},
-      "test_year_handoff_cli_content_filing_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing", "reviewed": true, "tests": 1},
-      "test_year_handoff_daemon_content_filing_collisions_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing", "reviewed": true, "tests": 1}
+      "test_year_handoff_service_content_errors_and_all_112_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_year_handoff_cli_content_filing_and_native_routing": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_year_handoff_daemon_content_filing_collisions_and_native_routing": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_samourai_import.py": {
       "SamouraiImportTest": {
@@ -26003,6 +26330,19 @@
         ],
         "group": "reports",
         "reason": "compares native exit-tax projections, wire bytes, XLSX content and all database tables with Python, including refusal gates, estimate disclosures and the reference no-snapshot boundary; requires zero CLI and daemon fallbacks",
+        "reviewed": true,
+        "tests": 1
+      }
+    },
+    "tests/test_rust_review_builds.py": {
+      "test_complete_review_build_vectors_replay_through_python": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal"
+        ],
+        "group": "journals",
+        "reason": "replays complete review-build states through unchanged Python with declared identity tapes and canonical live-anchor filtering; native tests join loading, custody, fusion and rendering for the same synthetic snapshots",
         "reviewed": true,
         "tests": 1
       }

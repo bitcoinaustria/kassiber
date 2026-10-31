@@ -675,6 +675,47 @@ fn native_loader_selects_bounded_worklist_from_active_count() {
 }
 
 #[test]
+fn review_loader_preserves_read_and_writer_snapshots_without_writes() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    for encrypted in [false, true] {
+        for case in &cases {
+            let conn = Connection::open_in_memory().unwrap();
+            if encrypted {
+                conn.pragma_update(None, "key", "synthetic-read-loader-key")
+                    .unwrap();
+            }
+            conn.execute_batch("PRAGMA foreign_keys=OFF").unwrap();
+            conn.execute_batch(&text(get(case, "sql"))).unwrap();
+            for begin in ["BEGIN", "BEGIN IMMEDIATE"] {
+                conn.execute_batch(begin).unwrap();
+                let changes = conn.total_changes();
+                let snapshot = load_read_snapshot(
+                    &conn,
+                    get(case, "profile").clone(),
+                    &text(get(case, "as_of")),
+                )
+                .unwrap();
+                assert_eq!(snapshot.v1().unwrap(), text(get(case, "expected")));
+                assert_eq!(conn.total_changes(), changes);
+                assert!(!conn.is_autocommit());
+                conn.execute_batch("ROLLBACK").unwrap();
+            }
+        }
+    }
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(matches!(
+        load_read_snapshot(&conn, dict([]), "now"),
+        Err(Error::TransactionRequired)
+    ));
+    assert!(conn.is_autocommit());
+    assert_eq!(conn.total_changes(), 0);
+}
+
+#[test]
 fn native_loader_blob_conversions_preserve_bytes_and_consuming_policy() {
     for bytes in [
         vec![],

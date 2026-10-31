@@ -12,6 +12,8 @@ pub mod persistence;
 pub mod prebuild;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod process;
+#[cfg(any(test, feature = "test-harness"))]
+pub mod pipeline;
 mod render;
 pub mod storage;
 pub mod timing;
@@ -109,5 +111,5 @@ pub(crate) fn pyjson(value: &Value, compact: bool) -> Result<String, Refusal> {
 }
 
 mod compute;
-pub use compute::{compute, Computed, Fusion};
+pub use compute::{compute, compute_snapshot, Computed, Fusion};
 pub use kassiber_custody::Stages;

@@ -315,6 +315,20 @@ fn confirmation_quantity_refusals(rows: &[Record]) -> Result<()> {
 /// Reads pending writes under the caller's write lock; never repairs or commits.
 #[allow(clippy::field_reassign_with_default)] // Snapshot owns a private memo field.
 pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnapshot> {
+    if conn.is_autocommit()
+        || conn.transaction_state(Some("main"))? != rusqlite::TransactionState::Write
+    {
+        return Err(Error::TransactionRequired);
+    }
+    load_read_snapshot(conn, profile, as_of)
+}
+
+#[allow(clippy::field_reassign_with_default)]
+pub fn load_read_snapshot(
+    conn: &Connection,
+    profile: Value,
+    as_of: &str,
+) -> Result<LoadedSnapshot> {
     struct Memos;
     impl Drop for Memos {
         fn drop(&mut self) {
@@ -322,9 +336,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
         }
     }
     let _memos = Memos;
-    if conn.is_autocommit()
-        || conn.transaction_state(Some("main"))? != rusqlite::TransactionState::Write
-    {
+    if conn.is_autocommit() {
         return Err(Error::TransactionRequired);
     }
     let profile_id = text(get(&profile, "id"));
@@ -431,7 +443,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     snapshot.profile = profile.into();
     snapshot.book_network = network;
     snapshot.wallets = wallets;
-    snapshot.transactions = transactions.into_iter().map(J::Object).collect();
+    snapshot.transactions = transactions;
     snapshot.rate_rows = rate_rows;
     snapshot.owned_index = (!owned_index.is_null()).then_some(owned_index);
     snapshot.ownership_warnings = warnings.iter().map(text).collect();

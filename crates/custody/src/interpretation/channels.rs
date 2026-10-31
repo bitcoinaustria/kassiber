@@ -707,7 +707,7 @@ fn context(records: &[Value], rows: &[Value], wallets: &Wallets) -> Result<Value
     let pairs = transfer_pairs(&channels, rows, wallets)?;
     Ok(json!({"roles":roles,"pairs":pairs}))
 }
-pub(super) fn compute(snapshot: &Snapshot) -> Result<Value, String> {
+pub(crate) fn compute(snapshot: &Snapshot) -> Result<Value, String> {
     context(
         &snapshot
             .channel_records

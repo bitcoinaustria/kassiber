@@ -8540,11 +8540,13 @@ records remain under `target/r5-transfers9`. No job from this run remains active
 
 #### Review integration handoff
 
-The owner confirmed that R4-9 (`t3code/r4-9-loader`) and R4-12
-(`t3code/r4-12-persist`) are parallel, unavailable prerequisites; neither is
-implemented here. The following are requested adapter signatures, **not
-existing exports**. They use the current snapshot and render types so the
-workers can supply thin adapters around their eventual typed interfaces:
+At the transfers-9 checkpoint, R4-9 (`t3code/r4-9-loader`) and R4-12
+(`t3code/r4-12-persist`) were parallel, unavailable prerequisites. The following
+were requested adapter signatures, **not exports at that checkpoint**. The
+[transfers-10 continuation](#native-review-build-assembly-r5-transfers-10-partial)
+below records the now-present loader/writer and test-only build assembly. The
+workflow transaction, authority and parity requirements in this handoff remain.
+The requested signatures used that checkpoint's snapshot and render types:
 
 ```rust
 use kassiber_custody::snapshot::Snapshot;
@@ -8613,8 +8615,9 @@ decisions. Sibling unpairs retain the original baseline while their shared
 component is re-sliced. A snapshot-only shim would either miss that transition
 or require an unimplemented composer callback. Applied database parity also
 needs the real writer's rows and failure points; replaying expected writes
-would not prove its behavior. The owner-authorized stop-after-registration
-fallback is used here: **no review-only library port or parity claim is made**.
+would not prove its behavior. Transfers-9 stopped after registration and made
+**no review-only library port or parity claim**. The native assembler continuation
+below is a separate partial checkpoint.
 
 The follow-up must capture Python states at each real `_build` invocation and
 compare artifacts, cursor pages, economic digests, refusal precedence and
@@ -8624,6 +8627,114 @@ idempotent retries after book changes, caller-owned transactions, and injected
 failures during operation N, journal storage and receipt insertion. AI
 projections must read the resulting native history/receipts unchanged. Only
 then register the three review leaves and their three daemon kinds.
+
+### Native review-build assembly (R5 transfers-10, partial)
+
+`t3code/r5-transfers-10` starts at `b5eb38ea8`. Unlike the transfers-9 base,
+this base contains the R4-9 native loader and R4-12 journal writer checkpoints.
+Neither checkpoint alone provided the build-state assembler required above.
+This continuation connects that assembler behind tests/`test-harness` and
+adds isolated in-memory planning backups. No product review route is registered:
+counts remain **26/29 CLI leaves and 25/28 corresponding daemon kinds**.
+
+`journals::pipeline::Prepared` joins the direct SQL loader, typed custody
+admission, custody/fusion/tax computation and journal rendering. It keeps the
+custody projection alive for the borrowed `JournalState`. The review projection
+uses the writer's canonical primary-reason deduplication and removes anchors
+outside the current profile's live transaction IDs. All eighteen build-state
+fields remain present, including whole-book holdings, tax summaries, quantity
+decisions, component blockers and suspense provenance. Transfer basis eligibility
+compares complete arbitrated decisions, not their source slices. This corrects
+an assembly defect found by the complete-state comparison; no Python reference
+change was made.
+
+`loader::load` retains its writer-only contract. The separate
+`load_read_snapshot` entry point requires a caller-owned transaction and never
+starts or ends it. The existing transitional `StageSnapshot::typed` adapter
+joins the direct loader to `BookSnapshot`; this still serializes transitional
+facts internally and does not close R4's typed/performance acceptance work.
+Duplicate manifest dependency keys and stale loader row types on the base are
+repaired without adding dependencies or changing locked versions.
+
+`pipeline::memory_snapshot` backs up through the book's existing SQLCipher
+binding to RAM, enables memory temporary storage and foreign keys, and uses an
+injected ephemeral destination key for encrypted sources. It never reads the
+book key. It refuses an active main-database write transaction before backup,
+preserving pending writes and transaction ownership. Tests cover plaintext and
+encrypted sources, active read transactions, exact INTEGER/REAL/TEXT/BLOB
+preservation, Unicode, clone mutation isolation and pending-write refusal.
+
+The opt-in `tests.rust_port.review_build_capture` plugin captures actual
+Python `_build` invocations from disposable tests, including intermediate
+rebuilds during mixed operations and sibling unpairs. It uses the declared UUID
+tape and a fixed build clock; comparisons mask no state fields. The freeze tool
+deduplicates only byte-identical complete expected outputs and preserves their
+source test names. Captures include private test facts and stay under `target/`;
+the checked-in vectors contain synthetic fixtures only.
+
+| Verification | Result | Scope |
+| --- | ---: | --- |
+| Live Python review capture | 66 tests and 12 subtests passed | Workflow, acquisition, quarantine/unpair and daemon review modules; 138 actual builds |
+| Joined native build comparisons | 552/552 exact matches | Every captured build in plaintext/SQLCipher and read/writer transactions; unchanged source `total_changes` and transaction ownership |
+| Checked-in build vectors | 33 distinct complete states | Byte-identical expected-output deduplication only; no output fields masked; retained source test names |
+| Python build/render/persistence oracles | 9 passed | Replays all 33 review states through unchanged Python with declared identity tapes; existing render/storage oracles also pass |
+| Read-loader byte gate | 148 exact matches | The existing 37 loader fixtures in plaintext/SQLCipher and read/writer snapshots, plus autocommit refusal |
+| Native custody and journal suites | 651 passed, zero failed/ignored | 19 test/doc-test targets, including complete persistence dumps, filed impacts, every-write rollback and SQLCipher |
+| Rust formatting and clippy | Passed | Workspace formatting; custody/journals all-target clippy with `test-harness` and `-D warnings` |
+| Final mutation campaign | 16/16 killed; seven passing baselines | All 15 new review recipes plus the repaired inherited `JL-receipt-accounting-precedence`; zero survivors/build errors |
+| Required inventory update | 5,776 tests in 357 modules | New replay test is a reviewed journal oracle; inherited stale classification metadata is normalized |
+| Required CI preflight | 57 passed | The first run exposed inherited documented uv flag ordering; the doc is normalized to `uv sync --locked` and the full rerun passes |
+
+The new recipes live in `crates/journals/scripts/review_mutations.json`. Their
+named kills cover `review_builds_match_complete_python_states`,
+`review_builds_keep_primary_reasons_and_only_live_profile_anchors`,
+`review_loader_preserves_read_and_writer_snapshots_without_writes`,
+`review_memory_snapshots_preserve_sqlcipher_and_plaintext_values_without_source_writes`,
+`review_memory_snapshot_refuses_pending_writes_without_committing_or_consuming_a_key`,
+and `review_rates_and_warnings_preserve_reference_precedence_and_exactness`.
+The inherited accounting-precedence recipe is updated for typed snapshot
+admission and killed by `native_loader_preserves_receipt_error_precedence`.
+All 59 loader recipes and all 112 render/persistence recipes still apply;
+their complete inherited campaigns were not rerun here.
+
+No check remains blocked by the sandbox. The owned mutation and verification
+build trees are removed after recording these summaries. Logs, the machine-
+readable verification summary and synthetic captures remain under `target/`;
+no background job is left running.
+
+These are build/clone and inherited writer checks, not full review-operation,
+artifact, receipt or filed-impact integration parity. The inherited R4 campaign
+and lossless/refusal acceptance barriers remain open.
+
+Reproduce with Rust 1.99.1 and the locked Python 3.11 environment. Set
+`MATURIN_NO_INSTALL_RUST=1`, `CARGO_BUILD_JOBS=8`, `CARGO_NET_OFFLINE=true`, and
+`TMPDIR` to an existing worktree `target/` directory. Set both
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` under that directory to override
+machine-wide intermediate-build configuration. Run one test job at a time:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv sync --locked --python 3.11
+mise exec rust@1.99.1 uv@latest -- cargo test --offline -p kassiber-journals --features test-harness -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- cargo build --offline -p kassiber-journals --features test-harness --example review-build
+KASSIBER_TEST_REVIEW_BUILD_DIR="$PWD/target/review-capture" mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q -p tests.rust_port.review_build_capture tests/test_review_workflow.py tests/test_acquisition_review.py tests/test_quarantine_review.py tests/test_daemon_review_workflow.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/journals/scripts/verify_review_builds.py target/review-capture target/build/debug/examples/review-build
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/journals/scripts/freeze_review_builds.py target/review-capture --accept
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/journals/scripts/review_mutation_check.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/journals/scripts/review_mutation_check.py --mutations crates/journals/scripts/loader_mutations.json --only JL-receipt-accounting-precedence
+```
+
+Remaining work is explicit. Close the inherited R4 lossless legacy-value and
+precise-refusal barriers before admitting production review builds. Implement
+current cases, scoped cursor freshness, waiting roots and pair evidence;
+canonical operation normalization, artifacts/digests and acquisition-policy
+effects; clone-isolated planning and validation; writer-locked ordered apply,
+historical idempotency receipts before freshness, canonical journal storage and
+receipt insertion in the same savepoint. Then prove full normalized database
+parity, filed-report impact handling and rollback at every late failure,
+caller-owned transaction/cache restoration, exact CLI/daemon envelopes and
+authorship, and AI once-only consent/receipt projections. Finally register
+`review cases|plan|apply` and `ui.review.cases|plan|apply` with zero hybrid
+fallbacks. This checkpoint does not claim those services or R5 completion.
 
 ### Bitcoin native fetch assembly (R5)
 

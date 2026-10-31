@@ -34,6 +34,10 @@ pub struct Computed {
 /// decision-only build, which skips finalization and fusion.
 pub fn compute(request: &str, finalized: bool) -> Result<Computed, Refusal> {
     let snapshot = kassiber_custody::parse(request)?;
+    compute_snapshot(snapshot, finalized)
+}
+
+pub fn compute_snapshot(snapshot: Snapshot, finalized: bool) -> Result<Computed, Refusal> {
     let stages = kassiber_custody::run(&snapshot, finalized)?;
     let fusion = match &stages.finalized_projection {
         Some(projection) => fuse(&snapshot, projection),

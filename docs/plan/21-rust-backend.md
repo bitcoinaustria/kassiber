@@ -3085,6 +3085,32 @@ cannot use stored journal projections. The [integration checkpoint](../reference
 records evidence and the precise remaining boundaries. This does not complete
 the transfers/review service slice. Python and AI projections are unchanged.
 
+### R5 transfers: native review-build assembly (partial)
+
+`t3code/r5-transfers-10` starts at `b5eb38ea8`, which includes the R4-9 native
+loader and R4-12 writer checkpoints. It repairs their integration with the typed
+custody snapshot and joins native loading, custody, fusion, tax computation and
+rendering into a complete review build. The loader now supports caller-owned
+read snapshots separately from its existing writer-only entry point. Planning
+backup uses the same SQLCipher binding, an in-memory destination and an injected
+ephemeral key; pending source writes are refused without committing them.
+
+The assembler remains gated to tests/`test-harness`. Its sampled byte comparisons
+include every build invoked by mixed reviews, acquisition reviews and sibling or
+interleaved unpairs. Complete decisions determine transfer basis eligibility;
+suggestions and graph evidence gain no reviewed-custody authority. Canonical
+quarantine deduplication and live-profile anchor filtering precede case use.
+The [checkpoint](../reference/rust-shell.md#native-review-build-assembly-r5-transfers-10-partial)
+records exact coverage and reproduction commands.
+
+Counts remain **26/29 CLI leaves and 25/28 corresponding daemon kinds**. The
+three review commands remain unregistered. This is a build/clone checkpoint,
+not review workflow acceptance: lossless/refusal admission, cases/cursors,
+portable artifacts and policy-bound effects, ordered operation application,
+idempotent receipts, canonical writer integration, filed impacts, rollback and
+CLI/daemon/AI consent parity still require implementation and proof. There is no
+new hybrid fallback or Python product change.
+
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 
 The unregistered `wallets::fetch::Fetch` captures the supported single-wallet

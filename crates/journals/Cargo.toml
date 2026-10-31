@@ -54,5 +54,9 @@ name = "journal-fusion"
 required-features = ["test-harness"]
 
 [[example]]
+name = "review-build"
+required-features = ["test-harness"]
+
+[[example]]
 name = "journals-bench"
 required-features = ["timing"]
