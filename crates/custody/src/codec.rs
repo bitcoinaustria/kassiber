@@ -9,6 +9,16 @@ use std::str::FromStr;
 const PARALLEL_ITEMS: usize = 1024;
 
 pub fn from_json(v: &Value) -> Result<Py, String> {
+    if let Some(bytes) = raw_bytes(v) {
+        return Ok(Py::Bytes(bytes));
+    }
+    if let Some(dict) = escaped_dict(v) {
+        return dict
+            .iter()
+            .map(|(k, v)| Ok((Key::from(k.as_str()), from_json(v)?)))
+            .collect::<Result<_, String>>()
+            .map(Py::Dict);
+    }
     Ok(match v {
         Value::Array(v) if v.len() >= PARALLEL_ITEMS => Py::List(
             crate::par::map(v, from_json)
@@ -45,6 +55,9 @@ pub(crate) fn dumps_json_into(
     level: usize,
     out: &mut String,
 ) -> Option<()> {
+    if raw_bytes(v).is_some() || escaped_dict(v).is_some() {
+        return None;
+    }
     match v {
         Value::Null => out.push_str("null"),
         Value::Bool(true) => out.push_str("true"),
@@ -141,7 +154,7 @@ pub(crate) fn lossless(v: &Py) -> bool {
             Py::Int(n) => n.bits() < 14_000,
             Py::Float(f) => f.is_finite(),
             Py::Str(s) => !s.has_surrogates(),
-            Py::Decimal(_) => false,
+            Py::Decimal(_) | Py::Bytes(_) => false,
             Py::List(items) if items.len() >= PARALLEL_ITEMS => {
                 depth < 900
                     && crate::par::map(items, |item| walk(item, depth + 1))
@@ -185,6 +198,16 @@ pub fn to_json(v: &Py) -> Value {
                 .map(|c| char::from_u32(c).unwrap_or('\u{fffd}'))
                 .collect()
         })),
+        // Only the private adapter tag denotes a byte scalar. Literal maps
+        // with a reserved key are escaped below, so raw JSON cannot forge it.
+        Py::Bytes(bytes) => {
+            use std::fmt::Write;
+            let mut hex = String::with_capacity(bytes.len() * 2);
+            for byte in bytes {
+                write!(hex, "{byte:02x}").unwrap();
+            }
+            serde_json::json!({"$kassiber_bytes": hex})
+        }
         Py::List(v) if v.len() >= PARALLEL_ITEMS => Value::Array(
             crate::par::map(v, to_json)
                 .into_iter()
@@ -192,7 +215,7 @@ pub fn to_json(v: &Py) -> Value {
                 .collect(),
         ),
         Py::List(v) => Value::Array(v.iter().map(to_json).collect()),
-        Py::Dict(v) => Value::Object(
+        Py::Dict(v) => json_dict(
             v.iter()
                 .filter_map(|(k, v)| {
                     if let Key::Str(k) = k {
@@ -295,6 +318,12 @@ pub fn sha256(text: &str) -> String {
 /// Encoding an unpaired surrogate with ensure_ascii=false still refuses it.
 pub fn loads(text: &str) -> Result<Py, String> {
     loads_bytes(text.as_bytes())
+}
+
+/// json.loads(bytes), including encoding detection and raw surrogate identity.
+pub fn load_json_bytes(bytes: &[u8]) -> Result<Py, String> {
+    let text = kassiber_pyjson::json_bytes_string(bytes).map_err(str::to_owned)?;
+    loads_bytes(text.as_surrogatepass_bytes())
 }
 
 /// JSON after Python's surrogatepass byte decoding. Cursor byte inputs can
@@ -585,6 +614,13 @@ pub(crate) fn clear_memos() {
 }
 
 pub fn object(v: &Value) -> Value {
+    if let Some(bytes) = raw_bytes(v) {
+        return load_json_bytes(&bytes)
+            .ok()
+            .map(|value| to_json(&value))
+            .filter(Value::is_object)
+            .unwrap_or_else(|| serde_json::json!({}));
+    }
     if v.is_object() {
         return v.clone();
     }
@@ -603,6 +639,9 @@ pub fn object(v: &Value) -> Value {
 }
 
 pub fn truth(v: &Value) -> bool {
+    if let Some(bytes) = raw_bytes(v) {
+        return !bytes.is_empty();
+    }
     match v {
         Value::Null => false,
         Value::Bool(b) => *b,
@@ -617,6 +656,9 @@ pub fn truth(v: &Value) -> bool {
     }
 }
 pub fn pystr(v: &Value) -> String {
+    if let Some(bytes) = raw_bytes(v) {
+        return kassiber_pyjson::bytes_repr(&bytes);
+    }
     match v {
         Value::String(s) => s.clone(),
         Value::Null => "None".into(),
@@ -641,6 +683,13 @@ pub fn text(v: &Value) -> String {
     }
 }
 pub fn integer(v: &Value) -> Result<Value, String> {
+    if let Some(bytes) = raw_bytes(v) {
+        let text = std::str::from_utf8(&bytes)
+            .ok()
+            .filter(|s| s.is_ascii())
+            .ok_or("invalid integer quantity")?;
+        return integer(&Value::String(text.into()));
+    }
     if let Some(b) = v.as_bool() {
         return Ok(serde_json::json!(i64::from(b)));
     }
@@ -681,6 +730,70 @@ pub fn integer(v: &Value) -> Result<Value, String> {
     let n = BigInt::from_str(&normalized).map_err(|_| "invalid integer quantity".to_owned())?;
     serde_json::from_str(&n.to_string()).map_err(|e| e.to_string())
 }
+
+/// Restore a literal mapping escaped by the transitional JSON record adapter.
+pub fn escaped_dict(value: &Value) -> Option<&serde_json::Map<String, Value>> {
+    let map = value.as_object()?;
+    if map.len() == 1 {
+        map.get("$kassiber_dict")?.as_object()
+    } else {
+        None
+    }
+}
+
+/// Preserve mapping identity when its sole key overlaps a private scalar tag.
+pub fn json_dict(map: serde_json::Map<String, Value>) -> Value {
+    if map.len() == 1 && (map.contains_key("$kassiber_bytes") || map.contains_key("$kassiber_dict"))
+    {
+        serde_json::json!({"$kassiber_dict": map})
+    } else {
+        Value::Object(map)
+    }
+}
+
+/// JSON requests contain literal maps, never native byte scalars. Escape the
+/// adapter's private tags when admitting that separate, text-based seam.
+pub(crate) fn escape_wire_tags(value: &mut Value) {
+    match value {
+        Value::Array(items) => items.iter_mut().for_each(escape_wire_tags),
+        Value::Object(map) => {
+            map.values_mut().for_each(escape_wire_tags);
+            if map.len() == 1
+                && (map.contains_key("$kassiber_bytes") || map.contains_key("$kassiber_dict"))
+            {
+                *value = json_dict(std::mem::take(map));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Internal representation used only by the transitional JSON-shaped custody
+/// records and the existing test recording codec. This is a bytes scalar, not
+/// a mapping and not decoded text; consumers must apply their own conversion.
+pub fn raw_bytes(value: &Value) -> Option<Vec<u8>> {
+    let map = value.as_object()?;
+    if map.len() != 1 {
+        return None;
+    }
+    let hex = map.get("$kassiber_bytes")?.as_str()?;
+    if !hex.len().is_multiple_of(2) {
+        return None;
+    }
+    hex.as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| {
+            let digit = |b: u8| match b {
+                b'0'..=b'9' => Some(b - b'0'),
+                b'a'..=b'f' => Some(b - b'a' + 10),
+                _ => None,
+            };
+            Some(digit(pair[0])? * 16 + digit(pair[1])?)
+        })
+        .collect()
+}
 pub fn integer_or_zero(v: &Value) -> Result<Value, String> {
     if !truth(v) {
         Ok(serde_json::json!(0))
@@ -701,4 +814,90 @@ pub fn wide(v: &Value) -> i128 {
     v.to_string()
         .parse()
         .expect("converted integer exceeds custody arithmetic range")
+}
+
+#[cfg(test)]
+mod byte_tests {
+    use super::*;
+    #[test]
+    fn raw_bytes_preserve_identity_truth_integer_and_literal_maps() {
+        for bytes in [
+            vec![],
+            vec![255, 0],
+            b"77".to_vec(),
+            b"{\"chain\":\"bitcoin\"}".to_vec(),
+        ] {
+            let value = Py::Bytes(bytes.clone());
+            let stored = to_json(&value);
+            assert_eq!(from_json(&stored).unwrap(), value);
+            assert_eq!(truth(&stored), !bytes.is_empty());
+            assert_eq!(pystr(&stored), kassiber_pyjson::bytes_repr(&bytes));
+            assert!(!lossless(&value));
+            assert_eq!(
+                kassiber_pyjson::dumps(&value, &Options::new()).unwrap_err(),
+                kassiber_pyjson::Error::BytesNotSerializable
+            );
+            let mut out = String::new();
+            assert_eq!(dumps_json_into(&stored, &Options::new(), 0, &mut out), None);
+        }
+        let Py::Str(raw) = load_json_bytes(b"\"\xed\xa0\x80\xed\xb0\x80\"").unwrap() else {
+            panic!("raw string")
+        };
+        assert_eq!(raw.code_points().collect::<Vec<_>>(), vec![0xd800, 0xdc00]);
+        let Py::Str(escaped) = load_json_bytes(br#""\ud800\udc00""#).unwrap() else {
+            panic!("escaped string")
+        };
+        assert_eq!(escaped.code_points().collect::<Vec<_>>(), vec![0x10000]);
+        assert_eq!(
+            integer(&to_json(&Py::Bytes(b"77".to_vec()))).unwrap(),
+            serde_json::json!(77)
+        );
+        assert!(integer(&to_json(&Py::Bytes("٧٧".as_bytes().to_vec()))).is_err());
+        for key in ["$kassiber_bytes", "$kassiber_dict", "$bytes"] {
+            let value = Py::Dict(vec![(Key::from(key), Py::from("ff00"))]);
+            assert_eq!(from_json(&to_json(&value)).unwrap(), value);
+        }
+        assert_eq!(
+            object(&to_json(&Py::Bytes(b"{\"chain\":\"bitcoin\"}".to_vec()))),
+            serde_json::json!({"chain":"bitcoin"})
+        );
+        assert_eq!(
+            object(&to_json(&Py::Bytes(vec![255, 0]))),
+            serde_json::json!({})
+        );
+    }
+}
+
+#[cfg(test)]
+mod byte_wire_tests {
+    use super::*;
+    #[test]
+    fn json_snapshot_cannot_forge_internal_byte_scalars() {
+        let mut snapshot = crate::snapshot::Snapshot::default();
+        snapshot.schema_version = 1;
+        snapshot.operation = "custody".into();
+        snapshot.as_of = "now".into();
+        for key in ["$kassiber_bytes", "$kassiber_dict"] {
+            let literal = serde_json::json!({key:"ff00"});
+            snapshot.transactions =
+                vec![serde_json::from_value(serde_json::json!({"note":literal})).unwrap()];
+            let encoded = serde_json::to_string(&snapshot).unwrap();
+            let decoded = crate::parse(&encoded).unwrap();
+            let expected = Py::Dict(vec![(Key::from(key), Py::from("ff00"))]);
+            assert_eq!(
+                from_json(&decoded.transactions[0]["note"]).unwrap(),
+                expected
+            );
+            let mut out = String::new();
+            assert_eq!(
+                dumps_json_into(
+                    &decoded.transactions[0]["note"],
+                    &Options::new(),
+                    0,
+                    &mut out
+                ),
+                None
+            );
+        }
+    }
 }

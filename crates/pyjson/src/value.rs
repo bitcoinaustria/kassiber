@@ -68,6 +68,12 @@ impl PyStr {
         &self.0
     }
 
+    /// UTF-8 with surrogatepass: raw surrogate points stay distinct from
+    /// escaped JSON surrogate pairs. Used only by native compatibility codecs.
+    pub fn as_surrogatepass_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
     /// Whether this is exactly `text`, without allocating.
     pub fn is(&self, text: &str) -> bool {
         self.0 == text.as_bytes()
@@ -187,6 +193,8 @@ pub enum Value {
     Float(f64),
     /// A `str`.
     Str(PyStr),
+    /// Raw Python `bytes`, including SQLite BLOBs. Never implicitly text.
+    Bytes(Vec<u8>),
     /// A `decimal.Decimal`. JSON has no decimal type: `default=str` writes it
     /// as the string `str(Decimal)`, and without it `json.dumps` refuses it.
     Decimal(Decimal),
@@ -194,6 +202,34 @@ pub enum Value {
     List(Vec<Value>),
     /// A `dict`, in insertion order.
     Dict(Vec<(Key, Value)>),
+}
+
+/// CPython's bytes repr (also its str), with quote selection and ASCII escapes.
+pub fn bytes_repr(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let quote = if bytes.contains(&b'\'') && !bytes.contains(&b'"') {
+        b'"'
+    } else {
+        b'\''
+    };
+    let mut out = String::from("b");
+    out.push(char::from(quote));
+    for &byte in bytes {
+        match byte {
+            b'\\' => out.push_str("\\\\"),
+            b'\t' => out.push_str("\\t"),
+            b'\n' => out.push_str("\\n"),
+            b'\r' => out.push_str("\\r"),
+            b if b == quote => {
+                out.push('\\');
+                out.push(char::from(b));
+            }
+            32..=126 => out.push(char::from(byte)),
+            b => write!(out, "\\x{b:02x}").unwrap(),
+        }
+    }
+    out.push(char::from(quote));
+    out
 }
 
 /// A dict key `json.dumps` accepts. Non-string keys become JSON strings:

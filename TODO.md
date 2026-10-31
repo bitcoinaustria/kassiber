@@ -407,15 +407,14 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   A [projection/fusion kernel checkpoint](docs/reference/r4-journal-pipeline.md#projection-and-fusion-kernel-checkpoint)
   keeps stage models unchanged and reduces CPU, but the projection/request
   budgets and the no-engine-slowdown gate remain open.
-- [x] R4-9 native loader (evidence inherited from t3code/r4-9-loader-9@e15900677;
-  pending fresh r9 verification): **accepted except the BLOB corruption class (pending
-  owner decision) and 16 seed-dependent messages (pending Python fix)**.
-  Exhaustive map complete; all 308 loader and 2,292 custody recipes killed;
-  24,000 generated books/1,030 permutations, 159 retained replays/permutations
-  and focused census/shadow pass. The inherited 16,384-case non-BLOB audit keeps
-  zero writes/unsafe admissions; 4,446 BLOB gaps and sixteen message cases stay
-  pending. Timing remains within the owner's budget. Python retains production
-  authority ([acceptance and provenance](docs/reference/r4-native-loader-checkpoint.md#loader-9-acceptance)).
+- [x] R4-9 loader-9 exhaustive map and BLOB parity are composed. Evidence
+  inherited from t3code/r4-9-loader-9@e15900677 and
+  t3code/r4-9-loader-blob@d03c0b9a1; pending fresh r9 verification.
+  The 22,528-case audit closes BLOB gaps; forty measured seed-dependent
+  messages remain pending Python determinism fix. R9 must rerun the combined
+  mutation catalog, parity and performance gates before integrated acceptance.
+  Python retains production authority
+  ([provenance](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-12 persistence checkpoint](docs/reference/r4-journal-persistence-checkpoint.md):

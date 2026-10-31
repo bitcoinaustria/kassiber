@@ -56,6 +56,7 @@ pub(crate) fn truth(value: &Py) -> bool {
         Py::Int(v) => *v != BigInt::from(0),
         Py::Float(v) => *v != 0.0,
         Py::Str(v) => v.code_points().next().is_some(),
+        Py::Bytes(v) => !v.is_empty(),
         Py::List(v) => !v.is_empty(),
         Py::Dict(v) => !v.is_empty(),
         Py::Decimal(_) => unreachable!(),
@@ -443,6 +444,12 @@ pub(crate) fn merge(items: &[Py]) -> Option<Py> {
     Some(merged)
 }
 pub(crate) fn object(raw: &Value) -> Py {
+    if let Some(bytes) = codec::raw_bytes(raw) {
+        return codec::load_json_bytes(&bytes)
+            .ok()
+            .filter(|v| matches!(v, Py::Dict(_)))
+            .unwrap_or_else(|| Py::Dict(vec![]));
+    }
     let value = raw
         .as_str()
         .and_then(|s| codec::loads(s).ok())
@@ -453,7 +460,9 @@ pub(crate) fn object(raw: &Value) -> Py {
     }
 }
 pub(crate) fn parse(raw: &Value) -> Result<Option<Py>, String> {
-    let outer = if let Some(raw) = raw.as_str() {
+    let outer = if let Some(bytes) = codec::raw_bytes(raw) {
+        codec::load_json_bytes(&bytes).ok()
+    } else if let Some(raw) = raw.as_str() {
         codec::loads(raw).ok()
     } else {
         codec::from_json(raw).ok()
@@ -537,5 +546,29 @@ pub(crate) fn project(value: &Py) -> Value {
                 .collect(),
         ),
         _ => codec::to_json(value),
+    }
+}
+
+#[cfg(test)]
+mod byte_policy_tests {
+    use super::*;
+
+    #[test]
+    fn stored_graph_json_bytes_decode_only_at_the_mapping_consumer() {
+        let text = r#"{"vin":[],"vout":[],"chain":"bitcoin","network":"main"}"#;
+        let mut utf16 = vec![255, 254];
+        utf16.extend(text.encode_utf16().flat_map(u16::to_le_bytes));
+        for bytes in [text.as_bytes().to_vec(), utf16] {
+            let value = codec::to_json(&Py::Bytes(bytes));
+            assert_eq!(object(&value), object(&json!(text)));
+            assert_eq!(parse(&value).unwrap(), parse(&json!(text)).unwrap());
+            assert!(parse(&value).unwrap().is_some());
+        }
+        for bytes in [vec![], vec![255, 0]] {
+            let value = codec::to_json(&Py::Bytes(bytes.clone()));
+            assert_eq!(object(&value), Py::Dict(vec![]));
+            assert_eq!(parse(&value).unwrap(), None);
+            assert_eq!(truth(&Py::Bytes(bytes.clone())), !bytes.is_empty());
+        }
     }
 }

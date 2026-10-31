@@ -419,10 +419,12 @@ fn native_loader_keeps_sql_values_and_refuses_blob_coercion() {
     let conn = Connection::open_in_memory().unwrap();
     let rows=query(&conn,"SELECT NULL AS n,9223372036854775807 AS i,1.0 AS f,'钱' AS s,1 AS duplicate,2 AS duplicate",[]).unwrap();
     assert_eq!(kassiber_pyjson::dumps(&list(rows),&Options::new()).unwrap(),"[{\"n\": null, \"i\": 9223372036854775807, \"f\": 1.0, \"s\": \"\\u94b1\", \"duplicate\": 1}]");
-    assert!(matches!(
-        query(&conn, "SELECT x'ff' AS blob", []),
-        Err(Error::Unsupported(_))
-    ));
+    let rows = query(&conn, "SELECT x'ff00' AS blob", []).unwrap();
+    assert_eq!(get(&rows[0], "blob"), &Value::Bytes(vec![255, 0]));
+    assert_eq!(
+        kassiber_pyjson::dumps(&list(rows), &Options::new()),
+        Err(kassiber_pyjson::Error::BytesNotSerializable)
+    );
 }
 
 #[test]
@@ -673,5 +675,183 @@ fn native_loader_selects_bounded_worklist_from_active_count() {
         .unwrap();
         assert_eq!(snapshot.gap_worklist.large_book, excluded == 0);
         conn.execute_batch("ROLLBACK").unwrap();
+    }
+}
+
+#[test]
+fn native_loader_blob_conversions_preserve_bytes_and_consuming_policy() {
+    for bytes in [
+        vec![],
+        vec![255, 0],
+        b"77".to_vec(),
+        b"  +7_7\n".to_vec(),
+        b"{\"chain\":\"bitcoin\",\"private\":\"secret\"}".to_vec(),
+    ] {
+        let value = Value::Bytes(bytes.clone());
+        assert_eq!(sql_value(ValueRef::Blob(&bytes)).unwrap(), value);
+        let native = direct::scalar(ValueRef::Blob(&bytes)).unwrap();
+        assert_eq!(kassiber_custody::codec::from_json(&native).unwrap(), value);
+        assert_eq!(truth(&value), !bytes.is_empty());
+        assert_eq!(text(&value), kassiber_pyjson::bytes_repr(&bytes));
+        let safe = safe_row(dict([("config_json", value.clone())]), &mut HashMap::new()).unwrap();
+        assert_eq!(get(&safe, "config_json"), &Value::from("{}"));
+        assert_eq!(
+            get(&safe, "config_text_mentions_samourai"),
+            &Value::Bool(false)
+        );
+        assert_eq!(
+            kassiber_pyjson::dumps(&value, &Options::new())
+                .unwrap_err()
+                .to_string(),
+            "Object of type bytes is not JSON serializable"
+        );
+    }
+    assert_eq!(
+        ownership::integer(&Value::Bytes(b"77".to_vec())),
+        Some(77.into())
+    );
+    assert_eq!(
+        ownership::outpoint_integer(&Value::Bytes(b"77".to_vec())).unwrap(),
+        77.into()
+    );
+    assert!(ownership::integer(&Value::Bytes("٧٧".as_bytes().to_vec())).is_none());
+    assert!(ownership::outpoint_integer(&Value::Bytes("٧٧".as_bytes().to_vec())).is_err());
+    let Err(Error::Reference(error)) = ownership::outpoint_integer(&Value::Bytes(vec![255, 0]))
+    else {
+        panic!("byte int must refuse")
+    };
+    assert_eq!(error.family, "ValueError");
+    assert_eq!(
+        error.message,
+        "invalid literal for int() with base 10: b'\\xff\\x00'"
+    );
+    assert_eq!(
+        parsed(&Value::Bytes(b"{\"chain\":\"bitcoin\"}".to_vec())),
+        dict([("chain", "bitcoin".into())])
+    );
+    assert_eq!(
+        ownership::config(&dict([(
+            "config_json",
+            Value::Bytes(b"{\"chain\":\"bitcoin\"}".to_vec())
+        )]))
+        .unwrap(),
+        dict([("chain", "bitcoin".into())])
+    );
+    let Err(Error::Reference(error)) =
+        ownership::config(&dict([("config_json", Value::Bytes(b"77".to_vec()))]))
+    else {
+        panic!("parsed int must refuse as int")
+    };
+    assert_eq!(error.message, "'int' object has no attribute 'get'");
+}
+
+#[test]
+fn native_loader_blob_revision_references_bind_and_refuse_before_output() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    let sql = text(get(case, "sql"));
+    for expression in ["x'ff00'", "x'3737'", "x''"] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&sql).unwrap();
+        conn.execute_batch(&format!("BEGIN IMMEDIATE;
+            UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL;
+            UPDATE custody_components SET id={expression} WHERE state='superseded';
+            UPDATE custody_components SET supersedes_component_id={expression} WHERE id='active-a';
+            UPDATE custody_components SET superseded_by_component_id={expression} WHERE id='active-b';")).unwrap();
+        let changes = conn.total_changes();
+        let loaded = load(
+            &conn,
+            get(case, "profile").clone(),
+            &text(get(case, "as_of")),
+        )
+        .unwrap();
+        assert!(matches!(
+            loaded.v1(),
+            Err(Error::Json(kassiber_pyjson::Error::BytesNotSerializable))
+        ));
+        let snapshot = loaded.into_custody().unwrap();
+        assert_eq!(snapshot.revision_headers.len(), 1);
+        let expected = query(
+            &conn,
+            "SELECT id FROM custody_components WHERE state='superseded'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            kassiber_custody::codec::from_json(&snapshot.revision_headers[0]["id"]).unwrap(),
+            get(&expected[0], "id").clone()
+        );
+        assert_eq!(changes, conn.total_changes());
+        assert!(!conn.is_autocommit());
+        conn.execute_batch("ROLLBACK").unwrap();
+    }
+    for field in ["supersedes_component_id", "superseded_by_component_id"] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&sql).unwrap();
+        conn.execute_batch(&format!(
+            "BEGIN IMMEDIATE; UPDATE custody_components SET {field}=x'ff00' WHERE id='active-a'"
+        ))
+        .unwrap();
+        let changes = conn.total_changes();
+        for _ in 0..2 {
+            let Err(Error::Reference(error)) = load(
+                &conn,
+                get(case, "profile").clone(),
+                &text(get(case, "as_of")),
+            ) else {
+                panic!("mixed bytes must refuse")
+            };
+            assert_eq!(error.family, "TypeError");
+            assert_eq!(
+                error.message,
+                "'<' not supported between instances of 'str' and 'bytes'"
+            );
+        }
+        assert_eq!(changes, conn.total_changes());
+        assert!(!conn.is_autocommit());
+    }
+}
+
+#[test]
+fn native_loader_refuses_mixed_blob_numeric_revisions_before_queries() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    let sql = text(get(case, "sql")).replace(
+        "\"superseded_by_component_id\" TEXT",
+        "\"superseded_by_component_id\"",
+    );
+    for (scalar, kind) in [("7", "int"), ("1.5", "float")] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&sql).unwrap();
+        conn.execute_batch(&format!("BEGIN IMMEDIATE; UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL; UPDATE custody_components SET supersedes_component_id=x'3737' WHERE id='active-a'; UPDATE custody_components SET superseded_by_component_id={scalar} WHERE id='active-b';")).unwrap();
+        let changes = conn.total_changes();
+        let Err(Error::Reference(error)) = load(
+            &conn,
+            get(case, "profile").clone(),
+            &text(get(case, "as_of")),
+        ) else {
+            panic!("mixed bytes must refuse")
+        };
+        assert_eq!(error.family, "TypeError");
+        assert_eq!(
+            error.message,
+            format!("'<' not supported between instances of 'bytes' and '{kind}'")
+        );
+        assert_eq!(changes, conn.total_changes());
+        assert!(!conn.is_autocommit());
     }
 }

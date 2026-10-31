@@ -71,6 +71,9 @@ pub(super) fn integer(value: &Value) -> Option<BigInt> {
         Value::Str(value) => value
             .as_str()
             .and_then(|value| kassiber_pytext::parse_int(value).ok()),
+        Value::Bytes(bytes) if bytes.is_ascii() => std::str::from_utf8(bytes)
+            .ok()
+            .and_then(|value| kassiber_pytext::parse_int(value).ok()),
         _ => None,
     }
 }
@@ -83,6 +86,31 @@ pub(super) fn legacy_integer(value: &Value) -> Result<Option<BigInt>> {
     Ok(integer(value))
 }
 pub(super) fn outpoint_integer(value: &Value) -> Result<BigInt> {
+    if let Value::Bytes(bytes) = value {
+        let invalid = || {
+            Error::Reference(crate::Refusal::new(
+                "ValueError",
+                format!(
+                    "invalid literal for int() with base 10: {}",
+                    kassiber_pyjson::bytes_repr(bytes)
+                        .chars()
+                        .take(200)
+                        .collect::<String>()
+                ),
+            ))
+        };
+        if !bytes.is_ascii() {
+            return Err(invalid());
+        }
+        return match outpoint_integer(&Value::from(std::str::from_utf8(bytes).unwrap())) {
+            Err(Error::Reference(error))
+                if error.message.starts_with("invalid literal for int()") =>
+            {
+                Err(invalid())
+            }
+            result => result,
+        };
+    }
     if let Value::Str(value) = value {
         let raw = value
             .as_str()
@@ -160,6 +188,16 @@ pub(super) fn config(wallet: &Value) -> Result<Value> {
             .as_str()
             .and_then(|value| kassiber_pytext::loads(value).ok())
             .unwrap_or_else(|| dict([])),
+        Value::Bytes(_) => {
+            if let Value::Bytes(bytes) = raw {
+                kassiber_pyjson::json_bytes_string(bytes)
+                    .ok()
+                    .and_then(|text| kassiber_pytext::loads_py(&text).ok())
+                    .unwrap_or_else(|| dict([]))
+            } else {
+                unreachable!()
+            }
+        }
         _ => dict([]),
     };
     match parsed {

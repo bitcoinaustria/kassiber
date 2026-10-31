@@ -18,11 +18,16 @@ assert_eq!(text, r#"{"amount_msat":150000000,"schema_version":1}"#);
 ```
 
 `Value` mirrors the Python object: `None`, bools, unbounded ints, floats
-(infinities and NaN included), strings that may hold surrogates (`PyStr`),
+(infinities and NaN included), strings that may hold surrogates (`PyStr`), bytes,
 `Decimal` (from `kassiber-pydecimal`), lists, and dicts as ordered pairs
 with `str`, int, float, bool, or `None` keys. `Options` mirrors the keyword
 arguments: `separators`, `indent`, `ensure_ascii`, `sort_keys`, `allow_nan`,
 and `default=str`. The crate docs list what matches CPython 3.11.
+
+`Value::Bytes` preserves raw SQLite BLOBs. JSON encoding refuses them with
+`Object of type bytes is not JSON serializable`, unless `default=str` selects
+Python's bytes repr. `json_bytes_string` separately detects UTF-8/16/32 and
+preserves surrogate code points for consumers that call `json.loads(bytes)`.
 
 ## Where it refuses
 

@@ -29,7 +29,7 @@ mod unicode;
 mod unicode_tables;
 
 pub use case::{lower, upper};
-pub use json::{loads, JsonError, JsonErrorKind, MAX_NESTING};
+pub use json::{loads, loads_py, JsonError, JsonErrorKind, MAX_NESTING};
 pub use number::{parse_float, parse_int, NumberError};
 pub use text::{repr_py, repr_str, strip, strip_py};
 pub use unicode::{decimal_value, is_alpha, is_printable, is_space, unicode_version};

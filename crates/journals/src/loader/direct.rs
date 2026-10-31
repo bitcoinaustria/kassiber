@@ -53,6 +53,11 @@ impl Gate {
         if let Some(ordered) = self.ordered.get(path) {
             return Ok(ordered.clone());
         }
+        if kassiber_custody::codec::raw_bytes(value).is_some()
+            || kassiber_custody::codec::escaped_dict(value).is_some()
+        {
+            return kassiber_custody::codec::from_json(value).map_err(Error::Invalid);
+        }
         Ok(match value {
             J::Array(items) => Value::List(
                 items
@@ -140,11 +145,7 @@ pub(super) fn scalar(value: ValueRef<'_>) -> Result<J> {
                 .map_err(|_| Error::Unsupported("SQLite TEXT is not UTF-8"))?
                 .into(),
         ),
-        ValueRef::Blob(_) => {
-            return Err(Error::Unsupported(
-                "custody snapshot v1 cannot serialize SQLite BLOB",
-            ))
-        }
+        ValueRef::Blob(value) => kassiber_custody::codec::to_json(&Value::Bytes(value.to_vec())),
     })
 }
 
@@ -385,6 +386,14 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     }
     let mut revision_headers = vec![];
     if revision_ids.iter().any(revisions::Reference::is_text)
+        && revision_ids.iter().any(revisions::Reference::is_bytes)
+    {
+        return Err(Error::Reference(crate::Refusal::new(
+            "TypeError",
+            "'<' not supported between instances of 'str' and 'bytes'",
+        )));
+    }
+    if revision_ids.iter().any(revisions::Reference::is_text)
         && revision_ids.iter().any(|id| !id.is_text())
     {
         // Python sorts a set here, so hash randomization can reverse the
@@ -396,6 +405,18 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
             format!(
                 "'<' not supported between instances of '{}' and 'str'",
                 numeric.python_type()
+            ),
+        )));
+    }
+    if revision_ids.iter().any(revisions::Reference::is_bytes)
+        && revision_ids.iter().any(|id| !id.is_bytes())
+    {
+        let other = revision_ids.iter().find(|id| !id.is_bytes()).unwrap();
+        return Err(Error::Reference(crate::Refusal::new(
+            "TypeError",
+            format!(
+                "'<' not supported between instances of 'bytes' and '{}'",
+                other.python_type()
             ),
         )));
     }
@@ -740,10 +761,27 @@ mod tests {
             )
             .unwrap();
         assert_eq!(kassiber_pyjson::dumps(&value,&Options::new()).unwrap(),"[{\"n\": null, \"i\": 9223372036854775807, \"f\": 1.0, \"s\": \"\\u94b1\", \"duplicate\": 1}]");
-        assert!(matches!(
-            reader.rows(&conn, "rows[]", "SELECT x'ff' AS b", [], false),
-            Err(Error::Unsupported(_))
-        ));
+        let blobs = reader
+            .rows(&conn, "blobs[]", "SELECT x'ff00' AS b", [], false)
+            .unwrap();
+        assert_eq!(
+            kassiber_custody::codec::from_json(&blobs[0]["b"]).unwrap(),
+            Value::Bytes(vec![255, 0])
+        );
+        let blob = reader.gate.encode(&blobs[0]["b"], "blobs[].b").unwrap();
+        assert_eq!(
+            kassiber_pyjson::dumps(&blob, &Options::new()),
+            Err(kassiber_pyjson::Error::BytesNotSerializable)
+        );
+        for key in ["$kassiber_bytes", "$kassiber_dict"] {
+            let literal = dict([(key, Value::from("ff00"))]);
+            let stored = convert(literal.clone()).unwrap();
+            assert_eq!(
+                kassiber_custody::codec::from_json(&stored).unwrap(),
+                literal
+            );
+            assert_eq!(reader.gate.encode(&stored, "literal").unwrap(), literal);
+        }
         let rows = reader
             .rows(&conn, "rows[]", "SELECT 1e999 AS f", [], false)
             .unwrap();

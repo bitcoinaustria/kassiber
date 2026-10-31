@@ -2293,14 +2293,12 @@ loading retains database scalars for the reference-equivalent consuming stage;
 the JSON adapter keeps its strict signed-64 quantity contract. Infinite rates
 retain the exact downstream finite-decimal validation message.
 
-Loader-8 applies the owner's seed-variant matching rule to the remaining 16
-mixed numeric/TEXT revision-reference sort refusals. Its non-BLOB audit exits 0:
-all 16,384 cases over the same 23 tables/360 columns match, with zero writes and
-zero native admissions of Python-refused projections. Each of the sixteen
-records includes the measured variant set and per-seed CLI/daemon pairs. Native
-refusals are deterministic; the cases remain **pending Python determinism fix**.
-The 4,446 BLOB corruption-class gaps remain **pending an owner decision**,
-unchanged, with their loader-6 inventory retained.
+The BLOB continuation closes all 4,446 previously unresolved BLOB outcomes.
+The full composed audit passes all 22,528 cases, including 6,144 actual BLOB
+attempts; the separate 16,384-case non-BLOB rerun also passes. Both record
+actual `typeof()`, zero writes and zero native admissions of Python-refused
+projections. Typed raw bytes reach each consumer's Python-equivalent conversion,
+ignore or serialization policy, including exact CLI/daemon TypeError envelopes.
 
 Loader-9 completes the [exhaustive branch map](../reference/r4-native-loader-branch-map.md)
 and kills all **308 loader recipes** and **2,292 custody recipes**. Three custody
@@ -2312,8 +2310,8 @@ proves 53 exact native-loader byte matches and replays 53 fresh requests and
 permutations. The [acceptance record](../reference/r4-native-loader-checkpoint.md#loader-9-acceptance)
 owns the complete counts, re-anchor review and resumable campaign provenance.
 
-R4-9 is **accepted except the BLOB corruption class (pending owner decision)
-and 16 seed-dependent messages (pending Python fix)**. Loader-9 changes tests,
+The integrated R4-9 stage combines loader-9 acceptance with BLOB parity;
+forty seed-dependent messages remain pending the Python fix. Loader-9 changes tests,
 fixtures, catalogues and acceptance records; production Rust and Python code are
 unchanged. Python retains production journal authority, and the loader remains
 behind `test-harness` until its separate integration/authority gates.

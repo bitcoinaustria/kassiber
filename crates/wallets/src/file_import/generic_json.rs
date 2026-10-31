@@ -10,6 +10,7 @@ use kassiber_pyjson::{Key, Options};
 // code points; text that SQLite would bind is checked separately below.
 fn py_str(value: &Py) -> String {
     match value {
+        Py::Bytes(bytes) => kassiber_pyjson::bytes_repr(bytes),
         Py::Str(s) => s
             .code_points()
             .map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER))
@@ -72,6 +73,7 @@ pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
 /// retained independently; non-finite floats never change the evidence bytes.
 pub(super) fn projection(value: &Py) -> Json {
     match value {
+        Py::Bytes(bytes) => json!(kassiber_pyjson::bytes_repr(bytes)),
         Py::Null => Json::Null,
         Py::Bool(b) => json!(b),
         Py::Str(_) => json!(py_str(value)),

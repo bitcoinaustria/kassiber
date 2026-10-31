@@ -17,9 +17,10 @@ restack and its verification. The separate [tax-engine speed pass](tax-engine.md
 measures 2.03–3.96× faster `ledger` calls with byte-identical responses; its
 timings supersede the engine line in this design's original measurements.
 R4-9 has a [test-only loader checkpoint](r4-native-loader-checkpoint.md)
-whose loader-9 acceptance is **accepted except the BLOB corruption class
-(pending owner decision) and 16 seed-dependent messages (pending Python fix)**;
-inherited from t3code/r4-9-loader-9@e15900677; pending fresh r9 verification.
+whose loader-9 exhaustive map is combined with closed BLOB parity; forty
+seed-dependent messages remain pending Python determinism fix. Evidence
+inherited from t3code/r4-9-loader-9@e15900677 and
+t3code/r4-9-loader-blob@d03c0b9a1; pending fresh r9 verification.
 Python retains production authority.
 This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust

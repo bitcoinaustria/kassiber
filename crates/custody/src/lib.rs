@@ -103,8 +103,9 @@ pub fn parse(request: &str) -> Result<snapshot::BookSnapshot, Refusal> {
     let _span = timing::span("parse");
     serde_json::from_str::<snapshot::BookSnapshot>(request)
         .map_err(|e| e.to_string())
-        .and_then(|snapshot| {
+        .and_then(|mut snapshot| {
             snapshot.validate()?;
+            snapshot.escape_wire_tags();
             Ok(snapshot)
         })
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))

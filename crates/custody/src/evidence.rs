@@ -246,6 +246,14 @@ pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {
     )
 }
 pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, Error> {
+    if let Some(bytes) = codec::raw_bytes(value) {
+        // Evidence canonicalization deliberately uses UTF-8 replacement;
+        // json.loads(bytes) in graph parsing uses encoding detection instead.
+        return raw_py(
+            &Value::String(String::from_utf8_lossy(&bytes).into_owned()),
+            opaque_key,
+        );
+    }
     if let Some(s) = value.as_str() {
         if s.is_empty() {
             return Ok(Py::Dict(vec![]));
@@ -256,6 +264,7 @@ pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, Error> {
         Ok(codec::from_json(value)?)
     }
 }
+
 pub fn observed_hash(row: &Value) -> Result<(String, String), Error> {
     let a = strip(&text(&row["asset"])).to_owned();
     let asset = if a.len() == 64 && a.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -820,6 +829,27 @@ mod semantic_tests {
             } else {
                 assert_eq!(result.unwrap().payload(), v["key"], "{}", v["case"]);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod byte_policy_tests {
+    use super::*;
+
+    #[test]
+    fn evidence_bytes_use_utf8_replacement_before_canonical_json() {
+        for (bytes, text) in [
+            (b"{\"x\":7}".as_slice(), "{\"x\":7}"),
+            (b"\xff\0".as_slice(), "\u{fffd}\0"),
+            (b"\xff\xfe{\0}\0".as_slice(), "\u{fffd}\u{fffd}{\0}\0"),
+            (b"".as_slice(), ""),
+        ] {
+            let value = codec::to_json(&Py::Bytes(bytes.to_vec()));
+            assert_eq!(
+                raw_py(&value, "opaque").unwrap(),
+                raw_py(&Value::String(text.into()), "opaque").unwrap()
+            );
         }
     }
 }

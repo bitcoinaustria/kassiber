@@ -44,7 +44,7 @@ def test_loader_seed_variants_require_observed_complete_refusal_pairs():
         ("custody_components", "superseded_by_component_id", "integer", True),
         ("custody_components", "created_at", "real", False),
         ("transactions", "supersedes_component_id", "real", False),
-        ("custody_components", "supersedes_component_id", "blob", False),
+        ("custody_components", "supersedes_component_id", "blob", True),
     ]:
         assert mixed_revision_refusal(reference, table, column, storage) is eligible
 

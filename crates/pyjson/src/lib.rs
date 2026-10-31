@@ -38,15 +38,17 @@
 //! `tests/data/json_vectors.txt` come from CPython; `README.md` lists the
 //! surveyed call variants and how to regenerate both.
 
+mod bytes;
 mod encode;
 mod float;
 mod value;
 
+pub use bytes::json_bytes_string;
 pub use encode::{
     dumps, dumps_into, dumps_str_into, Error, Indent, Options, INT_MAX_STR_DIGITS, MAX_DEPTH,
 };
 pub use float::float_repr;
-pub use value::{CodePoints, InvalidCodePoint, Key, PyStr, Value};
+pub use value::{bytes_repr, CodePoints, InvalidCodePoint, Key, PyStr, Value};
 
 pub use kassiber_pydecimal::Decimal;
 pub use num_bigint::BigInt;

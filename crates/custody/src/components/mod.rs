@@ -125,10 +125,11 @@ fn group<K: PartialEq>(
     result
 }
 pub(crate) fn integer(v: &Value) -> Result<Value, Error> {
+    let bytes = codec::raw_bytes(v);
     let kind = match v {
         Value::Null => Some("NoneType"),
         Value::Array(_) => Some("list"),
-        Value::Object(_) => Some("dict"),
+        Value::Object(_) if bytes.is_none() => Some("dict"),
         _ => None,
     };
     if let Some(kind) = kind {
@@ -142,7 +143,7 @@ pub(crate) fn integer(v: &Value) -> Result<Value, Error> {
         });
     }
     codec::integer(v).map_err(|message| {
-        if let Value::String(_) = v {
+        if v.is_string() || bytes.is_some() {
             let value = codec::from_json(v).expect("string scalar");
             Error::value(format!(
                 "invalid literal for int() with base 10: {}",
@@ -159,6 +160,9 @@ pub(crate) fn integer(v: &Value) -> Result<Value, Error> {
 // SQLite orders raw INTEGER/REAL facts before TEXT. Do not int() here:
 // malformed numeric text must be refused at the reference's conversion point.
 fn raw_order(a: &Value, b: &Value) -> std::cmp::Ordering {
+    if let (Some(a), Some(b)) = (codec::raw_bytes(a), codec::raw_bytes(b)) {
+        return a.cmp(&b);
+    }
     match (a, b) {
         (Value::Number(a), Value::Number(b)) => {
             match (
@@ -554,21 +558,30 @@ fn header_order(a: &Component, b: &Component) -> Result<std::cmp::Ordering, Erro
         if a == b {
             continue;
         }
-        if (a.is_string() && b.is_string()) || (a.is_number() && b.is_number()) {
+        if (a.is_string() && b.is_string())
+            || (a.is_number() && b.is_number())
+            || (codec::raw_bytes(a).is_some() && codec::raw_bytes(b).is_some())
+        {
             let order = raw_order(a, b);
             if !order.is_eq() {
                 return Ok(order);
             }
             continue;
         }
-        let kind = |v: &Value| match v {
-            Value::Null => "NoneType",
-            Value::Bool(_) => "bool",
-            Value::Number(n) if n.as_i64().is_some() || n.as_u64().is_some() => "int",
-            Value::Number(_) => "float",
-            Value::String(_) => "str",
-            Value::Array(_) => "list",
-            Value::Object(_) => "dict",
+        let kind = |v: &Value| {
+            if codec::raw_bytes(v).is_some() {
+                "bytes"
+            } else {
+                match v {
+                    Value::Null => "NoneType",
+                    Value::Bool(_) => "bool",
+                    Value::Number(n) if n.as_i64().is_some() || n.as_u64().is_some() => "int",
+                    Value::Number(_) => "float",
+                    Value::String(_) => "str",
+                    Value::Array(_) => "list",
+                    Value::Object(_) => "dict",
+                }
+            }
         };
         return Err(Error {
             code: "TypeError",
@@ -770,5 +783,44 @@ mod tests {
     #[test]
     fn component_raw_integer_order_is_exact() {
         assert!(raw_order(&json!(9007199254740992_i64), &json!(9007199254740993_i64)).is_lt());
+    }
+}
+
+#[cfg(test)]
+mod byte_tests {
+    use super::*;
+    #[test]
+    fn component_bytes_sort_and_integer_semantics_match_python() {
+        use kassiber_pyjson::Value as Py;
+        let bytes = |b: &[u8]| codec::to_json(&Py::Bytes(b.to_vec()));
+        assert_eq!(integer(&bytes(b"77")).unwrap(), json!(77));
+        let error = integer(&bytes(&[255, 0])).unwrap_err();
+        assert_eq!(error.code, "ValueError");
+        assert_eq!(
+            error.message,
+            "invalid literal for int() with base 10: b'\\xff\\x00'"
+        );
+        assert_eq!(
+            raw_order(&bytes(b"\0"), &bytes(b"'")),
+            std::cmp::Ordering::Less
+        );
+        let component = |created: Value| Component {
+            header: serde_json::from_value(json!({"created_at":created,"revision":1,"id":"a"}))
+                .unwrap(),
+            legs: vec![],
+            allocations: vec![],
+            economic_terms: vec![],
+            commitments: vec![],
+        };
+        assert_eq!(
+            header_order(&component(bytes(b"\0")), &component(bytes(b"'"))).unwrap(),
+            std::cmp::Ordering::Less
+        );
+        let error = header_order(&component(bytes(b"a")), &component(json!("b"))).unwrap_err();
+        assert_eq!(error.code, "TypeError");
+        assert_eq!(
+            error.message,
+            "'<' not supported between instances of 'bytes' and 'str'"
+        );
     }
 }

@@ -142,6 +142,8 @@ pub enum Error {
     /// `TypeError: Object of type Decimal is not JSON serializable`: a
     /// `Decimal` without `default=str`.
     NotSerializable,
+    /// `TypeError: Object of type bytes is not JSON serializable`.
+    BytesNotSerializable,
     /// `TypeError: '<' not supported between instances of ...`: `sort_keys`
     /// over keys Python cannot order (strings with numbers, or `None` with
     /// any other key).
@@ -168,6 +170,7 @@ impl fmt::Display for Error {
         f.write_str(match self {
             Error::OutOfRangeFloat => "out of range float values are not JSON compliant",
             Error::NotSerializable => "object of type Decimal is not JSON serializable",
+            Error::BytesNotSerializable => "Object of type bytes is not JSON serializable",
             Error::UnorderableKeys => "sort_keys cannot order these keys",
             Error::NanKeyOrder => "sort_keys over a NaN key is not reproduced",
             Error::IntTooLarge => "int exceeds the limit (4300 digits) for string conversion",
@@ -287,6 +290,12 @@ impl Encoder<'_> {
                 self.out.push_str(&text);
             }
             Value::Str(s) => self.string(s),
+            Value::Bytes(bytes) => {
+                if !self.options.default_str {
+                    return Err(Error::BytesNotSerializable);
+                }
+                self.string(&PyStr::from(crate::bytes_repr(bytes)));
+            }
             Value::Decimal(d) => {
                 if !self.options.default_str {
                     return Err(Error::NotSerializable);

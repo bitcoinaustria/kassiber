@@ -28,6 +28,7 @@ pub(super) fn truthy(value: &Value) -> bool {
         Value::Int(value) => value != &BigInt::from(0),
         Value::Float(value) => *value != 0.0,
         Value::Str(value) => value.code_points().next().is_some(),
+        Value::Bytes(value) => !value.is_empty(),
         Value::List(items) => !items.is_empty(),
         Value::Dict(items) => !items.is_empty(),
         Value::Decimal(_) => true,

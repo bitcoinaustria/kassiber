@@ -135,6 +135,7 @@ pub fn truthy(value: &Value) -> bool {
         Value::Int(n) => *n != kassiber_pyjson::BigInt::default(),
         Value::Float(f) => *f != 0.0,
         Value::Str(text) => text.code_points().next().is_some(),
+        Value::Bytes(bytes) => !bytes.is_empty(),
         Value::Decimal(d) => !d.is_zero(),
         Value::List(items) => !items.is_empty(),
         Value::Dict(pairs) => !pairs.is_empty(),
@@ -150,6 +151,7 @@ pub fn py_repr(value: &Value) -> String {
         Value::Int(n) => n.to_string(),
         Value::Float(f) => kassiber_pyjson::float_repr(*f),
         Value::Str(text) => kassiber_pytext::repr_py(text),
+        Value::Bytes(bytes) => kassiber_pyjson::bytes_repr(bytes),
         Value::Decimal(d) => format!("Decimal('{d}')"),
         Value::List(items) => format!(
             "[{}]",
@@ -194,6 +196,7 @@ pub fn type_name(value: &Value) -> &'static str {
         Value::Int(_) => "int",
         Value::Float(_) => "float",
         Value::Str(_) => "str",
+        Value::Bytes(_) => "bytes",
         Value::Decimal(_) => "Decimal",
         Value::List(_) => "list",
         Value::Dict(_) => "dict",

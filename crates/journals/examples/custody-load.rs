@@ -147,14 +147,38 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         // refusal cannot replace the projection's actual outcome.
         match snapshot.v1() {
             Ok(v1) => output["v1"] = json!(v1),
-            Err(_) => output["v1_error"] = json!("custody snapshot v1 serialization failed"),
+            Err(error) => {
+                output["v1_error"] = json!("custody snapshot v1 serialization failed");
+                if let loader::Error::Json(kassiber_pyjson::Error::BytesNotSerializable) = error {
+                    let refusal = reference_refusal(bytes_refusal());
+                    output["boundaries"] = refusal["boundaries"].clone();
+                }
+            }
         }
         return Ok(output);
     }
     let v1 = if field("timing_only") == &Value::Bool(true) {
         None
     } else {
-        Some(snapshot.v1()?)
+        match snapshot.v1() {
+            Ok(text) => Some(text),
+            Err(loader::Error::Json(kassiber_pyjson::Error::BytesNotSerializable)) => {
+                assert_eq!(
+                    before,
+                    conn.total_changes(),
+                    "serialization refusal wrote rows"
+                );
+                assert!(
+                    !conn.is_autocommit(),
+                    "serialization ended caller transaction"
+                );
+                conn.execute_batch("ROLLBACK")?;
+                let mut output = reference_refusal(bytes_refusal());
+                output["writes"] = json!(0);
+                return Ok(output);
+            }
+            Err(error) => return Err(error.into()),
+        }
     };
     let start = Instant::now();
     let adapter_cpu = cpu();
@@ -179,6 +203,13 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
 fn projection_diagnostics(value: &Value) -> Value {
     use kassiber_pyjson::Key;
     match value {
+        Value::Bytes(_) => kassiber_pyjson::Value::Dict(vec![(
+            kassiber_pyjson::Key::from("$bytes"),
+            kassiber_custody::codec::from_json(
+                &kassiber_custody::codec::to_json(value)["$kassiber_bytes"],
+            )
+            .unwrap(),
+        )]),
         Value::Float(value) if !value.is_finite() => Value::Dict(vec![(
             Key::from("$float"),
             Value::from(kassiber_pyjson::float_repr(*value)),
@@ -212,6 +243,13 @@ fn reference_refusal(refusal: kassiber_journals::Refusal) -> serde_json::Value {
     };
     json!({"error":"custody snapshot reference refused","refusal":refusal,
            "boundaries":{"cli":project(cli),"daemon":project(daemon)}})
+}
+fn bytes_refusal() -> kassiber_journals::Refusal {
+    let mut error: kassiber_journals::Refusal = "Object of type bytes is not JSON serializable"
+        .to_owned()
+        .into();
+    error.family = "TypeError".into();
+    error
 }
 fn main() {
     for line in io::stdin().lock().lines() {

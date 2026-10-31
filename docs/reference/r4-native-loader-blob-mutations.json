@@ -1,0 +1,470 @@
+{
+  "schema": "kassiber.loader-blob-mutation-summary.v1",
+  "mutation_count": 50,
+  "killed": 50,
+  "survivors": 0,
+  "runner_errors": 0,
+  "new_blob_recipes": 47,
+  "reanchored_recipes": [
+    "JL-blob-refusal",
+    "JL-direct-blob",
+    "JL-revision-message-family"
+  ],
+  "baseline_named_tests": [
+    "bytes_json_policy_and_repr_match_python",
+    "component_bytes_sort_and_integer_semantics_match_python",
+    "evidence_bytes_use_utf8_replacement_before_canonical_json",
+    "json_bytes_detect_encoding_without_changing_bytes_identity",
+    "json_parser_preserves_raw_surrogate_identity",
+    "json_snapshot_cannot_forge_internal_byte_scalars",
+    "native_loader_blob_conversions_preserve_bytes_and_consuming_policy",
+    "native_loader_blob_revision_identity_is_distinct_and_lexicographic",
+    "native_loader_blob_revision_references_bind_and_refuse_before_output",
+    "native_loader_keeps_sql_values_and_refuses_blob_coercion",
+    "native_loader_reads_direct_columns_without_conversion",
+    "native_loader_refuses_mixed_blob_numeric_revisions_before_queries",
+    "native_loader_refuses_mixed_revision_references_before_output",
+    "raw_bytes_preserve_identity_truth_integer_and_literal_maps",
+    "stored_graph_json_bytes_decode_only_at_the_mapping_consumer",
+    "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+  ],
+  "build": {
+    "rust": "1.99.1",
+    "cargo_offline": true,
+    "jobs": 8,
+    "profile": "debug",
+    "debug_info": false,
+    "targets": "initial shard all test targets; final shard unit libraries"
+  },
+  "catalogs": [
+    {
+      "path": "crates/journals/scripts/loader_mutations.json",
+      "entries": 136,
+      "sha256": "46d43050b00f00b7f2a135dde706dca92fb6b2ed3d50328bb2d3927b914cffdc"
+    },
+    {
+      "path": "crates/journals/scripts/loader_blob_mutations.json",
+      "entries": 47,
+      "sha256": "98689b36824e306bf6ff4adf0b330a24084a7f4430403c99dc6f63b90a5f9908"
+    }
+  ],
+  "sources": {
+    "crates/custody/src/codec.rs": "3a25779be01aae9b016505b0c697732538a638c3d5081843a12c064434976e12",
+    "crates/custody/src/components/mod.rs": "d86ff50cf1aa28adac8e67b0a73cbad56a68b4ffb36eef594889d0f8e58db325",
+    "crates/custody/src/evidence.rs": "985979b4a0720e098b7d53b40efee150e943c178116d12f0764310e06a0be08a",
+    "crates/custody/src/graph/stored.rs": "7445aad4b33c9da31d238f7632d301ac53c79fe6916a1061727a4cf195a0d4f4",
+    "crates/custody/src/lib.rs": "1c1254e3eb44ddc1c5dbcd3e42372e0b2734eb2eb1098e1d8634f39420c3b37b",
+    "crates/journals/scripts/audit_loader_storage.py": "8464bdb3e95d5e38892b939e917ad57e1448f721b0b79869d9ab494ce82956ec",
+    "crates/journals/src/loader.rs": "416958b19b923996eacfe90cdfc44f396487791dd6ee094ae13ec757c745506c",
+    "crates/journals/src/loader/direct.rs": "f8cc354302985a0208ee931ab80cc948a933342391e30cc6f289954aa605a4f8",
+    "crates/journals/src/loader/ownership.rs": "f90667f1d965e9f931006e925f95ef2d723752f0518434f81f498e847ab76279",
+    "crates/journals/src/loader/revisions.rs": "359036e8d41b11a68956f5d2a3101bd7e1f1728987db4c658fef74360b3f5597",
+    "crates/pyjson/src/bytes.rs": "2e1f1919fb18a244c447140c5617b8b11cd5ae24351915fbad269ac68765e49e",
+    "crates/pyjson/src/encode.rs": "e80c485c552190c4c25d52356807126bfa0c525cb6eb1b6e404c7df6d639cf39",
+    "crates/pyjson/src/value.rs": "ac5529d30f39fa78bed772fc3607872ea63b7a645d2a02d4d3c6dce16db683f8",
+    "crates/pytext/src/json.rs": "f22cd2bf46cec6e45be117081409dcb9e4d0488507812832aa8c58315b7a9ba1"
+  },
+  "mutations": [
+    {
+      "id": "JL-blob-refusal",
+      "file": "crates/journals/src/loader.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+      ]
+    },
+    {
+      "id": "JL-direct-blob",
+      "file": "crates/journals/src/loader/direct.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JB-config-memo",
+      "file": "crates/journals/src/loader.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-parsed-bytes",
+      "file": "crates/journals/src/loader.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-ownership-config",
+      "file": "crates/journals/src/loader/ownership.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-bytes-int-ascii",
+      "file": "crates/journals/src/loader/ownership.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-bytes-int-error",
+      "file": "crates/journals/src/loader/ownership.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-typed-from-json",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-typed-to-json",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-truth",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-string",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-integer",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-bytes-fast-json",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-literal-tag-escape",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_snapshot_cannot_forge_internal_byte_scalars"
+      ]
+    },
+    {
+      "id": "JB-literal-map-roundtrip",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-object",
+      "file": "crates/custody/src/codec.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-component-int-kind",
+      "file": "crates/custody/src/components/mod.rs",
+      "status": "killed",
+      "witnesses": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-component-int-repr",
+      "file": "crates/custody/src/components/mod.rs",
+      "status": "killed",
+      "witnesses": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-component-byte-sort",
+      "file": "crates/custody/src/components/mod.rs",
+      "status": "killed",
+      "witnesses": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-component-header-bytes",
+      "file": "crates/custody/src/components/mod.rs",
+      "status": "killed",
+      "witnesses": [
+        "component_bytes_sort_and_integer_semantics_match_python"
+      ]
+    },
+    {
+      "id": "JB-revision-bind",
+      "file": "crates/journals/src/loader/revisions.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_revision_references_bind_and_refuse_before_output"
+      ]
+    },
+    {
+      "id": "JB-revision-byte-order",
+      "file": "crates/journals/src/loader/revisions.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_revision_identity_is_distinct_and_lexicographic"
+      ]
+    },
+    {
+      "id": "JB-revision-byte-type",
+      "file": "crates/journals/src/loader/revisions.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_revision_identity_is_distinct_and_lexicographic"
+      ]
+    },
+    {
+      "id": "JB-revision-mixed-text",
+      "file": "crates/journals/src/loader/direct.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_revision_references_bind_and_refuse_before_output"
+      ]
+    },
+    {
+      "id": "JB-revision-mixed-number",
+      "file": "crates/journals/src/loader/direct.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_refuses_mixed_blob_numeric_revisions_before_queries"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-refusal",
+      "file": "crates/pyjson/src/encode.rs",
+      "status": "killed",
+      "witnesses": [
+        "bytes_json_policy_and_repr_match_python"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-default",
+      "file": "crates/pyjson/src/encode.rs",
+      "status": "killed",
+      "witnesses": [
+        "bytes_json_policy_and_repr_match_python"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-message",
+      "file": "crates/pyjson/src/encode.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-bom",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-surrogates",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+      ]
+    },
+    {
+      "id": "JB-audit-blob-variant",
+      "file": "crates/journals/scripts/audit_loader_storage.py",
+      "status": "killed",
+      "witnesses": [
+        "tests/test_rust_custody_loader.py::test_loader_seed_variants_require_observed_complete_refusal_pairs"
+      ]
+    },
+    {
+      "id": "JB-convert-literal-map",
+      "file": "crates/journals/src/loader.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JB-gate-literal-map",
+      "file": "crates/journals/src/loader/direct.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_reads_direct_columns_without_conversion"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf32-le",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf32-be",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf16-le",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-utf16-be",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-truncation",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-unpaired",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-json-bytes-short-utf16",
+      "file": "crates/pyjson/src/bytes.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_bytes_detect_encoding_without_changing_bytes_identity"
+      ]
+    },
+    {
+      "id": "JB-bytes-repr-quotes",
+      "file": "crates/pyjson/src/value.rs",
+      "status": "killed",
+      "witnesses": [
+        "bytes_json_policy_and_repr_match_python"
+      ]
+    },
+    {
+      "id": "JB-query-bytes-truth",
+      "file": "crates/journals/src/loader.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-outpoint-bytes-ascii",
+      "file": "crates/journals/src/loader/ownership.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+      ]
+    },
+    {
+      "id": "JB-evidence-byte-policy",
+      "file": "crates/custody/src/evidence.rs",
+      "status": "killed",
+      "witnesses": [
+        "evidence_bytes_use_utf8_replacement_before_canonical_json"
+      ]
+    },
+    {
+      "id": "JB-graph-byte-object",
+      "file": "crates/custody/src/graph/stored.rs",
+      "status": "killed",
+      "witnesses": [
+        "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+      ]
+    },
+    {
+      "id": "JB-graph-byte-parse",
+      "file": "crates/custody/src/graph/stored.rs",
+      "status": "killed",
+      "witnesses": [
+        "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+      ]
+    },
+    {
+      "id": "JB-graph-byte-truth",
+      "file": "crates/custody/src/graph/stored.rs",
+      "status": "killed",
+      "witnesses": [
+        "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+      ]
+    },
+    {
+      "id": "JB-snapshot-wire-tag-guard",
+      "file": "crates/custody/src/lib.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_snapshot_cannot_forge_internal_byte_scalars"
+      ]
+    },
+    {
+      "id": "JB-json-raw-surrogates",
+      "file": "crates/pytext/src/json.rs",
+      "status": "killed",
+      "witnesses": [
+        "json_parser_preserves_raw_surrogate_identity"
+      ]
+    },
+    {
+      "id": "JL-revision-message-family",
+      "file": "crates/journals/src/loader/direct.rs",
+      "status": "killed",
+      "witnesses": [
+        "native_loader_refuses_mixed_revision_references_before_output"
+      ]
+    }
+  ],
+  "scope": "Focused BLOB branches and reanchored recipes only; the exhaustive loader map and full custody campaign remain separate gates."
+}

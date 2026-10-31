@@ -67,7 +67,43 @@ pub struct StageSnapshot {
 }
 
 impl StageSnapshot {
-    /// The one explicit JSON boundary for neighbours awaiting their typed slice.
+    pub(crate) fn escape_wire_tags(&mut self) {
+        self.profile.escape_wire_tags();
+        for rows in [
+            &mut self.wallets,
+            &mut self.transactions,
+            &mut self.rate_rows,
+            &mut self.anchor_wallets,
+            &mut self.revision_headers,
+            &mut self.receipt_sources,
+            &mut self.channel_records,
+            &mut self.loan_legs,
+            &mut self.evidence_snapshots,
+            &mut self.migration_issues,
+            &mut self.gap_reviews,
+            &mut self.pair_dismissals,
+            &mut self.gap_worklist.rows,
+        ] {
+            rows.iter_mut().for_each(Record::escape_wire_tags);
+        }
+        for component in &mut self.components {
+            component.header.escape_wire_tags();
+            for rows in [
+                &mut component.legs,
+                &mut component.allocations,
+                &mut component.economic_terms,
+                &mut component.commitments,
+            ] {
+                rows.iter_mut().for_each(Record::escape_wire_tags);
+            }
+        }
+        self.book_network
+            .iter_mut()
+            .chain(self.owned_index.iter_mut())
+            .chain(self.anchors.values_mut())
+            .for_each(crate::codec::escape_wire_tags);
+    }
+    /// Each transaction row as a JSON object, in order; shared by every reader.
     pub fn rows(&self) -> &[Value] {
         self.rows.get_or_init(|| {
             crate::par::map(&self.transactions, |row| {

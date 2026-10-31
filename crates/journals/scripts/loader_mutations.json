@@ -242,12 +242,12 @@
   {
     "id": "JL-blob-refusal",
     "file": "crates/journals/src/loader.rs",
-    "find": "ValueRef::Blob(_) => {\n            return Err(Error::Unsupported(\n                \"custody snapshot v1 cannot serialize SQLite BLOB\",\n            ))\n        }",
+    "find": "ValueRef::Blob(value) => Value::Bytes(value.to_vec()),",
     "replace": "ValueRef::Blob(_) => Value::Null,",
     "expect_failing": [
       "native_loader_keeps_sql_values_and_refuses_blob_coercion"
     ],
-    "rule": "A legacy blob is never coerced to a null fact."
+    "rule": "Preserve a raw SQLite BLOB until its consuming conversion or serialization, never replace it with null."
   },
   {
     "id": "JL-direct-null",
@@ -282,12 +282,12 @@
   {
     "id": "JL-direct-blob",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "ValueRef::Blob(_) => {\n            return Err(Error::Unsupported(\n                \"custody snapshot v1 cannot serialize SQLite BLOB\",\n            ))\n        }",
+    "find": "ValueRef::Blob(value) => kassiber_custody::codec::to_json(&Value::Bytes(value.to_vec())),",
     "replace": "ValueRef::Blob(_) => J::Null,",
     "expect_failing": [
       "native_loader_reads_direct_columns_without_conversion"
     ],
-    "rule": "Refuse BLOB coercion at the current adapter seam."
+    "rule": "Preserve raw BLOB identity in directly constructed custody records."
   },
   {
     "id": "JL-direct-nonfinite",
@@ -1302,8 +1302,8 @@
   {
     "id": "JL-revision-message-family",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"TypeError\",\n            format!(",
-    "replace": "\"ValueError\",\n            format!(",
+    "find": "let numeric = revision_ids.iter().find(|id| !id.is_text()).unwrap();\n        return Err(Error::Reference(crate::Refusal::new(\n            \"TypeError\",\n            format!(",
+    "replace": "let numeric = revision_ids.iter().find(|id| !id.is_text()).unwrap();\n        return Err(Error::Reference(crate::Refusal::new(\n            \"ValueError\",\n            format!(",
     "expect_failing": [
       "native_loader_refuses_mixed_revision_references_before_output"
     ],

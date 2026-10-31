@@ -34,6 +34,12 @@ impl Record {
             .map(|index| &self.values[index])
     }
 
+    pub(super) fn escape_wire_tags(&mut self) {
+        self.values
+            .iter_mut()
+            .for_each(crate::codec::escape_wire_tags);
+    }
+
     pub fn contains_key(&self, key: &str) -> bool {
         self.get(key).is_some()
     }

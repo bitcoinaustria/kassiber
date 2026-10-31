@@ -8,6 +8,9 @@ pub(super) struct Reference(SqlValue);
 
 impl Reference {
     pub(super) fn from_json(value: &serde_json::Value) -> Result<Self> {
+        if let Some(bytes) = kassiber_custody::codec::raw_bytes(value) {
+            return Ok(Self(SqlValue::Blob(bytes)));
+        }
         Ok(Self(match value {
             serde_json::Value::String(value) => SqlValue::Text(value.clone()),
             serde_json::Value::Number(value) => {
@@ -30,12 +33,16 @@ impl Reference {
     pub(super) fn is_text(&self) -> bool {
         matches!(self.0, SqlValue::Text(_))
     }
+    pub(super) fn is_bytes(&self) -> bool {
+        matches!(self.0, SqlValue::Blob(_))
+    }
 
     pub(super) fn python_type(&self) -> &'static str {
         match self.0 {
             SqlValue::Text(_) => "str",
             SqlValue::Integer(_) => "int",
             SqlValue::Real(_) => "float",
+            SqlValue::Blob(_) => "bytes",
             _ => unreachable!("revision reference scalar"),
         }
     }
@@ -60,6 +67,7 @@ impl Ord for Reference {
     fn cmp(&self, other: &Self) -> Ordering {
         match (&self.0, &other.0) {
             (SqlValue::Text(a), SqlValue::Text(b)) => a.cmp(b),
+            (SqlValue::Blob(a), SqlValue::Blob(b)) => a.cmp(b),
             (SqlValue::Integer(a), SqlValue::Integer(b)) => a.cmp(b),
             (SqlValue::Real(a), SqlValue::Real(b)) => a.partial_cmp(b).expect("SQLite REAL"),
             (SqlValue::Integer(a), SqlValue::Real(b)) => int_float(*a, *b),
@@ -67,6 +75,8 @@ impl Ord for Reference {
             // Mixed text/numeric populations remain guarded before any query.
             (SqlValue::Text(_), _) => Ordering::Greater,
             (_, SqlValue::Text(_)) => Ordering::Less,
+            (SqlValue::Blob(_), _) => Ordering::Greater,
+            (_, SqlValue::Blob(_)) => Ordering::Less,
             _ => unreachable!("revision reference scalar"),
         }
     }
@@ -159,5 +169,35 @@ mod tests {
 
     fn scalar_json(value: f64) -> serde_json::Value {
         super::super::direct::scalar(ValueRef::Real(value)).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod byte_tests {
+    use super::*;
+    #[test]
+    fn native_loader_blob_revision_identity_is_distinct_and_lexicographic() {
+        let bytes = |b: &[u8]| {
+            Reference::from_json(&kassiber_custody::codec::to_json(&Value::Bytes(b.to_vec())))
+                .unwrap()
+        };
+        let a = bytes(b"77");
+        assert_eq!(a.python_type(), "bytes");
+        assert!(a.is_bytes());
+        assert!(!a.is_text());
+        let b = bytes(b"78");
+        assert!(a < b);
+        let text = Reference::from_json(&serde_json::json!("77")).unwrap();
+        let number = Reference::from_json(&serde_json::json!(77)).unwrap();
+        assert_ne!(a, text);
+        assert_ne!(a, number);
+        assert!(a < text);
+        assert!(text > a);
+        assert!(a > number);
+        assert!(number < a);
+        assert_eq!(
+            a.to_sql().unwrap(),
+            ToSqlOutput::Borrowed(ValueRef::Blob(b"77"))
+        );
     }
 }

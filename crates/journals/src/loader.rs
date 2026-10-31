@@ -91,8 +91,9 @@ pub(super) fn convert(value: Value) -> Result<serde_json::Value> {
                 ))?
                 .into(),
         ),
+        Value::Bytes(value) => kassiber_custody::codec::to_json(&Value::Bytes(value)),
         Value::List(values) => J::Array(values.into_iter().map(convert).collect::<Result<_>>()?),
-        Value::Dict(values) => J::Object(
+        Value::Dict(values) => kassiber_custody::codec::json_dict(
             values
                 .into_iter()
                 .map(|(key, value)| {
@@ -173,6 +174,7 @@ fn truth(value: &Value) -> bool {
         Value::Int(value) => *value != 0.into(),
         Value::Float(value) => *value != 0.0,
         Value::Str(value) => !value.is(""),
+        Value::Bytes(value) => !value.is_empty(),
         Value::List(value) => !value.is_empty(),
         Value::Dict(value) => !value.is_empty(),
         Value::Decimal(value) => !value.is_zero(),
@@ -183,6 +185,10 @@ fn parsed(value: &Value) -> Value {
         Value::Str(value) => value
             .as_str()
             .and_then(|s| kassiber_pytext::loads(s).ok())
+            .unwrap_or(Value::Null),
+        Value::Bytes(bytes) => kassiber_pyjson::json_bytes_string(bytes)
+            .ok()
+            .and_then(|text| kassiber_pytext::loads_py(&text).ok())
             .unwrap_or(Value::Null),
         _ => Value::Null,
     }
@@ -196,13 +202,7 @@ fn sql_value(value: ValueRef<'_>) -> Result<Value> {
             std::str::from_utf8(value)
                 .map_err(|_| Error::Unsupported("SQLite TEXT is not UTF-8"))?,
         ),
-        // Python's v1 encoder also refuses bytes. Do not coerce a legacy BLOB
-        // into a string, an amount, or an authority fact.
-        ValueRef::Blob(_) => {
-            return Err(Error::Unsupported(
-                "custody snapshot v1 cannot serialize SQLite BLOB",
-            ))
-        }
+        ValueRef::Blob(value) => Value::Bytes(value.to_vec()),
     })
 }
 
@@ -296,7 +296,13 @@ fn safe_row(mut row: Value, configs: &mut HashMap<String, (String, bool)>) -> Re
         if matches!(&row,Value::Dict(values) if values.iter().any(|(k,_)| matches!(k,Key::Str(k) if k.is(key))))
         {
             let raw = get(&row, key);
-            let cache_key = kassiber_pyjson::dumps(raw, &Options::new()).map_err(Error::Json)?;
+            let cache_key = if matches!(raw, Value::Bytes(_)) {
+                // config_facts treats every bytes value as a non-mapping.
+                // This key cannot collide with a serialized JSON value.
+                "BLOB".into()
+            } else {
+                kassiber_pyjson::dumps(raw, &Options::new()).map_err(Error::Json)?
+            };
             let (normalized, mentions) = if let Some(value) = configs.get(&cache_key) {
                 value.clone()
             } else {

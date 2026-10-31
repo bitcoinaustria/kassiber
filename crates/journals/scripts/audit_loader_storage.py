@@ -116,7 +116,7 @@ def classify_projection(reference, actual, variants=()):
 def mixed_revision_refusal(reference, table, column, stored_type):
     return (table == "custody_components"
             and column in ("supersedes_component_id", "superseded_by_component_id")
-            and stored_type in ("integer", "real")
+            and stored_type in ("integer", "real", "blob")
             and reference.get("phase") == "load"
             and reference.get("refusal", {}).get("family") == "TypeError"
             and reference["refusal"]["message"].startswith("'<' not supported between instances of "))
@@ -193,7 +193,7 @@ def summarize(result):
         "Every physical row of the small synthetic fixtures is audited, including inactive/foreign rows; this does not exhaust combinations of corrupted cells.",
         "Load and v1 serialization phases are distinguished; native custody admission is recorded separately.",
         "Projection mode compares the native in-process custody stages with Python through finalized projection, including exact CLI/daemon refusal code/message and zero writes. It does not run the unrouted R4 journal command or ledger persistence.",
-        "Mixed numeric/TEXT revision-reference load TypeErrors match only a complete CLI/daemon code/message pair observed for that exact case under Python hash seeds 1, 2, 3 and 4; these cases remain pending Python determinism fix.",
+        "Mixed numeric/TEXT and BLOB/TEXT revision-reference load TypeErrors match only a complete CLI/daemon code/message pair observed for that exact case under Python hash seeds 1, 2, 3 and 4; these cases remain pending Python determinism fix.",
     ]
     failures = {}
     for record in result["cases"]:
@@ -419,7 +419,7 @@ def main():
     parser.add_argument("--first-row", action="store_true", help="reproduce the historical read-column/first-row audit")
     parser.add_argument("--declared-only", action="store_true", help="skip the no-affinity storage variant")
     parser.add_argument("--snapshot-only", action="store_true", help="historical v1 transport audit without native projection")
-    parser.add_argument("--non-blob", action="store_true", help="exclude the BLOB corruption class pending an owner decision")
+    parser.add_argument("--non-blob", action="store_true", help="rerun the non-BLOB storage-class regression subset")
     args = parser.parse_args()
     args.out.with_suffix(".jsonl").write_text("")
     return run(args.binary.resolve(), args.out, args.summary_out,

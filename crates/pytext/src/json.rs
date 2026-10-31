@@ -72,7 +72,17 @@ impl std::error::Error for JsonError {}
 /// `json.loads(text)` for a `str`.
 pub fn loads(text: &str) -> Result<Value, JsonError> {
     let points: Vec<u32> = text.chars().map(u32::from).collect();
-    let scanner = Scanner { s: &points };
+    loads_points(&points)
+}
+
+/// json.loads of a Python string, preserving raw surrogate code points.
+pub fn loads_py(text: &PyStr) -> Result<Value, JsonError> {
+    let points: Vec<u32> = text.code_points().collect();
+    loads_points(&points)
+}
+
+fn loads_points(points: &[u32]) -> Result<Value, JsonError> {
+    let scanner = Scanner { s: points };
     if points.first() == Some(&0xFEFF) {
         return Err(scanner.decode_error("Unexpected UTF-8 BOM (decode using utf-8-sig)", 0));
     }
@@ -474,6 +484,19 @@ impl Scanner<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn json_parser_preserves_raw_surrogate_identity() {
+        let text = kassiber_pyjson::PyStr::from_code_points(vec![34, 0xd800, 0xdc00, 34]).unwrap();
+        let kassiber_pyjson::Value::Str(raw) = super::loads_py(&text).unwrap() else {
+            panic!("string")
+        };
+        assert_eq!(raw.code_points().collect::<Vec<_>>(), vec![0xd800, 0xdc00]);
+        let kassiber_pyjson::Value::Str(escaped) = super::loads(r#""\ud800\udc00""#).unwrap()
+        else {
+            panic!("string")
+        };
+        assert_eq!(escaped.code_points().collect::<Vec<_>>(), vec![0x10000]);
+    }
     use super::*;
 
     fn error(text: &str) -> String {
