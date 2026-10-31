@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 
 import pytest
+import openpyxl
 
 from kassiber.cli import handlers
 from kassiber.core import accounts, custody_review_terms, reports, ui_snapshot, wallets
@@ -198,3 +199,43 @@ def test_full_departure_day_includes_fractional_inventory_and_quotes(engine_book
         "asset": "BTC", "rate": 65000 if quote_source == "cache" else 61000,
         "pair": "BTC-EUR", "asOf": last_instant, "source": quote_source,
     }]
+
+
+@pytest.mark.parametrize(("quote_at", "priced"), [
+    ("2021-06-01T00:00:00Z", False),
+    ("2024-12-30T23:59:59.999999Z", False),  # 24h + 1 microsecond
+    ("2024-12-31T00:00:00Z", True),          # exactly 24h
+    ("2024-12-31T23:59:59.500000Z", True),
+])
+def test_transaction_fmv_age_limit_through_real_engine(engine_book, quote_at, priced):
+    conn = engine_book([("buy", "Cold", quote_at, "inbound", BTC, 0, 30000, "buy")])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    quote = report["fmvSource"][0]
+    assert quote["source"] == ("transaction" if priced else "missing")
+    assert quote["asOf"] == (quote_at if priced else None)
+    assert report["status"]["missingFmvAssets"] == ([] if priced else ["BTC"])
+    for field in ("neuMarketValue", "neuGain", "taxableGain", "estimatedTax"):
+        assert (report["totals"][field] is not None) == priced
+    if not priced:
+        assert "Incomplete estimate: missing FMV for BTC" in reports.format_exit_tax_lines(report)
+
+
+@pytest.mark.parametrize("quote_source", ("cache", "transaction"))
+def test_handoffs_always_show_fmv_source_and_actual_quote_time(engine_book, tmp_path, quote_source):
+    at = "2024-12-31T12:34:56Z"
+    conn = engine_book([("buy", "Cold", at, "inbound", BTC, 0, 30000, "buy")],
+                       quotes=[(at, 65000)] if quote_source == "cache" else [])
+    pdf = tmp_path / "exit.pdf"
+    xlsx = tmp_path / "exit.xlsx"
+    reports.export_exit_tax_pdf_report(conn, "W", "P", pdf, handlers._report_hooks(), departure_date="2024-12-31")
+    reports.export_exit_tax_xlsx_report(conn, "W", "P", xlsx, handlers._report_hooks(), departure_date="2024-12-31")
+    pdf_text = pdf.read_bytes().decode("latin1")
+    assert f"source: {quote_source}" in pdf_text
+    assert f"as of: {at}" in pdf_text
+    workbook = openpyxl.load_workbook(xlsx)
+    try:
+        values = [cell.value for row in workbook["FMV quotes"] for cell in row]
+        assert quote_source in values
+        assert at in values
+    finally:
+        workbook.close()

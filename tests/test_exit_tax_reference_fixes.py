@@ -26,7 +26,7 @@ def book(tmp_path):
         INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,
             fingerprint,occurred_at,direction,asset,amount,fiat_rate,fiat_rate_exact,
             raw_json,created_at)
-            VALUES('buy','ws','p','cold','buy','buy','2023-12-31T23:30:00Z',
+            VALUES('buy','ws','p','cold','buy','buy','2024-01-01T00:30:00Z',
                 'inbound','BTC',100000000000,30000,'30000.125','{}','now'),
                 ('future','ws','p','cold','future','future','2025-01-01T00:00:00Z',
                 'inbound','BTC',20000000000,60000,'60000.123','{}','now');
@@ -79,7 +79,7 @@ def test_transaction_fallback_is_bounded_and_discloses_its_source_time(book):
     report = _report(book)
     assert report["fmvSource"] == [{
         "asset": "BTC", "rate": 30000.125, "pair": "BTC-EUR",
-        "asOf": "2023-12-31T23:30:00Z", "source": "transaction",
+        "asOf": "2024-01-01T00:30:00Z", "source": "transaction",
     }]
     assert report["totals"]["neuMarketValue"] == 30000.13
 

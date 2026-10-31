@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { ExitTaxFmvCard } from "@/components/reports/ExitTaxFmvCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -496,22 +497,7 @@ function ExitTaxBody({
           </section>
 
           {/* FMV source */}
-          <section className="kb-surface p-(--kb-card-padding)">
-            <h2 className="text-sm font-medium">Fair market value</h2>
-            <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
-              {report.fmvSource.map((source) => (
-                <li key={source.asset} className="flex items-center justify-between gap-2">
-                  <span>{source.pair}</span>
-                  <span className="tabular-nums">
-                    {source.rate != null ? fmtMoney(source.rate) : "—"}
-                    <Badge variant="outline" className="ml-2">
-                      {source.source}
-                    </Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <ExitTaxFmvCard quotes={report.fmvSource} fmtMoney={fmtMoney} />
 
           {/* Assumptions & review gate */}
           <section className="kb-surface p-(--kb-card-padding)">
