@@ -8,6 +8,7 @@ pub fn handles(command: &str) -> bool {
         command,
         "reports.export-csv"
             | "reports.export-xlsx"
+            | "reports.export-exit-tax-xlsx"
             | "reports.export-commercial-subledger-csv"
             | "reports.export-austrian-e1kv-csv"
             | "reports.export-austrian-e1kv-xlsx"
@@ -15,6 +16,7 @@ pub fn handles(command: &str) -> bool {
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
             | "ui.reports.export_xlsx"
+            | "ui.reports.export_exit_tax_xlsx"
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
@@ -133,6 +135,7 @@ fn execute_admitted(
     let desktop = command.starts_with("ui.");
     let xlsx = command == "ui.reports.export_xlsx"
         || command == "ui.reports.export_austrian_e1kv_xlsx"
+        || command == "ui.reports.export_exit_tax_xlsx"
         || command == "ui.transactions.export_xlsx"
         || (command == "transactions.export" && text(raw, "export_format") == "xlsx");
     if !desktop && command != "transactions.export" {
@@ -199,6 +202,19 @@ fn execute_admitted(
                 "report",
             )
         }
+        "ui.reports.export_exit_tax_xlsx" => (
+            "reports.export-exit-tax-xlsx",
+            format!(
+                "kassiber-exit-tax-{}",
+                if truthy(value(raw, "departure_date")) {
+                    py_str(value(raw, "departure_date"))
+                } else {
+                    "today".into()
+                }
+            ),
+            ".xlsx",
+            "exit_tax",
+        ),
         "ui.reports.export_austrian_e1kv_xlsx" => (
             "reports.export-austrian-e1kv-xlsx",
             format!("kassiber-austrian-e1kv-{}", py_str(value(raw, "year"))),

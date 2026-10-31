@@ -20,15 +20,20 @@ fn main() {
         let result = {
             let conn = Connection::open(Path::new(request["database"].as_str().unwrap())).unwrap();
             let args = kassiber_pytext::loads(request["args_json"].as_str().unwrap()).unwrap();
-            kassiber_reports::export::export(
-                &conn,
-                request["command"]
-                    .as_str()
-                    .unwrap_or("reports.export-transactions-xlsx"),
-                &args,
-                Path::new(request["path"].as_str().unwrap()),
-                &Fixed,
-            )
+            let command = request["command"]
+                .as_str()
+                .unwrap_or("reports.export-transactions-xlsx");
+            if command == "reports.exit-tax" {
+                kassiber_reports::execute_with_sources(&conn, command, &args, &Fixed)
+            } else {
+                kassiber_reports::export::export(
+                    &conn,
+                    command,
+                    &args,
+                    Path::new(request["path"].as_str().unwrap()),
+                    &Fixed,
+                )
+            }
         };
         let response = match result {
             Ok(value) => dict([("ok", value)]),

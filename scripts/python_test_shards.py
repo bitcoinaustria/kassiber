@@ -90,6 +90,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_xlsx_exports",
         "test_rust_austrian_xlsx",
         "test_rust_full_xlsx",
+        "test_rust_exit_tax",
         "test_rust_shell_parity",
         "test_rust_wallet_discovery",
         "test_rust_wallet_acquisition",

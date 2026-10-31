@@ -2503,8 +2503,8 @@
   {
     "id": "csv-at-projection-gate",
     "file": "crates/reports/src/lib.rs",
-    "find": "if truthy(value(args, \"csv\")) {",
-    "replace": "if false {",
+    "find": "if truthy(value(args, \"csv\")) {\n                    Ok(value(\n                        &report,",
+    "replace": "if false {\n                    Ok(value(\n                        &report,",
     "expect_failing": [
       "report_csv_projection_vectors"
     ],
@@ -6009,5 +6009,405 @@
       "full_xlsx_transport_retains_verification_scope_and_history"
     ],
     "rule": "The CLI forwards the default and explicit no-verify choice into the native export request."
+  },
+  {
+    "id": "exit-cent-rounding",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "d.quantize(-2, &Context::new(32, Rounding::HalfUp))",
+    "replace": "d.quantize(-2, &Context::new(32, Rounding::HalfEven))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Cent ties retain the reference half-up rounding."
+  },
+  {
+    "id": "exit-sat-rounding",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": ".quantize(0, &Context::new(32, Rounding::HalfUp))",
+    "replace": ".quantize(0, &Context::new(32, Rounding::HalfEven))",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Sub-satoshi positions round to sats half-up."
+  },
+  {
+    "id": "exit-marker-authority",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "return Ok(m == \"alt\");",
+    "replace": "return Ok(m == \"neu\");",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "An explicit regime marker precedes stored categories and dates."
+  },
+  {
+    "id": "exit-marker-first",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": ".find_map(|t| t.strip_prefix(\"at_regime=\"))",
+    "replace": ".filter_map(|t| t.strip_prefix(\"at_regime=\")).last()",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Only the first matching marker is authoritative."
+  },
+  {
+    "id": "exit-category-authority",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "return Ok(text(row, \"at_category\").starts_with(\"alt\"));",
+    "replace": "return Ok(false);",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Stored category prefixes precede date inference."
+  },
+  {
+    "id": "exit-vienna-cutoff",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "Ok(at < kassiber_rates::time::parse(\"2021-02-28T23:00:00Z\").unwrap())",
+    "replace": "Ok(at < kassiber_rates::time::parse(\"2021-03-01T00:00:00Z\").unwrap())",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Alt/Neu attribution retains the Vienna cutoff instant."
+  },
+  {
+    "id": "exit-destination-normalization",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "\"eu\" | \"eea\" | \"eu_eea\" | \"euea\" => Ok(\"eu_eea\".into()),",
+    "replace": "\"eu\" | \"eea\" | \"eu_eea\" | \"euea\" => Ok(\"third_country\".into()),",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Destination aliases preserve collection timing."
+  },
+  {
+    "id": "exit-departure-offset",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": ".map(|s| s[..10].into())",
+    "replace": ".map(|_| raw[..10].into())",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Departure dates use the normalized UTC calendar day."
+  },
+  {
+    "id": "exit-latest-fallback",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "ORDER BY occurred_at DESC,created_at DESC,id DESC",
+    "replace": "ORDER BY occurred_at ASC,created_at ASC,id ASC",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Transaction fallback uses the latest usable nonexcluded row."
+  },
+  {
+    "id": "exit-fallback-exact-presence",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if matches!(precise, Value::Null)",
+    "replace": "if true",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Present empty exact transaction prices retain zero instead of selecting legacy prices."
+  },
+  {
+    "id": "exit-cache-manual",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "CASE WHEN source='manual' THEN 0 ELSE 1 END ASC",
+    "replace": "CASE WHEN source='manual' THEN 1 ELSE 0 END ASC",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Reviewed manual rates win timestamp ties."
+  },
+  {
+    "id": "exit-cache-boundary",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "at <= cutoff_at",
+    "replace": "at >= cutoff_at",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Rate candidates are bounded by parsed departure instants."
+  },
+  {
+    "id": "exit-cache-positive",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if rate > Decimal::zero() {",
+    "replace": "if rate >= Decimal::zero() {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A nonpositive cached quote cannot price holdings."
+  },
+  {
+    "id": "exit-fallback-positive",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "fallback.get(asset).filter(|r| **r > Decimal::zero())",
+    "replace": "fallback.get(asset).filter(|_| true)",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A nonpositive transaction quote remains missing."
+  },
+  {
+    "id": "exit-profile-validation",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if !is_at && truthy(value(profile, \"tax_long_term_days\")) {",
+    "replace": "if false && truthy(value(profile, \"tax_long_term_days\")) {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Generic policy validation remains part of report preparation."
+  },
+  {
+    "id": "exit-entry-cutoff",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "text(row, \"occurred_at\") > cutoff",
+    "replace": "text(row, \"occurred_at\") < cutoff",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The inventory walk excludes later journal rows."
+  },
+  {
+    "id": "exit-transfer-skip",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if [\"transfer_in\", \"transfer_out\"].contains(&kind.as_str()) {",
+    "replace": "if [\"unrecognized\"].contains(&kind.as_str()) {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Owned transfers never enter the global deemed-disposal pool."
+  },
+  {
+    "id": "exit-income-skip",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if kind == \"income\" {",
+    "replace": "if kind == \"unrecognized\" {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Income recognition does not duplicate its acquisition lot."
+  },
+  {
+    "id": "exit-income-disclosure",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "income = true;",
+    "replace": "income = false;",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Income-type receipts disclose the acquisition-lot assumption."
+  },
+  {
+    "id": "exit-regime-generic",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let regime = usize::from(is_at && alt(row)?);",
+    "replace": "let regime = usize::from(alt(row)?);",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Generic profiles pool all entries without Austrian grandfathering."
+  },
+  {
+    "id": "exit-basis-precedence",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "Some(basis) => basis,",
+    "replace": "Some(_) => Decimal::zero(),",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "An explicitly stored inflow basis precedes fiat value."
+  },
+  {
+    "id": "exit-acquisition-basis",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "None => exact(row, \"fiat_value\")?.unwrap_or_else(Decimal::zero),",
+    "replace": "None => Decimal::zero(),",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Acquisition fiat values carry inventory basis."
+  },
+  {
+    "id": "exit-consumed-basis",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": ".neg(&DECIMAL)",
+    "replace": ".abs(&DECIMAL)",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Outflows subtract the engine consumed basis."
+  },
+  {
+    "id": "exit-untagged-disclosure",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "untagged = true;",
+    "replace": "untagged = false;",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Untagged outflows retain the ambiguity disclosure."
+  },
+  {
+    "id": "exit-exact-basis",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let basis = exact(row, \"cost_basis\")?;",
+    "replace": "let basis = if matches!(value(row,\"cost_basis\"),Value::Null) {None} else {Some(decimal(value(row,\"cost_basis\"))?)};",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Exact journal basis strings precede legacy REAL columns."
+  },
+  {
+    "id": "exit-basis-clamp",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let basis = basis.clone().max(Decimal::zero());",
+    "replace": "let basis = basis.clone();",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Remaining negative basis clamps independently from quantity."
+  },
+  {
+    "id": "exit-missing-neu",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "neu_market = add_optional(neu_market, market.as_ref())?;",
+    "replace": "neu_market = add_optional(neu_market, Some(market.as_ref().unwrap_or(&Decimal::zero())))?;",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Any unpriced Neu position makes the aggregate market value incomplete."
+  },
+  {
+    "id": "exit-loss-floor",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let taxable = neu_gain.as_ref().map(|g| g.clone().max(Decimal::zero()));",
+    "replace": "let taxable = neu_gain.clone();",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "A net deemed-disposal loss cannot produce negative estimated tax."
+  },
+  {
+    "id": "exit-tax-rate",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let rate: Decimal = \"0.275\".parse().unwrap();",
+    "replace": "let rate: Decimal = \"0.25\".parse().unwrap();",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The presentation estimate preserves the reference rate without changing tax rules."
+  },
+  {
+    "id": "exit-generic-estimate",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "let estimated = if is_at {",
+    "replace": "let estimated = if true {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Generic books have no Austrian tax estimate."
+  },
+  {
+    "id": "exit-alt-basis",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if regime == 0 {\n                        eur(Some(&basis))?",
+    "replace": "if regime == 1 {\n                        eur(Some(&basis))?",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Alt lots exclude taxable basis from their disclosure."
+  },
+  {
+    "id": "exit-missing-disclosure",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "assumptions.push(note(\"missing\"));",
+    "replace": "assumptions.push(note(\"_ASSUMPTION_FMV\"));",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Missing prices retain the explicit incomplete-value disclosure."
+  },
+  {
+    "id": "exit-quarantine-text",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "if quarantines != 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Plain-text reports warn when quarantine makes the estimate incomplete."
+  },
+  {
+    "id": "exit-method-label",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "\"moving_average_at\"",
+    "replace": "\"hifo\"",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "The reference policy-default label is preserved even for selected HIFO books."
+  },
+  {
+    "id": "exit-xlsx-quantity",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "Decimal::from(100_000_000)",
+    "replace": "Decimal::from(100_000_000_000_i64)",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Workbook quantities scale integer sat outputs to BTC."
+  },
+  {
+    "id": "exit-xlsx-gain",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "(\"gain_loss\", value(r, \"gain\").clone())",
+    "replace": "(\"gain_loss\", value(r, \"costBasis\").clone())",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Workbook lot gains retain their report values."
+  },
+  {
+    "id": "exit-xlsx-review",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "notes.push(dict([(\"note\", value(&report, \"reviewGate\").clone())]));",
+    "replace": "notes.push(dict([(\"note\", s(\"\"))]));",
+    "expect_failing": [
+      "exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness"
+    ],
+    "rule": "Workbook assumptions include the tax-adviser review gate."
+  },
+  {
+    "id": "exit-xlsx-no-registration",
+    "file": "crates/reports/src/exit_xlsx.rs",
+    "find": "completion: None,",
+    "replace": "completion: Some(export_completion::Completion{kind:\"exit-tax.xlsx\".into(),year:None,scope:dict::<&str>([])}),",
+    "expect_failing": [
+      "exit_xlsx_managed_publication_preserves_reference_without_snapshots"
+    ],
+    "rule": "Exit-tax exports preserve the reference no-snapshot boundary."
+  },
+  {
+    "id": "exit-managed-native",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "\"reports.export-exit-tax-xlsx\",\n            format!",
+    "replace": "\"reports.export-xlsx\",\n            format!",
+    "expect_failing": [
+      "exit_xlsx_managed_publication_preserves_reference_without_snapshots"
+    ],
+    "rule": "Desktop exit-tax requests publish the exit-tax workbook."
+  },
+  {
+    "id": "exit-cli-export-arguments",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"departure_date\",\n            \"destination\",",
+    "replace": "            \"departure_date\",\n            \"omitted_destination\",",
+    "expect_failing": [
+      "exit_tax_transport_forwards_departure_and_destination"
+    ],
+    "rule": "CLI exit-tax exports forward the destination selection."
   }
 ]

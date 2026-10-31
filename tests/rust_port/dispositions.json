@@ -25916,6 +25916,45 @@
         "reviewed": true,
         "tests": 1
       }
+    },
+    "tests/test_rust_exit_tax.py": {
+      "test_exit_service_content_errors_and_all_database_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native exit-tax projections, wire bytes, XLSX content and all database tables with Python, including refusal gates, estimate disclosures and the reference no-snapshot boundary; requires zero CLI and daemon fallbacks",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_exit_cli_wire_workbooks_database_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native exit-tax projections, wire bytes, XLSX content and all database tables with Python, including refusal gates, estimate disclosures and the reference no-snapshot boundary; requires zero CLI and daemon fallbacks",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_exit_daemon_wire_workbooks_database_and_zero_fallbacks": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "reports",
+        "reason": "compares native exit-tax projections, wire bytes, XLSX content and all database tables with Python, including refusal gates, estimate disclosures and the reference no-snapshot boundary; requires zero CLI and daemon fallbacks",
+        "reviewed": true,
+        "tests": 1
+      }
     }
   }
 }

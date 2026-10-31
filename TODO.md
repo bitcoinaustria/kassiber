@@ -390,8 +390,9 @@ projections stay Python. Progress and remaining work for this slice:
 ## Rust backend R5 reports
 
 The [report-read boundaries](docs/plan/21-rust-backend.md#r5-reports-first-read-boundary-partial)
-read Python-produced journals through ten CLI leaves and five daemon kinds.
-The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
+read Python-produced journals through shared native CLI and desktop services.
+The export continuations retain explicit saved/filed markers where Python
+registers them; exit-tax preserves its reference no-registration boundary.
 
 - [x] Port live summary, gains, balance sheet, wallet holdings and saved/filed
   snapshot listing, retaining readiness gates and exact JSON/table/plain output.
@@ -402,7 +403,11 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
   deterministic split-row ordering.
 - [x] Port CSV projections for the ten report reads and atomic `--output`
   publication, with FIFO/HIFO/Austrian byte parity and killed mutations.
-- [ ] Port exit-tax reads and the associated amendment disclosures.
+- [x] Port exit-tax reads and XLSX through native CLI/desktop services, preserving
+  estimate disclosures, exact workbook content and all database tables. The
+  [exit-tax checkpoint](docs/reference/rust-shell.md#exit-tax-service-checkpoint-r5-fourteenth-reports-continuation-partial)
+  records Python's absent snapshot registration and amendment disclosure with
+  a repro.
 - [x] Port historical balance/holdings reads and the desktop balance-history
   kind with native parity and killed mutations.
 - [x] Reduce Rust read startup and report scaling costs without changing schema,
@@ -434,7 +439,7 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
 - [x] Port full-report XLSX, including profile-wide verification, CLI/desktop
   registration, actual-byte saved hashes and repeated explicit filing; compare
   openpyxl content and every database table with zero hybrid fallbacks.
-- [ ] Port exit-tax, year-handoff and cross-check XLSX projections and
+- [ ] Port year-handoff and cross-check XLSX projections and
   registration. Verify their saved completions, Rust-byte hashes, explicit
   filing, complete normalized DB sequences and native routing before marking
   XLSX complete. PDF stays Python.

@@ -10,6 +10,8 @@ pub const KINDS: &[&str] = &[
     "ui.reports.balance_history",
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
+    "ui.reports.exit_tax_preview",
+    "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
@@ -21,6 +23,8 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
         kind,
         "ui.reports.export_csv"
             | "ui.reports.export_xlsx"
+            | "ui.reports.export_exit_tax_xlsx"
+            | "ui.reports.exit_tax_preview"
             | "ui.reports.export_capital_gains_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
@@ -32,6 +36,21 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
         if !matches!(args, Value::Dict(_)) {
             return Err(AppError::new("validation", "daemon args must be an object")
                 .with_details(dict([("type", s(type_name(args)))])));
+        }
+        if kind == "ui.reports.exit_tax_preview" {
+            return book.reports(
+                kind,
+                &dict([
+                    (
+                        "departure_date",
+                        get(args, "departure_date").cloned().unwrap_or(Value::Null),
+                    ),
+                    (
+                        "destination",
+                        get(args, "destination").cloned().unwrap_or(Value::Null),
+                    ),
+                ]),
+            );
         }
         return book.reports(kind, args);
     }

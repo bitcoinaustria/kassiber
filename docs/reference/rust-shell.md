@@ -31,7 +31,7 @@ verification, including per-command Rust routing counts.
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
-| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian/full-report XLSX artifacts with verification, and append-only saved/filed snapshot markers |
+| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian/full-report/exit-tax XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers |
 
 ## Command line
 
@@ -5323,6 +5323,146 @@ process callers exist. PDF rendering and the entire PDF-containing source-funds
 bundle stay Python. Audit packages retain the previous whole-command Python
 boundary because reviewed evidence can contain PDFs. AI projections stay
 Python. No dependency, lockfile, schema or Python product code changes here.
+
+## Exit-tax service checkpoint (R5 fourteenth reports continuation, partial)
+
+`t3code/r5-reports-14` starts at `bcde492ff`. The native report service now
+registers `reports exit-tax`, `reports export-exit-tax-xlsx`,
+`ui.reports.exit_tax_preview` and `ui.reports.export_exit_tax_xlsx`.
+The inventory walk consumes stored signed integer-msat journal quantities and
+exact engine basis, preserving marker/category/date regime precedence, the
+Vienna grandfathering cutoff, skipped income/owned transfers, independent
+quantity/basis clamping, loss flooring and the reference presentation estimate.
+It does not run the tax engine, reinterpret custody or acquire prices.
+
+Cache candidates use parsed instant bounds, then Python's stored timestamp,
+manual-source and fetched-time ordering. Malformed persisted dates are excluded.
+Transaction-derived fallback retains exact-field presence, including empty
+exact values becoming zero instead of selecting a legacy price. Generic policy
+integer conversion and holding-period refusals, departure-date parsing,
+destination aliases, unpriced/null values, quarantine status and all estimate
+assumptions retain the reference behavior. Readiness gates run before report
+construction. Desktop export additionally retains its source-freshness barrier;
+export admission spans native publication. Existing saved/filed/amendment history
+is unchanged by either runtime.
+
+The approved `rust_xlsxwriter` renderer emits Overview, Deemed disposal, Wallet
+holdings and Assumptions with matching typed values, meaningful styles,
+dimensions, row heights, panes, filters, properties and literal text. The oracle
+loads formulas and cached values through openpyxl and validates ZIP/XML. Each
+runtime's reported byte count is independently checked against its own file;
+only that ZIP-container size is normalized. Reports and other response bytes,
+including errors, compare without masking. No saved digest or generated identity
+normalization is needed for exit-tax.
+
+Reference bugs/omissions are preserved, not repaired in Python or Rust:
+
+- The reported method is the jurisdiction's policy default even when HIFO is
+  selected on the book.
+- Journal cutoff selection compares stored timestamp text, so a legacy offset
+  can exclude a row whose UTC instant is within the departure day.
+- Transaction-rate fallback is not bounded by departure, and its `asOf` still
+  reports the departure cutoff. Wallet holdings are the current stored context,
+  independent of the historical inventory cutoff; wallet-only assets can remain
+  unpriced despite an available cache quote.
+- The XLSX omits the report's quarantine warning. Its one-column Assumptions
+  title is absent because Python attempts a single-cell merge. The existing
+  recorder suppresses that library's `Can't merge single cell` warning; process
+  tests apply the same narrowly scoped warning filter. Openpyxl load warnings
+  remain unsuppressed.
+- Exit-tax XLSX creates no saved snapshot or dependency capture. The report and
+  workbook disclose no existing pending filed-report amendment impact. A frozen
+  history fixture retains the original saved commitment and pending impact in
+  every compared database table.
+
+Reproduce all of these on synthetic data under `target/`, preserving account
+`HOME`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_exit_tax.py
+```
+
+The output includes `reported_method: moving_average_at` with configured HIFO,
+a 2024 departure using the 2025 transaction's `60000.123` rate, current wallet
+holdings, an absent Assumptions title, no quarantine disclosure in the workbook,
+no registered snapshot and `amendment_disclosed: false` with one pending impact.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Frozen exit-tax projections | 99 cases: 78 workbook documents and 21 exact refusals |
+| Real native service | 198 read/workbook comparisons, including canonical bytes of every one of the 112 database tables |
+| CLI | Four Austrian/generic, ready/stale/raw-hex scenarios; JSON, table, plain, CSV, machine and XLSX outputs |
+| Desktop | Two sessions, each comparing 15 previews and 15 exports, including collisions, malformed args, ignored scope overrides and blocked source freshness |
+| Existing history | Literal preexisting saved digest and pending amendment impact remain unchanged |
+
+The final `tests/test_rust_exit_tax.py` run passes all 204 cases without skips.
+The corpus includes exact/legacy price precedence, manual/cache timestamp ties,
+offset and fractional cache bounds, unpriced assets, material marker/category/date
+conflicts, independent basis/quantity clamps, cent/sat ties, large msat values,
+legacy generic holding-period coercion/refusals and reference loader error order.
+
+| Exit-tax-family routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.exit-tax` | 80 | 0 |
+| `reports.export-exit-tax-xlsx` | 16 | 0 |
+| Native daemon sessions (60 exit-tax requests in total) | 2 | 0 |
+
+The report mutation catalog now has 640 applicable entries. All 40 new
+`exit-*` mutations are killed by these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `exit_tax_vectors_pin_inventory_rates_disclosures_and_readiness` | 37 |
+| `exit_xlsx_managed_publication_preserves_reference_without_snapshots` | 2 |
+| `exit_tax_transport_forwards_departure_and_destination` | 1 |
+
+All three named selections pass unmutated against the final corpus. The 600
+inherited entries retain their preceding checkpoint evidence; the shared
+`csv-at-projection-gate` recipe is narrowed to its Austrian branch after adding
+exit CSV projection, and is freshly killed by `report_csv_projection_vectors`.
+The first category-authority run exposed a rounded-away fee fixture; the final
+material acquisition/category conflict kills that recipe. Per-entry killers and
+logs are recorded in `target/r5-reports14/mutation-summary.json`. Mutation scratch
+trees are removed by the runner. Native probes are rebuilt from the real
+worktree after mutation verification.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting, production
+and test-harness workspace/all-target clippy with `-D warnings`, all 1,515
+workspace tests and all 14 harness tests. After the final exact-price and
+holding-period cases, the three affected named selections pass again. The
+binary smoke test uses still-unported privacy hygiene as its unsupported-command
+witness now that exit-tax is native. Owned-loopback fixtures run with sandbox
+access.
+
+The broader locked Python 3.11 regression passes all 1,048 tests, including the
+preceding exit corpus, inherited full/Austrian/transaction workbooks, renderer,
+CSV artifacts, report reads and original exit-tax/ledger contracts. The expanded
+exit corpus then passes the 204 cases above. Thirteen selected AI catalog,
+capability and redaction tests plus four subtests pass. The distinct broader
+hybrid logs record 609 report/transaction CLI calls and 17 daemon sessions
+served by Rust, with zero in-scope fallback. Its 23 Python `journals.process`
+calls are setup outside the report scope. Routing totals exclude pytest symlink
+aliases; per-command counts are in `target/r5-reports14/routing-summary.json`.
+
+The oracle generator checks cleanly. The required classifier update records
+5,703 definitions, with the three new tests reviewed as retained report oracles;
+the module is in the serial daemon CI lane. Required CI preflight passes all
+57 tests. `target/r5-reports14/verification-summary.json` retains gates,
+routing and reference-bug evidence. Verification inherits account `HOME` and
+isolates books, preferences, owner locks and scratch under `target/`. Owned
+verification build trees are removed after writing the summaries. Verification
+is Linux-only; the full Python/frontend quality gate, Docker regtest and
+packaged/platform checks are not run.
+
+This is a clean boundary after the exit-tax family. The remaining ordered work
+is gain explanations (compact and legacy) and desktop gains; cross-check reads
+and workbooks; Lightning reads and CSV; non-PDF source-funds reads; year-handoff
+XLSX; CoinTracking/Blockpit CSV and other permitted non-PDF artifacts; privacy
+hygiene, mirror and PSBT reads. Individual snapshot/amendment reads retain the
+prior process-caller deferral. PDF rendering, PDF-containing source-funds bundles
+and audit packages, and AI projections stay Python. No dependency, lockfile,
+schema or Python product code changes are part of this continuation.
 
 ## Not yet ported
 

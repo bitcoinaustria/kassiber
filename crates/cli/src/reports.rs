@@ -19,6 +19,8 @@ pub const COMMANDS: &[&str] = &[
     "reports.balance-history",
     "reports.export-csv",
     "reports.export-xlsx",
+    "reports.exit-tax",
+    "reports.export-exit-tax-xlsx",
     "reports.export-austrian-e1kv-csv",
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
@@ -35,6 +37,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         command,
         "reports.export-csv"
             | "reports.export-xlsx"
+            | "reports.export-exit-tax-xlsx"
             | "reports.export-austrian-e1kv-csv"
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-commercial-subledger-csv"
@@ -65,6 +68,8 @@ fn export_request(args: &Namespace) -> Value {
             "from_day",
             "to_day",
             "timezone",
+            "departure_date",
+            "destination",
         ]
         .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
     )
@@ -92,6 +97,14 @@ fn snapshot_request(args: &Namespace) -> Value {
 
 fn request(args: &Namespace) -> Value {
     dict([
+        (
+            "departure_date",
+            args.get("departure_date").cloned().unwrap_or(Value::Null),
+        ),
+        (
+            "destination",
+            args.get("destination").cloned().unwrap_or(Value::Null),
+        ),
         ("csv", Value::Bool(args.text("format") == Some("csv"))),
         (
             "text",
@@ -128,6 +141,46 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn exit_tax_transport_forwards_departure_and_destination() {
+        for command in ["exit-tax", "export-exit-tax-xlsx"] {
+            let mut argv = vec![
+                "reports",
+                command,
+                "--departure-date",
+                "2024-01-01",
+                "--destination",
+                "third_country",
+            ];
+            if command.ends_with("xlsx") {
+                argv.extend(["--file", "exit.xlsx"]);
+            }
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let request = if command.ends_with("xlsx") {
+                export_request(&args)
+            } else {
+                request(&args)
+            };
+            assert_eq!(
+                kassiber_envelope::get(&request, "departure_date"),
+                Some(&kassiber_envelope::s("2024-01-01"))
+            );
+            assert_eq!(
+                kassiber_envelope::get(&request, "destination"),
+                Some(&kassiber_envelope::s("third_country"))
+            );
+            let full = format!("reports.{command}");
+            assert!(COMMANDS.contains(&full.as_str()));
+            assert!(crate::describe::IMPLEMENTED.contains(&full.as_str()));
+        }
+    }
     #[test]
     fn full_xlsx_transport_retains_verification_scope_and_history() {
         for verify in [true, false] {

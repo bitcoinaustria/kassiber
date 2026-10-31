@@ -289,6 +289,7 @@ pub fn prepare(
         "reports.export-transactions-xlsx"
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-xlsx"
+            | "reports.export-exit-tax-xlsx"
     ) {
         return Err(AppError::new(
             "not_implemented",
@@ -300,6 +301,9 @@ pub fn prepare(
     let result = (|| {
         if command == "reports.export-austrian-e1kv-xlsx" {
             return austrian_xlsx::prepare(conn, args, sources);
+        }
+        if command == "reports.export-exit-tax-xlsx" {
+            return exit_xlsx::prepare(conn, args, sources);
         }
         if command == "reports.export-xlsx" {
             return full_xlsx::prepare(conn, args, sources);

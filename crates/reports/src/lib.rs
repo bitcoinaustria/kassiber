@@ -11,6 +11,8 @@ mod capital_csv;
 mod commercial;
 mod components;
 mod desktop;
+mod exit_tax;
+mod exit_xlsx;
 pub mod export;
 pub mod export_completion;
 pub mod export_range;
@@ -148,6 +150,16 @@ pub fn execute_with_sources(
                     Ok(desktop::history(rows, args))
                 } else {
                     Ok(Value::List(rows))
+                }
+            }
+            "reports.exit-tax" | "ui.reports.exit_tax_preview" => {
+                let report = exit_tax::report(conn, &workspace, &profile, args, sources)?;
+                if truthy(value(args, "text")) {
+                    Ok(s(exit_tax::render(&report)?))
+                } else if truthy(value(args, "csv")) {
+                    Ok(value(&report, "lots").clone())
+                } else {
+                    Ok(report)
                 }
             }
             "reports.journal-entries" => journal::entries(conn, &profile),

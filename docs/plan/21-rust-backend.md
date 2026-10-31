@@ -1168,6 +1168,28 @@ CSV formats and non-PDF artifacts remain open. No tax rules, Python product
 code or dependencies change. PDF-containing exports and AI projections stay
 Python under the existing owner decision.
 
+### R5 exit-tax service continuation (partial)
+
+The fourteenth reports continuation starts at `bcde492ff` on
+`t3code/r5-reports-14`. Native `reports exit-tax`,
+`reports export-exit-tax-xlsx`, `ui.reports.exit_tax_preview` and
+`ui.reports.export_exit_tax_xlsx` share the stored-journal estimate and the
+approved in-memory XLSX renderer. Exact msat inventory, explicit regime markers,
+consumed engine basis, cached/manual-rate ordering, missing prices, destination
+classes and review warnings retain Python's behavior and readiness gates.
+
+The [exit-tax checkpoint](../reference/rust-shell.md#exit-tax-service-checkpoint-r5-fourteenth-reports-continuation-partial)
+records frozen projections, openpyxl workbook comparisons, other wire bytes,
+all 112 database tables, zero in-scope hybrid fallbacks and named mutation
+kills. Python registers no exit-tax snapshot and exposes no pending amendment
+impact in this report; the port preserves those omissions with a reproducible
+synthetic history case. Other reference presentation/historical-scope quirks
+also have a checked-in repro. No tax rules, Python product code, schema or
+dependencies change. This completes the exit-tax family only. Gain explanations
+and desktop gains are next, followed by cross-check, Lightning, non-PDF
+source-funds, year-handoff, platform CSV/other artifacts, then privacy reads.
+PDF-containing exports and AI projections remain Python.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one
