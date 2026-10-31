@@ -1,7 +1,5 @@
 """Custody admission and legacy projection must never emit nonfinite prices."""
 import json
-import subprocess
-import sys
 
 import pytest
 
@@ -13,6 +11,7 @@ from kassiber.core.imports import normalize_import_record
 from kassiber.daemon import _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests.cli_runner import run as run_cli
 from tests.test_custody_authored_migration import _scope, _tx, _legacy_rows, NOW
 from kassiber.core.custody_journal import CustodyJournalBuilder
 from tests.test_custody_quantity import _observation
@@ -29,8 +28,8 @@ def test_payout_admission_is_atomic(tmp_path, bad, surface):
         before = conn.total_changes
         args = dict(payout_asset='BTC', payout_amount='1', payout_fiat_value=bad)
         if surface == 'cli':
-            result = subprocess.run(
-                [sys.executable, '-m', 'kassiber', '--data-root', str(tmp_path),
+            result = run_cli(
+                ['--data-root', str(tmp_path),
                  '--machine', 'transfers', 'payouts', 'create',
                  '--workspace', 'Books', '--profile', 'Book', '--tx-out', 'out',
                  '--payout-asset', 'BTC', '--payout-amount', '1',
@@ -216,3 +215,17 @@ def test_sliced_absolute_value_refuses_derived_rate_overflow():
         _projected_slice_row(source, QuantitySlice(source.quantity_hash, 0, 100),
             {'source': {'amount': 100, 'fiat_value': '1e308'}}, side='external')
     assert caught.value.code == 'validation'
+
+
+@pytest.mark.parametrize('value', ['9999999999999999999', '-9999999999999999999'])
+def test_exact_price_inside_limit_cannot_round_its_float_mirror_to_limit(value):
+    from decimal import Decimal
+    from kassiber.core.custody_pricing import TAX_DECIMAL_LIMIT, finite_decimal
+
+    assert abs(Decimal(value)) < TAX_DECIMAL_LIMIT
+    assert abs(float(value)) == float(TAX_DECIMAL_LIMIT)
+    with pytest.raises(AppError, match='outside the supported decimal range') as caught:
+        finite_decimal(value, 'fiat_rate')
+    assert caught.value.code == 'validation'
+    # A representable value safely below the limit remains usable.
+    assert finite_decimal('9999999999999997952', 'fiat_rate') == Decimal('9999999999999997952')
