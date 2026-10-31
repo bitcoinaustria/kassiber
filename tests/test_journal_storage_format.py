@@ -20,8 +20,8 @@ from kassiber.core.report_explanation import explain_capital_gain, result_refere
 from kassiber.db import open_db
 
 
-def _book(root, method="fifo", country="generic"):
-    conn = open_db(root)
+def _book(root, method="fifo", country="generic", *, passphrase=None):
+    conn = open_db(root, passphrase=passphrase)
     conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('w','W','2020')")
     conn.execute(
         "INSERT INTO profiles(id,workspace_id,label,gains_algorithm,tax_country,fiat_currency,created_at) "
@@ -167,6 +167,52 @@ def test_opening_a_pre_compact_book_adds_the_column_and_reads_legacy_rows(tmp_pa
         ).fetchone()[0] == 0
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("legacy_backup", [False, True])
+def test_compact_calculations_survive_encrypted_backup_and_restore(tmp_path, legacy_backup):
+    from kassiber.backup.pack import export_backup, import_backup
+
+    source = tmp_path / "source" / "data"
+    target = tmp_path / "restored" / "data"
+    passphrase = "synthetic journal storage test"
+    conn = _book(source, passphrase=passphrase)
+    try:
+        if legacy_backup:
+            _as_legacy(conn)
+            conn.execute("ALTER TABLE journal_entries DROP COLUMN calculation_compact")
+            conn.commit()
+        expected = _explanations(conn)
+        columns = ",".join(
+            row["name"] for row in conn.execute("PRAGMA table_info(journal_entries)")
+        )
+        rows = [
+            tuple(row)
+            for row in conn.execute(f"SELECT {columns} FROM journal_entries ORDER BY id")
+        ]
+    finally:
+        conn.close()
+    archive = tmp_path / "journal.kassiber"
+    export_backup(str(source), archive, passphrase, backup_passphrase="synthetic archive test")
+    import_backup(archive, target, backup_passphrase="synthetic archive test", move_into_place=True)
+    restored = open_db(target, passphrase=passphrase)
+    try:
+        assert [
+            tuple(row)
+            for row in restored.execute(f"SELECT {columns} FROM journal_entries ORDER BY id")
+        ] == rows
+        assert _explanations(restored) == expected
+        assert restored.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        if legacy_backup:
+            assert restored.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE calculation_compact IS NOT NULL"
+            ).fetchone()[0] == 0
+            _process(restored)
+        assert restored.execute(
+            "SELECT COUNT(*) FROM journal_entries WHERE calculation_compact IS NOT NULL"
+        ).fetchone()[0] > 0
+    finally:
+        restored.close()
 
 
 def _calculation():

@@ -120,6 +120,38 @@ def test_policy_builder_patch_skips_only_fusion(tmp_path, monkeypatch, patched):
     assert row["skipped"] == (["fusion"] if patched else [])
     assert row.get("reason") == (compare.PATCHED_POLICY_REASON if patched else None)
     assert not compare.session_report([row])[1]
+@pytest.mark.parametrize("injection", ["fusion", "quantity"])
+def test_test_policy_skips_only_matching_fusion_and_does_not_leak(tmp_path, monkeypatch, injection):
+    from kassiber.core import custody_journal
+    from kassiber.tax_policy import POLICY_BUILDERS
+    from tests.custody_snapshot_generator import snapshot
+
+    book = snapshot(0)
+    class Builder:
+        conn = None
+        profile = book["profile"]
+        def load_snapshot(self):
+            return book
+
+    policy = POLICY_BUILDERS[book["profile"]["tax_country"]]
+    monkeypatch.setattr(custody_journal, "_build_observer_factory", None)
+    monkeypatch.setattr(compare, "_INSTALLED_MODE", "census")
+    monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / "records"))
+    monkeypatch.setenv(compare.INJECT_ENV, injection)
+    with compare.injected_fusion_policy(policy):
+        if injection == "fusion":
+            compare._build(Builder(), finalized=True)
+        else:
+            with pytest.raises(AssertionError, match="quantity"):
+                compare._build(Builder(), finalized=True)
+    with pytest.raises(AssertionError, match=injection):
+        compare._build(Builder(), finalized=True)
+    if injection == "fusion":
+        row = compare.read_records(tmp_path / "records")[0]
+        assert row["reason"] == "injected_policy"
+        assert row["compared"] == list(compare.STAGES[:-1])
+        assert row["skipped"] == ["fusion"]
+        assert not compare.session_report([row])[1]
 
 
 @pytest.mark.parametrize("patched", [False, True])

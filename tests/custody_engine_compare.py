@@ -118,6 +118,23 @@ def patched_compute_functions():
     )
 
 
+_INJECTED_POLICY = ContextVar("custody_injected_policy", default=None)
+
+
+@contextmanager
+def injected_fusion_policy(builder):
+    """Compare custody, except fusion under this exact test-only policy.
+
+    Rust has the shipped policies, not Python's patched POLICY_BUILDERS.
+    The opt-out is local to this context and the matching builder identity.
+    """
+    token = _INJECTED_POLICY.set(builder)
+    try:
+        yield
+    finally:
+        _INJECTED_POLICY.reset(token)
+
+
 @contextmanager
 def injected_stage_failure(stage, error):
     """Opt one intentional test failure out of parity, by stage and identity.
@@ -289,6 +306,11 @@ def _build(self, *, finalized):
                 if skip_reason:
                     results.pop("fusion", None)
                     skipped = tuple(stage for stage in STAGES if stage in skipped or stage == "fusion")
+                from kassiber.tax_policy import POLICY_BUILDERS
+                policy = _INJECTED_POLICY.get()
+                if "fusion" in results and policy is not None and POLICY_BUILDERS.get(snapshot["profile"].get("tax_country")) is policy:
+                    results.pop("fusion", None)
+                    skipped = (*skipped, "fusion")
                 for stage in STAGES:
                     if stage in results:
                         assert stage in python_stages, "Python omitted implemented stage: " + stage
@@ -337,7 +359,8 @@ def _build(self, *, finalized):
     if observer is not None:
         observer.finish(result)
     if not recorded:
-        record("result", compared=compared, skipped=skipped, reference=audit_reference, reason=skip_reason)
+        record("result", compared=compared, skipped=skipped, reference=audit_reference,
+               reason="injected_policy" if "fusion" in skipped and _INJECTED_POLICY.get() is not None else skip_reason)
     return result
 
 

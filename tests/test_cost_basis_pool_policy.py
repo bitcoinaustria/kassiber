@@ -25,6 +25,7 @@ from kassiber.tax_policy import (
     build_generic_policy,
     resolve_cost_basis_pool_id,
 )
+from tests.custody_engine_compare import injected_fusion_policy
 
 
 class CostBasisPoolPolicyTests(unittest.TestCase):
@@ -117,7 +118,10 @@ class CostBasisPoolPolicyTests(unittest.TestCase):
         )
         self.conn.commit()
 
-        with patch.dict(POLICY_BUILDERS, {"generic": wallet_test_policy}):
+        with (
+            patch.dict(POLICY_BUILDERS, {"generic": wallet_test_policy}),
+            injected_fusion_policy(wallet_test_policy),
+        ):
             processed = process_journals(self.conn, "Books", "Main")
             self.assertEqual(processed["processed_transactions"], 1)
             self.assertNotIn(

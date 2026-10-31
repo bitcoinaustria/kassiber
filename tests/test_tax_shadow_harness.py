@@ -284,7 +284,10 @@ class SessionEndTest(unittest.TestCase):
         result = self._session(compare.SHADOW, inject=True)
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("1 passed", result.stdout)
-        self.assertIn("FAILED: calls that differed from the oracle: 1, in /", result.stdout)
+        self.assertRegex(
+            result.stdout,
+            r"FAILED: calls that differed from the oracle: 1, in .*/test_shadow_session_probe\.py",
+        )
 
     def test_a_test_that_stubs_the_engine_runs_uncompared(self):
         # Both tests see the injected difference; only the unmarked one is compared.
@@ -307,8 +310,14 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("2 passed", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
         self.assertRegex(result.stdout, r"(?m)^generic: 2 v2$")
-        self.assertIn("calls not compared because the test stubs the engine: 1, in /", result.stdout)
-        self.assertIn("FAILED: calls that differed from the oracle: 1, in /", result.stdout)
+        self.assertRegex(
+            result.stdout,
+            r"calls not compared because the test stubs the engine: 1, in .*/test_shadow_session_probe\.py",
+        )
+        self.assertRegex(
+            result.stdout,
+            r"FAILED: calls that differed from the oracle: 1, in .*/test_shadow_session_probe\.py",
+        )
 
     def test_an_ld5_refusal_is_counted_and_fails_the_session(self):
         # A row that includes its fee in its amount is a shape a finalized
@@ -338,14 +347,17 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("production calls compared with the oracle: 0", result.stdout)
         self.assertRegex(result.stdout, r"(?m)^unclassified: 0 v2, 1 not routed$")
         self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 1", result.stdout)
-        self.assertIn("FAILED: calls production's builder refused under LD-5: 1, in /", result.stdout)
+        self.assertRegex(
+            result.stdout,
+            r"FAILED: calls production's builder refused under LD-5: 1, in .*/test_shadow_session_probe\.py",
+        )
 
     def test_census_fails_an_engine_caller_outside_the_overlay(self):
         result = self._session(compare.CENSUS)
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("1 passed", result.stdout)
         self.assertIn("production calls: 1, from test modules: 1", result.stdout)
-        self.assertIn("are not in the shadow overlay (scripts/python_test_shards.py): /", result.stdout)
+        self.assertIn("are not in the shadow overlay (scripts/python_test_shards.py): ", result.stdout)
         self.assertIn("test_shadow_session_probe.py", result.stdout)
 
 

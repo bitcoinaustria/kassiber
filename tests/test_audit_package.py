@@ -629,6 +629,33 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertNotIn("source_link_missing", warning_codes)
         self.assertNotIn("source_link_unreviewed", warning_codes)
 
+    def test_quarantined_transaction_retains_its_stored_detail_in_audit_outputs(self):
+        self._mark_journals_current()
+        detail = json.dumps({"missing": "reviewed custody", "amount_msat": 123}, sort_keys=True)
+        self.conn.execute(
+            "INSERT INTO journal_quarantines(transaction_id, workspace_id, profile_id, reason, detail_json, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?)",
+            (self.tx_id, self.workspace_id, self.profile_id, "custody_review_required", detail, NOW),
+        )
+        self.conn.commit()
+        summary = audit_package.build_evidence_summary(
+            self.conn, str(self.data_root), None, None, self.audit_hooks,
+        )
+        transaction = summary["transactions"][0]
+        quarantine = {"reason": "custody_review_required", "details": detail, "created_at": NOW}
+        self.assertEqual(transaction["journal"]["quarantine"], quarantine)
+        self.assertEqual(transaction["readiness"]["status"], "blocked")
+        self.assertIn(
+            "journal_quarantined",
+            {warning["code"] for warning in transaction["readiness"]["warnings"]},
+        )
+        result = audit_package.export_audit_package(
+            self.conn, str(self.data_root), None, None,
+            self.root / "exports" / "quarantined-audit", self.audit_hooks,
+        )
+        manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["transactions"][0]["journal"]["quarantine"], quarantine)
+
     def test_audit_package_journal_state_exclusion_does_not_create_false_journal_blocker(self):
         self.conn.execute(
             "UPDATE transactions SET pricing_source_kind = 'manual_override' WHERE id = ?",

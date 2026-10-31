@@ -514,7 +514,7 @@ def _journal_quarantine_for_tx(conn: sqlite3.Connection, profile_id: str, tx_id:
         return None
     return {
         "reason": row["reason"],
-        "details": row["details"] or "",
+        "details": row["detail_json"] or "",
         "created_at": row["created_at"],
     }
 

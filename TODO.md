@@ -334,6 +334,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [x] R4-1: commit the Rust end-to-end bench, bench-book generators and the
   regression record; record the baseline. The harness, generators and record
   format and four recovered baseline records are integrated.
+- [x] Establish compact retained-calculation storage in Python with the Rust
+  schema mirror, report/AI parity, coexistence and backup/restore evidence; see
+  [the storage measurements](docs/reference/r4-journal-pipeline.md#compact-storage-implementation-measurements).
+- [ ] Establish deterministic journal ids and changed-row writes in Python as
+  the R4-12 persistence reference.
+- [ ] Scope the 128 MiB journal rebuild cache in Python as the R4-12 reference.
 - [ ] R4-2 to R4-8: typed rows, custody stages and fusion, one step per run,
   each with the full mutation catalog rerun and before/after timings.
   R4-2's first prototype stopped at 0.301 s against its 0.250 s target;

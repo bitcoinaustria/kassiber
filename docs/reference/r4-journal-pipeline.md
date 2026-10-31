@@ -1655,10 +1655,84 @@ transaction.
 - Recommendation: not for speed now. Decide it as a concurrency question
   with the next dependency update.
 
-## Decisions
+### Compact-storage implementation measurements
 
-The owner answered decisions 1 to 4 on 2026-10-30. Decisions 5 and 6 remain
-open.
+These are real Python `journals process` wall times, including a fresh
+interpreter, imports, book open, commit and close, comparing `ff7050c0` with
+`6a94f676`. Every sample uses a disposable copy of a primed book. The
+1-minute load exceeded 8 throughout, so before/after runs alternate AB/BA
+and the table uses the best of five for each version. These measurements
+do not include deterministic ids or the larger rebuild cache.
+
+| Book | Plaintext, before → after (s) | SQLCipher, before → after (s) |
+| --- | ---: | ---: |
+| generic 2k | 2.028 → 2.063 | 2.686 → 2.623 |
+| generic 20k | 13.779 → 13.802 | 17.398 → 16.388 |
+| multi-wallet 2k | 2.550 → 2.589 | 3.340 → 3.244 |
+| multi-wallet 20k | 24.391 → 23.395 | 27.416 → 26.959 |
+
+Load ranged from 10.27 to 58.86. Generic 20k SQLCipher improves 5.8%;
+plaintext generic timings are effectively unchanged. The compact format
+reduces retained bytes, but custody and rendering still dominate the full
+command, and these busy-host timings do not establish a small speedup.
+[Raw samples and runtime versions](r4-journal-storage-results.json) retain
+each run's time and starting/ending load.
+
+The report-dump harness freezes clocks and generated artifact ids, compares
+every report command (including typed refusals), hashes PDF/CSV bytes and
+XLSX/ZIP members, and captures audit evidence, audit packages, seven redacted
+AI projections and every retained calculation's legacy bytes. Parity copies
+use `ANALYZE journal_entries` after the first three completed cases: without
+statistics, the full-population SQLCipher audit scan chooses the profile
+index for every transaction instead of the existing transaction index.
+Both versions receive identical statistics; the timed books use none of
+this preparation.
+
+The multi-wallet 20k dump exposed a pre-existing audit reader error:
+`journal_quarantines` stores `detail_json`, but the package reader requested
+`details` and crashed whenever a transaction was quarantined. The reader now
+copies `detail_json` into the existing `details` output field and preserves
+the blocking warning. Its regression fails before the correction. Report
+parity applies that same one-line correction to the pre-compact baseline;
+the original baseline cannot produce these quarantined audit packages.
+
+All 45 captured sections match byte for byte in all ten comparisons:
+generic and multi-wallet 2k/20k, and barrier 2k, each plaintext and
+SQLCipher. Every retained calculation also reproduces its legacy bytes.
+The dumps compare typed refusals for unavailable Lightning/cross-check/PSBT
+inputs, Austrian reports on generic profiles, and blocked source-of-funds
+exports. Those cases do not establish successful export coverage; the
+report and accounting shards cover their supported success paths.
+
+The first report-shard run also exposed an existing test-harness assumption:
+with scratch under the worktree, pytest records repository-relative module
+names. The tax-shadow harness now checks the exact failure count and probe
+filename for either path rather than requiring a leading slash. Its injected
+difference and builder-refusal assertions keep their failure semantics.
+
+The custody census also exposed the cost-basis-policy fixture's intentional
+Python-only `wallet` policy: Rust correctly retains the shipped `global`
+allowlist. That fixture explicitly skips fusion only while its exact patched
+policy builder is installed. All six preceding custody stages remain compared;
+regressions prove that other-stage differences still fail and that the exception
+does not survive its context. No product policy or comparison for real books
+changes.
+
+The required accounting, report, CLI/daemon and security shards pass. The
+accounting census records 364 tax calls and 259 custody snapshots; the
+custody-shadow lane compares 253 snapshots with the frozen Python flow. All
+three Rust store manifests match, the offline Rust workspace passes, and the
+fresh Rust read/interoperability/migration matrix passes 381 tests (2 skipped).
+The authoritative logs and test summaries are linked from the results JSON.
+Older-binary coexistence builds must use a separate Cargo target: reusing a
+target here left a stale store artifact until `cargo clean -p kassiber-store`
+and a fresh build. The recorded Rust gates use that fresh current store.
+The pinned error/environment indexes are refreshed for the compact change's
+source-line shifts; their error policies and environment reads are unchanged.
+
+## Decisions for the owner
+
+The owner answered decisions 1 to 4 on 2026-10-30. Decisions 5 and 6 remain open.
 
 1. **Early production path.** R4 makes the Rust binary authoritative.
    Desktop users get the speed-up at the R7 cutover, because the Python

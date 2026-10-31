@@ -141,7 +141,7 @@
       "AttachmentOpenScopeTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1}
     },
     "tests/test_audit_package.py": {
-      "AuditPackageCoreTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.audit_package, kassiber.core.attachments directly", "reviewed": false, "tests": 19}
+      "AuditPackageCoreTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.audit_package, kassiber.core.attachments directly", "reviewed": false, "tests": 20}
     },
     "tests/test_austrian_classification.py": {
       "InferRegimeFromTimestampTest": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.austrian directly", "reviewed": false, "tests": 4},
@@ -892,6 +892,7 @@
       "test_policy_builder_patch_skips_only_fusion": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_patched_compute_function_skips_every_stage": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_session_rejects_invalid_patched_compute_skip": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_test_policy_skips_only_matching_fusion_and_does_not_leak": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_every_implemented_stage_is_compared": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_child_import_order_installs_both_recorder_and_comparison": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_stale_binding_cannot_pass_with_no_stages": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
@@ -1343,6 +1344,7 @@
       "test_realized_entries_store_compact_calculations_that_restore_legacy_bytes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
       "test_explanations_and_event_reads_are_identical_for_compact_and_legacy_rows": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},
       "test_opening_a_pre_compact_book_adds_the_column_and_reads_legacy_rows": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},
+      "test_compact_calculations_survive_encrypted_backup_and_restore": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.backup.pack, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_compact_encoding_round_trips_and_shares_equal_sources": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
       "test_calculations_outside_the_encoding_keep_legacy_bytes": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
       "test_malformed_compact_text_is_rejected": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.journal_calculation directly", "reviewed": false, "tests": 1},
