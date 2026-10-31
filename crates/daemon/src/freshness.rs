@@ -71,6 +71,7 @@ fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 impl Requests {
+    #[cfg(feature = "test-kinds")]
     pub(crate) fn graph_pending(&self) -> usize {
         self.published.len()
     }
@@ -151,6 +152,7 @@ impl Requests {
 }
 
 impl Daemon {
+    #[cfg(feature = "test-kinds")]
     pub(crate) fn start_graph(&mut self) -> Result<(), AppError> {
         self.freshness_requests.graph_enabled = true;
         self.reap_graph(false)
@@ -162,6 +164,12 @@ impl Daemon {
             self.freshness_requests.published.clear();
             if let Some(active) = &self.freshness_requests.graph {
                 active.cancel.cancel();
+                #[cfg(feature = "test-kinds")]
+                if std::env::var("KASSIBER_RUST_TEST_GRAPH_STOP_WITNESS").as_deref() == Ok("1") {
+                    let _ = self
+                        .output
+                        .event("test.freshness.graph.stopping", dict::<&str>([]));
+                }
             }
         }
         if let Some(book) = self.freshness_requests.graph_closing.as_mut() {
@@ -336,7 +344,7 @@ impl Daemon {
         self.reap_freshness(false)?;
         if matches!(
             kind,
-            "daemon.lock" | "daemon.shutdown" | "ui.profiles.switch"
+            "daemon.lock" | "daemon.shutdown" | "ui.profiles.switch" | "ui.backup.apply"
         ) {
             return self.reap_freshness(true);
         }
@@ -361,6 +369,7 @@ impl Daemon {
 
     pub(crate) fn start_freshness(
         &mut self,
+        kind: &str,
         request_id: &RequestId,
         request: &Request,
         options: Options,
@@ -423,6 +432,8 @@ impl Daemon {
             cancel.cancel();
         }
         let granted = get(args, "consent") != Some(&Value::Bool(false));
+        let automatic_graph = !kind.starts_with("test.");
+        let kind = kind.to_owned();
         let output = self.output.clone();
         let progress_id = request_id.clone();
         let worker_cancel = cancel.clone();
@@ -440,7 +451,7 @@ impl Daemon {
                         &mut |event| {
                             output
                                 .write(&with_request_id(
-                                    success("test.freshness.execute.progress", event.clone()),
+                                    success(&format!("{kind}.progress"), event.clone()),
                                     &progress_id,
                                 ))
                                 .map_err(|_| {
@@ -458,7 +469,7 @@ impl Daemon {
                 let response = match outcome {
                     Ok(value) => {
                         graph_grants = worker_consent.take_graph_grants();
-                        with_request_id(success("test.freshness.execute", value), &progress_id)
+                        with_request_id(success(&kind, value), &progress_id)
                     }
                     Err(error) => {
                         let _ = book.rollback();
@@ -482,6 +493,9 @@ impl Daemon {
             consent,
             worker,
         });
+        if automatic_graph {
+            self.freshness_requests.graph_enabled = true;
+        }
         Ok(())
     }
 }

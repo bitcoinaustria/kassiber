@@ -8227,3 +8227,39 @@ tax/custody shadow overlays, Docker regtest and packaged/platform gates were
 not run. This checkpoint stops at the guarded graph-worker boundary; automatic
 product integration, validation/selection and full product acceptance remain
 open as listed above.
+
+### Bitcoin wallet-sync automatic graph lifecycle (R5, partial)
+
+Local branch `t3code/r5-sync-22` starts at `bbb5c0166`. The graph/request
+lifecycle now compiles in the production daemon. An admitted product request
+arms automatic mailbox consumption; the worker still receives grants only
+after successful terminal serialization, write and flush. Launch, idle and
+status without a live grant remain inert. Lock and shutdown join both
+connection owners in production builds as well as guarded builds.
+
+The guarded product-lifecycle seam exercises automatic startup without the
+explicit graph-start kind. Source-control proof now covers the originating
+wallet and graph sources on both protocols: pause/resume, graph cancellation,
+and the reference's no-op cancellation of an already completed wallet job.
+Control envelopes and every logical table match the reference, retaining the
+recorded checkpoint-redaction exception. Existing cancellation, consent,
+restart, output-closure and SQLCipher fences remain in place.
+
+This boundary registers no product route. Product argument/request-ID
+validation, inert whole-invocation selection, complete product daemon parity
+and registration remain the next steps. Default journal refresh still awaits
+the native R4-13 service. Native product served-by counts remain 0/0/0.
+
+Verification passes the 133-case graph/lifecycle run, four additional live
+restore/rotation cases, and 27 affected Rust daemon/protocol tests, without
+skips. All four new graph/source mutations and both adjusted inherited
+progress/redaction recipes are killed after six unmutated named selections
+pass. Restore entry quiesces both workers before handling installation;
+authenticated passphrase rotation quiesces them before connection retirement.
+A guarded cancellation witness removes authentication timing from that test.
+Production emits no witness. Other inherited mutation campaigns were not rerun.
+
+Command logs and the mutation summary remain under
+`target/r5-sync-22-artifacts/`. Mutation build trees are removed by the runner.
+Product validation/selection and full product parity remain unaccepted at this
+commit boundary; the following continuation must register only passing shapes.

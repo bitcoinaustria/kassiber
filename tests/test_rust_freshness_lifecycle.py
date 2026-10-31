@@ -353,7 +353,8 @@ def test_live_freshness_closed_output_stops_and_joins_the_request(tmp_path, prot
 
 
 @pytest.mark.parametrize("action", ["cancel", "pause", "resume"])
-def test_reference_source_control_checkpoint_repro_and_native_parity(tmp_path, action):
+@pytest.mark.parametrize("source", ["wallet", "graph"])
+def test_reference_source_control_checkpoint_repro_and_native_parity(tmp_path, action, source):
     from kassiber import daemon_freshness
     from kassiber.envelope import build_envelope
     from tests.rust_sync_parity import deterministic_sources
@@ -366,6 +367,9 @@ def test_reference_source_control_checkpoint_repro_and_native_parity(tmp_path, a
         reference = tmp_path / "reference.sqlite"
         checkpoint = {"script_membership": {"synthetic": ["private-script-member"]}}
         with connect(books[1]) as current, connect(reference) as snapshot:
+            if source == "graph":
+                current.execute("UPDATE freshness_jobs SET source_key='wallet_graph:a',job_type='wallet_graph_references'")
+                current.execute("UPDATE freshness_source_states SET source_key='wallet_graph:a'")
             current.execute("UPDATE freshness_source_states SET checkpoint_json=?", (json.dumps(checkpoint),))
             current.commit()
             current.backup(snapshot)

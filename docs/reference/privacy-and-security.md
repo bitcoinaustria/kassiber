@@ -172,7 +172,12 @@ one temporary SQLCipher session secret and drops that secret immediately after
 opening. It rechecks the grant and current offline/no-egress permission between
 Electrum batches, around HTTP retries and before cache writes. Lookup is limited
 to Bitcoin Esplora/Electrum references through `kassiber-net`, with no alternate
-backend fallback. Product routes and automatic worker startup remain on Python.
+backend fallback. Admitted native product requests now arm automatic mailbox
+consumption, retaining the terminal-flush barrier; that lifecycle is exercised
+through a guarded seam until product validation and registration pass. The
+three product routes still remain on Python. Restore and authenticated
+passphrase rotation also quiesce the connection-owning workers before
+retirement or replacement.
 Execution test kinds exist only in guarded builds, with no new renderer or AI
 allowlist entry. Disposable-loopback regressions verify empty attempt and egress
 buffers before consent and under pretransport fences. Worker failure events

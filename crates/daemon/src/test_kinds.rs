@@ -15,13 +15,14 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 13] = [
+pub const KINDS: [&str; 14] = [
     "test.stream",
     "test.emit_event",
     "test.late",
     "test.secret_store",
     "test.freshness.plan",
     "test.freshness.execute",
+    "test.freshness.product.execute",
     "test.freshness.cancel",
     "test.freshness.pause",
     "test.freshness.resume",
@@ -58,58 +59,65 @@ pub(crate) fn handle(
     }
     let args = get(request, "args");
     Some(match kind {
-        "test.freshness.plan" | "test.freshness.execute" => (|| {
-            use kassiber_wallets::freshness::planning::{Request, Scope};
-            if let Some(locked) = daemon.open_lazily(request_id)? {
-                return Ok((Some(locked), false));
-            }
-            if let Some(locked) = daemon.check_expected_scope(
-                args.filter(|v| get(v, "expected_scope").is_some()),
-                request_id,
-            )? {
-                return Ok((Some(locked), false));
-            }
-            let workspace = arg_text(args, "workspace_id");
-            let wallet = arg_text(args, "wallet");
-            let flag = |key| {
-                args.and_then(|v| get(v, key)).and_then(|v| match v {
-                    Value::Bool(value) => Some(*value),
-                    _ => None,
-                })
-            };
-            let selection = Request {
-                scope: if workspace.is_empty() {
-                    Scope::ActiveProfile
-                } else {
-                    Scope::Workspace(workspace)
-                },
-                wallet: (!wallet.is_empty()).then_some(wallet),
-                rates: flag("rates"),
-                journals: flag("journals"),
-                force_full: flag("force_full").unwrap_or(false),
-            };
-            if kind == "test.freshness.execute" {
-                daemon.start_freshness(
+        "test.freshness.plan" | "test.freshness.execute" | "test.freshness.product.execute" => {
+            (|| {
+                use kassiber_wallets::freshness::planning::{Request, Scope};
+                if let Some(locked) = daemon.open_lazily(request_id)? {
+                    return Ok((Some(locked), false));
+                }
+                if let Some(locked) = daemon.check_expected_scope(
+                    args.filter(|v| get(v, "expected_scope").is_some()),
                     request_id,
-                    &selection,
-                    kassiber_wallets::freshness::execution::Options {
-                        run: flag("run").unwrap_or(true),
-                        limit: None,
+                )? {
+                    return Ok((Some(locked), false));
+                }
+                let workspace = arg_text(args, "workspace_id");
+                let wallet = arg_text(args, "wallet");
+                let flag = |key| {
+                    args.and_then(|v| get(v, key)).and_then(|v| match v {
+                        Value::Bool(value) => Some(*value),
+                        _ => None,
+                    })
+                };
+                let selection = Request {
+                    scope: if workspace.is_empty() {
+                        Scope::ActiveProfile
+                    } else {
+                        Scope::Workspace(workspace)
                     },
-                    args.unwrap_or(&dict::<&str>([])),
-                )?;
-                return Ok((None, false));
-            }
-            daemon.freshness_before_request(kind)?;
-            let payload = daemon
-                .book_mut()?
-                .freshness_plan(&selection)?
-                .specifications();
-            Ok((
-                Some(with_request_id(success(kind, payload), request_id)),
-                false,
-            ))
-        })(),
+                    wallet: (!wallet.is_empty()).then_some(wallet),
+                    rates: flag("rates"),
+                    journals: flag("journals"),
+                    force_full: flag("force_full").unwrap_or(false),
+                };
+                if kind != "test.freshness.plan" {
+                    daemon.start_freshness(
+                        if kind == "test.freshness.product.execute" {
+                            "ui.freshness.run"
+                        } else {
+                            kind
+                        },
+                        request_id,
+                        &selection,
+                        kassiber_wallets::freshness::execution::Options {
+                            run: flag("run").unwrap_or(true),
+                            limit: None,
+                        },
+                        args.unwrap_or(&dict::<&str>([])),
+                    )?;
+                    return Ok((None, false));
+                }
+                daemon.freshness_before_request(kind)?;
+                let payload = daemon
+                    .book_mut()?
+                    .freshness_plan(&selection)?
+                    .specifications();
+                Ok((
+                    Some(with_request_id(success(kind, payload), request_id)),
+                    false,
+                ))
+            })()
+        }
         "test.freshness.graph.start" => (|| {
             daemon.start_graph()?;
             Ok((

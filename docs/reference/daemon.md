@@ -802,11 +802,14 @@ fetch batches. Its guarded daemon request runner owns a separate connection,
 streams progress, services request/source cancellation and offline changes,
 and joins before book switching, locking or shutdown. Its private successful-job
 graph grants now cross the terminal-write boundary into a bounded mailbox.
-A guarded, explicitly started graph worker consumes those grants using bounded
-Bitcoin reference lookup and its own SQLite/SQLCipher connection. Automatic
-worker startup and product validation/selection remain pending. All three
-product sync/freshness routes still use Python. See the latest
-[Rust checkpoint](rust-shell.md#bitcoin-wallet-sync-native-graph-worker-r5-partial).
+The graph worker consumes those grants using bounded Bitcoin reference lookup
+and its own SQLite/SQLCipher connection. Automatic
+mailbox consumption is now armed by admitted native product requests, with
+the terminal-flush barrier and both source-control boundaries preserved. This
+lifecycle is still driven through a guarded seam; product validation/selection
+and registration remain pending. All three product sync/freshness routes still
+use Python. See the latest
+[Rust checkpoint](rust-shell.md#bitcoin-wallet-sync-automatic-graph-lifecycle-r5-partial).
 
 Within the daemon, refresh execution is serialized across recovery, queueing,
 batch fetch and apply. A background tick skips an occupied execution slot; an

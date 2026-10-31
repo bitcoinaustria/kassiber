@@ -59,7 +59,6 @@ pub struct Output {
 #[derive(Debug)]
 pub struct OutputClosed;
 
-#[cfg(feature = "test-kinds")]
 pub(crate) struct Written(());
 
 impl Output {
@@ -69,7 +68,6 @@ impl Output {
         }
     }
 
-    #[cfg(feature = "test-kinds")]
     pub(crate) fn write_for_handoff(
         &self,
         record: &Value,

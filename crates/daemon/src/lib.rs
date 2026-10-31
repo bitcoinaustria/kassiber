@@ -18,7 +18,6 @@ mod backends;
 mod backup;
 pub mod control;
 mod documents;
-#[cfg(feature = "test-kinds")]
 mod freshness;
 mod imports;
 pub mod input;
@@ -317,7 +316,6 @@ pub(crate) struct Daemon {
     project_id: Option<String>,
     project_root: Option<String>,
     select_project_on_open: bool,
-    #[cfg(feature = "test-kinds")]
     freshness_requests: freshness::Requests,
     book: Option<Box<dyn Book>>,
     owner: Option<Box<dyn ProjectOwner>>,
@@ -340,7 +338,6 @@ impl Daemon {
             project_id: paths.project_id.clone(),
             project_root: paths.project_root.clone(),
             select_project_on_open: !config.bootstrap.selection_explicit,
-            #[cfg(feature = "test-kinds")]
             freshness_requests: Default::default(),
             book: None,
             owner: None,
@@ -357,13 +354,11 @@ impl Daemon {
 
     fn run(&mut self, input: &mut Input) -> i32 {
         loop {
-            #[cfg(feature = "test-kinds")]
             if self.reap_freshness(false).is_err() {
                 return 1;
             }
             self.backup_sessions.expire();
             let timeout = self.backup_sessions.remaining();
-            #[cfg(feature = "test-kinds")]
             let timeout = if self.freshness_requests.polling() {
                 Some(
                     timeout
@@ -599,7 +594,6 @@ impl Daemon {
             }
         }
         self.backup_sessions.expire();
-        #[cfg(feature = "test-kinds")]
         self.freshness_before_request(&kind_text)?;
         if backup::KINDS.contains(&kind_text.as_str()) {
             return backup::handle(self, &kind_text, args.as_ref(), &request_id);
@@ -1084,7 +1078,6 @@ impl Daemon {
     /// `daemon.lock`: close the book, release ownership, forget the
     /// passphrase.
     fn lock(&mut self) -> Result<(), AppError> {
-        #[cfg(feature = "test-kinds")]
         self.reap_freshness(true)?;
         if let Some(mut book) = self.book.take() {
             if let Err(error) = book.close() {
@@ -1188,7 +1181,6 @@ impl Daemon {
     fn shutdown_resources(&mut self) {
         self.backup_sessions.clear();
         self.unlocked_passphrase = None;
-        #[cfg(feature = "test-kinds")]
         if self.reap_freshness(true).is_err() {
             return;
         }

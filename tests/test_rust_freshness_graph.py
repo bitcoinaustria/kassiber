@@ -400,18 +400,21 @@ def test_native_graph_cancels_between_electrum_prevout_batches(tmp_path):
 
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
-def test_native_graph_enabled_worker_waits_for_terminal_handoff(tmp_path, protocol):
+@pytest.mark.parametrize("automatic", [False, True])
+def test_native_graph_enabled_worker_waits_for_terminal_handoff(tmp_path, protocol, automatic):
     config, chain, _ = _fixture("receive-change")
     roots, books = _books(tmp_path, config)
     with serve(chain, protocol) as url:
         env = _environment(tmp_path, protocol, url)
         env.pop("KASSIBER_RUST_TEST_SYNC_PREFIX", None)
         with Session(roots[1], env) as session:
-            session.send("test.freshness.graph.start", "start")
-            assert session.until("start")["kind"] == "test.freshness.graph.start"
+            if not automatic:
+                session.send("test.freshness.graph.start", "start")
+                assert session.until("start")["kind"] == "test.freshness.graph.start"
             assert chain.hits == []
-            session.send("test.freshness.execute", "sync", {"rates": False, "journals": False})
-            terminal = session.until("sync", "test.freshness.execute")
+            kind = "test.freshness.product.execute" if automatic else "test.freshness.execute"
+            session.send(kind, "sync", {"rates": False, "journals": False})
+            terminal = session.until("sync", "ui.freshness.run" if automatic else kind)
             assert terminal["data"]["completed"][0]["status"] == "done"
             assert not any(row["kind"] == "ui.freshness.background" for row in session.rows)
             while not any(row["kind"] == "ui.freshness.background" for row in session.rows):
@@ -430,7 +433,7 @@ def test_native_graph_enabled_worker_waits_for_terminal_handoff(tmp_path, protoc
 
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
-@pytest.mark.parametrize("control", ["cancel", "revoke", "offline", "lock", "switch", "shutdown", "eof"])
+@pytest.mark.parametrize("control", ["cancel", "revoke", "offline", "source-cancel", "source-pause", "graph-cancel", "graph-pause", "lock", "switch", "restore", "shutdown", "eof"])
 def test_native_graph_worker_controls_and_owned_connection(tmp_path, protocol, control):
     config, chain, _ = _fixture("receive-change")
     roots, books = _books(tmp_path, config)
@@ -457,26 +460,39 @@ def test_native_graph_worker_controls_and_owned_connection(tmp_path, protocol, c
                     session.send(f"test.freshness.request.{control}", "control", {"target_request_id": "sync"})
                 elif control == "offline":
                     session.send("ui.network.offline.set", "control", {"enabled": True})
+                elif control in {"source-cancel", "source-pause", "graph-cancel", "graph-pause"}:
+                    graph_source = control.startswith("graph-")
+                    action = control.rsplit("-", 1)[-1]
+                    with connect(books[1]) as conn:
+                        job = conn.execute("SELECT id,source_key FROM freshness_jobs WHERE job_type=?",
+                            ("wallet_graph_references" if graph_source else "onchain_wallet_history",)).fetchone()
+                    args = {"job_id": job[0]} if action == "cancel" else {"source_key": job[1]}
+                    session.send(f"test.freshness.{action}", "control", args)
                 elif control == "switch":
                     session.send("ui.profiles.switch", "control", {"profile_id": "q"})
+                elif control == "restore":
+                    session.send("ui.backup.apply", "control", {"token": "missing", "confirm": "RESTORE"})
                 else:
                     session.send(f"daemon.{control}", "control")
-                if control in {"cancel", "revoke", "offline"}:
+                if control in {"cancel", "revoke", "offline", "source-cancel", "source-pause", "graph-cancel", "graph-pause"}:
                     assert session.until("control")["kind"] != "error"
                 elif control != "eof":
                     while b"\n" in session.buffer or select.select([session.process.stdout], [], [], 0.1)[0]:
                         assert session.read().get("request_id") != "control"
                 hits.release.set()
-                if control in {"lock", "switch", "shutdown"}:
-                    assert session.until("control")["kind"] != "error"
+                if control in {"lock", "switch", "shutdown", "restore"}:
+                    assert (session.until("control")["kind"] == "error") == (control == "restore")
                 while not any(r["kind"] == "ui.freshness.background" for r in session.rows):
                     session.read()
                 event = next(r for r in session.rows if r["kind"] == "ui.freshness.background")
                 assert event["event"] is True and "request_id" not in event
-                assert event["data"]["completed"][0]["status"] in {"cancelled", "error"}
+                assert event["data"]["completed"][0]["status"] in ({"done"} if control == "source-cancel" else {"cancelled", "error"})
+                if control.endswith("pause"):
+                    session.send("test.freshness.resume", "resume", {"source_key": job[1]})
+                    assert session.until("resume")["data"]["result"]["paused"] is False
                 count = len(hits)
                 with connect(books[1]) as conn:
-                    assert conn.execute("SELECT count(*) FROM transaction_graph_cache").fetchone()[0] == 0
+                    assert bool(conn.execute("SELECT count(*) FROM transaction_graph_cache").fetchone()[0]) == (control == "source-cancel")
                     assert conn.execute("SELECT count(*) FROM freshness_jobs WHERE job_type='wallet_graph_references' AND status='running'").fetchone()[0] == 0
                 if control in {"shutdown", "eof"}:
                     session.process.wait(timeout=30)
@@ -612,7 +628,7 @@ def test_native_graph_closed_output_joins_worker_before_exit(tmp_path, protocol)
 
 
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
-@pytest.mark.parametrize("stop", [False, True], ids=["complete", "lock"])
+@pytest.mark.parametrize("stop", [False, True, "rotate"], ids=["complete", "lock", "rotate"])
 def test_native_graph_encrypted_worker_handoff_and_cleanup(tmp_path, protocol, stop):
     from kassiber.secrets.migration import migrate_plaintext_to_encrypted
     from kassiber.secrets.sqlcipher import open_encrypted
@@ -624,6 +640,8 @@ def test_native_graph_encrypted_worker_handoff_and_cleanup(tmp_path, protocol, s
     with serve(chain, protocol) as url:
         env = _environment(tmp_path, protocol, url)
         env.pop("KASSIBER_RUST_TEST_SYNC_PREFIX", None)
+        if stop == "rotate":
+            env["KASSIBER_RUST_TEST_GRAPH_STOP_WITNESS"] = "1"
         with Session(roots[1], env) as session:
             session.send("daemon.unlock", "unlock", {"auth_response": {"passphrase_secret": key}})
             assert session.until("unlock")["kind"] == "daemon.unlock"
@@ -641,12 +659,20 @@ def test_native_graph_encrypted_worker_handoff_and_cleanup(tmp_path, protocol, s
                 assert session.until("start")["kind"] == "test.freshness.graph.start"
                 assert hits.started.wait(30)
                 if stop:
-                    session.send("daemon.lock", "lock")
+                    if stop == "rotate":
+                        session.send("ui.secrets.change_passphrase", "lock", {
+                            "auth_response": {"passphrase_secret": key},
+                            "new_passphrase_secret": "Synthetic replacement 🔑 passphrase"})
+                    else:
+                        session.send("daemon.lock", "lock")
+                    if stop == "rotate":
+                        while not any(row["kind"] == "test.freshness.graph.stopping" for row in session.rows):
+                            assert session.read().get("request_id") != "lock"
                     while b"\n" in session.buffer or select.select([session.process.stdout], [], [], 0.1)[0]:
                         assert session.read().get("request_id") != "lock"
                 hits.release.set()
                 if stop:
-                    assert session.until("lock")["kind"] == "daemon.lock"
+                    assert session.until("lock")["kind"] == ("ui.secrets.change_passphrase" if stop == "rotate" else "daemon.lock")
                 while not any(r["kind"] == "ui.freshness.background" for r in session.rows):
                     session.read()
                 event = next(r for r in session.rows if r["kind"] == "ui.freshness.background")
@@ -655,7 +681,7 @@ def test_native_graph_encrypted_worker_handoff_and_cleanup(tmp_path, protocol, s
                 if not stop:
                     session.send("daemon.lock", "lock")
                     assert session.until("lock")["kind"] == "daemon.lock"
-                conn = open_encrypted(books[1], key)
+                conn = open_encrypted(books[1], "Synthetic replacement 🔑 passphrase" if stop == "rotate" else key)
                 try:
                     cached = conn.execute("SELECT count(*) FROM transaction_graph_cache").fetchone()[0]
                     assert cached == 0 if stop else cached > 0
@@ -666,5 +692,6 @@ def test_native_graph_encrypted_worker_handoff_and_cleanup(tmp_path, protocol, s
                 session.finish()
                 assert len(hits) == count
                 assert key not in json.dumps(session.rows, ensure_ascii=False)
+                assert "Synthetic replacement 🔑 passphrase" not in json.dumps(session.rows, ensure_ascii=False)
             finally:
                 hits.release.set()

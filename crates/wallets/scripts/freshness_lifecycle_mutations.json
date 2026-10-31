@@ -84,7 +84,7 @@
     "file": "crates/wallets/src/freshness.rs",
     "find": "Ok(ui::payload(&status))",
     "replace": "Ok(status)",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_reference_source_control_checkpoint_repro_and_native_parity[pause]"],
+    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_reference_source_control_checkpoint_repro_and_native_parity[wallet-pause]"],
     "rule": "Source-control results must not disclose persisted private checkpoints to the UI."
   },
   {

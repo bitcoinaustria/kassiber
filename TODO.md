@@ -203,7 +203,9 @@ through the shared setup crate.
   It starts explicitly in guarded builds; no product route is registered.
 - [ ] Integrate automatic graph-worker startup with the eventual native product
   request lifecycle, retaining the flushed-response barrier, source controls and
-  complete product graph/event/restart/reviewed-book acceptance.
+  complete product graph/event/restart/reviewed-book acceptance. Automatic
+  arming and both source-control boundaries are verified through the guarded
+  product-lifecycle seam; product registration remains pending.
 - [ ] Validate complete product argument shapes and protocol request IDs, add
   inert whole-invocation selection for explicit no-refresh variants, then
   register only shapes passing full envelope/event/table parity with zero

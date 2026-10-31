@@ -102,6 +102,7 @@ pub(super) fn handle(
     let new = Secret::new(new.into());
     let acquired = daemon.owner.is_none();
     daemon.ensure_owner()?;
+    daemon.reap_freshness(true)?;
     // Authentication and owner validation precede connection retirement. A
     // failed close preserves the connection and its lease for a later retry.
     if let Some(mut book) = daemon.book.take() {

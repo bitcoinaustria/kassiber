@@ -188,5 +188,45 @@
       "tests/test_rust_freshness_graph.py::test_native_graph_request_identity_and_replay_are_fenced"
     ],
     "rule": "An unrelated request identity cannot cancel a graph worker, and a consumed sync request cannot mint another grant."
+  },
+  {
+    "id": "graph-automatic-product-start",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "if automatic_graph {\n            self.freshness_requests.graph_enabled = true;",
+    "replace": "if false && automatic_graph {\n            self.freshness_requests.graph_enabled = true;",
+    "expect_failing": [
+      "tests/test_rust_freshness_graph.py::test_native_graph_enabled_worker_waits_for_terminal_handoff[True-esplora]"
+    ],
+    "rule": "Product execution must automatically consume receipt-backed grants after terminal flush."
+  },
+  {
+    "id": "graph-origin-source-pause",
+    "file": "crates/wallets/src/freshness/graph.rs",
+    "find": "|| truthy(field(&source, \"paused\"))",
+    "replace": "|| false && truthy(field(&source, \"paused\"))",
+    "expect_failing": [
+      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[source-pause-esplora]"
+    ],
+    "rule": "Pausing the originating wallet source must stop a live graph lookup before publication."
+  },
+  {
+    "id": "graph-followup-source-pause",
+    "file": "crates/wallets/src/freshness/graph/worker.rs",
+    "find": ".is_some_and(|v| truthy(field(&v, \"paused\")))",
+    "replace": ".is_some_and(|_| false)",
+    "expect_failing": [
+      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[graph-pause-esplora]"
+    ],
+    "rule": "Pausing the graph source must stop transport continuation and cache publication."
+  },
+  {
+    "id": "graph-followup-job-cancel",
+    "file": "crates/wallets/src/freshness/execution.rs",
+    "find": "if truthy(field(&row, \"cancel_requested\")) || field(&row, \"status\") == &s(\"cancelled\") {",
+    "replace": "if false && truthy(field(&row, \"cancel_requested\")) || field(&row, \"status\") == &s(\"cancelled\") {",
+    "expect_failing": [
+      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[graph-cancel-esplora]"
+    ],
+    "rule": "Cancelling a running graph job must stop cache publication at the next check."
   }
 ]
