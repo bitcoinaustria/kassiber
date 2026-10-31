@@ -220,6 +220,7 @@ def _write_data_sheet(
 
     first_data_row = 3  # 1-based Excel row of the first data row
     row_index = 2
+    cached_check_failures = 0
     if rows:
         for row in rows:
             excel_row = row_index + 1
@@ -230,6 +231,8 @@ def _write_data_sheet(
                 link_url = str(row.get(column["link_key"], "")) if column.get("link_key") else ""
                 if formula is not None:
                     expr, cached = formula(col_index, excel_row, row)
+                    if column["fmt"] == "check" and cached != "OK":
+                        cached_check_failures += 1
                     if expr is None:
                         _write_value(worksheet, row_index, index, cached, fmt)
                     else:
@@ -261,6 +264,7 @@ def _write_data_sheet(
         "col_index": col_index,
         "first_data_row": first_data_row,
         "last_data_row": last_data_row,
+        "cached_check_failures": cached_check_failures,
     }
 
 
@@ -762,7 +766,11 @@ def _write_status_banner(verify_ws, formats, control_ref, sub_ref):
     counts.append(f'(COUNTA({gain_rng})-COUNTIF({gain_rng},"OK"))')
     total = "+".join(counts)
     expr = f'=IF(({total})=0,"ALL CHECKS OK","MISMATCH — see the highlighted check columns")'
-    verify_ws.write_formula(STATUS_CELL[0], STATUS_CELL[1], expr, formats["status_ok"], "ALL CHECKS OK")
+    # Use the very same cached checks that were emitted to the sheets; viewers
+    # without formula recalculation must see the same verdict as those cells.
+    failures = control_ref["cached_check_failures"] + sub_ref["cached_check_failures"]
+    cached = "MISMATCH — see the highlighted check columns" if failures else "ALL CHECKS OK"
+    verify_ws.write_formula(STATUS_CELL[0], STATUS_CELL[1], expr, formats["status_ok"], cached)
     verify_ws.conditional_format(
         f"{_cell(STATUS_CELL[1], STATUS_CELL[0] + 1)}",
         {"type": "text", "criteria": "containing", "value": "MISMATCH", "format": formats["diff"]},

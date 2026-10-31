@@ -329,6 +329,8 @@ Control and Disposals checks written to the workbook. A cached failing check
 therefore displays a mismatch even in viewers that do not recalculate formulas;
 the live formula remains available for later spreadsheet edits.
 
+## Rates and tax input quality
+
 Exit-tax previews and PDF/XLSX estimates report the book's selected accounting
 method. They reconstruct global inventory and wallet quantities from journal
 entries before the next civil midnight (exclusive): Europe/Vienna for Austrian
