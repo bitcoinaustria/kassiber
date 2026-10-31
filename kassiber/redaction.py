@@ -59,13 +59,16 @@ _SECRET_KEY_NAME = (
     r"silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|"
     r"sp[_-]?descriptor|spscan|spspend|token|xprv)(?:[_-]v[0-9]+)?_*"
 )
+# A glued suffix makes the quote boundary ambiguous (e.g. a nested assignment's
+# opening quote). Fail closed through this line rather than exposing its tail.
+_AMBIGUOUS_QUOTED_TAIL = r'''(?:[^\s,;}\])][^\r\n]*)?'''
 _QUOTED_SECRET_VALUE = r'''(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')'''
 # A truncated quoted value may contain spaces. Fail closed through end of line.
 _UNTERMINATED_SECRET_VALUE = r'''["'][^\r\n]*'''
 _ASSIGNED_SECRET_RE = re.compile(
     rf"(?<![A-Za-z0-9_.-])(?P<key>['\"]?{_SECRET_KEY_NAME}\b['\"]?)"
     r"(?P<sep>\s*[:=]\s*)"
-    rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
+    rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE}{_AMBIGUOUS_QUOTED_TAIL})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
     re.IGNORECASE,
 )
 _ESCAPED_ASSIGNED_SECRET_RE = re.compile(
