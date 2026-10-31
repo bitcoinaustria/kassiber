@@ -17,6 +17,10 @@ test-harness = ["kassiber-net/test-observer"]
 name = "client_fixture"
 required-features = ["test-harness"]
 
+[[example]]
+name = "lightning_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-net = { path = "../net" }
 kassiber-envelope = { path = "../envelope" }

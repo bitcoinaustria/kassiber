@@ -7,6 +7,7 @@ mod core;
 mod detection;
 mod electrum;
 mod http;
+pub mod lightning;
 pub mod probes;
 mod time;
 

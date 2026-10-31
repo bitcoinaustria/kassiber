@@ -204,3 +204,17 @@ easier to leak than the GUI.
 
 When in doubt, discard. Adding a Tier-2 record later is a small change;
 revoking it from a leaked DB is impossible.
+
+## Native report acquisition preparation
+
+The unregistered `kassiber_chain::lightning::LndReportClient` returns only
+profitability channels and routing totals. Its public result has no fields for
+credentials, node or peer pubkeys, funding outpoints, invoices, payments,
+forward events, routes or failure strings. Private peer ids are used only
+inside the request to resolve aliases; a missing alias becomes `private peer`.
+Closed channels still participate in the reference's alias lookup but never
+become report rows. All raw response parsing stays inside the client, with no
+persistence or raw-body error previews. Native node-snapshot, AI and backend
+test routes remain deferred; this report projection is not a general snapshot
+adapter. The [checkpoint](rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete)
+records the remaining full-snapshot/error parity work before registration.

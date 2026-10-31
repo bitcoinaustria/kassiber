@@ -1042,3 +1042,17 @@ endpoints, credentials, labels, watch-only material, raw metadata and exact
 amounts. AI dispatch remains Python. The
 [Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
 records parity and the unported Mirror/PSBT boundary.
+
+The unregistered native LND profitability acquisition helper uses only
+`kassiber-net` HTTP routes. Its caller must provide current consent for the
+book, profile, connection, report window, optional export destination and
+immutable backend configuration, in addition to the endpoint, proxy and TLS
+trust. Construction performs local configuration/certificate reads and no
+probe. The gate checks offline mode, the product no-egress switch and shared
+consent revocation during transport. A future service caller must revoke the
+grant on cancellation or a book/configuration change. It reads the same fixed
+1000-event/payment/invoice pages as Python, including private-peer alias
+lookups, and never follows redirects or retries directly around a proxy.
+Only report channels and routing totals leave the helper; errors omit raw
+node bodies. No CLI, daemon, background or AI route uses it yet. See the
+[LND preparation checkpoint](rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete).

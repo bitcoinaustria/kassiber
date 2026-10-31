@@ -3445,10 +3445,15 @@ changes. The [preparation checkpoint](../reference/rust-shell.md#lightning-profi
 records byte/table comparisons, mutation evidence and reference-quirk repros.
 
 This does not complete the requested Lightning read/export family. Both public
-reads fetch live snapshots in Python, and native CLN/LND snapshot adapters are
-still deferred. Native adapter acquisition with exact-action consent, discard
-policy, backend/capability/error handling, CLI/daemon registration and full
-zero-fallback process acceptance remain required. No public route is added:
+reads fetch live snapshots in Python. Native LND report acquisition now has an
+unregistered preparation boundary, using the net gate, action-bound consent,
+minimal report projections and disposable loopback comparisons with unchanged
+Python. This is not the full LND snapshot adapter. CLN acquisition, complete
+snapshot/error/TLS/proxy parity, backend/capability service handling,
+CLI/daemon registration and full zero-fallback product acceptance remain
+required. The [LND checkpoint](../reference/rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete)
+records the retained quirks, transport mutation evidence and Python error
+disclosure repro. No public route is added:
 the inventory remains 153 CLI leaves (21 reports), 15 report daemon kinds and
 two transaction export kinds. New Lightning native CLI/daemon served-by counts
 are zero; no hybrid acceptance is claimed. Non-PDF source-funds reads belong

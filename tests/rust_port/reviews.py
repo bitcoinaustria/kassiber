@@ -357,6 +357,10 @@ REVIEWS["tests/test_rust_lightning_reports.py"] = {"*": {
     "disposition": "oracle", "group": "reports",
     "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred",
 }}
+REVIEWS["tests/test_rust_lightning_acquisition.py"] = {"*": {
+    "disposition": "oracle", "group": "reports",
+    "reason": "regenerates LND acquisition projections from unchanged Python, compares actual native fixture and Python HTTP processes on owned loopback nodes, verifies product no-egress and consent refusals, and reproduces raw-response error disclosure; this does not claim public CLI/daemon registration or complete snapshot parity",
+}}
 REVIEWS["tests/test_review_regressions.py"] = {
     "ReviewRegressionTest::test_river_parser_accepts_xbt_amount_suffix": {
         "disposition": "rust-test", "group": "imports",

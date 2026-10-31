@@ -218,5 +218,215 @@
       "tests/test_electrum_coinbase.py::test_electrum_coinbase_graph_does_not_lookup_the_null_outpoint"
     ],
     "rule": "Coinbase graph normalization leaves the null outpoint without a fabricated prevout."
+  },
+  {
+    "id": "chain-lnd-report-binding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": ".with_action_binding(action.binding(&config)?)",
+    "replace": ".with_action_binding([0; 32])",
+    "expect_failing": [
+      "lnd_report_consent_binds_book_profile_connection_window_export_and_credentials"
+    ],
+    "rule": "Consent distinguishes the owning book, profile, connection, window, export and complete backend configuration."
+  },
+  {
+    "id": "chain-lnd-report-consent",
+    "file": "crates/chain/src/lightning.rs",
+    "find": ".send(request, consent, deadline, RESPONSE_LIMIT)",
+    "replace": ".send(request, Some(&Consent::explicit_trigger(self.request())), deadline, RESPONSE_LIMIT)",
+    "expect_failing": [
+      "lnd_report_construction_and_refusals_make_no_attempts"
+    ],
+    "rule": "Saved configuration never manufactures consent for an LND read."
+  },
+  {
+    "id": "chain-lnd-report-macaroon",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "r.header(\"Grpc-Metadata-macaroon\", &self.macaroon)",
+    "replace": "r.header(\"X-Wrong-macaroon\", &self.macaroon)",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Every LND endpoint uses the configured macaroon header."
+  },
+  {
+    "id": "chain-lnd-report-macaroon-case",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let macaroon = macaroon.to_ascii_lowercase();",
+    "replace": "let macaroon = macaroon.to_owned();",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Hex macaroons are normalized as in Python."
+  },
+  {
+    "id": "chain-lnd-report-user-agent",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "format!(\"kassiber/{}\", self.http.version)",
+    "replace": "format!(\"other/{}\", self.http.version)",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "LND HTTP requests identify the application with its fixed User-Agent."
+  },
+  {
+    "id": "chain-lnd-report-forward-window",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "&& timestamp < start",
+    "replace": "&& timestamp <= start",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "The forwarding window includes events exactly at its lower boundary."
+  },
+  {
+    "id": "chain-lnd-report-payment-window",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "&& integer(field(row, \"creation_date\"))? < start",
+    "replace": "|| integer(field(row, \"creation_date\"))? < start",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Either seconds or nanoseconds may establish that a payment falls inside the window."
+  },
+  {
+    "id": "chain-lnd-report-channel-rounding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "floor_div(forward.fee_msat.clone(), 1000)",
+    "replace": "forward.fee_msat.clone()",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Per-channel routing earnings floor each forward independently before aggregation."
+  },
+  {
+    "id": "chain-lnd-report-summary-rounding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let revenue = floor_div(revenue_msat, 1000);",
+    "replace": "let revenue = floor_div(revenue_msat, 1000) + 1;",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Routing summary floors the aggregate msat exactly once."
+  },
+  {
+    "id": "chain-lnd-report-payment-sat-fee",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "fee(row, \"fee_sat\")?",
+    "replace": "fee(row, \"fee\")?",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Zero or absent payment fee_msat falls back to fee_sat."
+  },
+  {
+    "id": "chain-lnd-report-status",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "[\"SUCCEEDED\", \"SUCCESS\", \"COMPLETE\"]",
+    "replace": "[\"SUCCEEDED\", \"SUCCESS\", \"FAILED\"]",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Only successful payments contribute costs and counts."
+  },
+  {
+    "id": "chain-lnd-report-private-alias",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "\"private peer\".into()",
+    "replace": "c.peer.clone().unwrap_or_else(|| \"private peer\".into())",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Missing private aliases never fall back to the private peer pubkey."
+  },
+  {
+    "id": "chain-lnd-report-switch-route",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "self.read(\"/v1/switch\",",
+    "replace": "self.read(\"/v1/payments\",",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Forwarding acquisition is limited to the read-only switch endpoint."
+  },
+  {
+    "id": "chain-lnd-report-limit",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "\"num_max_events\": 1000",
+    "replace": "\"num_max_events\": 100",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "The reference forwards page limit is preserved."
+  },
+  {
+    "id": "chain-lnd-report-identifier",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "validate_short_id(channel.short_id.as_ref())?;",
+    "replace": "let _ = &channel.short_id;",
+    "expect_failing": [
+      "lnd_report_invalid_credentials_and_channel_identifiers_fail_closed"
+    ],
+    "rule": "Channel identifiers must pass the format-only discard-boundary validator."
+  },
+  {
+    "id": "chain-lnd-report-outpoint",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "validate_outpoint(point)?;",
+    "replace": "let _ = point;",
+    "expect_failing": [
+      "lnd_report_invalid_credentials_and_channel_identifiers_fail_closed"
+    ],
+    "rule": "Funding outpoints cannot smuggle arbitrary node text into a curated shape."
+  },
+  {
+    "id": "chain-lnd-report-json-disclosure",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "AppError::new(\"backend_error\", \"LND returned non-JSON data\")",
+    "replace": "AppError::new(\"backend_error\", raw)",
+    "expect_failing": [
+      "lnd_report_errors_refuse_redirects_shapes_and_raw_secrets"
+    ],
+    "rule": "Malformed JSON errors never expose raw node responses."
+  },
+  {
+    "id": "chain-lnd-report-json-shape",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if !matches!(value, Value::Dict(_))",
+    "replace": "if false && !matches!(value, Value::Dict(_))",
+    "expect_failing": [
+      "lnd_report_errors_refuse_redirects_shapes_and_raw_secrets"
+    ],
+    "rule": "LND REST response objects are validated before use."
+  },
+  {
+    "id": "chain-lnd-report-negative-rounding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if value < BigInt::from(0) && &value % divisor != BigInt::from(0)",
+    "replace": "if false && value < BigInt::from(0) && &value % divisor != BigInt::from(0)",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Python floor division is retained for negative sub-sat forward fees."
+  },
+  {
+    "id": "chain-lnd-report-offline",
+    "file": "crates/net/src/lib.rs",
+    "find": "Offline::Offline => return Err(Error::Offline),",
+    "replace": "Offline::Offline => {},",
+    "expect_failing": [
+      "lnd_report_offline_and_unavailable_refuse_before_loopback"
+    ],
+    "rule": "An already consented LND report still refuses offline mode before any loopback attempt."
+  },
+  {
+    "id": "chain-lnd-report-private-whitespace",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "kassiber_pytext::strip(s)",
+    "replace": "s.trim()",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Private flags use Python whitespace rules so a true flag cannot expose its peer as an alias fallback."
   }
 ]

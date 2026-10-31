@@ -10332,3 +10332,122 @@ output and all 112 tables with zero in-scope fallback and named transport
 mutation kills. Node-snapshot/backend-test routes and AI projections retain
 their prior deferrals. Non-PDF source-funds reads are owned by the parallel
 `t3code/r5-reports-sof` branch; reports-b ownership is unchanged.
+
+## LND profitability acquisition checkpoint (R5, incomplete)
+
+`t3code/r5-reports-lightning-2` starts at `35754114f`. This continuation adds
+`kassiber_chain::lightning::LndReportClient`, an **unregistered report acquisition
+boundary**. It is not completion of the Lightning CLI/desktop/CSV family and
+does not implement a general node-snapshot adapter. The existing profitability,
+scoped lookup, window coercion and direct CSV publication code is unchanged.
+
+The client reads Python's nine fixed REST resources in order and resolves
+missing private-peer aliases in sorted, deduplicated order, including peers
+from closed channels. It retains the reference's 1000-row request limits; it
+does not invent pagination, rebalance attribution or on-chain cost allocation.
+Forward and payment windows retain Python's inclusive lower bound and its OR
+between payment seconds/nanoseconds. Summary routing revenue floors the sum of
+msat, while per-channel revenue and payment costs floor each event separately.
+Quantities remain unbounded integers and peer aliases retain Python string
+semantics, including surrogates. Closed channels never become report rows.
+
+All requests use the `kassiber-net` HTTP gate, configured proxy/TLS trust and
+macaroon header. Construction performs no DNS, sockets, HTTP or probe. A new
+optional action digest on `kassiber_net::Request` binds consent to the exact
+book, profile, connection, window, report/export destination and backend
+configuration, in addition to the existing endpoint/proxy/trust scope.
+Missing, changed or revoked consent, offline/unavailable policy and the product
+no-egress switch refuse before transport. Service integration still must own
+grant lifetime and revoke it on cancellation or scope/configuration changes.
+
+Only routing totals and report-channel fields leave the client. Its result
+cannot carry credentials, node/peer pubkeys, outpoints, invoices, payments,
+forward events, routes or raw failures. Private peer ids are request-local
+alias lookup inputs, with the neutral `private peer` fallback. The client
+performs no database write, journal refresh, ownership decision, tax
+calculation, price acquisition or readiness change. Existing AI tools stay on
+their Python redacted path.
+
+The frozen oracle has 85 cases (83 successes and two refusals) generated from
+unchanged Python. Native tests
+compare report projections and every request's method, path, query and decoded
+JSON body, including empty results, exact large quantities, window edges,
+private aliases, Python-specific whitespace on privacy flags, identifiers and
+malformed-id refusals. Twelve separate native
+fixture processes and twelve unchanged Python processes also compare actual
+loopback HTTP request fields and acquired projections, without a Python
+fallback inside the native driver. Three further native processes prove zero
+hits, observer attempts and RAM-ledger records with missing consent, offline
+mode or product no-egress enabled. These are acquisition-driver comparisons,
+not product CLI/daemon or CSV acceptance.
+
+The Python reference can disclose raw LND HTTP error bodies in its message and
+malformed JSON in `response_preview` details. The no-socket synthetic repro
+`crates/chain/scripts/repro_python_lnd_errors.py` pins both cases. Python stays
+unchanged; the native helper omits response bodies from errors. This intentional
+privacy difference needs an explicit disposition when the public services are
+wired. The previously recorded CSV large-integer precision loss, missing
+routing-window zeros and encoding-error partial writes remain unchanged.
+
+The chain mutation catalog now has 43 entries: 22 inherited entries and 21 new
+`chain-lnd-report-*` entries. The new campaign requires every unmutated named
+selection to pass, every mutant to build, and every mutant to fail its named
+test. A missing selection or build failure counts as no kill. The inherited
+22 chain mutations and the earlier 23 report-preparation mutations are not
+rerun in this continuation.
+
+All 21 new mutations are killed after all seven unmutated named selections
+pass. The accepted final campaign uses a fresh build tree. Earlier runs exposed
+a weak header-value assertion and a stale mutated cache; the assertion now
+checks the exact value, and the stale cache is removed before the accepted run.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary` | 11 |
+| `lnd_report_python_vectors_pin_projection_and_exact_requests` | 3 |
+| `lnd_report_consent_binds_book_profile_connection_window_export_and_credentials` | 1 |
+| `lnd_report_construction_and_refusals_make_no_attempts` | 1 |
+| `lnd_report_errors_refuse_redirects_shapes_and_raw_secrets` | 2 |
+| `lnd_report_invalid_credentials_and_channel_identifiers_fail_closed` | 2 |
+| `lnd_report_offline_and_unavailable_refuse_before_loopback` | 1 |
+
+The native inventory remains **153 CLI leaves**, including **21 report
+commands**, **15 report daemon kinds** and **two transaction export kinds**.
+New Lightning product CLI calls served by Rust: **0**. New Lightning product
+daemon requests served by Rust: **0**. No hybrid product workload or public
+zero-fallback acceptance is claimed, and no registration entry changes.
+
+Rust 1.99.1 offline/locked formatting and chain/net all-target clippy with
+`-D warnings` pass. The 27 chain tests and 63 net tests pass, including transport,
+source-scanner, dependency and startup guards. The four existing Lightning
+report tests still pin wire/CSV bytes, scoped lookup, all-table invariance and
+reference quirks. Focused Python verification passes 88 tests and five subtests,
+including all four new acquisition checks, with no skipped cases. The required
+classifier update retains the four new tests as report oracles; the generated
+inventory has 5,715 test definitions. Required `python_test_shards.py run
+preflight --ci` passes all 57 tests. Verification is Linux-only; the full
+Python/frontend gate, live-node/regtest and packaged-platform acceptance are
+not run.
+
+Remaining work before completing R5 Lightning reads and CSV:
+
+1. Port CLN acquisition and its curated snapshot boundary, including the
+   `lightning-cli`/commando subprocess route through the net gate, exact-action
+   consent, offline/no-egress refusal and transport failure handling.
+2. Complete LND full-snapshot/ancillary-field refusal parity and its service
+   error, TLS and proxy differential matrix. The report-only helper does not
+   yet reproduce every failure raised while Python builds unused snapshot
+   fields.
+3. Add the shared native backend/capability service, CLI report/CSV handling and
+   daemon report handling, with current-book/configuration checks and consent
+   revocation. Keep node-snapshot/backend-test routes and AI projections
+   separately scoped.
+4. Register only completed routes, prove actual CLI/daemon wire and CSV bytes
+   plus complete unchanged book dumps with zero in-scope fallback, and kill the
+   corresponding CLN/service transport mutations by named tests.
+
+Verification summaries and logs live under `target/r5-lightning-2/` locally.
+All explicit scratch and builds use this worktree's `target/`, account `HOME`
+is preserved, Cargo is offline/locked with eight jobs, and owned mutation and
+verification build trees are removed after summarizing. No dependency,
+lockfile, schema, Python product or report-registration change is included.

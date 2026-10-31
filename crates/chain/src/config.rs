@@ -19,6 +19,13 @@ impl Backend {
     /// Python backend mapping, including nested `config` / serialized config_json.
     /// This performs only local configuration/certificate reads, never a probe.
     pub fn new(config: &Value, electrum: bool) -> Result<Self> {
+        Self::with_trust(config, electrum, None)
+    }
+    pub(crate) fn with_trust(
+        config: &Value,
+        electrum: bool,
+        trust: Option<TlsTrust>,
+    ) -> Result<Self> {
         let mut config = config.clone();
         if !config.is_object() {
             return Err(app("Backend configuration must be an object"));
@@ -51,7 +58,9 @@ impl Backend {
             .map(boolean)
             .transpose()?
             .unwrap_or(false);
-        let trust = if electrum && !secure {
+        let trust = if let Some(trust) = trust {
+            trust
+        } else if electrum && !secure {
             TlsTrust::Plaintext
         } else if insecure {
             TlsTrust::ExplicitInsecure

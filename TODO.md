@@ -123,6 +123,8 @@ through the shared setup crate.
 - [x] Add consent-bound Esplora/mempool, Electrum TCP/TLS and Core RPC clients,
   plus HTTP, Electrum, Core, BTCPay and local Core-detection probes.
 - [ ] Port the Lightning node-snapshot adapters and `ui.backends.lightning.test`.
+  Native LND profitability acquisition now has a separate unregistered
+  preparation boundary; full snapshot adapters and CLN transport remain open.
 - [ ] Complete failure-path/TLS/proxy differential fixtures across all backend
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
@@ -431,8 +433,10 @@ registers them; exit-tax preserves its reference no-registration boundary.
   The reviewed commercial subledger CLI read and its CSV export now run
   natively, with reference vectors, killed mutations and hybrid routing proof.
   Lightning profitability/CSV preparation is now native and verified separately;
-  live CLN/LND snapshot acquisition, capability checks and CLI/daemon cutover
-  remain open. See the [preparation checkpoint](docs/reference/rust-shell.md#lightning-profitability-preparation-checkpoint-r5-incomplete).
+  LND report acquisition has consent-bound native preparation and loopback
+  reference comparisons. CLN transport, complete snapshot/error parity,
+  capability checks, CLI/daemon cutover and product zero-fallback proof remain
+  open. See the [LND checkpoint](docs/reference/rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete).
 - [x] Port configuration privacy hygiene through the native service, CLI and
   daemon, retaining count-only disclosure, local header inspection, stored
   freshness and Python endpoint/provider classification. The accepted corpus
@@ -902,6 +906,11 @@ Python.
   invoice recovery, and audit custody. Keep it separate from normal daemon,
   AI, and diagnostics surfaces; preserve the adapter discard policy in
   [Lightning opsec](docs/reference/lightning-opsec.md).
+- [ ] Remove raw node-response disclosure from Python LND HTTP/JSON errors.
+  `crates/chain/scripts/repro_python_lnd_errors.py` reproduces response text in
+  HTTP error messages and malformed-JSON `response_preview` details using
+  synthetic responses and no sockets. Native LND report errors omit those
+  bodies; Python remains unchanged in this port checkpoint.
 
 ## Desktop and handoffs
 

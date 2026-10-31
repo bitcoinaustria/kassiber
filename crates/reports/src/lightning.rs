@@ -151,7 +151,7 @@ pub struct Routing {
     pub payment_cost_sat: BigInt,
     pub rebalance_cost_sat: BigInt,
     pub onchain_cost_sat: BigInt,
-    /// Authoritative adapter net, deliberately not recomputed from sat totals.
+    /// Authoritative adapter profit, deliberately not recomputed from sat totals.
     pub net_profit_sat: BigInt,
     pub forward_count: BigInt,
     pub payment_count: BigInt,
