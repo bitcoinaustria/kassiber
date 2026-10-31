@@ -49,7 +49,10 @@ def assert_same(expected, actual, label="custody"):
     if found:
         raise AssertionError(found)
 
+import importlib
+import inspect
 import os
+import sys
 from pathlib import Path
 from kassiber.core import custody_journal
 from kassiber import tax_policy
@@ -70,6 +73,49 @@ _PRODUCTION_POLICY_BUILDERS = {
     tax_policy.AUSTRIAN_TAX_COUNTRY: tax_policy.build_austrian_policy,
 }
 PATCHED_POLICY_REASON = "patched POLICY_BUILDERS: Rust fusion uses production profile policy"
+PATCHED_COMPUTE_PREFIX = "patched custody compute: "
+# Modules whose functions run after the snapshot is loaded. A test that
+# replaces one of them exercises Python-only behavior, so Rust, which never
+# sees the patch, cannot be compared. Loader, store and authoring modules are
+# absent on purpose: patching them changes the snapshot both engines receive.
+_COMPUTE_MODULES = (
+    "kassiber.core.custody_compute",
+    "kassiber.core.custody_components",
+    "kassiber.core.custody_component_claims",
+    "kassiber.core.custody_component_facts",
+    "kassiber.core.custody_evidence",
+    "kassiber.core.custody_interpreters",
+    "kassiber.core.custody_gaps",
+    "kassiber.core.custody_gap_holds",
+    "kassiber.core.custody_native_audit",
+    "kassiber.core.custody_native_reconciliation",
+    "kassiber.core.custody_native_transitions",
+    "kassiber.core.custody_quantity",
+    "kassiber.core.custody_quantity_runtime",
+    "kassiber.core.custody_review_terms",
+    "kassiber.core.custody_pricing",
+    "kassiber.core.custody_tax_projection",
+)
+_COMPUTE_FUNCTIONS = {}
+
+
+def _capture_compute_functions():
+    captured = {}
+    for name in _COMPUTE_MODULES:
+        module = importlib.import_module(name)
+        for attr, value in vars(module).items():
+            if inspect.isfunction(value) and value.__module__ == name:
+                captured[(name, attr)] = value
+    return captured
+
+
+def patched_compute_functions():
+    """Name every captured custody compute function a test has replaced."""
+    return sorted(
+        f"{module}.{attr}"
+        for (module, attr), function in _COMPUTE_FUNCTIONS.items()
+        if getattr(sys.modules[module], attr, None) is not function
+    )
 
 
 @contextmanager
@@ -208,6 +254,9 @@ def _build(self, *, finalized):
     python_stages = {}
     patched_policy = tax_policy.POLICY_BUILDERS != _PRODUCTION_POLICY_BUILDERS
     skip_reason = PATCHED_POLICY_REASON if patched_policy and finalized else None
+    patched_compute = patched_compute_functions()
+    if patched_compute:
+        audit_reference = False
     def emit(name, value):
         if observer is not None:
             observer.stage(name, value)
@@ -220,6 +269,11 @@ def _build(self, *, finalized):
         if injection is not None and injection[0] == failed and injection[1] is error:
             compared, skipped = (), STAGES
             record("injected", skipped=skipped, reason="injected", refusing_stage=failed)
+            recorded = True
+            return
+        if patched_compute:
+            compared, skipped = (), STAGES
+            record("patched", skipped=skipped, reason=PATCHED_COMPUTE_PREFIX + ", ".join(patched_compute), refusing_stage=failed)
             recorded = True
             return
         try:
@@ -282,7 +336,8 @@ def _build(self, *, finalized):
         raise
     if observer is not None:
         observer.finish(result)
-    record("result", compared=compared, skipped=skipped, reference=audit_reference, reason=skip_reason)
+    if not recorded:
+        record("result", compared=compared, skipped=skipped, reference=audit_reference, reason=skip_reason)
     return result
 
 
@@ -294,6 +349,8 @@ def install_custody_mode(mode):
         return
     if _ORIGINAL is None:
         _ORIGINAL = custody_journal.CustodyJournalBuilder._compute_snapshot
+    _COMPUTE_FUNCTIONS.clear()
+    _COMPUTE_FUNCTIONS.update(_capture_compute_functions())
     custody_journal.CustodyJournalBuilder._compute_snapshot = _build
     _INSTALLED_MODE = mode
 
@@ -314,10 +371,12 @@ def session_report(records):
     lines.append(f"injected builds: {len(injected)} (all stages skipped)")
     patched = [row for row in records if row.get("reason") == PATCHED_POLICY_REASON]
     lines.append(f"patched-policy builds: {len(patched)} (fusion skipped)")
+    patched_compute = [row for row in records if row["outcome"] == "patched"]
+    lines.append(f"patched-compute builds: {len(patched_compute)} (all stages skipped)")
     failures = [row for row in records if row["outcome"] == "difference"]
     empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
     errors = ([f"custody differences: {len(failures)}"] if failures else [])
-    incomplete = [row for row in records if row["outcome"] in {"result", "error", "injected"} and
+    incomplete = [row for row in records if row["outcome"] in {"result", "error", "injected", "patched"} and
                   (set(row["compared"]) & set(row["skipped"]) or
                    set(row["compared"]) | set(row["skipped"]) != set(STAGES))]
     if incomplete:
@@ -326,6 +385,9 @@ def session_report(records):
         errors.append("custody injected skip record is invalid")
     if any("fusion" in row["compared"] or "fusion" not in row["skipped"] for row in patched):
         errors.append("custody patched-policy skip record is invalid")
+    if any(not str(row.get("reason", "")).startswith(PATCHED_COMPUTE_PREFIX) or row["compared"]
+           or set(row["skipped"]) != set(STAGES) for row in patched_compute):
+        errors.append("custody patched-compute skip record is invalid")
     if empty:
         errors.append("custody binding compared no stages")
     return lines, errors

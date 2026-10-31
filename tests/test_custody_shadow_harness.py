@@ -122,6 +122,63 @@ def test_policy_builder_patch_skips_only_fusion(tmp_path, monkeypatch, patched):
     assert not compare.session_report([row])[1]
 
 
+@pytest.mark.parametrize("patched", [False, True])
+def test_patched_compute_function_skips_every_stage(tmp_path, monkeypatch, patched):
+    from kassiber.core import custody_journal
+    from kassiber.core import custody_tax_projection
+    from kassiber.errors import AppError
+    from tests.custody_snapshot_generator import snapshot
+
+    book = snapshot(0)
+    monkeypatch.setattr(compare, "_COMPUTE_FUNCTIONS", compare._capture_compute_functions())
+    if patched:
+        def refuse(*args, **kwargs):
+            raise AppError("Transaction out: split payout allocation requires review", code="validation")
+
+        monkeypatch.setattr(custody_tax_projection, "compile_finalized_tax_projection", refuse)
+
+    class Builder:
+        conn = None
+        profile = book["profile"]
+
+        def load_snapshot(self):
+            return book
+
+    monkeypatch.setattr(custody_journal, "_build_observer_factory", None)
+    # Shadow also audits the frozen flow, which a patched build must skip;
+    # the unpatched control has no database for that audit.
+    monkeypatch.setattr(compare, "_INSTALLED_MODE", "shadow" if patched else "census")
+    monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / "records"))
+    if patched:
+        with pytest.raises(AppError, match="split payout"):
+            compare._build(Builder(), finalized=True)
+    else:
+        compare._build(Builder(), finalized=True)
+    row, = compare.read_records(tmp_path / "records")
+    if patched:
+        assert row["outcome"] == "patched"
+        assert row["compared"] == []
+        assert set(row["skipped"]) == set(compare.STAGES)
+        assert row["reason"] == (
+            compare.PATCHED_COMPUTE_PREFIX
+            + "kassiber.core.custody_tax_projection.compile_finalized_tax_projection"
+        )
+    else:
+        assert row["outcome"] == "result"
+        assert set(row["compared"]) == set(compare.STAGES)
+    lines, errors = compare.session_report([row])
+    assert not errors
+    assert f"patched-compute builds: {int(patched)} (all stages skipped)" in lines
+
+
+@pytest.mark.parametrize("change", [{"reason": "injected"}, {"compared": ["quantity"]}, {"skipped": []}])
+def test_session_rejects_invalid_patched_compute_skip(change):
+    row = dict(outcome="patched", compared=[], skipped=list(compare.STAGES), reference=False,
+               reason=compare.PATCHED_COMPUTE_PREFIX + "kassiber.core.custody_quantity.f")
+    row.update(change)
+    assert compare.session_report([row])[1]
+
+
 def test_every_implemented_stage_is_compared(monkeypatch):
     import kassiber_tax
     expected = {"components": {"blockers": []}, "evidence": {}}
