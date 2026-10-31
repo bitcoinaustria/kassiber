@@ -30,7 +30,8 @@ verification, including per-command Rust routing counts.
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
-| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian XLSX artifacts, and append-only saved/filed snapshot markers |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
+| `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian/full-report XLSX artifacts with verification, and append-only saved/filed snapshot markers |
 
 ## Command line
 
@@ -5206,6 +5207,122 @@ reviewed evidence, which can include PDFs, and writes JSON. It remains wholly
 Python here; PDF-containing audit packages also retain the owner's whole-command
 Python boundary. No PDF renderer is ported. AI tool
 projections stay Python and continue to use the existing shared services.
+
+## Full-report XLSX service checkpoint (R5 thirteenth reports continuation, partial)
+
+`t3code/r5-reports-13` starts at `e193e6b10` and registers
+`reports export-xlsx` and `ui.reports.export_xlsx`. The native service shares
+the admitted full-report sections with CSV and renders XLSX in memory through
+the already approved writer. Default verification adds `Verify`, `Acquisitions`,
+`Disposals`, `Control` and optional `Evidence`/`Quarantined` sheets. CLI
+`--no-verify` and the desktop boolean retain the reference behavior.
+
+Verification uses the whole profile even when a wallet limits the value sheets.
+It preserves signed-ledger magnitude conversion from integer msat, ledger order,
+taxability, tags, literal evidence links, quarantines and local rate provenance.
+Control formulas, cached results, tolerances, conditional formatting and run
+metadata retain Python's content. No calculation establishes new tax facts or
+changes stored journals. Readiness and freshness barriers remain in force.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Frozen full-report projections | 91 cases: 61 workbook documents and 30 exact pre-render refusals |
+| Real service exports | The same cases compare openpyxl content, normalized response bytes and canonical bytes of all 112 database tables |
+| CLI export/filing sequences | Four processed/stale/generic/raw-hex scenarios; verification on/off, wallet/history scope and repeated explicit filing |
+| Desktop | Fourteen requests, including filename collisions, verification on/off and invalid arguments |
+| Actual digests | Every new saved digest and byte count checked against its own published workbook before normalization |
+
+The oracle loads formula and cached-value modes and compares resolved styles,
+dimensions, merges, panes, names, properties and ZIP/XML validity. New workbook
+ZIP byte counts and independently verified digests intentionally differ from
+Python; new snapshot ids use explicit action mappings. Preexisting commitments
+remain literal. All other response and stored values compare without masking.
+The test tooling pins both report time and the independent Python history/writer
+clocks. This is test isolation, not a Python product change.
+
+| Full-report-family routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.export-xlsx` | 24 | 0 |
+| `reports.filed-snapshots.create` in workbook sequences | 24 | 0 |
+| Native daemon sessions (fourteen full-report XLSX requests) | 1 | 0 |
+
+Export admission spans publication, actual-byte hashing, saved registration and
+dependency capture. Only explicit filing appends a filed marker. The service
+test independently hashes each output; the process sequences file each successful
+capture twice and compare every table after each action. Full-report tests run
+in the serial daemon CI lane.
+
+The unchanged Python reference caches `Verify!B2` as `ALL CHECKS OK` even when
+`Disposals!L3` caches `DIFF`. The live formula checks the disposal/control
+columns when a spreadsheet recalculates. Rust preserves these cached values
+for parity; Python is not fixed. Reproduce using a synthetic workbook under
+`target/r5-reports13/banner-repro/`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_verification_banner.py
+```
+
+The output is `{"disposal_check": "DIFF", "workbook_banner": "ALL CHECKS OK"}`.
+
+The report mutation catalog has 600 entries; all apply to this checkout.
+All 31 new `xlsx-full-*` rules are killed after their six named unmutated
+selections pass. Projection vectors cover ledger/profile scope, ordering,
+taxability, exact msat conversion, tags, disclosures, provenance and formula
+references. Dedicated completion, managed-request, tolerance and CLI tests
+pin saved identity, native format, validation and verification forwarding.
+Build errors and missing selections count as errors, never kills. The 569
+inherited entries retain prior checkpoint evidence and are not freshly rerun.
+`target/r5-reports13/mutation-summary.json` maps every new recipe to its killer;
+the owned mutation source/build trees are removed after saving that summary.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting, production
+and test-harness workspace/all-target clippy with `-D warnings`, all 1,512
+workspace tests and all 14 guarded binary tests. The owned-loopback workspace
+fixtures run with sandbox access. Full-report, Austrian, shared CSV and managed
+request oracle generators all check cleanly.
+
+The final locked Python 3.11 regression passes 526 tests and ten subtests,
+without skips: 96 full-report cases, 52 Austrian cases, 43 inherited report
+process scenarios, 217 renderer cases, 86 transaction XLSX cases and 32
+AI/capability/catalog/runner/contract checks. Its distinct routing logs record
+513 report/transaction CLI invocations and fifteen daemon sessions served by
+Rust, with zero in-scope fallbacks. Per-command totals are retained in
+`target/r5-reports13/regression-routing.json`; the full-report-family counts
+above are included in these totals.
+
+The three new tests have a retained-oracle review in
+`tests/rust_port/reviews.py`. The required classifier update/check records
+5,700 test definitions, and `python_test_shards.py run preflight --ci` passes
+all 57 tests. Verification preserves the inherited account `HOME`; books,
+preferences, owner locks and scratch are isolated under `target/`.
+`target/r5-reports13/verification-summary.json` retains the gates, routing,
+mutation evidence and reference-bug result. Owned mutation and verification
+build trees are removed after their summaries are written. Verification is
+Linux-only; the full Python/frontend quality gate, Docker regtest and
+packaged/platform checks are not run.
+
+This completes only the full-report XLSX command family. Continue one family
+at a time, with native service, CLI/daemon registration, openpyxl workbook
+content or other-artifact byte comparison, every database table, zero in-scope
+fallbacks and named mutation kills before moving on:
+
+1. `reports exit-tax`, `reports export-exit-tax-xlsx`,
+   `ui.reports.exit_tax_preview` and `ui.reports.export_exit_tax_xlsx`, including
+   amendment disclosures.
+2. Retained capital-gain explanations for compact and legacy calculations and
+   the desktop capital-gains projection; privacy hygiene/mirror/PSBT,
+   cross-check, Lightning profitability and non-PDF source-funds reads.
+3. CLI/desktop year-handoff XLSX, desktop cross-check workbooks and Lightning
+   profitability CSV.
+4. CoinTracking/Blockpit transaction CSV and `ui.transactions.export_platform_csv`,
+   then other non-PDF report artifacts as their contracts permit.
+
+Individual snapshot/amendment reads retain the earlier core-only deferral until
+process callers exist. PDF rendering and the entire PDF-containing source-funds
+bundle stay Python. Audit packages retain the previous whole-command Python
+boundary because reviewed evidence can contain PDFs. AI projections stay
+Python. No dependency, lockfile, schema or Python product code changes here.
 
 ## Not yet ported
 

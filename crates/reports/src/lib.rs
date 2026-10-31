@@ -16,6 +16,7 @@ pub mod export_completion;
 pub mod export_range;
 pub mod export_request;
 mod full_csv;
+mod full_xlsx;
 mod history;
 mod holdings;
 mod journal;
@@ -27,6 +28,8 @@ mod summary;
 mod summary_text;
 mod tax_summary;
 mod transaction_csv;
+mod verification;
+mod verification_xlsx;
 pub mod zone;
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};

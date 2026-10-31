@@ -9,6 +9,7 @@ pub const KINDS: &[&str] = &[
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
     "ui.reports.export_csv",
+    "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
@@ -19,6 +20,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
     if matches!(
         kind,
         "ui.reports.export_csv"
+            | "ui.reports.export_xlsx"
             | "ui.reports.export_capital_gains_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"

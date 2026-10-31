@@ -1144,6 +1144,30 @@ workbooks, platform CSV formats and other artifacts still need native service
 and transport proof. PDF and PDF-containing source-funds bundles remain Python
 by owner decision; AI projections remain Python.
 
+### R5 full-report XLSX service continuation (partial)
+
+The thirteenth reports continuation starts at `e193e6b10` and ports
+`reports export-xlsx` and `ui.reports.export_xlsx`. The admitted full-report
+projection is shared with CSV; native verification adds the whole-profile
+acquisition/disposal ledgers, per-asset controls, evidence and quarantine
+disclosures. Wallet filters affect the value sheets while verification keeps
+the reference's pooled scope. Formula text, cached results, editable tolerance,
+conditional formatting and provenance retain Python's content.
+
+Ninety-one frozen fixtures include 61 workbook documents and 30 pre-render
+refusals. The real service/process oracle compares openpyxl content, normalized
+wire bytes and canonical bytes of all 112 database tables. Completion hashes
+the actual Rust bytes, preserves sealed dependencies and saves without filing;
+repeated explicit filing retains that capture. Thirty-one new mutation entries
+have named projection, tolerance, request and completion tests.
+
+The [full-report checkpoint](../reference/rust-shell.md#full-report-xlsx-service-checkpoint-r5-thirteenth-reports-continuation-partial)
+records the final gates, routing counts, unchanged-Python verification-banner
+bug and exact remainder. Exit tax is next; the other reads, workbooks, platform
+CSV formats and non-PDF artifacts remain open. No tax rules, Python product
+code or dependencies change. PDF-containing exports and AI projections stay
+Python under the existing owner decision.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

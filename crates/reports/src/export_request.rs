@@ -7,12 +7,14 @@ pub fn handles(command: &str) -> bool {
     matches!(
         command,
         "reports.export-csv"
+            | "reports.export-xlsx"
             | "reports.export-commercial-subledger-csv"
             | "reports.export-austrian-e1kv-csv"
             | "reports.export-austrian-e1kv-xlsx"
             | "transactions.export"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
+            | "ui.reports.export_xlsx"
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
@@ -129,7 +131,8 @@ fn execute_admitted(
     sources: &dyn Sources,
 ) -> Result<Value> {
     let desktop = command.starts_with("ui.");
-    let xlsx = command == "ui.reports.export_austrian_e1kv_xlsx"
+    let xlsx = command == "ui.reports.export_xlsx"
+        || command == "ui.reports.export_austrian_e1kv_xlsx"
         || command == "ui.transactions.export_xlsx"
         || (command == "transactions.export" && text(raw, "export_format") == "xlsx");
     if !desktop && command != "transactions.export" {
@@ -166,7 +169,7 @@ fn execute_admitted(
         freshness(conn, &profile)?;
     }
     let (native, stem, suffix, scope) = match command {
-        "reports.export-csv" | "ui.reports.export_csv" => {
+        "reports.export-csv" | "ui.reports.export_csv" | "ui.reports.export_xlsx" => {
             if desktop {
                 if get(raw, "year").is_some() || get(raw, "tax_year").is_some() {
                     return Err(validation(format!(
@@ -176,14 +179,23 @@ fn execute_admitted(
                 if !matches!(value(raw, "wallet"), Value::Null | Value::Str(_)) {
                     return Err(validation(format!("{command} wallet must be a string")));
                 }
+                if command == "ui.reports.export_xlsx"
+                    && !matches!(get(raw, "verify"), None | Some(Value::Bool(_)))
+                {
+                    return Err(validation(format!("{command} verify must be a boolean")));
+                }
                 if get(raw, "history_limit").is_none() {
                     replace(&mut args, "history_limit", Value::Int(0.into()));
                 }
             }
             (
-                "reports.export-csv",
+                if xlsx {
+                    "reports.export-xlsx"
+                } else {
+                    "reports.export-csv"
+                },
                 "kassiber-report".into(),
-                ".csv",
+                if xlsx { ".xlsx" } else { ".csv" },
                 "report",
             )
         }

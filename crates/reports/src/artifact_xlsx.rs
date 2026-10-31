@@ -4,7 +4,7 @@ use super::*;
 use artifact_csv::{list, File, Prepared, Section};
 use kassiber_xlsx::{Cell, Document, Operation, Sheet, Style};
 
-fn styles() -> Vec<Style> {
+pub(super) fn styles() -> Vec<Style> {
     let text = Style {
         font_size: Some(11.0),
         valign: Some("top".into()),
@@ -146,7 +146,7 @@ pub(super) fn lines(value: &Value, width: f64) -> usize {
 
 /// The Python generic report worksheet layout, shared by transaction lists and
 /// later native report projections. Values remain typed, even in text columns.
-fn sheet(section: &Section) -> Result<Sheet> {
+pub(super) fn sheet(section: &Section) -> Result<Sheet> {
     let mut ops = vec![
         Operation::Landscape,
         Operation::Fit {
@@ -286,7 +286,9 @@ pub fn prepare(
 ) -> Result<Prepared> {
     if !matches!(
         command,
-        "reports.export-transactions-xlsx" | "reports.export-austrian-e1kv-xlsx"
+        "reports.export-transactions-xlsx"
+            | "reports.export-austrian-e1kv-xlsx"
+            | "reports.export-xlsx"
     ) {
         return Err(AppError::new(
             "not_implemented",
@@ -298,6 +300,9 @@ pub fn prepare(
     let result = (|| {
         if command == "reports.export-austrian-e1kv-xlsx" {
             return austrian_xlsx::prepare(conn, args, sources);
+        }
+        if command == "reports.export-xlsx" {
+            return full_xlsx::prepare(conn, args, sources);
         }
         let (_, profile) = kassiber_setup::references::scope(conn, args)?;
         let (section, mut metadata) = standalone_csv::project(conn, &profile, args)?;

@@ -178,6 +178,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "transfers.components.show",
     "review.receipt",
     "reports.export-csv",
+    "reports.export-xlsx",
     "reports.export-austrian-e1kv-csv",
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",

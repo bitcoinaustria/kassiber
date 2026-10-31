@@ -5699,5 +5699,315 @@
       "austrian_xlsx_managed_request_preserves_format_and_freshness"
     ],
     "rule": "Managed annual XLSX requests publish native workbook bytes through the native completion transport."
+  },
+  {
+    "id": "xlsx-full-verification-default",
+    "file": "crates/reports/src/full_xlsx.rs",
+    "find": "let verify = get(&args, \"verify\").is_none_or(truthy);",
+    "replace": "let verify = false;",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Full workbooks include profile-wide verification unless the caller disables it."
+  },
+  {
+    "id": "xlsx-full-saved-kind",
+    "file": "crates/reports/src/full_xlsx.rs",
+    "find": "kind = \"full-report.xlsx\".into();",
+    "replace": "kind = \"full-report.csv\".into();",
+    "expect_failing": [
+      "full_xlsx_export_hashes_actual_bytes_and_saves_without_filing"
+    ],
+    "rule": "Saved full workbooks identify their artifact as full-report.xlsx."
+  },
+  {
+    "id": "xlsx-full-managed-format",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "let xlsx = command == \"ui.reports.export_xlsx\"",
+    "replace": "let xlsx = command == \"not-ported\"",
+    "expect_failing": [
+      "full_xlsx_managed_request_preserves_format_and_freshness"
+    ],
+    "rule": "The desktop full-workbook request renders and publishes XLSX bytes."
+  },
+  {
+    "id": "xlsx-full-managed-boolean",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "&& !matches!(get(raw, \"verify\"), None | Some(Value::Bool(_)))",
+    "replace": "&& false",
+    "expect_failing": [
+      "full_xlsx_managed_verify_argument_is_boolean"
+    ],
+    "rule": "The desktop verify argument accepts only a boolean when present."
+  },
+  {
+    "id": "xlsx-full-ledger-profile-scope",
+    "file": "crates/reports/src/verification.rs",
+    "find": "WHERE je.profile_id=?",
+    "replace": "WHERE je.profile_id=? AND w.id='hot'",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification ledger rows cover the entire selected profile across wallets."
+  },
+  {
+    "id": "xlsx-full-ledger-order",
+    "file": "crates/reports/src/verification.rs",
+    "find": "ORDER BY je.occurred_at ASC,\n            je.created_at ASC,\n            je.id ASC",
+    "replace": "ORDER BY je.occurred_at DESC,\n            je.created_at DESC,\n            je.id DESC",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification ledger order follows occurrence, creation and entry identity ascending."
+  },
+  {
+    "id": "xlsx-full-excluded-taxability",
+    "file": "crates/reports/src/verification.rs",
+    "find": "COALESCE(t.taxability_override,1)!=0",
+    "replace": "COALESCE(t.taxability_override,1)=0",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Explicit non-taxable transactions remain excluded from taxable control totals."
+  },
+  {
+    "id": "xlsx-full-swap-taxability",
+    "file": "crates/reports/src/verification.rs",
+    "find": "COALESCE(je.at_category,'')!='neu_swap'",
+    "replace": "COALESCE(je.at_category,'')!='never'",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Austrian neu_swap entries remain excluded from taxable control totals."
+  },
+  {
+    "id": "xlsx-full-magnitude",
+    "file": "crates/reports/src/verification.rs",
+    "find": "let qty = if qty < 0.into() { -qty } else { qty };",
+    "replace": "let qty = if qty > 0.into() { -qty } else { qty };",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification input quantities preserve the positive magnitude of signed integer msat."
+  },
+  {
+    "id": "xlsx-full-msat-scale",
+    "file": "crates/reports/src/verification.rs",
+    "find": "Decimal::from(100_000_000_000_i64)",
+    "replace": "Decimal::from(100_000_000_i64)",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification quantities convert integer msat to BTC at 100 billion msat per BTC."
+  },
+  {
+    "id": "xlsx-full-income-ledger",
+    "file": "crates/reports/src/verification.rs",
+    "find": "[\"acquisition\", \"income\", \"transfer_in\"]",
+    "replace": "[\"acquisition\", \"never\", \"transfer_in\"]",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Income rows remain in the verification acquisition ledger."
+  },
+  {
+    "id": "xlsx-full-transfer-fee-ledger",
+    "file": "crates/reports/src/verification.rs",
+    "find": "[\"disposal\", \"fee\", \"transfer_fee\", \"transfer_out\"]",
+    "replace": "[\"disposal\", \"fee\", \"never\", \"transfer_out\"]",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Transfer fees remain in the verification disposal ledger."
+  },
+  {
+    "id": "xlsx-full-ledger-tags",
+    "file": "crates/reports/src/verification.rs",
+    "find": "v.join(\", \")",
+    "replace": "v.join(\";\")",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification tags retain the reference comma-and-space separator."
+  },
+  {
+    "id": "xlsx-full-quarantine-disclosure",
+    "file": "crates/reports/src/verification.rs",
+    "find": "s(detail(value(row, \"detail_json\")))",
+    "replace": "s(\"\")",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification discloses the stored quarantine detail without promoting it to tax facts."
+  },
+  {
+    "id": "xlsx-full-evidence-reference",
+    "file": "crates/reports/src/verification.rs",
+    "find": "if is_url { url } else { filename }",
+    "replace": "if is_url { url } else { \"\" }",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "File evidence retains its original filename as the literal reference."
+  },
+  {
+    "id": "xlsx-full-rate-source",
+    "file": "crates/reports/src/verification.rs",
+    "find": "source = text(&rate, \"source\");",
+    "replace": "source = \"incorrect\".into();",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Per-asset controls disclose the locally cached market-rate source."
+  },
+  {
+    "id": "xlsx-full-rate-as-of",
+    "file": "crates/reports/src/verification.rs",
+    "find": "timestamp = text(&rate, \"timestamp\");",
+    "replace": "timestamp = \"incorrect\".into();",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Per-asset controls disclose the locally cached market-rate timestamp."
+  },
+  {
+    "id": "xlsx-full-profile-holdings",
+    "file": "crates/reports/src/verification.rs",
+    "find": "holdings::report(conn, profile, true)?",
+    "replace": "holdings::report(conn, profile, false)?",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification controls aggregate portfolio holdings across the profile."
+  },
+  {
+    "id": "xlsx-full-realized-aggregation",
+    "file": "crates/reports/src/verification.rs",
+    "find": "number(bucket, \"realized_gain\") + number(row, \"gain_loss\")",
+    "replace": "number(bucket, \"realized_gain\") - number(row, \"gain_loss\")",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification realized gains sum stored taxable capital-gain rows."
+  },
+  {
+    "id": "xlsx-full-quantity-formula",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "=F{excel}/100000000000",
+    "replace": "=F{excel}/100000000",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Ledger formulas convert the msat input column to BTC using the reference scale."
+  },
+  {
+    "id": "xlsx-full-unit-price-formula",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "=IF(G{excel}=0,0,H{excel}/G{excel})",
+    "replace": "=IF(G{excel}=0,0,G{excel}/H{excel})",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Acquisition unit-price formulas divide fiat value by BTC quantity with a zero guard."
+  },
+  {
+    "id": "xlsx-full-disposal-formula",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "=H{excel}-I{excel}",
+    "replace": "=I{excel}-H{excel}",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Disposal gain formulas subtract cost basis from proceeds."
+  },
+  {
+    "id": "xlsx-full-quantity-control",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "a(6),a(3),a(4),a(6),a(3),a(4),d(6),d(3),d(6),d(3),d(4)",
+    "replace": "a(7),a(3),a(4),a(7),a(3),a(4),d(6),d(3),d(6),d(3),d(4)",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Holdings control formulas use quantity columns and exclude duplicate income and transfer-fee effects."
+  },
+  {
+    "id": "xlsx-full-basis-control",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "a(7),a(3),a(4),a(7),a(3),a(4),d(8),d(3)",
+    "replace": "a(7),a(3),a(4),a(7),a(3),a(4),d(7),d(3)",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Basis control formulas subtract disposal cost basis from qualifying acquisition fiat value."
+  },
+  {
+    "id": "xlsx-full-realized-control",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "d(9),d(3),d(12),a(9),a(3),a(10)",
+    "replace": "d(9),d(3),d(11),a(9),a(3),a(10)",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Realized-gain controls filter the taxable column in both ledgers."
+  },
+  {
+    "id": "xlsx-full-quantity-tolerance",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "if key==\"qty_check\"{5e-9}else{0.01}",
+    "replace": "if key==\"qty_check\"{0.01}else{0.01}",
+    "expect_failing": [
+      "verification_formula_checks_preserve_tolerances_and_cached_results"
+    ],
+    "rule": "Cached quantity checks use the BTC tolerance rather than the editable fiat tolerance."
+  },
+  {
+    "id": "xlsx-full-status-ranges",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "range(\"Disposals\", 11, sub)",
+    "replace": "range(\"Disposals\", 10, sub)",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "The status banner checks the disposal gain-check column."
+  },
+  {
+    "id": "xlsx-full-conditional-quality",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "for token in [\"coarse\", \"missing\"]",
+    "replace": "for token in [\"exact\", \"missing\"]",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Verification highlights coarse and missing pricing quality."
+  },
+  {
+    "id": "xlsx-full-empty-ranges",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "count.max(1) + 2",
+    "replace": "count.max(2) + 2",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Empty ledgers retain a one-row formula range matching the reference workbook."
+  },
+  {
+    "id": "xlsx-full-readme-wallet",
+    "file": "crates/reports/src/verification_xlsx.rs",
+    "find": "if raw.contains(\"__WALLET__\") && wallet.is_none()",
+    "replace": "if raw.contains(\"__WALLET__\")",
+    "expect_failing": [
+      "full_xlsx_projection_matches_python_workbook_vectors"
+    ],
+    "rule": "Whole-profile verification explains an active wallet filter without adding that note to unfiltered books."
+  },
+  {
+    "id": "xlsx-full-cli-verify",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"verify\",",
+    "replace": "            \"never\",",
+    "expect_failing": [
+      "full_xlsx_transport_retains_verification_scope_and_history"
+    ],
+    "rule": "The CLI forwards the default and explicit no-verify choice into the native export request."
   }
 ]

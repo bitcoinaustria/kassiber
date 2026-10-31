@@ -181,6 +181,16 @@ pub(super) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
+    project(conn, workspace, profile, args, sources).map(|(_, prepared)| prepared)
+}
+
+pub(super) fn project(
+    conn: &Connection,
+    workspace: &Value,
+    profile: &Value,
+    args: &Value,
+    sources: &dyn kassiber_setup::Sources,
+) -> Result<(Vec<Section>, Prepared)> {
     let id = text(profile, "id");
     let wallet = if truthy(value(args, "wallet")) {
         Some(kassiber_wallets::resolve(conn, &id, &text(args, "wallet"))?)
@@ -502,7 +512,7 @@ pub(super) fn prepare(
             .unwrap_or(&text(profile, "label"))
     );
     let count: usize = sections.iter().map(|s| s.rows.len()).sum();
-    Ok(Prepared {
+    let prepared = Prepared {
         files: vec![File {
             name: "report.csv".into(),
             sheet: String::new(),
@@ -533,5 +543,6 @@ pub(super) fn prepare(
                 None => Value::Null,
             },
         }),
-    })
+    };
+    Ok((sections, prepared))
 }

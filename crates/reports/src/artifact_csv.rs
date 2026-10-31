@@ -17,7 +17,7 @@ pub struct Prepared {
     pub completion: Option<crate::export_completion::Completion>,
 }
 
-fn history_limit(raw: &Value) -> Result<Value> {
+pub(super) fn history_limit(raw: &Value) -> Result<Value> {
     let parsed = match raw {
         Value::Null => return Ok(Value::Null),
         Value::Int(n) => n.clone(),

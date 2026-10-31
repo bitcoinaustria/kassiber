@@ -431,10 +431,13 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
 - [x] Port Austrian E1kv XLSX projection and CLI/desktop registration through
   native completion; compare workbook content, actual hashes, explicit filing
   and every database table, with zero hybrid fallbacks.
-- [ ] Port full-report (including verification), exit-tax,
-  year-handoff and cross-check XLSX projections and registration. Verify their
-  saved completions, Rust-byte hashes, explicit filing, complete normalized DB
-  sequences and native routing before marking XLSX complete. PDF stays Python.
+- [x] Port full-report XLSX, including profile-wide verification, CLI/desktop
+  registration, actual-byte saved hashes and repeated explicit filing; compare
+  openpyxl content and every database table with zero hybrid fallbacks.
+- [ ] Port exit-tax, year-handoff and cross-check XLSX projections and
+  registration. Verify their saved completions, Rust-byte hashes, explicit
+  filing, complete normalized DB sequences and native routing before marking
+  XLSX complete. PDF stays Python.
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
 - [x] Keep PDF rendering and PDF-containing source-funds bundles in Python by

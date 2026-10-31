@@ -110,7 +110,7 @@ pub(crate) fn period_years(
 }
 
 /// Python `int(value or 0)` for a stored journal quantity.
-fn integer(v: &Value) -> Result<BigInt> {
+pub(super) fn integer(v: &Value) -> Result<BigInt> {
     let error = || AppError::new("internal_error", "invalid stored journal quantity");
     match v {
         _ if !truthy(v) => Ok(0.into()),

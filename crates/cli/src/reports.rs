@@ -18,6 +18,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.austrian-tax-summary",
     "reports.balance-history",
     "reports.export-csv",
+    "reports.export-xlsx",
     "reports.export-austrian-e1kv-csv",
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
@@ -33,37 +34,40 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
     if matches!(
         command,
         "reports.export-csv"
+            | "reports.export-xlsx"
             | "reports.export-austrian-e1kv-csv"
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-commercial-subledger-csv"
             | "transactions.export"
     ) {
-        return book.reports(
-            command,
-            &dict(
-                [
-                    "workspace",
-                    "profile",
-                    "wallet",
-                    "wallets",
-                    "file",
-                    "dir",
-                    "history_limit",
-                    "year",
-                    "export_format",
-                    "period",
-                    "from_day",
-                    "to_day",
-                    "timezone",
-                ]
-                .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
-            ),
-        );
+        return book.reports(command, &export_request(args));
     }
     if command == "reports.filed-snapshots.create" {
         return book.reports(command, &snapshot_request(args));
     }
     book.reports(command, &request(args))
+}
+
+fn export_request(args: &Namespace) -> Value {
+    dict(
+        [
+            "workspace",
+            "profile",
+            "wallet",
+            "wallets",
+            "file",
+            "dir",
+            "history_limit",
+            "verify",
+            "year",
+            "export_format",
+            "period",
+            "from_day",
+            "to_day",
+            "timezone",
+        ]
+        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+    )
 }
 
 fn snapshot_request(args: &Namespace) -> Value {
@@ -124,6 +128,39 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn full_xlsx_transport_retains_verification_scope_and_history() {
+        for verify in [true, false] {
+            let mut argv = vec![
+                "reports",
+                "export-xlsx",
+                "--file",
+                "full.xlsx",
+                "--wallet",
+                "hot",
+                "--history-limit",
+                "1",
+            ];
+            if !verify {
+                argv.push("--no-verify");
+            }
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let request = export_request(&args);
+            assert_eq!(get(&request, "verify"), Some(&Value::Bool(verify)));
+            assert_eq!(get(&request, "wallet"), args.get("wallet"));
+            assert_eq!(get(&request, "history_limit"), args.get("history_limit"));
+            assert!(COMMANDS.contains(&"reports.export-xlsx"));
+            assert!(crate::describe::IMPLEMENTED.contains(&"reports.export-xlsx"));
+        }
+    }
+
     #[test]
     fn snapshot_create_transport_keeps_authored_fields() {
         let argv = [
