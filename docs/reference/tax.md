@@ -345,6 +345,9 @@ acquisition bucket, keeps market-value, gain and estimated-tax totals null;
 known quantities and basis remain available for review.
 Exit-tax exports remain valuation drafts outside the ordinary realized-report
 snapshot system; see [saved and filed report impact](custody-components.md#saved-and-filed-report-impact).
+PDF/XLSX drafts stamp the journal input version alongside the FMV quotes for
+manual comparison after changes; this does not register a saved/filed snapshot.
+
 ### Exit-tax cutoff timezone: owner decision pending
 
 The departure day currently means the UTC calendar day. Austrian Alt/Neu

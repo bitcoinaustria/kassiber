@@ -45,6 +45,7 @@ export interface ExitTaxReport {
   departureDate: string;
   destination: ExitTaxDestination;
   method: string;
+  journalInputVersion: number | null;
   fmvSource: ExitTaxFmvSource[];
   totals: {
     neuQuantitySats: number;
@@ -111,6 +112,7 @@ export function buildExitTaxFixture(
     departureDate,
     destination,
     method: "moving_average_at",
+    journalInputVersion: 1,
     fmvSource: [
       { asset: "BTC", rate: fmv, pair: "BTC-EUR", asOf: "2026-06-15T00:00:00Z", source: "cache" },
     ],

@@ -231,7 +231,8 @@ prices leave an incomplete estimate. Transaction-price fallback is limited to
 the 24 hours before the cutoff; older prices are missing FMV, never zero tax.
 `status.missingFmvAssets` identifies that readiness barrier. PDF/XLSX and the
 desktop FMV card disclose quote source and `asOf`. Exit-tax exports intentionally create no
-ordinary realized-report snapshot.
+ordinary realized-report snapshot. PDF/XLSX stamp `journalInputVersion` and FMV
+quotes for manual freshness comparison, without automatic amendment tracking.
 See `docs/plan/11-exit-tax-deemed-disposal.md`.
 
 ## Journal entries
