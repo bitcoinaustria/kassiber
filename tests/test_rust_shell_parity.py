@@ -1281,7 +1281,7 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source"):
+    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source", fresh_ids=False):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
@@ -1309,7 +1309,7 @@ class RustRealStoreParityTest(_Roots):
             "from kassiber.operator import project; "
             "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
             "from kassiber.core import imports,import_batches,metadata,wallets; from kassiber.cli import handlers; "
-            f"ids=iter({identities!r}); wallets.uuid=imports.uuid=import_batches.uuid=metadata.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
+            "ids=iter(__import__('os').environ['KASSIBER_RUST_TEST_IMPORT_IDS'].split(',')); wallets.uuid=imports.uuid=import_batches.uuid=metadata.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
             f"wallets.now_iso=imports.now_iso=import_batches.now_iso=handlers.now_iso=lambda:{fixed_time!r}; "
             "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
         )
@@ -1326,7 +1326,9 @@ class RustRealStoreParityTest(_Roots):
                     database.write_bytes(baseline)
                     wires, dumps = [], []
                     batches = []
-                    for step in steps:
+                    for step_index, step in enumerate(steps):
+                        if fresh_ids:
+                            self.env["KASSIBER_RUST_TEST_IMPORT_IDS"] = ",".join(f"00000000-0000-4000-8000-{step_index * 20 + i:012}" for i in range(1, 21))
                         content, edits = step if isinstance(step, tuple) else (step, [])
                         if edits:
                             with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
@@ -1489,6 +1491,38 @@ class RustRealStoreParityTest(_Roots):
             + f"Deposit,0.003,BTC,,,,,2025-01-03,{txid}\n"
             + "Deposit,0.004,BTC,,,,,2025-01-04,\n" * 2,
         ], fiat_currency="EUR", wallet_kind="cointracking", seed=seed)
+
+    def _btcpay_reference_files(self, format):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_btcpay_imports.json").read_text())
+        self._file_import_parity("import-btcpay", [
+            bytes(case["bytes"]) if "bytes" in case else case["text"] for case in cases if case["format"] == "btcpay_" + format
+        ], extra=("--input-format", format))
+
+    def test_btcpay_csv_reference_files_wire_bytes_full_state_and_rollback(self):
+        self._btcpay_reference_files("csv")
+
+    def test_btcpay_json_reference_files_wire_bytes_full_state_and_rollback(self):
+        self._btcpay_reference_files("json")
+
+    def test_btcpay_surrogate_currency_wire_bytes_full_state_and_rollback(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_btcpay_imports.json").read_text())
+        selected = [case for case in cases if case["name"].startswith("btcpay:json:currency-surrogate-")]
+        self.assertEqual(len(selected), 6)
+        self._file_import_parity("import-btcpay", [case["text"] for case in selected], extra=("--input-format", "json"))
+
+    def test_btcpay_coordinator_wire_bytes_full_state_and_rollback(self):
+        self.maxDiff = None
+        from crates.wallets.scripts.generate_btcpay_vectors import BASE
+        body = json.dumps([BASE])
+        changed = json.dumps([{**BASE, "Comment":"new comment", "Labels":{"new tag":{}, "old":{"text":"Shop"}}}])
+        self._file_import_parity("import-btcpay", [[
+            body, body,
+            (changed, ["UPDATE transactions SET note='authored'"]),
+            (body, ["UPDATE transactions SET note=NULL", "DELETE FROM transaction_tags"]),
+            json.dumps([BASE, {**BASE, "Timestamp":"invalid"}]),
+            (json.dumps([BASE, {**BASE, "TransactionId":["invalid"]}]), ["UPDATE transactions SET note=NULL", "DELETE FROM transaction_tags"]),
+            body,
+        ]], extra=("--input-format", "json"), fresh_ids=True)
 
     def test_binance_reference_files_wire_bytes_full_state_and_rollback(self):
         cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_binance_imports.json").read_text())
@@ -1761,6 +1795,12 @@ class RustShellDriftTest(unittest.TestCase):
         self.check("crates/wallets/scripts/generate_cointracking_vectors.py")
         self.check("crates/wallets/scripts/generate_blockpit_vectors.py")
         self.check("crates/wallets/scripts/generate_binance_vectors.py")
+
+    def test_btcpay_vectors_match_python_reference(self):
+        self.check("crates/wallets/scripts/generate_btcpay_vectors.py")
+        result = subprocess.run([sys.executable, "-m", "tests.rust_port.repro_btcpay_reference"], cwd=ROOT, capture_output=True, text=True, timeout=TIMEOUT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

@@ -181,6 +181,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.export-austrian-e1kv-csv",
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
+    "wallets.import-btcpay",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

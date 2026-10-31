@@ -2080,7 +2080,7 @@ precede the complete generic-ledger file loader.
 | `binance-supplemental` | Medium | AutoInvest and dividend variants, provider references and evidence matching, without duplicating authoritative wallet observations. |
 | `wasabi` | Large | Sanitized JSON/bundle loading, wallet metadata, labels and transaction/privacy provenance with sensitive fields discarded. |
 | `samourai` | Large | Parent/child wallet sets, deposit/badbank/premix/postmix/ricochet account plans, descriptors and privacy metadata; retain watch-only and no-contact admission. |
-| `btcpay` file | Medium | JSON/CSV invoice/payment/method mapping and metadata/provenance enrichment. Greenfield/API synchronization is a separate network slice. |
+| `btcpay` file | Medium | CSV/JSON net wallet movements, confirmation aliases, import-authored comments/tags and raw provenance. Greenfield/API synchronization is a separate network slice. |
 | `document` | Largest | Draft validation and confidence/quarantine rules, local PDF/image/OCR preparation, explicit provider-contact consent, bounded input limits, attachment storage and cross-resource rollback. |
 
 This is substantially larger than the four-importer continuation: one small,
@@ -2208,6 +2208,34 @@ passes both isolated and original-binary rechecks; the shell checkpoint records
 the complete result and retained diagnostics rather than claiming a green gate.
 
 The remaining core/CLI importers are BTCPay files, generic ledger, Wasabi,
+Samourai and document ingestion, each requiring its own verified commit.
+
+### R5 file-import continuation: BTCPay core/CLI checkpoint
+
+Native `wallets import-btcpay` accepts CSV and JSON files through the shared
+local file service. Exact net amounts, outbound fee inclusion, confirmation
+aliases, raw provider evidence, deposit/withdrawal kinds, imported notes
+and normalized tags follow Python. Scoped dedupe, metadata-only invalidation,
+reimports, import runs and rollback retain the existing coordinator contract.
+The reference boolean-identity metadata bug is preserved with an offline repro.
+
+The corpus contains 311 Python-derived files, with native field/fingerprint
+vectors, hybrid complete-book comparisons and raw CLI bytes/full typed dumps
+on SQLite and SQLCipher. Coordinator and late-failure tests cover both codecs.
+Thirty-eight new mutation entries bring the wallet catalog to 686; all new
+entries and the shared atomic-import rule have named kill evidence. The
+[BTCPay checkpoint](../reference/rust-shell.md#btcpay-core-and-cli-file-ingestion-r5-continuation)
+records the audit runs, routing counts and verification results.
+
+The expanded hybrid run records 318 native imports and zero importer fallbacks.
+All 73 native file-import tests pass. Formatting, strict workspace/harness
+Clippy, all 14 harness tests and all 57 required CI preflight checks pass. The
+classifier records 5,729 Python definitions. The workspace suite has 1,493
+passes and the 58 known sandbox
+socket denials, with no other failures; exact names are in the shell checkpoint.
+
+Python production code, dependencies, egress, sync routes and AI projections
+are unchanged. Remaining core/CLI importers are generic ledger, Wasabi,
 Samourai and document ingestion, each requiring its own verified commit.
 
 ## Risks

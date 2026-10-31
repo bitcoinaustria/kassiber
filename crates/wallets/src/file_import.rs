@@ -1,5 +1,6 @@
 //! User-triggered, local file ingestion. No provider, transport or AI dispatch.
 mod binance;
+mod btcpay;
 mod bull;
 mod coinfinity;
 mod csv;
@@ -52,11 +53,15 @@ pub enum Format {
     CoinTracking,
     Blockpit,
     Binance,
+    BtcpayCsv,
+    BtcpayJson,
 }
 impl Format {
     fn name(self) -> &'static str {
         match self {
             Self::Csv => "csv",
+            Self::BtcpayCsv => "btcpay_csv",
+            Self::BtcpayJson => "btcpay_json",
             Self::Json => "json",
             Self::Phoenix => "phoenix_csv",
             Self::River => "river_csv",
@@ -75,6 +80,7 @@ impl Format {
         match self {
             Self::CoinTracking | Self::Blockpit => tax_platform::load(file, self),
             Self::Json => generic_json::load(file),
+            Self::BtcpayCsv | Self::BtcpayJson => btcpay::load(file, self == Self::BtcpayJson),
             Self::Csv => csv::load(file),
             Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
@@ -1513,6 +1519,17 @@ fn apply(
     }
     if request.format.migration() {
         tax_platform::reconcile(conn, request, wallet, ids, &mut result, invalidated)?;
+    }
+    if matches!(request.format, Format::BtcpayCsv | Format::BtcpayJson) {
+        btcpay::metadata(
+            conn,
+            (profile, &workspace),
+            &wallet.id,
+            rows,
+            ids,
+            &mut result,
+            invalidated,
+        )?;
     }
     if !inserted_ids.is_empty() {
         let batch = ids.next(conn)?;

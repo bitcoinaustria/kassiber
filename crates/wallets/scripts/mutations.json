@@ -636,7 +636,8 @@
       "twentyone_legacy_reactivation_rolls_back_when_invalidation_fails",
       "cointracking_admission_and_late_failure_leave_every_write_uncommitted",
       "blockpit_admission_and_late_failure_leave_every_write_uncommitted",
-      "binance_late_failure_rolls_back_records_flags_runs_and_readiness"
+      "binance_late_failure_rolls_back_records_flags_runs_and_readiness",
+      "btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -6498,5 +6499,385 @@
       "binance_relevant_coordinator_matches_scope_fee_precedence_and_price_refusals"
     ],
     "rule": "Emit updated_records before the conditional updated count in enrichment replies."
+  },
+  {
+    "id": "W-btcpay-row-type",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "has no attribute 'items'",
+    "replace": "has no attribute 'get'",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Preserve malformed BTCPay row refusals before normalization."
+  },
+  {
+    "id": "W-btcpay-currency-default",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": ".unwrap_or(&s(\"BTC\"))",
+    "replace": ".unwrap_or(&s(\"LBTC\"))",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Missing and false currencies use BTC."
+  },
+  {
+    "id": "W-btcpay-missing-amount",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "BTCPay export is missing Amount",
+    "replace": "BTCPay export is missing amount",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Missing amounts retain the reference refusal."
+  },
+  {
+    "id": "W-btcpay-amount-suffix",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "if let Some(prefix) = amount.strip_suffix(&suffix)",
+    "replace": "if let Some(prefix) = amount.strip_prefix(&suffix)",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Only the currency suffix is stripped from amount cells."
+  },
+  {
+    "id": "W-btcpay-amount-suffix-case",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "kassiber_pytext::lower(suffix),",
+    "replace": "suffix.to_owned(),",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Accept the lowercase currency suffix as Python does."
+  },
+  {
+    "id": "W-btcpay-amount-parse",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "PriceNumber::parse(&amount)?",
+    "replace": "PriceNumber::parse(\"0\")?",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Parse exact exported amounts without replacement."
+  },
+  {
+    "id": "W-btcpay-direction",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "n.is_negative() && !n.is_zero()",
+    "replace": "n.is_positive() && !n.is_zero()",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Signed net wallet movement determines direction."
+  },
+  {
+    "id": "W-btcpay-nan",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "return Err(decimal_error(DecimalError::InvalidOperation))",
+    "replace": "return Err(AppError::new(\"app_error\", \"NaN\"))",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "NaN comparison retains Decimal InvalidOperation."
+  },
+  {
+    "id": "W-btcpay-txid",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "get(&row, \"TransactionId\")",
+    "replace": "get(&row, \"transactionid\")",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "BTCPay primary transaction IDs are case sensitive."
+  },
+  {
+    "id": "W-btcpay-txid-alias",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "value(&row, \"Transaction Id\")",
+    "replace": "value(&row, \"Transaction ID\")",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Retain the spaced transaction identity alias."
+  },
+  {
+    "id": "W-btcpay-timestamp",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "value(&row, \"Timestamp\").clone()",
+    "replace": "value(&row, \"timestamp\").clone()",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Use the provider timestamp field."
+  },
+  {
+    "id": "W-btcpay-confirmed-precedence",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "get(&row, \"confirmed_at\")",
+    "replace": "get(&row, \"ConfirmedAt\")",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "The snake-case confirmation field wins over its alias."
+  },
+  {
+    "id": "W-btcpay-confirmed-alias",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "value(&row, \"ConfirmedAt\")",
+    "replace": "value(&row, \"confirmed_at\")",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Retain the provider confirmation alias."
+  },
+  {
+    "id": "W-btcpay-includes-fee",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "(\"amount_includes_fee\", Py::Bool(outbound))",
+    "replace": "(\"amount_includes_fee\", Py::Bool(false))",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Outbound BTCPay net movement includes its miner fee."
+  },
+  {
+    "id": "W-btcpay-kind",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "s(if outbound { \"withdrawal\" } else { \"deposit\" })",
+    "replace": "s(if outbound { \"deposit\" } else { \"withdrawal\" })",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Retain the movement kind without tax reinterpretation."
+  },
+  {
+    "id": "W-btcpay-description",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "s(\"Imported from BTCPay\")",
+    "replace": "s(\"BTCPay\")",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Uncommented records retain the reference description."
+  },
+  {
+    "id": "W-btcpay-raw",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "s(kassiber_pyjson::dumps(\n                &row,",
+    "replace": "s(kassiber_pyjson::dumps(\n                &Py::Null,",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Retain the complete original provider row in raw evidence."
+  },
+  {
+    "id": "W-btcpay-json-shape",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "BTCPay JSON export must be a list of transaction objects",
+    "replace": "JSON import must be a list of transaction objects",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "Refuse non-list BTCPay JSON with its specific message."
+  },
+  {
+    "id": "W-btcpay-json-newlines",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": ".replace('\\r', \"\\n\")",
+    "replace": ".replace('\\r', \"\\r\")",
+    "expect_failing": [
+      "python_btcpay_import_vectors"
+    ],
+    "rule": "JSON file reads use universal newline translation."
+  },
+  {
+    "id": "W-btcpay-label-map-fallback",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "label(&Py::Str(key.clone()))",
+    "replace": "None",
+    "expect_failing": [
+      "btcpay_labels_preserve_provider_shapes_normalization_and_idempotence"
+    ],
+    "rule": "Map labels without text fall back to their nonempty key."
+  },
+  {
+    "id": "W-btcpay-label-split",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": ".split(|p| *p == u32::from(','))",
+    "replace": ".split(|p| *p == u32::from(';'))",
+    "expect_failing": [
+      "btcpay_labels_preserve_provider_shapes_normalization_and_idempotence"
+    ],
+    "rule": "Scalar labels split on commas."
+  },
+  {
+    "id": "W-btcpay-label-strip",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "Py::Str(text) => kassiber_pytext::strip_py(text),",
+    "replace": "Py::Str(text) => text.clone(),",
+    "expect_failing": [
+      "btcpay_labels_preserve_provider_shapes_normalization_and_idempotence"
+    ],
+    "rule": "Label whitespace is stripped before normalization."
+  },
+  {
+    "id": "W-btcpay-metadata-scope",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "WHERE profile_id=? AND wallet_id=? AND external_id=? ORDER BY created_at DESC LIMIT 1",
+    "replace": "WHERE (profile_id=? OR wallet_id=?) AND external_id=? ORDER BY created_at ASC LIMIT 1",
+    "expect_failing": [
+      "btcpay_metadata_lookup_retains_untrimmed_typed_and_scoped_reference_behavior"
+    ],
+    "rule": "Metadata lookup remains profile and wallet scoped."
+  },
+  {
+    "id": "W-btcpay-metadata-untrimmed",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "_ => generic_json::metadata(row, \"txid\")?,",
+    "replace": "_ => Sql::Text(kassiber_pytext::strip(&py_str(external)).into()),",
+    "expect_failing": [
+      "btcpay_metadata_lookup_retains_untrimmed_typed_and_scoped_reference_behavior"
+    ],
+    "rule": "Retain the reference untrimmed and native-typed metadata lookup."
+  },
+  {
+    "id": "W-btcpay-comment-strip",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "kassiber_pytext::strip(&py_str(comment)).into()",
+    "replace": "py_str(comment)",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Notes use the stripped provider comment."
+  },
+  {
+    "id": "W-btcpay-authored-note",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "note.as_ref().is_none_or(String::is_empty)",
+    "replace": "true",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Imported comments do not replace authored notes."
+  },
+  {
+    "id": "W-btcpay-tag-code",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "kassiber_pytext::lower(&label).replace(' ', \"-\")",
+    "replace": "label.clone()",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Tag codes use Python lowercasing and space replacement."
+  },
+  {
+    "id": "W-btcpay-tag-idempotence",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "tags += conn",
+    "replace": "tags += 1 + conn",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Count only newly attached transaction tags."
+  },
+  {
+    "id": "W-btcpay-tag-created",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "created += 1;",
+    "replace": "created += 2;",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Count each newly created tag exactly once."
+  },
+  {
+    "id": "W-btcpay-note-count",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "notes += 1;",
+    "replace": "notes += 2;",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Report each newly set note exactly once."
+  },
+  {
+    "id": "W-btcpay-metadata-invalidation",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "!invalidated && (notes > 0 || tags > 0)",
+    "replace": "!invalidated && false",
+    "expect_failing": [
+      "btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports"
+    ],
+    "rule": "Metadata-only changes invalidate the journal inputs."
+  },
+  {
+    "id": "W-btcpay-label-list-text",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "value(item, \"text\")\n                } else {\n                    item\n                };\n                (*text != Py::Null)",
+    "replace": "value(item, \"label\")\n                } else {\n                    item\n                };\n                (*text != Py::Null)",
+    "expect_failing": [
+      "btcpay_labels_preserve_provider_shapes_normalization_and_idempotence"
+    ],
+    "rule": "List label objects use their text field and skip missing text."
+  },
+  {
+    "id": "W-btcpay-label-surrogate-list",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "text.code_points().next().is_some().then_some(Py::Str(text))",
+    "replace": "text.code_points().next().is_some().then(|| s(py_str(&Py::Str(text))))",
+    "expect_failing": [
+      "btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes"
+    ],
+    "rule": "Preserve surrogate label code points until SQLite refusal."
+  },
+  {
+    "id": "W-btcpay-label-surrogate-code",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "kassiber_pytext::lower(&prefix)",
+    "replace": "prefix.clone()",
+    "expect_failing": [
+      "btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes"
+    ],
+    "rule": "Normalize label code prefixes before locating a surrogate encoding refusal."
+  },
+  {
+    "id": "W-btcpay-label-surrogate-refusal",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "generic_json::metadata(&dict([(\"description\", code)]), \"description\")?;",
+    "replace": "let _ = code;",
+    "expect_failing": [
+      "btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes"
+    ],
+    "rule": "Refuse invalid label encoding rather than inventing a valid tag."
+  },
+  {
+    "id": "W-btcpay-currency-surrogate-binding",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "Py::Str(case_points(&kassiber_pytext::strip_py(text), false))",
+    "replace": "s(currency.clone())",
+    "expect_failing": [
+      "btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback"
+    ],
+    "rule": "Retain invalid currency code points until the database encoding boundary."
+  },
+  {
+    "id": "W-btcpay-currency-surrogate-suffix",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": ".ends_with(&exact.code_points().collect::<Vec<_>>())",
+    "replace": ".starts_with(&exact.code_points().collect::<Vec<_>>())",
+    "expect_failing": [
+      "btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback"
+    ],
+    "rule": "Match the original amount suffix before stripping an invalid currency."
+  },
+  {
+    "id": "W-btcpay-currency-surrogate-case",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "case_points(&kassiber_pytext::strip_py(text), false)",
+    "replace": "case_points(&kassiber_pytext::strip_py(text), true)",
+    "expect_failing": [
+      "btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback"
+    ],
+    "rule": "Preserve uppercase expansion and exact currency encoding refusal positions."
   }
 ]

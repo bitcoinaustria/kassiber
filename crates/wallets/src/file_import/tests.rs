@@ -458,6 +458,8 @@ fn assert_import_vectors(cases: &Json) {
         .unwrap();
         let format = match case["format"].as_str().unwrap() {
             "json" => Format::Json,
+            "btcpay_csv" => Format::BtcpayCsv,
+            "btcpay_json" => Format::BtcpayJson,
             "phoenix_csv" => Format::Phoenix,
             "river_csv" => Format::River,
             "bullbitcoin_csv" => Format::Bull,
@@ -3358,4 +3360,337 @@ fn binance_default_wallet_and_admission_follow_reference_order() {
             .code,
         "not_found"
     );
+}
+
+#[test]
+fn python_btcpay_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_btcpay_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+#[test]
+fn btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        let body = json!([{"TransactionId":"ab".repeat(32),"Timestamp":"2025-01-02","Amount":"-0.002 BTC","Comment":" imported ","Labels":["Two Words","two-words","Other"]}]).to_string();
+        let first = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+        assert_eq!(scalar(&conn, "SELECT amount FROM transactions"), 200000000);
+        assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 0);
+        assert_eq!(
+            scalar(&conn, "SELECT amount_includes_fee FROM transactions"),
+            1
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE direction='outbound' AND kind='withdrawal' AND external_id_kind='txid' AND note='imported'"),1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM tags WHERE code='two-words' AND label='Two Words'"
+            ),
+            1
+        );
+        assert_eq!(
+            kassiber_envelope::get(&first, "btcpay_notes_set"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&first, "btcpay_tags_created"),
+            Some(&Py::from(2))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&first, "btcpay_tags_added"),
+            Some(&Py::from(2))
+        );
+        let repeated = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "unchanged"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "journal_invalidated"),
+            Some(&Py::Bool(false))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&repeated, "btcpay_tags_added"),
+            Some(&Py::from(0))
+        );
+        conn.execute_batch("UPDATE transactions SET note='authored';DELETE FROM transaction_tags;DELETE FROM tags;").unwrap();
+        let tagged = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&tagged, "journal_invalidated"),
+            Some(&Py::Bool(true))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&tagged, "btcpay_notes_set"),
+            Some(&Py::from(0))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE note='authored'"
+            ),
+            1
+        );
+        conn.execute_batch("UPDATE transactions SET note=NULL;")
+            .unwrap();
+        let noted = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&noted, "btcpay_notes_set"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            3
+        );
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='btcpay_json' AND rows_inserted=1"),1);
+        let idless = json!([{"Timestamp":"2025-01-03","Amount":"0.001 BTC","Comment":"unlinked","Labels":"unlinked"}]).to_string();
+        let unlinked = import_kind(&conn, &idless, Format::BtcpayJson).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&unlinked, "btcpay_notes_set"),
+            Some(&Py::from(0))
+        );
+        assert_eq!(
+            scalar(&conn, "SELECT count(*) FROM tags WHERE code='unlinked'"),
+            0
+        );
+    }
+}
+
+#[test]
+fn btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness() {
+    for encrypted in [false, true] {
+        for trigger in [
+            "CREATE TRIGGER refuse_btcpay BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'denied');END;",
+            "CREATE TRIGGER refuse_btcpay BEFORE INSERT ON tags BEGIN SELECT RAISE(ABORT,'denied');END;",
+            "CREATE TRIGGER refuse_btcpay BEFORE INSERT ON transaction_tags BEGIN SELECT RAISE(ABORT,'denied');END;",
+            "CREATE TRIGGER refuse_btcpay BEFORE UPDATE OF journal_input_version ON profiles BEGIN SELECT RAISE(ABORT,'denied');END;",
+        ] {
+            let conn = fixture_codec(encrypted);
+            conn.execute_batch(trigger).unwrap();
+            let body = "TransactionId,Timestamp,Amount,Comment,Labels\nref,2025-01-02,1 BTC,note,label\n";
+            assert!(import_kind(&conn,body,Format::BtcpayCsv).is_err());
+            for table in ["transactions","tags","transaction_tags","import_batches","import_batch_transactions"] {
+                assert_eq!(scalar(&conn,&format!("SELECT count(*) FROM {table}")),0,"{table}");
+            }
+            assert_eq!(scalar(&conn,"SELECT journal_input_version FROM profiles WHERE id='p'"),0);
+        }
+        let conn = fixture_codec(encrypted);
+        let metadata_body =
+            "TransactionId,Timestamp,Amount,Comment,Labels\nref,2025-01-02,1 BTC,note,label\n";
+        import_kind(&conn, metadata_body, Format::BtcpayCsv).unwrap();
+        conn.execute_batch("UPDATE transactions SET note=NULL;DELETE FROM transaction_tags;DELETE FROM tags;
+            CREATE TRIGGER refuse_btcpay BEFORE UPDATE OF journal_input_version ON profiles BEGIN SELECT RAISE(ABORT,'denied');END;").unwrap();
+        assert!(import_kind(&conn, metadata_body, Format::BtcpayCsv).is_err());
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE note IS NULL"
+            ),
+            1
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 0);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 0);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            1
+        );
+        let conn = fixture_codec(encrypted);
+        let body = "TransactionId,Timestamp,Amount\nfirst,2025-01-02,1 BTC\nsecond,invalid,1 BTC\n";
+        assert!(import_kind(&conn, body, Format::BtcpayCsv).is_err());
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+}
+
+#[test]
+fn btcpay_metadata_lookup_retains_untrimmed_typed_and_scoped_reference_behavior() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('elsewhere','ws','q','Elsewhere','custom','2025-01-01'),('same-profile','ws','p','Other wallet','custom','2025-01-01');
+            INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('elsewhere','ws','q','elsewhere','clean','elsewhere','2025-01-02T00:00:00Z','inbound','BTC',100000000000,0,'2025-01-01'),('same-profile','ws','p','same-profile','clean','same-profile','2025-01-02T00:00:00Z','inbound','BTC',100000000000,0,'2025-01-01');").unwrap();
+        let body = json!([
+            {"TransactionId":" padded ","Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"padded","Labels":"padded"},
+            {"TransactionId":true,"Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"boolean","Labels":"boolean"},
+            {"TransactionId":1,"Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"integer","Labels":"integer"},
+            {"TransactionId":"clean","Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"clean","Labels":"clean"}
+        ]).to_string();
+        let result = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&result, "btcpay_notes_set"),
+            Some(&Py::from(3))
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE external_id=' padded ' AND note='padded'"
+            ),
+            1
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE external_id='True' AND note IS NULL"
+            ),
+            1
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE wallet_id IN ('elsewhere','same-profile') AND note IS NULL"
+            ),
+            2
+        );
+        assert_eq!(
+            scalar(&conn, "SELECT count(*) FROM tags WHERE code='boolean'"),
+            1
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transactions WHERE external_id='1' AND note='boolean'"
+            ),
+            1
+        );
+        let body = json!([{"TransactionId":["invalid"],"Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"note"}]).to_string();
+        let error = import_kind(&conn, &body, Format::BtcpayJson).unwrap_err();
+        assert_eq!(
+            error.message,
+            if encrypted {
+                "Error binding parameter 2 - probably unsupported type."
+            } else {
+                "Error binding parameter 3: type 'list' is not supported"
+            }
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 6);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    }
+}
+
+#[test]
+fn btcpay_labels_preserve_provider_shapes_normalization_and_idempotence() {
+    for encrypted in [false, true] {
+        for (labels, expected) in [
+            (
+                json!({"fallback":{},"empty":null,"text":{"text":" Trimmed "},"skip":{"text":""},"boolean":false,"zero":0}),
+                vec![
+                    ("fallback", "fallback"),
+                    ("empty", "empty"),
+                    ("trimmed", "Trimmed"),
+                    ("false", "False"),
+                    ("0", "0"),
+                ],
+            ),
+            (
+                json!([{"text":" Nested "},{},null,0,false," "]),
+                vec![("nested", "Nested"), ("0", "0"), ("false", "False")],
+            ),
+            (json!(" A, A , B "), vec![("a", "A"), ("b", "B")]),
+        ] {
+            let conn = fixture_codec(encrypted);
+            let body = json!([{"TransactionId":"labels","Timestamp":"2025-01-02","Amount":"1 BTC","Labels":labels}]).to_string();
+            let result = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+            assert_eq!(
+                kassiber_envelope::get(&result, "btcpay_tags_added"),
+                Some(&Py::from(expected.len() as i64))
+            );
+            let mut statement = conn
+                .prepare("SELECT code,label FROM tags ORDER BY code")
+                .unwrap();
+            let observed = statement
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            let mut expected = expected
+                .into_iter()
+                .map(|(code, label)| (code.to_string(), label.to_string()))
+                .collect::<Vec<_>>();
+            expected.sort();
+            assert_eq!(observed, expected);
+            let repeated = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
+            assert_eq!(
+                kassiber_envelope::get(&repeated, "btcpay_tags_added"),
+                Some(&Py::from(0))
+            );
+            assert_eq!(
+                kassiber_envelope::get(&repeated, "journal_invalidated"),
+                Some(&Py::Bool(false))
+            );
+        }
+    }
+}
+
+#[test]
+fn btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes() {
+    for encrypted in [false, true] {
+        for labels in [r#"" İ\ud800 ""#, r#"[" İ\ud800 "]"#, r#"{" İ\ud800 ":{}}"#] {
+            let conn = fixture_codec(encrypted);
+            let body = format!(
+                r#"[{{"TransactionId":"labels","Timestamp":"2025-01-02","Amount":"1 BTC","Labels":{labels}}}]"#
+            );
+            let error = import_kind(&conn, &body, Format::BtcpayJson).unwrap_err();
+            assert_eq!(error.message,"'utf-8' codec can't encode character '\\ud800' in position 2: surrogates not allowed");
+            for table in ["transactions", "tags", "transaction_tags", "import_batches"] {
+                assert_eq!(scalar(&conn, &format!("SELECT count(*) FROM {table}")), 0);
+            }
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT journal_input_version FROM profiles WHERE id='p'"
+                ),
+                0
+            );
+        }
+    }
+}
+
+#[test]
+fn btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_btcpay_imports.json"
+    ))
+    .unwrap();
+    let cases = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| {
+            case["name"]
+                .as_str()
+                .unwrap()
+                .starts_with("btcpay:json:currency-surrogate-")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 6);
+    for encrypted in [false, true] {
+        for case in &cases {
+            let conn = fixture_codec(encrypted);
+            let error =
+                import_kind(&conn, case["text"].as_str().unwrap(), Format::BtcpayJson).unwrap_err();
+            assert_eq!(
+                json!({"code":error.code,"message":error.message,"hint":error.hint}),
+                case["error"],
+                "{}",
+                case["name"]
+            );
+            for table in ["transactions", "tags", "transaction_tags", "import_batches"] {
+                assert_eq!(scalar(&conn, &format!("SELECT count(*) FROM {table}")), 0);
+            }
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT journal_input_version FROM profiles WHERE id='p'"
+                ),
+                0
+            );
+        }
+    }
 }

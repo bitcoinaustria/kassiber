@@ -104,21 +104,10 @@ dependencies.
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
-The initial shell checkpoint implemented `init`, `status`, `daemon`, `commands describe`, all six
-`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
-`loans` and six `attachments` commands, all four `documents` commands and stored
-`btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
-inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix`, `import-river`, `import-binance-supplemental` and supported Bitcoin `sync`,
-the [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
-report snapshot/CSV export leaves, transaction CSV/XLSX and
-[Austrian XLSX](#austrian-xlsx-service-checkpoint-r5-twelfth-reports-continuation-partial), and every leaf of
-`workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, all eight `secrets` leaves, and `backup export`
-and `backup import`, including `--install`. The service
-checkpoints below extend that subset; `describe.rs::IMPLEMENTED` records current
-execution support. Each family registers through its own CLI module. An
-unimplemented leaf parses exactly as in Python and then fails
+The native catalog includes
+`wallets import-btcpay`. `commands describe` lists the supported
+leaves from `crates/cli/src/describe.rs`; each family registers through its own
+CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -2725,6 +2714,145 @@ verification build trees are removed after summarizing. No Python production
 code, dependency, schema, egress, sync route or AI projection changes in this
 checkpoint. BTCPay files, generic ledger, Wasabi, Samourai and document ingestion
 remain separate core/CLI commits.
+
+## BTCPay core and CLI file ingestion (R5 continuation)
+
+`wallets import-btcpay` now imports CSV and JSON files through the native
+local file service. It preserves exact signed net movements, integer msat,
+BTC/LBTC asset normalization, confirmation aliases, conservative
+deposit/withdrawal kinds and the outbound fee-included flag. Original provider
+rows remain raw evidence; file imports do not establish invoice pricing,
+ownership or reviewed tax facts. Both `--input-format` and `--format` retain
+the generated CLI grammar.
+
+Comments fill empty notes, and scalar/list/map labels use Python's tag-code
+normalization and first-label retention. Wallet/profile selection, repeated
+imports, metadata-only journal invalidation, import runs and rollback share
+the transactional coordinator. Invalid amounts, schemas, timestamps, typed
+values and label encodings preserve reference refusals. Late failures roll
+back observations, notes, tags, run records and readiness changes on both
+codecs.
+
+There are 311 Python-derived reference files (109 CSV and 202 JSON). Native
+vectors pin every normalized field and fingerprint. Hybrid cases compare
+complete typed book dumps and assert native routing for every file plus
+coordinator/reimport and rollback cases. The CLI oracle compares raw output
+bytes and complete typed book dumps for every frozen file on SQLite and
+SQLCipher. Its coordinator sequence uses fresh, deterministic identities per
+invocation so late failures reach metadata rather than an unrelated
+repeated-UUID constraint. It retains schema admission and injects CLI failures
+through malformed records; native tests inject database faults inside the
+admitted service transaction.
+
+Python's boolean-identity metadata bug is intentionally retained. A JSON
+`TransactionId: true` stores external identity `"True"`, while metadata lookup
+binds the original boolean. It misses that row and can attach its comment or
+labels to a separate numeric identity `"1"` in the same wallet. Run
+`uv run --locked python -m tests.rust_port.repro_btcpay_reference` offline for
+both reproductions. Native tests and the frozen typed-identity files pin the
+behavior; Python production code is unchanged.
+
+The final review also covers lone surrogates in currency strings. Original
+code points survive uppercase expansion and suffix matching until the exact
+encoding refusal; a replacement character cannot accidentally match a
+surrogate suffix. Six frozen files pin amount-error precedence, case
+conversion and rollback on both codecs.
+
+The catalog adds 38 BTCPay mutations to the retained 648 (686 total).
+`W-import-atomic` also names the BTCPay late-failure witness. The first audit
+passes 14 baseline selections and kills 33 of 36 selected entries. Two
+surviving recipes were equivalent after normalization; their final recipes
+remove raw evidence and alter actual scalar-label splitting. The other
+survivor exposed a missing same-profile wallet witness, which the scope test
+now covers. A second audit passes all three revised selections and kills all
+three remaining mutations. The final currency review adds three further
+entries, all killed by
+`btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback` after
+its unmutated baseline passes. The label-strip recipe is narrowed to the label
+match arm after the currency addition; a byte-for-byte comparison proves it
+generates the same mutant, and a final unmutated baseline and kill both pass.
+All 38 new entries and the shared atomic rule have
+named kill evidence. The other 647 inherited entries retain their earlier
+evidence. Mutation source and build trees are removed after summarizing the
+audit.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-btcpay-row-type` | `python_btcpay_import_vectors` |
+| `W-btcpay-currency-default` | `python_btcpay_import_vectors` |
+| `W-btcpay-missing-amount` | `python_btcpay_import_vectors` |
+| `W-btcpay-amount-suffix` | `python_btcpay_import_vectors` |
+| `W-btcpay-amount-suffix-case` | `python_btcpay_import_vectors` |
+| `W-btcpay-amount-parse` | `python_btcpay_import_vectors` |
+| `W-btcpay-direction` | `python_btcpay_import_vectors` |
+| `W-btcpay-nan` | `python_btcpay_import_vectors` |
+| `W-btcpay-txid` | `python_btcpay_import_vectors` |
+| `W-btcpay-txid-alias` | `python_btcpay_import_vectors` |
+| `W-btcpay-timestamp` | `python_btcpay_import_vectors` |
+| `W-btcpay-confirmed-precedence` | `python_btcpay_import_vectors` |
+| `W-btcpay-confirmed-alias` | `python_btcpay_import_vectors` |
+| `W-btcpay-includes-fee` | `python_btcpay_import_vectors` |
+| `W-btcpay-kind` | `python_btcpay_import_vectors` |
+| `W-btcpay-description` | `python_btcpay_import_vectors` |
+| `W-btcpay-raw` | `python_btcpay_import_vectors` |
+| `W-btcpay-json-shape` | `python_btcpay_import_vectors` |
+| `W-btcpay-json-newlines` | `python_btcpay_import_vectors` |
+| `W-btcpay-label-map-fallback` | `btcpay_labels_preserve_provider_shapes_normalization_and_idempotence` |
+| `W-btcpay-label-split` | `btcpay_labels_preserve_provider_shapes_normalization_and_idempotence` |
+| `W-btcpay-label-strip` | `btcpay_labels_preserve_provider_shapes_normalization_and_idempotence` |
+| `W-btcpay-metadata-scope` | `btcpay_metadata_lookup_retains_untrimmed_typed_and_scoped_reference_behavior` |
+| `W-btcpay-metadata-untrimmed` | `btcpay_metadata_lookup_retains_untrimmed_typed_and_scoped_reference_behavior` |
+| `W-btcpay-comment-strip` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-authored-note` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-tag-code` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-tag-idempotence` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-tag-created` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-note-count` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-metadata-invalidation` | `btcpay_coordinator_preserves_notes_tags_fee_inclusion_and_reimports` |
+| `W-btcpay-label-list-text` | `btcpay_labels_preserve_provider_shapes_normalization_and_idempotence` |
+| `W-btcpay-label-surrogate-list` | `btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes` |
+| `W-btcpay-label-surrogate-code` | `btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes` |
+| `W-btcpay-label-surrogate-refusal` | `btcpay_surrogate_labels_refuse_without_erasing_evidence_or_partial_writes` |
+| `W-btcpay-currency-surrogate-binding` | `btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback` |
+| `W-btcpay-currency-surrogate-suffix` | `btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback` |
+| `W-btcpay-currency-surrogate-case` | `btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback` |
+
+The final hybrid scenarios record these importer calls; setup and rollback
+commands are excluded from the routing count:
+
+| CLI importer | Rust-served calls | Python importer fallbacks |
+| --- | ---: | ---: |
+| BTCPay | 318 | 0 |
+
+The original 305 files pass raw CLI bytes and full typed book dumps on SQLite
+and SQLCipher, with coordinator, drift and routing checks: six tests and 917
+subtests. The currency review adds the remaining six files on both codecs and
+reruns BTCPay coordination, inherited Binance coordination, drift and the
+expanded hybrid scenarios: six tests and 327 subtests. All 73 native
+file-import tests pass, including both-codec currency refusal/rollback and
+late metadata failures.
+
+Formatting, strict workspace/harness Clippy and all 14 harness tests pass with
+Rust 1.99.1 and offline Cargo. All 686 mutation recipes apply to the final
+source. The classifier records 5,729 Python test definitions, and all 57
+required CI preflight checks pass. The final appended-registry layout also
+passes the coordinator's raw-wire/full-book check on both codecs. The workspace
+suite records 1,493 passes and 58 socket bind denials with explicit `EPERM`
+(12 chain, 16 network, 11 rates and 19 wallets). There are no other failures;
+the backup assertion that failed transiently in the previous checkpoint passes
+in this run. The exact denied test names and diagnostics are retained in
+`target/r5-importers-9-artifacts/workspace-results.json`.
+
+The compact verification rebuild uses `CARGO_BUILD_JOBS=8`, no debug info and
+no incremental cache. Mutation and verification build trees are removed after
+summarizing. Logs and routing/mutation summaries remain under
+`target/r5-importers-9-artifacts/`. The full Python/frontend quality gate,
+Docker/regtest and packaged/platform gates were not run.
+
+Transport scope follows the [shared file-import
+follow-up](#shared-file-import-daemon-parity-pending). No dependency, schema,
+egress, sync route or AI projection is added. Generic ledger, Wasabi, Samourai
+and document ingestion remain separate core/CLI commits.
 
 ## Daemon
 

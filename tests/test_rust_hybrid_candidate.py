@@ -695,6 +695,50 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-blockpit"]
         self.assertEqual(calls, [{"command": "wallets.import-blockpit", "served_by": "rust"}] * 8)
 
+    def test_btcpay_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "BTCPay source", "--kind", "custom"))
+        source = self.data_root.parent / "btcpay.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_btcpay_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-btcpay", "--wallet", "BTCPay source", "--file", str(source), "--format", case["format"].removeprefix("btcpay_"))
+                    self.assertIn(result.returncode, (0, 1), (result.stdout, result.stderr))
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-btcpay"]
+        self.assertEqual(calls, [{"command":"wallets.import-btcpay", "served_by":"rust"}] * len(cases))
+
+    def test_btcpay_coordinator_reimports_metadata_and_rollback_match_dump(self):
+        from crates.wallets.scripts.generate_btcpay_vectors import BASE
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "BTCPay source", "--kind", "custom"))
+        source = self.data_root.parent / "btcpay.json"
+        args = ("wallets", "import-btcpay", "--wallet", "BTCPay source", "--file", str(source), "--input-format", "json")
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            source.write_text(json.dumps([BASE]))
+            first = self.ok(self.cli(*args))["data"]
+            self.assertEqual(first["btcpay_notes_set"], 1)
+            self.assertFalse(self.ok(self.cli(*args))["data"]["journal_invalidated"])
+            source.write_text(json.dumps([{**BASE, "Comment":"new", "Labels":"New label"}]))
+            self.assertEqual(self.ok(self.cli(*args))["data"]["btcpay_tags_created"], 1)
+            source.write_text(json.dumps([BASE, {**BASE, "Timestamp":"invalid"}]))
+            self.assertEqual(self.cli(*args).returncode, 1)
+            self.ok(self.cli("imports", "rollback", "--batch", first["import_batch_id"], "--confirm"))
+            source.write_text(json.dumps([BASE]))
+            self.assertEqual(self.ok(self.cli(*args))["data"]["imported"], 1)
+            self.assertEqual(self.cli("wallets", "import-btcpay", "--wallet", "missing", "--file", str(source)).returncode, 1)
+            self.assertEqual(self.cli("wallets", "import-btcpay", "--wallet", "BTCPay source", "--file", str(source.parent / "missing.csv")).returncode, 1)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-btcpay"]
+        self.assertEqual(calls, [{"command":"wallets.import-btcpay", "served_by":"rust"}] * 7)
+
     def test_binance_import_has_no_fallback_and_matches_every_reference_dump(self):
         self.ok(self.cli("init"))
         self.ok(self.cli("workspaces", "create", "Workspace"))

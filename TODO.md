@@ -363,8 +363,11 @@ projections stay Python. Progress and remaining work for this slice:
   frozen Python files, SQLite/SQLCipher full-book/wire parity, commercial
   coordination, reference-bug repros and named mutation killers. See the
   Binance checkpoint in plan 21.
-- [ ] Port BTCPay files, generic ledger, Wasabi, Samourai and document ingestion
-  at core/CLI level, one verified commit per importer.
+- [x] Port BTCPay CSV/JSON files at core/CLI level with frozen Python files,
+  SQLite/SQLCipher full-book/wire parity, notes/tags, reference-bug reproduction
+  and named mutation killers. See the BTCPay checkpoint in plan 21.
+- [ ] Port generic ledger, Wasabi, Samourai and document ingestion at core/CLI
+  level, one verified commit per importer.
 - [ ] Complete the [shared file-import daemon parity follow-up](docs/reference/rust-shell.md#shared-file-import-daemon-parity-pending)
   after its native prerequisites land.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,

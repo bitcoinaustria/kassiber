@@ -40,7 +40,8 @@ pub fn execute(
         | "import-ledger-live"
         | "import-cointracking"
         | "import-blockpit"
-        | "import-binance-supplemental" => {
+        | "import-binance-supplemental"
+        | "import-btcpay" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,
                 wallet,
@@ -67,6 +68,13 @@ pub fn execute(
                         kassiber_wallets::file_import::Format::Pocket
                     }
                     Some("import-phoenix") => kassiber_wallets::file_import::Format::Phoenix,
+                    Some("import-btcpay") => {
+                        if namespace.text("input_format") == Some("json") {
+                            kassiber_wallets::file_import::Format::BtcpayJson
+                        } else {
+                            kassiber_wallets::file_import::Format::BtcpayCsv
+                        }
+                    }
                     _ => kassiber_wallets::file_import::Format::Csv,
                 },
             })
