@@ -156,6 +156,9 @@ name the transactions that set their pool's barrier in
 at all is listed as such a downstream row instead of disappearing.
 `custody_quantity_unresolved` keeps a deterministic primary `blocker_code` and,
 when several issues apply, every `blocker_codes`/`issue_ids` plus `gap_ids`.
+Rows behind an invalid-price basis barrier retain their own missing-price or
+price-review cause as the primary reason, with the barrier as an additional
+reason. They remain excluded from booking until the relevant causes clear.
 
 `ui.journals.quarantine` and `journals quarantined` add per row `category`,
 `blocks_reports` (the row is named by a persisted custody quantity issue, which

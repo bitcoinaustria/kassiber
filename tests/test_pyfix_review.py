@@ -332,3 +332,24 @@ def test_large_legacy_price_quarantines_sale_without_aborting_book(book, rate, l
     assert 'supported decimal range' in json.loads(bad['detail_json'])['cause']
     assert book.execute("SELECT 1 FROM journal_entries WHERE transaction_id='buy'").fetchone()
     assert not book.execute("SELECT 1 FROM journal_entries WHERE transaction_id='out'").fetchone()
+
+
+@pytest.mark.parametrize('bad_rate', [None, '1e-14', '1e40'])
+def test_invalid_price_barrier_preserves_later_missing_price_cause(book, bad_rate):
+    """price_q.py: an invalid sale must not hide the next sale's own cause."""
+    _tx(book, 'buy', 'btc', 'inbound', 'BTC', 300000000000, '2025-01-01T00:00:00Z')
+    _tx(book, 'sell-missing', 'btc', 'outbound', 'BTC', 50000000000, '2026-02-01T00:00:00Z')
+    _tx(book, 'sell-ok', 'btc', 'outbound', 'BTC', 50000000000, '2026-03-01T00:00:00Z')
+    _tx(book, 'receipt-missing', 'btc', 'inbound', 'BTC', 50000000000, '2026-04-01T00:00:00Z')
+    book.execute("UPDATE transactions SET fiat_rate=50000, fiat_rate_exact='50000' WHERE id IN ('buy','sell-ok')")
+    book.execute("UPDATE transactions SET amount=50000000000, fiat_rate=?, fiat_rate_exact=? WHERE id='out'", (float(bad_rate) if bad_rate else None, bad_rate))
+    book.commit()
+    process_journals(book, 'Books', 'Book')
+    quarantines = {row['transaction_id']: row for row in book.execute('SELECT * FROM journal_quarantines')}
+    assert quarantines['sell-missing']['reason'] == 'missing_spot_price'
+    assert quarantines['receipt-missing']['reason'] == 'missing_spot_price'
+    if bad_rate:
+        assert quarantines['out']['reason'] == 'invalid_transaction_price'
+        additional = json.loads(quarantines['sell-missing']['detail_json'])['additional_reasons']
+        assert any(item['reason'] == 'custody_basis_barrier' for item in additional)
+    assert {row[0] for row in book.execute('SELECT DISTINCT transaction_id FROM journal_entries')} == {'buy'}

@@ -30,6 +30,7 @@ from .custody_quantity import (
     QuantitySlice,
 )
 from .custody_quantity_runtime import CanonicalQuantityState, with_tax_projection_blockers
+from .tax_events import transaction_price_quarantine
 from .transfer_chronology import chain_order_evidence
 
 
@@ -522,9 +523,16 @@ def compile_finalized_tax_projection(
         allocated_fee_sources.add(source.quantity_hash)
         return source.fee_msat
 
-    def quarantine_basis_barrier(source: QuantityObservation) -> None:
+    def quarantine_basis_barrier(source: QuantityObservation, *, check_price: bool = False) -> None:
         if source.anchor_transaction_id not in rows_by_id:
             return
+        if check_price:
+            row = rows_by_id[source.anchor_transaction_id]
+            price_cause = transaction_price_quarantine(
+                profile, row, str(_field(row, "wallet_label") or source.wallet_id)
+            )
+            if price_cause is not None:
+                quarantines.setdefault((source.anchor_transaction_id, price_cause["reason"]), price_cause)
         source_barrier = state.tax_eligibility.barrier_for(source)
         source_reasons = issue_reasons_by_transaction.get(
             source.anchor_transaction_id, set()
@@ -582,7 +590,13 @@ def compile_finalized_tax_projection(
             continue
         is_eligible = _slice_key(decision.source) in eligible
         if not is_eligible:
-            quarantine_basis_barrier(source)
+            # Preserve intrinsic valuation causes on standalone events. A
+            # reviewed payout can supply its own price, and internal moves do
+            # not require a standalone disposal price.
+            quarantine_basis_barrier(source, check_price=(
+                decision.state in {EXTERNAL_CONFIRMED, EXTERNAL_PRESUMED}
+                and source.anchor_transaction_id not in payouts_by_source
+            ))
             continue
         if decision.target is not None and decision.state in {
             INTERNAL_VERIFIED,
@@ -942,7 +956,7 @@ def compile_finalized_tax_projection(
             observation.anchor_transaction_id not in projected_anchor_ids
             and observation.anchor_transaction_id not in quarantined_ids
         ):
-            quarantine_basis_barrier(observation)
+            quarantine_basis_barrier(observation, check_price=True)
 
     # Taxable cross-asset reviews do not assert continuing custody, so they do
     # not emit an internal quantity claim.  Preserve them as audit/tax-relation
