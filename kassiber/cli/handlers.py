@@ -2049,6 +2049,7 @@ def _prepare_negative_balance_repairs(
     prefetched,
     *,
     source_overlap_index=None,
+    check_wallet_cancelled=None,
 ):
     """Fetch any widened descriptor repair before opening the apply savepoint."""
 
@@ -2085,6 +2086,7 @@ def _prepare_negative_balance_repairs(
                 hooks,
                 checkpoint=core_sync.full_scan_checkpoint(fetch.sync_state.checkpoint),
                 force_full=True,
+                check_cancelled=(lambda: check_wallet_cancelled(wallet)) if check_wallet_cancelled is not None else None,
                 source_overlap_preflight=(
                     lambda candidate, state: core_source_overlap.filter_sync_state_for_canonical_owner(
                         conn,
@@ -2134,6 +2136,7 @@ def _prefetch_chain_wallets(
     *,
     freshness_checkpoints=None,
     force_full=False,
+    check_wallet_cancelled=None,
 ):
     """Finish chain discovery and backend I/O before any write savepoint."""
 
@@ -2188,6 +2191,7 @@ def _prefetch_chain_wallets(
                 if hooks.prepare_observer_fetch is not None
                 else None
             ),
+            check_wallet_cancelled=check_wallet_cancelled,
         )
         prepared = _prepare_negative_balance_repairs(
             conn,
@@ -2197,6 +2201,7 @@ def _prefetch_chain_wallets(
             hooks,
             prefetched,
             source_overlap_index=source_overlap_index,
+            check_wallet_cancelled=check_wallet_cancelled,
         )
         scope_by_wallet = {str(row["id"]): row.get("_book_environment_id") for row in wallets}
         return {wallet_id: replace(result, book_environment_id=scope_by_wallet.get(wallet_id)) if isinstance(result, core_sync.WalletBackendFetch) else result for wallet_id, result in prepared.items()}
@@ -2339,6 +2344,7 @@ def sync_wallet_from_backend(
             hooks,
             freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
             force_full=force_full,
+            check_wallet_cancelled=(lambda _wallet: check_cancelled()) if check_cancelled is not None else None,
         )
     results = _apply_wallet_sync_atomically(
         conn,
@@ -2368,6 +2374,7 @@ def prefetch_wallets_from_backend(
     *,
     freshness_checkpoints=None,
     force_full=False,
+    check_wallet_cancelled=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return _prefetch_chain_wallets(
@@ -2378,6 +2385,7 @@ def prefetch_wallets_from_backend(
         _wallet_sync_hooks(commit=False),
         freshness_checkpoints=freshness_checkpoints,
         force_full=force_full,
+        check_wallet_cancelled=check_wallet_cancelled,
     )
 
 
