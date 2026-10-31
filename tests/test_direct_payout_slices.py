@@ -1,7 +1,6 @@
 """Direct payout terms apply only to their reviewed source allocation."""
 import json
-import subprocess
-import sys
+from tests import cli_runner
 from decimal import Decimal
 
 import pytest
@@ -23,12 +22,12 @@ def test_partial_payout_terms_do_not_price_residual(tmp_path, surface, policy, a
         args = dict(payout_asset=asset, payout_amount=('1' if asset == 'EUR' else '0.0000004'), policy=policy,
                     payout_fiat_value='10', out_amount='0.0000004')
         if surface == 'cli':
-            command = [sys.executable, '-m', 'kassiber', '--data-root', str(tmp_path),
+            command = ['--data-root', str(tmp_path),
                        '--machine', 'transfers', 'payouts', 'create',
                        '--workspace', 'Books', '--profile', 'Book', '--tx-out', 'out']
             for key, value in args.items():
                 command.extend(['--' + key.replace('_', '-'), value])
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = cli_runner.run(command, capture_output=True, text=True)
             assert result.returncode == 0, result.stdout + result.stderr
         else:
             _ui_swap_matching_payload_from_conn(conn, 'ui.transfers.payouts.create',
@@ -52,7 +51,7 @@ def test_partial_payout_terms_do_not_price_residual(tmp_path, surface, policy, a
         conn.close()
 
 
-@pytest.mark.parametrize('value', ['3.333', '12345678901234567890.1234567890123456789', '3.3330000000000002'])
+@pytest.mark.parametrize('value', ['3.333', '123456789012.1234567890123456789', '3.3330000000000002'])
 def test_payout_preserves_authored_decimal(tmp_path, value):
     conn = open_db(tmp_path)
     try:
@@ -112,7 +111,7 @@ def test_partial_payout_ledger_journals_and_report(tmp_path, priced, policy, ass
             refreshed = conn.execute("SELECT proceeds_exact FROM journal_entries WHERE entry_type='disposal'").fetchall()
             assert sum(Decimal(r[0]) for r in refreshed) == expected
         # Reports read the stored projection, never the payout metadata as events.
-        result = subprocess.run([sys.executable, '-m', 'kassiber', '--data-root', str(tmp_path),
+        result = cli_runner.run(['--data-root', str(tmp_path),
                 '--machine', 'reports', 'capital-gains', '--workspace', 'Books', '--profile', 'Book'],
             capture_output=True, text=True)
         payload = json.loads(result.stdout)

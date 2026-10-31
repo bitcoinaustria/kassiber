@@ -5,6 +5,10 @@ from decimal import Decimal, InvalidOperation
 
 from ..errors import AppError
 
+# The tax engine (like its RP2 oracle) quantizes comparisons to 13 decimal
+# places with 32 significant digits: at most 19 integer digits fit.
+TAX_DECIMAL_LIMIT = Decimal("1e19")
+
 
 def finite_decimal(value, field: str) -> Decimal:
     """Require a decimal that is finite in exact and legacy numeric outputs."""
@@ -22,7 +26,11 @@ def finite_decimal(value, field: str) -> Decimal:
     # Bound before any fixed-point formatting; RP2 compares prices
     # at 13 decimal places. Never admit a nonzero price that becomes zero.
     if number and (
-        abs(number.as_tuple().exponent) > 308 or abs(number) < Decimal("1e-13")
+        abs(number.as_tuple().exponent) > 308
+        or number.copy_abs() < Decimal("1e-13")
+        or number.copy_abs() >= TAX_DECIMAL_LIMIT
+        # Legacy numeric mirrors must not round up across the engine limit.
+        or abs(float(number)) >= float(TAX_DECIMAL_LIMIT)
     ):
         raise AppError(
             f"{field} is outside the supported decimal range",

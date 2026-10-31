@@ -408,7 +408,8 @@ so the recalculated journals are stored in the same transaction.
 Prices are decimal strings. Payouts, overrides, imports, manual/cached rates,
 commercial/document prices and source-of-funds values share finite decimal
 validation. NaN, infinity, malformed decimals, float overflow, exponents outside
--308…308 and nonzero magnitudes below 1e-13 return typed `validation` errors
+-308…308, nonzero magnitudes below 1e-13, or magnitudes at or above 1e19
+(including numeric mirrors rounded across that upper bound) return typed `validation` errors
 before storage or fixed-point formatting. The lower bound prevents prices
 comparing as zero in the tax engine. Negative zero normalizes to zero.
 Finalized custody projection names the transaction when refusing invalid stored

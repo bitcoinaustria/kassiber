@@ -391,7 +391,10 @@ If transactions do not already include usable fiat pricing, Kassiber first tries
 All price write paths use shared finite decimal validation, including overrides,
 history reverts, manual/cached rates, BTCPay, imports, documents and source-of-funds sources. Values must
 fit finite numeric output, use exponents between -308 and 308, and have zero or
-magnitude at least 1e-13 so the tax engine cannot compare a positive price as zero.
+magnitude at least 1e-13 and below 1e19. The upper bound reserves the engine's
+13 decimal places within its 32-digit precision; numeric mirrors must also stay
+below that limit after float conversion. The lower bound prevents the engine
+from comparing a positive price as zero.
 Negative zero normalizes to zero. Derived totals (`rate * amount`) and unit
 rates (`value / amount`) obey the same limits at write time. Invalid stored
 transaction pricing is quarantined as `invalid_transaction_price`, with the

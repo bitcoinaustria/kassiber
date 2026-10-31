@@ -32,7 +32,8 @@ def book(tmp_path):
     conn.close()
 
 
-BAD = ['NaN', 'sNaN', 'Infinity', '1e400', '1e999', '1e-20', '1e-300', '1e-999999999']
+BAD = ['NaN', 'sNaN', 'Infinity', '1e400', '1e999', '1e-20', '1e-300', '1e-999999999',
+       '1e19', '1e40', '1e300']
 
 
 @pytest.mark.parametrize('value', BAD)
@@ -170,7 +171,7 @@ def test_split_payout_fails_closed(book, monkeypatch, policy, asset):
     assert not result.rows
 
 
-@pytest.mark.parametrize('rate', ['Infinity', '1e-13'])
+@pytest.mark.parametrize('rate', ['Infinity', '1e-13', '1e19', '1e40', '1e300'])
 def test_legacy_price_quarantine_identifies_transaction(book, rate):
     book.execute("UPDATE transactions SET fiat_rate=?, fiat_rate_exact=? WHERE id='out'", (rate, rate))
     book.commit()
@@ -244,7 +245,7 @@ def test_history_revert_rejects_unsupported_derived_price_without_writes(book, f
         metadata.revert_transaction_edit(book, 'Books', 'Book', 'out', _metadata_hooks(),
             event_id=corrected['history_event_id'], field=field)
     assert error.value.code == 'validation'
-    assert 'derived' in str(error.value)
+    assert 'derived' in str(error.value) or field in str(error.value)
     assert book.total_changes == before
     assert book.execute("SELECT fiat_rate_exact, fiat_value_exact FROM transactions WHERE id='out'").fetchone()[:] == ('100000', '0.100000')
 
@@ -289,7 +290,7 @@ def test_export_survives_legacy_nonfinite_price(book, tmp_path, export_format):
         assert 'inf' not in output.read_text().lower()
 
 
-@pytest.mark.parametrize('value', ['1e400', '1e-20', '1e-999999999'])
+@pytest.mark.parametrize('value', ['1e400', '1e-20', '1e-999999999', '1e19', '1e40', '1e300'])
 def test_daemon_metadata_rejects_price_without_writes(book, value):
     from kassiber.daemon import _transaction_metadata_update_payload
     from kassiber.db import set_setting
@@ -302,3 +303,32 @@ def test_daemon_metadata_rejects_price_without_writes(book, value):
         _transaction_metadata_update_payload(book, dict(transaction='out', fiat_rate=value), default_source='user')
     assert error.value.code == 'validation'
     assert book.total_changes == before
+
+
+@pytest.mark.parametrize('rate', ['1e18', '9999999999999997952'])
+def test_largest_supported_prices_process_without_quantize_failure(book, rate):
+    from kassiber.core.custody_pricing import finite_decimal
+    assert finite_decimal(rate, 'rate') == Decimal(rate)
+    book.execute("UPDATE transactions SET amount=50000000000, direction='inbound', fiat_rate=?, fiat_rate_exact=? WHERE id='out'", (float(rate), rate))
+    book.commit()
+    assert process_journals(book, 'Books', 'Book')['quarantined'] == 0
+
+
+@pytest.mark.parametrize('rate', ['1e19', '1e40', '1e300'])
+@pytest.mark.parametrize('legacy_source', ['transaction', 'rate_cache'])
+def test_large_legacy_price_quarantines_sale_without_aborting_book(book, rate, legacy_source):
+    _tx(book, 'buy', 'btc', 'inbound', 'BTC', 100000000000, '2025-01-01T00:00:00Z')
+    book.execute("UPDATE transactions SET fiat_rate=50000, fiat_rate_exact='50000' WHERE id='buy'")
+    book.execute("UPDATE transactions SET amount=50000000000 WHERE id='out'")
+    if legacy_source == 'transaction':
+        book.execute("UPDATE transactions SET fiat_rate=?, fiat_rate_exact=? WHERE id='out'", (float(rate), rate))
+    else:
+        upsert_rate(book, 'BTC-EUR', NOW, '50000', 'manual')
+        book.execute('UPDATE rates_cache SET rate=?, rate_exact=?', (float(rate), rate))
+    book.commit()
+    process_journals(book, 'Books', 'Book')
+    bad = book.execute("SELECT * FROM journal_quarantines WHERE transaction_id='out'").fetchone()
+    assert bad['reason'] == 'invalid_transaction_price'
+    assert 'supported decimal range' in json.loads(bad['detail_json'])['cause']
+    assert book.execute("SELECT 1 FROM journal_entries WHERE transaction_id='buy'").fetchone()
+    assert not book.execute("SELECT 1 FROM journal_entries WHERE transaction_id='out'").fetchone()
