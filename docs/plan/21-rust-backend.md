@@ -3433,3 +3433,23 @@ needs the shared v0/v2 parser, categorical features and inventory/linkage
 overlay. Both CLI/daemon reads remain unregistered and fail closed; no separate
 graph interpreter or PSBT signing authority is introduced. AI projections and
 all Python files remain unchanged. No dependency, lockfile or schema changes.
+### R5 Lightning profitability preparation (incomplete)
+
+`t3code/r5-reports-lightning` starts at `9338364db`. The native reports crate
+now prepares profitability payloads, CSV rows and direct CSV publication from
+an already curated open-channel/routing projection. Scoped connection lookup
+and daemon window coercion retain Python behavior. Amounts remain unbounded
+integer sat at this report boundary; binary64 appears only in the reference's
+CSV BTC formatting. No tax, journal, adapter persistence or readiness behavior
+changes. The [preparation checkpoint](../reference/rust-shell.md#lightning-profitability-preparation-checkpoint-r5-incomplete)
+records byte/table comparisons, mutation evidence and reference-quirk repros.
+
+This does not complete the requested Lightning read/export family. Both public
+reads fetch live snapshots in Python, and native CLN/LND snapshot adapters are
+still deferred. Native adapter acquisition with exact-action consent, discard
+policy, backend/capability/error handling, CLI/daemon registration and full
+zero-fallback process acceptance remain required. No public route is added:
+the inventory remains 153 CLI leaves (21 reports), 15 report daemon kinds and
+two transaction export kinds. New Lightning native CLI/daemon served-by counts
+are zero; no hybrid acceptance is claimed. Non-PDF source-funds reads belong
+to `t3code/r5-reports-sof`; the separate reports-b ownership is unchanged.

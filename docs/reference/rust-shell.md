@@ -10226,3 +10226,109 @@ broadcasting and spending keys stay outside the watch-only boundary. The
 separate legacy `ui.privacy_hygiene.snapshot` scorer is also unported; this
 checkpoint covers the configuration report only. Full corrupt-marker daemon
 diagnostic parity remains outstanding in addition to those two report families.
+## Lightning profitability preparation checkpoint (R5, incomplete)
+
+`t3code/r5-reports-lightning` starts at `9338364db`, the cross-check checkpoint.
+The new `kassiber_reports::lightning` module prepares profitability payloads,
+CSV rows and CSV files from an already curated routing/open-channel projection.
+It also implements profile-scoped connection lookup and the daemon's window
+coercion. The report-specific types have no node-pubkey, backend credential,
+invoice, payment, forward-event or route fields. The module does not fetch a
+snapshot, infer ownership, rebuild journals, calculate tax, acquire prices,
+persist node data or change report-readiness barriers. There is no new egress.
+
+This is an **unregistered preparation boundary**, not completion of the live
+Lightning read/export family. Python's CLI and desktop profitability reads,
+and its CLI CSV export, all fetch a fresh CLN/LND snapshot. Neither native
+adapter exists at this base; their explicit deferral remains in the chain
+checkpoint. Registering a report renderer alone would advertise an incomplete
+route. No CLI or daemon registry entry is added, and AI projections stay Python.
+
+The report preserves the snapshot's summary values, including its authoritative
+net, and keeps channel order and the inclusive covers-open-cost comparison.
+Missing routing becomes the reference zero summary and label; missing channel
+earnings become zero. Report quantities use unbounded integer sat, as Python's
+profitability API does. CSV BTC text preserves Python's correctly rounded
+int/int-to-binary64 division and fixed eight-place formatting; this float is
+never an accounting input. The explicit operator CSV retains Python's channel
+alias and ID columns. It contains no node pubkey, invoice/payment fields or
+backend configuration. This full projection must not be exposed as an AI tool
+or repurposed as a shareable diagnostics export.
+
+Publication retains direct open/truncate, literal paths, CRLF, quoting, errors
+and partial writes. It creates no parent directories, saved report marker,
+dependency capture or filed marker. The tested reference quirks are retained:
+
+- Large exact sat integers can lose visible precision in the CSV BTC column;
+  sat text and JSON integers remain exact.
+- A supplied net need not equal the separately rounded summary totals, and
+  an absent routing window silently reports zeros while retaining channel rows.
+- A surrogate in a CSV field raises an encoding error after truncation and
+  can leave header/summary rows in the destination.
+- Deep wallet-config nesting escapes the recoverable malformed-config path
+  as `RecursionError`; an infinite daemon window escapes as `OverflowError`.
+
+Reproduce these on disposable data, preserving account `HOME`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_lightning.py
+```
+
+The frozen oracle has 144 report cases (136 successful CSV files, six encoding
+refusals with partial files and two float-overflow refusals before opening),
+38 scoped-lookup cases and 22 window cases. Native tests compare literal
+payload/envelope bytes, CSV row bytes, file bytes, metadata and refusal bytes.
+Every lookup and report case compares all 112 tables, including empty tables,
+NULLs, stored journals and a fixed synthetic migration-audit canary. The canary
+is seeded before the operation so initial schema-creation clocks are not
+mistaken for report differences; no post-operation normalization is used.
+Adjacent surrogate pairs are represented by explicit input code points so
+fixture JSON cannot silently combine them into an astral character.
+
+The mutation catalog has 754 applicable entries. All 23 new `lightning-*`
+entries are killed by their named tests after all four unmutated selections
+pass. Build errors and absent selections count as no kill. The inherited
+731 entries retain the preceding checkpoint's evidence and are not rerun.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `lightning_report_vectors_pin_wire_csv_rounding_and_all_tables` | 12 |
+| `lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables` | 6 |
+| `lightning_daemon_window_vectors_preserve_coercion_and_infinity_error` | 3 |
+| `lightning_csv_publication_preserves_direct_open_and_no_registration` | 2 |
+
+Rust 1.99.1 offline/locked formatting, reports/all-target clippy with
+`-D warnings` and all 72 reports-crate tests pass. All 46 selected Python
+tests pass, including the generator check, eight reference-quirk assertions
+and the original Lightning scaffold contracts. The required classifier update
+reviews both new Python tests as retained report oracles. Required CI preflight
+passes all 57 tests plus 60 subtests. Verification is Linux-only; no full
+Python/frontend quality gate, live-node integration or packaged-platform
+acceptance is claimed.
+
+`target/r5-lightning/verification-summary.json` and `mutation-summary.json`
+retain the gates and per-entry killers. Mutation builds use a separate tree;
+final report tests rebuild from the real worktree. Account `HOME` is preserved,
+all books and explicit scratch are disposable, and subsequent builds override
+the machine's Cargo build directory into this worktree's `target/`. The initial
+environment sync inherited an external 167 MB worktree-specific build cache;
+Cargo metadata identified it and it was removed. The final verification build
+is 1.3 GB; owned mutation/verification trees are removed after summarizing,
+while logs and summaries remain. No dependency, lockfile, schema, tax-rule or
+Python product changes are included.
+
+The native inventory remains 153 CLI leaves, including 21 report commands,
+15 report daemon kinds and two transaction export kinds. New Lightning native
+CLI calls: **0**. New Lightning native daemon requests: **0**. No hybrid
+workload is run or claimed, and these preparation tests do not establish
+zero-fallback process acceptance.
+
+Remaining work is explicit: port live CLN/LND snapshot acquisition and its
+discard boundary; bind egress to the exact action/book/backend and preserve
+offline, capability and error behavior; wire the shared service through the
+CLI and daemon; append registration entries; then compare actual wire/CSV
+output and all 112 tables with zero in-scope fallback and named transport
+mutation kills. Node-snapshot/backend-test routes and AI projections retain
+their prior deferrals. Non-PDF source-funds reads are owned by the parallel
+`t3code/r5-reports-sof` branch; reports-b ownership is unchanged.

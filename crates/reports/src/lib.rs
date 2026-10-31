@@ -32,6 +32,7 @@ mod holdings;
 mod journal;
 mod platform_csv;
 mod privacy_hygiene;
+pub mod lightning;
 mod snapshot_write;
 mod snapshots;
 mod sql;

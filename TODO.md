@@ -430,6 +430,9 @@ registers them; exit-tax preserves its reference no-registration boundary.
   Lightning reads/CSV, non-PDF source funds, Privacy Mirror and PSBT.
   The reviewed commercial subledger CLI read and its CSV export now run
   natively, with reference vectors, killed mutations and hybrid routing proof.
+  Lightning profitability/CSV preparation is now native and verified separately;
+  live CLN/LND snapshot acquisition, capability checks and CLI/daemon cutover
+  remain open. See the [preparation checkpoint](docs/reference/rust-shell.md#lightning-profitability-preparation-checkpoint-r5-incomplete).
 - [x] Port configuration privacy hygiene through the native service, CLI and
   daemon, retaining count-only disclosure, local header inspection, stored
   freshness and Python endpoint/provider classification. The accepted corpus

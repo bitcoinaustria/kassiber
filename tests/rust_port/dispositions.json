@@ -19389,6 +19389,10 @@
         "tests": 1
       }
     },
+    "tests/test_rust_lightning_reports.py": {
+      "test_lightning_report_kernel_vectors_match_unchanged_python": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred", "reviewed": true, "tests": 1},
+      "test_lightning_report_kernel_reference_quirks_remain_reproducible": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {
         "disposition": "subprocess-scenario",

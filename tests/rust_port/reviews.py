@@ -353,6 +353,10 @@ REVIEWS["tests/test_rust_diagnostics.py"] = {"*": {
     "disposition": "oracle", "group": "secrets-backup",
     "reason": "compares native public diagnostics/export and CLI failure bytes with Python; normalizes only explicitly allowed native runtime and stack values, with normalization-scope regressions",
 }}
+REVIEWS["tests/test_rust_lightning_reports.py"] = {"*": {
+    "disposition": "oracle", "group": "reports",
+    "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred",
+}}
 REVIEWS["tests/test_review_regressions.py"] = {
     "ReviewRegressionTest::test_river_parser_accepts_xbt_amount_suffix": {
         "disposition": "rust-test", "group": "imports",

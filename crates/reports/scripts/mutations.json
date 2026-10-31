@@ -8529,5 +8529,235 @@
       "privacy_hygiene_daemon_rejects_unknown_fields_and_non_objects"
     ],
     "rule": "The daemon configuration privacy hygiene kind must reject unsupported arguments."
+  },
+  {
+    "id": "lightning-open-threshold",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "(\"coversOpenCost\", Value::Bool(earned >= self.open_cost_sat))",
+    "replace": "(\"coversOpenCost\", Value::Bool(earned > self.open_cost_sat))",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "Earnings equal to the open-cost reference cover that cost."
+  },
+  {
+    "id": "lightning-authoritative-net",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "(\"netProfitSat\", Value::Int(r.net_profit_sat.clone()))",
+    "replace": "(\"netProfitSat\", Value::Int(r.routing_revenue_sat.clone()))",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "The adapter net remains authoritative even when it differs from separately rounded totals."
+  },
+  {
+    "id": "lightning-absent-routing",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "window_label: \"No routing window reported\".into(),",
+    "replace": "window_label: \"No routing data\".into(),",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "An absent routing snapshot has the exact reference label and zero summary."
+  },
+  {
+    "id": "lightning-missing-earned",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "let earned = c.earned_routing_sat.clone().unwrap_or_else(|| 0.into());\n                            dict([",
+    "replace": "let earned = c.earned_routing_sat.clone().unwrap_or_else(|| 1.into());\n                            dict([",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "Missing channel earnings become zero while preserving the channel."
+  },
+  {
+    "id": "lightning-channel-order",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "self.channels\n                        .iter()",
+    "replace": "self.channels\n                        .iter().rev()",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "Per-channel rows retain adapter order."
+  },
+  {
+    "id": "lightning-binary-division",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "    let f = format!(\"{}e-8\", integer_text(n)?)\n        .parse::<f64>()\n        .map_err(|_| AppError::new(\"internal_error\", \"invalid Lightning amount\"))?;\n",
+    "replace": "    let f = integer_text(n)?.parse::<f64>().unwrap() / 100_000_000.0;\n",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "CSV rounds the exact int/int quotient to binary64 rather than rounding the numerator first."
+  },
+  {
+    "id": "lightning-csv-crlf",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "points.extend([13, 10]);",
+    "replace": "points.extend([10]);",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "CSV uses the reference excel dialect CRLF line terminators."
+  },
+  {
+    "id": "lightning-csv-quotes",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "if quoted && point == 34 {",
+    "replace": "if quoted && point == 0 {",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "CSV doubles embedded quote characters inside quoted cells."
+  },
+  {
+    "id": "lightning-csv-channel-id",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "\"; id=\".into(),",
+    "replace": "\"; channel=\".into(),",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "The explicit operator CSV retains the exact channel detail string."
+  },
+  {
+    "id": "lightning-csv-truncate",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "std::fs::File::create(path)",
+    "replace": "std::fs::OpenOptions::new().create(true).append(true).open(path)",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "The direct Python export truncates an existing artifact rather than appending."
+  },
+  {
+    "id": "lightning-csv-row-count",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "(\"rows\", Value::Int((rows.len() - 1).into()))",
+    "replace": "(\"rows\", Value::Int(rows.len().into()))",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "Export metadata counts data rows and excludes the header."
+  },
+  {
+    "id": "lightning-profile-scope",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "WHERE profile_id=?1 AND (id=?2 OR lower(label)=lower(?2))",
+    "replace": "WHERE (?1 IS NOT NULL) AND (id=?2 OR lower(label)=lower(?2))",
+    "expect_failing": [
+      "lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables"
+    ],
+    "rule": "Connection identity lookup is scoped to the selected profile."
+  },
+  {
+    "id": "lightning-label-case",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "OR lower(label)=lower(?2))",
+    "replace": "OR label=?2)",
+    "expect_failing": [
+      "lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables"
+    ],
+    "rule": "Lightning labels use SQLite case-insensitive comparison."
+  },
+  {
+    "id": "lightning-ambiguity",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 2 {",
+    "expect_failing": [
+      "lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables"
+    ],
+    "rule": "A combined id/label collision is refused rather than selecting one wallet."
+  },
+  {
+    "id": "lightning-backend-reference",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "Some(Value::Str(s)) if !s.is(\"\") => Some(s.clone()),",
+    "replace": "Some(Value::Str(s)) if !s.is(\"\") => Some(\"wrong-backend\".into()),",
+    "expect_failing": [
+      "lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables"
+    ],
+    "rule": "The adapter lookup retains the literal nonempty string backend reference."
+  },
+  {
+    "id": "lightning-scope-error-order",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "    let (_, profile) = kassiber_setup::references::scope(conn, args)?;\n    let reference = reference.as_str().ok_or_else(|| utf8_error(reference))?;",
+    "replace": "    let reference = reference.as_str().ok_or_else(|| utf8_error(reference))?;\n    let (_, profile) = kassiber_setup::references::scope(conn, args)?;",
+    "expect_failing": [
+      "lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables"
+    ],
+    "rule": "Scope refusal precedes encoding a valid string reference for the SQLite query."
+  },
+  {
+    "id": "lightning-window-minimum",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "parsed.max(1.into()).min(365.into())",
+    "replace": "parsed.max(2.into()).min(365.into())",
+    "expect_failing": [
+      "lightning_daemon_window_vectors_preserve_coercion_and_infinity_error"
+    ],
+    "rule": "The daemon clamps its routing window to a minimum of one day."
+  },
+  {
+    "id": "lightning-window-maximum",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "parsed.max(1.into()).min(365.into())",
+    "replace": "parsed.max(1.into()).min(364.into())",
+    "expect_failing": [
+      "lightning_daemon_window_vectors_preserve_coercion_and_infinity_error"
+    ],
+    "rule": "The daemon clamps its routing window to a maximum of 365 days."
+  },
+  {
+    "id": "lightning-window-infinity",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "Value::Float(n) if n.is_infinite() => {",
+    "replace": "Value::Float(n) if n.is_nan() => {",
+    "expect_failing": [
+      "lightning_daemon_window_vectors_preserve_coercion_and_infinity_error"
+    ],
+    "rule": "Infinity retains Python OverflowError while NaN falls back to 30 days."
+  },
+  {
+    "id": "lightning-config-recursion",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "return Err(AppError::new(\"internal_error\", e.to_string()));",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "lightning_connection_vectors_pin_scope_ambiguity_config_and_all_tables"
+    ],
+    "rule": "Malformed config is recoverable but Python RecursionError remains an internal refusal."
+  },
+  {
+    "id": "lightning-default-open-cost",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "pub const DEFAULT_OPEN_COST_SAT: i64 = 2_500;",
+    "replace": "pub const DEFAULT_OPEN_COST_SAT: i64 = 2_499;",
+    "expect_failing": [
+      "lightning_csv_publication_preserves_direct_open_and_no_registration"
+    ],
+    "rule": "The shared default open-cost heuristic remains 2500 sat."
+  },
+  {
+    "id": "lightning-create-parents",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "        let rows = self.csv_rows()?;",
+    "replace": "        let rows = self.csv_rows()?;\n        std::fs::create_dir_all(path.parent().unwrap()).unwrap();",
+    "expect_failing": [
+      "lightning_csv_publication_preserves_direct_open_and_no_registration"
+    ],
+    "rule": "Lightning CSV preserves the reference refusal for absent parent directories."
+  },
+  {
+    "id": "lightning-surrogate-refusal",
+    "file": "crates/reports/src/lightning.rs",
+    "find": "let encoded = line.as_str().ok_or_else(|| utf8_error(&line))?;",
+    "replace": "let lossy: String = line.code_points().map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER)).collect();\n            let encoded = lossy.as_str();",
+    "expect_failing": [
+      "lightning_report_vectors_pin_wire_csv_rounding_and_all_tables"
+    ],
+    "rule": "CSV preserves UnicodeEncodeError and partial direct writes instead of replacing surrogates."
   }
 ]
