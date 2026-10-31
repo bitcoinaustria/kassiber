@@ -353,6 +353,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   [kernel checkpoint](docs/reference/custody-engine.md#interpretation-and-gap-kernel-checkpoint-r4)
   for parity and touched-file mutation scope. Overall custody and the
   R4-2–R4-8 integration budget remain open.
+  R4-6's partial quantity probe also stopped for re-planning: compute missed
+  both targets and boundary conversion grew; no implementation was accepted
+  ([measurements](docs/reference/r4-journal-pipeline.md#r4-6-partial-quantity-target-probe)).
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):

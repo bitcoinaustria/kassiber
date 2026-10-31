@@ -327,6 +327,9 @@ not shrink without a reviewed equivalence note. The separate kernel branch ran i
 391 touched-file recipes from a 2,301-recipe catalog; untouched recipes are
 not claimed as freshly killed there. This integration reruns the whole catalog.
 Each step also records
+
+catalog (currently 2,292 recipes), and reports kill set equals catalog. The catalog may
+not shrink without a reviewed equivalence note. Each step also records
 before and after timings from the bench books, back to back.
 
 "Measured cost replaced" is what the code a step rewrites costs today, at
@@ -827,6 +830,89 @@ checked-in inventory unchanged, all 57 preflight tests pass, workspace
 formatting passes, and all 2,292 original mutation recipes apply. Full workspace
 Clippy and workspace tests were not run for this withdrawn prototype; they
 remain part of a future implementation's acceptance gates.
+
+### R4-6 partial quantity target probe
+
+R4-6 stopped for re-planning after a partial typed prototype missed the
+quarter-time target. No quantity implementation or mutation-recipe change is
+accepted by this checkpoint. The source baseline is `dd433e4e` plus the
+R4-1/R4-2 records replayed as `7dad367a`. Python production source is unchanged.
+
+The prototype introduced typed slices, decisions, postings, domains, projection
+and eligibility indices, with a `CanonicalQuantityState` container. It retained
+untyped canonical/evidence operands, native augmentation, reviewed compilation,
+issues and reviewed economic terms; it is **not** the complete typed model in
+the migration table. The finalization adapter explicitly materialized its
+Python-model input under `quantity.boundary.finalized`.
+
+The committed probe records use the R4-1 recorder and release `journals-bench`
+with Rust 1.99.1 and locked Python 3.11. Both disposable 20,000-row books are
+SQLite backups of the design fixtures; every CSV byte matches the committed
+seed generator, and multi-wallet retains 300 active authored peg components.
+Each measurement alternates Python, saved baseline Rust and prototype Rust
+for five pairs because the 1-minute load exceeded 8. Values below are the
+spans from each engine's fastest complete run; conversion is separate from
+quantity compute. They are observations under load, not quiet-machine claims.
+
+| 20,000-row book, seconds | Before compute | Before conversion | Prototype compute | Prototype conversion | Compute target |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| generic-20000 | 1.736 | 0.218 | **1.209 — missed** | 1.060 | ≤ 0.395 |
+| multi-wallet-20000 | 1.760 | 0.235 | **1.231 — missed** | 1.005 | ≤ 0.455 |
+
+Full-pipeline compute rose from 7.729 to 8.193 s on generic and from 11.137
+to 11.502 s on multi-wallet. Python end-to-end measured 13.723 and 23.592 s.
+The respective 1-minute load ranges were 20.77–33.02 and 13.85–38.80.
+Raw records: [r4-6-quantity-probe.jsonl](r4-6-quantity-probe.jsonl).
+
+The R4-1 recorder's existing custody aggregate does not include the prototype's
+new `quantity.boundary.finalized` span. It must not be read as total custody
+cost; the compute/conversion table and full-pipeline measurements include the
+cost explicitly. Ledger request and response hashes agree in every paired run.
+
+Generic quantity still spends 0.158 s on component compilation/indexing,
+0.322 s on native augmentation and 0.428 s on arbitration. Multi-wallet spends
+0.264, 0.248 and 0.414 s respectively. The unchanged generic native/compiler
+work alone exceeds the generic compute budget. The new compatibility adapter
+rebuilds serde trees, clones the canonical population and eligible decisions,
+then converts that materialized tree to Python-model values. Its 1.005–1.060 s
+cost is additional work, not a speedup from moving the old conversion span.
+
+Re-planning must cover native/reviewed compilation and a shared typed
+observation/index boundary, not just the arbitration output. The next adapter
+must avoid rebuilding large serde objects before Python-model conversion;
+the final wire serializer must write typed fields directly. Temporary
+neighbour conversion must remain separately measured, and cannot be used to
+hide generic stage computation or relax the target.
+
+The rejected patch and saved binaries remain local under `target/r4-6/`.
+The patch SHA-256 is
+`4673ac644a91062fdbac95c0dce642225e63f2031a3c8d148b2b1336d22a07df`.
+All three implementation files were restored byte-for-byte before this
+records-only checkpoint. No prototype code supplies production results.
+
+The prototype passes `cargo check`, formatting and 41 selected Rust tests,
+including frozen quantity arbitration, exact amounts, compiler/runtime wrappers
+and scoped barriers. Complete custody-response, ledger-request and
+ledger-response hashes also match the baseline on both cached 20,000-row
+snapshots. This is bounded parity evidence, not the full generated/replay gate.
+The restored checkpoint passes workspace formatting and all 2,292 catalog
+applicability checks. Immediately before the checkpoint commit, inventory
+regeneration leaves `tests/rust_port/dispositions.json` unchanged and the
+required `preflight --ci` shard passes 57 tests.
+
+The live catalog contains 2,292 recipes. Twelve anchors moved in the discarded
+prototype: `quantity-arbitration-posting-order`, `QRT-056`, `QRT-069`,
+`QRT-102` through `QRT-109`, and `R2-review-finalized-allowlist`. They were not
+re-anchored or run as mutants, and no kill is claimed. Restoring the code
+restores their original anchors; the catalog does not shrink.
+
+Remaining work is the complete typed quantity model and direct serializer,
+repeated 20,000-row performance acceptance and the 2,000-row timings, the
+24,000-book/1,030-permutation activity/vacuity campaign, retained replay, full
+frozen vectors and exact stage refusals. Re-anchor rewritten recipes, add
+witnesses for new branches and kill the full catalog. Core-accounting and
+reports-contracts still need census and custody-shadow with tax census;
+Clippy `-D warnings` and workspace tests also remain. R4-6 remains open.
 
 ## Authority switch (R4-16)
 
