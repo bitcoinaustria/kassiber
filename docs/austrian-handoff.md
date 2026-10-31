@@ -102,6 +102,13 @@ it on the journal entries it composes from those fragments:
 - The engine decides the semantic category from the matched lot, swap marker,
   and holding period.
 - Kassiber persists the resulting `at_category` string on journal rows.
+- For outflow inventory and dashboard classification, this computed category
+  takes precedence over the input `at_regime` description marker. FIFO, LOFO,
+  and ordinary moving average can consume globally pooled lots of a different
+  regime than the wallet-availability marker requested. The marker remains
+  input intent, not proof of which lots RP2 matched. Fee rows retain no tax
+  category or taxable gain; their persisted `at_regime` is taken from RP2's
+  matched-lot classification, with separate rows when regimes differ.
 - Kassiber maps that semantic category onto current BMF / FinanzOnline
   Kennzahlen via its own table so tax-form wiring can evolve without
   re-implementing Austrian tax semantics. The category names are semantic

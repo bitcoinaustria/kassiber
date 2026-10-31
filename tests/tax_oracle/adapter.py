@@ -1448,10 +1448,15 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         capital_gains_type = _capital_gains_type(gain_loss)
         at_category = None
         at_kennzahl = None
+        consumed_regime = None
         event_key: Any = (taxable_event.internal_id, capital_gains_type)
         source_row = row_by_id.get(taxable_event.unique_id)
         if tax_country == "at":
             at_category, at_kennzahl = _classify_at_disposal(gain_loss)
+            if entry_type in {"fee", "transfer_fee"}:
+                # Keep RP2's consumed-lot regime before presentation overrides
+                # and before fees lose their capital-gains category below.
+                consumed_regime = "alt" if at_category.startswith("alt") else "neu"
             category_override = _row_get(source_row, "at_category_override") if source_row else None
             taxability_override = _row_get(source_row, "taxability_override") if source_row else None
             if taxability_override == 0 and category_override in _NON_REPORTABLE_AT_CATEGORY_OVERRIDES:
@@ -1466,7 +1471,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             # One taxable event can split across multiple Austrian semantic
             # buckets when RP2 matches against heterogeneous acquired lots, so
             # keep separate journal rows per category.
-            event_key = (taxable_event.internal_id, capital_gains_type, at_category)
+            event_key = (taxable_event.internal_id, capital_gains_type, at_category, consumed_regime)
         event = realized_by_event.setdefault(
             event_key,
             {
@@ -1485,6 +1490,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 ),
                 "at_category": at_category,
                 "at_kennzahl": at_kennzahl,
+                "consumed_regime": consumed_regime,
                 "capital_gains_type": capital_gains_type,
             },
         )
@@ -1510,6 +1516,15 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             gain_loss = Decimal("0")
             event["at_category"] = None
             event["at_kennzahl"] = None
+            if event["consumed_regime"] is not None:
+                # Input notes describe wallet-regime intent. Generic lot
+                # methods can consume another regime; the persisted fee row
+                # must describe the lots actually removed from inventory.
+                description = " ".join([
+                    marker_token(MARKER_REGIME, event["consumed_regime"]),
+                    *(token for token in str(description or "").split()
+                      if not token.startswith(f"{MARKER_REGIME}=")),
+                ])
         quantity = event["quantity"] if event["entry_type"] == "income" else -event["quantity"]
         entry = {
             "id": str(uuid.uuid4()),
