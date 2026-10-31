@@ -28,6 +28,9 @@ def matrix(monkeypatch):
             self.chain = {h: ('a', h) for h in range(899980, 900001)}  # height -> (fork tag, height)
             self.tip = 900000
             self.special_height = None   # script 0 tx confirmed at this height (race)
+            self.special = {}
+            self.newtx = {}
+            self.hook = None
             self.lie = {}
             self.req = Counter()
         def tag(self, h):
@@ -48,19 +51,25 @@ def matrix(monkeypatch):
             self.tip = base
             self.extend(new_len, tag)
         def tx_height(self, i):
-            return self.special_height if (i == 0 and self.special_height) else 800000 + i
+            return self.special.get(i, self.special_height if (i == 0 and self.special_height) else 800000 + i)
 
     W = World()
     indices = {sb.scriptpubkey_scripthash(script(i)): i for i in range(USED + UNUSED)}
 
-    def esplora_tx(i):
-        h = W.tx_height(i)
+    def esplora_tx(i, *, extra=False):
+        h = W.newtx[i] if extra else W.tx_height(i)
         bh = W.bhash(h) if h in W.chain else 'aa' * 32
         bt = W.bts(h) if h in W.chain else 1700000000 + i
-        return dict(txid=txid(i), fee=200,
+        return dict(txid=txid(5000 + i) if extra else txid(i), fee=200,
             vin=[dict(txid=txid(1000 + i), vout=0, prevout=dict(scriptpubkey='0014' + 'ee' * 20, value=100200))],
             vout=[dict(scriptpubkey=script(i), value=100000)],
             status=dict(confirmed=True, block_height=h, block_hash=bh, block_time=bt))
+
+    def fire(i):
+        if W.hook and W.hook[0] == i:
+            action = W.hook[1]
+            W.hook = None
+            action(W)
 
     def route(url, **kw):
         path = url.split('example.invalid/', 1)[1]
@@ -78,12 +87,15 @@ def matrix(monkeypatch):
             if h not in W.chain: raise sb.AppError('not found', code='backend_error')
             return W.bhash(h)
         parts = path.split('/'); i = indices[parts[1]]; populated = i < USED
+        fire(i)
         if len(parts) == 2:
             W.req['stats'] += 1
+            populated = int(populated) + int(i in W.newtx)
             return dict(chain_stats=dict(tx_count=int(populated), funded_txo_count=int(populated), funded_txo_sum=100000 * populated,
                                          spent_txo_count=0, spent_txo_sum=0), mempool_stats=dict(tx_count=0))
         if parts[2:] == ['txs', 'chain']:
-            W.req['history_chain'] += 1; return [esplora_tx(i)] if populated else []
+            W.req['history_chain'] += 1
+            return ([esplora_tx(i, extra=True)] if i in W.newtx else []) + ([esplora_tx(i)] if populated else [])
         if parts[2:] == ['txs', 'mempool']:
             W.req['history_mempool'] += 1; return []
         W.req['utxo'] += 1; return []
@@ -102,15 +114,18 @@ def matrix(monkeypatch):
                 if params[0] > W.tip: raise sb.AppError('bad height', code='backend_error')
                 return W.bhex(params[0])
             if method == 'blockchain.scripthash.subscribe':
-                i = indices[params[0]]; return f'status-{i}-{W.tx_height(i)}' if i < USED else None
+                i = indices[params[0]]; fire(i)
+                return f'status-{i}-{W.tx_height(i)}-{W.newtx.get(i)}' if i < USED else None
             if method == 'blockchain.scripthash.get_history':
-                i = indices[params[0]]; return [dict(tx_hash=txid(i), height=W.tx_height(i))] if i < USED else []
+                i = indices[params[0]]
+                return ([dict(tx_hash=txid(i), height=W.tx_height(i))] if i < USED else []) + ([dict(tx_hash=txid(5000 + i), height=W.newtx[i])] if i in W.newtx else [])
             if method == 'blockchain.scripthash.listunspent': return []
             assert method == 'blockchain.transaction.get', method
             return params[0]
         def batch_call(self, calls): return [self.call(m, p) for m, p in calls]
 
     tx_indices = {txid(i): i for i in range(USED)}
+    tx_indices.update({txid(5000 + i): i for i in range(USED)})
     def decode(raw):
         i = tx_indices.get(raw)
         if i is None: return dict(txid=raw, vin=[], vout=[dict(script_hex='0014' + 'ee' * 20, value_sats=100200)])
@@ -123,7 +138,8 @@ def matrix(monkeypatch):
         ('decode_liquid_transaction', lambda raw: SimpleNamespace(
             vin=[SimpleNamespace(txid=txid(1000 + tx_indices[raw]))] if raw in tx_indices else [], vout=[])),
         ('liquid_input_txid', lambda vin: vin.txid),
-        ('record_components_from_liquid_tx', lambda *a, **k: []),
+        ('record_components_from_liquid_tx', lambda txid, occurred_at, *a, **k: [dict(
+            txid=txid, occurred_at=occurred_at, confirmed_at=k['confirmed_at'], raw_json='{}')]),
     ]:
         monkeypatch.setattr(sb, name, value)
 
@@ -165,6 +181,57 @@ def matrix(monkeypatch):
         W.lie.clear()
         hist = sum(v for k, v in W.req.items() if 'history' in k)
         return dict(initial=initial, changed=meta.get('scripts_changed'), history_reqs=hist, total=sum(W.req.values()), reqs=dict(W.req), **tx0_view(records, meta, protocol))
+
+    def run3(protocol, chain, *, first_sync=False, invalid_proof=None, lower_fork=False):
+        nonlocal W
+        W = World()
+        adapter = sb.compatibility_esplora_sync_adapter if protocol == 'esplora' else sb.compatibility_electrum_sync_adapter
+        backend = dict(name='fixture', kind=protocol, url='https://example.invalid/')
+        state = base_state(chain)
+        W.special = {0: 900000}
+
+        def reorg(w):
+            w.reorg(1, 2, 'b')
+            w.newtx[1] = 900001
+
+        steps = []
+        for step in range(3):
+            W.lie.clear()
+            if step == (0 if first_sync else 1):
+                if lower_fork:
+                    # Both entries race above the initial tip. Only the lower
+                    # entry belongs to an orphan; validating the maximum misses it.
+                    W.extend(2)
+                    W.special = {0: 900001, 1: 900002}
+                    W.lie.update(tip_hash=W.bhash(900000), tip_height=900000,
+                                 subscribe=lambda: {'height': 900000, 'hex': W.bhex(900000)})
+                    real_hash = W.bhash
+                    W.lie['block_hash'] = lambda h: 'ff' * 32 if h == 900001 else real_hash(h)
+                else:
+                    W.hook = (1, reorg)
+                if invalid_proof:
+                    value = sb.AppError('unavailable', code='backend_error') if invalid_proof == 'error' else 'zz'
+                    def proof_only(normal):
+                        initial_reads = 0
+                        def read(height):
+                            nonlocal initial_reads
+                            if height == 900000:
+                                initial_reads += 1
+                                if initial_reads > int(first_sync):
+                                    return value
+                            return normal(height)
+                        return read
+                    W.lie['block_hash'] = proof_only(W.bhash)
+                    W.lie['header'] = proof_only(W.bhex)
+            W.req.clear()
+            records, meta = adapter(backend, {}, state)
+            cp = meta['freshness_checkpoint']
+            cache = dict(state.history_cache)
+            cache.update({r.get('external_id') or r['txid']: r['raw_json'] for r in records})
+            state = replace(state, checkpoint=cp, history_cache=cache)
+            steps.append(dict(checkpoint=cp, records=records, requests=dict(W.req),
+                              history_reqs=sum(v for k, v in W.req.items() if 'history' in k)))
+        return steps, W.bts(W.tx_height(0))
 
     def drop(key): return lambda cp: {k: v for k, v in cp.items() if k != key}
     def setkey(key, val): return lambda cp: {**cp, key: val}
@@ -209,7 +276,7 @@ def matrix(monkeypatch):
                                    change=lambda w: w.extend(1), expect='reuse'),
     }
 
-    return run, S
+    return run, S, run3
 
 
 SCENARIOS = [
@@ -224,7 +291,7 @@ SCENARIOS = [
 @pytest.mark.parametrize('protocol,chain', [('esplora', 'bitcoin'), ('electrum', 'bitcoin'), ('electrum', 'liquid')])
 @pytest.mark.parametrize('scenario', SCENARIOS)
 def test_compatibility_history_anchor_matrix(matrix, protocol, chain, scenario):
-    run, scenarios = matrix
+    run, scenarios, _ = matrix
     config = scenarios[scenario]
     result = run(protocol, chain, config)
     refreshed = bool(result['history_reqs'] and result['changed'])
@@ -237,9 +304,34 @@ def test_compatibility_history_anchor_matrix(matrix, protocol, chain, scenario):
 
 
 @pytest.mark.parametrize('protocol,chain', [('esplora', 'bitcoin'), ('electrum', 'bitcoin'), ('electrum', 'liquid')])
-def test_legacy_history_anchor_is_rebuilt(matrix, protocol, chain):
-    run, scenarios = matrix
-    config = {**scenarios['race_then_reorg'], 'cp': lambda cp: {
-        key: value for key, value in cp.items() if key != 'compatibility_history_anchor_version'
+@pytest.mark.parametrize('version', [None, 1])
+def test_legacy_history_anchor_is_rebuilt(matrix, protocol, chain, version):
+    run, scenarios, _ = matrix
+    config = {**scenarios['same_tip'], 'cp': lambda cp: {
+        **{key: value for key, value in cp.items() if key != 'compatibility_history_anchor_version'},
+        **({'compatibility_history_anchor_version': version} if version is not None else {}),
     }}
     assert run(protocol, chain, config)['history_reqs'] > 0
+
+
+@pytest.mark.parametrize('protocol,chain', [('esplora', 'bitcoin'), ('electrum', 'bitcoin'), ('electrum', 'liquid')])
+@pytest.mark.parametrize('first_sync', [False, True], ids=['mid_sync_reorg_s2', 'mid_sync_reorg_s1'])
+@pytest.mark.parametrize('invalid_proof', [None, 'error', 'garbage'])
+def test_mid_sync_reorg_cannot_advance_anchor(matrix, protocol, chain, first_sync, invalid_proof):
+    _, _, run3 = matrix
+    steps, truth = run3(protocol, chain, first_sync=first_sync, invalid_proof=invalid_proof)
+    raced = steps[0 if first_sync else 1]['checkpoint']
+    assert raced[protocol + '_tip_height'] is None
+    refreshed = steps[1 if first_sync else 2]
+    assert refreshed['history_reqs'] > 0
+    tx0 = next(r for r in refreshed['records'] if r.get('txid') == txid(0) or txid(0) in r.get('external_id', ''))
+    assert tx0['occurred_at'] == sb.timestamp_to_iso(truth)
+    if protocol == 'electrum':
+        assert refreshed['checkpoint']['electrum_headers']['900000'] == truth
+
+
+def test_esplora_checks_every_raced_block(matrix):
+    _, _, run3 = matrix
+    steps, _ = run3('esplora', 'bitcoin', first_sync=True, lower_fork=True)
+    assert steps[0]['checkpoint']['esplora_tip_height'] is None
+    assert steps[1]['history_reqs'] > 0
