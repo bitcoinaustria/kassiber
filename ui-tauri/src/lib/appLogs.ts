@@ -131,7 +131,7 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     "$1$2[redacted]",
   ],
   [
-    /\b((?:https?|tcp|ssl|socks5h?|wss?):\/\/)((?:[^/\s@]*:[^/\s@]*|[^/\s@\\"'<>?#]+))@/gi,
+    /\b((?:https?|tcp|ssl|socks5h?|wss?):\/\/)((?:[^/:\s@]*:[^/\s@]*|[^/\s@\\"'<>?#]+))@/gi,
     "$1[redacted-credentials]@",
   ],
   ...BARE_BIP39_WORD_RUN_PATTERNS,
