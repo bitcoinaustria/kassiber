@@ -6,6 +6,7 @@ mod coinfinity;
 mod csv;
 mod exchange;
 mod generic_json;
+pub mod ledger;
 mod ledgerlive;
 mod phoenix;
 mod platform_csv;
@@ -55,6 +56,7 @@ pub enum Format {
     Binance,
     BtcpayCsv,
     BtcpayJson,
+    Ledger,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -74,6 +76,7 @@ impl Format {
             Self::CoinTracking => "cointracking_csv",
             Self::Blockpit => "blockpit_csv",
             Self::Binance => "binance_supplemental_csv",
+            Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
@@ -91,6 +94,7 @@ impl Format {
             Self::Strike => strike::parse(csv::load(file)?),
             Self::Pocket => pocket::parse(csv::load(file)?),
             Self::LedgerLive => ledgerlive::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::Ledger => ledger::load(file, None),
         }
     }
     fn evidence(self) -> bool {
@@ -1176,6 +1180,14 @@ pub fn execute(
     request: Request,
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
+    execute_with_ledger_map(conn, request, None, identity)
+}
+pub fn execute_with_ledger_map(
+    conn: &Connection,
+    request: Request,
+    column_map: Option<&ledger::ColumnMap>,
+    identity: Option<&Identity>,
+) -> Result<Py, AppError> {
     let mut ids = Ids { identity, at: 0 };
     let mode = if request.format.active() {
         let mode = exchange::mode(
@@ -1223,7 +1235,11 @@ pub fn execute(
                 .with_details(dict([("wallet",s(wallet.label.as_str())),("wallet_kind",s(kind.as_str()))])));
         }
     }
-    let rows = request.format.load(&request.file)?;
+    let rows = if request.format == Format::Ledger {
+        ledger::load(&request.file, column_map)?
+    } else {
+        request.format.load(&request.file)?
+    };
     // Relevant mode normalizes and validates each row in reference order;
     // a matched price refusal precedes normalization of any later row.
     let records = if mode == Some("relevant") {
@@ -1243,6 +1259,7 @@ pub fn execute(
             &rows,
             &records,
             &mut ids,
+            column_map,
         )
     };
     if result.is_ok() {
@@ -1283,6 +1300,7 @@ fn apply(
     rows: &[csv::Row],
     records: &[Record],
     ids: &mut Ids<'_>,
+    column_map: Option<&ledger::ColumnMap>,
 ) -> Result<Py, AppError> {
     let profile = &request.profile_id;
     let (workspace, currency): (String, String) = conn
@@ -1533,7 +1551,7 @@ fn apply(
     }
     if !inserted_ids.is_empty() {
         let batch = ids.next(conn)?;
-        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
+        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         for id in inserted_ids {
             conn.execute("INSERT OR IGNORE INTO import_batch_transactions(batch_id,transaction_id) VALUES(?,?)",[&batch,&id]).map_err(database_error)?;
         }

@@ -48,7 +48,13 @@ def run(binary, argv):
         with mock.patch.object(wallets, "uuid", id_source), mock.patch.object(wallets, "now_iso", return_value=timestamp), mock.patch.object(imports, "uuid", id_source), mock.patch.object(import_batches, "uuid", id_source), mock.patch.object(metadata, "uuid", id_source), mock.patch.object(imports, "now_iso", return_value=timestamp), mock.patch.object(import_batches, "now_iso", return_value=timestamp), mock.patch.object(handlers, "now_iso", return_value=timestamp):
             error = None
             try:
-                outcome = handlers.import_into_wallet(reference, args.workspace, args.profile, args.wallet, args.file, {"import-btcpay":"btcpay_" + getattr(args,"input_format","csv"), "import-phoenix":"phoenix_csv", "import-json":"json", "import-csv":"csv", "import-river":"river_csv", "import-bull":"bullbitcoin_csv", "import-bullbitcoin":"bullbitcoin_csv", "import-coinfinity":"coinfinity_csv", "import-21bitcoin":"21bitcoin_csv", "import-strike":"strike_csv", "import-ledger-live":"ledgerlive_csv", "import-cointracking":"cointracking_csv", "import-blockpit":"blockpit_csv", "import-binance-supplemental":"binance_supplemental_csv", "import-pocket":"pocketbitcoin_csv", "import-pocketbitcoin":"pocketbitcoin_csv"}[args.wallets_command], getattr(args,"mode",None))
+                if args.wallets_command == "import-ledger":
+                    from kassiber.cli.main import _column_map_arg
+                    from kassiber.importers import preview_generic_ledger_records
+                    mapping = _column_map_arg(args.column_map)
+                    outcome = preview_generic_ledger_records(args.file, limit=args.limit if args.limit is not None else 200, column_map=mapping) if args.dry_run else handlers.import_into_wallet(reference,args.workspace,args.profile,args.wallet,args.file,"generic_ledger",column_map=mapping)
+                else:
+                    outcome = handlers.import_into_wallet(reference, args.workspace, args.profile, args.wallet, args.file, {"import-btcpay":"btcpay_" + getattr(args,"input_format","csv"), "import-phoenix":"phoenix_csv", "import-json":"json", "import-csv":"csv", "import-river":"river_csv", "import-bull":"bullbitcoin_csv", "import-bullbitcoin":"bullbitcoin_csv", "import-coinfinity":"coinfinity_csv", "import-21bitcoin":"21bitcoin_csv", "import-strike":"strike_csv", "import-ledger-live":"ledgerlive_csv", "import-cointracking":"cointracking_csv", "import-blockpit":"blockpit_csv", "import-binance-supplemental":"binance_supplemental_csv", "import-pocket":"pocketbitcoin_csv", "import-pocketbitcoin":"pocketbitcoin_csv"}[args.wallets_command], getattr(args,"mode",None))
             except Exception as exc:
                 reference.rollback()
                 error = exc

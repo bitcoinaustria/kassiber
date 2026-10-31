@@ -739,6 +739,63 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-btcpay"]
         self.assertEqual(calls, [{"command":"wallets.import-btcpay", "served_by":"rust"}] * 7)
 
+    def test_ledger_import_and_preview_have_no_fallback_and_match_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "Ledger source", "--kind", "custom"))
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_ledger_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source = self.data_root.parent / ("ledger" + case["extension"])
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    extra = ["--column-map",json.dumps(case["column_map"])] if case["column_map"] is not None else []
+                    for flags in [[],["--dry-run","--limit",str(case["limit"])]]:
+                        result = self.cli("wallets","import-ledger","--wallet","Ledger source","--file",str(source),*extra,*flags)
+                        self.assertIn(result.returncode,(0,1),(result.stdout,result.stderr))
+                        self.assertNotIn("Traceback",result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-ledger"]
+        self.assertEqual(calls,[{"command":"wallets.import-ledger","served_by":"rust"}]*len(cases)*2)
+
+    def test_ledger_mapped_coordinator_reimports_scope_failures_and_rollback_match_dump(self):
+        import sqlite3
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Workspace"))
+        self.ok(self.cli("profiles", "create", "Book", "--workspace", "Workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Workspace", "--profile", "Book"))
+        self.ok(self.cli("wallets", "create", "--label", "Ledger source", "--kind", "custom"))
+        source = self.data_root.parent / "mapped.csv"
+        mapping = self.data_root.parent / "mapping.json"
+        mapping.write_text(json.dumps({
+            "date": "When", "amount": "Units", "type": "Side", "fiat_value": "Cash",
+            "fiat_currency": "Currency", "txid": "Reference", "type_map": {"ACQUIRE": "Buy"},
+        }))
+        body = "When,Units,Side,Cash,Currency,Reference\n2025-01-02,0.002,ACQUIRE,190,EUR,mapped\n"
+        source.write_text(body)
+        args = ("wallets", "import-ledger", "--wallet", "Ledger source", "--file", str(source))
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            first = self.ok(self.cli(*args, "--column-map", "@" + str(mapping)))["data"]
+            self.assertEqual(first["imported"], 1)
+            repeated = self.ok(self.cli(*args, "--column-map", "@" + str(mapping)))["data"]
+            self.assertEqual(repeated["imported"], 0)
+            self.assertTrue(repeated["journal_invalidated"])
+            source.write_text(body.replace("190", "191"))
+            self.ok(self.cli(*args, "--column-map", mapping.read_text()))
+            source.write_text(body + "invalid,0.003,ACQUIRE,200,EUR,later\n")
+            self.assertEqual(self.cli(*args, "--column-map", "@" + str(mapping)).returncode, 1)
+            self.assertEqual(self.cli(*args, "--column-map", mapping.read_text(), "--wallet", "missing").returncode, 1)
+            self.assertEqual(self.cli(*args, "--column-map", mapping.read_text(), "--profile", "missing").returncode, 1)
+            source.write_text(body)
+            self.ok(self.cli(*args, "--column-map", "@" + str(mapping)))
+        self.ok(self.cli("imports", "rollback", "--batch", first["import_batch_id"], "--confirm"))
+        with sqlite3.connect(self.data_root / "kassiber.sqlite3") as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM transactions").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT count(*) FROM import_batches").fetchone()[0], 0)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-ledger"]
+        self.assertEqual(calls, [{"command": "wallets.import-ledger", "served_by": "rust"}] * 7)
+
     def test_binance_import_has_no_fallback_and_matches_every_reference_dump(self):
         self.ok(self.cli("init"))
         self.ok(self.cli("workspaces", "create", "Workspace"))

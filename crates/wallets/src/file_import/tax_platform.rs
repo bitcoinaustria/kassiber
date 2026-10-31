@@ -73,7 +73,7 @@ fn platform(format: Format) -> &'static Platform {
         _ => &COINTRACKING,
     }
 }
-const FIAT: &[&str] = &[
+pub(super) const FIAT: &[&str] = &[
     "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
     "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
     "TRY", "USD", "ZAR",
@@ -81,7 +81,7 @@ const FIAT: &[&str] = &[
 fn fail(message: impl Into<String>, hint: &str) -> AppError {
     AppError::new("validation", message).with_hint(hint)
 }
-fn number(
+pub(super) fn number(
     value: Option<String>,
     field: &str,
     label: &str,
@@ -131,7 +131,7 @@ fn number(
         )
     })
 }
-fn date(value: Option<String>, index: usize) -> Result<String, AppError> {
+pub(super) fn date(value: Option<String>, index: usize) -> Result<String, AppError> {
     let text = value
         .as_deref()
         .map(kassiber_pytext::strip)

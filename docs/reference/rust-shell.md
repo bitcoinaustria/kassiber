@@ -9022,3 +9022,139 @@ preserved, and no background job remains. The full quality gate, tax/custody
 shadow overlays, Docker regtest and packaged/platform gates were not run.
 Explicit no-refresh daemon routes are accepted at this boundary; default
 refresh remains open at the R4 handoff above.
+
+## Generic-ledger core and CLI ingestion (R5 continuation)
+
+Native `wallets import-ledger` reads CSV/TSV and XLSX/XLSM files. Native
+ledger headers, inferred columns and supplied maps retain exact Bitcoin/sats
+amounts, cash and network fees, fiat execution values, types, notes,
+counterparties and swap-linkage fields. Original supplied maps are saved with
+the import batch; type-map keys retain insertion order before normalization.
+`--dry-run` previews every accepted/rejected row without opening a book, even
+when supplied wallet/profile/workspace selections do not exist. Inline and
+`@path` maps share the reference admission order.
+
+The bounded ZIP reader uses stored or DEFLATE members in memory and never
+extracts files. Entry count, individual and total expansion, compression ratio,
+CRC, local-header identity and overlap, XML nesting/node count, namespace and
+attribute copies, repeated shared strings and workbook-wide rectangular cells
+are checked. The [imports reference](imports.md#generic-ledger-import) records the
+limits. Workbook selection, shared/inline rich strings, typed cells, cached
+formulas, dates and the 1904 epoch follow the frozen Python examples.
+Malformed worksheet XML and typed cells retain the reference error boundary.
+
+The corpus contains 341 Python-derived reference files, including 35 XLSX/XLSM
+files. Native vectors compare normalized fields, fingerprints and previews.
+Hybrid cases compare complete typed book dumps and assert Rust routing for
+every import and preview. Raw CLI bytes and full typed dumps, including failed
+imports and rollback, are compared on SQLite and SQLCipher. Coordinator cases
+cover supplied-map persistence, scoped dedupe, repeated prices, changed prices,
+invalid later rows, missing scopes and late batch-link failures on both codecs.
+The bulk matrix uses a synthetic SQLCipher raw key to avoid repeating key
+derivation for every fixture. Coordinator wire checks retain ordinary
+passphrases.
+
+The following Python reference quirks are intentionally retained:
+
+- Sats-denominated inferred columns multiply unit prices by the original sats
+  count before converting the Bitcoin amount, inflating the resulting value.
+- A preamble before the header can make a file unrecognized even when the
+  workbook sheet picker found that header.
+- Empty previews report `amount_max` as `0.000000`.
+- A native `1 LBTC` amount cell refuses because the shared suffix reader strips
+  the shorter BTC suffix first.
+- Reimporting an unchanged priced row invalidates journals again.
+
+Run `uv run --locked python -m tests.rust_port.repro_ledger_reference` offline
+for all five reproductions. Python production code is unchanged. The
+[shared CSV refusal](#shared-csv-reference-refusal) applies through the shared
+reader.
+
+The catalog appends 44 generic-ledger mutations to the retained 686 (730 total).
+The shared atomic-import recipe additionally names the ledger batch-link
+failure witness. Each new entry has the following named killer:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-ledger-sats-conversion` | `python_ledger_import_vectors` |
+| `W-ledger-both-bitcoin` | `python_ledger_import_vectors` |
+| `W-ledger-cash-admission` | `python_ledger_import_vectors` |
+| `W-ledger-type-direction` | `python_ledger_import_vectors` |
+| `W-ledger-fee-currency` | `python_ledger_import_vectors` |
+| `W-ledger-sats-fee-default` | `python_ledger_import_vectors` |
+| `W-ledger-buy-cash-fee` | `python_ledger_import_vectors` |
+| `W-ledger-sell-cash-fee` | `python_ledger_import_vectors` |
+| `W-ledger-txid` | `python_ledger_import_vectors` |
+| `W-ledger-raw` | `python_ledger_import_vectors` |
+| `W-ledger-payment-hash-source` | `python_ledger_import_vectors` |
+| `W-ledger-mapping-unknown` | `python_ledger_import_vectors` |
+| `W-ledger-mapping-column` | `python_ledger_import_vectors` |
+| `W-ledger-mapping-duplicate` | `python_ledger_import_vectors` |
+| `W-ledger-mapping-header-units` | `python_ledger_import_vectors` |
+| `W-ledger-mapping-type-order` | `python_ledger_import_vectors` |
+| `W-ledger-header-assets` | `python_ledger_import_vectors` |
+| `W-ledger-unreadable-direction` | `python_ledger_import_vectors` |
+| `W-ledger-preview-limit` | `python_ledger_preview_vectors` |
+| `W-ledger-preview-problems` | `python_ledger_preview_vectors` |
+| `W-ledger-preview-empty-scale` | `python_ledger_preview_vectors` |
+| `W-ledger-empty-file` | `python_ledger_import_vectors` |
+| `W-ledger-zip-entry-count` | `ledger_zip_limits_precede_decompression_and_check_integrity` |
+| `W-ledger-zip-member-size` | `ledger_zip_limits_precede_decompression_and_check_integrity` |
+| `W-ledger-zip-total-size` | `ledger_zip_total_expansion_is_bounded_across_duplicate_members` |
+| `W-ledger-zip-ratio` | `ledger_zip_limits_precede_decompression_and_check_integrity` |
+| `W-ledger-zip-crc` | `ledger_zip_limits_precede_decompression_and_check_integrity` |
+| `W-ledger-xml-depth` | `ledger_xml_limits_and_namespaces_prevent_ambiguous_cells` |
+| `W-ledger-xml-namespace` | `ledger_xml_limits_and_namespaces_prevent_ambiguous_cells` |
+| `W-ledger-sheet-expansion` | `ledger_xml_limits_and_namespaces_prevent_ambiguous_cells` |
+| `W-ledger-batch-map` | `ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches` |
+| `W-ledger-xml-refusal-position` | `python_ledger_import_vectors` |
+| `W-ledger-xlsx-cell-refusal` | `python_ledger_import_vectors` |
+| `W-ledger-xml-metadata-refusal` | `python_ledger_import_vectors` |
+| `W-ledger-xml-element-name` | `python_ledger_import_vectors` |
+| `W-ledger-date-midnight` | `python_ledger_import_vectors` |
+| `W-ledger-error-details-order` | `python_ledger_import_vectors` |
+| `W-ledger-chartsheet-index` | `python_ledger_import_vectors` |
+| `W-ledger-zip-overlap` | `python_ledger_import_vectors` |
+| `W-ledger-xml-namespace-budget` | `ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles` |
+| `W-ledger-xml-attribute-budget` | `ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles` |
+| `W-ledger-shared-string-budget` | `ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles` |
+| `W-ledger-rectangle-budget` | `ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles` |
+| `W-ledger-workbook-cell-budget` | `ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles` |
+
+The final hybrid run records **689 native `wallets.import-ledger` calls and
+zero importer fallbacks**: 341 files each imported and previewed, plus seven
+mapped coordinator calls. The unchanged 340-file bulk matrix passed three
+checks and 1,700 subtests. After adding the overlap fixture and allocation
+bounds, the 35-spreadsheet codec supplement, expanded hybrid run, mapped
+coordinator and reference regeneration/repro checks passed four tests and
+481 subtests. The focused ordinary-passphrase coordinator, map-order,
+chartsheet and no-book preview checks also passed (six tests, 36 subtests).
+All 80 native file-import tests pass.
+
+The scratch mutation audit passed 16 named baselines and killed 44 of 45
+selected rules. The new workbook-wide limit initially masked the early
+sheet-size mutation. Adding an oversized cell with an invalid value pins
+refusal before cell parsing; its named baseline and mutation recheck pass.
+All 44 new entries plus the shared atomic-import rule are therefore killed,
+with no final survivors or build errors. The mutation build tree was removed
+after recording the result.
+
+Formatting and strict workspace/harness Clippy pass. The final workspace run
+passes 1,500 tests with exactly the 58 previously verified loopback cases
+excluded; no other sandbox blocks or failures occur. All 14 harness tests pass.
+The required classifier update records 5,739 Python definitions, and
+`uv run --locked python scripts/python_test_shards.py run preflight --ci`
+passes all 57 checks. Builds use eight jobs with debug information and
+incremental compilation disabled; the final verification tree remains below
+4 GiB.
+
+The wallets crate reuses rates' exact `flate2 = 1.1.9` pin with
+`default-features = false` and `rust_backend`. The dependency already appears
+in `THIRD_PARTY_LICENSES.md`. Cargo.lock adds only the wallets-to-flate2 edge:
+all 370 package records retain their versions and transitive dependencies.
+The standard library has no DEFLATE inflater; no new package is added.
+
+Transport scope follows the [shared file-import
+follow-up](#shared-file-import-daemon-parity-pending). No schema, egress, sync
+route or AI projection changes. Wasabi, Samourai and document ingestion belong
+to the separate importer worker.

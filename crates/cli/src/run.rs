@@ -412,6 +412,8 @@ pub fn run(
         }
         "commands.describe" => describe_command(&namespace, &globals.selection)
             .and_then(|catalog| emit(&mut sink, format, &kind, catalog)),
+        "wallets.import-ledger" if namespace.flag("dry_run") => crate::wallets::preview_ledger(&namespace)
+            .and_then(|payload| emit(&mut sink,format,&kind,payload)),
         _ if dotted.starts_with("wallets.") => with_book(
             env,
             store.as_ref(),

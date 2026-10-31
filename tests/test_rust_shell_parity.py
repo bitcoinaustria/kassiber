@@ -441,7 +441,7 @@ class RustRealStoreParityTest(_Roots):
         with mock.patch.object(cli_runner, "prefix", side_effect=prefix):
             yield
 
-    def call(self, rust, args, *, root=None, secret=None, new_secret=False, default=False):
+    def call(self, rust, args, *, root=None, secret=None, new_secret=False, default=False, timeout=TIMEOUT):
         args = ["--machine", *([] if default else ["--data-root", str(root or self.root)]), *args]
         with tempfile.TemporaryFile() as fd:
             if secret is not None:
@@ -452,7 +452,7 @@ class RustRealStoreParityTest(_Roots):
                 else:
                     args[1:1] = ["--db-passphrase-fd", str(fd.fileno())]
             kwargs = dict(cwd=ROOT, env=self.env, stdin=subprocess.DEVNULL,
-                          capture_output=True, timeout=TIMEOUT,
+                          capture_output=True, timeout=timeout,
                           pass_fds=(fd.fileno(),) if secret is not None else ())
             with self.reference():
                 return (subprocess.run(_rust(args), **kwargs) if rust
@@ -1281,7 +1281,7 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source", fresh_ids=False):
+    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None, wallet_kind=None, seed=None, wallet_ref="Import source", fresh_ids=False, raw_key=False):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
@@ -1315,9 +1315,9 @@ class RustRealStoreParityTest(_Roots):
         )
 
         for encrypted in (False, True):
-            secret = self.PASSPHRASE if encrypted else None
+            secret = ("x'" + "42" * 32 + "'" if raw_key else self.PASSPHRASE) if encrypted else None
             if encrypted:
-                self.ok(self.call(False, ["secrets", "init"], secret=secret, new_secret=True))
+                self.ok(self.call(False, ["secrets", "init"], secret=secret, new_secret=True, timeout=600))
             baseline = database.read_bytes()
             for scenario in scenarios:
                 steps = scenario if isinstance(scenario, list) else [scenario]
@@ -1330,13 +1330,18 @@ class RustRealStoreParityTest(_Roots):
                         if fresh_ids:
                             self.env["KASSIBER_RUST_TEST_IMPORT_IDS"] = ",".join(f"00000000-0000-4000-8000-{step_index * 20 + i:012}" for i in range(1, 21))
                         content, edits = step if isinstance(step, tuple) else (step, [])
+                        step_extra = extra
+                        if isinstance(step, dict):
+                            content, edits = step["content"], step.get("edits", [])
+                            file = self.home / ("input" + step.get("extension", ".csv"))
+                            step_extra = step.get("extra", extra)
                         if edits:
                             with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
                                 for sql in edits:
                                     conn.execute(sql)
                                 conn.commit()
                         file.write_bytes(content.encode() if isinstance(content, str) else content)
-                        args = ["wallets", command, *(["--wallet", wallet_ref] if wallet_ref else []), "--file", str(file), *extra]
+                        args = ["wallets", command, *(["--wallet", wallet_ref] if wallet_ref else []), "--file", str(file), *step_extra]
                         if rust:
                             result = self.call(True, args, secret=secret)
                         else:
@@ -1359,7 +1364,7 @@ class RustRealStoreParityTest(_Roots):
                         dumps.append(normalized_dump(conn))
                     results.append(wires)
                     states.append(dumps)
-                with self.subTest(encrypted=encrypted, content=steps[0][:100]):
+                with self.subTest(encrypted=encrypted, content=str(steps[0])[:100]):
                     self.assertEqual(results[1], results[0])
                     self.assertEqual(states[1], states[0])
             database.write_bytes(baseline)
@@ -1500,6 +1505,62 @@ class RustRealStoreParityTest(_Roots):
 
     def test_btcpay_csv_reference_files_wire_bytes_full_state_and_rollback(self):
         self._btcpay_reference_files("csv")
+
+    def test_ledger_reference_files_wire_bytes_full_state_and_rollback(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_ledger_imports.json").read_text())
+        self._file_import_parity("import-ledger", [
+            {"content":bytes(case["bytes"]) if "bytes" in case else case["text"], "extension":case["extension"], "extra":["--column-map",json.dumps(case["column_map"])] if case["column_map"] is not None else []}
+            for case in cases
+        ], fiat_currency="EUR", raw_key=True)
+
+    def test_ledger_preview_reference_files_wire_bytes_and_no_mutations(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_ledger_imports.json").read_text())
+        self._file_import_parity("import-ledger", [
+            {"content":bytes(case["bytes"]) if "bytes" in case else case["text"], "extension":case["extension"], "extra":["--dry-run","--limit",str(case["limit"]), *(["--column-map",json.dumps(case["column_map"])] if case["column_map"] is not None else [])]}
+            for case in cases
+        ], raw_key=True)
+
+    def test_ledger_coordinator_wire_bytes_full_state_and_rollback(self):
+        from crates.wallets.scripts.generate_ledger_vectors import inputs
+        body=next(c["text"] for c in inputs() if c["name"]=="ledger:base")
+        self._file_import_parity("import-ledger",[[body,body,body.replace("190","191"),body+"Buy,invalid,0.002,BTC,190,EUR,2,EUR,later,later-id\n",body]],fiat_currency="EUR",fresh_ids=True)
+
+    def test_ledger_chartsheet_selection_import_and_preview_wire_bytes_and_full_state(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_ledger_imports.json").read_text())
+        selected = [case for case in cases if case["name"].startswith("ledger:xlsx-chartsheet-")]
+        self.assertEqual(len(selected), 2)
+        self._file_import_parity("import-ledger", [
+            {"content": bytes(case["bytes"]), "extension": case["extension"], "extra": flags}
+            for case in selected for flags in ([], ["--dry-run"])
+        ], fiat_currency="EUR", raw_key=True)
+
+    def test_ledger_column_map_order_wire_bytes_full_state_and_rollback(self):
+        cases=json.loads((ROOT / "crates/wallets/tests/vectors/python_ledger_imports.json").read_text())
+        self._file_import_parity("import-ledger",[
+            {"content":case["text"],"extra":["--column-map",case["column_map_json"]]}
+            for case in cases if case["name"].startswith("ledger:mapping-type-order-") or (case["column_map"] is not None and case.get("error", {}).get("details"))
+        ], raw_key=True)
+
+    def test_ledger_spreadsheet_integrity_import_and_preview_wire_bytes_and_full_state(self):
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_ledger_imports.json").read_text())
+        selected = [case for case in cases if case["extension"] in {".xlsx", ".xlsm"}]
+        self.assertEqual(len(selected), 35)
+        self._file_import_parity("import-ledger", [
+            {"content": bytes(case["bytes"]), "extension": case["extension"], "extra": flags}
+            for case in selected for flags in ([], ["--dry-run"])
+        ], fiat_currency="EUR", raw_key=True)
+
+    def test_ledger_preview_bypasses_book_scope_and_parses_inline_and_file_maps(self):
+        self.env["HOME"]=os.environ.get("HOME","")
+        source=self.home / "ledger.csv"
+        source.write_text("When,Units\n2025-01-02,0.002\n")
+        mapping=self.home / "map.json"
+        mapping.write_text('{"date":"When","amount":"Units"}')
+        for value in [mapping.read_text(),"@"+str(mapping),"{", "[]", "@"+str(self.home / "absent.json")]:
+            args=["wallets","import-ledger","--wallet","missing","--workspace","missing","--profile","missing","--file",str(source),"--dry-run","--column-map",value]
+            python,rust=(self.call(native,args) for native in [False,True])
+            self.assertEqual((rust.returncode,rust.stdout,rust.stderr),(python.returncode,python.stdout,python.stderr))
+        self.assertFalse((self.root / "kassiber.sqlite3").exists())
 
     def test_btcpay_json_reference_files_wire_bytes_full_state_and_rollback(self):
         self._btcpay_reference_files("json")
@@ -1799,6 +1860,11 @@ class RustShellDriftTest(unittest.TestCase):
     def test_btcpay_vectors_match_python_reference(self):
         self.check("crates/wallets/scripts/generate_btcpay_vectors.py")
         result = subprocess.run([sys.executable, "-m", "tests.rust_port.repro_btcpay_reference"], cwd=ROOT, capture_output=True, text=True, timeout=TIMEOUT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_ledger_vectors_match_python_reference(self):
+        self.check("crates/wallets/scripts/generate_ledger_vectors.py")
+        result = subprocess.run([sys.executable, "-m", "tests.rust_port.repro_ledger_reference"], cwd=ROOT, capture_output=True, text=True, timeout=TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stderr)
 
 

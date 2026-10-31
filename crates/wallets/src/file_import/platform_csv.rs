@@ -203,10 +203,10 @@ fn sniff(text: &str) -> Dialect {
         }) && !delims.is_empty(),
     }
 }
-pub(super) fn load(file: &str) -> Result<(Vec<String>, Vec<csv::Row>), AppError> {
+pub(super) fn raw_rows(file: &str) -> Result<Vec<Vec<String>>, AppError> {
     let text = csv::read_sig(file)?;
     if kassiber_pytext::strip(&text).is_empty() {
-        return Ok((vec![], vec![]));
+        return Ok(vec![]);
     }
     let d = sniff(&text);
     let mut records = vec![];
@@ -277,6 +277,10 @@ pub(super) fn load(file: &str) -> Result<(Vec<String>, Vec<csv::Row>), AppError>
         row.push(field);
         records.push(row);
     }
+    Ok(records)
+}
+pub(super) fn load(file: &str) -> Result<(Vec<String>, Vec<csv::Row>), AppError> {
+    let records = raw_rows(file)?;
     let mut records = records
         .into_iter()
         .filter(|r| r.iter().any(|s| !kassiber_pytext::strip(s).is_empty()));

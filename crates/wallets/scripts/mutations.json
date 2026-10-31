@@ -637,7 +637,8 @@
       "cointracking_admission_and_late_failure_leave_every_write_uncommitted",
       "blockpit_admission_and_late_failure_leave_every_write_uncommitted",
       "binance_late_failure_rolls_back_records_flags_runs_and_readiness",
-      "btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness"
+      "btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness",
+      "ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -6879,5 +6880,445 @@
       "btcpay_surrogate_currency_preserves_refusal_precedence_and_rollback"
     ],
     "rule": "Preserve uppercase expansion and exact currency encoding refusal positions."
+  },
+  {
+    "id": "W-ledger-sats-conversion",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "&PriceNumber::parse(\"100000000\")?",
+    "replace": "&PriceNumber::parse(\"10000000\")?",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger sats conversion."
+  },
+  {
+    "id": "W-ledger-both-bitcoin",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if inbound && outbound {",
+    "replace": "if false && inbound && outbound {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger both bitcoin."
+  },
+  {
+    "id": "W-ledger-cash-admission",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "!tax_platform::FIAT.contains(s)",
+    "replace": "false && !tax_platform::FIAT.contains(s)",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger cash admission."
+  },
+  {
+    "id": "W-ledger-type-direction",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if type_direction != direction {",
+    "replace": "if false && type_direction != direction {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger type direction."
+  },
+  {
+    "id": "W-ledger-fee-currency",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if Some(fee_asset) != cash_asset.as_deref() {",
+    "replace": "if false && Some(fee_asset) != cash_asset.as_deref() {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger fee currency."
+  },
+  {
+    "id": "W-ledger-sats-fee-default",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "fee_asset.as_deref().unwrap_or(original)",
+    "replace": "fee_asset.as_deref().unwrap_or(\"BTC\")",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger sats fee default."
+  },
+  {
+    "id": "W-ledger-buy-cash-fee",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "arithmetic(&base, &cash_fee, '+')?",
+    "replace": "arithmetic(&base, &cash_fee, '-')?",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger buy cash fee."
+  },
+  {
+    "id": "W-ledger-sell-cash-fee",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "nonnegative(arithmetic(&base, &cash_fee, '-')?)?",
+    "replace": "nonnegative(arithmetic(&base, &cash_fee, '+')?)?",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger sell cash fee."
+  },
+  {
+    "id": "W-ledger-txid",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "\"txid\":txid.clone().unwrap_or_default()",
+    "replace": "\"txid\":\"ledger\"",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger txid."
+  },
+  {
+    "id": "W-ledger-raw",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "\"raw_json\":config::stored_json(&row.data)",
+    "replace": "\"raw_json\":\"{}\"",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger raw."
+  },
+  {
+    "id": "W-ledger-payment-hash-source",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "\"generic_ledger\".into()",
+    "replace": "\"importer\".into()",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger payment hash source."
+  },
+  {
+    "id": "W-ledger-mapping-unknown",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if !unknown.is_empty() {",
+    "replace": "if false && !unknown.is_empty() {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger mapping unknown."
+  },
+  {
+    "id": "W-ledger-mapping-column",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if !known.is_empty() && !known.contains(&column) {",
+    "replace": "if false && !known.is_empty() && !known.contains(&column) {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger mapping column."
+  },
+  {
+    "id": "W-ledger-mapping-duplicate",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "claimed.insert(column.clone(), field)",
+    "replace": "claimed.insert(format!(\"{column}{field}\"), field)",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger mapping duplicate."
+  },
+  {
+    "id": "W-ledger-mapping-header-units",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "from.is_some() && plan[field] != json!(from)",
+    "replace": "false && from.is_some() && plan[field] != json!(from)",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger mapping header units."
+  },
+  {
+    "id": "W-ledger-mapping-type-order",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "for source in &mapping.type_order {",
+    "replace": "for source in mapping.type_order.iter().rev() {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger mapping type order."
+  },
+  {
+    "id": "W-ledger-header-assets",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "tokens\n        .iter()\n        .rev()",
+    "replace": "tokens\n        .iter()\n        .take(0)",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger header assets."
+  },
+  {
+    "id": "W-ledger-unreadable-direction",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if let Some(direction) = cell(&row.data[\"__unreadable_direction\"]) {",
+    "replace": "if let Some(direction) = cell(&Json::Null) {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger unreadable direction."
+  },
+  {
+    "id": "W-ledger-preview-limit",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "for row in normalized.iter().take(limit) {",
+    "replace": "for row in normalized.iter() {",
+    "expect_failing": [
+      "python_ledger_preview_vectors"
+    ],
+    "rule": "Preserve generic ledger preview limit."
+  },
+  {
+    "id": "W-ledger-preview-problems",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "problems.into_iter().take(limit).collect()",
+    "replace": "problems.into_iter().collect()",
+    "expect_failing": [
+      "python_ledger_preview_vectors"
+    ],
+    "rule": "Preserve generic ledger preview problems."
+  },
+  {
+    "id": "W-ledger-preview-empty-scale",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "\"0.000000\".into()",
+    "replace": "\"0\".into()",
+    "expect_failing": [
+      "python_ledger_preview_vectors"
+    ],
+    "rule": "Preserve generic ledger preview empty scale."
+  },
+  {
+    "id": "W-ledger-empty-file",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "if records.is_empty() {",
+    "replace": "if false && records.is_empty() {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve generic ledger empty file."
+  },
+  {
+    "id": "W-ledger-zip-entry-count",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "if count > MAX_ENTRIES {",
+    "replace": "if false && count > MAX_ENTRIES {",
+    "expect_failing": [
+      "ledger_zip_limits_precede_decompression_and_check_integrity"
+    ],
+    "rule": "Preserve generic ledger zip entry count."
+  },
+  {
+    "id": "W-ledger-zip-member-size",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "if decompressed > MAX_MEMBER",
+    "replace": "if false && decompressed > MAX_MEMBER",
+    "expect_failing": [
+      "ledger_zip_limits_precede_decompression_and_check_integrity"
+    ],
+    "rule": "Preserve generic ledger zip member size."
+  },
+  {
+    "id": "W-ledger-zip-total-size",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "|| total > MAX_TOTAL",
+    "replace": "|| total > usize::MAX",
+    "expect_failing": [
+      "ledger_zip_total_expansion_is_bounded_across_duplicate_members"
+    ],
+    "rule": "Preserve generic ledger zip total size."
+  },
+  {
+    "id": "W-ledger-zip-ratio",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "|| decompressed > compressed.max(1).saturating_mul(MAX_RATIO)",
+    "replace": "|| false && decompressed > compressed.max(1).saturating_mul(MAX_RATIO)",
+    "expect_failing": [
+      "ledger_zip_limits_precede_decompression_and_check_integrity"
+    ],
+    "rule": "Preserve generic ledger zip ratio."
+  },
+  {
+    "id": "W-ledger-zip-crc",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "|| !observed != crc",
+    "replace": "|| false && !observed != crc",
+    "expect_failing": [
+      "ledger_zip_limits_precede_decompression_and_check_integrity"
+    ],
+    "rule": "Preserve generic ledger zip crc."
+  },
+  {
+    "id": "W-ledger-xml-depth",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "|| stack.len() > 64",
+    "replace": "|| stack.len() > 128",
+    "expect_failing": [
+      "ledger_xml_limits_and_namespaces_prevent_ambiguous_cells"
+    ],
+    "rule": "Preserve generic ledger xml depth."
+  },
+  {
+    "id": "W-ledger-xml-namespace",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "if node.namespace != \"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" {",
+    "replace": "if false && node.namespace != \"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" {",
+    "expect_failing": [
+      "ledger_xml_limits_and_namespaces_prevent_ambiguous_cells"
+    ],
+    "rule": "Preserve generic ledger xml namespace."
+  },
+  {
+    "id": "W-ledger-sheet-expansion",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "n > MAX_CELLS",
+    "replace": "n > usize::MAX",
+    "expect_failing": [
+      "ledger_xml_limits_and_namespaces_prevent_ambiguous_cells"
+    ],
+    "rule": "Reject oversized sheet coordinates before parsing or materializing cells."
+  },
+  {
+    "id": "W-ledger-batch-map",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "column_map.map(|map| config::stored_json(&map.raw))",
+    "replace": "column_map.map(|_| \"{}\".to_owned())",
+    "expect_failing": [
+      "ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches"
+    ],
+    "rule": "Persist the original supplied ledger map inside the atomic import batch."
+  },
+  {
+    "id": "W-ledger-xml-refusal-position",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "xml_error(&text, start + 2, \"mismatched tag\")",
+    "replace": "xml_error(&text, start + 1, \"mismatched tag\")",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Retain the Python worksheet XML refusal position."
+  },
+  {
+    "id": "W-ledger-xlsx-cell-refusal",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "\"Invalid numeric cell\", \"invalid boolean cell\", \"Invalid cell coordinates\", \"invalid literal for int()\"",
+    "replace": "\"Invalid numeric cell\", \"unknown boolean cell\", \"Invalid cell coordinates\", \"invalid literal for int()\"",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Retain the Python workbook refusal for malformed boolean cells."
+  },
+  {
+    "id": "W-ledger-xml-metadata-refusal",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "\"attributes construct error\"",
+    "replace": "\"unclosed token\"",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Retain the Python metadata XML refusal for truncated attributes."
+  },
+  {
+    "id": "W-ledger-xml-element-name",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "if !xml_name(name) {\n            return Err",
+    "replace": "if false && !xml_name(name) {\n            return Err",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Reject malformed worksheet element names before reading observations."
+  },
+  {
+    "id": "W-ledger-date-midnight",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "&& fractional_millis < 86_400_000",
+    "replace": "&& fractional_millis <= 86_400_000",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Carry an Excel serial rounded to midnight into the following date."
+  },
+  {
+    "id": "W-ledger-error-details-order",
+    "file": "crates/wallets/src/file_import/ledger.rs",
+    "find": "dict(entries.map(|(key, value)| (key, py(&value))))",
+    "replace": "dict(entries.into_iter().rev().map(|(key, value)| (key, py(&value))))",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve Python insertion order in column-map refusal details."
+  },
+  {
+    "id": "W-ledger-chartsheet-index",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "                sheets.push(None);\n                continue;",
+    "replace": "                continue;",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Preserve chartsheet positions when selecting the active worksheet."
+  },
+  {
+    "id": "W-ledger-zip-overlap",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "if stop > header_ends[&local].min(offset) {",
+    "replace": "if stop > offset {",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Reject a compressed member extending into the next local header before inflation, matching Python zipfile."
+  },
+  {
+    "id": "W-ledger-xml-namespace-budget",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "budget.charge(inherited)?;",
+    "replace": "budget.charge(0)?;",
+    "expect_failing": [
+      "ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles"
+    ],
+    "rule": "Bound inherited XML namespace copies before materialization."
+  },
+  {
+    "id": "W-ledger-xml-attribute-budget",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "budget.charge(ns.len() + local.len() + 2)?;",
+    "replace": "budget.charge(0)?;",
+    "expect_failing": [
+      "ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles"
+    ],
+    "rule": "Bound expanded XML attribute names before materialization."
+  },
+  {
+    "id": "W-ledger-shared-string-budget",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "budget.charge(string_bytes.checked_mul(2).ok_or_else(bounded)?)?;",
+    "replace": "budget.charge(string_bytes.checked_mul(0).ok_or_else(bounded)?)?;",
+    "expect_failing": [
+      "ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles"
+    ],
+    "rule": "Bound repeated shared-string expansion before cloning cells."
+  },
+  {
+    "id": "W-ledger-rectangle-budget",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": ".checked_mul(2 * std::mem::size_of::<Json>())",
+    "replace": ".checked_mul(0 * std::mem::size_of::<Json>())",
+    "expect_failing": [
+      "ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles"
+    ],
+    "rule": "Bound sparse worksheet allocations before making rectangles."
+  },
+  {
+    "id": "W-ledger-workbook-cell-budget",
+    "file": "crates/wallets/src/file_import/ledger/xlsx.rs",
+    "find": "if self.cells > MAX_CELLS {",
+    "replace": "if self.cells > MAX_CELLS * 2 {",
+    "expect_failing": [
+      "ledger_materialization_limits_cover_namespace_attributes_strings_and_workbook_rectangles"
+    ],
+    "rule": "Accumulate rectangular cells across every worksheet in a workbook."
   }
 ]

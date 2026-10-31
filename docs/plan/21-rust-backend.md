@@ -3202,3 +3202,37 @@ job/summary ordering, and prove defaults before removing either journal guard.
 Enabled unported rate sources still decline. No Python journal bridge is
 introduced. The [product handoff](../reference/rust-shell.md#bitcoin-wallet-sync-product-routes-r5-no-refresh)
 records the exact integration boundaries and verification.
+
+R4-11 remains incomplete: the 0.15 s generic-20k budget, lossless legacy edge
+values, exhaustive rendering/join mutations and full inherited campaign gates
+still need completion.
+
+### R5 file-import continuation: generic-ledger core/CLI checkpoint
+
+Native `wallets import-ledger` reads CSV/TSV and bounded XLSX/XLSM files, with
+native headers, column inference, explicit maps, exact Bitcoin/sats and cash
+fees, execution values and swap-linkage fields. Dry-run previews read no book;
+import runs preserve the original supplied map, scoped dedupe, journal
+invalidation and atomic rollback.
+
+There are 341 frozen Python-derived files, including 35 spreadsheets. Native
+field/fingerprint and preview vectors, hybrid full-book routing assertions,
+raw CLI bytes/full typed dumps on SQLite and SQLCipher, and coordinator/late
+failure cases cover the boundary. Five reference quirks have an offline repro.
+The catalog adds 44 named mutation entries (730 total). The
+[generic-ledger checkpoint](../reference/rust-shell.md#generic-ledger-core-and-cli-ingestion-r5-continuation)
+records routing counts, mutation killers and final verification. The expanded
+hybrid run records 689 native imports/previews and zero importer fallbacks;
+all 80 native file-import tests pass. The 44 new mutations and shared atomic
+rule are killed across the scratch audit and early-limit witness recheck.
+Formatting, strict workspace/harness Clippy, all 14 harness tests and all 57
+required CI preflight checks pass. The final workspace run passes 1,500 tests,
+excluding the 58 previously verified loopback cases, with no other blocks or
+failures. The classifier records 5,739 Python definitions.
+
+The only dependency change is a wallets-to-flate2 edge, reusing rates' exact
+1.1.9 pin and pure Rust backend. Cargo.lock retains the same 370 packages and
+versions; the existing license entry records the added use. Python production
+code, schema, egress, sync routes and AI projections are unchanged. Remaining
+core/CLI importers are Wasabi, Samourai and document ingestion in the separate
+worker's scope.

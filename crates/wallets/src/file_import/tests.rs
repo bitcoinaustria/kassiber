@@ -444,10 +444,11 @@ fn assert_import_vectors(cases: &Json) {
                 .collect::<Vec<_>>()
         });
         let path = std::env::temp_dir().join(format!(
-            "kassiber-import-vector-{}-{:?}-{}.csv",
+            "kassiber-import-vector-{}-{:?}-{}{}",
             std::process::id(),
             std::thread::current().id(),
-            name.bytes().map(u32::from).sum::<u32>()
+            name.bytes().map(u32::from).sum::<u32>(),
+            case["extension"].as_str().unwrap_or(".csv")
         ));
         std::fs::write(
             &path,
@@ -460,6 +461,7 @@ fn assert_import_vectors(cases: &Json) {
             "json" => Format::Json,
             "btcpay_csv" => Format::BtcpayCsv,
             "btcpay_json" => Format::BtcpayJson,
+            "generic_ledger" => Format::Ledger,
             "phoenix_csv" => Format::Phoenix,
             "river_csv" => Format::River,
             "bullbitcoin_csv" => Format::Bull,
@@ -473,7 +475,22 @@ fn assert_import_vectors(cases: &Json) {
             "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
-        let result = format.load(path.to_str().unwrap()).and_then(|rows| {
+        let mapping = case.get("column_map").filter(|v| !v.is_null()).map(|v| {
+            ledger::ColumnMap::from_python(
+                &case
+                    .get("column_map_json")
+                    .and_then(Json::as_str)
+                    .map(|s| kassiber_pytext::loads(s).unwrap())
+                    .unwrap_or_else(|| kassiber_pytext::loads(&v.to_string()).unwrap()),
+            )
+            .unwrap()
+        });
+        let loaded = if format == Format::Ledger {
+            ledger::load(path.to_str().unwrap(), mapping.as_ref())
+        } else {
+            format.load(path.to_str().unwrap())
+        };
+        let result = loaded.and_then(|rows| {
             rows.iter()
                 .map(|row| {
                     let r = normalize(row)?;
@@ -499,18 +516,28 @@ fn assert_import_vectors(cases: &Json) {
                 })
                 .collect::<Result<Vec<_>, AppError>>()
         });
-        std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(&path).unwrap();
         match result {
             Ok(records) => assert_eq!(
                 kassiber_pytext::loads(&json!(records).to_string()).unwrap(),
                 kassiber_pytext::loads(&case["records"].to_string()).unwrap(),
                 "{name}"
             ),
-            Err(error) => assert_eq!(
-                json!({"code":error.code,"message":error.message,"hint":error.hint}),
-                case["error"],
-                "{name}"
-            ),
+            Err(error) => {
+                if let Some(expected) = case["error"].get("details_json") {
+                    let details = error
+                        .details
+                        .as_ref()
+                        .map(|v| kassiber_pyjson::dumps(v, &Default::default()).unwrap())
+                        .unwrap_or_else(|| "null".into());
+                    assert_eq!(json!(details), *expected, "{name}");
+                }
+                assert_eq!(
+                    json!({"code":error.code,"message":error.message.replace(path.to_str().unwrap(),"{file}"),"hint":error.hint}),
+                    json!({"code":case["error"]["code"],"message":case["error"]["message"],"hint":case["error"]["hint"]}),
+                    "{name}"
+                );
+            }
         }
     }
 }
@@ -878,6 +905,7 @@ fn bull(conn: &Connection, mode: &str) -> Py {
                 identity: None,
                 at: 0,
             },
+            None,
         )
         .unwrap()
     }
@@ -1326,6 +1354,7 @@ fn coinfinity(conn: &Connection, mode: &str) -> Py {
                 identity: None,
                 at: 0,
             },
+            None,
         )
         .unwrap()
     }
@@ -1968,6 +1997,7 @@ fn pocket(conn: &Connection, mode: &str) -> Py {
                 identity: None,
                 at: 0,
             },
+            None,
         )
         .unwrap()
     }
@@ -2161,6 +2191,7 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
             identity: None,
             at: 0,
         },
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -3369,6 +3400,182 @@ fn python_btcpay_import_vectors() {
     ))
     .unwrap();
     assert_import_vectors(&cases);
+}
+
+#[test]
+fn python_ledger_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_ledger_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+#[test]
+fn python_ledger_preview_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_ledger_imports.json"
+    ))
+    .unwrap();
+    for (i, case) in cases.as_array().unwrap().iter().enumerate() {
+        let path = std::env::temp_dir().join(format!(
+            "ledger-preview-{}-{i}{}",
+            std::process::id(),
+            case["extension"].as_str().unwrap()
+        ));
+        let bytes: Vec<u8> = case
+            .get("bytes")
+            .map(|v| {
+                v.as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|b| b.as_u64().unwrap() as u8)
+                    .collect()
+            })
+            .unwrap_or_else(|| case["text"].as_str().unwrap().as_bytes().to_vec());
+        std::fs::write(&path, bytes).unwrap();
+        let mapping = case.get("column_map").filter(|v| !v.is_null()).map(|_| {
+            ledger::ColumnMap::from_python(
+                &kassiber_pytext::loads(case["column_map_json"].as_str().unwrap()).unwrap(),
+            )
+            .unwrap()
+        });
+        let result = ledger::preview(
+            path.to_str().unwrap(),
+            mapping.as_ref(),
+            case["limit"].as_i64().unwrap().max(0) as usize,
+        );
+        std::fs::remove_file(&path).unwrap();
+        match result {
+            Ok(value) => assert_eq!(
+                serde_json::from_str::<Json>(
+                    &kassiber_pyjson::dumps(&value, &Default::default()).unwrap()
+                )
+                .unwrap(),
+                case["preview"],
+                "{}",
+                case["name"]
+            ),
+            Err(e) => {
+                let details = e
+                    .details
+                    .as_ref()
+                    .map(|v| kassiber_pyjson::dumps(v, &Default::default()).unwrap())
+                    .unwrap_or_else(|| "null".into());
+                assert_eq!(
+                    json!({"code":e.code,"message":e.message.replace(path.to_str().unwrap(),"{file}"),"hint":e.hint,"details":serde_json::from_str::<Json>(&details).unwrap(),"details_json":details}),
+                    case["preview_error"],
+                    "{}",
+                    case["name"]
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "ledger-coordinator-{}-{encrypted}.csv",
+            std::process::id()
+        ));
+        std::fs::write(&path,"When,Units,Side,Price,Currency,Hash,Funding,Output\n2025-01-02,0.002,ACQUIRE,190,EUR,abababababababababababababababababababababababababababababababab,cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd,2\n").unwrap();
+        let mapping = ledger::ColumnMap::from_json(
+            &json!({"date":"When","amount":"Units","type":"Side","fiat_value":"Price","fiat_currency":"Currency","type_map":{"ACQUIRE":"Buy"},"payment_hash":"Hash","swap_refund_funding_txid":"Funding","swap_refund_funding_vout":"Output"}),
+        );
+        let run = |wallet: &str| {
+            execute_with_ledger_map(
+                &conn,
+                Request {
+                    profile_id: "p".into(),
+                    wallet: wallet.into(),
+                    file: path.to_string_lossy().into_owned(),
+                    format: Format::Ledger,
+                    mode: None,
+                },
+                Some(&mapping),
+                None,
+            )
+        };
+        let first = run("Source").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&first, "imported"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(scalar(&conn, "SELECT amount FROM transactions"), 200000000);
+        assert_eq!(
+            scalar(&conn, "SELECT swap_refund_funding_vout FROM transactions"),
+            2
+        );
+        let stored: (String, String, String) = conn
+            .query_row(
+                "SELECT source_format,column_map_json,source_filename FROM import_batches",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            stored,
+            (
+                "generic_ledger".into(),
+                config::stored_json(&mapping.raw),
+                path.file_name().unwrap().to_string_lossy().into_owned()
+            )
+        );
+        let hash: String = conn
+            .query_row("SELECT payment_hash_source FROM transactions", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(hash, "generic_ledger");
+        let second = run("Source").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&second, "imported"),
+            Some(&Py::from(0))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&second, "journal_invalidated"),
+            Some(&Py::Bool(true))
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(run("missing").unwrap_err().code, "not_found");
+        conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('other','ws','p','Other','custom','2025-01-01')",[]).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&run("Other").unwrap(), "imported"),
+            Some(&Py::from(1))
+        );
+        let before = scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'",
+        );
+        conn.execute_batch("DELETE FROM import_batch_transactions;DELETE FROM import_batches;DELETE FROM transactions;CREATE TRIGGER deny_ledger_link BEFORE INSERT ON import_batch_transactions BEGIN SELECT RAISE(ABORT,'ledger link denied');END;").unwrap();
+        let error = run("Source").unwrap_err();
+        assert_eq!(error.code, "internal_error");
+        assert_eq!(
+            kassiber_envelope::get(error.details.as_ref().unwrap(), "sqlite_error_code"),
+            Some(&Py::from(1811))
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 0);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            before
+        );
+        assert!(conn.is_autocommit());
+        conn.execute_batch("DROP TRIGGER deny_ledger_link").unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&run("Source").unwrap(), "imported"),
+            Some(&Py::from(1))
+        );
+        std::fs::remove_file(path).unwrap();
+    }
 }
 
 #[test]

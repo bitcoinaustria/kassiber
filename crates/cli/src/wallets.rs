@@ -14,6 +14,11 @@ pub fn execute(
     stdin: &mut dyn Read,
     stderr: &mut dyn Write,
 ) -> Result<Value, AppError> {
+    let column_map = if namespace.text("wallets_command") == Some("import-ledger") {
+        column_map(namespace)?
+    } else {
+        None
+    };
     let (workspace_id, profile_id) =
         book.resolve_scope(namespace.get("workspace"), namespace.get("profile"))?;
     let wallet = namespace.text("wallet").unwrap_or_default().to_owned();
@@ -25,6 +30,18 @@ pub fn execute(
                 namespace.flag("all"),
                 namespace.flag("force_full"),
             );
+        }
+        "import-ledger" => {
+            return book.import_ledger_file(
+                kassiber_wallets::file_import::Request {
+                    profile_id,
+                    wallet,
+                    file: namespace.text("file").unwrap_or_default().into(),
+                    format: kassiber_wallets::file_import::Format::Ledger,
+                    mode: None,
+                },
+                column_map,
+            )
         }
         "import-csv"
         | "import-json"
@@ -116,6 +133,54 @@ pub fn execute(
         }
     };
     book.wallets(operation)
+}
+
+fn column_map(
+    namespace: &Namespace,
+) -> Result<Option<kassiber_wallets::file_import::ledger::ColumnMap>, AppError> {
+    let raw = kassiber_pytext::strip(namespace.text("column_map").unwrap_or_default());
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let raw = if let Some(file) = raw.strip_prefix('@') {
+        kassiber_wallets::file_import::ledger::read_map(file)?
+    } else {
+        raw.into()
+    };
+    let value = kassiber_pytext::loads(&raw).map_err(|_| {
+        AppError::new("validation", "column map must be valid JSON")
+            .with_hint("Example: '{\"date\":\"Ausfuehrung\",\"amount\":\"Stueck\"}'")
+    })?;
+    if !matches!(value, Value::Dict(_)) {
+        return Err(
+            AppError::new("validation", "column map must be a JSON object")
+                .with_hint(kassiber_wallets::file_import::ledger::column_map_hint()),
+        );
+    }
+    Ok(Some(
+        kassiber_wallets::file_import::ledger::ColumnMap::from_python(&value)?,
+    ))
+}
+
+pub fn preview_ledger(namespace: &Namespace) -> Result<Value, AppError> {
+    let mapping = column_map(namespace)?;
+    let limit = namespace
+        .get("limit")
+        .filter(|v| **v != Value::Null)
+        .map(kassiber_envelope::py_str)
+        .map(|s| {
+            if s.starts_with('-') {
+                0
+            } else {
+                s.parse::<usize>().unwrap_or(usize::MAX)
+            }
+        })
+        .unwrap_or(200);
+    kassiber_wallets::file_import::ledger::preview(
+        namespace.text("file").unwrap_or_default(),
+        mapping.as_ref(),
+        limit,
+    )
 }
 
 fn json_value(value: &Value) -> Result<Json, AppError> {

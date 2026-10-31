@@ -435,6 +435,17 @@ template is the header row with example rows. The importer reads `.xlsx` (via
 the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
 is not read — save as `.xlsx` or CSV first.
 
+The native Rust importer reads stored and DEFLATE-compressed XLSX members in
+memory, without extracting files or resolving external XML entities. It limits
+archives to 4,096 entries, 32 MiB per decompressed member, 128 MiB for the input
+archive and total decompressed members, and a 200:1 compression ratio.
+Rectangular cell ranges total at most 1,000,000 cells across the workbook; XML is limited
+to 64 nested elements and 4,000,000 nodes per part. A shared 512 MiB
+materialization budget accounts for XML nodes, namespace and attribute copies,
+shared strings and worksheet allocations before making them. Overlapping ZIP
+members, mismatched local headers and CRC failures are refused. Files exceeding
+these limits return validation errors before importing observations.
+
 `--dry-run` previews what would import (also a no-DB read): it returns
 `{rows_read, mapped, errors, problems[], preview[], confident, detected[]}` and
 persists nothing, collecting a row-numbered problem for every rejected row at

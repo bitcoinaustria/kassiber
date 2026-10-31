@@ -182,6 +182,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
     "wallets.import-btcpay",
+    "wallets.import-ledger",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

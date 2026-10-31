@@ -1934,6 +1934,7 @@ dependencies = [
  "bdk_wallet",
  "bitcoin",
  "elements-miniscript",
+ "flate2",
  "kassiber-chain",
  "kassiber-custody",
  "kassiber-envelope",
