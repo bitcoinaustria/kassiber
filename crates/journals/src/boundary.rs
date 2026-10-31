@@ -28,6 +28,13 @@ pub fn build<'a>(
     let span = kassiber_custody::timing::span("render");
     let ledger = render_ledger(&input, response, ids)?;
     drop(span);
+    finish(c, ledger)
+}
+
+/// Complete the diagnostic joins and pass-through state after native ledger
+/// rendering. The caller retains custody operands through persistence. Neither
+/// this stage nor `render_ledger` performs SQL or generates clock/UUID values.
+pub fn finish(c: &Value, ledger: LedgerState) -> Result<JournalState<'_>, Refusal> {
     let span = kassiber_custody::timing::span("balance_comparison");
     let quantity_differences = joins::differences(c, &ledger.wallet_holdings)?;
     drop(span);

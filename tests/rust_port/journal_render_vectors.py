@@ -124,7 +124,7 @@ def vectors():
         projection = replace(base.finalized_tax_projection, rows=rows)
         add(f'anchor-stringification-{name}', snapshot(0)['profile'],
             replace(base, finalized_tax_projection=projection), normal_response)
-    for method in (None, 123):
+    for method in (None, 123, '\x1c FIFO\x1f', '\u3000FIFO\u3000'):
         add(f'method-stringification-{method}',
             dict(snapshot(0)['profile'], gains_algorithm=method), base, normal_response)
 
@@ -153,6 +153,103 @@ def vectors():
         add(f'source-timestamp-{name}', snapshot(0)['profile'],
             replace(base, finalized_tax_projection=replace(base.finalized_tax_projection, rows=rows)),
             normal_response)
+
+    empty_response = dict(schema_version=2, ok=True, entries=[], quarantines=[],
+                          intra_audit=[], carried_rows=[], holdings=[], tax_summary=[])
+    profile = snapshot(0)['profile']
+    source = dict(base.finalized_tax_projection.rows[0], id='source-slice',
+                  direction='outbound', journal_transaction_id='source', amount=123)
+    projected = replace(base.finalized_tax_projection, rows=(source,),
+                        intra_pairs=(), quarantines=())
+    payout = dict(id='payout', out_transaction_id='source', payout_amount=10)
+    for field in ('out_amount', 'out_amount_msat', 'payout_amount', 'swap_fee_msat'):
+        for name, value in [('invalid', 'bad'), ('fraction-text', '1.5'),
+                            ('exponent-text', '1e3'), ('list', [1]), ('dict', {'a': 1}),
+                            ('unicode', '\u3000+１２_３\u3000'), ('leading-zero', '00123'),
+                            ('fraction', -123.9), ('bool', True), ('null', None),
+                            ('empty-list', []), ('empty-dict', {})]:
+            add(f'payout-{field}-{name}', profile,
+                replace(base, finalized_tax_projection=projected,
+                        direct_payout_records=[dict(payout, **{field: value})]),
+                empty_response, group='boundary')
+    for name, rows, record in [
+        ('missing-source', (), payout),
+        ('ambiguous-source', (source, dict(source, id='other')), payout),
+        ('asset-filter', (source,), dict(payout, out_asset='OTHER')),
+        ('missing-id', (source,), dict(payout, id=None, payout_amount='bad')),
+        ('missing-anchor', (source,), dict(payout, out_transaction_id='', payout_amount='bad')),
+        ('refusal-order', (source,), dict(payout, out_amount='bad', payout_amount='later', swap_fee_msat='last')),
+        ('asset-before-amount', (source,), dict(payout, out_asset='OTHER', out_amount='bad')),
+        ('amount-filter', (source, dict(source, id='other', amount=124)), dict(payout, out_amount=123)),
+        ('zero-fallback', (source,), dict(payout, out_amount=0, out_amount_msat=123)),
+        ('negative-subunit', (dict(source, amount=0),), dict(payout, out_amount=-0.9)),
+        ('negative-zero-text', (dict(source, amount=0),), dict(payout, out_amount='-0')),
+    ]:
+        add(f'payout-{name}', profile, replace(base, finalized_tax_projection=replace(
+            projected, rows=rows), direct_payout_records=[record]), empty_response, group='boundary')
+
+    for text in ('1E999', '-1E999', '1E-999', '-0E0', 'bad', '1.0', None, 1, True, []):
+        response = dict(empty_response, quarantines=[dict(row=source['id'],
+            reason='missing_spot_price', detail_kind='plain',
+            detail={'nested': [dict(float=text)]})])
+        add(f'detail-float-{text!r}', profile, replace(base, finalized_tax_projection=projected),
+            response, group='boundary')
+    response = dict(empty_response, tax_summary=[dict(year=2024, asset='BTC',
+        transaction_type='sell', long_term=False, quantity='1E0',
+        proceeds='1E999', cost_basis='-1E999', gain_loss='0E0')])
+    add('summary-float-overflow', profile, base, response, group='boundary')
+
+    for name, mutate in [
+        ('missing-row', lambda response: response['entries'][0].update(row='unknown')),
+        ('missing-wallet-and-row', lambda response: response['entries'][0].update(
+            wallet='unknown', row='unknown')),
+    ]:
+        import copy
+        response = copy.deepcopy(normal_response)
+        mutate(response)
+        add(name, profile, base, response, group='boundary')
+    for key in ('wallet_account_id', 'account_code', 'account_label'):
+        refs = {key: dict(value) for key, value in base.wallet_refs_by_id.items()}
+        del refs['wallet-a'][key]
+        response = dict(empty_response, holdings=[dict(asset='BTC', wallet='Cold',
+            quantity='1E0', cost_basis='2E0')])
+        add(f'holding-missing-{key}', profile, replace(base, wallet_refs_by_id=refs),
+            response, group='boundary')
+    for key in ('workspace_id',):
+        malformed_profile = dict(profile)
+        del malformed_profile[key]
+        add(f'entry-profile-missing-{key}', malformed_profile, base,
+            normal_response, group='boundary')
+    for name, wallet_id in [('list', []), ('dict', {})]:
+        refs = {key: dict(value) for key, value in base.wallet_refs_by_id.items()}
+        refs['wallet-a']['id'] = wallet_id
+        add(f'entry-wallet-id-{name}', profile, replace(base, wallet_refs_by_id=refs),
+            normal_response, group='boundary')
+    for name, first, second in [('bool-int', True, 1), ('int-float', 1, 1.0),
+                                ('zero-float', 0, -0.0), ('list', [], []),
+                                ('dict', {}, {})]:
+        refs = {key: dict(value) for key, value in base.wallet_refs_by_id.items()}
+        for wallet, value in [('wallet-a', first), ('wallet-b', second)]:
+            refs[wallet].update(wallet_account_id=value, account_code='same', account_label='same')
+        response = dict(empty_response, holdings=[dict(asset='BTC', wallet=wallet,
+            quantity='1E0', cost_basis='2E0') for wallet in ('Cold', 'Hot')])
+        add(f'holding-key-{name}', profile, replace(base, wallet_refs_by_id=refs),
+            response, group='boundary')
+
+    quarantine = dict(transaction_id='source', workspace_id='ws-1', profile_id='profile-1',
+                      reason='owned_fanout_unresolved', detail_json='{}')
+    for reason in ('owned_fanout_unresolved', 'missing_spot_price'):
+        for text in ('bad', [1], {'a': 1}, '1_0', ' １２３ ', -1.2):
+            rows = [dict(source, id='source', external_id='CSV-ID', wallet_id='source-wallet'),
+                    dict(source, id='target', direction='inbound', external_id='CSV-ID',
+                         wallet_id='target-wallet', amount=text)]
+            c = replace(base, rows=rows, active_components=[], finalized_tax_projection=replace(
+                projected, rows=(), quarantines=(dict(quarantine, reason=reason),)))
+            add(f'ownership-inbound-{reason}-{text!r}', profile, c, empty_response, group='boundary')
+    for text in ('bad', [1], {'a': 1}, ' １２３ '):
+        add(f'balance-suspense-{text!r}', profile, replace(base,
+            active_components=[dict(validation=dict(suspense_msat=text), legs=[])]),
+            empty_response, group='boundary')
 
     # Independently injected engine results cover refusals before row rendering.
     for stage in ('prepare', 'validate', 'compute_multi', 'compute', 'classify', 'request', 'unsupported', 'unknown'):

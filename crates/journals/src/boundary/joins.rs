@@ -1,3 +1,4 @@
+use crate::integer::wide_or_zero as int;
 use crate::*;
 use kassiber_custody::journal_support as graph;
 use kassiber_pyjson::BigInt;
@@ -6,18 +7,6 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap},
 };
-fn int(v: &Value) -> BigInt {
-    if let Some(n) = v.as_i64() {
-        return BigInt::from(n);
-    }
-    if let Some(n) = v.as_u64() {
-        return BigInt::from(n);
-    }
-    kassiber_custody::codec::integer_or_zero(v)
-        .ok()
-        .and_then(|v| v.to_string().parse().ok())
-        .unwrap_or_default()
-}
 fn legacy_txid(v: &Value) -> String {
     let text = if truth(v) { string(v) } else { String::new() };
     if text.len() == 64 && text.bytes().all(|c| c.is_ascii_hexdigit()) {
@@ -59,7 +48,7 @@ pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refus
         }
     }
     for component in array(&c["active_components"]) {
-        if int(&component["validation"]["suspense_msat"]) <= BigInt::from(0) {
+        if int(&component["validation"]["suspense_msat"])? <= BigInt::from(0) {
             continue;
         }
         for leg in array(&component["legs"]) {
@@ -206,7 +195,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
         // Retain those conversions even when no quarantine can produce a card.
         for row in rows {
             if row["direction"] == "inbound" {
-                let _ = int(&row["amount"]);
+                let _ = int(&row["amount"])?;
             }
         }
         return Ok((json!({"total":0,"by_reason":{}}), json!([])));
@@ -282,7 +271,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
     let mut physical_groups_built = false;
     let mut legacy_groups_built = false;
     for r in rows {
-        if r["direction"] == "inbound" && int(&r["amount"]) > BigInt::from(0) {
+        if r["direction"] == "inbound" && int(&r["amount"])? > BigInt::from(0) {
             inbounds.entry(string(&r["wallet_id"])).or_default().push(r);
         }
     }
@@ -297,7 +286,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
         };
         if unavailable.contains(&id)
             || source["direction"] != "outbound"
-            || int(&source["amount"]) <= BigInt::from(0)
+            || int(&source["amount"])? <= BigInt::from(0)
         {
             continue;
         }
@@ -325,7 +314,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                 }
                 if let Some(owner) = owners.first() {
                     *destinations.entry(owner.clone()).or_default() +=
-                        int(&output["value_sats"]) * 1000;
+                        int(&output["value_sats"])? * 1000;
                 }
             }
             if ambiguous {
@@ -373,21 +362,23 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                     )
                 });
             let group = groups.get(&key).map(Vec::as_slice).unwrap_or(&[]);
-            let outs: Vec<_> = group
-                .iter()
-                .filter(|r| r["direction"] == "outbound" && int(&r["amount"]) > BigInt::from(0))
-                .collect();
+            let mut outs = vec![];
+            for row in group {
+                if row["direction"] == "outbound" && int(&row["amount"])? > BigInt::from(0) {
+                    outs.push(row);
+                }
+            }
             if outs.len() != 1 || outs[0]["id"] != source["id"] {
                 continue;
             }
             for inbound in group {
                 if inbound["direction"] == "inbound"
-                    && int(&inbound["amount"]) > BigInt::from(0)
-                    && inbound["wallet_id"] != source["wallet_id"]
+                    && int(&inbound["amount"])? > BigInt::from(0)
+                    && string(&inbound["wallet_id"]) != string(&source["wallet_id"])
                 {
                     *destinations
                         .entry(string(&inbound["wallet_id"]))
-                        .or_default() += int(&inbound["amount"]);
+                        .or_default() += int(&inbound["amount"])?;
                 }
             }
         }
@@ -409,7 +400,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                 {
                     continue;
                 }
-                let received = int(&inbound["amount"]);
+                let received = int(&inbound["amount"])?;
                 let diff = &received - &amount;
                 let abs = if diff < BigInt::from(0) { -diff } else { diff };
                 let magnitude = if amount < BigInt::from(0) {
@@ -435,7 +426,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                     && reason != "ownership_transfer_source_ambiguous"
                     && scope.is_some()
                     && iscope == scope
-                    && int(&source["amount"]) == amount
+                    && int(&source["amount"])? == amount
                     && received == amount
                 {
                     exact.push(*inbound);
@@ -458,7 +449,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                     &format!("ownership-review:{id}:{wallet}"),
                     confidence,
                     size,
-                ));
+                )?);
                 *counts.entry(reason.clone()).or_default() += 1;
             }
         }
@@ -476,8 +467,9 @@ fn candidate(
     conflict: &str,
     confidence: &str,
     size: usize,
-) -> Value {
-    let mut v = json!({"out_id":string(&out["id"]),"in_id":string(&inbound["id"]),"out_amount_msat":number(&amount.to_string()).expect("integer"),"in_amount_msat":number(&int(&inbound["amount"]).to_string()).expect("integer"),"confidence":confidence,"method":"ownership_graph","swap_fee_msat":number(&(amount-int(&inbound["amount"])).to_string()).expect("integer"),"swap_fee_kind":"ownership_graph_delta","default_kind":"manual","default_policy":"carrying-value","conflict_set_id":conflict,"conflict_size":size,"evidence_provider":"ownership_graph","evidence_id":reason,"evidence_kind":"owned_output","evidence_conflicts":[],"evidence_send_amount_msat":null,"evidence_receive_amount_msat":null});
+) -> Result<Value, Refusal> {
+    let received = int(&inbound["amount"])?;
+    let mut v = json!({"out_id":string(&out["id"]),"in_id":string(&inbound["id"]),"out_amount_msat":number(&amount.to_string())?,"in_amount_msat":number(&received.to_string())?,"confidence":confidence,"method":"ownership_graph","swap_fee_msat":number(&(amount-received).to_string())?,"swap_fee_kind":"ownership_graph_delta","default_kind":"manual","default_policy":"carrying-value","conflict_set_id":conflict,"conflict_size":size,"evidence_provider":"ownership_graph","evidence_id":reason,"evidence_kind":"owned_output","evidence_conflicts":[],"evidence_send_amount_msat":null,"evidence_receive_amount_msat":null});
     for (prefix, row) in [("out", out), ("in", inbound)] {
         for key in [
             "asset",
@@ -503,7 +495,7 @@ fn candidate(
     ] {
         v[k] = json!("");
     }
-    v
+    Ok(v)
 }
 
 #[cfg(test)]

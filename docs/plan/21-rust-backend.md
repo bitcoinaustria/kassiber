@@ -2674,9 +2674,13 @@ no command or daemon registration and no persistence changes.
 
 The [checkpoint evidence and R4-12 handoff](../reference/r4-journal-render-checkpoint.md)
 record sampled byte parity, mutation coverage and back-to-back timings.
-R4-11 remains incomplete: the 0.15 s generic-20k budget, lossless legacy edge
-values, exhaustive rendering/join mutations and full inherited campaign gates
-still need completion.
+The [performance follow-up](../reference/r4-journal-render-performance-checkpoint.md)
+meets the earlier wall-clock render budgets. The
+[boundary continuation](../reference/r4-journal-render-boundary-checkpoint.md)
+repairs integer refusals, holding keys and nonfinite detail/summary values.
+R4-11 remains incomplete: lossless native scalar fidelity, exhaustive
+rendering/join mutations, full inherited campaign gates and the final CPU
+targets still need completion.
 
 ### R5 pairing command checkpoint
 

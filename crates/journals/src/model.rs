@@ -126,11 +126,25 @@ pub struct TaxSummaryRow {
     pub asset: String,
     pub transaction_type: &'static str,
     pub capital_gains_type: &'static str,
+    #[serde(serialize_with = "serialize_float")]
     pub quantity: f64,
     pub quantity_msat: Value,
+    #[serde(serialize_with = "serialize_float")]
     pub proceeds: f64,
+    #[serde(serialize_with = "serialize_float")]
     pub cost_basis: f64,
+    #[serde(serialize_with = "serialize_float")]
     pub gain_loss: f64,
+}
+fn serialize_float<S: Serializer>(value: &f64, serializer: S) -> Result<S::Ok, S::Error> {
+    if value.is_finite() {
+        serializer.serialize_f64(*value)
+    } else {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry("$float", &kassiber_pyjson::float_repr(*value))?;
+        map.end()
+    }
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Holding {

@@ -1,0 +1,224 @@
+# R4-11 boundary continuation and acceptance record
+
+This 2026-10-31 local continuation starts at `b5eb38ea8` on
+`t3code/r4-11-render-3`. **R4-11 is not accepted.** The lossless scalar boundary,
+exhaustive branch mutations and full inherited gates remain open. Python
+retains production accounting authority; no native journal command is enabled.
+
+## Requirement and changes
+
+Preserve Python's complete state and refusals without changing custody,
+ownership or tax decisions. The requested render-and-join CPU limit is 0.15 s
+on both 20k books. Compatibility metadata and suggestions grant no authority.
+
+- Direct payouts use fallible Python integer coercion, including Unicode
+  digits, whitespace, underscores, booleans, float truncation and falsey
+  defaults. Witnesses cover source filtering, unique fallback and refusal order.
+- Ownership and residual-suspense joins propagate integer refusals. The lazy
+  no-card path still validates inbound amounts. Same-wallet comparison uses
+  Python stringification.
+- Holdings merge Python-equal boolean, integer and integral-float tuple keys,
+  retain the first key and refuse unhashable keys. Missing account fields
+  refuse rather than becoming null. Entry lookup preserves unknown-wallet
+  precedence, missing-row refusal and UUID consumption; unhashable wallet ids
+  refuse before generating an entry id.
+- Typed quarantine floats decode directly into `pyjson`: finite Decimal
+  overflow remains Infinity, and malformed canonical details refuse instead
+  of panicking. Summary floats keep nonfinite scalar tags in canonical state.
+- Candidate enrichment shares persistence's lossless parser, preserving
+  escaped surrogate text, NaN and Infinity with compact sorted ASCII output.
+- Calculation methods use Python whitespace stripping. Holdings precede
+  quarantine rendering, and compatibility payouts precede summaries.
+
+The base manifest repeated store/wallet dependencies and could not load in
+Cargo. Removing duplicates normalizes the existing lockfile; no dependency is
+added. The loader also retained the old transaction shape and discarded typed
+admission. Its compatibility repair wraps transaction records as values and
+returns the admitted `BookSnapshot`; receipt acquisition reads the same rows.
+Existing loader tests cover this repair.
+
+## Stage handoff
+
+Keep `boundary::build(profile, custody, wallets, response, ids)`, or call
+`render_ledger(&LedgerInputs, &LedgerResponse, ids)` followed by
+`boundary::finish(&custody, ledger_state)`. `finish` consumes owned ledger rows,
+performs diagnostic joins and borrows custody facts through persistence. It
+does not serialize the state, read SQL, create ids, read clocks or perform I/O.
+The new `native_render_and_finish_match_combined_stage` checks every successful
+frozen state and exact UUID-tape consumption. Custody operands still use the
+transitional representation; final typed integration remains open.
+
+## Verification record
+
+The frozen corpus contains 366 reproducible synthetic cases: 206 states and
+160 refusals, 101 more than the previous 265 cases. Tests compare canonical
+bytes with complete error attributes and explicit UUID tapes. All 265
+original records remain unchanged. Tapes are checked on refusals as well as
+successful states. All six native oracle tests and all six Python
+oracle/capture tests pass. The all-feature journal crate suite passes all 34
+tests, including full logical SQLite/SQLCipher dumps, rollback injection,
+loader admission and storage tests. Scoped formatting and all-target,
+all-feature clippy with `-D warnings` pass. Campaign/timing evidence follows.
+
+The required classifier update refreshes the existing disposition inventory
+and reference counts. The first CI preflight run passes 56 tests and fails
+`DependencyDriftTests::test_development_workflows_use_locked_uv_and_pnpm`:
+`docs/reference/r4-quantity-kernel-performance.md:203` puts `--offline` before
+`--locked` in its already-locked sync command, while the check requires
+`--locked` immediately after `sync`. Reordering those flags preserves the
+command's behavior; no Python test or product source is changed.
+The fresh CI preflight passes all **57 tests**.
+
+All existing mutation recipes remain. Five anchors move to equivalent
+operations; two enrichment anchors now target the shared persistence helper.
+Twenty-two new recipes pin repaired boundary behavior. There are 83 journal and
+51 persistence recipes. The inherited custody catalog has 2,327 applicable
+recipes; applicability is not kill evidence.
+
+| Reanchored recipe | Equivalent operation |
+| --- | --- |
+| `JR-quarantine-sort` | Change default separators to compact separators in the lossless detail serializer |
+| `JR-enrichment-key` | Replace the established candidate key in the shared persistence helper |
+| `JR-enrichment-layout` | Disable compact separators in that helper |
+| `JR-owned-amount` | Change the sats-to-msat factor from 1,000 to 1,001 after fallible coercion |
+| `JR-review-fee` | Add the already-coerced inbound amount instead of subtracting it |
+
+All **83/83** journal recipes are killed by their declared named test, with
+eight passing unmutated baselines and no build failures. The first run found
+two survivors: the whitespace recipe named the wrong corpus group, and
+removing an explicit zero branch was equivalent because serde normalizes
+integer `-0`. The corrected recipe names the ledger test; the redundant
+branch is removed and the zero recipe changes the conversion result. A fresh
+complete 83-recipe run passes. No inherited recipe is removed.
+
+| Named test | Killed recipes |
+| --- | ---: |
+| `ledger_rendering_matches_python` | 31 |
+| `legacy_boundary_values_and_refusal_order_match_python` | 21 |
+| `ownership_reviews_and_reconciliations_match_python` | 13 |
+| `msat_conversion_matches_python_at_rounding_and_width_boundaries` | 8 |
+| `balance_join_matches_existing_comparator_and_promotes_before_overflow` | 4 |
+| `refusal_mapping_matches_python` | 3 |
+| `quarantine_candidate_enrichment_is_compact_sorted_and_ascii` | 2 |
+| `balance_current_keys_preserve_python_stringification` | 1 |
+
+Local raw operands and logs live under `target/r4-render-3/`.
+`verification-index.json` binds the final probe/source digests to the results;
+`mutation-audit.json` maps every killed recipe to its named test. The mutation
+and verification build trees are removed after these summaries are saved.
+
+The twelve generators' 24,000 books and 1,030 permutations match all seven
+custody stages on 24,852 non-refused inputs and all 24,705 rendering states.
+The 178 matched upstream refusals and 147 pre-render refusals are separate
+from successful rendering comparisons. The run exercises 4,907 entries,
+125,117 quarantines, 328 ownership candidates and 45,441 diagnostic quantity
+differences. No rendering refusal occurs in this campaign; the frozen corpus
+supplies rendering refusal witnesses. The summary retains every scenario's
+activity across all 515 scenarios and distinct active seed inputs, including
+the small active subsets in the component, reconciliation and gap families.
+`generated-final/summary.json` records the fresh final-probe run; the first
+full run has the same counts and no differences.
+
+| Generator | Books | Permutations | Render matches | Distinct active seed inputs | Entries | Ownership candidates |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Evidence | 2,000 | 58 | 1,987 | 1,379 | 1,207 | 0 |
+| Components | 2,000 | 312 | 2,312 | 177 | 0 | 0 |
+| Samourai | 2,000 | 68 | 2,068 | 1,588 | 60 | 0 |
+| Recorded | 2,000 | 92 | 2,092 | 1,655 | 814 | 0 |
+| Fanout | 2,000 | 94 | 1,916 | 1,494 | 0 | 220 |
+| Graph | 2,000 | 16 | 2,016 | 2,000 | 0 | 0 |
+| Pipeline | 2,000 | 24 | 2,024 | 1,675 | 0 | 0 |
+| Safety | 2,000 | 78 | 2,078 | 767 | 160 | 108 |
+| Channels | 2,000 | 64 | 2,064 | 1,563 | 194 | 0 |
+| Native | 2,000 | 110 | 2,034 | 1,601 | 803 | 0 |
+| Reconciliation | 2,000 | 50 | 2,050 | 96 | 1,476 | 0 |
+| Gaps | 2,000 | 64 | 2,064 | 249 | 193 | 0 |
+
+The original 159 recordings and their 159 permutations match on every custody
+stage and all 318 rendering states. They exercise 3,076 entries, 750
+quarantines and 222 diagnostic differences, with no ownership candidates or
+render refusals; other corpora are needed for those branches. The focused
+boundary repro now matches nonfinite detail and malformed payout integer
+cases; the actual surrogate scalar still fails at probe decoding. The final
+evidence is in `recorded-final/summary.json` and `boundary-final/summary.json`.
+
+Five alternating trials on each copied benchmark book first passed complete
+state parity. Best process CPU seconds were:
+
+| Book | Python CPU (s) | Rust CPU (s) |
+| --- | ---: | ---: |
+| Generic 2k | 0.112395 | 0.016900 |
+| Generic 20k | 1.675372 | 0.379535 |
+| Multi-wallet 2k | 0.166336 | 0.047097 |
+| Multi-wallet 20k | 1.529882 | 0.248375 |
+
+Both 20k CPU measurements **fail 0.15 s**. Shared-host one-minute load ranged
+from 53.14 to 67.13; load is context, not an exemption. These snapshots were
+copied from `/home/tg/.cache/kassiber-verify/perf/`; the previous checkpoint's
+different-host-load wall results do not establish a regression comparison.
+Raw final wall/CPU samples are in
+`target/r4-render-3/benchmark-final/timings.json`. An earlier local CPU run
+also missed both budgets (0.156140 s generic, 0.295192 s multi-wallet);
+`target/r4-render-3/benchmark/timings.json` retains it. There is no controlled
+same-load baseline comparison.
+
+## Remaining acceptance work
+
+1. Replace `serde_json::Value`/Rust `String` throughout the native scalar
+   boundary, including entries, provenance, joins and engine response decoding.
+   The actual `workspace_id = '\ud800'` repro still cannot decode. Stored
+   quarantine text is a separate repaired case; no sentinel is used.
+2. Complete nonfinite handling for raw stage float tags, carried-rate overlays
+   and transfer audit projection/consumption. Certify malformed row/list/dict
+   operands and response refusal order. Eager response decoding, default-empty
+   arrays, graph error-family mapping and remaining `expect` paths are open.
+3. Finish the branch audit: component exclusions, ambiguous script owners,
+   scope/txid filtering, amount tolerance and graph refusal propagation. Run
+   the 51 persistence and 2,327 inherited custody mutations with named kills.
+   Focused journal recipes do not replace those gates.
+4. Finish typed loader/custody integration; rerun full census and custody-shadow
+   with fresh render captures, the additional fresh-recording corpus and
+   complete integrated logical SQLite/SQLCipher dumps, then the repository
+   quality gate. Existing persistence fixtures do not certify the full
+   generated encrypted rendering campaign.
+5. Meet 0.15 s CPU on both 20k books after final integration. Historical wall
+   measurements alone are not CPU acceptance evidence.
+
+No Python product source changed. No Python reference bug was identified. No
+push, PR or external comment was performed.
+
+## Reproduction
+
+Use `MATURIN_NO_INSTALL_RUST=1`, `CARGO_BUILD_JOBS=8` and
+`mise exec rust@1.99.1 uv@latest --`. Synchronize with
+`uv sync --locked --python 3.11`. Set `TMPDIR`, `CARGO_TARGET_DIR` and
+`CARGO_BUILD_BUILD_DIR` under this worktree's `target/`; keep Cargo offline and
+do not change `HOME`.
+
+The release probe now reports wall `seconds` and process `cpu_seconds`, using
+`getrusage(RUSAGE_SELF)` on Unix. The benchmark records Python `process_time()`
+and alternates five Python/Rust trials per book after complete state parity.
+Custody, engine computation, decoding, serialization and persistence are
+outside both measured spans.
+
+The focused mutation run selects the `JR-` recipes from the checked-in catalog
+into `target/r4-render-3/journal-mutations.json`. The full catalog check includes
+the 51 persistence recipes, but they were not rerun for kills. The boundary
+repro below is expected to exit 1 while the actual surrogate scalar is open.
+
+```sh
+cargo test --offline --locked -p kassiber-journals --all-features -- --test-threads=1
+cargo fmt -p kassiber-journals -- --check
+cargo clippy --offline --locked -p kassiber-journals --all-targets --all-features -- -D warnings
+uv run --locked python -m pytest tests/test_rust_journal_render.py -q
+uv run --locked python -m tests.rust_port.journal_render_vectors
+uv run --locked python crates/journals/scripts/mutation_check.py --check
+uv run --locked python crates/journals/scripts/mutation_check.py --mutations target/r4-render-3/journal-mutations.json
+cargo build --offline --locked --release -p kassiber-journals --example journal-render
+uv run --locked python scripts/check-journal-render-boundary.py --probe PROBE --output target/r4-render-3/boundary-final
+uv run --locked python scripts/check-journal-render-campaign.py --probe PROBE --output target/r4-render-3/generated-final
+uv run --locked python scripts/check-journal-render-campaign.py --probe PROBE --recordings /home/tg/.cache/kassiber-verify/custody-recordings --output target/r4-render-3/recorded-final
+uv run --locked python scripts/benchmark-journal-render.py --probe PROBE --snapshots target/r4-render-3/bench --output target/r4-render-3/benchmark-final
+uv run --locked python -m tests.rust_port.classify_tests update
+uv run --locked python scripts/python_test_shards.py run preflight --ci
+```

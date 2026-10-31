@@ -16,6 +16,7 @@ fn run(v: &Value, timing_only: bool) -> Value {
         Err(e) => return json!({"error":e}),
     };
     let mut ids = v["entry_ids"].as_array().expect("entry_ids").iter();
+    let cpu_start = cpu_seconds();
     let start = Instant::now();
     let result = boundary::build(
         &v["profile"],
@@ -31,15 +32,27 @@ fn run(v: &Value, timing_only: bool) -> Value {
         },
     );
     let elapsed = start.elapsed().as_secs_f64();
+    let cpu_elapsed = cpu_seconds() - cpu_start;
     #[cfg(feature = "timing")]
     eprintln!("{:?}", kassiber_custody::timing::take());
     match result {
-        Ok(_) if timing_only => json!({"seconds":elapsed}),
+        Ok(_) if timing_only => json!({"seconds":elapsed,"cpu_seconds":cpu_elapsed}),
         Ok(s) => {
-            json!({"state":boundary::canonical(&s).expect("canonical state"),"seconds":elapsed})
+            json!({"state":boundary::canonical(&s).expect("canonical state"),"seconds":elapsed,"cpu_seconds":cpu_elapsed})
         }
-        Err(e) => json!({"error":e,"seconds":elapsed}),
+        Err(e) => json!({"error":e,"seconds":elapsed,"cpu_seconds":cpu_elapsed}),
     }
+}
+#[cfg(unix)]
+fn cpu_seconds() -> f64 {
+    use nix::sys::resource::{getrusage, UsageWho};
+    let usage = getrusage(UsageWho::RUSAGE_SELF).expect("process CPU usage");
+    let time = |t: nix::sys::time::TimeVal| t.tv_sec() as f64 + t.tv_usec() as f64 / 1_000_000.0;
+    time(usage.user_time()) + time(usage.system_time())
+}
+#[cfg(not(unix))]
+fn cpu_seconds() -> f64 {
+    f64::NAN
 }
 fn main() {
     let timing_only = std::env::args().any(|a| a == "--timing-only");

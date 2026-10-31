@@ -62,14 +62,16 @@ def main():
                     with patch.object(ledger.KassiberTaxEngine, 'build_ledger_state',
                                       lambda self, inputs: original_reader(self.profile, inputs, response)):
                         start = time.perf_counter()
+                        cpu_start = time.process_time()
                         python_state = builder.build()
+                        cpu_elapsed = time.process_time() - cpu_start
                         elapsed = time.perf_counter() - start
                     # Match Rust's span: release the completed state outside the
                     # build timer, rather than freeing the previous trial while
                     # assigning this trial's result.
                     del python_state
                     row = dict(book=name, trial=trial + 1, implementation='python',
-                               seconds=elapsed, load_1m=load)
+                               seconds=elapsed, cpu_seconds=cpu_elapsed, load_1m=load)
                     timings.append(row)
                     print(json.dumps(row), flush=True)
                     load = os.getloadavg()[0]
@@ -78,7 +80,7 @@ def main():
                     actual = json.loads(child.stdout.readline())
                     assert 'error' not in actual, actual.get('error')
                     row = dict(book=name, trial=trial + 1, implementation='rust',
-                               seconds=actual['seconds'], load_1m=load)
+                               seconds=actual['seconds'], cpu_seconds=actual['cpu_seconds'], load_1m=load)
                     timings.append(row)
                     print(json.dumps(row), flush=True)
                 child.stdin.close()

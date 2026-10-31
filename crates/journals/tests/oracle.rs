@@ -28,11 +28,6 @@ fn corpus(group: &str) {
                     "{}",
                     c["name"]
                 );
-                assert!(
-                    ids.next().is_none(),
-                    "UUID tape not consumed exactly: {}",
-                    c["name"]
-                );
             }
             Err(error) => assert_eq!(
                 serde_json::to_string(&serde_json::to_value(error).unwrap()).unwrap(),
@@ -41,6 +36,11 @@ fn corpus(group: &str) {
                 c["name"]
             ),
         }
+        assert!(
+            ids.next().is_none(),
+            "UUID tape not consumed exactly: {}",
+            c["name"]
+        );
     }
     assert!(count > 0);
 }
@@ -55,6 +55,40 @@ fn ownership_reviews_and_reconciliations_match_python() {
 #[test]
 fn refusal_mapping_matches_python() {
     corpus("refusals");
+}
+#[test]
+fn legacy_boundary_values_and_refusal_order_match_python() {
+    corpus("boundary");
+}
+#[test]
+fn native_render_and_finish_match_combined_stage() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!("data/render.json")).unwrap();
+    for case in cases.iter().filter(|c| c["expected"]["state"].is_string()) {
+        let response = if case["response"].is_null() {
+            boundary::empty_response()
+        } else {
+            boundary::ledger_response(&case["response"]).unwrap()
+        };
+        let input = kassiber_journals::LedgerInputs {
+            profile: &case["profile"],
+            projection: &case["custody"]["finalized_tax_projection"],
+            wallets: case["wallets"].as_array().unwrap(),
+            direct_payout_records: case["custody"]["direct_payout_records"].as_array().unwrap(),
+        };
+        let mut ids = case["entry_ids"].as_array().unwrap().iter();
+        let rendered = kassiber_journals::render_ledger(&input, &response, || {
+            ids.next().unwrap().as_str().unwrap().into()
+        })
+        .unwrap();
+        let state = boundary::finish(&case["custody"], rendered).unwrap();
+        assert_eq!(
+            boundary::canonical(&state).unwrap(),
+            case["expected"]["state"],
+            "{}",
+            case["name"]
+        );
+        assert!(ids.next().is_none());
+    }
 }
 #[test]
 fn quarantine_candidate_enrichment_is_compact_sorted_and_ascii() {
@@ -75,5 +109,13 @@ fn quarantine_candidate_enrichment_is_compact_sorted_and_ascii() {
     assert_eq!(
         enrich_quarantine_detail(&json!("{\"ownership_review_candidates\":[1]}"), &[]).unwrap(),
         "{\"ownership_review_candidates\":[1]}"
+    );
+    assert_eq!(
+        enrich_quarantine_detail(
+            &json!(r#"{"z":NaN,"s":"\ud800","i":Infinity}"#),
+            &candidates
+        )
+        .unwrap(),
+        r#"{"i":Infinity,"ownership_review_candidates":[{"in_id":"\u00e9","out_id":"a"}],"s":"\ud800","z":NaN}"#
     );
 }

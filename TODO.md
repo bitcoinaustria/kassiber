@@ -440,8 +440,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations
   and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
-  reaches the generic and multi-wallet 20k budgets; recheck them during typed
-  integration. Python retains production authority.
+  meets the historical wall-clock targets. The [boundary continuation](docs/reference/r4-journal-render-boundary-checkpoint.md)
+  repairs integer refusals, holding keys and nonfinite detail/summary values;
+  actual surrogate scalars, the 0.15 s CPU budget and the remaining acceptance
+  gates are open.
+  Python retains production authority.
 - [x] R4-14: expose the native automatic-pairing journal stage by reusing
   transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and
   caller-transaction database parity on SQLite and SQLCipher, hash-seed sweeps,

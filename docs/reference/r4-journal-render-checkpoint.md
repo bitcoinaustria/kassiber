@@ -7,8 +7,14 @@ There is no CLI/daemon registration, persistence, SQL, network access, clock
 read or entropy source in the crate.
 
 A [local performance follow-up](r4-journal-render-performance-checkpoint.md)
-reaches both 20k render budgets and records expanded verification. The
-lossless boundary and full branch mutation requirements remain open.
+reaches the historical wall-clock targets and records expanded verification.
+The current CPU targets, lossless boundary and full branch mutation
+requirements remain open.
+
+A [boundary continuation](r4-journal-render-boundary-checkpoint.md) repairs
+legacy integer refusals, holding keys and nonfinite detail/summary rendering,
+and exposes a separate finish stage. Native scalar fidelity and exhaustive
+acceptance remain open.
 
 ## Implemented boundary
 

@@ -252,8 +252,8 @@
   {
     "id": "JR-quarantine-sort",
     "file": "crates/journals/src/render.rs",
-    "find": "detail_json: pyjson(&detail, false)?,",
-    "replace": "detail_json: pyjson(&detail, true)?,",
+    "find": "detail_json: py_detail(&detail, false)?,",
+    "replace": "detail_json: py_detail(&detail, true)?,",
     "expect_failing": [
       "ledger_rendering_matches_python"
     ],
@@ -261,9 +261,9 @@
   },
   {
     "id": "JR-enrichment-key",
-    "file": "crates/journals/src/render.rs",
-    "find": "detail[\"ownership_review_candidates\"] = json!(candidates);",
-    "replace": "detail[\"candidates\"] = json!(candidates);",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "key(\"ownership_review_candidates\"),",
+    "replace": "key(\"candidates\"),",
     "expect_failing": [
       "quarantine_candidate_enrichment_is_compact_sorted_and_ascii"
     ],
@@ -271,9 +271,9 @@
   },
   {
     "id": "JR-enrichment-layout",
-    "file": "crates/journals/src/render.rs",
-    "find": "pyjson(&detail, true)\n}",
-    "replace": "pyjson(&detail, false)\n}",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "dump(&Py::Dict(detail), true)",
+    "replace": "dump(&Py::Dict(detail), false)",
     "expect_failing": [
       "quarantine_candidate_enrichment_is_compact_sorted_and_ascii"
     ],
@@ -322,8 +322,8 @@
   {
     "id": "JR-owned-amount",
     "file": "crates/journals/src/boundary/joins.rs",
-    "find": "int(&output[\"value_sats\"]) * 1000",
-    "replace": "int(&output[\"value_sats\"]) * 1001",
+    "find": "int(&output[\"value_sats\"])? * 1000",
+    "replace": "int(&output[\"value_sats\"])? * 1001",
     "expect_failing": [
       "ownership_reviews_and_reconciliations_match_python"
     ],
@@ -342,8 +342,8 @@
   {
     "id": "JR-review-fee",
     "file": "crates/journals/src/boundary/joins.rs",
-    "find": "amount-int(&inbound[\"amount\"])",
-    "replace": "amount+int(&inbound[\"amount\"])",
+    "find": "amount-received",
+    "replace": "amount+received",
     "expect_failing": [
       "ownership_reviews_and_reconciliations_match_python"
     ],
@@ -1118,5 +1118,225 @@
       "journal_persistence_matches_complete_python_dumps"
     ],
     "rule": "Persist the first pool basis barrier."
+  },
+  {
+    "id": "JR-int-string-grammar",
+    "file": "crates/journals/src/integer.rs",
+    "find": "parse_int(text).map_err",
+    "replace": "parse_int(\"0\").map_err",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Legacy integer strings retain Unicode parsing and invalid-literal refusals."
+  },
+  {
+    "id": "JR-int-float-truncate",
+    "file": "crates/journals/src/integer.rs",
+    "find": "float.trunc()",
+    "replace": "float.round()",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Legacy float conversion truncates toward zero."
+  },
+  {
+    "id": "JR-int-falsey",
+    "file": "crates/journals/src/integer.rs",
+    "find": "if truth(value) {",
+    "replace": "if !value.is_null() {",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Compatibility int(value or 0) converts empty containers to zero."
+  },
+  {
+    "id": "JR-int-container-type",
+    "file": "crates/journals/src/integer.rs",
+    "find": "\"TypeError\",",
+    "replace": "\"ValueError\",",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Nonempty list/dict integer operands refuse with TypeError."
+  },
+  {
+    "id": "JR-int-boolean",
+    "file": "crates/journals/src/integer.rs",
+    "find": "i64::from(*v)",
+    "replace": "i64::from(!*v)",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Python integer booleans have exact values zero and one."
+  },
+  {
+    "id": "JR-int-refusal-family",
+    "file": "crates/journals/src/integer.rs",
+    "find": "Refusal::new(\"ValueError\", message)",
+    "replace": "Refusal::new(\"TypeError\", message)",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Malformed integer strings retain the ValueError family."
+  },
+  {
+    "id": "JR-detail-overflow",
+    "file": "crates/journals/src/render.rs",
+    "find": "Py::Float(float(&decimal))",
+    "replace": "Py::Float(if float(&decimal).is_finite() {float(&decimal)} else {0.0})",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Finite Decimal overflow remains an Infinity in quarantine JSON."
+  },
+  {
+    "id": "JR-detail-invalid-decimal",
+    "file": "crates/journals/src/render.rs",
+    "find": ".and_then(|text| Decimal::from_canonical(text).ok())",
+    "replace": ".and_then(|text| text.parse::<Decimal>().ok())",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Typed float details require canonical engine decimals."
+  },
+  {
+    "id": "JR-summary-nonfinite-tag",
+    "file": "crates/journals/src/model.rs",
+    "find": "map.serialize_entry(\"$float\",",
+    "replace": "map.serialize_entry(\"float\",",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "The build-state oracle retains nonfinite float scalar types."
+  },
+  {
+    "id": "JR-holding-bool-key",
+    "file": "crates/journals/src/render.rs",
+    "find": "Value::Bool(v) => HoldingKey::Integer(i64::from(*v).into()),",
+    "replace": "Value::Bool(v) => HoldingKey::String(v.to_string()),",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Python bool/int holding keys compare equal."
+  },
+  {
+    "id": "JR-holding-float-key",
+    "file": "crates/journals/src/render.rs",
+    "find": "if value.is_finite() && value.fract() == 0.0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Python integral float/int holding keys compare equal."
+  },
+  {
+    "id": "JR-holding-unhashable",
+    "file": "crates/journals/src/render.rs",
+    "find": "if value.is_array() { \"list\" } else { \"dict\" }",
+    "replace": "if value.is_array() { \"dict\" } else { \"list\" }",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Holding tuple keys refuse unhashable operands by type."
+  },
+  {
+    "id": "JR-payout-unique-source",
+    "file": "crates/journals/src/render.rs",
+    "find": "if candidates.len() == 1 {",
+    "replace": "if !candidates.is_empty() {",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Ambiguous payout source slices grant no compatibility fallback."
+  },
+  {
+    "id": "JR-payout-asset-filter",
+    "file": "crates/journals/src/render.rs",
+    "find": "if truth(&r[\"out_asset\"])\n",
+    "replace": "if false\n",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Payout source selection filters asset before integer coercion."
+  },
+  {
+    "id": "JR-payout-amount-filter",
+    "file": "crates/journals/src/render.rs",
+    "find": "!= crate::integer::integer(amount)?",
+    "replace": "== crate::integer::integer(amount)?",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Reviewed amounts select exactly compatible source slices."
+  },
+  {
+    "id": "JR-payout-payout-amount",
+    "file": "crates/journals/src/render.rs",
+    "find": "crate::integer::integer_or_zero(&r[\"payout_amount\"])?",
+    "replace": "crate::integer::integer_or_zero(&r[\"out_amount\"])?",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Payout and source quantities remain distinct."
+  },
+  {
+    "id": "JR-ownership-inbound-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "let _ = int(&row[\"amount\"])?;",
+    "replace": "let _ = int(&row[\"amount\"]);",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "The lazy no-card shortcut must propagate inbound integer refusals."
+  },
+  {
+    "id": "JR-balance-suspense-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "int(&component[\"validation\"][\"suspense_msat\"])?",
+    "replace": "int(&component[\"validation\"][\"suspense_msat\"]).unwrap_or_default()",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Malformed component suspense cannot silently become zero."
+  },
+  {
+    "id": "JR-entry-key-hash",
+    "file": "crates/journals/src/render.rs",
+    "find": "holding_key(&wallet_id)?;",
+    "replace": "let _ = holding_key(&wallet_id);",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Unhashable entry ordinal keys refuse before UUID generation."
+  },
+  {
+    "id": "JR-method-python-strip",
+    "file": "crates/journals/src/render.rs",
+    "find": "kassiber_pytext::strip(&string(method)).into()",
+    "replace": "string(method).trim().into()",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Calculation methods use Python Unicode whitespace stripping."
+  },
+  {
+    "id": "JR-int-negative-zero",
+    "file": "crates/journals/src/integer.rs",
+    "find": "number(&format!(\"{integer:.0}\"))",
+    "replace": "number(&format!(\"{:.0}\", if integer == 0.0 { -1.0 } else { integer }))",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Negative subunit floats truncate to integer zero before payout source comparison."
+  },
+  {
+    "id": "JR-entry-refusal-uuid",
+    "file": "crates/journals/src/render.rs",
+    "find": "let id = ids();\n        Ok(JournalEntryRow {\n            id,\n            workspace_id: required(self.inputs.profile, \"workspace_id\")?.clone(),",
+    "replace": "let workspace_id = required(self.inputs.profile, \"workspace_id\")?.clone();\n        let id = ids();\n        Ok(JournalEntryRow {\n            id,\n            workspace_id,",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Entry UUID generation precedes a missing-workspace refusal and consumes the exact tape."
   }
 ]

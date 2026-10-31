@@ -1,5 +1,6 @@
 use crate::*;
 use kassiber_pydecimal::{Context, Decimal, Rounding};
+use kassiber_pyjson::{Key, Value as Py};
 use kassiber_tax_core::{
     ledger::response::*,
     manifest::{DetailKind, EntryType},
@@ -84,6 +85,22 @@ pub(crate) fn msat(d: &Decimal) -> Result<Value, Refusal> {
     number(&n.to_fixed_places(0, Rounding::HalfUp)?)
 }
 fn required<'a>(row: &'a Value, key: &str) -> Result<&'a Value, Refusal> {
+    if !row.is_object() {
+        let message = match row {
+            Value::String(_) => "string indices must be integers, not 'str'".into(),
+            Value::Array(_) => "list indices must be integers or slices, not str".into(),
+            _ => format!(
+                "'{}' object is not subscriptable",
+                match row {
+                    Value::Null => "NoneType",
+                    Value::Bool(_) => "bool",
+                    Value::Number(n) if n.to_string().contains(['.', 'e', 'E']) => "float",
+                    _ => "int",
+                }
+            ),
+        };
+        return Err(Refusal::new("TypeError", message));
+    }
     row.get(key)
         .ok_or_else(|| Refusal::new("KeyError", format!("'{key}'")))
 }
@@ -270,17 +287,21 @@ impl Reader<'_> {
         row: &Value,
         fallback_id: &str,
         occurred_at: Value,
-        id: String,
+        ids: &mut impl FnMut() -> String,
     ) -> Result<JournalEntryRow, Refusal> {
+        let wallet_id = required(wallet, "id")?.clone();
+        holding_key(&wallet_id)?;
+        let profile_id = required(self.inputs.profile, "id")?.clone();
+        let id = ids();
         Ok(JournalEntryRow {
             id,
             workspace_id: required(self.inputs.profile, "workspace_id")?.clone(),
-            profile_id: required(self.inputs.profile, "id")?.clone(),
+            profile_id,
             transaction_id: json!(row
                 .get("journal_transaction_id")
                 .map(string)
                 .unwrap_or_else(|| fallback_id.into())),
-            wallet_id: required(wallet, "id")?.clone(),
+            wallet_id,
             account_id: required(wallet, "wallet_account_id")?.clone(),
             occurred_at,
             entry_type: "acquisition",
@@ -324,13 +345,13 @@ impl Reader<'_> {
     ) -> Result<JournalEntryRow, Refusal> {
         match item {
             EntryOut::Acquisition(a) => {
-                let row = self.required_row(&a.row)?;
+                let row = self.row(&a.row).unwrap_or(&Value::Null);
                 let mut e = self.head(
                     self.wallet(&a.wallet)?,
                     row,
                     &a.row,
                     required(row, "occurred_at")?.clone(),
-                    ids(),
+                    ids,
                 )?;
                 e.asset = a.asset.clone();
                 e.quantity = jd(&a.quantity);
@@ -340,13 +361,13 @@ impl Reader<'_> {
                 Ok(e)
             }
             EntryOut::Realized(a) => {
-                let row = self.required_row(&a.row)?;
+                let row = self.row(&a.row).unwrap_or(&Value::Null);
                 let mut e = self.head(
                     self.wallet(&a.wallet)?,
                     row,
                     &a.row,
                     required(row, "occurred_at")?.clone(),
-                    ids(),
+                    ids,
                 )?;
                 e.entry_type = a.entry_type.as_str();
                 e.asset = a.asset.clone();
@@ -372,7 +393,7 @@ impl Reader<'_> {
                     method: if method.is_null() {
                         String::new()
                     } else {
-                        string(method).trim().into()
+                        kassiber_pytext::strip(&string(method)).into()
                     },
                     fragments: a
                         .fragments
@@ -397,7 +418,7 @@ impl Reader<'_> {
                 let wallet = lookup(&self.labels, &label)?;
                 let row_id = string(&audit[if outbound { "out_id" } else { "in_id" }]);
                 let row = self.row(&row_id).unwrap_or(&Value::Null);
-                let mut e = self.head(wallet, row, &row_id, audit["occurred_at"].clone(), ids())?;
+                let mut e = self.head(wallet, row, &row_id, audit["occurred_at"].clone(), ids)?;
                 let qty = decimal_text(&kassiber_pyjson::float_repr(
                     audit[if outbound {
                         "crypto_sent"
@@ -429,8 +450,8 @@ pub fn render_ledger(
     let rows: HashMap<_, _> = row_values
         .iter()
         .enumerate()
-        .map(|(slot, row)| (row_key(&row["id"]), slot))
-        .collect();
+        .map(|(slot, row)| Ok((row_key(required(row, "id")?), slot)))
+        .collect::<Result<_, Refusal>>()?;
     for carry in &response.carried_rows {
         let row = carried.entry(carry.row.clone()).or_insert_with(|| {
             rows.get(carry.row.as_str())
@@ -498,6 +519,7 @@ pub fn render_ledger(
         .collect::<Result<_, _>>()?;
     drop(span);
     let span = kassiber_custody::timing::span("render.quarantine_holdings");
+    let (account_holdings, wallet_holdings) = holdings(&response.holdings, &reader.labels)?;
     let mut quarantines = array(&inputs.projection["quarantines"])
         .iter()
         .map(|v| {
@@ -507,8 +529,8 @@ pub fn render_ledger(
     for q in &response.quarantines {
         quarantines.push(quarantine(inputs.profile, reader.required_row(&q.row)?, q)?);
     }
-    let (account_holdings, wallet_holdings) = holdings(&response.holdings, &reader.labels)?;
     drop(span);
+    let direct_swap_payouts = direct_payouts(inputs)?;
     let span = kassiber_custody::timing::span("render.summary");
     let tax_summary = response
         .tax_summary
@@ -529,7 +551,6 @@ pub fn render_ledger(
         .collect::<Result<_, Refusal>>()?;
     drop(span);
     let span = kassiber_custody::timing::span("render.finish");
-    let direct_swap_payouts = direct_payouts(inputs)?;
     drop(reader);
     drop(span);
     Ok(LedgerState {
@@ -575,32 +596,59 @@ fn audit(inputs: &LedgerInputs<'_>, a: &AuditOut) -> Result<Value, Refusal> {
     }
     Ok(v)
 }
-fn detail_value(v: &Value) -> Value {
-    match v {
-        Value::Object(m) if m.len() == 1 && m.contains_key("float") => json!(m["float"]
-            .as_str()
-            .expect("float text")
-            .parse::<f64>()
-            .expect("canonical float")),
-        Value::Object(m) => Value::Object(
+fn detail_value(v: &Value) -> Result<Py, Refusal> {
+    Ok(match v {
+        Value::Object(m) if m.len() == 1 && m.contains_key("float") => {
+            let operand = &m["float"];
+            let decimal = operand
+                .as_str()
+                .and_then(|text| Decimal::from_canonical(text).ok())
+                .ok_or_else(|| {
+                    let repr = match operand {
+                        Value::Null => "None".into(),
+                        Value::Bool(true) => "True".into(),
+                        Value::Bool(false) => "False".into(),
+                        _ => operand.to_string(),
+                    };
+                    let repr = operand
+                        .as_str()
+                        .map(kassiber_pytext::repr_str)
+                        .unwrap_or(repr);
+                    Refusal::new(
+                        "ValueError",
+                        format!("not a canonical engine decimal: {repr}"),
+                    )
+                })?;
+            Py::Float(float(&decimal))
+        }
+        Value::Object(m) => Py::Dict(
             m.iter()
-                .map(|(k, v)| (k.clone(), detail_value(v)))
-                .collect(),
+                .map(|(k, v)| Ok((Key::Str(k.as_str().into()), detail_value(v)?)))
+                .collect::<Result<_, Refusal>>()?,
         ),
-        Value::Array(a) => Value::Array(a.iter().map(detail_value).collect()),
-        _ => v.clone(),
+        Value::Array(a) => Py::List(a.iter().map(detail_value).collect::<Result<_, _>>()?),
+        _ => kassiber_custody::codec::from_json(v)?,
+    })
+}
+fn py_detail(value: &Py, compact: bool) -> Result<String, Refusal> {
+    let mut options = kassiber_pyjson::Options::new().sort_keys(true);
+    if compact {
+        options = options.compact();
     }
+    kassiber_pyjson::dumps(value, &options)
+        .map_err(|error| Refusal::new("ValueError", error.to_string()))
 }
 fn quarantine(profile: &Value, row: &Value, q: &QuarantineOut) -> Result<QuarantineRow, Refusal> {
-    let mut detail = detail_value(&Value::Object(q.detail.clone()));
+    let mut detail = detail_value(&Value::Object(q.detail.clone()))?;
+    let mut enriched = json!({});
     match q.detail_kind {
         DetailKind::PricingReview => {
             for k in REVIEW {
-                detail[k] = row[k].clone();
+                enriched[k] = row[k].clone();
             }
         }
         DetailKind::Hold => {
-            detail["external_id"] = json!(if truth(&row["external_id"]) {
+            enriched["external_id"] = json!(if truth(&row["external_id"]) {
                 string(&row["external_id"])
             } else {
                 String::new()
@@ -637,18 +685,29 @@ fn quarantine(profile: &Value, row: &Value, q: &QuarantineOut) -> Result<Quarant
                     ("islikelycoinjoin", json!(likely)),
                     ("required_for", json!("explicit_user_owned_provenance")),
                 ] {
-                    detail[k] = v;
+                    enriched[k] = v;
                 }
             }
         }
         DetailKind::Plain | DetailKind::PartnerLeg => {}
+    }
+    if let Py::Dict(items) = &mut detail {
+        for (key, value) in enriched.as_object().expect("enrichment object") {
+            let key = Key::Str(key.as_str().into());
+            let value = kassiber_custody::codec::from_json(value)?;
+            if let Some((_, old)) = items.iter_mut().find(|(k, _)| *k == key) {
+                *old = value;
+            } else {
+                items.push((key, value));
+            }
+        }
     }
     Ok(QuarantineRow {
         transaction_id: fallback(&row["journal_transaction_id"], required(row, "id")?).clone(),
         workspace_id: required(profile, "workspace_id")?.clone(),
         profile_id: required(profile, "id")?.clone(),
         reason: q.reason.as_str().into(),
-        detail_json: pyjson(&detail, false)?,
+        detail_json: py_detail(&detail, false)?,
     })
 }
 fn boolish(v: &Value) -> bool {
@@ -669,13 +728,13 @@ fn holdings(
     let mut wallet_slots = HashMap::new();
     fn add(
         h: &mut Holdings,
-        slots: &mut HashMap<String, usize>,
+        slots: &mut HashMap<Vec<HoldingKey>, usize>,
         key: Vec<Value>,
         item: &HoldingOut,
     ) -> Result<(), Refusal> {
         let index = slots.len();
         let slot = *slots
-            .entry(serde_json::to_string(&key).expect("key"))
+            .entry(key.iter().map(holding_key).collect::<Result<_, _>>()?)
             .or_insert(index);
         if slot == h.pairs.len() {
             h.pairs.push((
@@ -707,9 +766,9 @@ fn holdings(
                 &mut accounts,
                 &mut account_slots,
                 vec![
-                    w["wallet_account_id"].clone(),
-                    w["account_code"].clone(),
-                    w["account_label"].clone(),
+                    required(w, "wallet_account_id")?.clone(),
+                    required(w, "account_code")?.clone(),
+                    required(w, "account_label")?.clone(),
                     json!(item.asset),
                 ],
                 item,
@@ -718,9 +777,9 @@ fn holdings(
                 &mut wallets,
                 &mut wallet_slots,
                 vec![
-                    w["id"].clone(),
-                    w["label"].clone(),
-                    w["account_code"].clone(),
+                    required(w, "id")?.clone(),
+                    required(w, "label")?.clone(),
+                    required(w, "account_code")?.clone(),
                     json!(item.asset),
                 ],
                 item,
@@ -735,6 +794,42 @@ fn holdings(
         }
     }
     Ok((accounts, wallets))
+}
+#[derive(PartialEq, Eq, Hash)]
+enum HoldingKey {
+    Null,
+    Integer(kassiber_pyjson::BigInt),
+    Float(u64),
+    String(String),
+}
+fn holding_key(value: &Value) -> Result<HoldingKey, Refusal> {
+    Ok(match value {
+        Value::Null => HoldingKey::Null,
+        Value::Bool(v) => HoldingKey::Integer(i64::from(*v).into()),
+        Value::Number(n) => {
+            let text = n.to_string();
+            if text.contains(['.', 'e', 'E']) {
+                let value = text.parse::<f64>().expect("JSON float");
+                if value.is_finite() && value.fract() == 0.0 {
+                    HoldingKey::Integer(format!("{value:.0}").parse().expect("integer float"))
+                } else {
+                    HoldingKey::Float(value.to_bits())
+                }
+            } else {
+                HoldingKey::Integer(text.parse().expect("JSON integer"))
+            }
+        }
+        Value::String(text) => HoldingKey::String(text.clone()),
+        _ => {
+            return Err(Refusal::new(
+                "TypeError",
+                format!(
+                    "unhashable type: '{}'",
+                    if value.is_array() { "list" } else { "dict" }
+                ),
+            ));
+        }
+    })
 }
 fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
     if inputs.direct_payout_records.is_empty() {
@@ -756,23 +851,28 @@ fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
             continue;
         }
         let amount = fallback(&r["out_amount"], &r["out_amount_msat"]);
-        let candidates: Vec<_> = rows
-            .get(&string(out))
-            .into_iter()
-            .flatten()
-            .filter(|row| {
-                (!truth(&r["out_asset"]) || string(&row["asset"]) == string(&r["out_asset"]))
-                    && (amount.is_null()
-                        || amount == ""
-                        || integer(&row["amount"]) == integer(amount))
-            })
-            .collect();
+        let mut candidates = vec![];
+        for row in rows.get(&string(out)).into_iter().flatten() {
+            if truth(&r["out_asset"])
+                && string(fallback(&row["asset"], &json!(""))) != string(&r["out_asset"])
+            {
+                continue;
+            }
+            if !amount.is_null()
+                && amount != ""
+                && crate::integer::integer_or_zero(&row["amount"])?
+                    != crate::integer::integer(amount)?
+            {
+                continue;
+            }
+            candidates.push(row);
+        }
         let source = if candidates.len() == 1 {
             *candidates[0]
         } else {
             &Value::Null
         };
-        let mut v = json!({"payout_id":string(id),"out_id":string(out),"out_asset":fallback(&r["out_asset"],&source["asset"]),"out_amount_msat":integer(fallback(amount,&source["amount"])),"payout_amount_msat":integer(&r["payout_amount"]),"swap_fee_msat":integer(&r["swap_fee_msat"])});
+        let mut v = json!({"payout_id":string(id),"out_id":string(out),"out_asset":fallback(&r["out_asset"],&source["asset"]),"out_amount_msat":crate::integer::integer_or_zero(fallback(amount,&source["amount"]))?,"payout_amount_msat":crate::integer::integer_or_zero(&r["payout_amount"])?,"swap_fee_msat":crate::integer::integer_or_zero(&r["swap_fee_msat"])?});
         for k in [
             "kind",
             "policy",
@@ -788,27 +888,12 @@ fn direct_payouts(inputs: &LedgerInputs<'_>) -> Result<Value, Refusal> {
     }
     Ok(json!(result))
 }
-fn integer(v: &Value) -> Value {
-    if truth(v) {
-        number(&string(v)).unwrap_or(Value::Null)
-    } else {
-        json!(0)
-    }
-}
 /// Persistence calls this after deduplication; build() itself keeps raw quarantines.
 pub fn enrich_quarantine_detail(
     detail_json: &Value,
     candidates: &[Value],
 ) -> Result<String, Refusal> {
-    let mut detail =
-        serde_json::from_str::<Value>(detail_json.as_str().unwrap_or("")).unwrap_or(json!({}));
-    if !detail.is_object() {
-        detail = json!({});
-    }
-    if !candidates.is_empty() {
-        detail["ownership_review_candidates"] = json!(candidates);
-    }
-    pyjson(&detail, true)
+    crate::persistence::enrich_quarantine_detail(detail_json.as_str().unwrap_or(""), candidates)
 }
 
 #[cfg(test)]

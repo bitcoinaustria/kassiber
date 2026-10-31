@@ -3,6 +3,7 @@
 //! JSON boundary; the engine result and rendered entries have native types.
 //! No production command is registered; checkpoint references own acceptance.
 pub mod boundary;
+mod integer;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod loader;
 mod model;
