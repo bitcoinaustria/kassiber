@@ -74,7 +74,7 @@ No new tax math — the report reads the engine's own numbers.
 |---|---|
 | Remaining inventory + cost basis per regime | stored journal projection (acquisition `fiat_value`, outflow `cost_basis`), walked in `compute_deemed_disposal` |
 | Alt/Neu attribution | outflow `at_category` prefix first; otherwise regime marker, then `occurred_at` via `infer_regime_from_timestamp()`; fee markers reflect consumed lots |
-| FMV at the departure date | `rates_cache` lookup strictly before the cutoff + transaction-price fallback within the preceding 24 hours, disclosing source and actual quote timestamp (`_fmv_at`) |
+| FMV at the departure date | closest cached or transaction quote strictly before the cutoff and within the preceding 24 hours, disclosing source and actual quote timestamp (`_fmv_at`) |
 | 27.5% rate, Kennzahl mapping | `AT_SONDERSTEUERSATZ` (estimate constant) + `kennzahl_for_disposal_category()` |
 | PDF / XLSX adviser handoff | `hooks.write_text_pdf` + the generic XLSX writer in `kassiber/core/reports.py` |
 
@@ -154,7 +154,7 @@ defaults it invoked.
 | EXIT-002 | §27 Abs 6 deferral mechanism | EU/EEA = Nichtfestsetzung until sale; third country = immediate; no installment for private §27 | review required |
 | EXIT-003 | Planned 1 Jul 2026 tightening (annual proof when deferred gain > €100k) | announced, not enacted — do **not** hard-code; surface as a forward-looking note | re-verify against enacted statute before relying |
 | EXIT-004 | Derived tokens (staking/mining/airdrop) | Neubestand regardless of underlying coin age, €0 acquisition cost → enter exit base | review; moderate confidence (rests on BMF/VO, not clean §27b cite) |
-| EXIT-005 | FMV at departure date | cached rate before cutoff, then transaction quote within the preceding 24 hours; do not imply intraday coverage (see AT-007) | missing FMV leaves null valuations and `status.missingFmvAssets`; owner to confirm the transaction-age bound |
+| EXIT-005 | FMV at departure date | closest cached or transaction quote before cutoff, within the preceding 24 hours; do not imply intraday coverage (see AT-007) | missing FMV leaves null valuations and `status.missingFmvAssets`; current owner-selected age policy, open to revision |
 | EXIT-006 | Altbestand exclusion proof | exclude only lots with provable pre-cutoff acquisition; unknown-basis/quarantined lots cannot be confidently excluded | quarantine / incomplete-status surfaced |
 | EXIT-007 | Deemed-disposal losses on Neu lots | net within the exit computation per Austrian capital-income loss rules; multi-year carryforward stays out of scope (see 06) | review required |
 | EXIT-008 | Departure date, DTA tie-breaker, dual residence | taken as user input; Kassiber does not determine residency facts | adviser determines; out of scope |
@@ -176,7 +176,7 @@ defaults it invoked.
 - **Historical wallet context:** rebuild wallet quantities through the same
   cutoff, including transfers and excluding duplicate income recognition.
   Current stored holdings supply labels only. Wallet-context assets receive
-  the same cached/24-hour transaction quote lookup as global inventory. PDF,
+  the same closest-quote lookup and common 24-hour limit as global inventory. PDF,
   XLSX and the desktop FMV card disclose every quote's source and `asOf`.
 - **Export history:** exit-tax estimates intentionally do not register ordinary
   realized-journal snapshots or chain dependency captures. A replayable

@@ -433,3 +433,44 @@ def test_downgrade_and_rebuild_cannot_reuse_outflow_semantics(engine_book, monke
         corrected = reports.report_exit_tax(reopened, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
         assert corrected["totals"] == initial["totals"]
     reopened.close()
+
+
+@pytest.mark.parametrize(("quote_at", "priced"), [
+    ("2024-01-01T00:00:00Z", False),
+    ("2024-12-30T23:59:59.999999Z", False),
+    ("2024-12-31T00:00:00Z", True),
+    ("2024-12-31T23:59:59.999999Z", True),
+    ("2025-01-01T00:00:00Z", False),
+])
+def test_cached_fmv_uses_the_same_age_limit(engine_book, quote_at, priced):
+    conn = engine_book([("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy")],
+                       quotes=[(quote_at, 65000)])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    assert report["fmvSource"][0]["source"] == ("cache" if priced else "missing")
+    assert report["status"]["missingFmvAssets"] == ([] if priced else ["BTC"])
+    assert report["totals"]["estimatedTax"] == (9625 if priced else None)
+
+
+@pytest.mark.parametrize(("cached_at", "expected_source", "expected_rate"), [
+    ("2024-01-01T00:00:00Z", "transaction", 70000),
+    ("2024-12-31T11:00:00Z", "transaction", 70000),
+    ("2024-12-31T12:00:00Z", "cache", 65000),
+    ("2024-12-31T13:00:00Z", "cache", 65000),
+    ("2025-01-01T00:00:00Z", "transaction", 70000),
+])
+def test_closest_fmv_quote_wins_across_sources(engine_book, cached_at, expected_source, expected_rate):
+    conn = engine_book([("buy", "Cold", "2024-12-31T12:00:00Z", "inbound", BTC, 0, 70000, "buy")],
+                       quotes=[(cached_at, 65000)])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    assert report["fmvSource"][0]["source"] == expected_source
+    assert report["fmvSource"][0]["rate"] == expected_rate
+    assert report["status"]["missingFmvAssets"] == []
+
+
+def test_cached_fmv_chooses_closest_instant_across_offsets(engine_book):
+    conn = engine_book([("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy")],
+                       quotes=[("2024-12-31T23:30:00+02:00", 1),
+                               ("2024-12-31T22:00:00Z", 65000)])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
+    assert report["fmvSource"][0]["rate"] == 65000
+    assert report["totals"]["estimatedTax"] == 9625
