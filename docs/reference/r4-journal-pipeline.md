@@ -5,7 +5,8 @@ four recovered baseline records are committed. The typed row and admission
 continuation is an **R4-2 checkpoint**, with acceptance still open; R4-3's
 components/evidence rewrite is not implemented. The subsequent
 [interpretation and gap kernel checkpoint](custody-engine.md#interpretation-and-gap-kernel-checkpoint-r4)
-meets both stage CPU targets while retaining the existing representations. The R4-11 renderer has a
+meets both stage CPU targets while retaining the existing representations. The R4-7 typed finalized-output probe also missed its targets and was withdrawn
+([probe](#r4-7-finalized-projection-target-probe)). The R4-11 renderer has a
 [partial checkpoint](r4-journal-render-checkpoint.md); production acceptance
 remains open. [Storage-format speedups](#storage-format-speedups) run Python
 first; compact calculations are implemented with the Rust schema mirror.
@@ -328,8 +329,6 @@ not shrink without a reviewed equivalence note. The separate kernel branch ran i
 not claimed as freshly killed there. This integration reruns the whole catalog.
 Each step also records
 
-catalog (currently 2,292 recipes), and reports kill set equals catalog. The catalog may
-not shrink without a reviewed equivalence note. Each step also records
 before and after timings from the bench books, back to back.
 
 "Measured cost replaced" is what the code a step rewrites costs today, at
@@ -925,6 +924,116 @@ including output construction. The new run uses process CPU as its primary
 acceptance measure under load; wall time improves by 2.5–2.9×, so the earlier
 quarter-time wall budget remains open. This does not complete the full typed
 pipeline migration or establish whole-custody performance at 10× Python.
+
+### R4-7 finalized-projection target probe
+
+This run starts at integrated `dd433e4e`, with `4f663a62`'s baseline records
+cherry-picked as `3cb1b899`. **R4-7 is incomplete.** Its typed prototype missed
+both stage-compute targets and was withdrawn before the acceptance campaign.
+The committed implementation change is only the opt-in `custody.total` span.
+It covers `run()`, including operation-local memo cleanup, and excludes request
+parsing, oracle response encoding and fusion. It contains the individual stage
+spans; do not add it to their sum. Without `timing` it remains a no-op.
+
+The prototype introduced `FinalizedTaxProjection`, typed finalized quantities
+and generated row ids, intra/cross-asset pair records, and quarantine records
+with lossless Python payloads. A small raw-row accessor shared source records
+through `Arc`; historical SQL fields remained in their raw representation.
+It moved output conversion to the legacy fusion boundary. Observation and
+decision selection still used generic records, so this was not a completed
+field-based implementation of the stage. No typed API from that prototype is
+shipped or available for R4-8 to borrow.
+
+The two new `R4-7-probe` records in `r4-bench-records.jsonl` use the R4-1
+recorder, with five alternating Python/baseline/prototype pairs per book,
+`--max-load 8 --wait-minutes 0`. The one-minute loads were 17.85–25.46 for
+generic and 14.15–41.59 for multi-wallet. Every CSV byte matched the committed
+generator, and SQLite backups of the synthetic design books were made under
+this worktree's `target/r4-7/books`; the multi-wallet backup has 300 components.
+The saved baseline executable was built before prototype edits. All ten pairs
+retained the same ledger request and response SHA-256 for each book.
+
+Times below are seconds from the fastest complete run of each executable,
+rather than independently choosing the fastest stage from different runs.
+
+| 20,000 transactions | Generic before | Generic prototype | Multi-wallet before | Multi-wallet prototype |
+| --- | ---: | ---: | ---: | ---: |
+| Finalized input conversion | 0.246 | 0.320 | 0.255 | 0.333 |
+| Finalized compose (before includes output conversion) | 0.874 | **0.525** | 0.903 | **1.135** |
+| Projection-to-Python conversion (prototype: at fusion) | included above | 0.644 | included above | 0.566 |
+| Remaining finalized-stage elapsed | 0.212 | 0.257 | 0.228 | 0.263 |
+| Complete finalized-stage span, excluding fusion | 1.332 | 1.103 | 1.385 | 1.731 |
+| In-process `custody.total` | not instrumented | 4.656 | not instrumented | 7.809 |
+| Full pipeline compute | 7.512 | **8.135** | 11.241 | **12.395** |
+
+Typed compute misses the requested **0.2625 s generic / 0.290 s multi-wallet**
+limits. The output conversion is no longer inside `custody.total`, but remains
+necessary for the untyped fusion caller; moving that cost does not establish
+a custody speedup. The full pipeline regresses on both books.
+
+The remaining generic input maps, repeated field conversions and selection
+indexes still cost too much. The multi-wallet path additionally materializes
+all finalized rows back into JSON when any reviewed conversion exists, because
+the conversion matcher remained untyped. Raw-row copying at the input seam and
+full output materialization at fusion also preserve substantial conversion and
+destruction costs. Re-planning must replace these hot paths with typed
+observation/decision/slice operands and a conversion matcher borrowing typed
+rows, and make the legacy output conversion single-pass. The next attempt
+must measure those changes before claiming either stage or custody acceptance.
+
+The supplied sampler collected 393 main-thread samples of three generic
+prototype runs after allowing tracing of the owned benchmark process. Generic
+cloning, destruction and output conversion remain visible; 52.9% of self
+samples are unresolved in this optimized build, so the sample is not a precise
+per-function cost attribution. The first sandboxed attempt collected no
+samples because `ptrace` was denied.
+
+The rejected source, patch, saved executables, raw benchmark evidence and
+profiling artifacts remain locally under `target/r4-7/`. They are exploratory
+artifacts, not a verified implementation checkpoint. The live integrated
+mutation catalog has **2,292** entries (the older baseline record's 2,285 was
+not this integrated tip). It does not shrink. No recipe was re-anchored or
+added in the committed instrumentation change.
+
+The rejected prototype passed 34 focused Rust projection tests: frozen
+helper/adapter outputs, lossless diagnostics and refusal witnesses. These do
+not substitute for the complete acceptance campaign.
+
+The final instrumentation-only checkpoint passes workspace formatting,
+workspace/all-target Clippy with `-D warnings`, all **1,493 Rust workspace
+tests** (including the owned loopback-server tests), and the required CI
+preflight (**57 tests**). The required inventory update leaves its checked-in
+file unchanged. A timing-enabled generic 2,000 run emits `custody.total` once
+and preserves the saved baseline's full custody-response, ledger-request and
+ledger-response hashes.
+
+All **seven** recipes in the only touched Rust file, `lib.rs`, are killed
+after three named baseline selections pass: `rates-before-components`,
+`REC-OPERATION-01` through `REC-OPERATION-05`, and
+`projection8-capture-before-rates`. The kill ids equal that file's catalog;
+all **2,292** catalog entries still apply. No full-catalog kill rerun is claimed.
+Mutation and workspace verification build trees were removed after writing
+their summaries.
+
+Remaining R4-7 work:
+
+- Complete the typed compiler and its borrowable `FinalizedTaxProjection` API,
+  including typed reviewed conversions and input selection, then meet both
+  compute limits with input/output conversion reported separately. Recheck
+  the aggregate custody target after all four stage workers are integrated.
+- Run the twelve generators (24,000 books and 1,030 permutations), with
+  per-seed distinct-input activity and a deliberately vacuous control that
+  fails. Compare every stage and whole-pipeline byte, frozen vectors and exact
+  refusals, and all recorded replay inputs and permutations, including fresh
+  recordings.
+- Re-anchor every rewritten mutation recipe, add recipes for new branches,
+  list the equivalents, and rerun the required catalogs without shrinking
+  them. Run census and custody-shadow on `core-accounting` and
+  `reports-contracts` with `KASSIBER_TEST_TAX_ENGINE=census`. Repeat workspace
+  fmt/Clippy/tests, inventory update and CI preflight on that implementation.
+
+This target miss stops the implementation run; no R4-7 acceptance or typed
+fusion handoff is claimed.
 
 ## Authority switch (R4-16)
 

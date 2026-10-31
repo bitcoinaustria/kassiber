@@ -119,6 +119,8 @@ pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages,
             codec::clear_memos();
         }
     }
+    // Includes operation-local memo teardown; excludes parsing, oracle output and fusion.
+    let _total = timing::span("custody.total");
     let _memos = Memos;
     let admission = timing::span("admission");
     let gate = timing::span("admission.accounting");
