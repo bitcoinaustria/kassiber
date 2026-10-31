@@ -34,7 +34,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from ..errors import AppError
 from ..tax_policy import build_tax_policy
-from ..time_utils import parse_timestamp
+from ..time_utils import parse_timestamp, timestamp_microseconds
 from . import pricing
 from . import report_context as core_report_context
 from . import custody_journal
@@ -130,7 +130,8 @@ _ASSUMPTION_DEFERRAL_THIRD = (
 )
 _ASSUMPTION_FMV = (
     "EXIT-005: Fair market value uses the best available cached rate at or before "
-    "the departure date; it does not imply intraday coverage."
+    "the departure date, falling back to a transaction price at or before that "
+    "cutoff; it does not imply intraday coverage."
 )
 _ASSUMPTION_FUTURE_TIGHTENING = (
     "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains "
@@ -216,7 +217,7 @@ def _fmv_at(
     asset: str,
     fiat_currency: str,
     target_iso: str,
-    fallback_rates: Mapping[str, Any],
+    fallback_quotes: Mapping[str, Mapping[str, Any]],
 ) -> tuple[Optional[Decimal], dict[str, Any]]:
     """Fair market value of one unit of ``asset`` at/just before ``target_iso``.
 
@@ -224,7 +225,7 @@ def _fmv_at(
     always bounded by the departure date (a historical departure never picks up a
     later/future rate) and a reviewed manual override wins over a provider row at
     the same timestamp. If no rate at-or-before the date exists, fall back to the
-    profile's transaction price, else mark the asset unpriced.
+    profile's date-bounded transaction price, else mark the asset unpriced.
     """
 
     pair = core_rates.transaction_rate_pair(asset, fiat_currency)
@@ -243,15 +244,15 @@ def _fmv_at(
                     "asOf": cached.get("timestamp"),
                     "source": "cache",
                 }
-    fallback = fallback_rates.get(asset) if fallback_rates else None
+    fallback = fallback_quotes.get(asset)
     if fallback is not None:
-        fallback_dec = dec(fallback)
+        fallback_dec = dec(fallback["rate"])
         if fallback_dec > 0:
             return fallback_dec, {
                 "asset": asset,
                 "rate": float(fallback_dec),
                 "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-                "asOf": target_iso,
+                "asOf": fallback["timestamp"],
                 "source": "transaction",
             }
     return None, {
@@ -326,10 +327,24 @@ def compute_deemed_disposal(
     # already 1 March in Vienna for 28 February).
     old_rules = is_at and day < CRYPTO_KENNZAHLEN_FROM.date().isoformat()
     dest = _normalize_destination(destination)
-    method = build_tax_policy(profile).default_accounting_method
+    policy = build_tax_policy(profile)
+    method = str(profile.get("gains_algorithm") or policy.default_accounting_method).strip().lower()
+    cutoff_instant = timestamp_microseconds(cutoff)
 
     entries: Sequence[Mapping[str, Any]] = state.get("entries") or ()
-    fallback_rates = state.get("latest_rates") or {}
+    # A bare latest rate has no historical authority. Require its source time,
+    # even for directly supplied states, before admitting it to this valuation.
+    fallback_quotes = {}
+    for asset, value in (state.get("latest_rates") or {}).items():
+        timestamp = (state.get("latest_rate_timestamps") or {}).get(asset)
+        instant = timestamp_microseconds(timestamp)
+        if instant is not None and instant <= cutoff_instant:
+            fallback_quotes[asset] = {"rate": value, "timestamp": timestamp}
+
+    wallet_labels = {
+        key[0]: key[1] for key in (state.get("wallet_holdings") or {})
+    }
+    wallet_quantities: dict[tuple[str, str, str], Decimal] = {}
 
     # Per-asset Alt/Neu inventory + cost basis, rebuilt from engine entries.
     assets: dict[str, dict[str, _RegimeBucket]] = {}
@@ -343,9 +358,21 @@ def compute_deemed_disposal(
 
     for entry in entries:
         occurred_at = entry.get("occurred_at")
-        if occurred_at and str(occurred_at) > cutoff:
+        instant = timestamp_microseconds(occurred_at)
+        if instant is None:
+            raise AppError("Exit-tax inventory requires a valid journal timestamp.", code="validation")
+        if instant > cutoff_instant:
             continue  # not yet held / disposed of as of the departure date
         entry_type = str(entry.get("entry_type") or "")
+        asset = str(entry.get("asset") or "")
+        qty = dec(entry.get("quantity") or 0)
+        wallet_id = entry.get("wallet_id")
+        # transfer_out already includes the separate transfer_fee quantity,
+        # matching reports._holdings_quantity_delta and RP2's BalanceSet.
+        if asset and wallet_id and entry_type not in ("income", "transfer_fee"):
+            wallet_label = entry.get("wallet_label") or wallet_labels.get(wallet_id) or str(wallet_id)
+            key = (str(wallet_id), str(wallet_label), asset)
+            wallet_quantities[key] = wallet_quantities.get(key, Decimal("0")) + qty
         if entry_type in ("transfer_in", "transfer_out"):
             continue  # net-zero across owned wallets; never touches the pool
         if entry_type == "income":
@@ -354,10 +381,8 @@ def compute_deemed_disposal(
             # _HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES). Still flag EXIT-004.
             has_income = True
             continue
-        asset = str(entry.get("asset") or "")
         if not asset:
             continue
-        qty = dec(entry.get("quantity") or 0)
         # Generic profiles have no regime; pool everything as Neubestand-equiv.
         alt = _entry_is_alt(entry) if is_at else False
         bucket = _bucket(asset, alt)
@@ -382,8 +407,9 @@ def compute_deemed_disposal(
 
     fmv_source: list[dict[str, Any]] = []
     fmv_by_asset: dict[str, Optional[Decimal]] = {}
-    for asset in sorted(assets):
-        rate, source = _fmv_at(conn, asset, fiat_currency, cutoff, fallback_rates)
+    wallet_assets = {key[2] for key, qty in wallet_quantities.items() if qty > 0}
+    for asset in sorted(set(assets) | wallet_assets):
+        rate, source = _fmv_at(conn, asset, fiat_currency, cutoff, fallback_quotes)
         fmv_by_asset[asset] = rate
         fmv_source.append(source)
 
@@ -462,11 +488,10 @@ def compute_deemed_disposal(
     collection_timing = "deferred" if dest == DESTINATION_EU_EEA else "immediate"
 
     wallet_holdings = []
-    for key, totals in (state.get("wallet_holdings") or {}).items():
-        # key = (wallet_id, wallet_label, account_code, asset)
+    for key, qty in wallet_quantities.items():
+        # Transfers affect wallet context, while leaving the global pool alone.
         wallet_label = key[1]
-        asset = key[3]
-        qty = dec(totals.get("quantity") or 0)
+        asset = key[2]
         if qty <= 0:
             continue
         fmv = fmv_by_asset.get(asset)
@@ -561,7 +586,8 @@ def report_exit_tax(
         )
     workspace = report_context.workspace
     profile = report_context.profile
-    state = custody_journal.load_stored_ledger_state(conn, profile)
+    day, cutoff = _resolve_departure(departure_date)
+    state = custody_journal.load_stored_ledger_state(conn, profile, rate_cutoff=cutoff)
     profile = dict(profile)
     workspace_label = workspace["label"] if "label" in workspace.keys() else None
     profile.setdefault("workspace_label", workspace_label)
@@ -569,7 +595,7 @@ def report_exit_tax(
         conn,
         profile,
         state,
-        departure_date=departure_date,
+        departure_date=day,
         destination=destination,
     )
 

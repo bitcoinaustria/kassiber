@@ -41,7 +41,8 @@ rows**: it reads the journal state RP2 already computed
 (`hooks.build_ledger_state`) and rebuilds the remaining inventory + cost basis
 **per regime, directly from those entries**:
 
-1. Walk the journal entries with `occurred_at <= departure_date`.
+1. Walk the journal entries through the departure date's `23:59:59Z` cutoff,
+   comparing instants rather than stored timestamp text.
 2. Acquisitions/income **add** quantity + cost (acquisition-date regime via
    `infer_regime_from_timestamp`); disposals **subtract** quantity + their
    engine-computed consumed cost basis (regime from the entry's `at_category`).
@@ -70,7 +71,7 @@ No new tax math — the report reads the engine's own numbers.
 |---|---|
 | Remaining inventory + cost basis per regime | journal entries from `hooks.build_ledger_state` (acquisition `fiat_value`, disposal `cost_basis`), walked in `compute_deemed_disposal` |
 | Alt/Neu attribution | disposal `at_category` prefix; acquisition `occurred_at` vs `AT_NEU_CUTOFF` via `infer_regime_from_timestamp()` |
-| FMV at the departure date | `rates_cache` lookup at/before the date + latest-rate / transaction-price fallback (`_fmv_at`) |
+| FMV at the departure date | `rates_cache` lookup at/before the cutoff + transaction-price fallback bounded by the same instant, disclosing the actual source timestamp (`_fmv_at`) |
 | 27.5% rate, Kennzahl mapping | `AT_SONDERSTEUERSATZ` (estimate constant) + `kennzahl_for_disposal_category()` |
 | PDF / XLSX adviser handoff | `hooks.write_text_pdf` + the generic XLSX writer in `kassiber/core/reports.py` |
 
@@ -169,6 +170,14 @@ defaults it invoked.
   is incomplete. The payload surfaces `status.needsJournals` / `status.quarantines`
   and the GUI shows a strip linking to the quarantine queue; never present a
   partial estimate as final.
+- **Historical wallet context:** rebuild wallet quantities through the same
+  cutoff, including transfers and excluding duplicate income recognition.
+  Current stored holdings supply labels only. Wallet-context assets receive
+  the same cached/date-bounded transaction quote lookup as global inventory.
+- **Export history:** exit-tax estimates intentionally do not register ordinary
+  realized-journal snapshots or chain dependency captures. A replayable
+  valuation recipe is needed first; see
+  [saved and filed report impact](../reference/custody-components.md#saved-and-filed-report-impact).
 - **Re-run journals first.** The estimate is only trustworthy after journals are
   processed; the daemon auto-processes for `exit_tax_preview`, and the CLI/report
   path requires processed journals.

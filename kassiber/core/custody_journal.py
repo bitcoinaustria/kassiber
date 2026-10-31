@@ -160,6 +160,69 @@ def stored_move_transaction_ids(
     }
 
 
+def transaction_rate_quotes_for_profile(
+    conn, profile_id: str, *, at_or_before: str | None = None
+) -> dict[str, dict[str, Any]]:
+    """Return transaction rates with their actual observation timestamps.
+
+    Historical valuations compare instants, including legacy offset timestamps.
+    Unbounded callers retain the existing transaction ordering.
+    """
+
+    from ..time_utils import timestamp_predicate
+
+    bound = ""
+    order = "occurred_at DESC, created_at DESC"
+    params = [profile_id]
+    if at_or_before is not None:
+        bound = " AND " + timestamp_predicate(conn, "occurred_at", "<=")
+        order = "kassiber_timestamp_us(occurred_at) DESC, created_at DESC, id DESC"
+        params.append(at_or_before)
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT asset, occurred_at, fiat_rate, fiat_value, fiat_rate_exact,
+                   fiat_value_exact, amount
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0
+            """ + bound + " ORDER BY " + order,
+            params,
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = conn.execute(
+            """
+            SELECT asset, occurred_at, fiat_rate, fiat_value, amount
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0
+            """ + bound + " ORDER BY " + order,
+            params,
+        ).fetchall()
+    rates: dict[str, Any] = {}
+    for row in rows:
+        asset = row["asset"]
+        if asset in rates:
+            continue
+        rate = row["fiat_rate_exact"] if "fiat_rate_exact" in row.keys() else None
+        value = (
+            row["fiat_value_exact"] if "fiat_value_exact" in row.keys() else None
+        )
+        rate_dec = dec(rate) if rate is not None else None
+        value_dec = dec(value) if value is not None else None
+        if rate_dec is None and row["fiat_rate"] is not None:
+            rate_dec = dec(row["fiat_rate"])
+        if value_dec is None and row["fiat_value"] is not None:
+            value_dec = dec(row["fiat_value"])
+        if rate_dec is not None:
+            rates[asset] = {"rate": rate_dec, "timestamp": row["occurred_at"]}
+        elif value_dec is not None and row["amount"]:
+            rates[asset] = {
+                "rate": value_dec / msat_to_btc(row["amount"]),
+                "timestamp": row["occurred_at"],
+            }
+    return rates
+
+
 def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any]:
     """Return the latest usable transaction-derived rate for each asset."""
 
@@ -1032,14 +1095,17 @@ def store_ledger_state(
 def load_stored_ledger_state(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
+    *,
+    rate_cutoff: str | None = None,
 ) -> dict[str, Any]:
     """Load the report-facing ledger projection without reinterpreting custody."""
 
     profile_id = str(profile["id"])
     entries = []
     for row in conn.execute(
-        "SELECT * FROM journal_entries WHERE profile_id = ? "
-        "ORDER BY occurred_at ASC, created_at ASC, id ASC",
+        "SELECT e.*, w.label AS wallet_label FROM journal_entries e "
+        "LEFT JOIN wallets w ON w.id = e.wallet_id WHERE e.profile_id = ? "
+        "ORDER BY e.occurred_at ASC, e.created_at ASC, e.id ASC",
         (profile_id,),
     ).fetchall():
         entry = dict(row)
@@ -1073,11 +1139,13 @@ def load_stored_ledger_state(
             (profile_id,),
         ).fetchall()
     }
+    quotes = transaction_rate_quotes_for_profile(conn, profile_id, at_or_before=rate_cutoff)
     return {
         "entries": entries,
         "quarantines": quarantines,
         "wallet_holdings": wallet_holdings,
-        "latest_rates": latest_transaction_rates_for_profile(conn, profile_id),
+        "latest_rates": {asset: quote["rate"] for asset, quote in quotes.items()},
+        "latest_rate_timestamps": {asset: quote["timestamp"] for asset, quote in quotes.items()},
     }
 
 

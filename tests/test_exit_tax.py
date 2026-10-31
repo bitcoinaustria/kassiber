@@ -100,12 +100,15 @@ def _state():
     wallet_holdings = {
         ("w1", "Cold", "treasury", "BTC"): {"quantity": Decimal("1.4"), "cost_basis": Decimal("24000")},
     }
+    for entry in entries:
+        entry["wallet_id"] = "w1"
     return {
         "entries": entries,
         "wallet_holdings": wallet_holdings,
         "account_holdings": {},
         "quarantines": [],
         "latest_rates": {"BTC": Decimal("60000")},
+        "latest_rate_timestamps": {"BTC": "2023-03-01T00:00:00Z"},
     }
 
 

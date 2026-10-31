@@ -6304,7 +6304,10 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     last_column = max(len(headers) - 1, 0)
     widths = [_generic_report_column_width(header, rows) for header in headers]
     worksheet.set_row(0, 28)
-    worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
+    if last_column:
+        worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
+    else:
+        worksheet.write_string(0, 0, spec["title"], formats["title"])
     header_lines = max(
         (_estimate_wrapped_lines(_report_column_label(header), widths[index]) for index, header in enumerate(headers)),
         default=1,
@@ -7490,7 +7493,13 @@ def _exit_tax_xlsx_specs(report):
         }
         for holding in report["walletHoldings"]
     ]
-    notes = [{"note": note} for note in report["assumptions"]]
+    notes = []
+    if report["status"]["quarantines"]:
+        notes.append({
+            "note": f"{report['status']['quarantines']} quarantined transaction(s) — "
+                    "estimate is incomplete until resolved."
+        })
+    notes.extend({"note": note} for note in report["assumptions"])
     notes.append({"note": report["reviewGate"]})
     return [
         {

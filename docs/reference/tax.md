@@ -324,6 +324,23 @@ Quarantine causes typically include:
   double-spend siblings; verify or resync them from a chain-backed wallet before
   treating competing histories as settled.
 
+The full-report XLSX `Verify!B2` banner caches the verdict of the same cached
+Control and Disposals checks written to the workbook. A cached failing check
+therefore displays a mismatch even in viewers that do not recalculate formulas;
+the live formula remains available for later spreadsheet edits.
+
+Exit-tax previews and PDF/XLSX estimates report the book's selected accounting
+method. They reconstruct global inventory and wallet quantities from journal
+entries through the departure cutoff (`23:59:59Z`), comparing UTC instants even
+for legacy offset timestamps. Internal transfers move wallet context without
+changing global inventory; income recognition is not counted twice.
+FMV uses a cached quote at or before the cutoff, then a transaction price at or
+before it, with the actual quote timestamp disclosed. Future or undated prices
+cannot fill a historical valuation. Wallet-context assets use the same lookup,
+and the XLSX assumptions sheet discloses quarantines and incomplete estimates.
+Exit-tax exports remain valuation drafts outside the ordinary realized-report
+snapshot system; see [saved and filed report impact](custody-components.md#saved-and-filed-report-impact).
+
 ## Rates and tax input quality
 
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
