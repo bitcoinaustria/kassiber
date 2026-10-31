@@ -727,6 +727,91 @@ Exactly what remains before accepting this run:
 - Resolve the two harness issues above, repeat the required census/shadow and
   parity gates after R4-3, and run the whole mutation catalog in integration.
 
+### R4-4 typed compilation probe (stopped)
+
+The `t3code/r4-5-typed-gaps` continuation starts at the integrated `dd433e4e`
+and replays `4f663a62` as `5012ab6f`, retaining the R7 notes when resolving the
+two documentation conflicts. Its first R4-4 probe **misses both compute targets**.
+The prototype is withdrawn; R4-4 remains open and R4-5 is not started.
+
+The probe introduces stage-local `InterpreterCompilation`, quantity claims and
+slices, quarantine, native audit and reconciliation records. It suppresses the
+isolated diagnostic composition on the normal stage path, limits pair-scope
+indexing to pair endpoints, and clones the released reconciliation context only
+when needed. Producer rows, pairs and canonical observations still use the old
+JSON model. This tests the compilation/output seam; it is **not a complete typed
+input/producer implementation**. It defines no crate-wide row types and changes
+no Python code, dependencies, storage or product authority.
+
+The unchanged R4-1 recorder runs Python, saved baseline Rust and saved prototype
+Rust back to back, five pairs per 20,000-row book with `--max-load 8` and
+`--wait-minutes 0`. Both books are disposable SQLite backups; every stored CSV
+row and each CSV file equals the committed generator output, and multi-wallet
+retains 300 active peg components. The baseline executable is built from
+`5012ab6f` with only an added timing span around its existing Python-model output
+conversion. Source patches and executable digests stay in
+`target/r4-45-verify/`. The committed
+[`probe records`](r4-4-probe-records.jsonl) retain load averages, hashes and all
+spans; these are rejected-prototype measurements, not accepted R4-4 records.
+Times use each executable's fastest complete run, as the recorder selects it.
+
+| Interpretation, seconds | Generic 20,000 | Multi-wallet 20,000 |
+| --- | ---: | ---: |
+| Baseline compute, excluding outer conversion | 0.463346 | 1.780767 |
+| Baseline outer conversion | 0.000008 | 0.000062 |
+| Prototype compute, excluding both conversions | 0.389428 | 1.552213 |
+| Prototype producer-output to typed-record conversion | 0.000001 | 0.000002 |
+| Prototype typed-record to oracle/migration conversion | 0.000011 | 0.000018 |
+| Required compute ceiling | 0.153333 | 0.473333 |
+| Whole pipeline, baseline / prototype | 7.581066 / 7.520282 | 11.356035 / 11.202095 |
+| 1-minute load range | 19.21–25.19 | 13.86–37.06 |
+
+The generic prototype spends 0.195198 s in holds alone, above the complete
+stage's 0.153333 s ceiling. Building the input indexes takes another 0.049774 s,
+pipeline preparation 0.044928 s and Samourai compilation 0.030884 s. The outer
+conversion is negligible on this book, which emits no interpreter claims.
+The multi-wallet prototype spends 0.722127 s in pipeline preparation, itself
+above that book's complete 0.473333 s ceiling, plus 0.276040 s in holds and
+0.225525 s in recorded-component compilation. The loaded baseline is slower
+than the earlier 1.42 s reference; this does not relax the requested ceiling.
+Typing only returned records and suppressing diagnostic construction cannot
+meet the target. The next attempt needs reusable typed row/confirmation/scope
+facts for the holds detectors, lazy indexes for empty derivations, and borrowed
+rows with sparse overrides in pipeline preparation. Measure these kernels
+before completing the output model; their internal conversions remain part of
+this prototype's compute, not its small outer-boundary measurement.
+
+The prototype's existing frozen interpretation selection passes 276 Rust tests
+(139 module tests and 137 integration tests). Its edits touch files owning 101
+mutation recipes: 17 in `mod.rs`, 51 in `pairs.rs` and 33 in `safety.rs`.
+Two anchors need equivalent replacements, retained only with the local probe:
+
+- `REC-SAFETY-03`: retain the remove-to-insert mutation through the lazy
+  released-context accessor, so reconciled anchors fail to be released.
+- `REC-STAGE-05`: empty the typed `native_component_reconciliations` vector,
+  preserving the original certificate-omission mutant.
+
+With these two replacements all **2,292** integrated recipes apply. The
+catalog does not shrink. No kill rerun or new-branch mutation acceptance is
+claimed. All prototype source and recipe changes are withdrawn at the target
+stop; the committed implementation and catalog remain those of `5012ab6f`.
+The complete generated activity/vacuous/refusal campaign, retained replay,
+census/shadow shards and mutation kills must be rerun for a future accepted
+implementation. A successful frozen selection and benchmark ledger hashes do
+not substitute for those gates.
+
+Separate `--oracle --runs 1` checks on both 20,000-row benchmark snapshots
+produce identical full custody-response, ledger-request and ledger-response
+hashes between the saved baseline and prototype executables. Their outputs and
+`oracle-summary.json` stay with the local probe evidence. This bounds the
+observed parity to these two benchmark inputs.
+
+At the restored records-only boundary, inventory regeneration leaves the
+checked-in inventory unchanged, all 57 preflight tests pass, workspace
+formatting passes, and all 2,292 original mutation recipes apply. Full workspace
+Clippy and workspace tests were not run for this withdrawn prototype; they
+remain part of a future implementation's acceptance gates.
+
 ## Authority switch (R4-16)
 
 ### Before the switch

@@ -344,6 +344,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   Complete typed components/evidence and measure the remaining conversion cost
   before accepting R4-2/R4-3
   ([earlier probe](docs/reference/r4-journal-pipeline.md#recovered-baseline-and-r4-2-target-probe)).
+  R4-4's first typed compilation/output probe stopped at 0.389 s against
+  its 0.153 s generic target; re-plan typed safety facts and sparse derivation
+  rows before retrying. R4-5 was not started
+  ([probe](docs/reference/r4-journal-pipeline.md#r4-4-typed-compilation-probe-stopped)).
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
