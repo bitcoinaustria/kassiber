@@ -62,6 +62,108 @@ def unpublished(book):
             assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
 
 
+def graph_pending(session, request_id):
+    session.send("test.freshness.graph.pending", request_id)
+    response = session.until(request_id)
+    assert response["kind"] == "test.freshness.graph.pending", response
+    return response["data"]["grants"]
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+@pytest.mark.parametrize("control", ["cancel", "revoke", "lock", "switch"])
+def test_live_freshness_private_graph_handoff_and_discard(tmp_path, protocol, control):
+    with running(tmp_path, protocol) as (session, hits, book):
+        assert graph_pending(session, "before") == 0
+        hits.release.set()
+        result = session.until("sync", "test.freshness.execute")
+        assert completed(result)["status"] == "done"
+        assert graph_pending(session, "after") == 1
+        before, count = dump_bytes(book), len(hits)
+        session.send("status", "idle")
+        assert session.until("idle")["kind"] == "status"
+        assert graph_pending(session, "idle-graph") == 1
+        assert dump_bytes(book) == before and len(hits) == count
+        assert "graph_grants" not in json.dumps(session.rows)
+        with connect(book) as conn:
+            assert conn.execute("SELECT count(*) FROM freshness_jobs WHERE job_type='wallet_graph_references'").fetchone()[0] == 0
+            if control == "switch":
+                conn.execute("INSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('q','w','Second','EUR','later')")
+        if control in {"cancel", "revoke"}:
+            session.send(f"test.freshness.request.{control}", "discard", {"target_request_id": "sync"})
+            assert session.until("discard")["data"] == {"cancelled": True, "queued": False}
+        else:
+            session.send("daemon.lock" if control == "lock" else "ui.profiles.switch", "discard",
+                         {"profile_id": "q"} if control == "switch" else None)
+            assert session.until("discard")["kind"] != "error"
+        assert graph_pending(session, "discarded") == 0
+        assert len(hits) == count
+        session.finish()
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+def test_live_freshness_graph_handoff_deduplicates_and_never_recovers_authority(tmp_path, protocol):
+    config, chain, _ = _fixture("receive-change")
+    roots, books = _books(tmp_path, config)
+    with serve(chain, protocol) as url:
+        env = _environment(tmp_path, protocol, url)
+        env.pop("KASSIBER_RUST_TEST_SYNC_PREFIX", None)
+        with Session(roots[1], env) as session:
+            assert graph_pending(session, "launch") == 0
+            for request_id in ("first", "second"):
+                session.send("test.freshness.execute", request_id, ARGS)
+                assert completed(session.until(request_id, "test.freshness.execute"))["status"] == "done"
+                assert graph_pending(session, request_id + "-graph") == 1
+            session.send("test.freshness.request.cancel", "old", {"target_request_id": "first"})
+            assert session.until("old")["data"] == {"cancelled": False, "queued": False}
+            assert graph_pending(session, "current") == 1
+            session.finish()
+        with connect(books[1]) as conn:
+            conn.execute("INSERT INTO freshness_jobs(id,profile_id,job_type,source_key,source_type,source_label,status,phase,priority,created_at,updated_at) VALUES('persisted-graph','p','wallet_graph_references','wallet_graph:a','onchain_wallet','Graph','running','backend_fetch',200,'now','now')")
+        count = len(chain.hits)
+        with Session(roots[1], env) as session:
+            session.send("status", "read")
+            assert session.until("read")["kind"] == "status"
+            assert graph_pending(session, "restart") == 0
+            session.send("test.freshness.execute", "enqueue", {**ARGS, "run": False})
+            assert session.until("enqueue", "test.freshness.execute")["data"]["completed"] == []
+            assert graph_pending(session, "no-run") == 0
+            assert len(chain.hits) == count
+            with connect(books[1]) as conn:
+                assert conn.execute("SELECT status FROM freshness_jobs WHERE id='persisted-graph'").fetchone()[0] == "running"
+            session.finish()
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+def test_live_freshness_encrypted_graph_handoff_drops_on_lock(tmp_path, protocol):
+    from kassiber.secrets.migration import migrate_plaintext_to_encrypted
+    from kassiber.secrets.sqlcipher import open_encrypted
+
+    key = "Synthetic graph handoff 🔑 passphrase"
+    config, chain, _ = _fixture("receive-change")
+    roots, books = _books(tmp_path, config)
+    migrate_plaintext_to_encrypted(books[1], key)
+    with serve(chain, protocol) as url, Session(roots[1], _environment(tmp_path, protocol, url)) as session:
+        session.send("daemon.unlock", "unlock", {"auth_response": {"passphrase_secret": key}})
+        assert session.until("unlock")["kind"] == "daemon.unlock"
+        session.send("test.freshness.execute", "sync", ARGS)
+        assert completed(session.until("sync", "test.freshness.execute"))["status"] == "done"
+        assert graph_pending(session, "after") == 1
+        count = len(chain.hits)
+        session.send("daemon.lock", "lock")
+        assert session.until("lock")["kind"] == "daemon.lock"
+        assert graph_pending(session, "locked") == 0
+        session.send("test.freshness.execute", "locked-sync", ARGS)
+        assert session.until("locked-sync")["kind"] == "auth_required"
+        assert len(chain.hits) == count
+        conn = open_encrypted(books[1], key)
+        try:
+            assert conn.execute("SELECT count(*) FROM freshness_jobs WHERE job_type='wallet_graph_references'").fetchone()[0] == 0
+        finally:
+            conn.close()
+        assert key not in json.dumps(session.rows, ensure_ascii=False)
+        session.finish()
+
+
 @pytest.mark.parametrize("protocol", ["electrum", "esplora"])
 @pytest.mark.parametrize("control", ["cancel", "revoke", "offline", "source-cancel", "pause"])
 def test_live_freshness_controls_remain_available_during_fetch(tmp_path, protocol, control):
@@ -97,6 +199,7 @@ def test_live_freshness_controls_remain_available_during_fetch(tmp_path, protoco
                 assert job["error"]["code"] == ("interaction_required" if control == "revoke" else "network_egress_disabled")
             assert len(hits) <= hits.blocked_at + 1
         unpublished(book)
+        assert graph_pending(session, "fenced-graph") == 0
         session.finish()
 
 
@@ -162,6 +265,7 @@ def test_live_freshness_preconsent_and_early_request_fences(tmp_path, fence):
             else:
                 assert completed(response)["error"]["code"] == "network_egress_disabled"
             assert chain.hits == []
+            assert graph_pending(session, "fenced-graph") == 0
             session.finish()
 
 

@@ -91,8 +91,68 @@
     "id": "freshness-lifecycle-output-closed",
     "file": "crates/daemon/src/freshness.rs",
     "find": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\"))?;",
-    "replace": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(());",
+    "replace": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(None);",
     "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_closed_output_stops_and_joins_the_request[esplora]"],
     "rule": "Failure to write the terminal response must stop the daemon after joining the request."
+  },
+  {
+    "id": "freshness-graph-collect",
+    "file": "crates/wallets/src/freshness/native.rs",
+    "find": "grants.push(grant);",
+    "replace": "drop(grant);",
+    "expect_failing": [
+      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
+    ],
+    "rule": "A successful exact-action native job must privately hand off its graph grant."
+  },
+  {
+    "id": "freshness-graph-finished-handoff",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "graph_grants = worker_consent.take_graph_grants();",
+    "replace": "graph_grants = vec![];",
+    "expect_failing": [
+      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
+    ],
+    "rule": "Finished must carry private grants separately from the public terminal response."
+  },
+  {
+    "id": "freshness-graph-publish",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "if !stop {\n            if let Some(written) = written {",
+    "replace": "if false && !stop {\n            if let Some(written) = written {",
+    "expect_failing": [
+      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
+    ],
+    "rule": "A flushed successful response publishes the private grants into the bounded mailbox."
+  },
+  {
+    "id": "freshness-graph-request-discard",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "if self.published.revoke_request(target) {",
+    "replace": "if false && self.published.revoke_request(target) {",
+    "expect_failing": [
+      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[revoke-esplora]"
+    ],
+    "rule": "Request revocation remains available after the terminal response and discards pending grants."
+  },
+  {
+    "id": "freshness-graph-lock-discard",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "self.freshness_requests.published.clear();",
+    "replace": "let _ = &self.freshness_requests.published;",
+    "expect_failing": [
+      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_encrypted_graph_handoff_drops_on_lock[esplora]"
+    ],
+    "rule": "Locking an encrypted book removes pending graph authority before acknowledging lock."
+  },
+  {
+    "id": "freshness-graph-replacement",
+    "file": "crates/wallets/src/freshness/graph.rs",
+    "find": "self.entries.retain(|old| !old.grant.same_wallet(&grant));",
+    "replace": "self.entries.retain(|_| true);",
+    "expect_failing": [
+      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_graph_handoff_deduplicates_and_never_recovers_authority[esplora]"
+    ],
+    "rule": "A later successful sync replaces the pending grant for the same wallet and request authority never survives restart."
   }
 ]

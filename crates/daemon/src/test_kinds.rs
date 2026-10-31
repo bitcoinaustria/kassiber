@@ -15,7 +15,7 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 11] = [
+pub const KINDS: [&str; 12] = [
     "test.stream",
     "test.emit_event",
     "test.late",
@@ -27,6 +27,7 @@ pub const KINDS: [&str; 11] = [
     "test.freshness.resume",
     "test.freshness.request.cancel",
     "test.freshness.request.revoke",
+    "test.freshness.graph.pending",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -108,6 +109,19 @@ pub(crate) fn handle(
                 false,
             ))
         })(),
+        "test.freshness.graph.pending" => Ok((
+            Some(with_request_id(
+                success(
+                    kind,
+                    dict([(
+                        "grants",
+                        Value::from(daemon.freshness_requests.graph_pending()),
+                    )]),
+                ),
+                request_id,
+            )),
+            false,
+        )),
         "test.freshness.request.cancel" | "test.freshness.request.revoke" => (|| {
             if let Some(locked) = daemon.check_expected_scope(
                 args.filter(|v| get(v, "expected_scope").is_some()),

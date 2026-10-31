@@ -169,7 +169,8 @@ through the shared setup crate.
   saved capabilities in an inert admitted-book preflight before consent. Daemon
   freshness execution now has an unregistered admitted-book implementation;
   fetch progress and batch controls now reach the guarded daemon seam. Product
-  request lifecycle, graph handoff and default local journal refresh remain pending.
+  routes still need the bounded graph worker, product validation/selection and
+  complete no-refresh daemon parity; default requests remain on Python.
   The unregistered pre-dispatch queue now covers policy, state, recovery,
   single-flight/forced enqueue, cancellation controls, selected dispatch and
   workspace ordering. It grants no transport authority. See the queue checkpoint
@@ -193,6 +194,12 @@ through the shared setup crate.
   early/active cancellation, source controls, offline/revocation/replay fences
   and switch/lock/shutdown/EOF quiescence. Keep product registration gated on
   graph handoff, product validation/selection and full served-shape parity.
+- [x] Carry private successful-job graph grants through the guarded runner and
+  publish them into a bounded mailbox after the terminal response is flushed.
+  Preserve request cancellation, configuration checks and lifecycle discard.
+- [ ] Add the connection-owning, stoppable graph worker and bounded native
+  reference lookup, with grant revalidation, SQLCipher cleanup, unsolicited
+  events and graph/lifecycle parity and mutation acceptance.
 - [ ] Redact private checkpoints from Python freshness pause/resume results.
   The disposable `test_reference_source_control_checkpoint_repro_and_native_parity`
   repro pins the disclosure; Rust already applies the shared UI projection.
@@ -203,11 +210,13 @@ through the shared setup crate.
   fixture, restart-sequence and reviewed-book preparation/publication parity.
 - [x] Enable supported CLI `wallets sync` with complete live fixture, restart and
   reviewed-book comparisons on Electrum/Esplora and zero hybrid fallbacks.
-- [ ] Enable `ui.wallets.sync`, `ui.freshness.run` and
-  `ui.workspace.freshness.run` after queue/state/progress and journal-refresh
-  parity. Keep unsupported Liquid, Core RPC, Lightning, Silent Payments and
-  additional-wallet overlap on Python in the hybrid runner; direct native
-  unsupported calls refuse without retrying.
+- [ ] Enable verified explicit no-refresh variants of `ui.wallets.sync`,
+  `ui.freshness.run` and `ui.workspace.freshness.run` after inert whole-shape
+  selection, full envelope/event/book parity and zero served-shape hybrid
+  fallbacks. Keep defaults and unsupported Liquid, Core RPC, Lightning, Silent
+  Payments and additional-wallet overlap on Python in the hybrid runner; direct
+  native unsupported calls refuse without retrying. Native journal refresh
+  still requires R4-13.
 
 ## Rust backend R5 secrets, backup and diagnostics
 

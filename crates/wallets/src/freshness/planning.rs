@@ -492,7 +492,7 @@ impl Plan {
             version,
             |conn, name| resolver.borrow_mut()(conn, name),
         )?;
-        self.execute(
+        let result = self.execute(
             conn,
             options,
             sources,
@@ -500,6 +500,10 @@ impl Plan {
             observer,
             &execution::retry_time,
             |conn, name| resolver.borrow_mut()(conn, name),
-        )
+        );
+        proof.finish_graph_grants(conn, result.is_ok(), |conn, name| {
+            resolver.borrow_mut()(conn, name)
+        });
+        result
     }
 }

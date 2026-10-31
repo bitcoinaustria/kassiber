@@ -8010,3 +8010,97 @@ tax/custody shadow overlays, Docker regtest and packaged/platform gates were
 not run. This run stops at the verified request-loop boundary; the graph
 worker, product validation/selection and full product daemon acceptance remain
 open as listed above.
+
+### Bitcoin wallet-sync private graph handoff (R5, partial)
+
+Local branch `t3code/r5-sync-20` starts at `288ed149a`. This checkpoint
+implements the private grant-handoff prerequisite within the first remaining
+step. It does not implement the graph worker or register a product route.
+
+`freshness::native` captures graph candidates beside the exact prepared fetch,
+before backend work, and collects them only after successful publication. It
+prunes them against the completed job and current local authority before
+returning. `Consent::take_graph_grants` moves the private grants separately
+from the sanitized response; grants have no serialization or clone projection.
+Local checks bind the database path/instance, active context, immutable book
+network environment, wallet kind/configuration, selected effective and stored
+backend, exact done job, cancellation flag and unpaused source. Sync timestamp
+updates and JSON object key ordering do not change the wallet signature.
+Request cancellation and revocation remain shared after handoff.
+
+The guarded runner's `Finished` now carries those grants alongside the response
+and connection-close failure state. `Daemon::reap_freshness` requires an opaque
+receipt produced only after writing and flushing the exact terminal record.
+Fallback error serialization produces no receipt. Closed output, connection
+close failure and lifecycle quiescence publish no grants. The request collector
+and published mailbox each retain at most 128 grants; the mailbox replaces an
+older grant for the same database/book/wallet. Request cancellation/revocation
+can discard pending grants after the terminal response. Switching books, lock,
+shutdown and EOF revoke and clear the mailbox.
+
+The mailbox deliberately has no consumer in this checkpoint. Rust has no
+transaction-reference graph lookup service yet; neither a saved job nor a
+published grant initiates graph traffic, creates a graph freshness job or writes
+the graph cache. The guarded count-only inspection kind is absent from release
+builds and renderer/AI allowlists. No dependency or Python product code changes.
+The two recorded Python privacy deviations remain unchanged.
+
+The exact remaining handoff is:
+
+1. Implement the native transaction-reference lookup service and a bounded,
+   stoppable graph worker that owns its connection. Consume the published
+   mailbox only after the terminal-write receipt; revalidate grants and current
+   offline/no-egress permission before every transport batch and cache write.
+   Use only `kassiber-net`, without alternate-backend fallback. Preserve local
+   reference conflict/network checks, sanitized caches, the private scan cursor,
+   the 1,000-row/50-transaction/250-prevout/30-second pass limits and cancellation
+   between Electrum batches. Add SQLCipher session handoff/cleanup, unsolicited
+   `ui.freshness.background`/worker events, full graph/lifecycle parity and named
+   worker mutations before calling the original graph step complete.
+2. Implement product argument validation and inert whole-invocation hybrid
+   selection for explicit no-refresh variants, including protocol request-ID
+   shapes. Keep defaults on Python. No Python journal bridge or native journal
+   refresh is introduced; native refresh still requires R4-13.
+3. Prove full product daemon envelopes, event streams and every normalized
+   table on the broader disposable Electrum/Esplora fixture, restart and
+   reviewed-book corpus. Prove zero served-shape fallbacks and remaining mutation
+   acceptance, then register only passing shapes and record served-by counts.
+
+Successful native product calls added by this checkpoint remain zero for
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.
+All three product routes, including explicit no-refresh variants, stay on
+Python. This checkpoint does not complete the first requested step or R5.
+
+Verification passes the 248-case inherited queue/admission/execution/native
+suite and a 52-case lifecycle/protocol selection (one case overlaps), with
+two subtests. All 299 distinct cases pass without skips. They include the 12
+new live handoff cases over both protocols, encrypted lock cleanup, every-table
+native oracles and the inherited cancellation and source-control repros.
+All 225 distinct affected Rust tests pass: 184 wallet and 16 daemon library
+tests, six binary, eight supervisor and 11 daemon protocol tests. They retain
+the encrypted rollback and 102-round sync corpus.
+
+The six new graph-handoff mutations and the adjusted inherited closed-output
+recipe are all killed after five unmutated named selections pass. They pin
+collection, private runner handoff, publication, request revocation, encrypted
+lock discard, replacement and output closure. Build failures, skips and empty
+selections do not count as kills. Queue, admission, execution, progress and
+lifecycle catalogues pass static checks (29, 12, 19, 16 and 18 entries), as do
+combined sync and routing (547 and 14). Other inherited mutation campaigns
+were not rerun.
+
+Formatting and affected production/harness clippy pass with warnings denied.
+The required `classify_tests update` records 5,784 definitions, and
+`python_test_shards.py run preflight --ci` passes all 57 tests. A manual second
+pass reviewed grant construction and local binding checks, cancellation and
+revocation sharing, terminal-write/close ordering, bounded replacement and
+lifecycle discard, guarded routing, classification and documentation. No
+verification remains sandbox-blocked.
+
+Command logs and the summary remain under `target/r5-sync-20-artifacts/`.
+Mutation and verification build trees and disposable books are removed after
+summarizing their results. Account HOME is preserved, and no background job is
+left running. The full quality gate, tax/custody shadow overlays, Docker regtest
+and packaged/platform gates were not run. This run stops at the verified
+private-handoff boundary; the worker, product validation/selection and product
+daemon acceptance remain open as listed above.

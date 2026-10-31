@@ -160,10 +160,18 @@ its connection owner before releasing the book. Used request identities cannot
 create another grant. Source-control results redact private checkpoints,
 including the result container that Python pause/resume currently returns unredacted.
 That reference bug has a disposable repro; Python is unchanged here.
-The graph-grant handoff remains unfinished. Execution test kinds exist only in
-guarded builds, with no new renderer or AI allowlist entry. Disposable-loopback
-regressions verify empty attempt and egress buffers before consent and under
-pretransport fences.
+
+The guarded runner now carries private successful-job graph grants separately
+from the response and publishes them into a bounded in-memory mailbox only
+after the terminal record is written and flushed. Request cancellation or
+revocation and book/lock/shutdown/EOF boundaries discard that authority. Grant
+checks bind the successful job, database, active book and network binding,
+wallet configuration and selected backend. This mailbox has no consumer yet:
+the connection-owning graph worker and reference lookup remain unimplemented,
+so publishing a grant initiates no traffic or graph-cache writes. Execution
+test kinds exist only in guarded builds, with no new renderer or AI allowlist
+entry. Disposable-loopback regressions verify empty attempt and egress buffers
+before consent and under pretransport fences.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview

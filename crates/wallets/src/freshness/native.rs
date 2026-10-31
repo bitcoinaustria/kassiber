@@ -27,8 +27,9 @@ use std::{
 pub struct Consent {
     identity: Arc<()>,
     started: AtomicBool,
-    revoked: AtomicBool,
+    revoked: Arc<AtomicBool>,
     grants: Mutex<Vec<Arc<FetchConsent>>>,
+    graph_grants: Mutex<Vec<super::graph::Grant>>,
 }
 
 impl Consent {
@@ -36,8 +37,9 @@ impl Consent {
         Self {
             identity: plan.identity.clone(),
             started: AtomicBool::new(false),
-            revoked: AtomicBool::new(false),
+            revoked: Arc::new(AtomicBool::new(false)),
             grants: Mutex::new(vec![]),
+            graph_grants: Mutex::new(vec![]),
         }
     }
     pub fn revoke(&self) {
@@ -56,6 +58,35 @@ impl Consent {
             ));
         }
         Ok(())
+    }
+    pub fn take_graph_grants(&self) -> Vec<super::graph::Grant> {
+        self.graph_grants
+            .lock()
+            .map(|mut grants| std::mem::take(&mut *grants))
+            .unwrap_or_default()
+    }
+
+    pub(super) fn finish_graph_grants(
+        &self,
+        conn: &Connection,
+        succeeded: bool,
+        mut backend: impl FnMut(&Connection, &str) -> Result<Json>,
+    ) {
+        if let Ok(mut grants) = self.graph_grants.lock() {
+            grants.retain(|grant| succeeded && grant.validate(conn, &mut backend).is_ok());
+        }
+    }
+
+    fn collect_graph(&self, grant: super::graph::Grant) {
+        if self.check().is_err() {
+            return;
+        }
+        if let Ok(mut grants) = self.graph_grants.lock() {
+            grants.retain(|old| !old.same_wallet(&grant));
+            if grants.len() < super::graph::MAX_PENDING {
+                grants.push(grant);
+            }
+        }
     }
     pub(super) fn consume<'a>(consent: Option<&'a Self>, plan: &Plan) -> Result<&'a Self> {
         let proof = consent
@@ -105,6 +136,7 @@ struct Prepared {
     action: Fetch,
     grant: Arc<FetchConsent>,
     fetch: Json,
+    graph: Option<super::graph::Grant>,
 }
 
 pub(super) struct Native<'a, B> {
@@ -224,6 +256,15 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             ));
         }
         let grant = self.proof.grant(&action)?;
+        let graph = super::graph::Grant::capture(
+            conn,
+            job,
+            &selected.wallet,
+            backend,
+            self.proof.revoked.clone(),
+            self.cancel.clone(),
+        )
+        .ok();
         let label = field(&selected.wallet, "label");
         emit(&dict([
             ("phase", s("discovery")),
@@ -284,6 +325,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             action,
             grant,
             fetch,
+            graph,
         })
     }
 }
@@ -382,6 +424,7 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
                 action,
                 grant,
                 fetch,
+                graph,
             } = if let Some(result) = this.prefetched.remove(&id) {
                 if result.is_err() {
                     progress.emit(conn, &dict([("phase", s("batch_prefetch"))]))?;
@@ -453,9 +496,13 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
             )
             .map_err(crate::database_error)?;
             execution::commit(conn)?;
-            results
-                .pop()
-                .ok_or_else(|| AppError::new("state_not_ready", "Wallet sync produced no result"))
+            let result = results.pop().ok_or_else(|| {
+                AppError::new("state_not_ready", "Wallet sync produced no result")
+            })?;
+            if let Some(graph) = graph {
+                this.proof.collect_graph(graph);
+            }
+            Ok(result)
         };
         run(self, conn, progress).map_err(failure)
     }

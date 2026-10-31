@@ -7,6 +7,7 @@ use kassiber_pyjson::{Key, Options, Value};
 use kassiber_store::rusqlite::{params, Connection};
 
 pub mod execution;
+pub mod graph;
 pub mod native;
 pub mod planning;
 pub mod sources;

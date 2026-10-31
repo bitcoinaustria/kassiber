@@ -3007,3 +3007,21 @@ graph worker. Step 3 keeps the explicit no-refresh choice: implement product
 validation and inert whole-shape selection while defaults remain on Python.
 Full product daemon parity and zero served-shape fallbacks must precede route
 registration. This checkpoint registers none of the three product routes.
+
+### R5 Bitcoin sync: private graph handoff (partial)
+
+Successful native freshness jobs now carry private graph follow-up grants out
+of the guarded request runner separately from their sanitized response. The
+main loop publishes them only after the terminal record is written and flushed;
+fallback error serialization and connection-close failures do not publish.
+The mailbox is bounded and replaces an older grant for the same wallet.
+Request cancellation/revocation and context lifecycle boundaries discard grants.
+Local validation binds the exact completed job, database identity, active book,
+network binding, wallet signature and effective/stored backend configuration.
+
+This completes the private handoff prerequisite only. Rust still needs the
+connection-owning, stoppable graph worker and bounded transaction-reference
+lookup service, their unsolicited events, parity and graph mutation acceptance.
+The mailbox has no consumer and creates no graph traffic or graph-cache writes.
+Product validation/whole-shape selection, full product daemon parity and route
+registration remain open; all three product routes still use Python.

@@ -59,11 +59,24 @@ pub struct Output {
 #[derive(Debug)]
 pub struct OutputClosed;
 
+#[cfg(feature = "test-kinds")]
+pub(crate) struct Written(());
+
 impl Output {
     pub fn new(stream: Box<dyn Write + Send>) -> Self {
         Output {
             stream: Arc::new(Mutex::new(stream)),
         }
+    }
+
+    #[cfg(feature = "test-kinds")]
+    pub(crate) fn write_for_handoff(
+        &self,
+        record: &Value,
+    ) -> Result<Option<Written>, OutputClosed> {
+        let exact = daemon_line(record).is_ok();
+        self.write(record)?;
+        Ok(exact.then_some(Written(())))
     }
 
     /// Writes one record as a compact JSON line and flushes it.
@@ -115,5 +128,75 @@ impl Output {
     /// An unsolicited record: `event: true` and never a `request_id`.
     pub fn event(&self, kind: &str, data: Value) -> Result<(), OutputClosed> {
         self.write(&build_event_envelope(kind, data))
+    }
+}
+
+#[cfg(all(test, feature = "test-kinds"))]
+mod handoff_tests {
+    use super::*;
+    use kassiber_envelope::{dict, success};
+
+    struct Sink {
+        bytes: Arc<Mutex<Vec<u8>>>,
+        fail_write: bool,
+        fail_flush: bool,
+    }
+
+    impl Write for Sink {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if self.fail_write {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            self.bytes.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            if self.fail_flush {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn handoff_requires_a_complete_flushed_terminal_record() {
+        let record = success("finished", dict::<&str>([]));
+        for (fail_write, fail_flush) in [(true, false), (false, true), (false, false)] {
+            let bytes = Arc::new(Mutex::new(Vec::new()));
+            let output = Output::new(Box::new(Sink {
+                bytes: bytes.clone(),
+                fail_write,
+                fail_flush,
+            }));
+            let written = output.write_for_handoff(&record);
+            if fail_write || fail_flush {
+                assert!(written.is_err());
+            } else {
+                assert!(written.unwrap().is_some());
+                assert_eq!(
+                    *bytes.lock().unwrap(),
+                    daemon_line(&record).unwrap().as_bytes()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fallback_error_records_never_grant_a_handoff_receipt() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let output = Output::new(Box::new(Sink {
+            bytes: bytes.clone(),
+            fail_write: false,
+            fail_flush: false,
+        }));
+        let record = success("finished", Value::Int("9".repeat(4301).parse().unwrap()));
+        assert!(output.write_for_handoff(&record).unwrap().is_none());
+        let line = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        let error = kassiber_pytext::loads(&line).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&error, "kind"),
+            Some(&Value::from("error"))
+        );
     }
 }

@@ -7,10 +7,15 @@ use std::time::{Duration, Instant};
 use kassiber_envelope::{dict, get, success, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::{Book, Unlock};
-use kassiber_wallets::freshness::{execution::Options, native::Consent, planning::Request};
+use kassiber_wallets::freshness::{
+    execution::Options,
+    graph::{Grant, Pending},
+    native::Consent,
+    planning::Request,
+};
 use kassiber_wallets::scan::Cancellation;
 
-use crate::output::{with_request_id, RequestId};
+use crate::output::{with_request_id, RequestId, Written};
 use crate::{app_error_envelope, Daemon};
 
 struct Active {
@@ -23,6 +28,7 @@ struct Active {
 struct Finished {
     response: Value,
     closing: Option<Box<dyn Book>>,
+    graph_grants: Vec<Grant>,
 }
 
 #[derive(Default)]
@@ -31,6 +37,7 @@ pub(crate) struct Requests {
     active: Option<Active>,
     used: HashSet<String>,
     pending: HashMap<String, Instant>,
+    published: Pending,
 }
 
 fn busy() -> AppError {
@@ -50,6 +57,14 @@ fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 impl Requests {
+    pub(crate) fn graph_pending(&self) -> usize {
+        self.published.len()
+    }
+
+    fn publish(&mut self, request_id: &str, grants: Vec<Grant>, _written: Written) {
+        self.published.publish(request_id, grants);
+    }
+
     pub(crate) fn running(&self) -> bool {
         self.active.is_some()
     }
@@ -89,6 +104,12 @@ impl Requests {
                 ("queued", Value::Bool(false)),
             ]));
         }
+        if self.published.revoke_request(target) {
+            return Ok(dict([
+                ("cancelled", Value::Bool(true)),
+                ("queued", Value::Bool(false)),
+            ]));
+        }
         let queued = !revoke && !self.used.contains(target);
         if queued {
             if self.pending.len() >= 128 && !self.pending.contains_key(target) {
@@ -106,6 +127,9 @@ impl Requests {
 
 impl Daemon {
     pub(crate) fn reap_freshness(&mut self, stop: bool) -> Result<(), AppError> {
+        if stop {
+            self.freshness_requests.published.clear();
+        }
         if let Some(book) = self.freshness_requests.closing.as_mut() {
             book.close()?;
             self.freshness_requests.closing = None;
@@ -116,19 +140,27 @@ impl Daemon {
         let finished = active.worker.join().unwrap_or_else(|_| Finished {
             response: app_error_envelope(
                 &AppError::new("internal_error", "Freshness worker panicked"),
-                &RequestId::Value(kassiber_envelope::s(active.id)),
+                &RequestId::Value(kassiber_envelope::s(active.id.as_str())),
             ),
             closing: None,
+            graph_grants: vec![],
         });
         self.freshness_requests.closing = finished.closing;
-        self.output
-            .write(&finished.response)
+        let written = self
+            .output
+            .write_for_handoff(&finished.response)
             .map_err(|_| AppError::new("cancelled", "Freshness output closed"))?;
         if self.freshness_requests.closing.is_some() {
             return Err(
                 AppError::new("project_in_use", "Freshness connection could not close")
                     .retryable(true),
             );
+        }
+        if !stop {
+            if let Some(written) = written {
+                self.freshness_requests
+                    .publish(&active.id, finished.graph_grants, written);
+            }
         }
         Ok(())
     }
@@ -152,6 +184,7 @@ impl Daemon {
                     | "test.freshness.resume"
                     | "test.freshness.request.cancel"
                     | "test.freshness.request.revoke"
+                    | "test.freshness.graph.pending"
             )
         {
             return Err(busy());
@@ -254,8 +287,10 @@ impl Daemon {
                 .unwrap_or_else(|_| {
                     Err(AppError::new("internal_error", "Freshness worker panicked"))
                 });
+                let mut graph_grants = vec![];
                 let response = match outcome {
                     Ok(value) => {
+                        graph_grants = worker_consent.take_graph_grants();
                         with_request_id(success("test.freshness.execute", value), &progress_id)
                     }
                     Err(error) => {
@@ -265,6 +300,7 @@ impl Daemon {
                 };
                 Finished {
                     response,
+                    graph_grants,
                     closing: if book.close().is_err() {
                         Some(book)
                     } else {

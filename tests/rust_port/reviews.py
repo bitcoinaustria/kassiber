@@ -48,7 +48,7 @@ REVIEWS = {
         },
     },
     "tests/test_rust_freshness_lifecycle.py": {
-        "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded native request loop against blocked disposable backends to pin cancellation, source controls, quiescence and exact-request authority; retains subprocess and complete-book witnesses until product registration"},
+        "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded native request loop against blocked disposable backends to pin cancellation, source controls, quiescence, exact-request authority and private after-response graph-grant handoff/discard; retains subprocess and complete-book witnesses until product registration, without claiming graph-worker execution"},
         "test_reference_source_control_checkpoint_repro_and_native_parity": {"disposition": "oracle", "group": "daemon-runtime", "reason": "reproduces Python pause/resume checkpoint disclosure; compares complete source-control envelopes after explicitly removing that private result container, and every unchanged logical table"},
     },
     "tests/test_backend_configuration.py": {
