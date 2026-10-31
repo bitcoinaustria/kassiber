@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 from kassiber.cli.handlers import auto_price_transactions_from_rates_cache
 from tests.rust_port.journal_prebuild_oracle import capture, rate, seed, transaction, vectors
 from tests.rust_port.journal_persistence_oracle import dump
+from tests.rust_port.journal_source_overlap_oracle import vectors as source_vectors
 
 
 def deny_network():
@@ -62,7 +63,7 @@ def connection(path, cipher):
 
 
 def parity(binary, root):
-    cases = vectors()
+    cases = [*vectors(), *(dict(v, stage="sources") for v in source_vectors())]
     requests = []
     for cipher in (False, True):
         for i, case in enumerate(cases):
@@ -92,7 +93,11 @@ def parity(binary, root):
     rows = native(binary, requests)
     for row, request in zip(rows, requests, strict=True):
         assert row["verified"], request["name"]
-        assert row["count"] == request["count"], request["name"]
+        if request.get("stage") == "sources":
+            assert row["result"] == request["result"], request["name"]
+            assert row["projection_wire"] == request["wire_fields"], request["name"]
+        else:
+            assert row["count"] == request["count"], request["name"]
         assert row["error"] == request["error"], request["name"]
     for request in requests:
         Path(request["database"]).unlink()
@@ -152,7 +157,7 @@ def main():
         root = Path(directory)
         probe = subprocess.run([sys.executable, "-c", "import socket; socket.socket()"], preexec_fn=deny_network)
         assert probe.returncode == -31, probe.returncode
-        record = dict(boundary="auto-pricing only; repair stages remain unported", full_dump_comparisons=parity(args.binary, root),
+        record = dict(boundary="source repairs and cached pricing; legacy component refresh remains unported", full_dump_comparisons=parity(args.binary, root),
                       network="native process killed on socket/connect/send syscalls; guard self-test passed")
         if args.benchmark: record["timings"] = benchmark(args.binary, root)
     args.out.parent.mkdir(parents=True, exist_ok=True)

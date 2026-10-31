@@ -1,7 +1,10 @@
 #[allow(dead_code)]
 #[path = "../tests/support/mod.rs"]
 mod support;
-use kassiber_journals::prebuild::{auto_price_transactions_from_rates_cache, PricingScope};
+use kassiber_journals::prebuild::{
+    auto_price_transactions_from_rates_cache, repair_journal_source_overlaps,
+    source_overlap_result_fields, source_overlap_warning, PricingScope,
+};
 use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
@@ -35,14 +38,58 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let before = cpu();
     let start = std::time::Instant::now();
-    let result = auto_price_transactions_from_rates_cache(
-        &conn,
-        &PricingScope {
-            profile_id: v["profile_id"].as_str().unwrap_or("p"),
-            fiat_currency: v["fiat_currency"].as_str().unwrap_or("EUR"),
-            decimal_context: Context::new(32, Rounding::HalfEven),
-        },
-    );
+    let mut ids = v["ids"].as_array().into_iter().flatten();
+    let mut ticks = v["ticks"].as_array().into_iter().flatten();
+    let mut clock = || {
+        ticks
+            .next()
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                kassiber_journals::Refusal::from("source audit clock tape exhausted".to_string())
+            })
+    };
+    let mut identity = || {
+        ids.next()
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                kassiber_journals::Refusal::from("source audit ID tape exhausted".to_string())
+            })
+    };
+    let mut projection_wire = Value::Null;
+    let result = if v["stage"] == "sources" {
+        repair_journal_source_overlaps(
+            &conn,
+            v["profile_id"].as_str().unwrap_or("pf"),
+            &mut clock,
+            &mut identity,
+        )
+        .and_then(|repair| {
+            let warning = source_overlap_warning(
+                &conn,
+                v["profile_id"].as_str().unwrap_or("pf"),
+                repair.as_ref(),
+            )?;
+            let fields = source_overlap_result_fields(repair.as_ref(), warning.as_ref())?;
+            projection_wire = json!(kassiber_pyjson::dumps(
+                &fields,
+                &kassiber_pyjson::Options::new()
+            )
+            .map_err(|e| kassiber_journals::Refusal::from(e.to_string()))?);
+            Ok(json!({"repair":repair,"warning":warning}))
+        })
+    } else {
+        auto_price_transactions_from_rates_cache(
+            &conn,
+            &PricingScope {
+                profile_id: v["profile_id"].as_str().unwrap_or("p"),
+                fiat_currency: v["fiat_currency"].as_str().unwrap_or("EUR"),
+                decimal_context: Context::new(32, Rounding::HalfEven),
+            },
+        )
+        .map(|count| json!(count))
+    };
     let wall_seconds = start.elapsed().as_secs_f64();
     let cpu_seconds = cpu() - before;
     let (count, error) = match result {
@@ -63,7 +110,7 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
         .then(|| support::snapshot(&conn));
     conn.execute_batch("ROLLBACK")?;
     Ok(
-        json!({"name":v["name"],"count":count,"error":error,"verified":verified,"dump":dump,"cpu_seconds":cpu_seconds,"wall_seconds":wall_seconds}),
+        json!({"name":v["name"],"count":count,"result":count,"projection_wire":projection_wire,"error":error,"verified":verified,"dump":dump,"cpu_seconds":cpu_seconds,"wall_seconds":wall_seconds}),
     )
 }
 

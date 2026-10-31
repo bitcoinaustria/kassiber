@@ -1,0 +1,189 @@
+"""Frozen complete-dump oracle for the local journal source repair stage."""
+from __future__ import annotations
+
+import argparse
+from contextlib import ExitStack
+from dataclasses import replace
+import json
+import sqlite3
+import uuid
+from unittest.mock import patch
+
+from kassiber.cli import handlers
+from kassiber.cli.handlers import _journal_source_overlap_warning, _repair_journal_source_overlaps
+from tests.rust_port.journal_prebuild_oracle import ROOT, CLOCK, refusal, seed
+from tests.rust_port.journal_persistence_oracle import dump
+from tests.test_source_overlap import (
+    ADDR_A, ADDR_B, ADDR_C, _descriptor_config, _descriptor_target,
+    _script, _seed_book, _tx, _utxo, _wallet,
+)
+
+PATH = ROOT / "crates/journals/tests/data/prebuild-sources.json"
+
+
+def capture(conn, name):
+    conn.commit()
+    before = dump(conn)
+    profile = conn.execute("SELECT * FROM profiles WHERE id='pf'").fetchone()
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("SAVEPOINT source_oracle")
+    error = result = wire_fields = None
+    ids = iter(uuid.UUID(int=i) for i in range(1, 1000))
+    with ExitStack() as stack:
+        stack.enter_context(patch("uuid.uuid4", side_effect=lambda: next(ids)))
+        ticks = []
+        def clock():
+            tick = CLOCK if name != "changing-clock" else f"2026-10-31T12:00:{len(ticks):02}Z"
+            ticks.append(tick)
+            return tick
+        stack.enter_context(patch.object(handlers, "_metadata_hooks", return_value=replace(handlers._metadata_hooks(), now_iso=clock)))
+        for target in ("socket.getaddrinfo", "socket.socket.connect", "socket.socket.connect_ex", "socket.socket.sendto"):
+            stack.enter_context(patch(target, side_effect=AssertionError("source repair attempted network I/O")))
+        try:
+            repair = _repair_journal_source_overlaps(conn, profile)
+            warning = _journal_source_overlap_warning(conn, profile, repair)
+            result = dict(repair=repair, warning=warning)
+            fields = {}
+            if repair is not None:
+                fields["source_overlap_repair"] = repair
+            if warning is not None:
+                fields["source_overlap_warning"] = warning
+            wire_fields = json.dumps(fields, sort_keys=False)
+        except Exception as exc:
+            error = refusal(exc)
+            conn.execute("ROLLBACK TO source_oracle")
+    conn.execute("RELEASE source_oracle")
+    expected = dump(conn)
+    # Savepoint names consume Python UUIDs but are not persisted or projected.
+    identity = []
+    for event in conn.execute("SELECT id FROM transaction_edit_events ORDER BY rowid"):
+        identity.append(event[0])
+        identity.extend(r[0] for r in conn.execute("SELECT id FROM transaction_edit_fields WHERE event_id=? ORDER BY rowid", event))
+    conn.rollback()
+    return dict(name=name, before=before, expected=expected, result=result, error=error, ids=identity, ticks=ticks, wire_fields=wire_fields)
+
+
+def vectors():
+    names = (
+        "no-overlap", "trim-empty", "trim-partial", "duplicate", "multiple-duplicates",
+        "unresolved-amount", "unresolved-fee", "unresolved-direction", "unresolved-asset",
+        "unresolved-raw", "unresolved-no-external-id", "outbound", "nested-raw",
+        "review-conflict", "mixed-conflict", "address-only", "inventory-overlap",
+        "raw-inventory-script", "invalid-inventory-script", "different-network",
+        "deprecated-inactive", "deprecated-active", "descriptor-horizon", "checkpoint-horizon",
+        "inventory-horizon", "invalid-descriptor", "invalid-config", "invalid-address",
+        "invalid-address-container", "invalid-deprecated", "excluded-duplicate", "other-profile",
+        "trim-inventory-checkpoint", "address-map-order", "address-case", "empty-scope",
+        "script-hex", "script-pubkey-object", "script-pubkey-string", "raw-inventory-whitespace",
+        "invalid-outputs", "invalid-inputs", "changing-clock", "invalid-deprecated-none",
+        "legacy-real-amount", "legacy-real-fee", "invalid-economic-amount", "invalid-economic-fee", "economic-text-int",
+    )
+    output = []
+    for name in names:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        seed(conn)
+        _seed_book(conn)
+        config = _descriptor_config()
+        target = _descriptor_target(config, 5 if name.endswith("horizon") else 0)
+        addr = target.address
+        chain = dict(chain="bitcoin", network="mainnet")
+        if name == "no-overlap":
+            addr = ADDR_C
+        descriptor = config if name not in {"address-only", "inventory-overlap", "raw-inventory-script", "invalid-inventory-script", "invalid-descriptor"} else chain
+        if name == "invalid-descriptor":
+            descriptor = dict(chain, descriptor="bad")
+        _wallet(conn, "canonical", "Descriptor", "descriptor" if name != "address-only" else "address", descriptor)
+        address_config = dict(chain, addresses=[addr, ADDR_B] if name == "trim-partial" else [addr])
+        if name == "different-network": address_config["network"] = "test"
+        if name.startswith("deprecated-"): address_config["deprecated"] = True
+        if name == "invalid-address": address_config["addresses"] = ["not-an-address"]
+        if name == "invalid-address-container": address_config["addresses"] = 1
+        if name == "invalid-deprecated": address_config["deprecated"] = "junk"
+        if name == "invalid-deprecated-none": address_config["deprecated"] = "None"
+        if name == "empty-scope": address_config.pop("network")
+        if name == "address-case": address_config["addresses"] = [addr.upper(), addr]
+        _wallet(conn, "duplicate", "Address", "address", address_config)
+        if name == "address-map-order":
+            address_config["addresses"] = {addr: 1, ADDR_B: 2}
+            conn.execute("UPDATE wallets SET config_json=? WHERE id='duplicate'", (json.dumps(address_config),))
+        if name == "invalid-config": conn.execute("UPDATE wallets SET config_json='[' WHERE id='duplicate'")
+        if name == "address-only":
+            conn.execute("UPDATE wallets SET config_json=? WHERE id='canonical'", (json.dumps(dict(chain, addresses=[addr])),))
+        if name in {"inventory-overlap", "raw-inventory-script", "invalid-inventory-script", "inventory-horizon", "raw-inventory-whitespace"}:
+            _utxo(conn, "canonical", addr)
+            if name == "inventory-overlap":
+                conn.execute("UPDATE wallet_utxos SET address=NULL,script_pubkey=?", (_script(addr),))
+            if name == "raw-inventory-script":
+                conn.execute("UPDATE wallet_utxos SET address=NULL,script_pubkey='invalid',raw_json=?", (json.dumps(dict(script_pubkey=_script(addr))),))
+            if name == "invalid-inventory-script":
+                conn.execute("UPDATE wallet_utxos SET address='invalid',script_pubkey='xyz'")
+            if name == "inventory-horizon":
+                conn.execute("UPDATE wallet_utxos SET address_index=5")
+                _tx(conn, "unmatched", "duplicate", "cc" * 32, script_pubkey=_script(addr))
+            if name == "raw-inventory-whitespace":
+                conn.execute("UPDATE wallet_utxos SET script_pubkey=?", ("00 14 " + _script(addr)[4:],))
+        if name == "trim-inventory-checkpoint":
+            _utxo(conn, "duplicate", addr)
+            _utxo(conn, "duplicate", ADDR_B, txid="bb")
+            conn.execute("INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,checkpoint_json,updated_at) VALUES('pf','onchain_wallet:duplicate','onchain_wallet','Address','{}',?)", (CLOCK,))
+        if name in {"trim-empty", "trim-partial", "duplicate", "multiple-duplicates", "outbound", "nested-raw", "review-conflict", "mixed-conflict", "excluded-duplicate", "script-hex", "script-pubkey-object", "script-pubkey-string", "invalid-outputs", "invalid-inputs", "changing-clock", "legacy-real-amount", "legacy-real-fee", "invalid-economic-amount", "invalid-economic-fee", "economic-text-int"} or name.startswith("unresolved-") or name == "deprecated-active":
+            direction = "outbound" if name in {"outbound", "invalid-inputs"} else "inbound"
+            _tx(conn, "keep", "canonical", "AA" * 32, direction=direction, script_pubkey=_script(addr))
+            _tx(conn, "exclude", "duplicate", "AA" * 32, direction=direction, script_pubkey=_script(addr))
+            if name.startswith("trim-"):
+                conn.execute("DELETE FROM transactions WHERE id='exclude'")
+            if name == "unresolved-amount": conn.execute("UPDATE transactions SET amount=amount+1 WHERE id='exclude'")
+            if name == "unresolved-fee": conn.execute("UPDATE transactions SET fee=1 WHERE id='exclude'")
+            if name.startswith("legacy-real-"):
+                field = "amount" if name.endswith("amount") else "fee"
+                conn.execute(f"UPDATE transactions SET {field}=CASE id WHEN 'keep' THEN 1.25 ELSE 2.5 END")
+            if name.startswith("invalid-economic-"):
+                field = "amount" if name.endswith("amount") else "fee"
+                conn.execute(f"UPDATE transactions SET {field}='invalid' WHERE id='exclude'")
+            if name == "economic-text-int":
+                conn.execute("UPDATE transactions SET amount=1000 WHERE id='keep'")
+                conn.execute("UPDATE transactions SET amount='1_000' WHERE id='exclude'")
+            if name == "unresolved-direction":
+                conn.execute("UPDATE transactions SET direction='outbound' WHERE id='exclude'")
+                conn.execute("UPDATE transactions SET raw_json=?", (json.dumps(dict(vin=[dict(prevout=dict(scriptpubkey=_script(addr)))],vout=[dict(scriptpubkey=_script(addr))])),))
+            if name == "unresolved-asset": conn.execute("UPDATE transactions SET asset='LBTC' WHERE id='exclude'")
+            if name == "unresolved-raw": conn.execute("UPDATE transactions SET raw_json='{}' WHERE id='exclude'")
+            if name == "unresolved-no-external-id": conn.execute("UPDATE transactions SET external_id=NULL WHERE id='exclude'")
+            if name == "excluded-duplicate": conn.execute("UPDATE transactions SET excluded=1 WHERE id='exclude'")
+            if name == "nested-raw": conn.execute("UPDATE transactions SET raw_json=json_object('tx',json(raw_json))")
+            if name in {"invalid-outputs", "invalid-inputs"}:
+                conn.execute("UPDATE transactions SET raw_json=?", (json.dumps({"vout" if name.endswith("outputs") else "vin": True}),))
+            if name.startswith("script-"):
+                entry = {"script_hex": _script(addr)} if name == "script-hex" else {"scriptPubKey": {"hex": _script(addr)} if name.endswith("object") else _script(addr)}
+                conn.execute("UPDATE transactions SET raw_json=?", (json.dumps({"vout": [entry]}),))
+            if name in {"multiple-duplicates", "mixed-conflict", "changing-clock"}:
+                _tx(conn, "exclude-two", "duplicate", "bb" * 32, script_pubkey=_script(addr))
+                _tx(conn, "keep-two", "canonical", "bb" * 32, script_pubkey=_script(addr))
+            if name in {"review-conflict", "mixed-conflict"}:
+                conn.execute("INSERT INTO custody_components(id,workspace_id,profile_id,lineage_id,revision,component_type,state,authored_source,created_at) VALUES('review','ws','pf','review',1,'transfer','draft','user',?)", (CLOCK,))
+                conn.execute("INSERT INTO custody_component_legs(id,component_id,workspace_id,profile_id,role,ordinal,rail,asset,exposure,conservation_unit,amount_msat,transaction_id,created_at) VALUES('leg','review','ws','pf','source',0,'onchain','BTC','BTC','msat',1000000000,'exclude',?)", (CLOCK,))
+                conn.execute("UPDATE custody_components SET state='active' WHERE id='review'")
+        if name == "checkpoint-horizon":
+            conn.execute("INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,checkpoint_json,updated_at) VALUES('pf','onchain_wallet:canonical','onchain_wallet','Descriptor',?,?)", ('{"highest_used":{"0":5}}',CLOCK))
+        if name == "other-profile":
+            conn.execute("UPDATE wallets SET profile_id='other' WHERE id='duplicate'")
+        output.append(capture(conn, name))
+        conn.close()
+    return output
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--write", action="store_true")
+    args = parser.parse_args()
+    data = vectors()
+    base = data[0]["before"]
+    packed = dict(base=base, cases=[dict(case, **{side: {table: item["rows"] for table,item in case[side].items() if item != base[table]} for side in ("before","expected")}) for case in data])
+    text = json.dumps(packed, ensure_ascii=True, separators=(",", ":"), allow_nan=False) + "\n"
+    if args.write: PATH.write_text(text)
+    else: assert PATH.read_text() == text
+    print(f"{len(data)} complete source-repair dumps match Python")
+
+
+if __name__ == "__main__": main()

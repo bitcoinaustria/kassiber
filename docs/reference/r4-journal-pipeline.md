@@ -363,7 +363,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)](r4-native-loader-checkpoint.md#loader-9-acceptance); all 308 loader and 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; inherited non-BLOB audit has 16,384 matches, zero writes/unsafe admissions; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
-| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Auto-pricing checkpoint](#r4-10-auto-pricing-checkpoint); both repair stages and campaign acceptance remain open. | Python 0.03 | ≤ 0.03 s |
+| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Auto-pricing checkpoint](#r4-10-auto-pricing-checkpoint); legacy repair, combined interface and campaign acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
@@ -382,8 +382,8 @@ remaining whole-pipeline budget.
 
 ### R4-10 auto-pricing checkpoint
 
-This is a partial, unregistered library checkpoint. It ports only
-`cli.handlers.auto_price_transactions_from_rates_cache`. **R4-10 is not
+This is a partial, unregistered library checkpoint. It ports cached pricing
+and the [source-overlap stage](#r4-10-source-overlap-checkpoint). **R4-10 is not
 complete, and this function is not a replacement for the pre-build pipeline.**
 Python's ordered pre-build contract is:
 
@@ -437,11 +437,12 @@ filter that kills socket creation, connect and send calls, including loopback;
 a socket-construction self-test verifies the filter. The Python oracle also
 forbids DNS and socket connection calls.
 
-The final replay passes **106 comparisons** (53 pricing fixtures on each
-driver), including a cache miss with market-rate refresh enabled. The bounded
-pricing catalog in `crates/journals/scripts/prebuild_mutations.json` has
+The original pricing replay passed **106 comparisons** (53 pricing fixtures
+on each driver), including a cache miss with market-rate refresh enabled. Its
+pricing subset in `crates/journals/scripts/prebuild_mutations.json` had
 **15 entries**, all killed by their declared named tests after the seven-test
-baseline passed. These results do not cover the unported repairs.
+baseline passed. These original results cover pricing only; source repairs
+have separate evidence below.
 
 Checkpoint checks pass: 18 journal library tests and six pricing integration
 tests, the reproducible Python oracle, Rust formatting and clippy with warnings
@@ -479,8 +480,8 @@ example (`--features test-harness`) and
 `uv run --locked python scripts/check-journal-prebuild.py --binary
 <absolute-example-path> --benchmark --out <target/results.json>`.
 
-Remaining R4-10 acceptance work: port both repair stages and their warning and
-result projections; expose the combined ordered pre-build stage for R4-13;
+Remaining R4-10 acceptance work: port drifted legacy-pair component refresh
+and its profile reload; expose the combined ordered pre-build stage for R4-13;
 prove whole-pipeline rollback after subsequent build/persistence refusals;
 compare the twelve generators with per-scenario activity, recorded books and
 fresh recordings on both drivers; expand the legacy/refusal corpus beyond
@@ -488,6 +489,85 @@ these bounded decimal and timestamp fixtures; complete the inherited census,
 shadow, frozen-vector and whole-catalog mutation gates. The pricing-only
 fixtures and bounded mutation catalog do not establish those broader gates or
 the complete pre-build CPU target. No production route calls this checkpoint.
+
+### R4-10 source-overlap checkpoint
+
+The unregistered native source stage exports
+`prebuild::repair_journal_source_overlaps(&Connection, profile_id, clock, identity)`
+and `prebuild::source_overlap_warning(&Connection, profile_id, repair.as_ref())`.
+Call them in that order, before legacy refresh and cached pricing. The repair
+returns `Result<Option<serde_json::Value>, Refusal>`; the warning has the same
+return type. Their optional values are exactly the Python
+`source_overlap_repair` and `source_overlap_warning` result projections. The
+`prebuild::source_overlap_result_fields(repair.as_ref(), warning.as_ref())`
+helper returns a lossless `kassiber_pyjson::Value` dictionary to append after
+the ordinary journal result fields. It preserves Python's nested dictionary
+insertion order for byte-identical machine responses; serializing the
+`serde_json::Value` results directly does not preserve that order. The
+caller supplies fallible clock and identity callbacks. For each changed
+duplicate, the repair samples the clock once, then requests one event ID
+followed by one field ID. Temporary savepoint identities are not part of the
+callback contract.
+
+The repair requires an existing writer reservation, owns an inner savepoint,
+and never commits. Refusals and unwinding restore every repair write while
+retaining pending caller writes. A successful return still belongs to the
+caller's whole-pipeline savepoint. The warning performs local reads only.
+Neither operation opens a connection, reads a filesystem, or contacts a
+configured backend. Descriptor derivation reuses the existing local wallet
+implementation and its finite 20,000-target cap per branch.
+
+The source index preserves address-list/inventory/descriptor evidence,
+network separation, deprecated wallets with active rows, and Python's
+canonical recommendation and ordering. Duplicate matching requires raw script
+evidence and the complete external-ID/direction/asset/amount/fee fingerprint.
+Exclusions append metadata history and invalidate the profile exactly as
+Python does; active custody reviews produce skipped records. Outstanding
+duplicates, conflicts, and unmatched active address-list rows prevent trimming.
+Trimming preserves unrelated inventory and resets only that wallet's on-chain
+freshness checkpoint.
+
+`tests.rust_port.journal_source_overlap_oracle` freezes complete before/after
+dumps and result/refusal projections for 49 synthetic scenarios, including
+serialized result-field bytes. Its ID tape includes only durable audit
+identities; the clock tape includes one timestamp per audited exclusion and
+has a changing-clock scenario. Native tests also inject a late SQL refusal,
+a clock refusal, and an identity refusal/panic after earlier exclusions.
+Legacy numeric and integer-text fingerprints retain Python's conversion and
+refusal behavior; nonempty invalid amount/fee text refuses instead of becoming zero. An
+absent deprecation flag remains distinct from invalid deprecation text.
+Native tests also reject positive/negative SQLite infinity in amounts and
+fees before serialization can erase it into a JSON null, preserving every
+stored scalar and avoiding any audited exclusion on that refusal.
+Production routing and the Python reference remain unchanged.
+
+The final source/pricing replay passes **204 comparisons**: 49 source and
+53 pricing scenarios on each real SQLite/SQLCipher driver, under the native
+socket syscall guard. The bounded catalog has **46 named mutations** killed
+across a full 45-entry campaign and the subsequent focused infinity-guard
+campaign. The full campaign preceded the final scalar guard and narrower
+audit SELECTs; after those changes the final 33-test native baseline, all 46
+recipe applicability checks and the 204 driver comparisons pass. Formatting,
+clippy with warnings denied, classifier update (no inventory delta), and all
+57 Python preflight checks also pass. [Source checkpoint evidence and named
+mutation mapping](r4-prebuild-source-results.json) retain these boundaries;
+they do not establish the inherited whole-stage campaign or CPU target.
+
+The Python reference also truncates fractional legacy msat when constructing
+source fingerprints: distinct SQLite REAL amounts 1.25 and 1.75 both become
+1 and can cause an audited exclusion. Run
+`uv run --locked python -m tests.rust_port.repro_journal_fractional_source_overlap`
+for a disposable in-memory repro. This port retains the reference conversion;
+rejecting those invalid legacy quantities needs a separate Python correction
+and refreshed parity vectors.
+
+The next legacy-refresh port must retain the distinction between migration
+domain refusals (record a skipped migration issue) and SQLite failures
+(propagate and roll back). The existing private component-authoring helpers in
+`crates/transfers` map SQLite errors to `AppError`; catching all such errors as
+migration skips would hide technical failures. No combined pre-build entry
+point is available at this checkpoint, so R4-13 still needs the complete
+Python pre-build pipeline until that port and its rollback gate are finished.
 
 ## Performance budget
 

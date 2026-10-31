@@ -142,11 +142,308 @@
   {
     "id": "JP-rollback",
     "file": "crates/journals/src/prebuild.rs",
-    "find": "ROLLBACK TO r4_journal_pricing; RELEASE r4_journal_pricing",
-    "replace": "RELEASE r4_journal_pricing",
+    "find": "ROLLBACK TO {name}; RELEASE {name}",
+    "replace": "RELEASE {name}",
     "expect_failing": [
-      "prebuild_pricing_refusal_rolls_back_earlier_writes"
+      "prebuild_pricing_refusal_rolls_back_earlier_writes",
+      "prebuild_sources_late_sql_refusal_restores_all_tables"
     ],
     "rule": "Roll back earlier pricing writes after a later refusal."
+  },
+  {
+    "id": "JS-source-profile",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "WHERE profile_id=? AND excluded=0 GROUP BY wallet_id",
+    "replace": "WHERE profile_id!=? AND excluded=0 GROUP BY wallet_id",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep activity counts scoped to the profile."
+  },
+  {
+    "id": "JS-source-excluded",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "AND excluded=0 GROUP BY wallet_id",
+    "replace": "AND excluded IN (0,1) GROUP BY wallet_id",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Excluded duplicates do not block address trimming."
+  },
+  {
+    "id": "JS-source-deprecated",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "sources.retain(|s| !s.deprecated || s.count > 0);",
+    "replace": "sources.retain(|s| !s.deprecated);",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Deprecated sources remain visible while active transactions exist."
+  },
+  {
+    "id": "JS-source-kind",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "!canonical(&text(&w[\"kind\"]))",
+    "replace": "canonical(&text(&w[\"kind\"]))",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Prefer descriptor authority over an address list."
+  },
+  {
+    "id": "JS-source-inventory",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "script(&row[\"script_pubkey\"])",
+    "replace": "script(&Value::Null)",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Use stored inventory script evidence."
+  },
+  {
+    "id": "JS-source-raw-inventory",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "script(&mapping(&row[\"raw_json\"])[\"script_pubkey\"])",
+    "replace": "script(&Value::Null)",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Use retained inventory raw script fallback."
+  },
+  {
+    "id": "JS-source-checkpoint",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "for (b, n) in highest {",
+    "replace": "for (b, n) in highest.iter().take(0) {",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Extend descriptor horizons from stored checkpoints."
+  },
+  {
+    "id": "JS-source-inventory-horizon",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "b), n.max(-1));",
+    "replace": "b), -1);",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Extend descriptor horizons from the inventory."
+  },
+  {
+    "id": "JS-source-descriptor-horizon",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": ".clamp(0, 20_000) as u32;",
+    "replace": ".clamp(0, 2) as u32;",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep the candidate horizon used by finite source evidence."
+  },
+  {
+    "id": "JS-economic-amount",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "fingerprint_integer(&row[\"amount\"])?",
+    "replace": "json!(0)",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep differing net amounts out of duplicate groups."
+  },
+  {
+    "id": "JS-economic-fee",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "fingerprint_integer(&row[\"fee\"])?",
+    "replace": "json!(0)",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep differing fees out of duplicate groups."
+  },
+  {
+    "id": "JS-economic-direction",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "row[\"direction\"],\n            row[\"asset\"],",
+    "replace": "\"inbound\",\n            row[\"asset\"],",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep direction in the economic fingerprint."
+  },
+  {
+    "id": "JS-economic-asset",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "row[\"asset\"],\n            fingerprint_integer(&row[\"amount\"])",
+    "replace": "\"BTC\",\n            fingerprint_integer(&row[\"amount\"])",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep asset in the economic fingerprint."
+  },
+  {
+    "id": "JS-script-evidence",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "!s.is_disjoint(&evidence)",
+    "replace": "true",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Require concrete overlapping script evidence for exclusions."
+  },
+  {
+    "id": "JS-review-conflict",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "if let Some(c) = conflict(conn, profile, &tx)? {",
+    "replace": "if let Some(c) = None::<Value> {",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Never exclude an active reviewed custody anchor."
+  },
+  {
+    "id": "JS-unresolved-trim",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "&& unresolved.is_empty();",
+    "replace": ";",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Unresolved address-list transactions prevent trimming."
+  },
+  {
+    "id": "JS-audit-history",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "VALUES(?,?,'excluded','false','true','{}')",
+    "replace": "VALUES(?,?,'excluded','true','false','{}')",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Preserve the direction of the audited exclusion."
+  },
+  {
+    "id": "JS-audit-version",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version+2",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Invalidate the journal input version exactly once per audited edit."
+  },
+  {
+    "id": "JS-trim-inventory",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "DELETE FROM wallet_utxos WHERE profile_id=?",
+    "replace": "DELETE FROM wallet_utxos WHERE profile_id!=?",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Clear only the matching output inventory."
+  },
+  {
+    "id": "JS-trim-checkpoint",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "DELETE FROM freshness_source_states WHERE profile_id=?",
+    "replace": "DELETE FROM freshness_source_states WHERE profile_id!=?",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Reset the trimmed wallet refresh checkpoint."
+  },
+  {
+    "id": "JS-trim-deprecate",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "c[\"deprecated\"] = json!(true);",
+    "replace": "c[\"deprecated\"] = json!(false);",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Deprecate a list whose final address was removed."
+  },
+  {
+    "id": "JS-raw-refusal",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "if truth(v) && (v.is_boolean() || v.is_number()) {",
+    "replace": "if false && (v.is_boolean() || v.is_number()) {",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Refuse non-iterable graph entries rather than skip malformed evidence."
+  },
+  {
+    "id": "JS-source-network",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "source.network.clone(),",
+    "replace": "String::new(),",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep network domains separate in finite overlap evidence."
+  },
+  {
+    "id": "JS-result-count",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "r[\"updated\"]==true",
+    "replace": "r[\"updated\"]==false",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Count successfully updated duplicates in the repair result."
+  },
+  {
+    "id": "JS-audit-clock",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let at = clock()?;",
+    "replace": "let at = String::new();",
+    "expect_failing": ["prebuild_sources_audited_duplicates_and_trimming"],
+    "rule": "Sample the caller clock for each audited exclusion."
+  },
+  {
+    "id": "JS-audit-clock-order",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let at = clock()?;\n        let id = identity()?;\n        let field = identity()?;",
+    "replace": "let id = identity()?;\n        let field = identity()?;\n        let at = clock()?;",
+    "expect_failing": ["prebuild_sources_clock_refusal_restores_earlier_audits"],
+    "rule": "Refuse a failed clock before allocating that event's durable identities."
+  },
+  {
+    "id": "JS-result-order",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "\"addresses_removed\",\n                \"wallets_updated\",\n                \"duplicates_excluded\",",
+    "replace": "\"wallets_updated\",\n                \"addresses_removed\",\n                \"duplicates_excluded\",",
+    "expect_failing": ["prebuild_sources_audited_duplicates_and_trimming"],
+    "rule": "Preserve Python's nested dictionary order in serialized process result fields."
+  },
+  {
+    "id": "JS-deprecated-null",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "\"0\" | \"false\" | \"no\" | \"off\" => Ok(false),",
+    "replace": "\"none\" | \"0\" | \"false\" | \"no\" | \"off\" => Ok(false),",
+    "expect_failing": ["prebuild_sources_full_python_dumps_and_refusals"],
+    "rule": "Distinguish absent deprecation from the invalid text None."
+  },
+  {
+    "id": "JS-economic-legacy-number",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "kassiber_custody::codec::integer(v).map_err(Refusal::from)",
+    "replace": "Ok(json!(0))",
+    "expect_failing": ["prebuild_sources_legacy_economic_inputs_and_refusals"],
+    "rule": "Keep Python's integer conversion for legacy REAL economic fingerprints."
+  },
+  {
+    "id": "JS-economic-legacy-text",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "kassiber_pytext::parse_int(text).map_err(|error| {",
+    "replace": "kassiber_pytext::parse_int(\"0\").map_err(|error| {",
+    "expect_failing": ["prebuild_sources_legacy_economic_inputs_and_refusals"],
+    "rule": "Parse exact legacy integer text and refuse malformed economic values."
+  },
+  {
+    "id": "JS-economic-nonfinite",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "if !n.is_finite() {",
+    "replace": "if false {",
+    "expect_failing": ["prebuild_sources_nonfinite_economics_refuses_without_writes"],
+    "rule": "Refuse non-finite SQLite source scalars before JSON can turn them into nulls."
   }
 ]

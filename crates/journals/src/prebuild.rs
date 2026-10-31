@@ -4,7 +4,13 @@ use kassiber_store::rusqlite::{
     self, functions::FunctionFlags, params, types::Value as Sql, Connection,
 };
 
+mod overlap;
 mod pricing;
+mod sources;
+
+pub use overlap::{
+    repair_journal_source_overlaps, source_overlap_result_fields, source_overlap_warning,
+};
 
 pub struct PricingScope<'a> {
     pub profile_id: &'a str,
@@ -16,26 +22,45 @@ pub fn auto_price_transactions_from_rates_cache(
     conn: &Connection,
     scope: &PricingScope<'_>,
 ) -> Result<usize, Refusal> {
+    require_writer(conn)?;
+    atomic(conn, "r4_journal_pricing", || pricing::run(conn, scope))
+}
+
+fn require_writer(conn: &Connection) -> Result<(), Refusal> {
     if conn.transaction_state(Some("main"))? != rusqlite::TransactionState::Write {
         return Err(Refusal::new(
             "RuntimeError",
             "journal pre-build requires the caller's write transaction",
         ));
     }
-    conn.execute_batch("SAVEPOINT r4_journal_pricing")?;
-    let mut savepoint = Savepoint(Some(conn));
-    let count = pricing::run(conn, scope)?;
-    conn.execute_batch("RELEASE r4_journal_pricing")?;
-    savepoint.0 = None;
-    Ok(count)
+    Ok(())
 }
 
-struct Savepoint<'a>(Option<&'a Connection>);
+fn atomic<T>(
+    conn: &Connection,
+    name: &'static str,
+    f: impl FnOnce() -> Result<T, Refusal>,
+) -> Result<T, Refusal> {
+    conn.execute_batch(&format!("SAVEPOINT {name}"))?;
+    let mut savepoint = Savepoint {
+        conn: Some(conn),
+        name,
+    };
+    let result = f()?;
+    conn.execute_batch(&format!("RELEASE {name}"))?;
+    savepoint.conn = None;
+    Ok(result)
+}
+
+struct Savepoint<'a> {
+    conn: Option<&'a Connection>,
+    name: &'static str,
+}
 impl Drop for Savepoint<'_> {
     fn drop(&mut self) {
-        if let Some(conn) = self.0 {
-            let _ =
-                conn.execute_batch("ROLLBACK TO r4_journal_pricing; RELEASE r4_journal_pricing");
+        if let Some(conn) = self.conn {
+            let name = self.name;
+            let _ = conn.execute_batch(&format!("ROLLBACK TO {name}; RELEASE {name}"));
         }
     }
 }

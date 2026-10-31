@@ -1,0 +1,237 @@
+{
+  "boundary": "Partial unregistered source-overlap repair/warning API, with cached-pricing regression coverage; legacy refresh and the combined pre-build interface remain unimplemented",
+  "corpus": {
+    "oracle": "tests/rust_port/journal_source_overlap_oracle.py",
+    "frozen_vectors": "crates/journals/tests/data/prebuild-sources.json",
+    "source_scenarios": 49,
+    "pricing_scenarios": 53,
+    "dump_contract": "All tables, rowids, SQLite scalar classes, exact text, REAL bits, audit identities and clock samples",
+    "source_projection_contract": "Result/refusal values and Python dictionary insertion order in serialized result-field bytes",
+    "reproducibility": "All 49 checked-in source vectors reproduce exactly from Python"
+  },
+  "final_replay": {
+    "boundary": "source repairs and cached pricing; legacy component refresh remains unported",
+    "full_dump_comparisons": 204,
+    "network": "native process killed on socket/connect/send syscalls; guard self-test passed"
+  },
+  "native_tests": {
+    "library": 18,
+    "pricing_integration": 6,
+    "source_integration": 9,
+    "passed": 33,
+    "rollback": [
+      "caller-owned pending writes",
+      "fallible clock after an earlier exclusion",
+      "identity refusal and unwinding after an earlier exclusion",
+      "late SQLite failure during checkpoint cleanup"
+    ],
+    "nonfinite_economic_refusals": [
+      {
+        "field": "amount",
+        "sign": "positive",
+        "family": "OverflowError",
+        "message": "cannot convert float infinity to integer"
+      },
+      {
+        "field": "amount",
+        "sign": "negative",
+        "family": "OverflowError",
+        "message": "cannot convert float infinity to integer"
+      },
+      {
+        "field": "fee",
+        "sign": "positive",
+        "family": "OverflowError",
+        "message": "cannot convert float infinity to integer"
+      },
+      {
+        "field": "fee",
+        "sign": "negative",
+        "family": "OverflowError",
+        "message": "cannot convert float infinity to integer"
+      }
+    ],
+    "nonfinite_named_test": "prebuild_sources_nonfinite_economics_refuses_without_writes",
+    "nonfinite_note": "The extra infinity probes are separate from the 49 JSON dump vectors; the native test verifies the stored REAL bits directly"
+  },
+  "mutation_campaign": {
+    "catalog": "crates/journals/scripts/prebuild_mutations.json",
+    "runner": "crates/journals/scripts/mutation_check.py",
+    "entries": 46,
+    "killed_count": 46,
+    "runs": [
+      {
+        "entries": 45,
+        "baseline_tests_passed": 12,
+        "killed": 45,
+        "scope": "Full bounded catalog before the final nonfinite scalar guard and narrower audit SELECTs"
+      },
+      {
+        "entries": 1,
+        "baseline_tests_passed": 1,
+        "killed": 1,
+        "scope": "Focused JS-economic-nonfinite campaign after adding that guard"
+      }
+    ],
+    "final_tree_verification": "All 46 recipes apply; the final 33-test native baseline and 204 driver comparisons pass after the guard and narrower SELECTs",
+    "killed": {
+      "JP-writer": [
+        "prebuild_pricing_requires_caller_write_transaction"
+      ],
+      "JP-profile": [
+        "prebuild_pricing_scopes_and_skips"
+      ],
+      "JP-excluded": [
+        "prebuild_pricing_scopes_and_skips"
+      ],
+      "JP-exact-missing": [
+        "prebuild_pricing_full_python_dumps_and_refusals"
+      ],
+      "JP-provenance": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-confirmation": [
+        "prebuild_pricing_timestamp_selection"
+      ],
+      "JP-time-bound": [
+        "prebuild_pricing_timestamp_selection"
+      ],
+      "JP-manual-tie": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-rate-precedence": [
+        "prebuild_pricing_precedence_and_precision"
+      ],
+      "JP-exact-value": [
+        "prebuild_pricing_precedence_and_precision"
+      ],
+      "JP-msat": [
+        "prebuild_pricing_precedence_and_precision"
+      ],
+      "JP-provider-quality": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-count": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-external-ref": [
+        "prebuild_pricing_provenance_and_count"
+      ],
+      "JP-rollback": [
+        "prebuild_pricing_refusal_rolls_back_earlier_writes",
+        "prebuild_sources_late_sql_refusal_restores_all_tables"
+      ],
+      "JS-source-profile": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-excluded": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-deprecated": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-kind": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-inventory": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-raw-inventory": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-checkpoint": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-inventory-horizon": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-descriptor-horizon": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-economic-amount": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-economic-fee": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-economic-direction": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-economic-asset": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-script-evidence": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-review-conflict": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-unresolved-trim": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-audit-history": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-audit-version": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-trim-inventory": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-trim-checkpoint": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-trim-deprecate": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-raw-refusal": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-source-network": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-result-count": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-audit-clock": [
+        "prebuild_sources_audited_duplicates_and_trimming"
+      ],
+      "JS-audit-clock-order": [
+        "prebuild_sources_clock_refusal_restores_earlier_audits"
+      ],
+      "JS-result-order": [
+        "prebuild_sources_audited_duplicates_and_trimming"
+      ],
+      "JS-deprecated-null": [
+        "prebuild_sources_full_python_dumps_and_refusals"
+      ],
+      "JS-economic-legacy-number": [
+        "prebuild_sources_legacy_economic_inputs_and_refusals"
+      ],
+      "JS-economic-legacy-text": [
+        "prebuild_sources_legacy_economic_inputs_and_refusals"
+      ],
+      "JS-economic-nonfinite": [
+        "prebuild_sources_nonfinite_economics_refuses_without_writes"
+      ]
+    },
+    "acceptance_note": "Bounded source/pricing mutations only; the inherited campaign and every-branch acceptance remain open"
+  },
+  "checks": {
+    "cargo_fmt_all_check": "passed",
+    "cargo_clippy_journals_all_targets_test_harness_deny_warnings": "passed",
+    "classify_tests_update": "passed; no inventory delta",
+    "python_preflight_ci": "57 passed",
+    "fractional_msat_python_repro": "tests/rust_port/repro_journal_fractional_source_overlap.py reproduced the int() fingerprint collision; Python remains unchanged"
+  },
+  "cpu": "No new CPU measurements; the complete pre-build 20k target and cache-miss/fill profiling remain open",
+  "production_routing_changed": false,
+  "new_dependencies": false,
+  "remaining": [
+    "Port drifted legacy-pair refresh, atomic group migration/refusals and profile reload on activated or skipped outcomes",
+    "Expose the combined ordered pre-build interface for R4-13 and prove full rollback after later build or persistence failures",
+    "Compare all twelve generators with per-scenario activity and recorded/fresh books on both drivers",
+    "Complete broader legacy/refusal coverage, focused census/shadow, campaign frozen vectors and every-branch mutations",
+    "Profile and optimize whole-stage process CPU at 20k against 0.03 s, preserving dumps; report the measured floor and cost breakdown if the target remains out of reach"
+  ]
+}
