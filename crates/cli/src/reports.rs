@@ -26,6 +26,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
     "reports.cross-check",
+    "reports.export-year-handoff",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -47,6 +48,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-commercial-subledger-csv"
             | "transactions.export"
+            | "reports.export-year-handoff"
     ) {
         return book.reports(command, &export_request(args));
     }
@@ -410,4 +412,44 @@ mod tests {
             assert_eq!(get(&request, "year"), Some(&Value::Int(2024.into())));
         }
     }
+    #[test]
+    fn year_handoff_cli_forwards_year_file_and_book_scope() {
+        let args = crate::argparse::parse_args(
+            &[
+                "reports",
+                "export-year-handoff",
+                "--year",
+                "2024",
+                "--file",
+                "book.xlsx",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ]
+            .map(str::to_owned),
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        let request = export_request(&args);
+        assert_eq!(get(&request, "year"), Some(&Value::Int(2024.into())));
+        assert_eq!(
+            get(&request, "file"),
+            Some(&kassiber_envelope::s("book.xlsx"))
+        );
+        assert_eq!(
+            get(&request, "workspace"),
+            Some(&kassiber_envelope::s("Main"))
+        );
+        assert_eq!(
+            get(&request, "profile"),
+            Some(&kassiber_envelope::s("Book"))
+        );
+        assert!(COMMANDS.contains(&"reports.export-year-handoff"));
+        assert!(crate::describe::IMPLEMENTED.contains(&"reports.export-year-handoff"));
+    }
+
 }

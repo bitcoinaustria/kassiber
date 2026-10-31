@@ -21902,6 +21902,11 @@
         "tests": 1
       }
     },
+    "tests/test_rust_year_handoff.py": {
+      "test_year_handoff_service_content_errors_and_all_112_tables": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "reports", "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing", "reviewed": true, "tests": 1},
+      "test_year_handoff_cli_content_filing_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing", "reviewed": true, "tests": 1},
+      "test_year_handoff_daemon_content_filing_collisions_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native year-handoff workbook content, normalized wire bytes and all 112 database tables, actual saved hashes and repeated filing against Python; requires Rust-only CLI and daemon routing", "reviewed": true, "tests": 1}
+    },
     "tests/test_samourai_import.py": {
       "SamouraiImportTest": {
         "disposition": "rust-test",

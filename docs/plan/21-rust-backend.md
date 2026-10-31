@@ -3356,3 +3356,25 @@ versions; the existing license entry records the added use. Python production
 code, schema, egress, sync routes and AI projections are unchanged. Remaining
 core/CLI importers are Wasabi, Samourai and document ingestion in the separate
 worker's scope.
+
+### R5 year-handoff XLSX continuation (reports worker B)
+
+The owner split remaining reports after `be4aac52d` into independent workers.
+`t3code/r5-reports-b` ports year-handoff XLSX through the native service, CLI
+and desktop daemon. Exact observed movements and journal holdings remain
+separate; source freshness, current journals and prior-year quarantines block
+export. The eight-sheet projection preserves pooled basis, asset identity,
+classification, timing notes and live formula caches without running tax or
+custody computation. Saved completion hashes the actual native bytes;
+explicit filing retains its frozen capture and existing amendment history.
+
+The [year-handoff checkpoint](../reference/rust-shell.md#year-handoff-xlsx-checkpoint-r5-reports-worker-b-partial)
+records openpyxl content, exact wire metadata, all 112 database tables,
+zero in-scope fallbacks, mutation evidence and reproducible reference quirks.
+The native inventory is 153 CLI leaves (21 reports) and 14 report daemon
+kinds plus two transaction exports. Cross-check, Lightning and non-PDF
+source-funds belong to the other reports worker. Worker B's remaining work is
+CoinTracking/Blockpit CSV and privacy hygiene/mirror/PSBT reads; the artifact
+inventory finds no other unported non-PDF artifact in this worker's scope.
+PDF-containing exports and AI projections remain Python; dependencies, tax
+rules, schema and Python product code are unchanged.

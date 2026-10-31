@@ -20,6 +20,7 @@ pub const KINDS: &[&str] = &[
     "ui.transactions.export_xlsx",
     "ui.reports.cross_check",
     "ui.reports.export_cross_check",
+    "ui.reports.export_year_handoff",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
     if matches!(
@@ -45,6 +46,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
             | "ui.reports.export_austrian_e1kv_xlsx"
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
+            | "ui.reports.export_year_handoff"
     ) {
         let empty = dict::<&str>([]);
         let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);

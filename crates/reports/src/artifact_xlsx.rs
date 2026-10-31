@@ -290,6 +290,7 @@ pub fn prepare(
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
+            | "reports.export-year-handoff"
     ) {
         return Err(AppError::new(
             "not_implemented",
@@ -304,6 +305,9 @@ pub fn prepare(
         }
         if command == "reports.export-exit-tax-xlsx" {
             return exit_xlsx::prepare(conn, args, sources);
+        }
+        if command == "reports.export-year-handoff" {
+            return year_handoff_xlsx::prepare(conn, args, sources);
         }
         if command == "reports.export-xlsx" {
             return full_xlsx::prepare(conn, args, sources);

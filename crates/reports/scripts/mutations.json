@@ -7319,5 +7319,395 @@
       "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
     ],
     "rule": "Bare carriage-return row separators retain the Python StringIO reader refusal."
+  },
+  {
+    "id": "handoff-b-calendar",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "let at = text(profile, \"tax_country\").to_lowercase() == \"at\";",
+    "replace": "let at = false;",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Keep the book calendar rather than forcing UTC."
+  },
+  {
+    "id": "handoff-b-msat-scale",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "units.magnitude().clone(), -11",
+    "replace": "units.magnitude().clone(), -8",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Use exact integer-msat scale for every asset."
+  },
+  {
+    "id": "handoff-b-exact-tail",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "fraction.trim_end_matches('0')",
+    "replace": "fraction",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Keep the reference exact-column decimal text."
+  },
+  {
+    "id": "handoff-b-asset-alias",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "[\"LBTC\", \"L-BTC\"].contains(&upper.as_str())",
+    "replace": "[\"L-BTC\"].contains(&upper.as_str())",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Group both Liquid bitcoin spellings by the same identity."
+  },
+  {
+    "id": "handoff-b-issued-identity",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "format!(\"liquid:{code}\")",
+    "replace": "format!(\"issued:{code}\")",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Retain canonical Liquid asset identity."
+  },
+  {
+    "id": "handoff-b-quantity-skip",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "holding.stored += &quantity;",
+    "replace": "holding.stored += 0;",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Retain journal quantities in opening and closing balances."
+  },
+  {
+    "id": "handoff-b-income-basis",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "if kind != \"income\" {",
+    "replace": "if true {",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Income does not duplicate the acquisition basis."
+  },
+  {
+    "id": "handoff-b-basis-debit",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": ".sub(\n                    amounts[\"cost_basis\"].as_ref().unwrap_or(&Decimal::zero()),",
+    "replace": ".add(\n                    amounts[\"cost_basis\"].as_ref().unwrap_or(&Decimal::zero()),",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "A debit removes the consumed basis."
+  },
+  {
+    "id": "handoff-b-pooled-basis",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "holding.stored > 0.into() && quantities[asset] > 0.into()",
+    "replace": "false",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Allocate pooled residual basis to positive wallet holdings."
+  },
+  {
+    "id": "handoff-b-quarantine-prior",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "period.position(&text(&row, \"occurred_at\"))? <= 0",
+    "replace": "period.position(&text(&row, \"occurred_at\"))? == 0",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Quarantines before the year also block opening balances."
+  },
+  {
+    "id": "handoff-b-quarantine-bypass",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "if blocking.is_empty() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Never export through an in-scope quarantine."
+  },
+  {
+    "id": "handoff-b-freshness",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "    export_request::freshness(conn, &profile)?;",
+    "replace": "    let _ = (&conn, &profile);",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Keep source-freshness admission before constructing the workbook."
+  },
+  {
+    "id": "handoff-b-journal-freshness",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "    require_context(conn, &profile, false)?;",
+    "replace": "    let _ = (&conn, &profile);",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Keep the stored journal-readiness barrier."
+  },
+  {
+    "id": "handoff-b-rate-final-second",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "kassiber_rates::time::parse(&period.end).unwrap() - 1_000_000",
+    "replace": "kassiber_rates::time::parse(&period.end).unwrap()",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Preserve the reference final-second quote cutoff."
+  },
+  {
+    "id": "handoff-b-rate-bound",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "ts <= cutoff",
+    "replace": "ts >= cutoff",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Read cached quotes on or before the reference cutoff."
+  },
+  {
+    "id": "handoff-b-rate-manual",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "CASE WHEN source='manual' THEN 0 ELSE 1 END,fetched_at DESC",
+    "replace": "CASE WHEN source='manual' THEN 1 ELSE 0 END,fetched_at DESC",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Manual cached quotes win timestamp ties."
+  },
+  {
+    "id": "handoff-b-rate-fetched",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "THEN 0 ELSE 1 END,fetched_at DESC",
+    "replace": "THEN 0 ELSE 1 END,fetched_at ASC",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "The newest fetched cached quote wins source ties."
+  },
+  {
+    "id": "handoff-b-timing-notes",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "if (position < 0) != (other < 0) || (position > 0) != (other > 0) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Expose journal/observation year-boundary timing differences."
+  },
+  {
+    "id": "handoff-b-neutral-classification",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "if kind == \"disposal\" && text(row, \"at_category\") == \"neu_swap\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "A tax-neutral disposal is not a realized disposal classification."
+  },
+  {
+    "id": "handoff-b-opening-balance",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "apply_to(&mut opening, key, row, &amounts)?;",
+    "replace": "let _ = key;",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Pre-year journal rows contribute opening balances."
+  },
+  {
+    "id": "handoff-b-transfer-fee-net",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "*movement.units.entry(\"transfer_net\".into()).or_default() += &magnitude;",
+    "replace": "*movement.units.entry(\"transfer_net\".into()).or_default() += 0;",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Transfer fees are counted once in roll-forward quantities."
+  },
+  {
+    "id": "handoff-b-transfer-basis-sign",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "amount.neg(&DECIMAL).map_err(arithmetic)?",
+    "replace": "amount",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Transfer out subtracts basis from the transfer net."
+  },
+  {
+    "id": "handoff-b-marker-strip",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "!(t.starts_with(\"at_\") && t.contains('='))",
+    "replace": "true",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Machine journal markers stay out of workbook descriptions."
+  },
+  {
+    "id": "handoff-b-pair-reference",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": ".chars().take(12).collect();",
+    "replace": ".chars().take(8).collect();",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Retain twelve-character pair references."
+  },
+  {
+    "id": "handoff-b-observation-sign",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "let delta = if outbound {",
+    "replace": "let delta = if !outbound {",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Observed outbound wallet deltas are negative."
+  },
+  {
+    "id": "handoff-b-fee-inclusion",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "\"amount_includes_fee\":truthy(value(source,\"amount_includes_fee\"))",
+    "replace": "\"amount_includes_fee\":false",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Normalize fee-inclusive outbound observations without double counting."
+  },
+  {
+    "id": "handoff-b-satoshi-boundary",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "if a.bitcoin {",
+    "replace": "if true {",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Only bitcoin-denominated assets receive satoshi columns."
+  },
+  {
+    "id": "handoff-b-excluded-scope",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "period.position(&text(&row, \"occurred_at\"))? != 0",
+    "replace": "period.position(&text(&row, \"occurred_at\"))? < 0",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Excluded rows stay inside the selected calendar year."
+  },
+  {
+    "id": "handoff-b-market-multiply",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": ".mul(r, &DECIMAL)",
+    "replace": ".add(r, &DECIMAL)",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Year-end value is quantity times the selected rate."
+  },
+  {
+    "id": "handoff-b-income-classification",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "labels.push(\"income\");",
+    "replace": "labels.push(\"acquisition\");",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Income keeps its own journal-derived classification."
+  },
+  {
+    "id": "handoff-b-fee-classification",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "labels.push(\"fee\");",
+    "replace": "labels.push(\"disposal\");",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Fee-only transactions retain the fee classification."
+  },
+  {
+    "id": "handoff-b-formula-cache",
+    "file": "crates/reports/src/year_handoff_xlsx.rs",
+    "find": "Cell::Formula { expression, result }",
+    "replace": "Cell::Formula { expression, result: \"0\".into() }",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Workbook formulas retain their independently computed caches."
+  },
+  {
+    "id": "handoff-b-quantity-format",
+    "file": "crates/reports/src/year_handoff_xlsx.rs",
+    "find": "\"#,##0.00000000###\"",
+    "replace": "\"#,##0.00\"",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Display msat-scale quantities without losing visible precision."
+  },
+  {
+    "id": "handoff-b-formula-row",
+    "file": "crates/reports/src/year_handoff_xlsx.rs",
+    "find": "&address(i + 2, j)",
+    "replace": "&address(i + 3, j)",
+    "expect_failing": [
+      "year_handoff_workbook_pins_observations_journals_rates_and_barriers"
+    ],
+    "rule": "Formulas reference the same data row."
+  },
+  {
+    "id": "handoff-b-snapshot-kind",
+    "file": "crates/reports/src/year_handoff_xlsx.rs",
+    "find": "kind: \"year-handoff.xlsx\".into()",
+    "replace": "kind: \"full-report.xlsx\".into()",
+    "expect_failing": [
+      "year_handoff_managed_publication_saves_actual_hash_and_retains_freshness"
+    ],
+    "rule": "Completion registers the year-handoff artifact kind."
+  },
+  {
+    "id": "handoff-b-snapshot-period",
+    "file": "crates/reports/src/year_handoff_xlsx.rs",
+    "find": "year: Some(Value::Int(year.into()))",
+    "replace": "year: Some(Value::Int((year + 1).into()))",
+    "expect_failing": [
+      "year_handoff_managed_publication_saves_actual_hash_and_retains_freshness"
+    ],
+    "rule": "Saved period stays bound to the exported year."
+  },
+  {
+    "id": "handoff-b-managed-type",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "if !matches!(value(raw, \"year\"), Value::Int(_)) {",
+    "replace": "if matches!(value(raw, \"year\"), Value::Null) {",
+    "expect_failing": [
+      "year_handoff_managed_publication_saves_actual_hash_and_retains_freshness"
+    ],
+    "rule": "Desktop handoff requires an integer year and refuses booleans and strings."
+  },
+  {
+    "id": "handoff-b-managed-format",
+    "file": "crates/reports/src/export_request.rs",
+    "find": "|| command == \"ui.reports.export_year_handoff\";",
+    "replace": "|| command == \"ui.reports.export_year_handoff_WRONG\";",
+    "expect_failing": [
+      "year_handoff_managed_publication_saves_actual_hash_and_retains_freshness"
+    ],
+    "rule": "Desktop handoff metadata retains XLSX format."
+  },
+  {
+    "id": "handoff-b-cli-year",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"year\",\n            \"export_format\",",
+    "replace": "            \"wrong_year\",\n            \"export_format\",",
+    "expect_failing": [
+      "year_handoff_cli_forwards_year_file_and_book_scope"
+    ],
+    "rule": "CLI transport forwards the selected year."
   }
 ]

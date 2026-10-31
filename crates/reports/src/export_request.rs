@@ -18,6 +18,8 @@ pub fn handles(command: &str) -> bool {
             | "ui.transactions.export_csv"
             | "ui.transactions.export_xlsx"
             | "ui.reports.export_xlsx"
+            | "reports.export-year-handoff"
+            | "ui.reports.export_year_handoff"
             | "ui.reports.export_exit_tax_xlsx"
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
@@ -69,7 +71,7 @@ pub(super) fn managed(root: &Path, stem: &str, suffix: &str, stamp: &str) -> Res
     }
     Ok(candidate)
 }
-fn freshness(conn: &Connection, profile: &Value) -> Result<()> {
+pub(super) fn freshness(conn: &Connection, profile: &Value) -> Result<()> {
     let id = text(profile, "id");
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM freshness_source_states WHERE profile_id=? AND blocking_reports=1", [&id], |r| r.get(0)).map_err(sql_error)?;
     if count == 0 {
@@ -145,8 +147,13 @@ fn execute_admitted(
         || command == "ui.reports.export_austrian_e1kv_xlsx"
         || command == "ui.reports.export_exit_tax_xlsx"
         || command == "ui.transactions.export_xlsx"
-        || (command == "transactions.export" && text(raw, "export_format") == "xlsx");
+        || (command == "transactions.export" && text(raw, "export_format") == "xlsx")
+        || command == "ui.reports.export_year_handoff";
     if !desktop && command != "transactions.export" {
+        if command == "reports.export-year-handoff" {
+            let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
+            freshness(conn, &profile)?;
+        }
         let target = PathBuf::from(text(
             raw,
             if command == "reports.export-austrian-e1kv-csv" {
@@ -208,6 +215,40 @@ fn execute_admitted(
                 "kassiber-report".into(),
                 if xlsx { ".xlsx" } else { ".csv" },
                 "report",
+            )
+        }
+        "ui.reports.export_year_handoff" => {
+            if let Value::Dict(fields) = raw {
+                let mut unknown: Vec<_> = fields
+                    .iter()
+                    .filter_map(|(k, _)| match k {
+                        kassiber_pyjson::Key::Str(k) if k.as_str() != Some("year") => {
+                            Some(k.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                unknown.sort();
+                if !unknown.is_empty() {
+                    return Err(validation(
+                        "ui.reports.export_year_handoff received unsupported arguments",
+                    )
+                    .with_details(dict([(
+                        "unsupported",
+                        Value::List(unknown.into_iter().map(Value::Str).collect()),
+                    )])));
+                }
+            }
+            if !matches!(value(raw, "year"), Value::Int(_)) {
+                return Err(validation(
+                    "ui.reports.export_year_handoff requires an integer year",
+                ));
+            }
+            (
+                "reports.export-year-handoff",
+                format!("kassiber-year-handoff-{}", py_str(value(raw, "year"))),
+                ".xlsx",
+                "year_handoff",
             )
         }
         "ui.reports.export_exit_tax_xlsx" => (

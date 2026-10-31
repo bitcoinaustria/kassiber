@@ -450,11 +450,9 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port full-report XLSX, including profile-wide verification, CLI/desktop
   registration, actual-byte saved hashes and repeated explicit filing; compare
   openpyxl content and every database table with zero hybrid fallbacks.
-- [ ] Port year-handoff XLSX projection and registration. Verify its reference
-  completion behavior, Rust-byte hashes where saved, explicit filing, complete
-  normalized DB sequences and native routing before marking XLSX complete.
-  Cross-check XLSX is complete at its reference no-snapshot boundary. PDF stays
-  Python.
+- [x] Port year-handoff XLSX projection, CLI/daemon registration, saved
+  completion and explicit filing; compare openpyxl content, all 112 tables
+  and native routing. See the [worker B checkpoint](docs/reference/rust-shell.md#year-handoff-xlsx-checkpoint-r5-reports-worker-b-partial).
 - [ ] Port CoinTracking/Blockpit transaction CSV and their desktop export kind,
   then other permitted non-PDF artifacts.
 - [x] Port explicit saved/filed markers and filing a captured local export,

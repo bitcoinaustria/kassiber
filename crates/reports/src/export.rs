@@ -189,7 +189,9 @@ pub fn export_with(
     published: &mut dyn FnMut() -> Result<()>,
 ) -> Result<Value> {
     let prepare = || {
-        if command.ends_with("-xlsx") {
+        if command == "reports.export-year-handoff" {
+            year_handoff_xlsx::prepare(conn, args, sources)
+        } else if command.ends_with("-xlsx") {
             artifact_xlsx::prepare(conn, command, args, sources)
         } else {
             artifact_csv::prepare(conn, command, args, sources)

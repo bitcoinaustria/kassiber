@@ -189,6 +189,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-ledger",
     "wallets.import-wasabi",
     "reports.cross-check",
+    "reports.export-year-handoff",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

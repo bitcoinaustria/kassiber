@@ -9871,3 +9871,114 @@ Transport scope follows the [shared file-import
 follow-up](#shared-file-import-daemon-parity-pending). No schema, egress, sync
 route or AI projection changes. Wasabi, Samourai and document ingestion belong
 to the separate importer worker.
+
+## Year-handoff XLSX checkpoint (R5 reports worker B, partial)
+
+`t3code/r5-reports-b` starts at `be4aac52d`, the fifteenth reports tip.
+The owner split the remaining report families between this branch and the
+independent `t3code/r5-reports-16` worker. This branch enables native
+`reports export-year-handoff` and `ui.reports.export_year_handoff`; it does
+not change the other worker's cross-check, Lightning or source-funds surfaces.
+The previously deferred desktop gains refresh boundary remains unchanged.
+
+The native service reads processed journals and observations separately. It
+preserves exact integer-msat quantities, canonical asset identities, pooled
+wallet basis allocation in reference insertion order, booked/observed timing
+notes, journal-derived classification and reviewed pair references. Stored
+prices retain exact-field precedence and cache/manual/fetched-time ordering;
+missing prices stay blank. Readiness, source-freshness and prior-year
+quarantine barriers precede workbook construction. No custody interpretation,
+tax computation, repricing or acquisition runs.
+
+The approved `rust_xlsxwriter` renderer emits Overview, Wallets, Transactions,
+Journal, Balances, Roll-forward, Reconciliation and Excluded. Literal text,
+links, formulas, independently computed caches, number formats, dimensions,
+panes, filters and deterministic properties match Python through openpyxl.
+Publication retains admission through actual-byte hashing, saved registration
+and dependency capture. Repeated explicit filing retains the saved commitment;
+preexisting saved history and amendment impacts compare literally.
+
+The corpus contains 65 projections: 51 workbooks and 14 exact refusals. All
+71 Python service/process comparisons pass: 65 service cases, four CLI
+sequences and two daemon sessions. Each compares canonical bytes of all 112
+database tables. Only freshly generated ids and independently verified XLSX
+digests are mapped; each byte count is checked against its own container.
+Other wire bytes compare exactly. No byte-artifact normalization is added.
+
+| Dedicated year-handoff parity routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.export-year-handoff` | 16 | 0 |
+| Explicit saved-report filing | 18 | 0 |
+| Daemon sessions (30 handoff requests) | 2 | 0 |
+
+The native inventory now has 153 CLI leaves, including 21 report commands,
+and 14 report daemon kinds plus the two transaction export kinds. AI
+projections remain Python.
+
+Reference quirks stay unchanged: `tax_country=' at '` selects UTC for this
+workbook although report admission recognizes Austria; a cached quote inside
+the year's final fractional second is skipped; and a missing generic handoff
+year uses the Austrian E 1kv validation message. Reproduce on disposable data
+under this worktree's `target/`, preserving account `HOME`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_year_handoff.py
+```
+
+The report mutation catalog has 719 applicable entries. All 39 new
+`handoff-b-*` entries are killed by these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `year_handoff_workbook_pins_observations_journals_rates_and_barriers` | 34 |
+| `year_handoff_managed_publication_saves_actual_hash_and_retains_freshness` | 4 |
+| `year_handoff_cli_forwards_year_file_and_book_scope` | 1 |
+
+All three selections pass unmutated. The 680 inherited entries retain their
+prior evidence and unchanged recipes; they are not freshly rerun.
+`target/r5-reports-b/mutation-summary.json` maps each new entry to its named
+killer. Build errors and empty selections count as errors. The runner removes
+source scratch; the owned mutation build tree is removed after summarizing.
+The oracle generator checks cleanly and the reference-bug repro passes.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting,
+production and test-harness workspace/all-target clippy with `-D warnings`,
+all 1,521 workspace tests and all 14 guarded binary tests. Probes are rebuilt
+from the real worktree after mutation verification. Owned-loopback fixtures
+run with sandbox access. The product version comes from the native binary's
+manifest, matching the existing verification workbook's version source.
+
+The final locked Python 3.11 regression passes all 964 cases without skips,
+including the 71 year-handoff cases, inherited gain/exit/full/Austrian/transaction
+workbooks, CSV artifacts, report reads and original handoff/atomic CSV tests.
+Its distinct hybrid logs record 835 report/transaction CLI calls and 24 daemon
+sessions served by Rust, with zero in-scope fallback. The 23 Python
+`journals.process` calls are setup outside report scope. A separate run of the
+20 original year-handoff tests through the hybrid launcher passes, with all
+three export calls served by Rust. Its one Python journal-process call is also
+setup. Counts exclude pytest symlink aliases;
+`target/r5-reports-b/final-routing-summary.json` retains per-command and per-log
+totals.
+
+All 13 selected AI catalog and report-contract checks plus four subtests pass.
+The required classifier update records 5,709 definitions and the three new
+retained report oracles in the serial daemon lane. Required CI preflight
+passes all 57 tests. The final mutation applicability check confirms all 719
+entries. `target/r5-reports-b/verification-summary.json` retains gates,
+routing, mutation and reference-bug evidence. Verification preserves account
+`HOME`, uses disposable data roots and keeps scratch under `target/`. Owned
+verification build trees are removed after summarizing. Verification is
+Linux-only; the full Python/frontend quality gate, Docker regtest and packaged
+or platform checks are not run.
+
+This checkpoint covers year-handoff only. Worker B still owns
+`transactions export --export-format cointracking-csv` / `blockpit-csv` and
+`ui.transactions.export_platform_csv`, followed by the three privacy
+hygiene/mirror/PSBT CLI and daemon reads. The artifact inventory finds no
+additional unported non-PDF artifact in Worker B's scope. Cross-check XLSX
+and Lightning CSV belong to Worker A along with their reads and non-PDF
+source-funds reads. Individual snapshot/amendment process callers remain
+previously deferred. PDF rendering, PDF-containing bundles/audit packages and
+AI projections stay Python. No Python product code, tax rules, schema,
+dependencies or lockfiles change.
