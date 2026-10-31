@@ -166,6 +166,7 @@ pub struct Request {
     proxy: Option<Proxy>,
     tls: TlsTrust,
     on_device_ai: bool,
+    action_binding: Option<[u8; 32]>,
 }
 
 impl Request {
@@ -176,11 +177,17 @@ impl Request {
             tls,
             proxy: None,
             on_device_ai: false,
+            action_binding: None,
         }
     }
 
     pub fn with_proxy(mut self, proxy: Proxy) -> Self {
         self.proxy = Some(proxy);
+        self
+    }
+
+    pub fn with_action_binding(mut self, binding: [u8; 32]) -> Self {
+        self.action_binding = Some(binding);
         self
     }
 

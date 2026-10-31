@@ -73,6 +73,7 @@ fn consent_is_bound_to_host_port_proxy_trust_subsystem_and_local_classification(
     cases.push(original.clone().with_proxy(
         Proxy::new("socks5h", Endpoint::new("127.0.0.1", 9050).unwrap(), None).unwrap(),
     ));
+    cases.push(original.clone().with_action_binding([1; 32]));
     for changed in cases {
         assert!(matches!(
             gate.authorize(changed, Some(proof.clone())),
@@ -92,6 +93,25 @@ fn consent_is_bound_to_host_port_proxy_trust_subsystem_and_local_classification(
         Err(Error::ConsentScope)
     ));
     assert!(gate.attempts().records.is_empty());
+}
+
+#[test]
+fn action_bound_consent_cannot_be_reused_or_stripped() {
+    let gate = gate(Offline::Online, Observer::Strict);
+    let original = request("node.invalid").with_action_binding([1; 32]);
+    let proof = Consent::explicit_trigger(&original);
+    for changed in [
+        request("node.invalid"),
+        request("node.invalid").with_action_binding([2; 32]),
+    ] {
+        assert!(matches!(
+            gate.authorize(changed, Some(proof.clone())),
+            Err(Error::ConsentScope)
+        ));
+    }
+    assert!(gate.authorize(original, Some(proof)).is_ok());
+    assert!(gate.attempts().records.is_empty());
+    assert!(gate.ledger().snapshot(0, 2000).records.is_empty());
 }
 
 #[test]
