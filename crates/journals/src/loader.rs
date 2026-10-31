@@ -291,6 +291,11 @@ fn safe_row(mut row: Value, configs: &mut HashMap<String, (String, bool)>) -> Re
             }
         }
     }
+    if let Value::Dict(values) = &mut row {
+        values.retain(
+            |(key, _)| !matches!(key, Key::Str(key) if key.is("_closed_confirmation_observation")),
+        );
+    }
     Ok(row)
 }
 fn safe_rows(

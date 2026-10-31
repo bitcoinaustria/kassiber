@@ -1,11 +1,18 @@
 # R4-9 native custody loader checkpoint
 
-This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-3
-continues `0b78605a0` (loader-2). Generic 20k now meets the 0.30 s target at
-**0.289 s process CPU / 0.291 s wall**, including admission. Multi-wallet 20k
-measures **0.429 / 0.433 s**. Python retains every production load and journal
-route. Exhaustive loader mutations, lossless legacy values/refusals and the
-remaining adversarial acceptance work still keep R4-9 open.
+This is an **unaccepted, test-only checkpoint**, updated 2026-10-31. Loader-4
+continues `e8387a966` (loader-3), fixes the physical safe-row column omission,
+and expands scalar refusals and descriptor/source-index witnesses. Its storage
+audit still demonstrates acceptance-blocking legacy mismatches. Python retains
+every production load and journal route.
+
+Final loader-4 measurements retain the 0.30 s target at **0.290 s process CPU /
+0.293 s wall**, including admission. Multi-wallet 20k measures **0.439 / 0.444 s**.
+Both CPU measurements remain within 5% of loader-3. The historical loader-3
+timing and verification sections below retain that run's evidence; they do not
+imply fresh reruns of its complete gates.
+Exhaustive loader mutations, lossless legacy values/refusals and the complete
+custody campaign still keep R4-9 open.
 
 ## Representation and authority
 
@@ -45,13 +52,13 @@ channels, gap rows and anchor objects retain both configuration checks, and
 transaction principal/fee admission still requires exact signed-64 msat.
 No memo survives a snapshot validation or grants accounting authority.
 
-Ownership, descriptor derivation, receipt sources, the bounded >50k worklist,
-error precedence and SQL selection/order remain the loader-2 implementation.
+Ownership, descriptor derivation, receipt sources and the bounded >50k worklist
+retain the loader-2 implementation except for the loader-4 corrections below.
 Column-order metadata and ordered derived facts remain solely for the v1 byte
 gate. The loader adds no egress, dependency, durable storage or production
 runtime requirement. `Cargo.lock` is unchanged.
 
-## Paired timing and profile
+## Loader-3 paired timing and profile
 
 [`r4-native-loader-3-bench.json`](r4-native-loader-3-bench.json) contains all
 20 pairs, generator manifests, byte lengths/hashes, five repetitions of the
@@ -102,7 +109,7 @@ SQLite stepping, float formatting and remaining JSON consumers now dominate a
 smaller total. The measured SQL floor is not a proof of the loader's minimum.
 Raw profiles and disposable books stay under `target/r4-loader-3`.
 
-## Verification
+## Loader-3 verification
 
 The shared-record change passes the 612-test custody/journals suite, followed
 by all three focused shared-record/admission tests. The live Python database
@@ -151,23 +158,173 @@ scratch trees are removed. The standalone probe, synthetic books, profiles and
 logs remain under `target/r4-loader-3`.
 No push, PR, external comment or production authority switch is in scope.
 
+## Loader-4 corrections and coverage
+
+Python's loader filters configuration fields to `chain`, `network`, `samourai`,
+`chain_instance_id`, `bitcoin_network` and `chain_network`; within Samourai
+metadata it retains only `role`, `group_id` and `section`. It also removes
+`_closed_confirmation_observation` from every `_safe_row`. The existing config
+projection mirrors the first two rules. Both native safe-row paths now mirror
+the last rule, including a physical BLOB column. SQLite TEXT still undergoes
+UTF-8 validation before removal. Raw component and revision headers retain the
+same-named column. Five frozen cases cover NULL, INTEGER, REAL, TEXT and BLOB
+on active transactions and excluded component anchors.
+
+JSON ownership configuration scalars now retain Python's `AttributeError`, and
+non-iterable JSON address scalars retain `TypeError`, with their exact messages.
+Summary configuration failures follow Python's unordered summary query rather
+than the separately ordered derivation wallet query. Inventory output indices
+retain integer-conversion families/messages, quote selection, the 200-character
+repr precision, nonfinite refusals and digit-limit precedence over an invalid
+suffix. Successful finite conversion still uses Python-compatible integer
+parsing and truncation.
+
+The storage audit found two further ordinary-value discrepancies. Ownership
+inventory falls back to the wallet id for an empty label; receipt inventory
+stringifies its stored label, including NULL and empty TEXT. These source-specific
+rules now have independent frozen witnesses. Address-list and descriptor source
+labels retain their existing rules.
+
+The frozen corpus grows from 37 byte fixtures/four refusals to **59 byte
+fixtures/22 exact refusals**. Descriptor additions cover twelve malformed,
+scalar, alias, gap-limit and change-synthesis configurations. Source-index
+additions cover duplicate inventory, different branch identities, missing and
+foreign-profile wallets, active transaction counts, deprecated flags and both
+label edge cases. Existing high-water, retired-policy, identity and cache cases
+remain in the corpus.
+
+The loader catalogue now has **90 entries**, including these 21 new recipes:
+
+| Contract | Mutation IDs | Named witness |
+| --- | --- | --- |
+| Safe/raw column removal and discarded TEXT validation | `JL-safe-confirmation-column`, `JL-raw-confirmation-column`, `JL-safe-row-confirmation`, `JL-dropped-text-validation` | `native_loader_filters_only_safe_confirmation_columns` |
+| Configuration/address refusal families, messages and summary order | `JL-owned-config-refusal-family`, `JL-owned-config-refusal-message`, `JL-owned-address-refusal-family`, `JL-owned-address-refusal-message`, `JL-owned-summary-refusal-order` | `native_loader_preserves_receipt_error_precedence` |
+| Ownership/receipt inventory labels | `JL-owned-empty-inventory-label`, `JL-receipt-raw-inventory-label` | `native_loader_matches_python_database_bytes` |
+| Output-index refusals, repr, digit limits and nonfinite conversion | `JL-owned-outpoint-refusal`, `JL-outpoint-repr-limit`, `JL-outpoint-digit-limit`, `JL-outpoint-nonfinite`, `JL-outpoint-nan-family`, `JL-outpoint-infinity-family` | `native_loader_preserves_receipt_error_precedence` and `native_loader_outpoint_integer_preserves_python_refusals` |
+| Oversized numeric-prefix refusal precedence | `JL-outpoint-prefix-limit`, `JL-outpoint-prefix-sign`, `JL-outpoint-prefix-unicode-space`, `JL-outpoint-prefix-parse` | `native_loader_outpoint_integer_preserves_python_refusals` |
+
+This maps the added contracts to their recipes; a complete inventory of every
+loader branch and its named kill remains open.
+
+## Loader-4 final paired timing
+
+[`r4-native-loader-4-bench.json`](r4-native-loader-4-bench.json) records five
+alternating Python/native pairs and five SQL-floor repetitions per book, using
+copies of the same seed-1 generic and seed-7 multi-wallet books. All four books
+retain exact Python bytes and the loader-3 byte lengths/hashes. The release
+probe's hash also matches the storage-audit record. The timing boundary and
+best-CPU-sample selection follow the loader-3 protocol above.
+
+| Book | Python CPU / wall | Native load CPU / wall | Admission CPU / wall | Native total CPU / wall | 1-minute load |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| generic 2,000 | 0.107 / 0.108 | 0.027 / 0.027 | 0.001 / 0.001 | **0.028 / 0.028** | 10.28–11.14 |
+| multi-wallet 2,000 | 0.152 / 0.153 | 0.054 / 0.054 | 0.002 / 0.002 | **0.056 / 0.056** | 11.14–11.14 |
+| generic 20,000 | 1.159 / 1.169 | 0.281 / 0.285 | 0.009 / 0.009 | **0.290 / 0.293** | 11.21–13.84 |
+| multi-wallet 20,000 | 1.400 / 1.416 | 0.415 / 0.419 | 0.024 / 0.024 | **0.439 / 0.444** | 13.20–13.48 |
+
+Unrounded native 20k totals are **0.290061 s CPU / 0.293467 s wall** and
+**0.438885 / 0.443591 s**. CPU increases **0.37%** and **2.30%** from the supplied
+0.289/0.429 s baselines, below their respective 5% ceilings of 0.30345/0.45045 s.
+These are separate shared-host runs; each current Python/native comparison is
+paired. The four-query floor is 0.076501 s CPU / 0.077615 s wall at generic20k
+and 0.092017 / 0.093013 s at multi-wallet20k.
+
+## Loader-4 verification and storage audit
+
+The custody/journals library and integration suite passes **616 tests**. The
+live loader oracle passes **84 tests**, including SQLCipher, pending writes and
+both >50k worklist paths. All **59 byte fixtures and 22 exact refusals** regenerate
+unchanged under `PYTHONHASHSEED=1` and `2`. Offline all-target clippy for
+`kassiber-journals` and `kassiber-custody`, with the loader's `test-harness` feature
+and `-D warnings`, passes.
+
+All **90 loader catalogue entries build and are killed** by their named witnesses:
+**90 killed, zero survivors, zero runner errors**. All twelve unmutated witness
+filters pass first. The [catalogue](../../crates/journals/scripts/loader_mutations.json)
+records each mutation's source anchor, rule and witness; the table above maps
+the added contracts. This is catalogue coverage, not an exhaustive source-branch
+census. The full 2,292-entry custody campaign has **no valid completed result**
+for loader-4. An interrupted attempt and a later baseline using stale mutant
+artifacts were discarded; neither supplies campaign kills, survivors or errors.
+Future batches must start with a fresh build tree. The loader campaign's build
+tree has been removed.
+
+[`r4-native-loader-4-storage-audit.json`](r4-native-loader-4-storage-audit.json)
+records the remaining storage gaps by fixture, column and requested storage
+class. The executable audit uses two synthetic fixtures and SQLite's authorizer
+to inventory **295 distinct physical read columns** (292 structural and 229
+source fixture/column pairs). Every distinct column has a populated representative
+in at least one fixture. Nine storage expressions produce **4,689 attempts**;
+**1,107 attempts hit empty tables** and are excluded from the populated counts:
+
+| Populated-row result | Cases |
+| --- | ---: |
+| Exact v1 value | 2,799 |
+| Exact refusal family, code and message | 6 |
+| Different refusal or refusal replaced by later admission | 612 |
+| Native refusal of a Python-serializable value | 165 |
+
+The **777 mismatches** comprise 350 BLOB, 350 invalid UTF-8, 38 positive infinity,
+37 negative infinity and two ordinary TEXT cases. No differing v1 value remains
+in these fixtures. These counts do not establish exhaustive column fidelity:
+the audit mutates only the first physical row, a predicate or join mutation can
+exclude that row, SQLite affinity can coerce the requested class, and only
+fixture-reached columns are inventoried. Full local records include `typeof()`,
+changed-row counts, reference phase and separate native admission outcomes.
+
+Concrete remaining failures include `transactions.note` BLOB (Python JSON
+serialization raises `TypeError: Object of type bytes is not JSON serializable`,
+while native loading emits a generic BLOB refusal), invalid UTF-8 in that column
+(Python's exact column-bearing `OperationalError` versus the generic native
+message), and infinite `transactions.fiat_rate` (Python retains it, native loading
+refuses). BLOB wallet configuration can be ignored or normalized by Python while
+the native reader refuses it. On authoritative source transactions, TEXT amount
+and fee raise Python's `ValueError` during loading; native loading instead reaches
+a later generic admission refusal. The audit distinguishes load failures from
+v1 serialization failures. These are native parity gaps, not identified Python
+reference bugs.
+
+Reproduce the gap inventory with the locally built release probe, keeping
+`TMPDIR` inside this worktree's `target` and using the prescribed toolchain:
+
+```sh
+TMPDIR="$PWD/target/r4-loader-4/tmp" \
+UV_CACHE_DIR="$PWD/target/r4-loader-4/uv-cache" \
+MATURIN_NO_INSTALL_RUST=1 CARGO_NET_OFFLINE=true PYTHONHASHSEED=1 \
+mise exec rust@1.99.1 uv@latest -- \
+  uv run --locked python crates/journals/scripts/audit_loader_storage.py \
+  --binary target/r4-loader-4/custody-load \
+  --out target/r4-loader-4/storage-audit.json \
+  --summary-out docs/reference/r4-native-loader-4-storage-audit.json
+```
+
+The audit intentionally exits **1** while any mismatch remains. It reads only
+synthetic fixtures, writes no owner book and installs no recording hook.
+
+The required `tests.rust_port.classify_tests update` regenerates the inventory
+and corrects its obsolete performance-failure description. The CI preflight
+passes **57 tests** after that update. Rust formatting and `git diff --check`
+pass. Manual review covers the direct/safe reader, source-specific labels,
+summary refusal order, integer conversion and the audit's coverage limits.
+Verification and mutation build trees are removed after summarizing; only the
+standalone probe, synthetic books and local evidence remain under
+`target/r4-loader-4`. No background test job remains at handoff.
+
 ## Remaining acceptance work
 
-1. Finish named mutation kills for every loader branch; 69 entries are still a
-   partial catalogue. Repeat the full inherited custody mutation campaign after
-   all remaining behavior changes; this checkout has 2,292 entries, rather than
-   the 2,285 in the task brief.
+1. Finish named mutation kills and an explicit map for every loader branch;
+   90 entries are still a partial catalogue. Repeat the full 2,292-entry custody
+   mutation campaign after all remaining behavior changes.
 2. Finish lossless legacy `SqlValue` storage and exact refusal order/family/
    message, including BLOB, nonfinite REAL, invalid UTF-8 and unusual SQLite
-   storage/config/descriptor scalars across every read column. Existing early
-   adapter refusals do not establish Python fidelity. A focused repro also
-   confirms the inherited safe-row omission: adding a physical TEXT column
-   named `_closed_confirmation_observation` to `transactions` makes native
-   retain that column, while Python removes it. This is not introduced by
-   shared columns and remains an acceptance blocker.
-3. Expand adversarial descriptor and source-index coverage beyond the inherited
-   high-water, aliases, retired-policy, cache-isolation and escaped-identity
-   cases. Complete remaining parity/review gates before accepting R4-9.
+   storage/config/descriptor scalars across every read column, unused or
+   overwritten fields, and competing invalid rows. Existing early
+   adapter refusals do not establish Python fidelity. The physical safe-row
+   omission and the ordinary label discrepancies above are fixed; the column
+   storage audit is an executable inventory of remaining gaps.
+3. Complete the remaining parity/review gates after the lossless boundary and
+   exhaustive mutations are implemented. The inherited generated/replay and
+   census/shadow counts above remain historical evidence until rerun.
 
 ## R4-13 integration contract
 

@@ -2283,6 +2283,19 @@ on production routing, performance targets, automatic pairing and persisted
 shapes are recorded in the design. Book-open cost and allocator decisions
 remain open.
 
+### R4-9 loader continuation (unaccepted)
+
+The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) fixes the
+physical safe-row column omission, selected ownership configuration/address and
+output-index refusals, and the distinct inventory label rules. Frozen coverage
+grows to 59 byte fixtures and 22 exact refusals, with expanded descriptor and
+source-index cases. All 90 loader mutations are killed, and final 20k paired timings including
+admission are 0.290 s CPU generic / 0.439 s multi-wallet, within 5% of loader-3.
+An executable per-column SQLite storage audit records 777 remaining mismatches.
+R4-9 remains unaccepted and test-only pending a lossless boundary,
+complete branch-to-mutation coverage, the full custody mutation campaign and
+remaining parity/review gates. Python retains production journal authority.
+
 ### R4-0 integrated stack
 
 The local `t3code/rust-backend-r6` stack integrates the R2 custody, projection

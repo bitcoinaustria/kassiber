@@ -156,6 +156,28 @@ def test_loader_covers_every_structural_table_column_and_filter(loose_book):
     check(conn)
 
 
+@pytest.mark.parametrize("storage", ["NULL", "7", "1.5", "'physical legacy value'", "x'ff00'"])
+def test_loader_drops_closed_confirmation_from_safe_rows(loose_book, storage):
+    conn, helper = loose_book
+    conn.execute('ALTER TABLE transactions ADD COLUMN "_closed_confirmation_observation"')
+    conn.execute('ALTER TABLE custody_components ADD COLUMN "_closed_confirmation_observation"')
+    for tx_id, excluded in (("included", 0), ("anchor", 1)):
+        helper._tx(conn, tx_id=tx_id, wallet_id="wallet-a", direction="inbound",
+                   amount=100000, external_id="acq", raw_json="{}")
+        conn.execute("UPDATE transactions SET excluded=? WHERE id=?", (excluded, tx_id))
+    conn.execute(f'UPDATE transactions SET "_closed_confirmation_observation"={storage}')
+    insert(conn, "custody_components", "component", state="active", revision=1,
+           supersedes_component_id=None, superseded_by_component_id=None,
+           _closed_confirmation_observation="retained raw header")
+    insert(conn, "custody_component_legs", "leg", component_id="component", ordinal=0,
+           transaction_id="anchor", anchor_transaction_id=None, wallet_id="wallet-a")
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    assert "_closed_confirmation_observation" not in snapshot["transactions"][0]
+    assert "_closed_confirmation_observation" not in snapshot["anchors"]["anchor"]
+    assert snapshot["components"][0]["header"]["_closed_confirmation_observation"] == "retained raw header"
+    check(conn)
+
+
 def test_loader_supports_missing_network_table_and_legacy_rate_columns(loose_book):
     conn, helper = loose_book
     conn.execute("DROP TABLE book_network_bindings")
@@ -390,4 +412,134 @@ def test_loader_descriptor_cache_separates_policies_and_wallet_facts(loose_book,
     matches = snapshot["owned_index"]["by_script"][b.script_pubkey]
     assert {(item["wallet_id"], item["source"]) for item in matches} == {
         ("wallet-a", "derived_history"), ("wallet-b", "derived")}
+    check(conn)
+
+
+def _check_refusal(conn):
+    profile = dict(_profile(conn))
+    with pytest.raises(Exception) as caught:
+        load_custody_snapshot(conn, profile, as_of=AS_OF)
+    expected = {"family": type(caught.value).__name__, "message": str(caught.value),
+                "code": getattr(caught.value, "code", None)}
+    request = {"sql": "\n".join(conn.iterdump()), "profile": profile, "as_of": AS_OF}
+    result = subprocess.run([BINARY], input=json.dumps(request).encode(), capture_output=True,
+                            check=True, timeout=120)
+    assert not result.stderr
+    actual = json.loads(result.stdout)
+    assert {key: actual.get("refusal", {}).get(key) for key in expected} == expected
+
+
+@pytest.mark.parametrize("config", ["null", "[]", "[1]", "true", "false", "42", "1.5", '"scalar"'])
+def test_loader_ownership_config_scalar_refusals(loose_book, config):
+    conn, helper = loose_book
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'", (config,))
+    _check_refusal(conn)
+
+
+def test_loader_ownership_config_refusals_follow_summary_query_order(loose_book):
+    conn, helper = loose_book
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    conn.execute("UPDATE wallets SET label='Z',config_json='[]' WHERE id='wallet-a'")
+    conn.execute("UPDATE wallets SET label='A',config_json='null' WHERE id='wallet-b'")
+    _check_refusal(conn)
+
+
+@pytest.mark.parametrize("vout", ["", "legacy scalar", "'quoted'", "\n钱", "9" * 4301 + "x"])
+def test_loader_inventory_outpoint_scalar_refusals(loose_book, vout):
+    conn, helper = loose_book
+    _source_inventory(conn, helper, "dd" * 32)
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    conn.execute("UPDATE wallet_utxos SET vout=?", (vout,))
+    _check_refusal(conn)
+
+
+@pytest.mark.parametrize("addresses", [True, False, 7, 1.5])
+def test_loader_ownership_address_scalar_refusals(loose_book, addresses):
+    conn, helper = loose_book
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    conn.execute("UPDATE wallets SET config_json=? WHERE id='wallet-a'",
+                 (json.dumps({"chain": "bitcoin", "network": "main", "addresses": addresses}),))
+    _check_refusal(conn)
+
+
+DESCRIPTOR_CASES = [
+    {"gap_limit": -1}, {"gap_limit": 5001}, {"gap_limit": "invalid"},
+    {"descriptor": 7}, {"descriptor": ["invalid"]}, {"descriptor": {"invalid": True}},
+    {"network": "invalid"}, {"chain": "invalid"},
+    {"chain": "BTC", "network": "mainnet"},
+    {"change_descriptor": None, "synthesize_change": False},
+    {"change_descriptor": None, "synthesize_change": 0},
+    {"change_descriptor": None, "descriptor_source": "bsms"},
+]
+
+
+@pytest.mark.parametrize("overrides", DESCRIPTOR_CASES)
+def test_loader_adversarial_descriptor_fields(loose_book, overrides):
+    conn, helper = loose_book
+    config = {**_descriptor_config(2), **overrides}
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, SCRIPT_A, 100010)],
+                   outputs=[(SCRIPT_B, 100000)], fee=10)
+    _native_leg(conn, helper, "wallet-b", SCRIPT_B, graph)
+    conn.execute("UPDATE wallets SET kind='descriptor',config_json=? WHERE id='wallet-a'",
+                 (json.dumps(config),))
+    check(conn)
+
+
+def _receipt_index_book(loose_book, deprecated):
+    conn, helper = loose_book
+    config = {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B],
+              "deprecated": deprecated}
+    conn.execute("UPDATE wallets SET config_json=?", (json.dumps(config),))
+    graph = _graph("dd" * 32, inputs=[("cc" * 32, 0, "0014" + "ab" * 20, 200000)],
+                   outputs=[(SCRIPT_A, 100000), (SCRIPT_B, 100000)])
+    for wallet in ("wallet-a", "wallet-b"):
+        _native_leg(conn, helper, wallet, SCRIPT_A, graph)
+    helper._tx(conn, tx_id="excluded", wallet_id="wallet-a", direction="inbound",
+               amount=1, external_id="acq", raw_json="{}")
+    conn.execute("UPDATE transactions SET excluded=1 WHERE id='excluded'")
+    for row_id, wallet, profile, branch in (
+        ("first", "wallet-a", "profile-1", 0),
+        ("duplicate", "wallet-a", "profile-1", 0),
+        ("different-branch", "wallet-a", "profile-1", 1),
+        ("orphan", "missing-wallet", "profile-1", 0),
+        ("foreign", "wallet-a", "other", 2),
+    ):
+        insert(conn, "wallet_utxos", row_id, wallet_id=wallet, profile_id=profile,
+               chain="bitcoin", network="main", txid="aa" * 32, vout=0,
+               address=None, script_pubkey=SCRIPT_A, branch_index=branch,
+               branch_label="receive", address_index=0, raw_json="{}")
+    return conn
+
+
+@pytest.mark.parametrize("deprecated", [False, True, "yes"])
+def test_loader_receipt_index_preserves_sources_counts_and_profile_scope(loose_book, deprecated):
+    conn = _receipt_index_book(loose_book, deprecated)
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    sources = snapshot["receipt_sources"]
+    inventory = [source for source in sources if source["source"] == "inventory"]
+    assert len(inventory) == 3
+    assert {source["active_transaction_count"] for source in inventory if source["wallet_id"] == "wallet-a"} == {1}
+    assert [source["active_transaction_count"] for source in inventory if source["wallet_id"] == "missing-wallet"] == [0]
+    check(conn)
+
+
+@pytest.mark.parametrize("label", [None, ""])
+def test_loader_inventory_labels_preserve_source_specific_fallbacks(loose_book, label):
+    conn = _receipt_index_book(loose_book, False)
+    conn.execute("UPDATE wallets SET label=? WHERE id='wallet-a'", (label,))
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    inventory = [source for source in snapshot["receipt_sources"]
+                 if source["source"] == "inventory" and source["wallet_id"] == "wallet-a"]
+    assert {source["wallet_label"] for source in inventory} == {str(label)}
+    matches = snapshot["owned_index"]["by_script"][SCRIPT_A]
+    assert {match["wallet_label"] for match in matches if match["wallet_id"] == "wallet-a" and match["source"] == "inventory"} == {"None" if label is None else "wallet-a"}
     check(conn)

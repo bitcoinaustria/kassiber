@@ -49,11 +49,19 @@ def vectors():
             selected = [
                 ("structural-columns", cases.test_loader_covers_every_structural_table_column_and_filter, ()),
                 ("legacy-rates", cases.test_loader_supports_missing_network_table_and_legacy_rate_columns, ()),
+                *[("closed-confirmation-" + str(i), cases.test_loader_drops_closed_confirmation_from_safe_rows, (storage,))
+                  for i, storage in enumerate(("NULL", "7", "1.5", "'physical legacy value'", "x'ff00'"))],
                 ("retired-policies", cases.test_loader_preserves_retired_policies_warnings_and_core_outpoints, ()),
                 *[("owned-" + str(descriptor), cases.test_loader_owns_inventory_addresses_and_descriptors, (descriptor,)) for descriptor in (False, True)],
                 *[("owned-cache-" + str(reverse), cases.test_loader_descriptor_cache_separates_policies_and_wallet_facts, (reverse,)) for reverse in (False, True)],
+                *[("owned-adversarial-" + str(i), cases.test_loader_adversarial_descriptor_fields, (overrides,))
+                  for i, overrides in enumerate(cases.DESCRIPTOR_CASES)],
                 *[("receipts-" + str(descriptor), cases.test_loader_reads_receipt_sources, (descriptor,)) for descriptor in (False, True)],
                 *[("receipts-identity-" + str(escaped), cases.test_loader_receipt_identity_from_graph_without_external_txid, (escaped,)) for escaped in (False, True)],
+                *[("receipts-counts-" + str(i), cases.test_loader_receipt_index_preserves_sources_counts_and_profile_scope, (deprecated,))
+                  for i, deprecated in enumerate((False, True, "yes"))],
+                *[("receipts-label-" + str(i), cases.test_loader_inventory_labels_preserve_source_specific_fallbacks, (label,))
+                  for i, label in enumerate((None, ""))],
                 *[("inventory-fallback-" + str(i), cases.test_loader_receipt_inventory_script_fallback, args) for i, args in enumerate((
                     (None, {}, None, "invalid", 0),
                     (None, {"script_pubkey": cases.SCRIPT_A}, None, False, 1),
@@ -112,10 +120,21 @@ def error_vectors():
         source = open_db(Path(directory))
         helper = OwnershipDeriverHandlerTest()
         helper._seed(source)
-        for current_name in ("receipt", "network", "tax", "component"):
+        selected = [
+            *[(name, cases.test_loader_receipt_error_precedence, (name,))
+              for name in ("receipt", "network", "tax", "component")],
+            *[("ownership-config-" + str(i), cases.test_loader_ownership_config_scalar_refusals, (config,))
+              for i, config in enumerate(("null", "[]", "[1]", "true", "false", "42", "1.5", '"scalar"'))],
+            *[("ownership-address-" + str(i), cases.test_loader_ownership_address_scalar_refusals, (addresses,))
+              for i, addresses in enumerate((True, False, 7, 1.5))],
+            ("ownership-config-order", cases.test_loader_ownership_config_refusals_follow_summary_query_order, ()),
+            *[("inventory-outpoint-" + str(i), cases.test_loader_inventory_outpoint_scalar_refusals, (vout,))
+              for i, vout in enumerate(("", "legacy scalar", "'quoted'", "\n钱", "9" * 4301 + "x"))],
+        ]
+        for current_name, function, arguments in selected:
             book = cases.loose_book.__wrapped__((source, helper))
             try:
-                cases.test_loader_receipt_error_precedence(next(book), current_name)
+                function(next(book), *arguments)
             finally:
                 book.close()
         source.close()

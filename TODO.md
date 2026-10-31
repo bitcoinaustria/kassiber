@@ -414,9 +414,13 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
   R4-9's test-only loader now shares column layouts across native custody rows;
-  generic 20k meets 0.30 s at 0.289 s CPU / 0.291 s wall. Multi-wallet 20k takes
-  0.429 / 0.433 s. It remains unaccepted pending full legacy fidelity,
-  adversarial coverage and complete parity/mutation gates
+  generic 20k meets 0.30 s at 0.290 s CPU / 0.293 s wall. Multi-wallet 20k takes
+  0.439 / 0.444 s, both within 5% of loader-3. The physical safe-row omission,
+  selected scalar refusals and inventory labels are fixed; frozen coverage is
+  59 byte fixtures/22 refusals.
+  All 90 loader mutations are killed; 777 per-column storage audit mismatches
+  still block acceptance. Complete the lossless boundary, exhaustive branch
+  mutation map and full custody/parity campaigns
   ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations

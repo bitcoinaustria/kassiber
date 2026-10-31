@@ -688,5 +688,215 @@
       "shared_snapshot_config_admission_checks_every_population"
     ],
     "rule": "Anchor configurations retain admission checks."
+  },
+  {
+    "id": "JL-safe-confirmation-column",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".filter(|(_, name)| !safe || *name != \"_closed_confirmation_observation\")",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "Safe rows discard physical closed-confirmation columns, including BLOB values, before v1 serialization."
+  },
+  {
+    "id": "JL-raw-confirmation-column",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".filter(|(_, name)| !safe || *name != \"_closed_confirmation_observation\")",
+    "replace": ".filter(|(_, name)| *name != \"_closed_confirmation_observation\")",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "Raw structural rows retain physical fields that the Python safe-row projection removes elsewhere."
+  },
+  {
+    "id": "JL-safe-row-confirmation",
+    "file": "crates/journals/src/loader.rs",
+    "find": "values.retain(\n            |(key, _)| !matches!(key, Key::Str(key) if key.is(\"_closed_confirmation_observation\")),\n        );",
+    "replace": "values.retain(|_| true);",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "The shared safe-row helper also drops closed confirmation observations."
+  },
+  {
+    "id": "JL-dropped-text-validation",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "sql_value(ValueRef::Text(bytes))?;",
+    "replace": "let _ = bytes;",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "SQLite still decodes invalid TEXT before Python removes the safe-row column."
+  },
+  {
+    "id": "JL-owned-config-refusal-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"AttributeError\",\n            format!",
+    "replace": "\"TypeError\",\n            format!",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Non-mapping JSON wallet configurations preserve Python AttributeError."
+  },
+  {
+    "id": "JL-owned-config-refusal-message",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "'{}' object has no attribute 'get'",
+    "replace": "'{}' object is not a mapping",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Configuration refusal messages retain the exact Python scalar type and attribute."
+  },
+  {
+    "id": "JL-owned-address-refusal-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"TypeError\",\n                format!",
+    "replace": "\"ValueError\",\n                format!",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Non-iterable address scalar configurations preserve Python TypeError."
+  },
+  {
+    "id": "JL-owned-address-refusal-message",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "'{}' object is not iterable",
+    "replace": "'{}' object is not an address list",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Non-iterable address scalar refusals retain Python exact messages."
+  },
+  {
+    "id": "JL-owned-summary-refusal-order",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=?\"",
+    "replace": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC\"",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Ownership summary failures follow the reference summary query order, independently of derivation wallet order."
+  },
+  {
+    "id": "JL-owned-empty-inventory-label",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "set(&mut wallet,\"label\",Value::from(wallet_id.clone()));",
+    "replace": "set(&mut wallet,\"label\",Value::from(\"\"));",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Ownership inventory replaces an empty wallet label with its wallet id, independently of address-list labels."
+  },
+  {
+    "id": "JL-receipt-raw-inventory-label",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "set(&mut item,\"wallet_label\",Value::from(text(get(wallet,\"label\"))));",
+    "replace": "set(&mut item,\"wallet_label\",Value::from(\"\"));",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Receipt inventory stringifies the stored label without the address/descriptor source fallback, including None and empty labels."
+  },
+  {
+    "id": "JL-owned-outpoint-refusal",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "let vout = outpoint_integer(vout)?;",
+    "replace": "let vout = integer(vout).unwrap_or(0.into());",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Invalid inventory output indices preserve the reference refusal instead of guessing output zero."
+  },
+  {
+    "id": "JL-outpoint-repr-limit",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".chars().take(200)",
+    "replace": ".chars().take(199)",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Integer literal refusal messages retain CPython repr precision."
+  },
+  {
+    "id": "JL-outpoint-digit-limit",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "value has {count} digits; use sys.set_int_max_str_digits()",
+    "replace": "value has {count} digits; use other_limit()",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Integer digit-limit refusals retain the exact reference message."
+  },
+  {
+    "id": "JL-outpoint-nonfinite",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !value.is_finite() {",
+    "replace": "if value.is_finite() {",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Nonfinite output indices refuse before integer conversion while finite floats retain truncation."
+  },
+  {
+    "id": "JL-outpoint-nan-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "crate::Refusal::new(\"ValueError\", \"cannot convert float NaN to integer\")",
+    "replace": "crate::Refusal::new(\"TypeError\", \"cannot convert float NaN to integer\")",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "NaN integer conversion retains Python ValueError."
+  },
+  {
+    "id": "JL-outpoint-infinity-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "crate::Refusal::new(\"OverflowError\", \"cannot convert float infinity to integer\")",
+    "replace": "crate::Refusal::new(\"ValueError\", \"cannot convert float infinity to integer\")",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Infinite integer conversion retains Python OverflowError."
+  },
+  {
+    "id": "JL-outpoint-prefix-limit",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "raw.len() > 4300",
+    "replace": "raw.len() < 4300",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "An oversized numeric prefix raises the digit-limit error before an invalid suffix."
+  },
+  {
+    "id": "JL-outpoint-prefix-sign",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "body.strip_prefix(['+', '-']).unwrap_or(body)",
+    "replace": "body",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Signed numeric prefixes preserve integer refusal precedence."
+  },
+  {
+    "id": "JL-outpoint-prefix-unicode-space",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "kassiber_pytext::is_space(c as u32)",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Non-ASCII leading whitespace preserves oversized numeric-prefix refusal precedence."
+  },
+  {
+    "id": "JL-outpoint-prefix-parse",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "kassiber_pytext::parse_int(&body[..end])",
+    "replace": "kassiber_pytext::parse_int(\"\")",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "The numeric prefix is validated before selecting the exact integer refusal."
   }
 ]

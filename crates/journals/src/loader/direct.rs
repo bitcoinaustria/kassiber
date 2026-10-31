@@ -154,11 +154,19 @@ impl Reader {
     ) -> Result<Vec<Record>> {
         let mut statement = conn.prepare_cached(sql)?;
         let mut seen = BTreeSet::new();
+        let discarded: Vec<_> = statement
+            .column_names()
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| safe && **name == "_closed_confirmation_observation")
+            .map(|(index, _)| index)
+            .collect();
         let columns: Vec<_> = statement
             .column_names()
             .into_iter()
             .enumerate()
             .filter(|(_, name)| seen.insert(*name))
+            .filter(|(_, name)| !safe || *name != "_closed_confirmation_observation")
             .map(|(i, key)| (i, key.to_owned()))
             .collect();
         let mut order: Vec<_> = columns.iter().map(|(_, key)| key.clone()).collect();
@@ -189,6 +197,11 @@ impl Reader {
         let mut cursor = statement.query(params)?;
         let mut result = Vec::with_capacity(self.capacity);
         while let Some(row) = cursor.next()? {
+            for index in &discarded {
+                if let ValueRef::Text(bytes) = row.get_ref(*index)? {
+                    sql_value(ValueRef::Text(bytes))?;
+                }
+            }
             let mut record = Vec::with_capacity(columns.len() + usize::from(has_config));
             let mut mentions = None;
             for (i, key) in &columns {
@@ -523,6 +536,64 @@ fn network(conn: &Connection, profile: &str, reader: &mut Reader) -> Result<Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_loader_filters_only_safe_confirmation_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        let mut reader = Reader::default();
+        for value in ["NULL", "7", "1.5", "'legacy'", "x'ff00'"] {
+            let rows = reader
+                .rows(
+                    &conn,
+                    "rows[]",
+                    &format!(
+                        "SELECT {value} AS _closed_confirmation_observation, 'kept' AS ordinary"
+                    ),
+                    [],
+                    true,
+                )
+                .unwrap();
+            assert_eq!(rows[0].iter().count(), 1);
+            assert_eq!(rows[0]["ordinary"], J::from("kept"));
+            assert_eq!(reader.gate.columns["rows[]"], ["ordinary"]);
+        }
+        let rows = reader
+            .rows(
+                &conn,
+                "rows[]",
+                "SELECT 'retained' AS _closed_confirmation_observation",
+                [],
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            rows[0]["_closed_confirmation_observation"],
+            J::from("retained")
+        );
+        assert_eq!(
+            reader.gate.columns["rows[]"],
+            ["_closed_confirmation_observation"]
+        );
+        assert!(matches!(
+            reader.rows(
+                &conn,
+                "rows[]",
+                "SELECT CAST(x'ff' AS TEXT) AS _closed_confirmation_observation",
+                [],
+                true,
+            ),
+            Err(Error::Unsupported(_))
+        ));
+        let safe = safe_row(
+            dict([
+                ("_closed_confirmation_observation", Value::from("discarded")),
+                ("ordinary", Value::from("kept")),
+            ]),
+            &mut HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(safe, dict([("ordinary", Value::from("kept"))]));
+    }
 
     #[test]
     fn native_loader_reads_direct_columns_without_conversion() {

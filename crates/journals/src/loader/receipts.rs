@@ -180,6 +180,7 @@ pub(super) fn load<'a>(
         let wallet=by_id.get(&id).copied().unwrap_or(&fallback);
         let (chain,network)=scope(get(&row,"chain"),get(&row,"network"));
         let mut item=source(profile_id,wallet,&chain,&network,&script,"inventory",&counts)?;
+        set(&mut item,"wallet_label",Value::from(text(get(wallet,"label"))));
         for key in ["branch_index","branch_label","address_index"] { set(&mut item,key,get(&row,key).clone()); } sources.push(item);
     }
     let mut maxes = HashMap::<String, HashMap<u32, kassiber_pyjson::BigInt>>::new();

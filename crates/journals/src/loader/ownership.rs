@@ -74,6 +74,54 @@ pub(super) fn integer(value: &Value) -> Option<BigInt> {
         _ => None,
     }
 }
+fn outpoint_integer(value: &Value) -> Result<BigInt> {
+    if let Value::Str(value) = value {
+        let raw = value
+            .as_str()
+            .ok_or(Error::Unsupported("surrogate outpoint index"))?;
+        return kassiber_pytext::parse_int(raw).map_err(|error| {
+            let error = if error == kassiber_pytext::NumberError::Invalid && raw.len() > 4300 {
+                let body = raw.trim_start_matches(|c: char| {
+                    if c.is_ascii() {
+                        matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c')
+                    } else {
+                        kassiber_pytext::is_space(c as u32)
+                    }
+                });
+                let body = body.strip_prefix(['+', '-']).unwrap_or(body);
+                let end = body.char_indices().find(|(_, c)| *c != '_' && kassiber_pytext::decimal_value(*c as u32).is_none()).map(|(index, _)| index).unwrap_or(body.len());
+                match kassiber_pytext::parse_int(&body[..end]) {
+                    Err(error @ kassiber_pytext::NumberError::TooManyDigits(_)) => error,
+                    _ => error,
+                }
+            } else {
+                error
+            };
+            Error::Reference(crate::Refusal::new("ValueError", match error {
+                kassiber_pytext::NumberError::Invalid => format!("invalid literal for int() with base 10: {}", kassiber_pytext::repr_py(value).chars().take(200).collect::<String>()),
+                kassiber_pytext::NumberError::TooManyDigits(count) => format!("Exceeds the limit (4300 digits) for integer string conversion: value has {count} digits; use sys.set_int_max_str_digits() to increase the limit"),
+            }))
+        });
+    }
+    if let Value::Float(value) = value {
+        if !value.is_finite() {
+            return Err(Error::Reference(if value.is_nan() {
+                crate::Refusal::new("ValueError", "cannot convert float NaN to integer")
+            } else {
+                crate::Refusal::new("OverflowError", "cannot convert float infinity to integer")
+            }));
+        }
+    }
+    integer(value).ok_or_else(|| {
+        Error::Reference(crate::Refusal::new(
+            "TypeError",
+            format!(
+                "int() argument must be a string, a bytes-like object or a real number, not '{}'",
+                kassiber_envelope::type_name(value)
+            ),
+        ))
+    })
+}
 pub(super) fn normalized_script(value: &Value) -> Option<String> {
     let raw = if truth(value) {
         text(value)
@@ -99,13 +147,22 @@ pub(super) fn normalized_script(value: &Value) -> Option<String> {
 }
 pub(super) fn config(wallet: &Value) -> Result<Value> {
     let raw = get(wallet, "config_json");
-    let parsed = if truth(raw) { parsed(raw) } else { dict([]) };
+    let parsed = match raw {
+        Value::Str(value) => value
+            .as_str()
+            .and_then(|value| kassiber_pytext::loads(value).ok())
+            .unwrap_or_else(|| dict([])),
+        _ => dict([]),
+    };
     match parsed {
         Value::Dict(_) => Ok(parsed),
-        Value::Null if !matches!(raw,Value::Str(raw) if raw.as_str().is_some_and(|raw|raw.trim() == "null")) => {
-            Ok(dict([]))
-        }
-        _ => Err(Error::Invalid("wallet config is not a mapping".into())),
+        _ => Err(Error::Reference(crate::Refusal::new(
+            "AttributeError",
+            format!(
+                "'{}' object has no attribute 'get'",
+                kassiber_envelope::type_name(&parsed)
+            ),
+        ))),
     }
 }
 pub(super) fn addresses(config: &Value) -> Result<Vec<String>> {
@@ -126,7 +183,15 @@ pub(super) fn addresses(config: &Value) -> Result<Vec<String>> {
                 _ => Value::Null,
             })
             .collect(),
-        _ => return Err(Error::Invalid("address list is not iterable".into())),
+        _ => {
+            return Err(Error::Reference(crate::Refusal::new(
+                "TypeError",
+                format!(
+                    "'{}' object is not iterable",
+                    kassiber_envelope::type_name(value)
+                ),
+            )))
+        }
     };
     let mut seen = BTreeSet::new();
     Ok(values
@@ -211,7 +276,7 @@ impl Index {
         if !truth(txid) || vout == &Value::Null {
             return Ok(());
         }
-        let vout = integer(vout).ok_or_else(|| Error::Invalid("outpoint index".into()))?;
+        let vout = outpoint_integer(vout)?;
         let key = format!("{}:{vout}", text(txid).to_lowercase());
         self.outpoints.add(key.clone(), item.clone());
         let (chain, network) = chain_network(get(item, "chain"), get(item, "network"));
@@ -290,7 +355,12 @@ pub(super) fn load(
         return Ok((Value::Null, vec![]));
     }
     let wallets=query(conn,"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC",[profile_id])?;
-    let summaries = wallets
+    let summary_rows = query(
+        conn,
+        "SELECT id,label,kind,config_json FROM wallets WHERE profile_id=?",
+        [profile_id],
+    )?;
+    let summaries = summary_rows
         .iter()
         .map(|wallet| Ok((text(get(wallet, "id")), (wallet, config(wallet)?))))
         .collect::<Result<HashMap<_, _>>>()?;
@@ -304,7 +374,10 @@ pub(super) fn load(
     for row in query(conn,"SELECT wallet_id,txid,vout,address,script_pubkey,branch_label,branch_index,address_index,chain,network FROM wallet_utxos WHERE profile_id=?",[profile_id])? {
         let wallet_id=text(get(&row,"wallet_id"));
         if !wallets.is_empty() && !summaries.contains_key(&wallet_id) { continue; }
-        let (wallet,config)=summaries.get(&wallet_id).map(|(wallet,config)|((*wallet).clone(),config.clone())).unwrap_or((dict([("id",Value::from(wallet_id.clone())),("label",Value::from(wallet_id.clone()))]),dict([])));
+        let (mut wallet,config)=summaries.get(&wallet_id).map(|(wallet,config)|((*wallet).clone(),config.clone())).unwrap_or((dict([("id",Value::from(wallet_id.clone())),("label",Value::from(wallet_id.clone()))]),dict([])));
+        if matches!(get(&wallet,"label"), Value::Str(label) if label.is("")) {
+            set(&mut wallet,"label",Value::from(wallet_id.clone()));
+        }
         let chain=if truth(get(&row,"chain")) { get(&row,"chain") } else { get(&config,"chain") };
         let network=if truth(get(&row,"network")) { get(&row,"network") } else { get(&config,"network") };
         let (chain,network)=chain_network(chain,network);
@@ -485,4 +558,41 @@ pub(super) fn load(
         }
     }
     Ok((index.encode(&references), warnings))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_loader_outpoint_integer_preserves_python_refusals() {
+        for (value, expected) in [
+            (Value::from("١_٢"), BigInt::from(12)),
+            (Value::Float(1.9), BigInt::from(1)),
+            (Value::Bool(true), BigInt::from(1)),
+            (Value::from(i64::MIN), BigInt::from(i64::MIN)),
+        ] {
+            assert_eq!(outpoint_integer(&value).unwrap(), expected);
+        }
+        for (value, family, message) in [
+            (Value::from(""), "ValueError", "invalid literal for int() with base 10: ''".into()),
+            (Value::from("'quoted'"), "ValueError", "invalid literal for int() with base 10: \"'quoted'\"".into()),
+            (Value::from("9".repeat(4301)), "ValueError", "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit".into()),
+            (Value::from(format!("{}x", "9".repeat(4301))), "ValueError", "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit".into()),
+            (Value::from(format!(" \t-{}x", "9".repeat(4301))), "ValueError", "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit".into()),
+            (Value::from(format!("\u{a0}+{}x", "9".repeat(4301))), "ValueError", "Exceeds the limit (4300 digits) for integer string conversion: value has 4301 digits; use sys.set_int_max_str_digits() to increase the limit".into()),
+            (Value::from("x".repeat(5000)), "ValueError", format!("invalid literal for int() with base 10: '{}", "x".repeat(199))),
+            (Value::Float(f64::NAN), "ValueError", "cannot convert float NaN to integer".into()),
+            (Value::Float(f64::INFINITY), "OverflowError", "cannot convert float infinity to integer".into()),
+            (Value::Float(f64::NEG_INFINITY), "OverflowError", "cannot convert float infinity to integer".into()),
+            (Value::Null, "TypeError", "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'".into()),
+        ] {
+            let Err(Error::Reference(refusal)) = outpoint_integer(&value) else {
+                panic!("expected outpoint scalar refusal");
+            };
+            assert_eq!(refusal.family, family);
+            assert_eq!(refusal.message, message);
+            assert!(refusal.code.is_none());
+        }
+    }
 }
