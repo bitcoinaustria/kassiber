@@ -1821,6 +1821,125 @@ code is unchanged.
 Batch 2, exchange APIs, sync and AI projections remain outside this checkpoint.
 No dependencies or egress are added.
 
+## 21bitcoin file-ingestion continuation (R5 importers batch 1, partial)
+
+Native `wallets import-21bitcoin` uses the active custodial ledger coordinator:
+full mode by default, provider-wallet creation/reuse, and refusal of relevant
+mode before wallet creation or file access. Provider row IDs remain separate
+from on-chain transaction IDs. BTC/LBTC aliases, trade/deposit/withdrawal legs,
+exact Decimal fiat values and fees, integer msat amounts, timestamps and raw
+provenance follow Python. Fiat sale proceeds are already net and retain that
+value. UTF-8 decoding retains BOM data; blank CSV rows are filtered before
+header validation. Dotted dates preserve Python's two/three-digit year rules,
+UTC interpretation, fractional-second discard and integer-overflow refusals.
+
+Legacy 21bitcoin reconciliation tags are cleared only on matching imported
+rows; tagged excluded rows are reactivated. The fallback lookup binds wallet,
+provider reference, direction, asset and exact msat amount. Unrelated tags and
+exclusions remain intact. Import-run update counts, dedupe, metadata/pricing
+authority, journal invalidation and atomic rollback use the shared core. No
+provenance record, commercial suggestion or prior report establishes custody,
+ledger totals, basis or tax facts.
+
+The frozen Python oracle contains **209 files**. Native vectors pin every
+normalized record/refusal; the hybrid candidate compares complete typed book
+dumps and responses for every file on a populated book. Additional scenarios
+exercise default wallets, reimports, legacy flags, updates, rollback and
+refusals. Direct binary comparisons cover both SQLite and SQLCipher.
+
+The acceptance scenarios require **222 Rust importer calls and zero Python
+fallbacks**: 209 frozen files, seven coordinator calls and six calls from the
+existing smoke/end-to-end module. Every invocation compares its entire book
+with Python. Eight direct wire/state/rollback scenarios pass across SQLite and
+SQLCipher. All 36 native file-import tests pass. Workspace fmt/clippy passes
+with warnings denied; the preceding complete workspace run passed 1,509 tests.
+Final stack verification is recorded separately after the last importer.
+
+There are **67 added 21bitcoin mutations** (348 wallet entries total). The
+inherited atomicity entries also name the 21bitcoin rollback test; Bull's tag
+mutation now targets its original call site after adding legacy cleanup.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-twentyone-blank-row` | `python_twentyone_import_vectors` |
+| `W-twentyone-extra-row` | `python_twentyone_import_vectors` |
+| `W-twentyone-headers` | `python_twentyone_import_vectors` |
+| `W-twentyone-id` | `python_twentyone_import_vectors` |
+| `W-twentyone-asset-alias` | `python_twentyone_import_vectors` |
+| `W-twentyone-lbtc` | `python_twentyone_import_vectors` |
+| `W-twentyone-buy_amount` | `python_twentyone_import_vectors` |
+| `W-twentyone-sell_amount` | `python_twentyone_import_vectors` |
+| `W-twentyone-fee_amount` | `python_twentyone_import_vectors` |
+| `W-twentyone-fee-fiat` | `python_twentyone_import_vectors` |
+| `W-twentyone-buy-branch` | `python_twentyone_import_vectors` |
+| `W-twentyone-sell-branch` | `python_twentyone_import_vectors` |
+| `W-twentyone-buy-amount` | `python_twentyone_import_vectors` |
+| `W-twentyone-sell-amount` | `python_twentyone_import_vectors` |
+| `W-twentyone-buy-fee` | `python_twentyone_import_vectors` |
+| `W-twentyone-buy-fiat` | `python_twentyone_import_vectors` |
+| `W-twentyone-sell-fiat` | `python_twentyone_import_vectors` |
+| `W-twentyone-buy-kind` | `python_twentyone_import_vectors` |
+| `W-twentyone-sell-kind` | `python_twentyone_import_vectors` |
+| `W-twentyone-btc-fee` | `python_twentyone_import_vectors` |
+| `W-twentyone-rate-guard` | `python_twentyone_import_vectors` |
+| `W-twentyone-divide` | `python_twentyone_import_vectors` |
+| `W-twentyone-type` | `python_twentyone_import_vectors` |
+| `W-twentyone-kind-deposit` | `python_twentyone_import_vectors` |
+| `W-twentyone-kind-withdrawal` | `python_twentyone_import_vectors` |
+| `W-twentyone-kind-trade` | `python_twentyone_import_vectors` |
+| `W-twentyone-kind-fallback` | `python_twentyone_import_vectors` |
+| `W-twentyone-date` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-year` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-truncated-year` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-default-time` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-day-month` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-large-int` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-positive-overflow` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-negative-overflow` | `python_twentyone_import_vectors` |
+| `W-twentyone-date-original` | `python_twentyone_import_vectors` |
+| `W-twentyone-identity` | `python_twentyone_import_vectors` |
+| `W-twentyone-note` | `python_twentyone_import_vectors` |
+| `W-twentyone-depot` | `python_twentyone_import_vectors` |
+| `W-twentyone-counterparty` | `python_twentyone_import_vectors` |
+| `W-twentyone-raw` | `python_twentyone_import_vectors` |
+| `W-twentyone-provider` | `python_twentyone_import_vectors` |
+| `W-twentyone-pair` | `python_twentyone_import_vectors` |
+| `W-twentyone-method` | `python_twentyone_import_vectors` |
+| `W-twentyone-source` | `python_twentyone_import_vectors` |
+| `W-twentyone-external-ref` | `python_twentyone_import_vectors` |
+| `W-twentyone-quality` | `python_twentyone_import_vectors` |
+| `W-twentyone-active-format` | `twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read` |
+| `W-twentyone-refuse-relevant` | `twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read` |
+| `W-twentyone-default-label` | `twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read` |
+| `W-twentyone-default-kind` | `twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read` |
+| `W-twentyone-row-count` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-report-updates` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-batch-updates` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-dispatch` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-profile` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-matched` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-wallet-gap` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-ambiguous` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-reactivate` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-delete` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-clear-count` | `twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness` |
+| `W-twentyone-fallback-wallet` | `twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions` |
+| `W-twentyone-fallback-reference` | `twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions` |
+| `W-twentyone-fallback-direction` | `twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions` |
+| `W-twentyone-fallback-asset` | `twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions` |
+| `W-twentyone-fallback-amount` | `twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions` |
+
+All 67 added entries and the three audited shared entries are killed. The
+first run killed 65 of 70; a sale with a non-sale provider label closed the
+remaining mapping gap. Explicit mutation-only string/ownership types repaired
+four unbuildable mutants, and targeted retries killed all five outstanding
+entries with passing baselines. The oracle now includes a separate provider
+counterparty as well. Mutation source/build trees were removed afterward.
+
+Pocket/Pocketbitcoin and Strike remain before batch 1 is complete. Batch 2,
+exchange API sync and AI projections remain outside this checkpoint. No
+production Python code, dependencies or egress are changed.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then
@@ -3161,7 +3280,7 @@ all served by Rust, including the two inherited creation fixture calls:
 | `reports.filed-snapshots.list` | 16 | 0 |
 | `reports.filed-snapshots.create` | 26 | 0 |
 
-The nine inherited native daemon sessions still compare 207 report responses
+The nine inherited native daemon sessions still compare 209 report responses
 as raw bytes, excluding their intentionally different ready-handshake inventories.
 No new daemon kind is enabled. The broader hybrid selection adds 41 ported report
 calls, all Rust-served; its unported setup/export/AI calls remain Python.
@@ -3281,7 +3400,7 @@ processed FIFO, HIFO or Austrian books.
 
 All 22 inherited report process scenarios pass on the rebuilt harness. Their
 fresh hybrid log records 309 ported report CLI calls, all Rust-served. The nine
-native daemon sessions compare 207 report responses as raw bytes, excluding
+native daemon sessions compare 209 report responses as raw bytes, excluding
 their intentionally different ready-handshake inventories. Per-command/kind
 counts are unchanged from the previous checkpoint:
 

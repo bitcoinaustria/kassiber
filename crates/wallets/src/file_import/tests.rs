@@ -462,6 +462,7 @@ fn assert_import_vectors(cases: &Json) {
             "river_csv" => Format::River,
             "bullbitcoin_csv" => Format::Bull,
             "coinfinity_csv" => Format::Coinfinity,
+            "21bitcoin_csv" => Format::TwentyOne,
             _ => Format::Csv,
         };
         let result = format.load(path.to_str().unwrap()).and_then(|rows| {
@@ -829,6 +830,14 @@ fn python_bull_import_vectors() {
 fn python_coinfinity_import_vectors() {
     let cases: Json = serde_json::from_str(include_str!(
         "../../tests/vectors/python_coinfinity_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+#[test]
+fn python_twentyone_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_twentyone_imports.json"
     ))
     .unwrap();
     assert_import_vectors(&cases);
@@ -1667,4 +1676,248 @@ fn coinfinity_economic_matching_preserves_closed_observation() {
         .unwrap();
     assert_eq!(stored, raw);
     assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='authored' AND description='authored' AND counterparty='authored' AND fiat_value_exact='101' AND fee=1000000"),1);
+}
+
+const TWENTYONE_HEADER: &str = "id,transaction_date,buy_asset,buy_amount,sell_asset,sell_amount,fee_asset,fee_amount,transaction_type,note\n";
+const TWENTYONE_BUY: &str = "one,01.01.222 01:02:03,BTC,0.002,EUR,100,EUR,1,trade,purchase\n";
+#[test]
+fn twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        let first = format!("{TWENTYONE_HEADER}{TWENTYONE_BUY}");
+        let result = import_kind(&conn, &first, Format::TwentyOne).unwrap();
+        assert_eq!(kassiber_envelope::get(&result, "mode"), Some(&s("full")));
+        assert_eq!(
+            kassiber_envelope::get(&result, "twentyonebitcoin_rows"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 0);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 0);
+        conn.execute_batch("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES('legacy','ws','p','21bitcoin-wallet-gap','old','2025-01-01'),('authored','ws','p','keep','Authored','2025-01-01'),('legacy2','ws','p','21bitcoin-matched','old matched','2025-01-01'),('legacy3','ws','p','21bitcoin-ambiguous','old ambiguous','2025-01-01'); INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions; INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy2' FROM transactions; INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy3' FROM transactions; INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'authored' FROM transactions; UPDATE transactions SET excluded=1;").unwrap();
+        let second = format!(
+            "{TWENTYONE_HEADER}{}two,02.01.2022,,,BTC,0.001,BTC,0.00001,withdrawal,send\n",
+            TWENTYONE_BUY.replace("purchase", "updated")
+        );
+        let result = import_kind(&conn, &second, Format::TwentyOne).unwrap();
+        for (key, count) in [
+            ("imported", 1),
+            ("updated", 1),
+            ("twentyonebitcoin_rows", 2),
+            ("reconciliation_flags_cleared", 1),
+            ("reactivated", 1),
+        ] {
+            assert_eq!(
+                kassiber_envelope::get(&result, key),
+                Some(&Py::from(count)),
+                "{key}"
+            );
+        }
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transaction_tags WHERE tag_id LIKE 'legacy%'"
+            ),
+            0
+        );
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM transaction_tags WHERE tag_id='authored'"
+            ),
+            1
+        );
+        assert_eq!(scalar(&conn, "SELECT sum(excluded) FROM transactions"), 0);
+        assert_eq!(
+            scalar(&conn, "SELECT sum(rows_updated) FROM import_batches"),
+            1
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 2);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            2
+        );
+        let result = import_kind(&conn, &second, Format::TwentyOne).unwrap();
+        assert_eq!(
+            kassiber_envelope::get(&result, "unchanged"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(
+            kassiber_envelope::get(&result, "updated"),
+            Some(&Py::from(1))
+        );
+        assert_eq!(kassiber_envelope::get(&result, "reactivated"), None);
+        assert_eq!(
+            kassiber_envelope::get(&result, "journal_invalidated"),
+            Some(&Py::Bool(true))
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 2);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE asset='BTC' AND direction='outbound' AND fee=1000000"),1);
+    }
+}
+#[test]
+fn twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read() {
+    let conn = fixture();
+    let request = |mode| Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: "missing-21bitcoin-input.csv".into(),
+        format: Format::TwentyOne,
+        mode,
+    };
+    let error = execute(
+        &conn,
+        request(Some("relevant".into())),
+        Some(&Identity {
+            ids: vec![],
+            timestamp: "2025-01-01".into(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(
+        (&*error.code, &*error.message),
+        (
+            "validation",
+            "21bitcoin_csv is an active custodial ledger import"
+        )
+    );
+    assert_eq!(
+        error.hint.as_deref(),
+        Some("Import the complete platform ledger, then review custody-transfer candidates.")
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 1);
+    conn.execute_batch("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    let error = execute(
+        &conn,
+        request(None),
+        Some(&Identity {
+            ids: vec!["provider".into()],
+            timestamp: "2025-01-01".into(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "not_found");
+    let stored: (String, String, String) = conn
+        .query_row(
+            "SELECT label,kind,config_json FROM wallets WHERE id='provider'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        stored,
+        (
+            "21bitcoin".into(),
+            "21bitcoin".into(),
+            r#"{"source_format": "21bitcoin_csv"}"#.into()
+        )
+    );
+    assert!(conn.is_autocommit());
+}
+#[test]
+fn twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let first = format!("{TWENTYONE_HEADER}{TWENTYONE_BUY}");
+    import_kind(&conn, &first, Format::TwentyOne).unwrap();
+    conn.execute_batch("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES('legacy','ws','p','21bitcoin-matched','old','2025-01-01'); INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions; UPDATE transactions SET excluded=1; CREATE TRIGGER refuse_21_batch BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'batch denied');END;").unwrap();
+    let content = format!("{first}two,02.01.2022,BTC,0.001,,,BTC,0,deposit,receive\n");
+    assert!(import_kind(&conn, &content, Format::TwentyOne).is_err());
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        1
+    );
+    assert!(conn.is_autocommit());
+}
+
+#[test]
+fn twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let first = format!("{TWENTYONE_HEADER}{TWENTYONE_BUY}");
+    import_kind(&conn, &first, Format::TwentyOne).unwrap();
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01'); INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES('legacy','ws','p','21bitcoin-matched','old','2025-01-01'); UPDATE transactions SET external_id='old-provider-id',fingerprint='old-fingerprint',excluded=1;").unwrap();
+    for (id, wallet, direction, asset, amount) in [
+        ("wrong-wallet", "other", "inbound", "BTC", 200000000_i64),
+        ("wrong-direction", "wallet", "outbound", "BTC", 200000000),
+        ("wrong-asset", "wallet", "inbound", "LBTC", 200000000),
+        ("wrong-amount", "wallet", "inbound", "BTC", 200000001),
+    ] {
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,pricing_external_ref,excluded,created_at) VALUES(?,'ws','p',?,'',?,'2022-01-01',?,?,?,0,'one',1,'9999-01-01')",params![id,wallet,id,direction,asset,amount]).unwrap();
+    }
+    conn.execute_batch(
+        "INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions;",
+    )
+    .unwrap();
+    let rows = twentyone::parse(csv::rows(&first).unwrap()).unwrap();
+    let mut record = normalize(&rows[0]).unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: "unused".into(),
+        format: Format::TwentyOne,
+        mode: None,
+    };
+    let wallet = resolve(&conn, "p", "Source").unwrap();
+    let mut outcome = Vec::new();
+    exchange::clear_legacy_flags(
+        &conn,
+        &request,
+        &wallet,
+        std::slice::from_ref(&record),
+        &mut outcome,
+    )
+    .unwrap();
+    assert_eq!(
+        outcome,
+        vec![
+            ("reconciliation_flags_cleared", Py::from(1)),
+            ("reactivated", Py::from(1))
+        ]
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions WHERE excluded=1"),
+        4
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT excluded FROM transactions WHERE external_id='old-provider-id'"
+        ),
+        0
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE id LIKE 'wrong-%' AND excluded=1"
+        ),
+        4
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 4);
+    record
+        .fields
+        .insert("pricing_external_ref".into(), Sql::Text("absent".into()));
+    let mut outcome = Vec::new();
+    exchange::clear_legacy_flags(
+        &conn,
+        &request,
+        &wallet,
+        std::slice::from_ref(&record),
+        &mut outcome,
+    )
+    .unwrap();
+    assert!(outcome.is_empty());
 }

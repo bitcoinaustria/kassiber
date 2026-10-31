@@ -6,6 +6,7 @@ mod exchange;
 mod generic_json;
 mod phoenix;
 mod river;
+mod twentyone;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pydecimal::{Context, Decimal, DecimalError, Rounding};
@@ -38,6 +39,7 @@ pub enum Format {
     River,
     Bull,
     Coinfinity,
+    TwentyOne,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -48,6 +50,7 @@ impl Format {
             Self::River => "river_csv",
             Self::Bull => "bullbitcoin_csv",
             Self::Coinfinity => "coinfinity_csv",
+            Self::TwentyOne => "21bitcoin_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
@@ -58,14 +61,19 @@ impl Format {
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
             Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::TwentyOne => twentyone::parse(csv::load(file)?),
         }
     }
     fn evidence(self) -> bool {
         matches!(self, Self::Bull | Self::Coinfinity)
     }
+    fn active(self) -> bool {
+        self == Self::TwentyOne
+    }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
+            Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
             _ => ("Bull Bitcoin", "bullbitcoin", "bullbitcoin_rows"),
         }
     }
@@ -1125,7 +1133,28 @@ pub fn execute(
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
     let mut ids = Ids { identity, at: 0 };
-    let mode = if request.format.evidence() {
+    let mode = if request.format.active() {
+        let mode = exchange::mode(
+            request
+                .mode
+                .as_deref()
+                .filter(|v| !v.is_empty())
+                .or(Some("full")),
+        )?;
+        if mode != "full" {
+            return Err(AppError::new(
+                "validation",
+                format!(
+                    "{} is an active custodial ledger import",
+                    request.format.name()
+                ),
+            )
+            .with_hint(
+                "Import the complete platform ledger, then review custody-transfer candidates.",
+            ));
+        }
+        Some(mode)
+    } else if request.format.evidence() {
         Some(exchange::mode(request.mode.as_deref())?)
     } else {
         None
@@ -1416,21 +1445,30 @@ fn apply(
             &mut result,
         )?;
     }
+    if request.format.active() && updated_count > 0 {
+        result.push(("updated", Py::from(updated_count)));
+    }
+    if request.format == Format::TwentyOne {
+        exchange::clear_legacy_flags(conn, request, wallet, records, &mut result)?;
+    }
     if !inserted_ids.is_empty() {
         let batch = ids.next(conn)?;
-        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() { updated_count } else { 0 },skipped]).map_err(database_error)?;
+        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         for id in inserted_ids {
             conn.execute("INSERT OR IGNORE INTO import_batch_transactions(batch_id,transaction_id) VALUES(?,?)",[&batch,&id]).map_err(database_error)?;
         }
         result.push(("import_batch_id", s(batch)));
     }
-    if request.format.evidence() {
+    if request.format.evidence() || request.format.active() {
         result.push((request.format.provider().2, Py::from(records.len() as i64)));
     }
     result.push(("input_format", s(format)));
     let path = kassiber_paths::abspath(std::path::Path::new(&request.file))
         .map_err(|e| AppError::new("internal_error", e.to_string()))?;
     result.push(("file", s(path.to_string_lossy().into_owned())));
+    if request.format.active() {
+        result.push(("mode", s("full")));
+    }
     Ok(dict(result))
 }
 #[cfg(test)]

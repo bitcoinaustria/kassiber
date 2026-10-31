@@ -82,6 +82,63 @@ pub(super) fn bitcoin(currency: Option<&str>) -> Option<&'static str> {
         _ => None,
     }
 }
+pub(super) fn clear_legacy_flags(
+    conn: &Connection,
+    request: &Request,
+    wallet: &crate::Wallet,
+    records: &[Record],
+    result: &mut Vec<(&str, Py)>,
+) -> Result<(), AppError> {
+    let mut tags = conn.prepare("SELECT id FROM tags WHERE profile_id=? AND code IN ('21bitcoin-matched','21bitcoin-wallet-gap','21bitcoin-ambiguous')").map_err(database_error)?;
+    let tags = tags
+        .query_map([&request.profile_id], |r| r.get::<_, String>(0))
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(database_error)?;
+    if tags.is_empty() {
+        return Ok(());
+    }
+    let mut cleared = 0;
+    let mut reactivated = 0;
+    for record in records {
+        let imported = find(conn, &wallet.id, record, &fingerprint(&wallet.id, record))?;
+        let imported = if imported.is_some() {
+            imported
+        } else {
+            conn.query_row("SELECT id,excluded FROM transactions WHERE wallet_id=? AND pricing_external_ref=? AND direction=? AND asset=? AND amount=? ORDER BY created_at DESC LIMIT 1", params![wallet.id, record.fields["pricing_external_ref"],record.fields["direction"],record.fields["asset"],record.fields["amount"]], |r| Ok(BTreeMap::from([("id".into(),r.get(0)?),("excluded".into(),r.get(1)?)]))).optional().map_err(database_error)?
+        };
+        let Some(imported) = imported else {
+            continue;
+        };
+        let id = string(&imported, "id");
+        let mut tagged = false;
+        for tag in &tags {
+            tagged |= conn
+                .execute(
+                    "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id=?",
+                    params![id, tag],
+                )
+                .map_err(database_error)?
+                > 0;
+        }
+        if tagged {
+            cleared += 1;
+            reactivated += conn
+                .execute(
+                    "UPDATE transactions SET excluded=0 WHERE id=? AND excluded!=0",
+                    [&id],
+                )
+                .map_err(database_error)?;
+        }
+    }
+    if cleared > 0 {
+        result.push(("reconciliation_flags_cleared", Py::from(cleared)));
+    }
+    if reactivated > 0 {
+        result.push(("reactivated", Py::from(reactivated as i64)));
+    }
+    Ok(())
+}
 pub(super) fn mode(value: Option<&str>) -> Result<&'static str, AppError> {
     match kassiber_pytext::lower(kassiber_pytext::strip(value.filter(|v|!v.is_empty()).unwrap_or("relevant"))).as_str() {
         "full" => Ok("full"),

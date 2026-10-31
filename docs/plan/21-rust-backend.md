@@ -1927,6 +1927,23 @@ mutations (281 wallet mutations killed in total) are recorded in the
 [Coinfinity checkpoint](../reference/rust-shell.md#coinfinity-file-ingestion-continuation-r5-importers-batch-1-partial).
 21bitcoin, Pocket/Pocketbitcoin and Strike remain before batch 1 is complete.
 
+### R5 exchange file-import batch 1: 21bitcoin continuation (partial)
+
+Native `wallets import-21bitcoin` imports the full active custodial ledger and
+keeps provider IDs separate from chain identities. It preserves BTC/LBTC legs,
+net fiat sale proceeds, exact fees/prices, UTC and dotted-date variants, blank
+row filtering, UTF-8/BOM behavior, provenance, dedupe and rollback-capable runs.
+Relevant mode refuses before wallet/file admission. Reimports clear legacy
+reconciliation tags and reactivate only the corresponding tagged rows; lookup
+fallbacks bind wallet, provider reference, direction, asset and exact msat.
+
+The 209 frozen Python files compare complete book dumps in full mode. Native
+coordinator, hybrid and encrypted/plaintext wire/state tests cover updates,
+legacy flags, default-wallet admission, rollback and refusals. The 67 added
+mutations and verification are recorded in the
+[21bitcoin checkpoint](../reference/rust-shell.md#21bitcoin-file-ingestion-continuation-r5-importers-batch-1-partial).
+Pocket/Pocketbitcoin and Strike remain before batch 1 is complete.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

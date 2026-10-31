@@ -625,7 +625,8 @@
     "find": "ROLLBACK TO wallet_file_import;RELEASE wallet_file_import",
     "replace": "RELEASE wallet_file_import",
     "expect_failing": [
-      "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness"
+      "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness",
+      "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -1487,7 +1488,8 @@
     "expect_failing": [
       "river_metadata_failure_rolls_back_observations_tags_and_run",
       "bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
-      "coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation"
+      "coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
+      "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness"
     ],
     "rule": "River metadata failures roll back the entire import and journal invalidation."
   },
@@ -2144,8 +2146,8 @@
   {
     "id": "W-bull-clear-flags",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id=?",
-    "replace": "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id!=?",
+    "find": "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id=?\",\n                [&id, &tag]",
+    "replace": "DELETE FROM transaction_tags WHERE transaction_id=? AND tag_id!=?\",\n                [&id, &tag]",
     "expect_failing": [
       "bull_full_exclusion_reconciliation_dedupe_and_readiness"
     ],
@@ -2810,5 +2812,675 @@
       "coinfinity_economic_matching_preserves_closed_observation"
     ],
     "rule": "Economic price enrichment must preserve the closed chain observation and authored metadata."
+  },
+  {
+    "id": "W-twentyone-blank-row",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "!kassiber_pytext::strip(s).is_empty()",
+    "replace": "true",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-extra-row",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "r.rest.is_some()",
+    "replace": "false",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-headers",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "exchange::headers(&rows, REQUIRED, \"21bitcoin\")?;",
+    "replace": "let _ = exchange::headers(&rows, REQUIRED, \"21bitcoin\");",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-id",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "c.opt(&[\"id\"])",
+    "replace": "c.opt(&[\"transaction_type\"])",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-asset-alias",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "exchange::bitcoin(Some(&value))",
+    "replace": "exchange::bitcoin(None)",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-lbtc",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "[\"BTC\", \"LBTC\"].contains(&s)",
+    "replace": "[\"BTC\"].contains(&s)",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-buy_amount",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "number(c.get(&[\"buy_amount\"]))?",
+    "replace": "number(Some(\"0\".into()))?",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-sell_amount",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "number(c.get(&[\"sell_amount\"]))?",
+    "replace": "number(Some(\"0\".into()))?",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-fee_amount",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "number(c.get(&[\"fee_amount\"]))?",
+    "replace": "number(Some(\"0\".into()))?",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-fee-fiat",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "fee_currency.is_some() && !crypto(&fee_currency)",
+    "replace": "false",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-buy-branch",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "(true, false) => {",
+    "replace": "(true, _) => {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-sell-branch",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "(false, true) => {",
+    "replace": "(false, _) => {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-buy-amount",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "abs(buy_amount.ok_or_else",
+    "replace": "abs(sell_amount.clone().ok_or_else",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-sell-amount",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "abs(sell_amount.ok_or_else",
+    "replace": "abs(buy_amount.clone().ok_or_else",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-buy-fee",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "&if fiat_fee { fee.clone() } else { zero() }, '+'",
+    "replace": "&if fiat_fee { fee.clone() } else { zero() }, '-'",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-buy-fiat",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "if value.is_some() { sell.clone() } else { None }",
+    "replace": "None",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-sell-fiat",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "if value.is_some() { buy.clone() } else { None }",
+    "replace": "None",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-buy-kind",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "let kind = if sell.is_some() {",
+    "replace": "let kind = if false {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-sell-kind",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "let kind = if value.is_some() {",
+    "replace": "let kind = if false {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-btc-fee",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "fee_currency.as_deref() == Some(&asset)",
+    "replace": "false",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-rate-guard",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "Some(value) if positive(&amount)?",
+    "replace": "Some(value) if false",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-divide",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "arithmetic(value, &amount, '/')?",
+    "replace": "arithmetic(value, &amount, '*')?",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-type",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "c\n        .opt(&[\"transaction_type\"])",
+    "replace": "c\n        .opt(&[\"note\"])",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-kind-deposit",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "\"deposit\" => \"deposit\".into(),",
+    "replace": "\"deposit\" => \"income\".into(),",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-kind-withdrawal",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "\"withdrawal\" => \"withdrawal\".into(),",
+    "replace": "\"withdrawal\" => \"send\".into(),",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-kind-trade",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "if direction == \"inbound\" {",
+    "replace": "if direction == \"outbound\" {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-kind-fallback",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "tag.replace(' ', \"_\")",
+    "replace": "tag",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "date(c.get(&[\"transaction_date\"]))?",
+    "replace": "Some(String::from(\"2025-01-01\"))",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-year",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "year_number += 2000;",
+    "replace": "year_number += 1900;",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-truncated-year",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "let text = if year.chars().count() == 3 && year.starts_with('2')",
+    "replace": "let text = if year.chars().count() == 3 && year.starts_with('3')",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-default-time",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "\"00:00:00\"",
+    "replace": "\"01:00:00\"",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-day-month",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "bits[1],\n        bits[0],",
+    "replace": "bits[0],\n        bits[1],",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-large-int",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "number > i64::MAX.into() || number < i64::MIN.into()",
+    "replace": "false",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-positive-overflow",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "if number > i32::MAX.into() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-negative-overflow",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "if number < i32::MIN.into() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-date-original",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "crate::time::timestamp(&iso).unwrap_or(value)",
+    "replace": "crate::time::timestamp(&iso).unwrap_or(\"2025-01-01\".into())",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-identity",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "format!(\"21bitcoin:{id}\")",
+    "replace": "id",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-note",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "c.opt(&[\"note\"])",
+    "replace": "None",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-depot",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "c.opt(&[\"depot_name\"])",
+    "replace": "None",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-counterparty",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "c.opt(&[\"exchange_name\"])",
+    "replace": "None::<String>",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-raw",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "config::stored_json(&c.json())",
+    "replace": "\"{}\"",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-provider",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "\"pricing_provider\":\"21bitcoin\"",
+    "replace": "\"pricing_provider\":\"wrong\"",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-pair",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "format!(\"{asset}-{f}\")",
+    "replace": "format!(\"{asset}/{f}\")",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-method",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "\"pricing_method\":source.map(|_|\"21bitcoin_csv\")",
+    "replace": "\"pricing_method\":source.map(|_|\"wrong\")",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-source",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "let source = rate.as_ref().map(|_| \"exchange_execution\");",
+    "replace": "let source = rate.as_ref().map(|_| \"wrong\");",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-external-ref",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "\"pricing_external_ref\":id",
+    "replace": "\"pricing_external_ref\":\"wrong\"",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-quality",
+    "file": "crates/wallets/src/file_import/twentyone.rs",
+    "find": "source.map(|_|\"exact\")",
+    "replace": "source.map(|_|\"estimate\")",
+    "expect_failing": [
+      "python_twentyone_import_vectors"
+    ],
+    "rule": "Preserve the Python 21bitcoin parser branch, exact amounts and provenance."
+  },
+  {
+    "id": "W-twentyone-active-format",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "self == Self::TwentyOne",
+    "replace": "false",
+    "expect_failing": [
+      "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-refuse-relevant",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if mode != \"full\" {",
+    "replace": "if mode != \"full\" && false {",
+    "expect_failing": [
+      "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-default-label",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"21bitcoin\", \"21bitcoin\", \"twentyonebitcoin_rows\")",
+    "replace": "(\"Wrong\", \"21bitcoin\", \"twentyonebitcoin_rows\")",
+    "expect_failing": [
+      "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-default-kind",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"21bitcoin\", \"21bitcoin\", \"twentyonebitcoin_rows\")",
+    "replace": "(\"21bitcoin\", \"custom\", \"twentyonebitcoin_rows\")",
+    "expect_failing": [
+      "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-row-count",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"21bitcoin\", \"21bitcoin\", \"twentyonebitcoin_rows\")",
+    "replace": "(\"21bitcoin\", \"21bitcoin\", \"wrong_rows\")",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-report-updates",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if request.format.active() && updated_count > 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-batch-updates",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if request.format.evidence() || request.format.active() { updated_count }",
+    "replace": "if request.format.evidence() { updated_count }",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-dispatch",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if request.format == Format::TwentyOne {",
+    "replace": "if false {",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-profile",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "WHERE profile_id=? AND code IN ('21bitcoin-matched'",
+    "replace": "WHERE profile_id!=? AND code IN ('21bitcoin-matched'",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-matched",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "'21bitcoin-matched'",
+    "replace": "'wrong'",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-wallet-gap",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "'21bitcoin-wallet-gap'",
+    "replace": "'wrong'",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-ambiguous",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "'21bitcoin-ambiguous'",
+    "replace": "'wrong'",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-reactivate",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "UPDATE transactions SET excluded=0 WHERE id=? AND excluded!=0",
+    "replace": "UPDATE transactions SET excluded=1 WHERE id=? AND excluded!=0",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-delete",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "tagged |= conn",
+    "replace": "tagged |= false && conn",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-clear-count",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "cleared += 1;",
+    "replace": "cleared += 2;",
+    "expect_failing": [
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+    ],
+    "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
+  },
+  {
+    "id": "W-twentyone-fallback-wallet",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "wallet_id=? AND pricing_external_ref=?",
+    "replace": "wallet_id!=? AND pricing_external_ref=?",
+    "expect_failing": [
+      "twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions"
+    ],
+    "rule": "Legacy reconciliation lookup must preserve wallet, provider reference, direction, asset and exact msat quantity."
+  },
+  {
+    "id": "W-twentyone-fallback-reference",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "pricing_external_ref=? AND direction=?",
+    "replace": "pricing_external_ref!=? AND direction=?",
+    "expect_failing": [
+      "twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions"
+    ],
+    "rule": "Legacy reconciliation lookup must preserve wallet, provider reference, direction, asset and exact msat quantity."
+  },
+  {
+    "id": "W-twentyone-fallback-direction",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "pricing_external_ref=? AND direction=?",
+    "replace": "pricing_external_ref=? AND direction!=?",
+    "expect_failing": [
+      "twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions"
+    ],
+    "rule": "Legacy reconciliation lookup must preserve wallet, provider reference, direction, asset and exact msat quantity."
+  },
+  {
+    "id": "W-twentyone-fallback-asset",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "AND asset=? AND amount=? ORDER BY created_at DESC LIMIT 1",
+    "replace": "AND asset!=? AND amount=? ORDER BY created_at DESC LIMIT 1",
+    "expect_failing": [
+      "twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions"
+    ],
+    "rule": "Legacy reconciliation lookup must preserve wallet, provider reference, direction, asset and exact msat quantity."
+  },
+  {
+    "id": "W-twentyone-fallback-amount",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "AND amount=? ORDER BY created_at DESC LIMIT 1",
+    "replace": "AND amount!=? ORDER BY created_at DESC LIMIT 1",
+    "expect_failing": [
+      "twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions"
+    ],
+    "rule": "Legacy reconciliation lookup must preserve wallet, provider reference, direction, asset and exact msat quantity."
   }
 ]

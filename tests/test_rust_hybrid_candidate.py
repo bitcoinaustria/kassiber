@@ -231,6 +231,24 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-coinfinity"]
         self.assertEqual(calls, [{"command":"wallets.import-coinfinity","served_by":"rust"}] * (2 * len(cases)))
 
+    def test_twentyone_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "21bitcoin workspace"))
+        self.ok(self.cli("profiles", "create", "21bitcoin book", "--workspace", "21bitcoin workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "21bitcoin workspace", "--profile", "21bitcoin book"))
+        self.ok(self.cli("wallets", "create", "--label", "21bitcoin source", "--kind", "21bitcoin"))
+        source = self.data_root.parent / "twentyone.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_twentyone_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-21bitcoin", "--wallet", "21bitcoin source", "--file", str(source))
+                    self.assertIn(result.returncode, (0,1), (result.stdout, result.stderr))
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-21bitcoin"]
+        self.assertEqual(calls, [{"command":"wallets.import-21bitcoin","served_by":"rust"}] * len(cases))
+
     def test_bull_coordinator_default_wallet_alias_reimport_and_rollback_dump(self):
         from tests.test_cli_smoke import _BULLBITCOIN_EXISTING_CSV, _BULLBITCOIN_ORDERS_CSV
         self.ok(self.cli("init"))
@@ -296,6 +314,38 @@ class HybridCandidateTest(unittest.TestCase):
         calls=[item for item in self.served() if item["command"]=="wallets.import-coinfinity"]
         self.assertEqual(len(calls),6)
         self.assertTrue(all(item["served_by"]=="rust" for item in calls))
+
+    def test_twentyone_default_ledger_reimport_legacy_flags_and_rollback_dump(self):
+        import sqlite3
+        from tests.test_cli_smoke import _TWENTYONEBITCOIN_TRANSACTIONS_CSV
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "21bitcoin workspace"))
+        self.ok(self.cli("profiles", "create", "21bitcoin book", "--workspace", "21bitcoin workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "21bitcoin workspace", "--profile", "21bitcoin book"))
+        source = self.data_root.parent / "twentyone.csv"
+        source.write_text(_TWENTYONEBITCOIN_TRANSACTIONS_CSV)
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            result = self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))["data"]
+            self.assertEqual((result["wallet"], result["mode"], result["imported"]), ("21bitcoin", "full", 2))
+            repeated = self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))["data"]
+            self.assertEqual((repeated["unchanged"],repeated["updated"]), (1,1))
+            database = next(self.data_root.rglob("kassiber.sqlite3"))
+            with sqlite3.connect(database) as conn:
+                conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) SELECT 'legacy21',workspace_id,profile_id,'21bitcoin-matched','legacy','2025-01-01' FROM wallets LIMIT 1")
+                conn.execute("INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy21' FROM transactions WHERE external_id='21bitcoin:2'")
+                conn.execute("UPDATE transactions SET excluded=1 WHERE external_id='21bitcoin:2'")
+            reactivated = self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))["data"]
+            self.assertEqual((reactivated["reconciliation_flags_cleared"],reactivated["reactivated"]),(1,1))
+            source.write_text(_TWENTYONEBITCOIN_TRANSACTIONS_CSV.replace("Promotion Payout BTC Purchase","Updated purchase") + "new,21bitcoin,main,08.10.2022 16:31:20,BTC,0.001,,,BTC,0,deposit,receive,\n")
+            changed = self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))["data"]
+            self.assertEqual((changed["imported"],changed["updated"]),(1,1))
+            self.ok(self.cli("imports", "rollback", "--batch", changed["import_batch_id"], "--confirm"))
+            self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))
+            self.assertEqual(self.cli("wallets", "import-21bitcoin", "--wallet", "missing", "--file", str(source)).returncode,1)
+            self.assertEqual(self.cli("wallets", "import-21bitcoin", "--file", str(source.parent / "missing.csv")).returncode,1)
+            self.assertEqual(self.cli("wallets", "import-21bitcoin", "--mode", "relevant", "--file", str(source)).returncode,2)
+        calls=[item for item in self.served() if item["command"]=="wallets.import-21bitcoin"]
+        self.assertEqual(calls,[{"command":"wallets.import-21bitcoin","served_by":"rust"}]*7)
 
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")

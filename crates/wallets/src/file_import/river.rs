@@ -75,7 +75,7 @@ pub(super) fn repr(n: &PriceNumber) -> String {
         PriceNumber::Special(v) => v.clone(),
     }
 }
-fn positive(n: &PriceNumber) -> Result<bool, AppError> {
+pub(super) fn positive(n: &PriceNumber) -> Result<bool, AppError> {
     match n {
         PriceNumber::Finite(v) => Ok(v.is_positive()),
         PriceNumber::Special(v) if v.contains("NaN") => {
