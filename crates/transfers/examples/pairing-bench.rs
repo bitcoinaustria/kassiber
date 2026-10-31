@@ -27,10 +27,18 @@ impl Sources for Fixed {
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 5 {
-        return Err("usage: pairing-bench DB WORKSPACE PROFILE auto|suggest|rules|bulk".into());
+    if !(5..=6).contains(&args.len()) || (args.len() == 6 && args[5] != "--passphrase-stdin") {
+        return Err("usage: pairing-bench DB WORKSPACE PROFILE auto|suggest|rules|bulk [--passphrase-stdin]".into());
     }
     let c = Connection::open(&args[1])?;
+    if args.len() == 6 {
+        let mut passphrase = String::new();
+        std::io::stdin().read_line(&mut passphrase)?;
+        c.pragma_update(None, "key", passphrase.trim_end_matches(['\r', '\n']))?;
+        c.execute_batch(
+            "PRAGMA cipher_compatibility=4; PRAGMA kdf_iter=256000; PRAGMA cipher_page_size=4096",
+        )?;
+    }
     c.execute_batch("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE")?;
     let scope = Scope {
         workspace_id: &args[2],

@@ -16,6 +16,22 @@ use kassiber_envelope::{set, truthy};
 use kassiber_pyjson::BigInt;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+fn get<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+    match value {
+        Value::Dict(pairs) => pairs
+            .iter()
+            .rev()
+            .find_map(|(key_value, value)| match key_value {
+                kassiber_pyjson::Key::Str(name) if name.is(key) => Some(value),
+                _ => None,
+            }),
+        _ => None,
+    }
+}
+fn value(row: &Value, key: &str) -> Value {
+    get(row, key).cloned().unwrap_or(Value::Null)
+}
+
 // Most observations contain ordinary UTF-8. Preserve the envelope's surrogate
 // fallback while copying ordinary strings without decoding every code point.
 fn py_str(v: &Value) -> String {
@@ -212,6 +228,28 @@ fn identity_payload(v: &Value) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pairing_field_lookup_preserves_exact_keys_and_last_duplicate() {
+        use kassiber_pyjson::{Key, PyStr};
+        let row = Value::Dict(vec![
+            (Key::Str("amount".into()), 1.into()),
+            (Key::Str("é 钱包".into()), 2.into()),
+            (Key::Int(1.into()), 3.into()),
+            (Key::Str("amount".into()), 4.into()),
+            (Key::Str("amount_extra".into()), 5.into()),
+            (
+                Key::Str(PyStr::from_code_points([0xd800]).unwrap()),
+                6.into(),
+            ),
+        ]);
+        for key in ["amount", "amount_extra", "é 钱包", "1", "missing", "", "�"] {
+            assert_eq!(get(&row, key), kassiber_envelope::get(&row, key));
+            assert_eq!(value(&row, key), super::super::value(&row, key));
+        }
+        assert_eq!(get(&row, "amount"), Some(&4.into()));
+        assert_eq!(get(&Value::Null, "amount"), None);
+    }
 
     #[test]
     fn pairing_encoded_provider_metadata_preserves_python_mapping_order() {

@@ -1,0 +1,424 @@
+{
+  "measured_on": "2026-10-31",
+  "base_revision": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+  "toolchain": {
+    "rust": "1.99.1",
+    "python": "3.11",
+    "profile": "release, debug=0, incremental=false",
+    "cargo_build_jobs": 8
+  },
+  "cpu_scopes": {
+    "python": "time.process_time around the automatic pairing stage",
+    "rust": "complete child user + system CPU; includes startup, open, serialization and commit"
+  },
+  "inputs": {
+    "generic-2000": {
+      "schema": "kassiber.journals-bench-book.v1",
+      "kind": "generic",
+      "transactions": 2000,
+      "seed": 1,
+      "csv_sha256": {
+        "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+      },
+      "pegs": 0,
+      "pegs_paired": 0,
+      "journals": {
+        "entries_created": 2000,
+        "quarantined": 0,
+        "cross_asset_pairs": 0,
+        "processed_transactions": 2000
+      },
+      "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+      "build_seconds": 14.8
+    },
+    "rich-2000": {
+      "schema": "kassiber.journals-bench-book.v1",
+      "kind": "multi-wallet",
+      "transactions": 2000,
+      "seed": 7,
+      "csv_sha256": {
+        "Hot.csv": "e106b0aa2628699a1bff2b7fa4705a94ff8aa3c52761582e69baee21090e0d6c",
+        "Cold.csv": "e65f77cd25ab4e5de41f831eccc073c12b9cd2c5b9909fdca5ae4bea88eabdca",
+        "LHot.csv": "77da8aad0da7f1401e6ed0d8663299c669a05b5a194e2c6fd6c2d3ac9299ab98",
+        "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+      },
+      "pegs": 342,
+      "pegs_paired": 171,
+      "journals": {
+        "entries_created": 2000,
+        "quarantined": 0,
+        "cross_asset_pairs": 171,
+        "processed_transactions": 2000
+      },
+      "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+      "build_seconds": 217.6
+    },
+    "generic-20000": {
+      "schema": "kassiber.journals-bench-book.v1",
+      "kind": "generic",
+      "transactions": 20000,
+      "seed": 1,
+      "csv_sha256": {
+        "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+      },
+      "pegs": 0,
+      "pegs_paired": 0,
+      "journals": {
+        "entries_created": 20000,
+        "quarantined": 0,
+        "cross_asset_pairs": 0,
+        "processed_transactions": 20000
+      },
+      "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+      "build_seconds": 22.0
+    },
+    "rich-20000": {
+      "schema": "kassiber.journals-bench-book.v1",
+      "kind": "multi-wallet",
+      "transactions": 20000,
+      "seed": 7,
+      "csv_sha256": {
+        "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+        "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+        "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+        "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+      },
+      "pegs": 3306,
+      "pegs_paired": 300,
+      "journals": {
+        "entries_created": 19983,
+        "quarantined": 17,
+        "cross_asset_pairs": 300,
+        "processed_transactions": 20000
+      },
+      "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+      "build_seconds": 1222.3
+    }
+  },
+  "measurements": [
+    {
+      "book": "generic-2000",
+      "storage": "sqlite",
+      "runs": [
+        {
+          "python": {
+            "seconds": 0.5993431100068847,
+            "cpu_seconds": 0.59079217,
+            "load_1m": 71.4296875
+          },
+          "rust": {
+            "seconds": 0.067337977,
+            "load_1m": "71.43",
+            "cpu_seconds": 0.068915
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.052159413,
+            "load_1m": "71.43",
+            "cpu_seconds": 0.064505
+          },
+          "python": {
+            "seconds": 0.45454000199970324,
+            "cpu_seconds": 0.4486714279999999,
+            "load_1m": 69.15283203125
+          }
+        },
+        {
+          "python": {
+            "seconds": 0.5293818730133353,
+            "cpu_seconds": 0.5024913849999999,
+            "load_1m": 69.15283203125
+          },
+          "rust": {
+            "seconds": 0.058445857,
+            "load_1m": "69.15",
+            "cpu_seconds": 0.07415999999999999
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.051773103,
+            "load_1m": "69.15",
+            "cpu_seconds": 0.06363899999999997
+          },
+          "python": {
+            "seconds": 0.422092528999201,
+            "cpu_seconds": 0.41557287200000026,
+            "load_1m": 69.15283203125
+          }
+        },
+        {
+          "python": {
+            "seconds": 0.424573643002077,
+            "cpu_seconds": 0.4169712790000002,
+            "load_1m": 66.01708984375
+          },
+          "rust": {
+            "seconds": 0.032903873,
+            "load_1m": "66.02",
+            "cpu_seconds": 0.04108500000000001
+          }
+        }
+      ],
+      "best": {
+        "python": 0.422092528999201,
+        "rust": 0.032903873
+      },
+      "best_cpu": {
+        "python": 0.41557287200000026,
+        "rust": 0.04108500000000001
+      },
+      "cpu_speedup": 10.114953681392238,
+      "native_cpu_scope": "complete child, including open, serialization and commit",
+      "speedup": 12.828050029223034,
+      "database_parity": true,
+      "suggestion_byte_parity": true,
+      "suggestions_before": 0,
+      "suggestions_after": 0
+    },
+    {
+      "book": "rich-2000",
+      "storage": "sqlite",
+      "runs": [
+        {
+          "python": {
+            "seconds": 0.4658619429974351,
+            "cpu_seconds": 0.4622814429999993,
+            "load_1m": 66.01708984375
+          },
+          "rust": {
+            "seconds": 0.078348573,
+            "load_1m": "66.02",
+            "cpu_seconds": 0.08600700000000006
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.058353634,
+            "load_1m": "64.09",
+            "cpu_seconds": 0.06772100000000003
+          },
+          "python": {
+            "seconds": 0.4859755429934012,
+            "cpu_seconds": 0.48144967400000027,
+            "load_1m": 64.09375
+          }
+        },
+        {
+          "python": {
+            "seconds": 0.5838813220034353,
+            "cpu_seconds": 0.5672781620000009,
+            "load_1m": 64.09375
+          },
+          "rust": {
+            "seconds": 0.068825434,
+            "load_1m": "64.09",
+            "cpu_seconds": 0.07891800000000004
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.062711676,
+            "load_1m": "61.36",
+            "cpu_seconds": 0.0732259999999999
+          },
+          "python": {
+            "seconds": 0.5119993670086842,
+            "cpu_seconds": 0.5075868570000015,
+            "load_1m": 61.36328125
+          }
+        },
+        {
+          "python": {
+            "seconds": 0.6370639599917922,
+            "cpu_seconds": 0.6183356480000004,
+            "load_1m": 61.36328125
+          },
+          "rust": {
+            "seconds": 0.101224685,
+            "load_1m": "61.36",
+            "cpu_seconds": 0.11485299999999998
+          }
+        }
+      ],
+      "best": {
+        "python": 0.4658619429974351,
+        "rust": 0.058353634
+      },
+      "best_cpu": {
+        "python": 0.4622814429999993,
+        "rust": 0.06772100000000003
+      },
+      "cpu_speedup": 6.8262642754832195,
+      "native_cpu_scope": "complete child, including open, serialization and commit",
+      "speedup": 7.983426413467842,
+      "database_parity": true,
+      "suggestion_byte_parity": true,
+      "suggestions_before": 173,
+      "suggestions_after": 173
+    },
+    {
+      "book": "generic-20000",
+      "storage": "sqlite",
+      "runs": [
+        {
+          "python": {
+            "seconds": 5.624514422001084,
+            "cpu_seconds": 5.500134085999999,
+            "load_1m": 59.65234375
+          },
+          "rust": {
+            "seconds": 0.57058718,
+            "load_1m": "57.12",
+            "cpu_seconds": 0.5821549999999999
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.49042909,
+            "load_1m": "54.95",
+            "cpu_seconds": 0.515789
+          },
+          "python": {
+            "seconds": 4.815628017997369,
+            "cpu_seconds": 4.709524696999999,
+            "load_1m": 54.38916015625
+          }
+        },
+        {
+          "python": {
+            "seconds": 4.791777802005527,
+            "cpu_seconds": 4.714465267999998,
+            "load_1m": 53.5732421875
+          },
+          "rust": {
+            "seconds": 0.347978293,
+            "load_1m": "52.01",
+            "cpu_seconds": 0.3674499999999996
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.344126182,
+            "load_1m": "51.25",
+            "cpu_seconds": 0.3616490000000001
+          },
+          "python": {
+            "seconds": 5.0458861219958635,
+            "cpu_seconds": 4.936483765999995,
+            "load_1m": 51.24853515625
+          }
+        },
+        {
+          "python": {
+            "seconds": 5.395333952998044,
+            "cpu_seconds": 5.262885845,
+            "load_1m": 55.845703125
+          },
+          "rust": {
+            "seconds": 0.403048451,
+            "load_1m": "54.26",
+            "cpu_seconds": 0.41734399999999994
+          }
+        }
+      ],
+      "best": {
+        "python": 4.791777802005527,
+        "rust": 0.344126182
+      },
+      "best_cpu": {
+        "python": 4.709524696999999,
+        "rust": 0.3616490000000001
+      },
+      "cpu_speedup": 13.022363388257668,
+      "native_cpu_scope": "complete child, including open, serialization and commit",
+      "speedup": 13.924479021493129,
+      "database_parity": true,
+      "suggestion_byte_parity": true,
+      "suggestions_before": 0,
+      "suggestions_after": 0
+    },
+    {
+      "book": "rich-20000",
+      "storage": "sqlite",
+      "runs": [
+        {
+          "python": {
+            "seconds": 7.308732519988553,
+            "cpu_seconds": 7.133982344999993,
+            "load_1m": 52.2001953125
+          },
+          "rust": {
+            "seconds": 0.625608242,
+            "load_1m": "51.86",
+            "cpu_seconds": 0.6368960000000001
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.460583291,
+            "load_1m": "55.64",
+            "cpu_seconds": 0.4996299999999998
+          },
+          "python": {
+            "seconds": 5.891277852002531,
+            "cpu_seconds": 5.823292981999998,
+            "load_1m": 55.6396484375
+          }
+        },
+        {
+          "python": {
+            "seconds": 6.341758580994792,
+            "cpu_seconds": 6.212914139000006,
+            "load_1m": 51.20849609375
+          },
+          "rust": {
+            "seconds": 0.474326489,
+            "load_1m": "50.23",
+            "cpu_seconds": 0.49543100000000084
+          }
+        },
+        {
+          "rust": {
+            "seconds": 0.519664708,
+            "load_1m": "50.12",
+            "cpu_seconds": 0.5416869999999996
+          },
+          "python": {
+            "seconds": 6.019723507008166,
+            "cpu_seconds": 5.923034236000007,
+            "load_1m": 50.119140625
+          }
+        },
+        {
+          "python": {
+            "seconds": 6.474846055993112,
+            "cpu_seconds": 6.345039320000012,
+            "load_1m": 47.466796875
+          },
+          "rust": {
+            "seconds": 0.600620372,
+            "load_1m": "47.37",
+            "cpu_seconds": 0.624444
+          }
+        }
+      ],
+      "best": {
+        "python": 5.891277852002531,
+        "rust": 0.460583291
+      },
+      "best_cpu": {
+        "python": 5.823292981999998,
+        "rust": 0.49543100000000084
+      },
+      "cpu_speedup": 11.753993960813894,
+      "native_cpu_scope": "complete child, including open, serialization and commit",
+      "speedup": 12.790906589797526,
+      "database_parity": true,
+      "suggestion_byte_parity": true,
+      "suggestions_before": 1778,
+      "suggestions_after": 1778
+    }
+  ]
+}

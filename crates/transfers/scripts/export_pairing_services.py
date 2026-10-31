@@ -188,7 +188,7 @@ def main():
                 inserts=[q for q in sql_lines if q.startswith('INSERT INTO "'+table+'"')]
                 sql_lines += ['DELETE FROM '+table, *inserts]
             initial_sequence=sequence
-            operations=[(action,{}) for action in ['suggest','auto','suggest','rules','bulk','suggest']]
+            operations=[(action,{}) for action in ['suggest','auto','auto','suggest','rules','bulk','suggest']]
             if scenario=='exact':
                 operations += [('suggest',{'candidate_type':'bad'}),('bulk',{'confidence':'bad'}),('suggest',{'asset_pair':'BTC'}),('suggest',{'route_pair':'BTC'}),('rules',{'candidate_type':'bad'})]
             if scenario=='tolerance' or seed_id < 0:

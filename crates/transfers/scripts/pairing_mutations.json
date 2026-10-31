@@ -1,5 +1,25 @@
 [
   {
+    "id": "pairing-field-lookup-duplicate-order",
+    "file": "crates/transfers/src/pairing/mod.rs",
+    "find": "Value::Dict(pairs) => pairs\n            .iter()\n            .rev()\n            .find_map",
+    "replace": "Value::Dict(pairs) => pairs\n            .iter()\n            .find_map",
+    "expect_failing": [
+      "pairing_field_lookup_preserves_exact_keys_and_last_duplicate"
+    ],
+    "rule": "Pairing field lookup retains Python's last value for duplicate string keys."
+  },
+  {
+    "id": "pairing-field-lookup-exact-key",
+    "file": "crates/transfers/src/pairing/mod.rs",
+    "find": "kassiber_pyjson::Key::Str(name) if name.is(key) => Some(value),",
+    "replace": "kassiber_pyjson::Key::Str(name) if name.as_str().is_some_and(|name| name.starts_with(key)) => Some(value),",
+    "expect_failing": [
+      "pairing_field_lookup_preserves_exact_keys_and_last_duplicate"
+    ],
+    "rule": "Only an exact string key selects an observation or evidence field."
+  },
+  {
     "id": "pairing-excluded",
     "file": "crates/transfers/src/pairing/matcher.rs",
     "find": "truthy(&value(&data, \"excluded\"))",
@@ -338,6 +358,16 @@
       "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
     ],
     "rule": "Falsey outer txids are absent, allowing authoritative nested identity to prevent a guessed same-asset heuristic pair."
+  },
+  {
+    "id": "pairing-stage-commits-journal-transaction",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "        let a = value(&rules, \"summary\");",
+    "replace": "        c.execute_batch(\"COMMIT\").map_err(sql::error)?;\n        let a = value(&rules, \"summary\");",
+    "expect_failing": [
+      "pairing_stage_repeats_match_python_and_outer_journal_failure_reverts_every_table"
+    ],
+    "rule": "Pairing must leave every authored row and the candidate cache inside the caller's journal transaction."
   },
   {
     "id": "pairing-ordered-raw-json",

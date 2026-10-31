@@ -22,6 +22,10 @@ seed-dependent messages remain pending Python determinism fix. Evidence
 inherited from t3code/r4-9-loader-9@e15900677 and
 t3code/r4-9-loader-blob@d03c0b9a1; pending fresh r9 verification.
 Python retains production authority.
+The [R4-14 pairing stage](rust-pairing.md) reuses the native transfer library;
+its 20k process CPU acceptance is 13.02× generic and 11.75× multi-wallet.
+Journal route activation remains with R4-13/R4-15/R4-16.
+Evidence inherited from t3code/r4-14-auto-pair@c47450757; pending fresh r9 verification.
 This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
@@ -363,7 +367,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
-| R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path (decision 3: ported in R4) | Python 3.44 / 4.74 | 10× Python |
+| R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path; [stage accepted](rust-pairing.md), journal routing awaits R4-13/R4-15/R4-16 | Python 3.44 / 4.74 historical; CPU remeasured 4.710 / 5.823 | 10× Python CPU; native 0.362 / 0.495, **13.02× / 11.75×** |
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 

@@ -427,8 +427,13 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   and the inherited campaign gates. The [performance follow-up](docs/reference/r4-journal-render-performance-checkpoint.md)
   reaches the generic and multi-wallet 20k budgets; recheck them during typed
   integration. Python retains production authority.
-- [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
-  freshness journal job and the authority switch.
+- [x] R4-14: expose the native automatic-pairing journal stage by reusing
+  transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and
+  caller-transaction database parity on SQLite and SQLCipher, hash-seed sweeps,
+  generator/recorded books and named mutations. The [CPU acceptance](docs/reference/rust-pairing.md#cpu-acceptance-2026-10-31)
+  reaches 13.02× / 11.75× Python at 20k. Journal routes remain Python.
+- [ ] R4-13, R4-15 and R4-16: CLI and daemon journal commands, integration of
+  automatic pairing, the freshness journal job and the authority switch.
 
 ## Rust backend R5 transfers and review
 

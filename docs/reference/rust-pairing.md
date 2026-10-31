@@ -1,9 +1,10 @@
 # Rust automatic transfer pairing (R4-14)
 
 `kassiber_transfers::pairing` ports the automatic pairing used before journal
-processing. This is a library checkpoint on `t3code/r4-14-pairing`, based on
-`c3d18194`; it registers no CLI command or daemon kind. The transfers worker can
-continue independently. The [service slice contract](../plan/21-rust-backend.md#service-slice-contract-r4-onward)
+processing. The journal stage remains separate from R4-13's pipeline wiring:
+`journals process --auto-pair`, desktop journal processing and freshness journal
+jobs retain Python routing until that integration lands. The existing native
+transfer commands reuse this same library. The [service slice contract](../plan/21-rust-backend.md#service-slice-contract-r4-onward)
 and [transfers classification](rust-shell.md#transfers-and-review-classification-r5)
 continue to govern route activation.
 
@@ -80,6 +81,9 @@ Shared custody identity reads preserve nonfinite Python scalar spellings so
 pair commitments retain the same event id and hashes as Python.
 Encoded provider text containers retain Python JSON object insertion order;
 ordinary scalar and graph payloads use the faster parser.
+Pairing field reads compare the existing generalized UTF-8 key bytes directly,
+retaining exact Unicode matches and last-duplicate precedence without repeatedly
+validating every preceding key. Non-string keys remain invisible to field reads.
 Rule fee caps divide the integer quantities before rounding to binary64, as
 Python does. The oracle includes an inclusive cap above 2^53 msat where rounding
 each operand first would incorrectly reject the rule.
@@ -90,15 +94,24 @@ each operand first would incorrectly reject the rule.
 | --- | ---: | --- |
 | Existing transfer fixture calls | 99 | Ordered dataclass JSON bytes |
 | Identity encodings, evidence controls and reference refusal | 24 | Ordered JSON bytes / exact error |
-| Transfer fixture populations hydrated into books | 123 / 984 | Ordered service JSON and every application-table row |
-| Generated books, seeds 1–12 | 132 / 876 | Ordered service JSON and every application-table row |
-| Supplied generic and multi-wallet books, 2k and 20k | 4 books, alternating repeats | Automatic summary, every application-table row, pre/post-write suggestion bytes |
+| Transfer fixture populations hydrated into books | 123 / 1,107 | Ordered service JSON and every application-table row, SQLite and SQLCipher |
+| Generated books, seeds 1–12 | 132 / 1,008 | Ordered service JSON and every application-table row, SQLite and SQLCipher |
+| Journal generator, generic and multi-wallet, 2k and 20k | 4 books; five SQLite repeats and one SQLCipher replay each | Automatic summary, every application-table row, pre/post-write suggestion bytes |
+| Synthetic CLI and daemon recordings | 2 restored books, all five profile scopes, SQLite and SQLCipher | Automatic summary, every application-table row and ordered suggestions, including a nonempty suggestion case |
 
 UUIDs, clocks and initial-book identity are injected before execution. No output
 UUID, timestamp, commitment, serialized field or row is masked. SQL restores
 retain scope/immutability triggers and assert foreign-key consistency. Initial
 migration audit times use an injected SQLite clock, before immutable audits are
 created. Only normalized dump row ordering changes.
+
+Every oracle book runs automatic pairing twice. The second pass creates no additional
+pairs, but Python's candidate-cache UPDATE still advances the chain-index clock
+and dirty revision. Those rows are compared exactly, including on SQLCipher;
+they are not masked as incidental state. A separate named test wraps both passes
+in the journal caller's savepoint, rolls that savepoint back and compares all
+112 application tables with the original book in both storage modes. Fixture
+restoration is batched in a transaction; pairing uses the ordinary commit policy.
 
 Each of the 12 generated seeds has **one distinct active input in each of 11
 shapes**: exact, ambiguous, tolerance boundary, multi-wallet, rule selection,
@@ -126,52 +139,83 @@ environment to reproduce it.
 
 Use Rust 1.99.1, locked Python 3.11 and offline Cargo. Set
 `TMPDIR="$PWD/target/r4-pairing"` and `MATURIN_NO_INSTALL_RUST=1`; create that
-scratch directory first. Prefix commands with
+scratch directory first. Set `CARGO_BUILD_JOBS=8`,
+`CARGO_TARGET_DIR="$PWD/target"`, `CARGO_BUILD_BUILD_DIR="$PWD/target/build"`
+and `CARGO_NET_OFFLINE=true` so shared user Cargo settings cannot move build
+scratch outside the worktree. Prefix commands with
 `mise exec rust@1.99.1 uv@latest --`.
 
 ```sh
 uv sync --locked --python 3.11
 uv run --locked python crates/transfers/scripts/export_pairing.py
 uv run --locked python crates/transfers/scripts/export_pairing_services.py
-cargo test --offline --release -p kassiber-transfers --test pairing_matcher --test pairing_services
+cargo test --offline --locked --release -p kassiber-transfers --lib --test pairing_matcher --test pairing_services
 uv run --locked python crates/transfers/scripts/sweep_pairing_hashseed.py
-cargo build --offline --release -p kassiber-transfers --example pairing-bench
+cargo build --offline --locked --release -p kassiber-transfers --example pairing-bench
 uv run --locked python crates/transfers/scripts/bench_pairing.py SOURCE_BOOKS
+uv run --locked python crates/transfers/scripts/bench_pairing.py SOURCE_BOOKS --cipher --runs 1
 uv run --locked python crates/transfers/scripts/verify_pairing_projections.py
+uv run --locked python crates/transfers/scripts/verify_pairing_recordings.py RECORDINGS
+uv run --locked python crates/transfers/scripts/verify_pairing_recordings.py RECORDINGS --cipher
 uv run --locked python crates/transfers/scripts/pairing_mutation_check.py
 ```
 
-The benchmark backs up each supplied book before use. It measures the pairing
-library, excluding process startup/open and final commit for both languages.
-Every run records the one-minute load. Above load 8, it alternates Python/Rust
-order and reports the best of five for each implementation. The full raw run
-record is retained alongside the report.
+The benchmark backs up each supplied book before use. Wall measurements cover
+the pairing library, excluding process startup/open and final commit for both
+languages. CPU scopes are described below. Every run records the one-minute
+load. It alternates Python/Rust order and reports the best of five for each
+implementation, including below load 8. The full raw run record is retained
+alongside the report.
 
-## Measured pairing time
+`bench_pairing.py` also accepts repeatable `--book DB` snapshots and visits every
+profile, compares every table and pre/post suggestion bytes, and supports
+`--cipher` with a synthetic key delivered to the native child over stdin.
+`verify_pairing_recordings.py` restores completed synthetic session data roots
+under `target/` before passing them to that same comparator. It never edits a
+recording. `--out` is constrained to this worktree's `target/`.
 
-Best of five alternating runs, seconds; 2026-10-30. One-minute load ranged from
-4.33 to 6.00; five runs were retained even below load 8.
+CPU results use Python's `time.process_time()` around the stage and the native
+child's user plus system CPU from `resource.getrusage(RUSAGE_CHILDREN)`. Native
+CPU includes startup, database open/keying, output serialization and commit, so
+it is an upper bound on stage CPU. Both implementations retain separate wall
+measurements; the earlier wall-only record is historical.
 
-| Book | Python | Rust | Speedup | Load at Python / Rust best |
-| --- | ---: | ---: | ---: | ---: |
-| generic-2000 | 0.323586 | 0.032099 | 10.08× | 5.76 / 6.00 |
-| multi-wallet-2000 | 0.425608 | 0.057988 | 7.34× | 5.54 / 5.54 |
-| generic-20000 | 3.586817 | 0.327021 | 10.97× | 4.99 / 4.83 |
-| multi-wallet-20000 | 5.009197 | 0.468366 | 10.70× | 4.36 / 4.50 |
+## CPU acceptance, 2026-10-31
 
-The 20k target is met for both book types. At 2k, fixed service overhead keeps
-the multi-wallet speedup below 10×. Every measured pair of runs passed complete
-database and ordered suggestion parity. [Raw runs](rust-pairing-bench.json)
-record both timings and the one-minute load for every execution.
+Best process CPU of five alternating runs on the committed journal-book
+generator's plaintext books, seeds 1 (generic) and 7 (multi-wallet), seconds.
+This is the R4 pipeline's plaintext performance budget. Native CPU is the
+complete-child upper bound described above. One-minute load ranged from 47.37
+to 71.43 on the shared 48-core host.
+
+| Book | Python stage CPU | Native child CPU | CPU speedup |
+| --- | ---: | ---: | ---: |
+| generic 2k | 0.415573 | 0.041085 | 10.11× |
+| multi-wallet 2k | 0.462281 | 0.067721 | 6.83× |
+| generic 20k | 4.709525 | 0.361649 | **13.02×** |
+| multi-wallet 20k | 5.823293 | 0.495431 | **11.75×** |
+
+The 10× CPU target at 20k is met on both shapes. At 2k the multi-wallet book
+remains below 10×. Every measured pair passed the automatic summary, complete
+database dump and ordered pre/post suggestion comparisons. The
+[CPU record](rust-pairing-stage-bench.json) includes every CPU/wall measurement,
+load, toolchain settings and input manifest/CSV hashes. The
+[earlier wall-only record](rust-pairing-bench.json) remains historical evidence;
+it is not used for CPU acceptance.
+
 Generic books have zero suggestions before and after pairing; multi-wallet
-books retain 173 at 2k and 1,778 at 20k. The generated books and projection probe
-exercise authored writes as well as candidate generation.
+books retain 173 at 2k and 1,778 at 20k. The synthetic seeded books and projection
+probe exercise new authored writes as well as candidate generation.
+SQLCipher replays verify parity separately; their complete-child CPU includes
+key derivation before the timed stage and is not used for stage CPU acceptance.
 
 ## Mutation and projection acceptance
 
-All **35/35 mutations are killed by named tests**: 14 matcher, 11 complete
-database/service, seven cache, one rollback, one exact fee-cap division and one
-encoded provider-text ordering.
+The current campaign kills **all 38 mutations** with eight named tests, each of
+which passes unmutated first. It retains the original 35 matcher/service/cache
+controls and adds two exact-key/duplicate-order controls plus a forbidden
+journal-transaction commit. Every mutated tree must compile before its named
+test fails; compilation errors do not count as kills.
 The catalog includes duplicate importer-hash and contradictory-provider-amount
 controls, fee-inclusive rows and refusal to promote an unscoped chain label to
 importer evidence. Mutation scratch trees are deleted after the summaries are
@@ -183,6 +227,8 @@ The named killing tests are:
 - `pairing_services_match_python_seeded_complete_database_rows_and_ordered_results`;
 - `pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options`;
 - `pairing_auto_pair_rolls_back_late_failure_and_leaves_commit_to_caller`;
+- `pairing_stage_repeats_match_python_and_outer_journal_failure_reverts_every_table`;
+- `pairing_field_lookup_preserves_exact_keys_and_last_duplicate`;
 - `pairing_rule_fee_cap_rounds_the_integer_ratio_once`;
 - `pairing_encoded_provider_metadata_preserves_python_mapping_order`.
 
@@ -194,9 +240,13 @@ The omitted rule confidence has Python's `strong` default; bulk's default
 remains `exact`. Literal asset-code comparisons in view filters retain Python's
 behavior independently of canonical Bitcoin alias matching.
 
-The final source passes `cargo fmt --all --check`, workspace/all-target clippy
-with `-D warnings` and the test-harness feature, and **975 workspace tests**
-with that feature. Python transfer matching, rules, freshness, AI and native
-transfer bridge modules pass **313 tests and 84 subtests**.
-The reviewed disposition inventory is regenerated, and the required
-`python_test_shards.py run preflight --ci` gate passes **57 tests**.
+The R4-14 follow-up passes **16 focused Rust tests**, including all 2,115
+operations on SQLite and SQLCipher, and transfer all-target clippy with
+`-D warnings`. Python matching, rules and freshness pass **212 tests and 33
+subtests**. The synthetic boundary recordings cover seven CLI smoke cases and
+the daemon suggestion case. The original library checkpoint's broader
+975-test workspace run remains historical evidence; it was not rerun here.
+The current follow-up also passes formatting, regenerates the reviewed
+disposition inventory, and passes the required **57-test preflight**. The
+regeneration refreshes stale baseline counts; preflight also required correcting
+an existing setup command's flag order to `uv sync --locked --offline`.

@@ -81,7 +81,7 @@ fn options() -> pairing::PairingOptions {
 }
 fn restore(c: &Connection, scenario: &Value) {
     let name = py_str(field(scenario, "name"));
-    c.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
+    c.execute_batch("PRAGMA foreign_keys=OFF; BEGIN").unwrap();
     let tables: Vec<String> = c
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
         .unwrap()
@@ -97,7 +97,7 @@ fn restore(c: &Connection, scenario: &Value) {
         c.execute_batch(&py_str(q))
             .unwrap_or_else(|e| panic!("{name}: {e}: {q:?}"));
     }
-    c.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    c.execute_batch("COMMIT; PRAGMA foreign_keys=ON;").unwrap();
     assert!(c
         .prepare("PRAGMA foreign_key_check")
         .unwrap()
@@ -109,15 +109,20 @@ fn restore(c: &Connection, scenario: &Value) {
 }
 #[test]
 fn pairing_services_match_python_seeded_complete_database_rows_and_ordered_results() {
-    assert_services(false);
+    assert_services(false, false);
+}
+
+#[test]
+fn pairing_stage_matches_python_complete_database_dumps_on_sqlcipher() {
+    assert_services(false, true);
 }
 
 #[test]
 fn pairing_command_routes_match_python_complete_database_rows_and_ordered_results() {
-    assert_services(true);
+    assert_services(true, false);
 }
 
-fn assert_services(commands: bool) {
+fn assert_services(commands: bool, encrypted: bool) {
     let fixture = kassiber_pytext::loads(include_str!("pairing_services.json")).unwrap();
     assert_eq!(list(field(&fixture, "scenarios")).len(), 255);
     assert_eq!(
@@ -125,22 +130,30 @@ fn assert_services(commands: bool) {
             .iter()
             .map(|s| list(field(s, "cases")).len())
             .sum::<usize>(),
-        1860
+        2115
     );
     assert_eq!(
         py_str(field(&fixture, "vacuous_failure")),
         "seed 1, scenario deliberately-vacuous: distinct-input activity 0 < 1"
     );
     let dir = tempfile::tempdir().unwrap();
-    let template = Book::create(dir.path(), None).unwrap();
+    let template = Book::create(
+        dir.path(),
+        encrypted.then_some("synthetic-pairing-test-only"),
+    )
+    .unwrap();
     for scenario in list(field(&fixture, "scenarios")) {
         let name = py_str(field(scenario, "name"));
         let mut connection = Connection::open_in_memory().unwrap();
-        kassiber_store::rusqlite::backup::Backup::new(template.connection(), &mut connection)
-            .unwrap()
-            .run_to_completion(128, std::time::Duration::ZERO, None)
-            .unwrap();
-        let c = &connection;
+        let c = if encrypted {
+            template.connection()
+        } else {
+            kassiber_store::rusqlite::backup::Backup::new(template.connection(), &mut connection)
+                .unwrap()
+                .run_to_completion(128, std::time::Duration::ZERO, None)
+                .unwrap();
+            &connection
+        };
         restore(c, scenario);
         let source = Fixed {
             next: Cell::new(py_str(field(scenario, "uuid_start")).parse().unwrap()),
@@ -439,4 +452,44 @@ fn pairing_auto_pair_rolls_back_late_failure_and_leaves_commit_to_caller() {
     assert_ne!(before, bytes(&dump(c)));
     c.execute_batch("ROLLBACK").unwrap();
     assert_eq!(before, bytes(&dump(c)));
+}
+
+#[test]
+fn pairing_stage_repeats_match_python_and_outer_journal_failure_reverts_every_table() {
+    let fixture = kassiber_pytext::loads(include_str!("pairing_services.json")).unwrap();
+    let scenario = list(field(&fixture, "scenarios"))
+        .iter()
+        .find(|s| py_str(field(s, "name")) == "1-multi-wallet")
+        .unwrap();
+    for encrypted in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let book = Book::create(
+            dir.path(),
+            encrypted.then_some("synthetic-pairing-test-only"),
+        )
+        .unwrap();
+        let c = book.connection();
+        restore(c, scenario);
+        let before = bytes(&dump(c));
+        let scope = Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        };
+        let source = Fixed { next: Cell::new(1) };
+        c.execute_batch("BEGIN IMMEDIATE; SAVEPOINT journal_pipeline")
+            .unwrap();
+        let first = pairing::auto_pair_before_journals(c, &scope, &source).unwrap();
+        assert_eq!(field(&first, "applied"), &2.into());
+        let second = pairing::auto_pair_before_journals(c, &scope, &source).unwrap();
+        assert_eq!(field(&second, "applied"), &0.into());
+        assert_eq!(field(field(&second, "remaining"), "total"), &0.into());
+        let expected = &list(field(scenario, "cases"))[2];
+        assert_eq!(bytes(&second), bytes(field(expected, "result")));
+        let expected_state = field(field(&fixture, "states"), &py_str(field(expected, "state")));
+        assert_eq!(bytes(&dump(c)), bytes(expected_state));
+        assert!(!c.is_autocommit());
+        c.execute_batch("ROLLBACK TO journal_pipeline; RELEASE journal_pipeline; COMMIT")
+            .unwrap();
+        assert_eq!(before, bytes(&dump(c)));
+    }
 }
