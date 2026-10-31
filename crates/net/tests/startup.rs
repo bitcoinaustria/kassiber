@@ -26,6 +26,32 @@ fn probe() {
         assert!(gate.attempts().records.is_empty());
         return;
     }
+    if scenario.starts_with("cln-") {
+        let request = Request::cln(
+            kassiber_net::ClnConfig {
+                program: "must-not-launch-lightning-cli".into(),
+                lightning_dir: None,
+                rpc_file: None,
+                network: None,
+                commando: None,
+            },
+            [1; 32],
+        );
+        let consent = Consent::explicit_trigger(&request);
+        let route = gate.authorize(request, Some(consent));
+        if scenario == "cln-product" {
+            assert!(matches!(route, Err(kassiber_net::Error::NoEgress)));
+            assert!(gate.attempts().records.is_empty());
+        } else {
+            let _ = route.unwrap().cln(
+                kassiber_net::ClnMethod::GetInfo,
+                std::time::Instant::now() + Duration::from_secs(1),
+                32,
+            );
+            panic!("guard failed to stop a process");
+        }
+        return;
+    }
     let request = Request::new(
         Subsystem::Sync,
         Endpoint::new("127.0.0.1", 9).unwrap(),
@@ -89,4 +115,21 @@ fn strict_guard_panics_in_child_before_loopback_connect() {
 #[test]
 fn ai_and_updates_match_python_online_gate_outside_product_override() {
     assert!(child("online-gate", "", "1").status.success());
+}
+
+#[test]
+fn cln_process_product_override_refuses_before_spawn() {
+    for value in ["1", "true", "YES", "on"] {
+        assert!(child("cln-product", "", value).status.success());
+    }
+}
+
+#[test]
+#[cfg(feature = "test-observer")]
+fn cln_process_observer_blocks_unapproved_child_launches() {
+    for value in ["1", "strict"] {
+        let output = child("cln-connect", value, "");
+        assert!(!output.status.success());
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("guard failed"));
+    }
 }

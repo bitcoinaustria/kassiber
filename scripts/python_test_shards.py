@@ -73,6 +73,8 @@ _NETWORK_SERIAL_MODULES = frozenset(
     {
         "test_proxy",
         "test_regtest_backend_stack",
+        "test_rust_cln_acquisition",
+        "test_rust_lightning_acquisition",
         "test_sync_backends",
     }
 )

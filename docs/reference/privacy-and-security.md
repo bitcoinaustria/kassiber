@@ -1056,3 +1056,15 @@ lookups, and never follows redirects or retries directly around a proxy.
 Only report channels and routing totals leave the helper; errors omit raw
 node bodies. No CLI, daemon, background or AI route uses it yet. See the
 [LND preparation checkpoint](rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete).
+
+The unregistered native CLN profitability helper gates `lightning-cli` launch
+through `kassiber-net`, including local IPC and commando calls. Exact-action
+consent covers the executable, options and backend configuration as well as
+the report scope. Missing or revoked consent, offline/unavailable policy and
+`KASSIBER_NO_EGRESS` refuse before launch; policy changes and deadlines stop
+and reap an in-flight child. Only fixed read-only resource methods can be
+called. The child owns its transport; the parent records a redacted process
+marker rather than claiming visibility into child sockets. Raw output and
+command details are excluded from errors. It has no product CLI, daemon,
+background or AI registration. See the
+[CLN subprocess boundary](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).

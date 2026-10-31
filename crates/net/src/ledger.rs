@@ -21,6 +21,7 @@ pub enum Operation {
     Connect,
     ProxyHandshake,
     Write,
+    Process,
 }
 
 #[derive(Clone, Copy)]
@@ -117,7 +118,9 @@ impl Ledger {
             subsystem: request.subsystem,
             host: endpoint.host.clone(),
             port: endpoint.port,
-            scheme: if request.tls == crate::TlsTrust::Plaintext {
+            scheme: if request.cln.is_some() {
+                "cln"
+            } else if request.tls == crate::TlsTrust::Plaintext {
                 "tcp"
             } else {
                 "tls"

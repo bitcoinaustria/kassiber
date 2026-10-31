@@ -3445,10 +3445,12 @@ changes. The [preparation checkpoint](../reference/rust-shell.md#lightning-profi
 records byte/table comparisons, mutation evidence and reference-quirk repros.
 
 This does not complete the requested Lightning read/export family. Both public
-reads fetch live snapshots in Python. Native LND report acquisition now has an
-unregistered preparation boundary, using the net gate, action-bound consent,
+reads fetch live snapshots in Python. Native LND and CLN report acquisition
+now have unregistered preparation boundaries, using the net gate, action-bound consent,
 minimal report projections and disposable loopback comparisons with unchanged
-Python. This is not the full LND snapshot adapter. CLN acquisition, complete
+Python. These are report-only clients. CLN uses a fixed read-only subprocess API,
+curated resource rows and ancillary-field refusal checks; its child transport
+is gated at launch and stopped on policy change or deadline. Complete LND
 snapshot/error/TLS/proxy parity, backend/capability service handling,
 CLI/daemon registration and full zero-fallback product acceptance remain
 required. The [LND checkpoint](../reference/rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete)
@@ -3458,3 +3460,18 @@ the inventory remains 153 CLI leaves (21 reports), 15 report daemon kinds and
 two transaction export kinds. New Lightning native CLI/daemon served-by counts
 are zero; no hybrid acceptance is claimed. Non-PDF source-funds reads belong
 to `t3code/r5-reports-sof`; the separate reports-b ownership is unchanged.
+
+### R5 Lightning CLN acquisition continuation (incomplete)
+
+`t3code/r5-reports-lightning-3` starts at `69955f7a0`. CLN report acquisition
+now runs through the net gate with immutable process configuration and exact
+action binding. The frozen Python corpus and loopback process comparisons
+retain window-label-only behavior, symmetric rounding, rebalance fee deduping,
+channel filtering and full-snapshot ancillary refusals. The
+[CLN checkpoint](../reference/rust-shell.md#cln-profitability-acquisition-checkpoint-r5-incomplete)
+records verification and mutation evidence. Python disclosure quirks have
+synthetic repros; native errors exclude raw node output and command details.
+The native route inventory is unchanged and successful product Lightning
+served-by counts remain **0 CLI calls and 0 daemon requests**. LND ancillary,
+error/TLS/proxy parity, shared backend/capability services, public wiring,
+registration and product wire/CSV/all-table acceptance remain required.

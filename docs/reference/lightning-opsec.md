@@ -218,3 +218,12 @@ persistence or raw-body error previews. Native node-snapshot, AI and backend
 test routes remain deferred; this report projection is not a general snapshot
 adapter. The [checkpoint](rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete)
 records the remaining full-snapshot/error parity work before registration.
+
+The unregistered `ClnReportClient` uses the same report-only result. It curates
+CLN resource rows before reshaping, validates ancillary fields that Python's
+full snapshot can refuse, and drops unused invoice/payment/account payloads.
+It preserves the reference's optional-resource behavior, except that consent,
+offline and overall request-budget refusals propagate. No node observations
+are persisted. The fixed read-only subprocess API and its consent, cleanup,
+observer and RAM-metadata boundaries are described in
+[CLN acquisition egress](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).

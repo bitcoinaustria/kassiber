@@ -1,4 +1,6 @@
-use kassiber_chain::lightning::{LndReportClient, ProfitabilitySnapshot, ReportAction};
+use kassiber_chain::lightning::{
+    ClnReportClient, LndReportClient, ProfitabilitySnapshot, ReportAction,
+};
 use kassiber_envelope::{dict, s};
 use kassiber_net::{Consent, Gate, Ledger, Offline};
 use kassiber_pyjson::Value;
@@ -54,7 +56,7 @@ fn main() {
     std::io::stdin().read_to_string(&mut input).unwrap();
     let input: serde_json::Value = serde_json::from_str(&input).unwrap();
     let offline = input["offline"].as_bool().unwrap_or(false);
-    let gate = Gate::new(
+    let mut gate = Gate::new(
         move || {
             if offline {
                 Offline::Offline
@@ -64,23 +66,35 @@ fn main() {
         },
         Ledger::default(),
     );
-    let result = LndReportClient::new(
-        &input["backend"],
-        gate.clone(),
-        input["version"].as_str().unwrap_or("fixture"),
-        ReportAction {
-            book_id: "disposable-book".into(),
-            profile_id: "profile".into(),
-            connection_id: "wallet".into(),
-            window_days: input["window"].as_u64().unwrap_or(30) as u16,
-            export_file: None,
-        },
-    )
-    .and_then(|client| {
-        let consent = (input["consent"].as_bool() != Some(false))
-            .then(|| Consent::explicit_trigger(client.request()));
-        client.fetch(consent.as_ref(), Instant::now() + Duration::from_secs(5))
-    });
+    if let Some(program) = input["cln_fixture"].as_str() {
+        gate = gate.with_cln_fixture(program.into());
+    }
+    let action = ReportAction {
+        book_id: "disposable-book".into(),
+        profile_id: "profile".into(),
+        connection_id: "wallet".into(),
+        window_days: input["window"].as_u64().unwrap_or(30) as u16,
+        export_file: None,
+    };
+    let result = if input["backend"]["kind"] == "coreln" {
+        ClnReportClient::new(&input["backend"], gate.clone(), action).and_then(|client| {
+            let consent = (input["consent"].as_bool() != Some(false))
+                .then(|| Consent::explicit_trigger(client.request()));
+            client.fetch(consent.as_ref(), Instant::now() + Duration::from_secs(5))
+        })
+    } else {
+        LndReportClient::new(
+            &input["backend"],
+            gate.clone(),
+            input["version"].as_str().unwrap_or("fixture"),
+            action,
+        )
+        .and_then(|client| {
+            let consent = (input["consent"].as_bool() != Some(false))
+                .then(|| Consent::explicit_trigger(client.request()));
+            client.fetch(consent.as_ref(), Instant::now() + Duration::from_secs(5))
+        })
+    };
     let result = match result {
         Ok(value) => dict([("result", projection(value))]),
         Err(error) => error.envelope(None),

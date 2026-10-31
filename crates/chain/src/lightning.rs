@@ -8,6 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::time::Instant;
 
+mod cln;
+pub use cln::ClnReportClient;
+
 #[derive(Clone)]
 pub struct ReportAction {
     pub book_id: String,

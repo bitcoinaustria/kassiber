@@ -123,8 +123,8 @@ through the shared setup crate.
 - [x] Add consent-bound Esplora/mempool, Electrum TCP/TLS and Core RPC clients,
   plus HTTP, Electrum, Core, BTCPay and local Core-detection probes.
 - [ ] Port the Lightning node-snapshot adapters and `ui.backends.lightning.test`.
-  Native LND profitability acquisition now has a separate unregistered
-  preparation boundary; full snapshot adapters and CLN transport remain open.
+  Native LND and CLN profitability acquisition now have unregistered
+  preparation boundaries; full snapshot adapters and product wiring remain open.
 - [ ] Complete failure-path/TLS/proxy differential fixtures across all backend
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
@@ -433,10 +433,12 @@ registers them; exit-tax preserves its reference no-registration boundary.
   The reviewed commercial subledger CLI read and its CSV export now run
   natively, with reference vectors, killed mutations and hybrid routing proof.
   Lightning profitability/CSV preparation is now native and verified separately;
-  LND report acquisition has consent-bound native preparation and loopback
-  reference comparisons. CLN transport, complete snapshot/error parity,
-  capability checks, CLI/daemon cutover and product zero-fallback proof remain
-  open. See the [LND checkpoint](docs/reference/rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete).
+  LND and CLN report acquisition have consent-bound native preparation and
+  loopback reference comparisons. CLN subprocess launch, cancellation and
+  ancillary refusals are gated and tested; product served-by counts remain zero.
+  Complete LND snapshot/error/TLS/proxy parity, capability services, CLI/daemon
+  cutover and product zero-fallback wire/CSV/all-table proof remain open. See the
+  [CLN checkpoint](docs/reference/rust-shell.md#cln-profitability-acquisition-checkpoint-r5-incomplete).
 - [x] Port configuration privacy hygiene through the native service, CLI and
   daemon, retaining count-only disclosure, local header inspection, stored
   freshness and Python endpoint/provider classification. The accepted corpus

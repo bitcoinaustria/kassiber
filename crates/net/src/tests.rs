@@ -17,6 +17,7 @@ fn gate(offline: Offline, observer: Observer) -> Gate {
         ledger: Ledger::default(),
         attempts: Ledger::default(),
         observer,
+        cln_fixture: None,
     }
 }
 

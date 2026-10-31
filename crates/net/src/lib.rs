@@ -30,6 +30,7 @@ mod http;
 mod ledger;
 mod offline;
 mod pinned;
+mod process;
 mod socks;
 mod tls;
 
@@ -38,6 +39,7 @@ pub mod test_support;
 
 pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
 pub use offline::OfflineCache;
+pub use process::{ClnConfig, ClnMethod, ClnProcessError};
 pub use tls::{RootCertificates, TlsTrust};
 // Shared pure URL parsing keeps the reviewed URL dependency in this crate.
 pub use url::Url as HttpUrl;
@@ -167,6 +169,7 @@ pub struct Request {
     tls: TlsTrust,
     on_device_ai: bool,
     action_binding: Option<[u8; 32]>,
+    cln: Option<ClnConfig>,
 }
 
 impl Request {
@@ -178,6 +181,7 @@ impl Request {
             proxy: None,
             on_device_ai: false,
             action_binding: None,
+            cln: None,
         }
     }
 
@@ -262,6 +266,7 @@ pub struct Gate {
     ledger: Ledger,
     attempts: Ledger,
     observer: Observer,
+    cln_fixture: Option<std::path::PathBuf>,
 }
 
 fn env_value(name: &str) -> String {
@@ -315,6 +320,7 @@ impl Gate {
             ledger,
             attempts: Ledger::default(),
             observer,
+            cln_fixture: None,
         }
     }
 
@@ -424,6 +430,9 @@ impl Route {
 
     fn connect_inner(self, timeout: Duration, http_forward: bool) -> Result<Connection, Error> {
         self.check()?;
+        if self.request.cln.is_some() {
+            return Err(Error::InvalidEndpoint);
+        }
         let config = tls::config(&self.request.tls, http_forward)?;
         if self
             .request

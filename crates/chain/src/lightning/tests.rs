@@ -7,7 +7,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
-fn projected(snapshot: ProfitabilitySnapshot) -> Value {
+pub(super) fn projected(snapshot: ProfitabilitySnapshot) -> Value {
     dict([
         (
             "channels",
@@ -133,7 +133,7 @@ fn lnd_report_python_vectors_pin_projection_and_exact_requests() {
     }
 }
 
-fn action() -> ReportAction {
+pub(super) fn action() -> ReportAction {
     ReportAction {
         book_id: "disposable-book".into(),
         profile_id: "profile".into(),

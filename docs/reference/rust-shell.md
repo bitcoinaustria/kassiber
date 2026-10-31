@@ -10451,3 +10451,126 @@ All explicit scratch and builds use this worktree's `target/`, account `HOME`
 is preserved, Cargo is offline/locked with eight jobs, and owned mutation and
 verification build trees are removed after summarizing. No dependency,
 lockfile, schema, Python product or report-registration change is included.
+
+## CLN profitability acquisition checkpoint (R5, incomplete)
+
+`t3code/r5-reports-lightning-3` starts at `69955f7a0`. This continuation adds
+`kassiber_chain::lightning::ClnReportClient` and the fixed read-only CLN
+subprocess boundary in `kassiber-net`. This is the first requested acquisition
+boundary, not completion of the Lightning report read/CSV family. No public
+route is registered, and LND product/error/TLS/proxy parity is unchanged.
+
+The CLN client reads the same nine resources in reference order, curates rows
+before reshaping, and returns only report channels and routing totals. It
+checks ancillary channel, balance and forward fields that can make Python's
+otherwise unused snapshot fields refuse. Closed channels never become report
+rows. It preserves aliases, arbitrary-size quantities, symmetric msat-to-sat
+truncation, the 32-digit half-even suffix-scaling context, and the reference's
+rebalance payment/bookkeeper fee split. No tax, custody, journal, price,
+readiness or adapter persistence behavior changes.
+
+The tested reference quirks remain: CLN's requested window changes only its
+label, not the acquired event set; net is rounded after subtracting msat costs;
+private flags must be actual booleans; the last alias per peer wins; a nested
+funding output zero can be treated as absent; and optional resource failures
+can produce a partial or zero report. Missing/revoked consent, offline or
+unavailable policy and exhausted overall request budgets always propagate in
+Rust rather than becoming an optional-resource zero.
+
+`Request::cln` binds exact action scope and immutable executable/options.
+`Route::cln` accepts only the nine `ClnMethod` variants, constructs argv without
+a shell, checks the gate before spawn and while the process runs, bounds stdout
+and kills/waits on failure, timeout or revocation. It rechecks authority before
+returning a completed projection. Native CLN is covered by `KASSIBER_NO_EGRESS`,
+unlike Python's CLN path. The child still owns its RPC/commando transport; the
+parent does not claim to enforce or observe child DNS, proxy or TLS. RAM
+metadata is a closed process marker with no command, credential or response.
+The test observer blocks all unapproved subprocesses, even in loopback mode;
+a gate-local test-support fixture registration permits only the owned fake
+executable, while strict mode still blocks it.
+
+The no-socket synthetic repro `crates/chain/scripts/repro_python_cln.py` pins
+Python's raw stderr, RPC-path command details and malformed-amount disclosure,
+as well as the window and funding-zero quirks. Python remains unchanged.
+Native errors retain typed failure codes while omitting raw output, commands
+and submitted malformed values. Public-service error comparisons still need
+to account for this privacy difference alongside the prior LND disclosure repro.
+
+The frozen corpus contains **348 cases: 291 successful projections and 57
+refusals**. Native tests compare the report projection, failure code and exact
+resource sequence against unchanged Python. Separate real native and Python
+processes compare 15 successful fake-node acquisitions and six transport
+failure cases, including commando argv, optional failures and secret-free
+native errors. Three native process refusals prove zero node hits, observer
+attempts and RAM-ledger records for missing consent, offline and product
+no-egress. The inherited 12 LND process pairs and its three refusal cases are
+also rerun. These are acquisition drivers, not product CLI/daemon acceptance.
+
+The chain mutation catalog contains 69 entries: 43 inherited entries and 26
+new `chain-cln-report-*` entries. The runner includes net tests for the new
+process boundary and requires all nine unmutated named selections to pass,
+each mutant to build, and every named selection to fail under its mutation.
+A missing selection or build failure counts as no kill. The first campaign
+found a surviving boolean-msat mutation because one msat remained below a
+visible sat boundary. A new reference capacity/revenue boundary case repairs
+that weakness; the accepted campaign uses a fresh mutation build tree. All
+26 mutants build and are killed after all nine unmutated selections pass.
+Inherited chain and report mutations are not rerun.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals` | 14 |
+| `cln_report_loopback_transport_pins_commands_optional_errors_and_discard` | 3 |
+| `cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child` | 3 |
+| `cln_report_consent_binds_action_and_every_process_option_before_launch` | 1 |
+| `cln_report_invalid_commando_configuration_is_inert_and_secret_free` | 1 |
+| `cln_report_offline_unavailable_missing_revoked_and_optional_policy_refuse` | 1 |
+| `cln_process_pins_read_only_argv_and_redacted_ram_metadata` | 1 |
+| `cln_process_test_observer_blocks_unapproved_children_before_spawn` | 1 |
+| `cln_report_process_errors_are_typed_and_never_expose_raw_output` | 1 |
+
+Final verification passes: **102 chain/net tests**, the **four inherited
+Lightning report-kernel tests**, workspace formatting, chain/net all-target
+clippy with warnings denied, and validation of all **69 mutation entries**.
+The required classifier update records **5,720 test definitions**, and
+`python_test_shards.py run preflight --ci` passes all **57 checks**.
+
+The focused Python run passes 162 tests and five subtests before an inherited
+report-vector regeneration exceeds its 180-second process budget on this
+shared host. That test now allows 600 seconds; both report oracles pass on
+rerun in 143.82 seconds, including the unchanged-vector comparison. All 163
+distinct focused tests therefore pass across the two runs. Both acquisition
+modules now belong to the serial network CI lane. No Python product behavior
+changes to accommodate the test budget.
+
+Final verification results are recorded in this worktree's
+`target/r5-lightning-3/verification-summary.json` and `mutation-summary.json`.
+Mutation scratch and verification build trees are removed after summarizing;
+logs and summaries remain. Account `HOME` is preserved. All explicit scratch
+and final/intermediate build output stays under this worktree's `target/`,
+with offline/locked Cargo and eight build jobs. The environment sync initially
+used the machine's configured external 167 MB intermediate cache; that owned
+cache was identified and removed before subsequent builds. No dependency,
+lockfile, schema or Python product changes are included.
+
+| Product route | New successful Rust-served calls |
+| --- | ---: |
+| `reports lightning-profitability` | 0 |
+| `reports export-lightning-profitability-csv` | 0 |
+| `ui.reports.lightning_profitability` | 0 |
+
+The inventory remains **153 CLI leaves**, including **21 report commands**,
+**15 report daemon kinds** and **two transaction export kinds**. No hybrid
+product workload or zero-fallback product acceptance is claimed.
+
+Remaining work, in order:
+
+1. Complete LND ancillary-field refusals and its service error, TLS and proxy
+   differential matrix, including the disposition of raw-response disclosure.
+2. Add shared backend resolution and capability checks, current-book/config
+   authority and grant lifetime handling; then wire CLI report/CSV and desktop
+   report routes and register only completed behavior.
+3. Compare actual product wire bytes, CSV artifacts and all 112 database tables
+   against Python, with zero in-scope fallbacks and named service/transport
+   mutation kills. Node-snapshot/backend-test routes and AI projections keep
+   their separately scoped deferrals.

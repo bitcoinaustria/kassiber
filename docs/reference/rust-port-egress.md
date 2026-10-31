@@ -759,3 +759,29 @@ product paths. The complete product oracle records per-invocation hybrid
 decisions and rejects any served-shape reference fallback. Default refresh
 remains dependent on native R4-13 journal processing; no Python journal bridge,
 new AI allowlist entry or disk logging is introduced.
+## CLN profitability subprocess acquisition (R5 preparation)
+
+`kassiber_chain::lightning::ClnReportClient` is an unregistered report helper.
+Its `kassiber-net` request binds the book, profile, connection, window, export
+path and backend configuration, including the executable and every CLN option.
+Construction is inert. The gate checks current consent, offline/unavailable
+policy and `KASSIBER_NO_EGRESS` before launching `lightning-cli`, rechecks while
+the child runs, and kills/waits on refusal or timeout. Only nine read-only
+`ClnMethod` variants are accepted; no arbitrary method, shell or argument-list
+API is exposed. The helper is not an AI tool.
+
+The process owns its CLN IPC/commando transport. The parent does not implement
+or claim to observe the child's DNS, proxy or TLS. Unlike Python's CLN path,
+the native launch is covered by the product no-egress switch. RAM observation
+uses `operation=Process`, `scheme=cln`, the fixed `lightning-cli` label and port
+1 as a process marker; these are not a fabricated TCP destination. Paths,
+peer ids, runes, stdout and stderr never enter those records or error details.
+Captured stdout is bounded and parsed inside the client; stderr is discarded.
+
+The test observer blocks unapproved subprocesses even in its loopback mode.
+Only a gate-local executable registered by a test-support build can run as a
+fixture; strict mode blocks it too. The CLN fixture executable contacts only
+its disposable loopback fake node. Process comparisons exercise actual child
+arguments and acquired projections against unchanged Python. Policy refusal
+processes prove zero node hits, process attempts and ledger rows before exact
+action consent. This is acquisition evidence, not public CLI/daemon acceptance.

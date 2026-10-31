@@ -11,7 +11,7 @@ publish.workspace = true
 [features]
 # Explicit opt-in for the differential driver and guarded downstream tests.
 # Keep the observer out of ordinary workspace feature unification.
-test-harness = ["kassiber-net/test-observer"]
+test-harness = ["kassiber-net/test-observer", "kassiber-net/test-support"]
 
 [[example]]
 name = "client_fixture"

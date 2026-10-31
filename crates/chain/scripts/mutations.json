@@ -428,5 +428,265 @@
       "lnd_report_python_vectors_pin_projection_and_exact_requests"
     ],
     "rule": "Private flags use Python whitespace rules so a true flag cannot expose its peer as an alias fallback."
+  },
+  {
+    "id": "chain-cln-report-action-binding",
+    "file": "crates/net/src/process.rs",
+    "find": ".with_action_binding(binding);",
+    "replace": ".with_action_binding({ let _ = binding; [0; 32] });",
+    "expect_failing": [
+      "cln_report_consent_binds_action_and_every_process_option_before_launch"
+    ],
+    "rule": "The CLN grant binds book, profile, connection, window and export destination."
+  },
+  {
+    "id": "chain-cln-report-commando-complete",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "let commando = if wants_commando {",
+    "replace": "let commando = if wants_commando && false {",
+    "expect_failing": [
+      "cln_report_invalid_commando_configuration_is_inert_and_secret_free"
+    ],
+    "rule": "A partial commando peer/rune pair is refused before launch."
+  },
+  {
+    "id": "chain-cln-report-optional-policy",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "![\"interaction_required\", \"network_egress_disabled\", \"backend_timeout\"].contains(&error.code.as_str())",
+    "replace": "true || ![\"interaction_required\", \"network_egress_disabled\", \"backend_timeout\"].contains(&error.code.as_str())",
+    "expect_failing": [
+      "cln_report_offline_unavailable_missing_revoked_and_optional_policy_refuse"
+    ],
+    "rule": "Optional-resource failures cannot swallow consent, offline or overall-budget refusal."
+  },
+  {
+    "id": "chain-cln-report-commando-rune",
+    "file": "crates/net/src/process.rs",
+    "find": "command.arg(format!(\"--commando-rune={rune}\"));",
+    "replace": "command.arg(format!(\"--commando-rune=wrong-{rune}\"));",
+    "expect_failing": [
+      "cln_report_loopback_transport_pins_commands_optional_errors_and_discard"
+    ],
+    "rule": "The configured rune is passed exactly to the fixed commando option."
+  },
+  {
+    "id": "chain-cln-report-rpc-option",
+    "file": "crates/net/src/process.rs",
+    "find": "(\"rpc-file\", &config.rpc_file),",
+    "replace": "(\"rpc-file-wrong\", &config.rpc_file),",
+    "expect_failing": [
+      "cln_report_loopback_transport_pins_commands_optional_errors_and_discard"
+    ],
+    "rule": "The selected RPC route is preserved without probing another path."
+  },
+  {
+    "id": "chain-cln-report-method-order",
+    "file": "crates/net/src/process.rs",
+    "find": ".arg(method.name())",
+    "replace": ".arg({ let _ = method; \"getinfo\" })",
+    "expect_failing": [
+      "cln_report_loopback_transport_pins_commands_optional_errors_and_discard"
+    ],
+    "rule": "All nine read-only resources are called in reference order."
+  },
+  {
+    "id": "chain-cln-report-argv-redaction",
+    "file": "crates/net/src/process.rs",
+    "find": "f.write_str(\"ClnConfig(<redacted>)\")",
+    "replace": "write!(f, \"{:?} {:?}\", self.rpc_file, self.commando)",
+    "expect_failing": [
+      "cln_process_pins_read_only_argv_and_redacted_ram_metadata"
+    ],
+    "rule": "Debug output cannot disclose process paths, peer identity or runes."
+  },
+  {
+    "id": "chain-cln-report-poll-policy",
+    "file": "crates/net/src/process.rs",
+    "find": "loop {\n                    self.check()?;",
+    "replace": "loop {\n                    let _ = &self;",
+    "expect_failing": [
+      "cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child"
+    ],
+    "rule": "Revocation and offline changes stop the in-flight subprocess."
+  },
+  {
+    "id": "chain-cln-report-output-bound",
+    "file": "crates/net/src/process.rs",
+    "find": "if bytes.len() > limit {",
+    "replace": "if bytes.len() > limit && false {",
+    "expect_failing": [
+      "cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child"
+    ],
+    "rule": "Captured subprocess output has a finite byte bound."
+  },
+  {
+    "id": "chain-cln-report-child-reap",
+    "file": "crates/net/src/process.rs",
+    "find": "            let _ = child.0.kill();\n            let _ = child.0.wait();",
+    "replace": "            let _ = child.0.wait();",
+    "expect_failing": [
+      "cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child"
+    ],
+    "rule": "Timeout/error cleanup kills and waits for the child before returning."
+  },
+  {
+    "id": "chain-cln-report-observer-fixture",
+    "file": "crates/net/src/process.rs",
+    "find": "self.gate.observer == Observer::Strict\n                || self.gate.cln_fixture.as_ref() != Some(&config.program)",
+    "replace": "self.gate.observer == Observer::Strict\n                && self.gate.cln_fixture.as_ref() != Some(&config.program)",
+    "expect_failing": [
+      "cln_process_test_observer_blocks_unapproved_children_before_spawn"
+    ],
+    "rule": "The observer blocks every child unless an owned fixture is explicitly registered; strict blocks all."
+  },
+  {
+    "id": "chain-cln-report-invalid-json",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "if raw.is_empty() { \"{}\" } else { raw }",
+    "replace": "if raw.is_empty() || raw.contains(\"private-non-json\") { \"{}\" } else { raw }",
+    "expect_failing": [
+      "cln_report_process_errors_are_typed_and_never_expose_raw_output"
+    ],
+    "rule": "Malformed required-resource JSON returns a typed secret-free error."
+  },
+  {
+    "id": "chain-cln-report-closed-channels",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "if !is_closed(row) {",
+    "replace": "if true || !is_closed(row) {",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Closed and force-closed channels never become profitability rows."
+  },
+  {
+    "id": "chain-cln-report-capacity-fallback",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "capacity = local + msat(field(row, \"their_amount_msat\"))?;",
+    "replace": "capacity = local;",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Nonpositive declared capacity falls back to both local and remote amounts."
+  },
+  {
+    "id": "chain-cln-report-boolean-msat",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "Value::Null | Value::Bool(_) => return Ok(0.into()),",
+    "replace": "Value::Null => return Ok(0.into()),\n        Value::Bool(_) => return Ok(1.into()),",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "CLN booleans in msat fields preserve Python zero semantics."
+  },
+  {
+    "id": "chain-cln-report-sat-suffix",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "(\"sat\", 3)",
+    "replace": "(\"sat\", 0)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Sat-suffixed node amounts convert exactly to msat."
+  },
+  {
+    "id": "chain-cln-report-decimal-context",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "digits.saturating_sub(32)",
+    "replace": "digits.saturating_sub(33)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Suffix scaling preserves the Python 32-digit decimal context."
+  },
+  {
+    "id": "chain-cln-report-decimal-tie",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "&& &coefficient % 2u32 == BigInt::from(1)",
+    "replace": "&& &coefficient % 2u32 == BigInt::from(0)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Suffix scaling preserves half-even ties before integral validation."
+  },
+  {
+    "id": "chain-cln-report-channel-alias",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "aliases.insert(peer, alias);",
+    "replace": "aliases.entry(peer).or_insert(alias);",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "The final alias for a peer wins across all channel rows."
+  },
+  {
+    "id": "chain-cln-report-rebalance-dedupe",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "rebalance_count += 1;\n            continue;",
+    "replace": "rebalance_count += 1;",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Rebalance-tagged pays count attempts without adding bookkeeper fees twice."
+  },
+  {
+    "id": "chain-cln-report-net-before-round",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "net_profit_sat: sat(&revenue - &payment_cost - &rebalance_cost - &onchain_cost),",
+    "replace": "net_profit_sat: sat(revenue.clone()) - sat(payment_cost.clone()) - sat(rebalance_cost.clone()) - sat(onchain_cost.clone()),",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Net is computed in msat before symmetric sat truncation."
+  },
+  {
+    "id": "chain-cln-report-signed-truncate",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "value / 1000u32",
+    "replace": "floor_div(value, 1000)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Negative CLN msat totals truncate symmetrically toward zero."
+  },
+  {
+    "id": "chain-cln-report-routing-none",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "let routing = present.then(|| Routing {",
+    "replace": "let routing = (present || true).then(|| Routing {",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "No routing activity preserves the reference absent-window projection."
+  },
+  {
+    "id": "chain-cln-report-ancillary-forward",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "for key in [\"in_msat\", \"out_msat\", \"fee_msat\"] {",
+    "replace": "for key in [\"fee_msat\"] {",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Malformed unused forward amounts still refuse the complete snapshot read."
+  },
+  {
+    "id": "chain-cln-report-ancillary-funds",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        msat(field(row, \"amount_msat\"))?;",
+    "replace": "        let _ = field(row, \"amount_msat\");",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Eligible on-chain balance amounts retain reference refusal behavior."
+  },
+  {
+    "id": "chain-cln-report-ancillary-ppm",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "strict_int(if truthy(field(row, \"fee_proportional_millionths\"))",
+    "replace": "strict_int(if false && truthy(field(row, \"fee_proportional_millionths\"))",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Unused fee-rate fields still retain full-snapshot refusals."
   }
 ]

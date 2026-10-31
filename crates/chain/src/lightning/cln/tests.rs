@@ -1,0 +1,296 @@
+use super::*;
+use kassiber_net::{Ledger, Offline};
+use serde_json::json;
+
+#[test]
+fn cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../../fixtures/python_cln.json")).unwrap()
+    else {
+        panic!("cases");
+    };
+    assert_eq!(cases.len(), 348);
+    for case in cases {
+        let name = py_str(field(&case, "name"));
+        let data = field(&case, "data");
+        let mut calls = Vec::new();
+        let result = acquire(
+            |method| {
+                calls.push(dict([
+                    ("method", Value::from(method.name())),
+                    ("args", Value::Null),
+                ]));
+                let Value::List(failures) = field(&case, "failures") else {
+                    panic!("failures");
+                };
+                if failures
+                    .iter()
+                    .any(|v| matches!(v, Value::Str(s) if s.is(method.name())))
+                {
+                    return Err(AppError::new("sync_error", "synthetic failure"));
+                }
+                Ok(field(data, method.name()).clone())
+            },
+            u16::try_from(integer(field(&case, "window")).unwrap()).unwrap(),
+        );
+        assert_eq!(Value::List(calls), field(&case, "calls").clone(), "{name}");
+        if let Some(error) = get(&case, "error") {
+            assert_eq!(
+                result.unwrap_err().code,
+                py_str(field(error, "code")),
+                "{name}"
+            );
+        } else {
+            let result = super::super::tests::projected(result.unwrap());
+            assert_eq!(result, field(&case, "expected").clone(), "{name}");
+            let encoded = kassiber_pyjson::dumps(&result, &Default::default()).unwrap();
+            assert!(!encoded.contains("DISCARDED_CLN_SECRET"), "{name}");
+        }
+    }
+}
+
+fn config() -> Json {
+    json!({"kind":"coreln", "name":"fake", "url":"cln://local", "lightning_cli":"nonexistent-lightning-fixture", "timeout":1})
+}
+fn action() -> ReportAction {
+    super::super::tests::action()
+}
+fn deadline() -> Instant {
+    Instant::now() + Duration::from_secs(1)
+}
+
+#[test]
+fn cln_report_consent_binds_action_and_every_process_option_before_launch() {
+    let gate = Gate::new(|| Offline::Online, Ledger::default());
+    let original = ClnReportClient::new(&config(), gate.clone(), action()).unwrap();
+    let proof = Consent::explicit_trigger(original.request());
+    for key in [
+        "lightning_cli",
+        "lightning_dir",
+        "rpc_file",
+        "network",
+        "name",
+        "url",
+    ] {
+        let mut config = config();
+        config[key] = json!("changed-private-value");
+        let client = ClnReportClient::new(&config, gate.clone(), action()).unwrap();
+        assert_eq!(
+            client.fetch(Some(&proof), deadline()).unwrap_err().code,
+            "interaction_required",
+            "{key}"
+        );
+    }
+    for key in ["book", "profile", "connection", "window", "export"] {
+        let mut action = action();
+        match key {
+            "book" => action.book_id = "other".into(),
+            "profile" => action.profile_id = "other".into(),
+            "connection" => action.connection_id = "other".into(),
+            "window" => action.window_days = 31,
+            _ => action.export_file = Some("target/other.csv".into()),
+        }
+        let client = ClnReportClient::new(&config(), gate.clone(), action).unwrap();
+        assert_eq!(
+            client.fetch(Some(&proof), deadline()).unwrap_err().code,
+            "interaction_required",
+            "{key}"
+        );
+    }
+    for token in ["rune", "changed-rune"] {
+        let mut config = config();
+        config["commando_peer_id"] = json!("private-peer");
+        config["token"] = json!(token);
+        let client = ClnReportClient::new(&config, gate.clone(), action()).unwrap();
+        assert_eq!(
+            client.fetch(Some(&proof), deadline()).unwrap_err().code,
+            "interaction_required"
+        );
+    }
+    assert!(gate.attempts().records.is_empty());
+    assert!(gate.ledger().snapshot(0, 2000).records.is_empty());
+}
+
+#[test]
+fn cln_report_offline_unavailable_missing_revoked_and_optional_policy_refuse() {
+    for state in [Offline::Online, Offline::Offline, Offline::Unavailable] {
+        let gate = Gate::new(move || state, Ledger::default());
+        let client = ClnReportClient::new(&config(), gate.clone(), action()).unwrap();
+        assert!(gate.attempts().records.is_empty());
+        assert_eq!(
+            client.fetch(None, deadline()).unwrap_err().code,
+            "interaction_required"
+        );
+        let proof = Consent::explicit_trigger(client.request());
+        if state != Offline::Online {
+            assert_eq!(
+                client.fetch(Some(&proof), deadline()).unwrap_err().code,
+                "network_egress_disabled"
+            );
+        }
+        proof.revoke();
+        assert!(client.fetch(Some(&proof), deadline()).is_err());
+        assert!(gate.attempts().records.is_empty());
+        assert!(gate.ledger().snapshot(0, 2000).records.is_empty());
+    }
+    for code in [
+        "interaction_required",
+        "network_egress_disabled",
+        "backend_timeout",
+    ] {
+        let mut calls = 0;
+        let result = acquire(
+            |_| {
+                calls += 1;
+                if calls == 1 {
+                    Ok(dict([] as [(&str, Value); 0]))
+                } else {
+                    Err(AppError::new(code, "policy refusal"))
+                }
+            },
+            30,
+        );
+        assert_eq!(result.unwrap_err().code, code);
+        assert_eq!(calls, 2);
+    }
+}
+
+#[test]
+fn cln_report_invalid_commando_configuration_is_inert_and_secret_free() {
+    for (peer, token) in [
+        (None, None),
+        (Some("private-peer"), None),
+        (None, Some("private-rune")),
+    ] {
+        let config = json!({"url":"cln://commando", "commando_peer_id":peer, "token":token});
+        let gate = Gate::new(|| Offline::Online, Ledger::default());
+        let error = ClnReportClient::new(&config, gate.clone(), action())
+            .err()
+            .unwrap();
+        assert_eq!(error.code, "validation");
+        let output = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+        assert!(!output.contains("private-peer"));
+        assert!(!output.contains("private-rune"));
+        assert!(gate.attempts().records.is_empty());
+        assert!(gate.ledger().snapshot(0, 2000).records.is_empty());
+    }
+}
+
+#[cfg(unix)]
+fn fake_cli(body: &str) -> (tempfile::TempDir, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let program = root.path().join("fake-lightning-cli");
+    std::fs::write(&program, format!("#!/usr/bin/python3\n{body}\n")).unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+    (root, program)
+}
+
+#[test]
+#[cfg(unix)]
+fn cln_report_loopback_transport_pins_commands_optional_errors_and_discard() {
+    use kassiber_net::test_support::FakeProvider;
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../../fixtures/python_cln.json")).unwrap()
+    else {
+        panic!("cases");
+    };
+    let case = &cases[0];
+    let data = field(case, "data");
+    let methods = [
+        ClnMethod::GetInfo,
+        ClnMethod::ListFunds,
+        ClnMethod::ListPeerChannels,
+        ClnMethod::ListForwards,
+        ClnMethod::ListPays,
+        ClnMethod::ListInvoices,
+        ClnMethod::ListIncome,
+        ClnMethod::ListBalances,
+        ClnMethod::ListAccountEvents,
+    ];
+    let replies = methods
+        .iter()
+        .map(|method| {
+            (
+                200,
+                kassiber_pyjson::dumps(field(data, method.name()), &Default::default()).unwrap(),
+            )
+        })
+        .collect();
+    let node = FakeProvider::replies(replies).unwrap();
+    let (_root, program) = fake_cli("import json,sys\nfrom urllib.request import Request,urlopen\nargs=sys.argv[1:]\nurl=next(a.split('=',1)[1] for a in args if a.startswith('--rpc-file='))\nwith urlopen(Request(url, data=json.dumps(args).encode()), timeout=2) as r: sys.stdout.write(r.read().decode())");
+    let gate = Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
+    let config = json!({"kind":"coreln", "lightning_cli":program, "rpc_file":node.base(), "lightning_dir":"disposable lightning directory", "network":"regtest", "commando_peer_id":"private-peer", "token":"private-rune"});
+    let client = ClnReportClient::new(&config, gate.clone(), action()).unwrap();
+    assert!(node.requests().is_empty());
+    let result = client
+        .fetch(
+            Some(&Consent::explicit_trigger(client.request())),
+            Instant::now() + Duration::from_secs(10),
+        )
+        .unwrap();
+    assert_eq!(
+        super::super::tests::projected(result),
+        field(case, "expected").clone()
+    );
+    let hits = node.requests();
+    assert_eq!(hits.len(), 9);
+    for (hit, method) in hits.iter().zip(methods) {
+        let args: Vec<String> =
+            serde_json::from_str(hit.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(
+            args,
+            [
+                "--json".to_owned(),
+                "--raw".to_owned(),
+                "--commando-peer=private-peer".to_owned(),
+                "--commando-rune=private-rune".to_owned(),
+                "--lightning-dir=disposable lightning directory".to_owned(),
+                format!("--rpc-file={}", node.base()),
+                "--network=regtest".to_owned(),
+                method.name().to_owned()
+            ]
+        );
+    }
+    let records = gate.ledger().snapshot(0, 2000).records;
+    assert_eq!(records.len(), 9);
+    assert!(records
+        .iter()
+        .all(|r| r.operation == kassiber_net::Operation::Process && r.scheme == "cln"));
+    assert!(!format!("{records:?}").contains("private-rune"));
+}
+
+#[test]
+#[cfg(unix)]
+fn cln_report_process_errors_are_typed_and_never_expose_raw_output() {
+    for (body, code) in [
+        ("import sys; print('private-stdout'); print('private-stderr',file=sys.stderr); sys.exit(4)", "sync_error"),
+        ("print('private-non-json')", "sync_error"),
+        ("import sys; sys.stdout.buffer.write(b'\\xff')", "sync_error"),
+        ("import time; time.sleep(10)", "backend_timeout"),
+    ] {
+        let (_root, program) = fake_cli(body);
+        let gate = Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
+        let config = json!({"kind":"coreln", "lightning_cli":program, "token":"private-rune", "commando_peer_id":"private-peer", "rpc_file":"private-rpc"});
+        let client = ClnReportClient::new(&config, gate, action()).unwrap();
+        let error = client.fetch(Some(&Consent::explicit_trigger(client.request())), Instant::now() + Duration::from_millis(100)).unwrap_err();
+        assert_eq!(error.code, code);
+        assert!(error.retryable);
+        let rendered = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+        for secret in ["private-stdout", "private-stderr", "private-non-json", "private-rune", "private-peer", "private-rpc"] { assert!(!rendered.contains(secret)); }
+    }
+    let gate = Gate::new(|| Offline::Online, Ledger::default());
+    let config = config();
+    let program = PathBuf::from(config["lightning_cli"].as_str().unwrap());
+    let client = ClnReportClient::new(&config, gate.with_cln_fixture(program), action()).unwrap();
+    assert_eq!(
+        client
+            .fetch(
+                Some(&Consent::explicit_trigger(client.request())),
+                deadline()
+            )
+            .unwrap_err()
+            .code,
+        "dependency_missing"
+    );
+}
