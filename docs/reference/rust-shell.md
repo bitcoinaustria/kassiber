@@ -109,7 +109,7 @@ The initial shell checkpoint implemented `init`, `status`, `daemon`, `commands d
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix` and `import-river`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv`, `import-phoenix` `import-river` and supported Bitcoin `sync`,
 the [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
 report snapshot/CSV export leaves, transaction CSV/XLSX and
 [Austrian XLSX](#austrian-xlsx-service-checkpoint-r5-twelfth-reports-continuation-partial), and every leaf of
@@ -122,7 +122,9 @@ unimplemented leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
-The development-only hybrid candidate may select Python before bootstrap.
+The development-only hybrid candidate selects Python before bootstrap except
+for sync capability selection, which uses the inert admitted-book preflight
+described in the [CLI registration checkpoint](#bitcoin-wallet-sync-cli-registration-r5-partial).
 Wallet lifecycle remains a partial service checkpoint with the explicit limitations below.
 
 `commands describe` builds the catalog from the generated tree with the
@@ -7248,6 +7250,9 @@ retrying a started native invocation through Python.
 
 ### Bitcoin wallet-sync service checkpoint (R5, partial)
 
+The [CLI registration continuation below](#bitcoin-wallet-sync-cli-registration-r5-partial)
+supersedes this checkpoint's inactive CLI and hybrid-selection status.
+
 Local branch `t3code/r5-sync-13` starts at `0207dbcfc`. The shared
 `kassiber-wallets::sync` service now joins native preparation to atomic wallet
 publication. It selects an explicit wallet or the label-ordered, nondeprecated
@@ -7383,3 +7388,128 @@ The wallets-sync, serial-network and daemon-cli shard runs use the Python
 reference candidate; passing them does not establish native served-by counts.
 The full Python/frontend quality gate, shadow overlays, Docker regtest and
 packaged/platform gates were not run.
+
+
+### Bitcoin wallet-sync CLI registration (R5, partial)
+
+Local branch `t3code/r5-sync-14` starts at `5e39ba109`. The native CLI now
+registers `wallets.sync` and calls the shared wallet-sync service through the
+admitted `Book`, with the current persisted offline policy and one exact-action
+grant. The supported boundary remains a single Bitcoin descriptor wallet per
+profile on Electrum/Esplora; source-less wallets keep their local skip behavior.
+No BDK networking crate or dependency is added.
+
+Python's CLI `handlers.sync_wallet` returns directly after observation
+publication and freshness/journal-staleness writes. It does **not** run journal
+processing. The daemon `_wallets_sync_payload` instead enqueues and runs wallet
+freshness jobs, then defaults to `run_local_journal_refresh` with automatic
+pairing and current-journal skipping; it can report disabled, deferred, failed
+or cancelled journal work. This checkpoint activates only the CLI contract.
+The daemon default remains Python, preserving that local accounting step until
+a narrow Python refresh handoff or explicitly restricted no-refresh variants
+can be verified with its native coordinator. R4-13 remains unimplemented.
+
+The development-only hybrid probe still parses command shape without opening
+a book. A supported noninteractive CLI sync without a passphrase FD then opens
+the admitted book and calls `wallet_sync_supported`, which constructs and
+discards an inert `Sync` using current saved wallets, defaults and backends.
+It creates no grant and performs no egress. An unsupported capability returns
+the distinct, silent test-only exit status 4 after successful book cleanup;
+only that status with empty stdout/stderr permits the hybrid runner to select
+Python. Validation/open/unlock failures and every result of an admitted native
+sync stay native, including later `native_fallback_required` errors. A race
+after capability preflight can therefore refuse, but never retry traffic.
+
+Interactive and passphrase-FD hybrid sync calls select Python before bootstrap
+because unlocking during capability detection could consume their input.
+Other commands retain pre-bootstrap shape selection. Production has no hybrid
+handoff, no Python retry and no added background trigger or AI disclosure.
+
+The live CLI oracle invokes Python's complete CLI entry point independently,
+then the native route through the hybrid candidate. It compares full envelopes,
+empty progress streams and every normalized logical table; only existing
+wall-clock `elapsed_ms` is normalized. Each sequence restarts both processes.
+Reviewed fixtures preserve current journals, saved reports and missing-authority
+cases. Active defaults and a saved backend absent from the runtime seed are
+covered separately. The source-less `--all` fixture also checks label ordering
+and deprecated-wallet exclusion with multiple wallets.
+
+| Registered CLI corpus | Electrum rounds | Esplora rounds | Local skips |
+| --- | ---: | ---: | ---: |
+| Ten fixtures, both selection modes | 30 | 30 | 0 |
+| Eight three-round restart sequences | 24 | 24 | 0 |
+| Five reviewed-book scenarios | 12 | 12 | 0 |
+| Active default and saved custom backend | 2 | 2 | 0 |
+| Source-less explicit and `--all` | 0 | 0 | 2 |
+| Total successful CLI rounds | 68 | 68 | 2 |
+
+Every successful round asserts its hybrid served-by log contains only Rust.
+Unsupported environment/saved Core RPC backend preflights leave complete books
+and loopback request counters unchanged. Separate tests pin the no-bootstrap
+shape probe, validation-versus-capability distinction, test-only opt-in,
+persisted offline/no-egress refusals, consumable unlock input, empty handoff
+output and refusal to retry even a native `native_fallback_required` error.
+
+Successful native product calls in this acceptance corpus are:
+
+| Route | Successful native product calls | In-scope hybrid fallbacks |
+| --- | ---: | ---: |
+| `wallets.sync` | 138 | 0 |
+| `ui.wallets.sync` | 0 | Unmeasured |
+| `ui.freshness.run` | 0 | Unmeasured |
+| `ui.workspace.freshness.run` | 0 | Unmeasured |
+
+The three daemon entries remain unregistered. Remaining work is:
+
+1. Port freshness source policy/specs, recovery/enqueue/selected dispatch,
+   pause/cooldown/cancellation, state/checkpoint/result redaction, snapshots and
+   profile/workspace ordering with exact Python wire output.
+2. Connect progress and early cancellation/book-switch/revocation to shared
+   sync, preserving the six-stage atomic publication fence and exact-action
+   consent. Persisted/recovered jobs grant no network permission.
+3. Add the default local journal refresh through a narrow existing-Python
+   operation, or serve only explicitly admitted no-refresh daemon variants.
+   Preserve current-journal skipping, auto-pairing and disabled/deferred/error
+   summaries before describing the daemon default as native.
+4. Prove full live daemon envelope, event and normalized-book parity over both
+   protocols, zero supported-shape hybrid fallbacks and named orchestration
+   mutation kills before registering each of the three daemon entries.
+
+Verification results for this local checkpoint are recorded below.
+
+
+The live error regression pins Python's distinct BDK “Outbound chain
+observation” and compatibility “Outbound requests” messages for offline and
+no-egress refusals. The native fetch permission mapper now preserves those full
+error envelopes through admission and publication checks. No Python reference
+bug was encountered.
+
+All fourteen new routing recipes are killed after thirteen named baselines
+pass. The runner rebuilds the mutated native binary before each named CLI test;
+build errors and empty selections cannot count as kills. Its complete
+source/build trees are removed after the summary is written. The inherited
+547-entry sync catalogue still validates against the tree; those inherited
+mutations were not rerun here.
+
+Formatting and affected-package production/harness clippy pass with warnings
+denied. The affected production Rust test batch passes 238 tests without
+failures or ignored tests, followed by eight CLI probe and eight supervisor
+protocol tests. Six inherited binary smoke cases in the first batch used their
+existing child-HOME override; this constraint violation was caught during
+harness review. All new CLI/mutation oracles and subsequent verification
+preserve account HOME and use disposable data roots.
+
+
+The final CLI/routing suite passes all 92 tests without skips, including the
+138 successful native rounds tabulated above. The required final
+`classify_tests update` records 5,713 definitions, and
+`python_test_shards.py run preflight --ci` passes all 57 tests. Command logs and
+summaries remain under `target/r5-sync-14-artifacts/`; completed native and
+mutation build trees and disposable books are removed. No requested checkpoint
+check remains sandbox-blocked. No background job is left running.
+
+This is one registered CLI route, not completion of the four-route R5 sync
+slice. The daemon coordinator/progress/journal work listed above remains
+unimplemented. The full Python/frontend quality gate, all inherited mutation
+reruns, tax/custody shadow overlays, Docker regtest and packaged/platform gates
+were not run.

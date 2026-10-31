@@ -47,6 +47,8 @@ pub struct Environment {
     /// (`tests/rust_port/hybrid_cli.py`) routes each call on it.
     #[cfg(feature = "test-probe")]
     pub test_probe: bool,
+    #[cfg(feature = "test-probe")]
+    pub test_sync_handoff: bool,
 }
 
 impl Environment {
@@ -74,6 +76,8 @@ impl Environment {
             operator_direct: var("KASSIBER_OPERATOR_DIRECT"),
             #[cfg(feature = "test-probe")]
             test_probe: var("KASSIBER_RUST_TEST_PROBE").as_deref() == Some("1"),
+            #[cfg(feature = "test-probe")]
+            test_sync_handoff: var("KASSIBER_RUST_TEST_SYNC_HANDOFF").as_deref() == Some("1"),
         }
     }
 
@@ -369,6 +373,8 @@ pub fn run(
         report: None,
         unhandled_type: None,
     };
+    #[cfg(feature = "test-probe")]
+    let mut sync_handoff = false;
     let result = match dotted.as_str() {
         command if crate::backup::COMMANDS.contains(&command) => {
             route_brokered(env, store.as_ref(), &globals.selection)
@@ -414,6 +420,22 @@ pub fn run(
             None,
             (&namespace, build.version, &mut diagnostics),
             |book, _| {
+                #[cfg(feature = "test-probe")]
+                if dotted == "wallets.sync" && env.test_sync_handoff {
+                    let (_, profile) = book.resolve_scope(
+                        namespace.get("workspace"),
+                        namespace.get("profile"),
+                    )?;
+                    if !book.wallet_sync_supported(
+                        &profile,
+                        namespace.text("wallet"),
+                        namespace.flag("all"),
+                        namespace.flag("force_full"),
+                    )? {
+                        sync_handoff = true;
+                        return Ok(());
+                    }
+                }
                 let payload =
                     crate::wallets::execute(&namespace, book, stdin.as_mut(), sink.stderr)?;
                 emit(&mut sink, format, &kind, payload)
@@ -476,7 +498,13 @@ pub fn run(
     };
     let _ = sink.stderr.write_all(&warnings);
     match result {
-        Ok(()) => 0,
+        Ok(()) => {
+            #[cfg(feature = "test-probe")]
+            if sync_handoff {
+                return 4;
+            }
+            0
+        }
         Err(mut error) => {
             // Python wraps layout I/O exceptions before these local services
             // as internal_error, just as it does their evidence-file failures.

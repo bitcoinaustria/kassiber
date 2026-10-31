@@ -37,6 +37,7 @@ RUST_DAEMON_ENV = "KASSIBER_HYBRID_RUST_DAEMON"
 IMPORT_ORACLE_ENV = "KASSIBER_HYBRID_IMPORT_ORACLE"
 OPTION_PREFIX = "--hybrid-"
 PROBE_NOT_IMPLEMENTED = 3  # crates/cli PROBE_NOT_IMPLEMENTED
+SYNC_HANDOFF = 4
 USAGE_ERROR = 2
 
 
@@ -62,6 +63,10 @@ def route(rust: str, args: list[str]) -> tuple[str, str]:
         return command, "python"
     if command == "daemon" and os.environ.get(RUST_DAEMON_ENV) != "1":
         return command, "python"
+    if command == "wallets.sync" and (
+        os.isatty(0) or any(arg.split("=", 1)[0] == "--db-passphrase-fd" for arg in args)
+    ):
+        return command, "python"
     return command, "rust"
 
 
@@ -82,6 +87,17 @@ def main() -> None:
     if not rust:
         raise SystemExit(f"hybrid candidate: set {RUST_ENV} to a test-harness Rust build")
     command, served_by = route(rust, args)
+    sync_result = None
+    if command == "wallets.sync" and served_by == "rust":
+        sync_result = subprocess.run(
+            [rust, *args], capture_output=True, close_fds=False,
+            env={**os.environ, "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1"}, check=False,
+        )
+        if sync_result.returncode == SYNC_HANDOFF:
+            if sync_result.stdout or sync_result.stderr:
+                raise SystemExit("hybrid candidate: sync handoff must have empty output")
+            served_by = "python"
+            sync_result = None
     log = os.environ.get(LOG_ENV)
     if log:
         line = json.dumps({"command": command, "served_by": served_by}) + "\n"
@@ -93,6 +109,10 @@ def main() -> None:
     # exec keeps stdin, inherited descriptors (--db-passphrase-fd) and the
     # working directory exactly as the test passed them.
     if served_by == "rust":
+        if sync_result is not None:
+            sys.stdout.buffer.write(sync_result.stdout)
+            sys.stderr.buffer.write(sync_result.stderr)
+            raise SystemExit(sync_result.returncode)
         if command in {"wallets.import-csv", "wallets.import-phoenix", "wallets.import-json", "wallets.import-river", "wallets.import-bull", "wallets.import-bullbitcoin", "wallets.import-coinfinity", "wallets.import-21bitcoin", "wallets.import-pocket", "wallets.import-pocketbitcoin", "wallets.import-strike"} and os.environ.get(IMPORT_ORACLE_ENV) == "1":
             # Direct script execution puts tests/rust_port first on sys.path.
             sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))

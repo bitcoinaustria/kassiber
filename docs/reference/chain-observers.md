@@ -722,7 +722,10 @@ retain their skip result and book-network guards.
 The service has request-bound consent and revalidates book, wallet, backend,
 network and observer inputs before preparation and publication. Cancellation,
 revocation and offline changes roll back every publication stage. Progress
-callbacks, daemon freshness queues, journal refresh and route activation are
-still pending. The live service oracle compares Python's complete `sync_wallet`
-handler with the native service and every normalized table; it does not exercise
-the registered CLI or daemon.
+callbacks, daemon freshness queues and journal refresh remain pending. The CLI
+`wallets sync` is registered for the supported service boundary. Its live oracle
+compares complete Python/native CLI envelopes and every normalized table through
+the hybrid runner, with zero supported-shape fallbacks. Python's CLI does not
+refresh journals after sync; it retains the same journal-staleness writes.
+The daemon routes remain unregistered because their queue, progress and default
+local journal-refresh contracts require further implementation.

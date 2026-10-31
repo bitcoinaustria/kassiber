@@ -340,6 +340,25 @@ impl Fetch {
         &self.captured_config
     }
 
+    fn permission_error(&self, error: kassiber_net::Error) -> AppError {
+        let mut envelope = error.app_error();
+        if self.compatibility.is_none()
+            && matches!(
+                error,
+                kassiber_net::Error::NoEgress
+                    | kassiber_net::Error::Offline
+                    | kassiber_net::Error::OfflineUnavailable
+            )
+        {
+            envelope.message = envelope.message.replacen(
+                "Outbound requests are",
+                "Outbound chain observation is",
+                1,
+            );
+        }
+        envelope
+    }
+
     pub(crate) fn revalidate(&self, conn: &Connection) -> Result<()> {
         let current = Self::new(
             conn,
@@ -384,7 +403,7 @@ impl Fetch {
             self.transport.request().clone(),
             Some(proof.transport.clone()),
         )
-        .map_err(|e| e.app_error())?;
+        .map_err(|e| self.permission_error(e))?;
         Ok(())
     }
 
@@ -413,7 +432,7 @@ impl Fetch {
             self.transport.request().clone(),
             Some(proof.transport.clone()),
         )
-        .map_err(|e| e.app_error())?;
+        .map_err(|e| self.permission_error(e))?;
         if proof.started.swap(true, Ordering::SeqCst) {
             return Err(AppError::new(
                 "interaction_required",
@@ -489,7 +508,7 @@ impl Fetch {
             self.transport.request().clone(),
             Some(proof.transport.clone()),
         )
-        .map_err(|e| e.app_error())?;
+        .map_err(|e| self.permission_error(e))?;
         Ok(
             json!({"backend":self.backend,"kind":self.backend["kind"],"force_full":self.force_full,"authoritative_chain_observer":true,
             "book_environment_id":self.environment,"skip_outcome":null,"sync_state":{"chain":"bitcoin","network":self.plan.network,

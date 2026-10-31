@@ -16,6 +16,50 @@ use kassiber_secrets::{NativeCredentialReader, UnlockOptions, UnlockSession};
 use kassiber_store::rusqlite::{Connection, OptionalExtension};
 use kassiber_store::{map_sqlite_error, Book as StoredBook, OpenOptions};
 
+#[cfg(feature = "test-harness")]
+struct FixedSyncSources {
+    prefix: String,
+    ids: u64,
+    now: i64,
+}
+
+#[cfg(feature = "test-harness")]
+impl kassiber_wallets::publication::wallet::Sources for FixedSyncSources {
+    fn id(&mut self) -> String {
+        self.ids += 1;
+        format!("{}-{:04}", self.prefix, self.ids)
+    }
+    fn now(&mut self) -> String {
+        self.now += 1;
+        kassiber_chain::format_unix_time(1_893_456_000 + self.now).unwrap()
+    }
+}
+fn sync_sources() -> (Box<dyn kassiber_wallets::publication::wallet::Sources>, u64) {
+    #[cfg(feature = "test-harness")]
+    if let Ok(prefix) = std::env::var("KASSIBER_RUST_TEST_SYNC_PREFIX") {
+        return (
+            Box::new(FixedSyncSources {
+                prefix,
+                ids: 0,
+                now: std::env::var("KASSIBER_RUST_TEST_SYNC_NOW")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0),
+            }),
+            std::env::var("KASSIBER_RUST_TEST_SYNC_START")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1_700_000_000),
+        );
+    }
+    (
+        Box::new(kassiber_wallets::publication::wallet::SystemSources::default()),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs()),
+    )
+}
+
 #[derive(Default)]
 pub struct RealStore {
     auth: Mutex<()>,
@@ -1199,6 +1243,30 @@ impl Book for RealBook {
         }
         kassiber_wallets::execute(self.conn()?, operation)
     }
+    fn wallet_sync_supported(
+        &self,
+        profile_id: &str,
+        wallet: Option<&str>,
+        all: bool,
+        force_full: bool,
+    ) -> Result<bool, AppError> {
+        use kassiber_wallets::sync::{resolve_backend, Request, Sync};
+        match Sync::new(
+            self.conn()?,
+            &Request {
+                profile_id,
+                wallet,
+                all,
+                force_full,
+                version: env!("CARGO_PKG_VERSION"),
+            },
+            |conn, name| resolve_backend(conn, &self.backends, name),
+        ) {
+            Ok(_) => Ok(true),
+            Err(error) if error.code == "native_fallback_required" => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
     fn wallet_sync(
         &mut self,
         profile_id: &str,
@@ -1208,11 +1276,10 @@ impl Book for RealBook {
     ) -> Result<Value, AppError> {
         use kassiber_net::{Gate, Ledger, Offline};
         use kassiber_wallets::{
-            publication::wallet::SystemSources,
             scan::Cancellation,
             sync::{resolve_backend, Request, Sync, SyncConsent},
         };
-        use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+        use std::time::{Duration, Instant};
         let gate = Gate::new(
             || match Context::from_env()
                 .ok()
@@ -1242,16 +1309,15 @@ impl Book for RealBook {
             |conn, name| resolve_backend(conn, backends, name),
         )?;
         let consent = SyncConsent::explicit_trigger(&action);
+        let (mut sources, start_time) = sync_sources();
         let result = action.run(
             conn,
             &gate,
             Some(&consent),
             &Cancellation::default(),
             Instant::now() + Duration::from_secs(900),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs()),
-            &mut SystemSources::default(),
+            start_time,
+            sources.as_mut(),
             |conn, name| resolve_backend(conn, backends, name),
         )?;
         Ok(Value::List(result))

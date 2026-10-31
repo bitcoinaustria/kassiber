@@ -2843,11 +2843,49 @@ comparing full envelopes and every normalized table across both protocols.
 This advances beyond the prepared-fetch/publication helper boundary, but is
 not registered CLI/daemon product acceptance.
 
-The freshness coordinator, progress events, default local journal refresh,
-pre-bootstrap unsupported hybrid selection and all four `IMPLEMENTED` entries
-remain unfinished. In particular, the native `Book` interface has no journal
+At this service checkpoint, freshness coordination, progress events, default
+local journal refresh, unsupported hybrid selection and all four registrations
+remained unfinished. The [CLI continuation below](#r5-bitcoin-sync-cli-registration-checkpoint-partial)
+supersedes the CLI registration and hybrid-selection status. The native `Book`
+interface still has no journal
 refresh operation, and the hybrid probe currently resolves only command-line
 shape; it cannot inspect saved wallet/backend capabilities without opening a
-book. Route activation must resolve those boundaries before claiming native
+book. Daemon route activation must resolve those boundaries before claiming native
 served-by counts. See the wallet-sync service checkpoint at the end of
 `docs/reference/rust-shell.md` for verification and the remaining handoff.
+
+### R5 Bitcoin sync: CLI registration checkpoint (partial)
+
+The native `wallets.sync` entry is registered. It calls the shared
+request-bound sync service through the admitted `Book` and preserves Python's
+CLI contract: sync publishes observations and journal staleness, without
+processing journals. Python's default daemon `ui.wallets.sync` instead runs
+freshness jobs, then `run_local_journal_refresh` with current-journal skipping
+and automatic pairing. That daemon default remains on Python until its queue,
+progress and refresh integration can preserve the same accounting effects.
+No native journal-processing claim is made.
+
+The test-only hybrid runner keeps its inert command-shape probe. For
+noninteractive sync without a passphrase FD, it then opens the admitted book
+and constructs an inert `Sync` to inspect saved wallet/backend capabilities.
+Only a silent pre-consent handoff may select Python. No grant or network
+client exists at that decision. Native failures after admission, including
+later `native_fallback_required` errors, never retry. Interactive and
+passphrase-FD hybrid sync calls choose Python before bootstrap so no unlock
+input is consumed twice. The product binary has no Python retry mechanism.
+
+The live registered CLI oracle now compares complete Python/native CLI
+responses, empty progress streams and every normalized table on disposable
+Electrum and Esplora backends. Fixtures, restart sequences, reviewed journals,
+saved reports, force-full, active defaults and saved custom backends traverse
+the hybrid candidate with zero supported-shape fallbacks. Source-less local
+wallets also retain skip results and label/deprecation handling. See the CLI
+registration checkpoint at the end of `docs/reference/rust-shell.md` for
+execution counts and verification.
+
+Remaining work is the three daemon registrations: freshness source policy,
+queue/recovery/dispatch/state and wire snapshots; request progress,
+cancellation/book-switch/revocation wiring; and either a narrow existing-Python
+journal-refresh handoff or explicitly restricted no-refresh variants. Require
+full live daemon envelope/event/book parity on both protocols, zero in-scope
+fallbacks and named mutation kills before enabling any of those entries.

@@ -935,13 +935,14 @@ reads remain subject to consent and offline checks; proxies never retry directly
 No product route, AI disclosure or durable write is enabled by this preparation
 checkpoint. See [native execution egress](rust-port-egress.md#native-bitcoin-bdk-execution-and-compatibility-caches-r5-step-1).
 
-The unregistered native fetch assembler captures the supported single-wallet
+The native fetch assembler captures the supported single-wallet
 scope and observer epochs locally before consent. One exact-action grant is
 shared across its discovery, acquisition and BDK stages; revocation reaches
 each transport. Missing or foreign grants, stale scope, cancellation and
 offline mode refuse before traffic. Other source shapes refuse before egress.
-The guarded test driver can publish the completed fetch to a disposable book;
-no CLI/daemon/AI route is enabled. See the
+The guarded test driver can publish the completed fetch to a disposable book.
+The CLI wallet-sync service now also uses this assembler; daemon integration
+and AI projections remain pending. See the
 [native fetch checkpoint](rust-shell.md#bitcoin-native-fetch-assembly-r5).
 
 The Rust compatibility fetch adapters use the same explicit-sync tip anchors:
@@ -950,18 +951,27 @@ only inside the existing consent-bound acquisition action. Optional tip failure
 disables reuse and does not bypass the return-time consent/offline/cancellation
 fence. The no-consent HTTP regression includes the tip-hash path, with empty
 attempt and egress buffers. No new connector, background job or AI projection
-is introduced; the four product sync routes remain unregistered.
+is introduced. The CLI `wallets sync` now uses this service for supported
+Bitcoin descriptor wallets; the three daemon sync/freshness routes remain
+unregistered.
 
-The unregistered wallet-sync service binds one explicit grant to the admitted
+The wallet-sync service binds one explicit grant to the admitted
 connection, book identity, profile, ordered wallet selection, network scope and
 resolved backends. Constructors and revalidation perform local reads only.
 Preparation rechecks observer epochs and checkpoints before traffic. Publication
 rechecks cancellation, grant revocation and the fresh `kassiber-net` offline
-policy at every savepoint stage, including commit. The inactive CLI/book adapter
+policy at every savepoint stage, including commit. The CLI/book adapter
 reads the persisted offline preference afresh; `KASSIBER_NO_EGRESS` remains
 enforced by the gate. No saved backend creates a grant. The service adds no
-automatic trigger or AI projection; daemon freshness and hybrid route activation
-remain pending.
+automatic trigger or AI projection; daemon freshness remains pending.
+
+The test-only hybrid CLI may open the admitted book to check saved sync
+capabilities. This check constructs and discards an inert action without
+granting consent or creating a network client. Only an explicit silent
+pre-consent handoff permits Python selection. Once native sync starts, errors
+and internal capability refusals never retry through Python. Passphrase-FD and
+interactive hybrid sync invocations select Python before opening either book,
+so unlock input is consumed once. Production builds have no hybrid handoff.
 
 Wallets using the active default retain that selection in their grant. The
 service re-resolves the current stored default before fetch and publication;

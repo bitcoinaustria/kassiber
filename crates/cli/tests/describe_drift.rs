@@ -60,7 +60,7 @@ fn queries_describe_unported_leaves_and_reject_unknown_paths() {
     let path = |parts: &[&str]| parts.iter().map(|p| (*p).to_owned()).collect::<Vec<_>>();
     let status = describe(&path(&["status"])).unwrap();
     assert_eq!(get(&status, "count"), Some(&Value::from(1)));
-    let unported = describe(&path(&["wallets", "sync"])).unwrap();
+    let unported = describe(&path(&["journals", "process"])).unwrap();
     assert_eq!(get(&unported, "count"), Some(&Value::from(1)));
     let unknown = describe(&path(&["nope"])).unwrap_err();
     assert_eq!(unknown.code, "unknown_command");

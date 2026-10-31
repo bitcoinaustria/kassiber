@@ -1,0 +1,142 @@
+[
+  {
+    "id": "routing-register-cli",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"wallets.sync\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_probe_does_not_bootstrap"
+    ],
+    "rule": "Register wallet sync in the native catalog without bootstrapping the probe."
+  },
+  {
+    "id": "routing-handoff-opt-in",
+    "file": "crates/cli/src/run.rs",
+    "find": "dotted == \"wallets.sync\" && env.test_sync_handoff",
+    "replace": "dotted == \"wallets.sync\"",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_handoff_requires_the_test_only_opt_in"
+    ],
+    "rule": "Only the test hybrid opt-in may request a silent unsupported handoff."
+  },
+  {
+    "id": "routing-handoff-admission",
+    "file": "crates/cli/src/run.rs",
+    "find": "if !book.wallet_sync_supported(",
+    "replace": "if book.wallet_sync_supported(",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_fixture_books_match_python[receive-change-wallet-electrum]"
+    ],
+    "rule": "A supported local capability decision continues through native sync."
+  },
+  {
+    "id": "routing-handoff-signal",
+    "file": "crates/cli/src/run.rs",
+    "find": "                        sync_handoff = true;",
+    "replace": "                        sync_handoff = false;",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_unsupported_capability_handoff_has_no_traffic"
+    ],
+    "rule": "Unsupported pre-consent capability produces the distinct silent handoff status."
+  },
+  {
+    "id": "routing-preflight-unsupported",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "Err(error) if error.code == \"native_fallback_required\" => Ok(false),",
+    "replace": "Err(error) if error.code == \"native_fallback_required\" => Ok(true),",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_unsupported_capability_handoff_has_no_traffic"
+    ],
+    "rule": "Saved unsupported capabilities are rejected before granting consent."
+  },
+  {
+    "id": "routing-preflight-validation",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "Err(error) if error.code == \"native_fallback_required\" => Ok(false),\n            Err(error) => Err(error),",
+    "replace": "Err(error) if error.code == \"native_fallback_required\" => Ok(false),\n            Err(_) => Ok(false),",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_capability_errors_are_not_handoff"
+    ],
+    "rule": "Validation failures never authorize a Python retry."
+  },
+  {
+    "id": "routing-current-offline",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        let gate = Gate::new(\n            || match Context::from_env()\n                .ok()\n                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())\n            {\n                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,\n                Some(_) => Offline::Online,\n                None => Offline::Unavailable,\n            },\n            Ledger::default(),\n        );\n",
+    "replace": "        let gate = Gate::new(\n            || match Context::from_env()\n                .ok()\n                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())\n            {\n                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Online,\n                Some(_) => Offline::Online,\n                None => Offline::Unavailable,\n            },\n            Ledger::default(),\n        );\n",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_native_failure_never_falls_back[offline-esplora]"
+    ],
+    "rule": "The registered route reads the current persisted offline policy before egress."
+  },
+  {
+    "id": "routing-hybrid-unlock-fd",
+    "file": "tests/rust_port/hybrid_cli.py",
+    "find": "os.isatty(0) or any(arg.split(\"=\", 1)[0] == \"--db-passphrase-fd\" for arg in args)",
+    "replace": "os.isatty(0)",
+    "expect_failing": [
+      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_keeps_consumable_unlock_inputs_on_python[--db-passphrase-fd]"
+    ],
+    "rule": "A passphrase descriptor is never consumed before a fallback decision."
+  },
+  {
+    "id": "routing-hybrid-tty",
+    "file": "tests/rust_port/hybrid_cli.py",
+    "find": "os.isatty(0) or any(arg.split(\"=\", 1)[0] == \"--db-passphrase-fd\" for arg in args)",
+    "replace": "any(arg.split(\"=\", 1)[0] == \"--db-passphrase-fd\" for arg in args)",
+    "expect_failing": [
+      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_keeps_consumable_unlock_inputs_on_python[tty]"
+    ],
+    "rule": "Interactive unlock input stays with a single runtime."
+  },
+  {
+    "id": "routing-hybrid-execution-error",
+    "file": "tests/rust_port/hybrid_cli.py",
+    "find": "if sync_result.returncode == SYNC_HANDOFF:",
+    "replace": "if sync_result.returncode != 0:",
+    "expect_failing": [
+      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_never_retries_a_native_result"
+    ],
+    "rule": "Native failures, including internal capability errors, never become retries."
+  },
+  {
+    "id": "routing-hybrid-empty-handoff",
+    "file": "tests/rust_port/hybrid_cli.py",
+    "find": "if sync_result.stdout or sync_result.stderr:",
+    "replace": "if False:",
+    "expect_failing": [
+      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_requires_an_empty_explicit_handoff"
+    ],
+    "rule": "An output-bearing handoff is refused instead of starting Python."
+  },
+  {
+    "id": "routing-hybrid-request-handoff",
+    "file": "tests/rust_port/hybrid_cli.py",
+    "find": "\"KASSIBER_RUST_TEST_SYNC_HANDOFF\": \"1\"",
+    "replace": "\"KASSIBER_RUST_TEST_SYNC_HANDOFF\": \"0\"",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_unsupported_hybrid_selection_falls_back_before_traffic"
+    ],
+    "rule": "The hybrid explicitly requests the inert local capability handoff."
+  },
+  {
+    "id": "routing-missing-capability",
+    "file": "crates/runtime/src/store.rs",
+    "find": "Err(not_implemented(\"wallets\", \"wallet sync capability\"))",
+    "replace": "Ok(true)",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_missing_capability_implementation_fails_closed"
+    ],
+    "rule": "A store without an implemented capability check fails closed instead of assuming support."
+  },
+  {
+    "id": "routing-bdk-egress-envelope",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        if self.compatibility.is_none()\n            && matches!(",
+    "replace": "        if self.compatibility.is_some()\n            && matches!(",
+    "expect_failing": [
+      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_native_failure_never_falls_back"
+    ],
+    "rule": "Match Python observer-specific egress messages without changing compatibility transport messages."
+  }
+]

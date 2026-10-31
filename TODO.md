@@ -127,7 +127,7 @@ through the shared setup crate.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity.
 
-## Rust backend R5 Bitcoin wallet sync (native preparation; product routes pending)
+## Rust backend R5 Bitcoin wallet sync (CLI registered; daemon routes pending)
 
 - [x] Port the compatibility descriptor gap walker for Esplora and Electrum,
   with exact-action consent, cancellation, progress, loopback differential
@@ -165,18 +165,22 @@ through the shared setup crate.
   This is an unregistered preparation seam; see the native fetch handoff.
 - [ ] Connect native preparation/publication to shared CLI/daemon wallet and
   freshness services, retaining pre-egress refusal of unsupported shapes.
-  The request-bound wallet-sync service and inactive CLI/book adapter now exist;
-  daemon freshness queue/state/progress orchestration and pre-bootstrap hybrid
-  capability selection are still pending. See the wallet-sync service checkpoint
-  in `docs/reference/rust-shell.md`.
+  The request-bound service and CLI route now exist; the hybrid runner checks
+  saved capabilities in an inert admitted-book preflight before consent. Daemon
+  freshness queue/state/progress and default local journal refresh remain pending.
+  See the CLI registration checkpoint in `docs/reference/rust-shell.md`.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.
   Retain validated Electrum graphs while refreshing header timestamps; rerun
   fixture, restart-sequence and reviewed-book preparation/publication parity.
-- [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
-  hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
-  Silent Payments sync remain `not_implemented` in the Rust binary.
+- [x] Enable supported CLI `wallets sync` with complete live fixture, restart and
+  reviewed-book comparisons on Electrum/Esplora and zero hybrid fallbacks.
+- [ ] Enable `ui.wallets.sync`, `ui.freshness.run` and
+  `ui.workspace.freshness.run` after queue/state/progress and journal-refresh
+  parity. Keep unsupported Liquid, Core RPC, Lightning, Silent Payments and
+  additional-wallet overlap on Python in the hybrid runner; direct native
+  unsupported calls refuse without retrying.
 
 ## Rust backend R5 secrets, backup and diagnostics
 
