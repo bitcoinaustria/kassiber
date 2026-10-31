@@ -453,6 +453,8 @@ saved-artifact registration was skipped. No saved report snapshot is created.
 Hard-linked files and existing writable files whose directory cannot hold a
 staged sibling are written in place. These compatibility paths are not atomic:
 an interrupted write can leave partial output, as with `open("w")`.
+Storage exhaustion (`ENOSPC` or `EDQUOT`) during staging raises without opening
+the existing destination for writing, so the previous complete report survives.
 Replacement errors name only the requested destination, including when it
 becomes a directory during writing; random staging filenames are not exposed.
 

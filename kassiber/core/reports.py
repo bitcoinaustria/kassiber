@@ -5595,7 +5595,7 @@ def _write_csv_rows(path, rows):
         descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
     except OSError as exc:
         if target_stat is None or exc.errno not in {
-            errno.EACCES, errno.EPERM, errno.EROFS, errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC),
+            errno.EACCES, errno.EPERM, errno.EROFS,
         }:
             raise
         with open(target, "w", encoding="utf-8", newline="") as handle:
