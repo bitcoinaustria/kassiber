@@ -55,7 +55,10 @@ remains the source of this evidence; counter checks are not a cryptographic or
 atomic snapshot guarantee against a malicious server.
 
 Compatibility Esplora and Electrum history caches are bound to the observed
-chain tip, including block identity rather than height alone. An identical tip
+highest observed history/header block, including block identity rather than
+height alone. A history read that races above the initial tip advances the
+anchor to that exact block (and the exact timestamp-supplying Electrum header).
+Checkpoints predating this bound rebuild once. An identical tip
 permits the existing counter/status cache checks. On a taller tip, the observer
 checks that the previously saved tip block still belongs to the current chain;
 Esplora also binds its new tip height to the observed hash. Proven extensions
