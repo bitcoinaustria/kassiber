@@ -1,0 +1,608 @@
+{
+  "round": 5,
+  "base_commit": "bccf5c38c62eedebdfea31c7042f31a5af5cca8f",
+  "branch": "t3code/python-reference-fixes-5",
+  "local_only": true,
+  "fixes": [
+    {
+      "id": 1,
+      "priority": "P1",
+      "finding": "Truncated quoted recovery phrases and passphrases",
+      "change": "Unterminated quoted secret assignments redact through end of line in Python and webview; complete multiline quoted values retain escape-aware parsing.",
+      "tests": [
+        "tests/test_redaction_shared_corpus.py",
+        "ui-tauri/src/lib/appLogsRedactionCorpus.test.ts"
+      ],
+      "proof": [
+        "01-before-python.log",
+        "01-before-webview.log"
+      ],
+      "validation": [
+        "01-after-python.log",
+        "01-after-webview.log"
+      ],
+      "rust_follow_up": "Mirror end-of-line handling in Rust secret-floor redactors, including Tauri supervisor redaction, and consume the updated shared fixture.",
+      "commit": "25e5f18c61d248601bd46ea849f9adff95e20c19",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "bccf5c38c"
+    },
+    {
+      "id": 2,
+      "priority": "P2",
+      "finding": "Quadratic secret-key prefix matching",
+      "change": "Anchor prefix scans at complete identifier boundaries so separator runs are scanned once. No pre-redaction truncation is needed for this path.",
+      "tests": [
+        "tests/test_redaction_shared_corpus.py::test_long_identifier_redaction_is_linear",
+        "ui-tauri/src/lib/appLogsRedactionCorpus.test.ts (100k-character deadline cases)"
+      ],
+      "proof": [
+        "02-before-python.log",
+        "02-before-webview.log"
+      ],
+      "validation": [
+        "02-after-python.log",
+        "02-after-webview.log"
+      ],
+      "thresholds": {
+        "characters": 100000,
+        "python_seconds": 0.8,
+        "webview_seconds": 0.5
+      },
+      "old_webview_seconds": {
+        "dash": 11.631,
+        "dot": 11.658
+      },
+      "rust_follow_up": "Carry the long-identifier deadline fixtures into Rust redaction tests and confirm every log/error path uses linear matching before capping.",
+      "commit": "fd2d7087baf9de173e768b2cefad701c7035289e",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "25e5f18c61d248601bd46ea849f9adff95e20c19"
+    },
+    {
+      "id": 3,
+      "priority": "P3",
+      "finding": "Repeated freshness counts in transaction flow filters",
+      "change": "Use an uncorrelated list of current profiles backed by grouped active-transaction counts, evaluated once per SQL statement.",
+      "tests": [
+        "tests/test_journal_freshness_readers.py::test_flow_filter_evaluates_freshness_once",
+        "tests/test_journal_freshness_readers.py::test_sql_predicate_matches_shared_evaluator"
+      ],
+      "proof": [
+        "03-before-python.log"
+      ],
+      "validation": [
+        "03-after-python.log"
+      ],
+      "rust_follow_up": "Mirror grouped canonical freshness in Rust transaction flow queries; preserve semantics stamps, active counts and all four flow results.",
+      "commit": "bd1c1f27041f8e90cf5c88e752fd9ecf5d138ab5",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "fd2d7087baf9de173e768b2cefad701c7035289e"
+    },
+    {
+      "id": 4,
+      "priority": "P3",
+      "finding": "Full compatibility refetch on every tip advance",
+      "change": "Prove that the saved tip is still on the current chain before reusing counter/status history checks. Bind Esplora height to hash; compare full Electrum headers. Reorgs and unprovable anchors still refresh.",
+      "tests": [
+        "tests/test_sync_incremental_anchor.py",
+        "tests/test_sync_confirmation_freshness.py",
+        "tests/test_filed_report_chain.py",
+        "tests/test_sync_backends.py",
+        "tests/test_liquid_electrum_sync.py",
+        "tests/test_electrum_coinbase.py"
+      ],
+      "proof": [
+        "04-before-python.log"
+      ],
+      "validation": [
+        "04-after-python.log"
+      ],
+      "request_counts": {
+        "used_scripts": 200,
+        "unused_scripts": 40,
+        "esplora_bitcoin": {
+          "before_first": 1202,
+          "after_first": 1204,
+          "before_advance": 1202,
+          "after_advance": 244,
+          "same_tip": 241
+        },
+        "electrum_bitcoin": {
+          "before_first": 1282,
+          "after_first": 1282,
+          "before_advance": 1082,
+          "after_advance": 242,
+          "same_tip": 241
+        },
+        "electrum_liquid": {
+          "before_first": 1282,
+          "after_first": 1282,
+          "before_advance": 1282,
+          "after_advance": 242,
+          "same_tip": 241
+        }
+      },
+      "request_count_notes": "Same deterministic fixture and syscall-level counters before/after. Bitcoin old advance reuses its validated wallet graph but fetches 200 previous transactions; this fixture measures 1082 rather than the reviewer's 1282. Liquid record building/unblinding is stubbed as in the reviewer repro; transport, histories, transaction fetching and checkpoints are real.",
+      "rust_follow_up": "Required: crates/wallets sync-12 mirrors ec49bf25 and must mirror the ancestry proof and checkpoint fields, including Liquid. Preserve same-statistics and taller-tip reorg regressions.",
+      "commit": "6be312eaa2a11f3448484ef81ad3e462b8acccba",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "bd1c1f27041f8e90cf5c88e752fd9ecf5d138ab5"
+    },
+    {
+      "id": 5,
+      "priority": "P3",
+      "finding": "CSV staging filenames in internal errors",
+      "change": "Normalize native staging errors to the requested filename and translate storage failures at all three CSV export boundaries into export_write_failed with destination and errno.",
+      "tests": [
+        "tests/test_report_csv_atomic.py::test_staging_error_names_requested_destination",
+        "tests/test_report_csv_atomic.py::test_cli_staging_error_is_typed_and_hides_private_stage",
+        "tests/test_report_csv_atomic.py"
+      ],
+      "proof": [
+        "05-before-python.log"
+      ],
+      "validation": [
+        "05-after-python.log"
+      ],
+      "rust_follow_up": "Mirror export_write_failed and destination-only error details in Rust CSV export paths without weakening atomic replacement, mode, symlink, hardlink or device/pipe behavior.",
+      "commit": "1168e6e23c9a72242ab24192213a2d95dfa4dbf2",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "6be312eaa2a11f3448484ef81ad3e462b8acccba"
+    },
+    {
+      "id": 6,
+      "priority": "P3",
+      "finding": "Remaining secret-filter gaps",
+      "change": "Identical Python/webview shared cases cover SOCKS/WS credentials, empty-user and token-only userinfo, Token/Digest authorization, repeated separators, version/trailing-underscore keys, and one escaped JSON layer. Include unchanged ID/hash/prose guards.",
+      "tests": [
+        "tests/test_redaction_shared_corpus.py",
+        "ui-tauri/src/lib/appLogsRedactionCorpus.test.ts"
+      ],
+      "proof": [
+        "06-before-python.log",
+        "06-before-webview.log"
+      ],
+      "validation": [
+        "06-after-python.log",
+        "06-after-webview.log"
+      ],
+      "rust_follow_up": "Adopt every new shared credential vector in all native secret-floor filters; preserve exact output and identifier/prose guards.",
+      "commit": "29156f61d105ec22d2a09f0ec5c4dfeb25af9771",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "1168e6e23c9a72242ab24192213a2d95dfa4dbf2"
+    },
+    {
+      "id": 7,
+      "priority": "P3",
+      "finding": "Float-mirror price-limit mutation survives tests",
+      "change": "Add positive/negative exact values below 1e19 whose float mirror rounds up to 1e19, plus a valid representable neighbor.",
+      "tests": [
+        "tests/test_custody_nonfinite_pricing.py::test_exact_price_inside_limit_cannot_round_its_float_mirror_to_limit"
+      ],
+      "proof": [
+        "07-without-float-bound.log"
+      ],
+      "validation": [
+        "07-after-python.log"
+      ],
+      "proof_note": "The production guard already exists in the base, so the proof removes exactly or abs(float(number)) >= float(TAX_DECIMAL_LIMIT), observes two failures, and restores the file.",
+      "rust_follow_up": "Port the exact-to-float boundary vectors wherever the Rust compatibility output or engine admission exposes a legacy float mirror.",
+      "commit": "f080da671626ef33a18aab575494774ecc4f5846",
+      "old_code_test_failed": true,
+      "regression_proof_method": "remove float-limit clause and restore"
+    },
+    {
+      "id": 8,
+      "finding": "Cached full-report XLSX verification banner",
+      "change": "Aggregate the actual cached check results emitted to Disposals and Control when caching Verify!B2; retain the live formula and conditional formatting.",
+      "tests": [
+        "tests/test_report_verification_banner.py"
+      ],
+      "proof": [
+        "08-before-python.log"
+      ],
+      "validation": [
+        "08-focused-python.log"
+      ],
+      "rust_follow_up": "Required: the Rust reports port deliberately preserves the old Python banner for parity. Mirror cached failure aggregation for the disposal check and all six Control checks.",
+      "commit": "92f8d1c4caab9ff2effbf102edb0af2a5852975a",
+      "old_code_test_failed": true,
+      "regression_proof_method": "temporarily restore prior production file(s) with git show, run new regressions, restore fixed files in finally",
+      "old_implementation_commit": "f080da671626ef33a18aab575494774ecc4f5846"
+    }
+  ],
+  "bip39_backstop_assessment": "Do not copy the current webview word-length-only detector into Python: it matches arbitrary runs of 12/15/18/21/24 short prose words without checking the BIP39 dictionary or checksum. Explicit recovery assignments, including truncated multiword quotes, are now protected in both runtimes. No new broad prose detector was introduced.",
+  "verification": [
+    {
+      "job": "shard-preflight",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "preflight",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 1.594,
+      "log": "shard-preflight.log",
+      "summary": [
+        "36 passed in 1.15s"
+      ]
+    },
+    {
+      "job": "shard-cli-smoke",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "cli-smoke",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 21.707,
+      "log": "shard-cli-smoke.log",
+      "summary": [
+        "74 passed in 21.33s"
+      ]
+    },
+    {
+      "job": "shard-core-accounting",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "core-accounting",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 590.955,
+      "log": "shard-core-accounting.log",
+      "summary": [
+        "2307 passed, 24 skipped in 590.22s (0:09:50)"
+      ]
+    },
+    {
+      "job": "shard-wallets-sync",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "wallets-sync",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 113.384,
+      "log": "shard-wallets-sync.log",
+      "summary": [
+        "738 passed in 112.92s (0:01:52)"
+      ]
+    },
+    {
+      "job": "shard-daemon-cli",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "daemon-cli",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 468.308,
+      "log": "shard-daemon-cli.log",
+      "summary": [
+        "636 passed in 467.98s (0:07:47)"
+      ]
+    },
+    {
+      "job": "shard-security-replication",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "security-replication",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 304.713,
+      "log": "shard-security-replication.log",
+      "summary": [
+        "285 passed in 304.39s (0:05:04)"
+      ]
+    },
+    {
+      "job": "shard-reports-contracts",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "reports-contracts",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 239.157,
+      "log": "shard-reports-contracts.log",
+      "summary": [
+        "1347 passed in 238.74s (0:03:58)"
+      ]
+    },
+    {
+      "job": "shard-serial-network",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "serial-network",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 7.267,
+      "log": "shard-serial-network.log",
+      "summary": [
+        "198 passed in 6.82s"
+      ]
+    },
+    {
+      "job": "shard-serial-daemon",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "serial-daemon",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 398.25,
+      "log": "shard-serial-daemon.log",
+      "summary": [
+        "267 passed in 397.72s (0:06:37)"
+      ]
+    },
+    {
+      "job": "shard-serial-regressions",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "serial-regressions",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 462.652,
+      "log": "shard-serial-regressions.log",
+      "summary": [
+        "193 passed in 462.22s (0:07:42)"
+      ]
+    },
+    {
+      "job": "shard-serial-integration",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "serial-integration",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 118.958,
+      "log": "shard-serial-integration.log",
+      "summary": [
+        "110 passed, 15 skipped in 118.48s (0:01:58)"
+      ]
+    },
+    {
+      "job": "vitest",
+      "command": [
+        "mise",
+        "exec",
+        "pnpm@10.33.0",
+        "--",
+        "pnpm",
+        "--dir",
+        "ui-tauri",
+        "test",
+        "--run"
+      ],
+      "exit_code": 0,
+      "seconds": 16.569,
+      "log": "vitest.log",
+      "summary": [
+        "Test Files  256 passed (256)",
+        "Tests  2185 passed (2185)"
+      ]
+    },
+    {
+      "job": "typecheck",
+      "command": [
+        "mise",
+        "exec",
+        "pnpm@10.33.0",
+        "--",
+        "pnpm",
+        "--dir",
+        "ui-tauri",
+        "typecheck"
+      ],
+      "exit_code": 0,
+      "seconds": 37.714,
+      "log": "typecheck.log"
+    }
+  ],
+  "limitations": [
+    {
+      "check": "uv run --locked python -m tests.rust_port.classify_tests update",
+      "status": "unavailable_in_requested_base",
+      "reason": "bccf5c38c has no tests/rust_port directory or classification module. The requested command was attempted and failed with ModuleNotFoundError: No module named tests.rust_port.",
+      "evidence": "classify-tests-update.log",
+      "remaining": "Run the classification update after applying these fixes to a branch that contains the Rust-port test inventory. No unrelated Rust infrastructure was imported into this Python reference branch."
+    }
+  ],
+  "manual_review": "Reviewed staged and unstaged diffs, canonical SQL freshness, source-bound cache safety, all CSV boundary callers, shared redaction vectors, and cached/live workbook checks. No schema or dependency changes; no push, PR, external comments or stash operations.",
+  "final_checks": [
+    {
+      "job": "frontend-changed-file-lint",
+      "command": [
+        "mise",
+        "exec",
+        "pnpm@10.33.0",
+        "--",
+        "pnpm",
+        "--dir",
+        "ui-tauri",
+        "exec",
+        "eslint",
+        "src/lib/appLogs.ts",
+        "src/lib/appLogsRedactionCorpus.test.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 2.335,
+      "log": "frontend-changed-file-lint.log"
+    },
+    {
+      "job": "classify-tests-update",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "tests.rust_port.classify_tests",
+        "update"
+      ],
+      "exit_code": 1,
+      "seconds": 0.084,
+      "log": "classify-tests-update.log"
+    },
+    {
+      "job": "final-preflight",
+      "command": [
+        "mise",
+        "exec",
+        "rust@1.99.1",
+        "uv@latest",
+        "--",
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "preflight",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "seconds": 1.583,
+      "log": "final-preflight.log",
+      "summary": [
+        "36 passed in 1.11s"
+      ]
+    }
+  ],
+  "status": "all_eight_findings_fixed; all_eleven_python_shards_vitest_typecheck_and_lint_pass; rust_inventory_update_unavailable_in_base",
+  "totals": {
+    "python_passed": 6191,
+    "python_skipped": 39,
+    "vitest_passed": 2185,
+    "vitest_files_passed": 256
+  },
+  "remaining_work": [
+    "Rust-port classification update on a branch containing that module. Rust implementation mirrors are documented per finding, including crates/wallets sync-12 and full-report cached banners."
+  ]
+}
