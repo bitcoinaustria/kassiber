@@ -1977,8 +1977,28 @@ The 70 added mutations and final verification are recorded in the
 Batch-1 command coverage is complete. Workspace/harness fmt and strict clippy,
 1,523 workspace tests, 14 harness tests, 95 requested Python tests and 3,027
 subtests, inventory/contracts and 57 preflight checks pass. All 470 wallet
-mutations are killed. A separately reproduced Python reference bug in unpriced
-legacy 21bitcoin reactivation still needs its own readiness correction.
+mutations are killed. The following separate reference correction closes the
+legacy 21bitcoin readiness issue reproduced during review.
+
+### R5 reference correction: legacy 21bitcoin journal readiness
+
+A withdrawal-only regression failed before the Python fix: clearing old
+reconciliation flags reactivated an excluded observation but left the journal
+input version and readiness unchanged. Python and Rust now invalidate once on
+reactivation, preserve the existing invalidation for priced updates, and retain
+readiness for tag-only cleanup on already-active rows. Failed invalidation
+rolls back the cleanup. This changes readiness, not provenance, custody review,
+tax normalization or the observation's imported amount/fee.
+
+Native plaintext/encrypted tests, the Python regression and three additional
+hybrid full-book comparisons pin the correction. Eight new mutations
+cover both implementations; the wallet catalog now has 478 entries. Final
+verification and named killers are recorded in the
+[readiness checkpoint](../reference/rust-shell.md#legacy-21bitcoin-reactivation-readiness-correction-r5).
+The corrected source passes fmt/strict clippy, 1,525 workspace tests, 14 harness
+tests, 96 requested Python tests and 3,027 subtests, the final inventory update,
+contracts and 57 preflight checks. All 478 mutations are killed. Batch 1 is
+complete for these file-import commands, with zero importer fallbacks.
 
 ### R5 file-import batch 2 sizing
 

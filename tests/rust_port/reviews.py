@@ -40,6 +40,13 @@ SAMPLES = {
 }
 
 REVIEWS = {
+    "tests/test_twentyonebitcoin_import.py": {
+        "TwentyOneBitcoinLegacyReadinessTest": {
+            "disposition": "rust-test",
+            "group": "imports",
+            "reason": "Direct coordinator regression against seeded legacy flags; native replacement is twentyone_legacy_reactivation_invalidates_ready_journals_once in crates/wallets/src/file_import/tests.rs, with full-book CLI parity in test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump.",
+        },
+    },
     "tests/test_backend_configuration.py": {
         "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "calls Python backend redactors directly; Rust replacement is malformed_backend_locations_never_echo_embedded_credentials in crates/setup/tests/backends.rs"},
         "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "pins the Python bare-host disclosure rule; Rust replacement is bare_backend_location_fullmatch_preserves_only_the_python_allowlist in crates/setup/src/backend_output.rs"},

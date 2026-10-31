@@ -2172,11 +2172,68 @@ harness tests (**14 passed**), a rebuilt harness binary, the requested Python
 suites (**95 tests and 3,027 subtests passed**), inventory/contracts and the
 **57-check preflight**. All 470 wallet mutations are killed.
 
-Batch-1 command coverage is complete. Review reproduced a separate Python
-reference bug: reactivating an unpriced legacy 21bitcoin withdrawal does not
-invalidate journals. Its reference correction remains necessary for readiness
-acceptance. Python production code, dependencies and egress are unchanged by
-the Strike continuation. No batch-2 command or API/sync/AI projection is enabled.
+Batch-1 command coverage is complete. The separate 21bitcoin reference
+correction below closes the readiness issue found during review. Python
+production code, dependencies and egress are unchanged by the Strike
+continuation. No batch-2 command or API/sync/AI projection is enabled.
+
+## Legacy 21bitcoin reactivation readiness correction (R5)
+
+The Python reference reactivated excluded legacy rows without invalidating
+journals when the reimport had no pricing or metadata update. A withdrawal-only
+reproduction returned `reactivated=1`, `journal_invalidated=false` and an
+unchanged input version. The committed regression was run before the fix and
+failed specifically for the unpriced/excluded case; it lives in
+[`tests/test_twentyonebitcoin_import.py`](../../tests/test_twentyonebitcoin_import.py).
+
+Both coordinators now invalidate once when cleanup reactivates a row and the
+ordinary import has not already invalidated. Priced updates still invalidate
+once; clearing legacy tags on already-active rows preserves readiness. Native
+tests cover both SQLite and SQLCipher, including rollback of the tag removal,
+exclusion change and input version when invalidation fails. A hybrid test
+compares full typed dumps and exact responses for three additional Rust imports
+with zero importer fallbacks. The total 21bitcoin hybrid acceptance count is
+**225 Rust importer calls**. Fault injection stays in the core tests because a
+real book correctly refuses an injected trigger as an unknown schema.
+
+Eight added mutations cover both implementations, bringing the catalog to
+**478 entries** (474 native and four Python reference mutations). The inherited
+`W-import-atomic` entry also names
+`twentyone_legacy_reactivation_rolls_back_when_invalidation_fails`.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-twentyone-readiness-native-invalidate` | `twentyone_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-native-once` | `twentyone_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-native-reactivated` | `twentyone_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-native-result` | `twentyone_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-reference-invalidate` | `TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-reference-once` | `TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-reference-reactivated` | `TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once` |
+| `W-twentyone-readiness-reference-result` | `TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once` |
+
+The complete corrected-source audit passes **68 named baseline tests** and
+kills **478/478 mutations**, with no survivors or build errors. All 47 native
+file-import tests, five Python reference-module tests (three readiness
+subtests), and the focused hybrid readiness test pass. Mutation source/build
+trees were removed after recording the summary.
+
+Final corrected-source verification passes workspace formatting and workspace
+and test-harness clippy with `-D warnings`, **1,525 workspace tests**, **14
+harness tests**, and a rebuilt harness binary. The requested Python command
+passes **96 tests and 3,027 subtests**. The final classifier update,
+inventory/contracts and **57 preflight checks** pass. Batch 1 is complete for
+the file-import commands recorded above; all four continuation importers have
+full-book parity and zero importer fallbacks. Verification build trees are
+removed after recording their summaries.
+
+Verification uses the pinned `mise exec rust@1.99.1 uv@latest --` toolchain,
+`MATURIN_NO_INSTALL_RUST=1`, locked/offline Cargo, and disposable `target/`
+data roots. Set both `CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` to the
+worktree's `target/` to keep global intermediate-build configuration outside
+the run. Mutation runs set both to `target/mutation-build`, use
+`TMPDIR=target/task-tmp`, and remove the mutation source/build trees after
+recording their summaries.
 
 ## Daemon
 

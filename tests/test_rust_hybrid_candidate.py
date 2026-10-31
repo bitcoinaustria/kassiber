@@ -449,6 +449,39 @@ class HybridCandidateTest(unittest.TestCase):
         calls=[item for item in self.served() if item["command"]=="wallets.import-strike"]
         self.assertEqual(calls,[{"command":"wallets.import-strike","served_by":"rust"}]*6)
 
+    def test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump(self):
+        import sqlite3
+        from contextlib import closing
+        from tests.test_twentyonebitcoin_import import HEADER
+
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Legacy workspace"))
+        self.ok(self.cli("profiles", "create", "Legacy book", "--workspace", "Legacy workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Legacy workspace", "--profile", "Legacy book"))
+        source = self.data_root.parent / "legacy.csv"
+        source.write_text(HEADER + "1,21bitcoin,main,10.01.2026 12:00:00,,,BTC,0.002,BTC,0.0001,withdrawal,Withdrawal,,\n")
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))
+            stable = self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))["data"]
+            self.assertFalse(stable["journal_invalidated"])
+            databases = list(self.data_root.rglob("kassiber.sqlite3"))
+            self.assertEqual(len(databases), 1)
+            with closing(sqlite3.connect(databases[0])) as conn:
+                conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) SELECT 'legacy',workspace_id,profile_id,'21bitcoin-matched','Old','2025-01-01' FROM transactions LIMIT 1")
+                conn.execute("INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions")
+                conn.execute("UPDATE transactions SET excluded=1")
+                conn.execute("UPDATE profiles SET last_processed_at='2026-01-11T00:00:00Z',last_processed_tx_count=1,last_processed_input_version=journal_input_version,ownership_review_counts_json='{}'")
+                before = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+                conn.commit()
+            result = self.ok(self.cli("wallets", "import-21bitcoin", "--file", str(source)))["data"]
+            self.assertTrue(result["journal_invalidated"])
+            self.assertEqual(result["reactivated"], 1)
+            with closing(sqlite3.connect(databases[0])) as conn:
+                self.assertEqual(conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0], before + 1)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-21bitcoin"]
+        self.assertEqual(calls, [{"command": "wallets.import-21bitcoin", "served_by": "rust"}] * 3)
+
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

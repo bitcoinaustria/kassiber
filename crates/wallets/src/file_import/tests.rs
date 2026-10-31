@@ -2326,3 +2326,116 @@ fn strike_late_failure_rolls_back_observations_runs_and_readiness() {
     );
     assert!(conn.is_autocommit());
 }
+
+#[test]
+fn twentyone_legacy_reactivation_invalidates_ready_journals_once() {
+    for encrypted in [false, true] {
+        for (priced, excluded) in [(false, true), (false, false), (true, true)] {
+            let conn = fixture_codec(encrypted);
+            conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+                .unwrap();
+            let row = if priced {
+                TWENTYONE_BUY
+            } else {
+                "one,01.01.2022,,,BTC,0.002,BTC,0.0001,withdrawal,Withdrawal\n"
+            };
+            let content = format!("{TWENTYONE_HEADER}{row}");
+            import_kind(&conn, &content, Format::TwentyOne).unwrap();
+            if !priced {
+                let stable = import_kind(&conn, &content, Format::TwentyOne).unwrap();
+                assert_eq!(
+                    kassiber_envelope::get(&stable, "journal_invalidated"),
+                    Some(&Py::Bool(false))
+                );
+            }
+            conn.execute_batch("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES('legacy','ws','p','21bitcoin-matched','Old','2025-01-01'),('authored','ws','p','keep','Keep','2025-01-01'); INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions; INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'authored' FROM transactions; UPDATE profiles SET last_processed_at='2026-01-11T00:00:00Z',last_processed_tx_count=1,last_processed_input_version=journal_input_version,ownership_review_counts_json='{}' WHERE id='p';").unwrap();
+            conn.execute("UPDATE transactions SET excluded=?", [i64::from(excluded)])
+                .unwrap();
+            let before = scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'",
+            );
+            let result = import_kind(&conn, &content, Format::TwentyOne).unwrap();
+            let invalidated = priced || excluded;
+            assert_eq!(
+                kassiber_envelope::get(&result, "journal_invalidated"),
+                Some(&Py::Bool(invalidated))
+            );
+            assert_eq!(
+                kassiber_envelope::get(&result, "reactivated"),
+                excluded.then_some(Py::from(1)).as_ref()
+            );
+            assert_eq!(
+                kassiber_envelope::get(&result, "reconciliation_flags_cleared"),
+                Some(&Py::from(1))
+            );
+            assert_eq!(
+                kassiber_envelope::get(&result, "imported"),
+                Some(&Py::from(0))
+            );
+            assert_eq!(kassiber_envelope::get(&result, "import_batch_id"), None);
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT journal_input_version FROM profiles WHERE id='p'"
+                ),
+                before + i64::from(invalidated)
+            );
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT last_processed_input_version FROM profiles WHERE id='p'"
+                ),
+                before
+            );
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT last_processed_tx_count FROM profiles WHERE id='p'"
+                ),
+                i64::from(!invalidated)
+            );
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM profiles WHERE id='p' AND last_processed_at IS NULL AND ownership_review_counts_json IS NULL"), i64::from(invalidated));
+            assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 0);
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT count(*) FROM transaction_tags WHERE tag_id='authored'"
+                ),
+                1
+            );
+        }
+    }
+}
+
+#[test]
+fn twentyone_legacy_reactivation_rolls_back_when_invalidation_fails() {
+    for encrypted in [false, true] {
+        let conn = fixture_codec(encrypted);
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        let content = format!(
+            "{TWENTYONE_HEADER}one,01.01.2022,,,BTC,0.002,BTC,0.0001,withdrawal,Withdrawal\n"
+        );
+        import_kind(&conn, &content, Format::TwentyOne).unwrap();
+        conn.execute_batch("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES('legacy','ws','p','21bitcoin-matched','Old','2025-01-01'); INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions; UPDATE transactions SET excluded=1; CREATE TRIGGER refuse_reactivation_invalidation BEFORE UPDATE OF journal_input_version ON profiles BEGIN SELECT RAISE(ABORT,'invalidation denied'); END;").unwrap();
+        let error = import_kind(&conn, &content, Format::TwentyOne).unwrap_err();
+        assert_eq!(error.code, "internal_error");
+        assert_eq!(error.message, "database operation failed");
+        assert_eq!(
+            kassiber_envelope::get(error.details.as_ref().unwrap(), "sqlite_error_code"),
+            Some(&Py::from(1811))
+        );
+        assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 1);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            1
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    }
+}

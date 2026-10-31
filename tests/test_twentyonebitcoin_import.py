@@ -433,5 +433,66 @@ class TwentyOneBitcoinImportTest(unittest.TestCase):
         self.assertEqual(pairs, [])
 
 
+class TwentyOneBitcoinLegacyReadinessTest(unittest.TestCase):
+    def test_legacy_reactivation_invalidates_ready_journals_once(self):
+        from contextlib import closing
+        from unittest.mock import Mock
+
+        from kassiber.core.imports import ImportCoordinatorHooks, import_file_into_wallet
+        from kassiber.core.repo.context import invalidate_journals
+        from kassiber.db import open_db
+
+        for priced, excluded in ((False, True), (False, False), (True, True)):
+            with self.subTest(priced=priced, excluded=excluded):
+                with tempfile.TemporaryDirectory(prefix="kassiber-21bitcoin-readiness-") as root, closing(open_db(Path(root) / "data")) as conn:
+                    conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('ws','WS','2025-01-01')")
+                    conn.execute("INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,tax_long_term_days,gains_algorithm,created_at) VALUES('p','ws','P','EUR','generic',365,'FIFO','2025-01-01')")
+                    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('w','ws','p','21bitcoin','21bitcoin','{}','2025-01-01')")
+                    profile = conn.execute("SELECT * FROM profiles").fetchone()
+                    wallet = conn.execute("SELECT * FROM wallets").fetchone()
+                    source = Path(root) / "history.csv"
+                    row = (
+                        "1,21bitcoin,main,10.01.2026 12:00:00,BTC,0.002,EUR,100,EUR,1,trade,Buy,,\n"
+                        if priced else
+                        "1,21bitcoin,main,10.01.2026 12:00:00,,,BTC,0.002,BTC,0.0001,withdrawal,Withdrawal,,\n"
+                    )
+                    source.write_text(HEADER + row, encoding="utf-8")
+                    invalidations = Mock(wraps=invalidate_journals)
+                    hooks = ImportCoordinatorHooks(ensure_tag_row=Mock(), invalidate_journals=invalidations)
+
+                    def run():
+                        return import_file_into_wallet(
+                            conn, profile, wallet, str(source), "21bitcoin_csv", hooks
+                        )
+
+                    run()
+                    if not priced:
+                        self.assertFalse(run()["journal_invalidated"])
+                    conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES('legacy','ws','p','21bitcoin-matched','Old','2025-01-01'),('authored','ws','p','keep','Keep','2025-01-01')")
+                    conn.execute("INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'legacy' FROM transactions")
+                    conn.execute("INSERT INTO transaction_tags(transaction_id,tag_id) SELECT id,'authored' FROM transactions")
+                    conn.execute("UPDATE transactions SET excluded=?", (int(excluded),))
+                    conn.execute("UPDATE profiles SET last_processed_at='2026-01-11T00:00:00Z',last_processed_tx_count=1,last_processed_input_version=journal_input_version,ownership_review_counts_json='{}'")
+                    conn.commit()
+                    before = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+                    invalidations.reset_mock()
+                    result = run()
+                    should_invalidate = priced or excluded
+                    self.assertEqual(result["journal_invalidated"], should_invalidate)
+                    self.assertEqual(result.get("reactivated", 0), int(excluded))
+                    self.assertEqual(result["reconciliation_flags_cleared"], 1)
+                    self.assertEqual(result["imported"], 0)
+                    self.assertNotIn("import_batch_id", result)
+                    self.assertEqual(invalidations.call_count, int(should_invalidate))
+                    after = conn.execute("SELECT * FROM profiles").fetchone()
+                    self.assertEqual(after["journal_input_version"], before + int(should_invalidate))
+                    self.assertEqual(after["last_processed_input_version"], before)
+                    self.assertEqual(after["last_processed_at"], None if should_invalidate else "2026-01-11T00:00:00Z")
+                    self.assertEqual(after["last_processed_tx_count"], 0 if should_invalidate else 1)
+                    self.assertEqual(after["ownership_review_counts_json"], None if should_invalidate else "{}")
+                    self.assertEqual(conn.execute("SELECT excluded FROM transactions").fetchone()[0], 0)
+                    self.assertEqual([row[0] for row in conn.execute("SELECT tag_id FROM transaction_tags")], ["authored"])
+
+
 if __name__ == "__main__":
     unittest.main()

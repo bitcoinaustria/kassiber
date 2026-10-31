@@ -632,7 +632,8 @@
       "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness",
       "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",
       "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation",
-      "strike_late_failure_rolls_back_observations_runs_and_readiness"
+      "strike_late_failure_rolls_back_observations_runs_and_readiness",
+      "twentyone_legacy_reactivation_rolls_back_when_invalidation_fails"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -4714,5 +4715,85 @@
       "python_strike_import_vectors"
     ],
     "rule": "Provider kinds use full Unicode casefold before alias mapping."
+  },
+  {
+    "id": "W-twentyone-readiness-native-invalidate",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if !invalidated && result.iter().any(|(key, _)| *key == \"reactivated\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "twentyone_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-native-once",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if !invalidated && result.iter().any(|(key, _)| *key == \"reactivated\") {",
+    "replace": "if result.iter().any(|(key, _)| *key == \"reactivated\") {",
+    "expect_failing": [
+      "twentyone_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-native-reactivated",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if !invalidated && result.iter().any(|(key, _)| *key == \"reactivated\") {",
+    "replace": "if !invalidated {",
+    "expect_failing": [
+      "twentyone_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-native-result",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "        if !invalidated && result.iter().any(|(key, _)| *key == \"reactivated\") {\n            invalidate_journals(conn, profile)?;\n            result\n                .iter_mut()\n                .find(|(key, _)| *key == \"journal_invalidated\")\n                .unwrap()\n                .1 = Py::Bool(true);\n        }",
+    "replace": "        if !invalidated && result.iter().any(|(key, _)| *key == \"reactivated\") {\n            invalidate_journals(conn, profile)?;\n            result\n                .iter_mut()\n                .find(|(key, _)| *key == \"journal_invalidated\")\n                .unwrap()\n                .1 = Py::Bool(false);\n        }",
+    "expect_failing": [
+      "twentyone_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-reference-invalidate",
+    "file": "kassiber/core/imports.py",
+    "find": "if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):",
+    "replace": "if False:",
+    "expect_failing": [
+      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-reference-once",
+    "file": "kassiber/core/imports.py",
+    "find": "if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):",
+    "replace": "if outcome.get(\"reactivated\"):",
+    "expect_failing": [
+      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-reference-reactivated",
+    "file": "kassiber/core/imports.py",
+    "find": "if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):",
+    "replace": "if not outcome.get(\"journal_invalidated\"):",
+    "expect_failing": [
+      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
+  },
+  {
+    "id": "W-twentyone-readiness-reference-result",
+    "file": "kassiber/core/imports.py",
+    "find": "        if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):\n            hooks.invalidate_journals(conn, profile[\"id\"])\n            outcome[\"journal_invalidated\"] = True",
+    "replace": "        if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):\n            hooks.invalidate_journals(conn, profile[\"id\"])\n            outcome[\"journal_invalidated\"] = False",
+    "expect_failing": [
+      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
+    ],
+    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
   }
 ]

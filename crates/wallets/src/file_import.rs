@@ -1460,6 +1460,15 @@ fn apply(
     }
     if request.format == Format::TwentyOne {
         exchange::clear_legacy_flags(conn, request, wallet, records, &mut result)?;
+        // Reactivation changes journal inputs even without a pricing refresh.
+        if !invalidated && result.iter().any(|(key, _)| *key == "reactivated") {
+            invalidate_journals(conn, profile)?;
+            result
+                .iter_mut()
+                .find(|(key, _)| *key == "journal_invalidated")
+                .unwrap()
+                .1 = Py::Bool(true);
+        }
     }
     if !inserted_ids.is_empty() {
         let batch = ids.next(conn)?;

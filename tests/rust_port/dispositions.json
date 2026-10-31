@@ -2198,7 +2198,7 @@
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_hybrid_candidate.py": {
-      "HybridCandidateTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 19}
+      "HybridCandidateTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 20}
     },
     "tests/test_rust_journal_persistence.py": {
       "test_storage_vectors_rebuild_from_python_reference": {"disposition": "oracle", "flags": [], "group": "journals", "reason": "regenerates exact storage encodings and replays complete frozen database snapshots through unchanged Python; native tests persist the same stage and ledger inputs and compare every stored scalar, id, timestamp and rowid", "reviewed": true, "tests": 1},
@@ -2817,7 +2817,8 @@
     },
     "tests/test_twentyonebitcoin_import.py": {
       "TwentyOneBitcoinImportTest": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 3},
-      "TwentyOneBitcoinImportTest::test_parser_keeps_provider_identity_skips_blank_rows_and_uses_net_sell_proceeds": {"disposition": "subprocess-scenario", "flags": ["subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.importers", "reviewed": false, "tests": 1}
+      "TwentyOneBitcoinImportTest::test_parser_keeps_provider_identity_skips_blank_rows_and_uses_net_sell_proceeds": {"disposition": "subprocess-scenario", "flags": ["subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.importers", "reviewed": false, "tests": 1},
+      "TwentyOneBitcoinLegacyReadinessTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "imports", "reason": "Direct coordinator regression against seeded legacy flags; native replacement is twentyone_legacy_reactivation_invalidates_ready_journals_once in crates/wallets/src/file_import/tests.rs, with full-book CLI parity in test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump.", "reviewed": true, "tests": 1}
     },
     "tests/test_ui_review_queue_status.py": {
       "ReviewQueueStatusTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.custody_evidence, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 9},
