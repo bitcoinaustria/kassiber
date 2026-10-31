@@ -111,7 +111,7 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   // One JSON-escaped layer: delimiters are \" and escaped inner quotes
   // belong to the value. Keep the surrounding diagnostic representation.
   [
-    new RegExp(String.raw`(?<![A-Za-z0-9_.-])(\\"${SECRET_KEY_NAME}\b\\")(\s*[:=]\s*)\\"(?:\\\\[\s\S]|[^\\]|\\(?!["\\]))*\\"`, "gi"),
+    new RegExp(String.raw`(?<![A-Za-z0-9_.-])(\\"${SECRET_KEY_NAME}\b\\")(\s*[:=]\s*)\\"(?:\\\\\\\\|\\\\\\"|\\\\[^\\]|[^\\]|\\(?!["\\]))*\\"`, "gi"),
     String.raw`$1$2\"[redacted]\"`,
   ],
   [

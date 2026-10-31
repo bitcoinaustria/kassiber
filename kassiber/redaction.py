@@ -70,7 +70,7 @@ _ASSIGNED_SECRET_RE = re.compile(
 )
 _ESCAPED_ASSIGNED_SECRET_RE = re.compile(
     rf'(?<![A-Za-z0-9_.-])(?P<key>\\"{_SECRET_KEY_NAME}\b\\")(?P<sep>\s*[:=]\s*)'
-    r'(?:(?P<quoted>\\"(?:\\\\[\s\S]|[^\\]|\\(?!["\\]))*\\")|(?P<unterminated>\\"[^\r\n]*))',
+    r'(?:(?P<quoted>\\"(?:\\\\\\\\|\\\\\\"|\\\\[^\\]|[^\\]|\\(?!["\\]))*\\")|(?P<unterminated>\\"[^\r\n]*))',
     re.IGNORECASE,
 )
 
