@@ -774,3 +774,51 @@ fn the_manifest_operation_lists_the_engines_tables() {
         ("request", "RequestError")
     );
 }
+
+#[test]
+fn typed_ledger_matches_text_for_every_stored_request() {
+    use kassiber_tax_core::ledger::response::ErrorResponse;
+    let cases = stored_cases();
+    assert!(cases.len() >= MIN_REQUESTS);
+    let mut successes = 0;
+    let mut refusals = 0;
+    for (name, request, _) in cases {
+        let text = serde_json::to_string(&request).unwrap();
+        let Ok(request) = serde_json::from_value::<LedgerRequest>(request) else {
+            continue;
+        };
+        let typed = match kassiber_tax_core::ledger_typed(&request) {
+            Ok(response) => {
+                successes += 1;
+                response.to_json().unwrap()
+            }
+            Err(error) => {
+                refusals += 1;
+                serde_json::to_string(&ErrorResponse::new(error)).unwrap()
+            }
+        };
+        assert_eq!(typed, ledger(&text), "{name}");
+    }
+    assert!(successes > 0);
+    assert!(refusals > 0);
+}
+
+#[test]
+fn typed_ledger_checks_its_header() {
+    use kassiber_tax_core::ledger::request::Operation;
+    let (_, value) = stored_requests().into_iter().next().unwrap();
+    let mut request: LedgerRequest = serde_json::from_value(value).unwrap();
+    request.schema_version = 1;
+    let error = kassiber_tax_core::ledger_typed(&request).unwrap_err();
+    assert_eq!(
+        error.inner.message,
+        "unsupported schema_version 1; the ledger operations read 2"
+    );
+    request.schema_version = 2;
+    request.operation = Operation::Prepare;
+    let error = kassiber_tax_core::ledger_typed(&request).unwrap_err();
+    assert_eq!(
+        error.inner.message,
+        "ledger_typed requires operation ledger"
+    );
+}

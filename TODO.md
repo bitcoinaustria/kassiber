@@ -407,6 +407,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   A [projection/fusion kernel checkpoint](docs/reference/r4-journal-pipeline.md#projection-and-fusion-kernel-checkpoint)
   keeps stage models unchanged and reduces CPU, but the projection/request
   budgets and the no-engine-slowdown gate remain open.
+  The [native conversion checkpoint](docs/reference/r4-journal-process-checkpoint.md)
+  adds `ledger_typed`, passes its response directly to rendering and borrows
+  renderer operands. Replace fusion's request value/decoder and the quantity
+  and finalized `stage_value` adapters before claiming the typed R4-8 handoff.
 - [x] R4-9 native loader: **fully accepted, with no pending exceptions**.
   Python/native mixed revision references now share one typed validation error.
   The fresh 22,528-case composed and 16,384-case non-BLOB audits match exactly;

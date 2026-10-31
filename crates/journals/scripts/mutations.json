@@ -2208,5 +2208,45 @@
       "process_complete_dumps_match_python_from_raw_books"
     ],
     "rule": "Use the persisted monotonic processing marker rather than the original clock."
+  },
+  {
+    "id": "JENGINE-typed-result",
+    "file": "crates/journals/src/engine.rs",
+    "find": "kassiber_tax_core::ledger_typed(&request).map_err(boundary::staged_error)",
+    "replace": "kassiber_tax_core::ledger_typed(&request).map(|_| boundary::empty_response()).map_err(boundary::staged_error)",
+    "expect_failing": [
+      "typed_engine_boundary_matches_text_and_refusal_attributes"
+    ],
+    "rule": "The native boundary must pass the typed engine result through without replacing its ledger."
+  },
+  {
+    "id": "JENGINE-wire-refusal",
+    "file": "crates/journals/src/engine.rs",
+    "find": "kassiber_custody::ledger_request::request_json(request)",
+    "replace": "serde_json::to_string(request).unwrap()",
+    "expect_failing": [
+      "typed_engine_boundary_keeps_wire_columns_for_wide_amounts"
+    ],
+    "rule": "An unrepresentable typed amount must retain the Python wire order and diagnostic column."
+  },
+  {
+    "id": "JPROCESS-operand-quantity",
+    "file": "crates/journals/src/process.rs",
+    "find": "quantity: &self.quantity,",
+    "replace": "quantity: &Value::Null,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Borrowed renderer operands must retain the canonical quantity state through persistence."
+  },
+  {
+    "id": "JPROCESS-operand-projection",
+    "file": "crates/journals/src/process.rs",
+    "find": "projection: &self.projection,",
+    "replace": "projection: &Value::Null,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Borrowed renderer operands must retain the finalized projection metadata."
   }
 ]

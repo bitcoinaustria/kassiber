@@ -15,7 +15,10 @@ fn legacy_txid(v: &Value) -> String {
         text
     }
 }
-pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refusal> {
+pub(super) fn differences(
+    c: &super::RenderOperands<'_>,
+    holdings: &Holdings,
+) -> Result<Value, Refusal> {
     fn text(v: &Value) -> Cow<'_, str> {
         v.as_str()
             .map(Cow::Borrowed)
@@ -36,18 +39,18 @@ pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refus
         current.insert((current_text(&key[0]), current_text(&key[3])), amount);
     }
     let mut reasons = json!({});
-    for leg in array(&c["loan_legs"]) {
+    for leg in c.loan_legs {
         if !leg["transaction_id"].is_null() {
             reasons[string(&leg["transaction_id"])] =
                 json!(format!("loan_{}_non_event", string(&leg["role"])));
         }
     }
-    if let Some(roles) = c["channel_roles"].as_object() {
+    if let Some(roles) = c.channel_roles.as_object() {
         for (id, role) in roles {
             reasons[id] = json!(format!("lightning_{}_non_event", string(role)));
         }
     }
-    for component in array(&c["active_components"]) {
+    for component in c.components {
         if int(&component["validation"]["suspense_msat"])? <= BigInt::from(0) {
             continue;
         }
@@ -61,7 +64,7 @@ pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refus
     // Borrow identities rather than building an intermediate JSON current-balance
     // table and cloning every observation hash. Only named non-event reasons
     // need the observation join; postings remain authoritative for quantities.
-    let projection = &c["quantity_state"]["projection"];
+    let projection = &c.quantity["projection"];
     let observations: HashMap<_, _> = if reasons.as_object().is_some_and(|m| !m.is_empty()) {
         array(&projection["observations"])
             .iter()
@@ -172,7 +175,10 @@ fn pairable(reason: &str) -> bool {
             | "ownership_transfer_source_ambiguous"
     )
 }
-pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value, Value), Refusal> {
+pub(super) fn ownership_review(
+    c: &super::RenderOperands<'_>,
+    qs: &[QuarantineRow],
+) -> Result<(Value, Value), Refusal> {
     struct Memos;
     impl Drop for Memos {
         fn drop(&mut self) {
@@ -192,7 +198,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
     if blocked.is_empty() {
         return Ok((json!({"total":0,"by_reason":{}}), json!([])));
     }
-    let rows = array(&c["rows"]);
+    let rows = c.rows;
     if !blocked.values().any(|reason| pairable(reason)) {
         // Python still converts every inbound amount before selecting sources.
         // Retain those conversions even when no quarantine can produce a card.
@@ -209,7 +215,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
     let by_id: HashMap<_, _> = rows.iter().map(|r| (string(&r["id"]), r)).collect();
     let mut active = BTreeSet::new();
     let mut unavailable = BTreeSet::new();
-    for component in array(&c["active_components"]) {
+    for component in c.components {
         let legs: HashMap<_, _> = array(&component["legs"])
             .iter()
             .map(|l| (string(&l["id"]), l))
@@ -300,7 +306,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
         let mut scope = None;
         let mut destinations = BTreeMap::<String, BigInt>::new();
         if let Some(parsed) = &parsed {
-            scope = graph::ownership_scope(source, parsed, &c["owned_index"])?;
+            scope = graph::ownership_scope(source, parsed, c.owned_index)?;
             let Some(s) = &scope else {
                 continue;
             };
@@ -309,7 +315,7 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
                 let owners = graph::script_owners(
                     &output["script"],
                     &(s.0.clone(), s.1.clone()),
-                    &c["owned_index"],
+                    c.owned_index,
                 )?;
                 if owners.contains(&string(&source["wallet_id"])) {
                     continue;
@@ -530,7 +536,10 @@ mod tests {
                 &json!({}),
             )
             .unwrap();
-            assert_eq!(differences(&c, &holdings).unwrap(), expected);
+            assert_eq!(
+                differences(&super::super::RenderOperands::from_json(&c), &holdings).unwrap(),
+                expected
+            );
         }
     }
 
@@ -581,7 +590,10 @@ mod tests {
                 &reasons,
             )
             .unwrap();
-            assert_eq!(differences(&c, &holdings).unwrap(), expected);
+            assert_eq!(
+                differences(&super::super::RenderOperands::from_json(&c), &holdings).unwrap(),
+                expected
+            );
         }
     }
 }

@@ -93,6 +93,7 @@ def main():
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--books', type=Path)
     parser.add_argument('--binary', type=Path)
+    parser.add_argument('--baseline-binary', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--pairs', type=int, default=5)
     args = parser.parse_args()
@@ -113,6 +114,8 @@ def main():
                        registered_command=False, acceptance='open', date=CLOCK[:10],
                        python_version=sys.version, trials_per_book=args.pairs,
                        native_binary_sha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(),
+                       baseline_binary_sha256=(hashlib.sha256(args.baseline_binary.read_bytes()).hexdigest()
+                                               if args.baseline_binary else None),
                        records=records)
     for shape in ['generic-2000', 'multi-wallet-2000', 'generic-20000', 'multi-wallet-20000']:
         source = args.books/shape
@@ -141,23 +144,37 @@ def main():
         warm = execute(py_command, {'root': str(clone('warm'))})
         pairs = []
         for number in range(args.pairs):
-            roots = {name: clone(f'{number}-{name}') for name in ['python', 'rust']}
+            names = ['python', 'rust'] + (['baseline'] if args.baseline_binary else [])
+            roots = {name: clone(f'{number}-{name}') for name in names}
             requests = {'python': {'root': str(roots['python'])},
                         'rust': dict(database=str(roots['rust']/'kassiber.sqlite3'),
                                      prepared_noop=True, clock=CLOCK, profile=warm['profile'], ids=warm['ids'])}
+            if args.baseline_binary:
+                requests['baseline'] = dict(requests['rust'], database=str(roots['baseline']/'kassiber.sqlite3'))
             outputs = {}
             load = os.getloadavg()
-            for name in (['python', 'rust'] if number % 2 == 0 else ['rust', 'python']):
-                outputs[name] = execute(py_command if name == 'python' else [str(args.binary.resolve())], requests[name])
-            assert outputs['python']['payload'] == outputs['rust']['payload']
-            assert [p['phase'] for p in outputs['python']['phases']] == [p['phase'] for p in outputs['rust']['phases']]
+            order = (['python', 'baseline', 'rust'] if number % 2 == 0 else ['rust', 'baseline', 'python']) if args.baseline_binary else (['python', 'rust'] if number % 2 == 0 else ['rust', 'python'])
+            for name in order:
+                command = py_command if name == 'python' else [str((args.baseline_binary if name == 'baseline' else args.binary).resolve())]
+                starting_load = os.getloadavg()
+                outputs[name] = execute(command, requests[name])
+                outputs[name]['load_before'] = starting_load
+                outputs[name]['load_after'] = os.getloadavg()
+            for name in names[1:]:
+                assert outputs['python']['payload'] == outputs[name]['payload']
+                assert [p['phase'] for p in outputs['python']['phases']] == [p['phase'] for p in outputs[name]['phases']]
             dumps = {}
             for name, root in roots.items():
                 with sqlite3.connect(root/'kassiber.sqlite3') as c:
                     dumps[name] = dump(c)
-            for table in dumps['python']:
-                assert scalar_exact(dumps['python'][table], dumps['rust'][table]), (shape, table)
-            assert dumps['python'].keys() == dumps['rust'].keys()
+            for name in names[1:]:
+                for table in dumps['python']:
+                    assert scalar_exact(dumps['python'][table], dumps[name][table]), (shape, name, table)
+                assert dumps['python'].keys() == dumps[name].keys()
+            for name in names:
+                outputs[name]['dump_sha256'] = hashlib.sha256(
+                    json.dumps(dumps[name], sort_keys=True, separators=(',', ':')).encode()
+                ).hexdigest()
             for output in outputs.values():
                 output.pop('ids', None)
                 output.pop('profile', None)

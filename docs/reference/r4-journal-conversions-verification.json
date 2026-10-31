@@ -1,0 +1,3040 @@
+{
+  "schema": "kassiber.journal-conversions-verification.v1",
+  "based_on": "925800ebe92cf2d2b2db81835da17143cbe873d1",
+  "acceptance": "partial checkpoint; direct typed fusion and stage-backed renderer views remain open",
+  "rust_version": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "python_version": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+  "cargo_build_jobs": 8,
+  "cargo_offline": true,
+  "source_sha256": {
+    "crates/journals/src/process.rs": "6513884efa1823dde4ed4ecfc8e4c582eb054c07f22381903ad9907107800af4",
+    "crates/journals/src/boundary.rs": "1e4d8847fc450b8b10c168d0ded46d9525a2759473a34d0c07a19297b1ee3c61",
+    "crates/journals/src/boundary/joins.rs": "03b77066a7e93f6cdfc93287d4c5d2374352496e08950f17cf1d4293d6ce770c",
+    "crates/journals/src/engine.rs": "833683b07287ad347a1b12c420ff034d60fef8dfb404e885503899a034425dbd",
+    "crates/journals/src/timing.rs": "bcba0958bbd41a6a9e52bb0af339ec0d650b987f94d1f4d641d94f51dcfc0b6d",
+    "crates/journals/examples/journal-process.rs": "b0845a22550c4e149a0aa04d4f557d8f57228abe6e336be79155e7c6e2d7a8aa",
+    "tax-engine/core/src/api.rs": "3d04824fa373216d8fca0d35feba7be4a712043d0942134ff56bec59382ad151",
+    "tax-engine/core/src/lib.rs": "a25ebcdceb7e3c692eefbcb33ca92c2483bd31d3db69d37c408edeac5665371d"
+  },
+  "lock_sha256": {
+    "Cargo.lock": "d13de03ce2c08fbc7f46d5a63adee19b386974c2cf73abd241f5de3cc89d4e1d",
+    "uv.lock": "d1f4c2b135b07f082e8b3273c3ab529412fdada83f36422f30b56566c3e27aab"
+  },
+  "commands": [
+    {
+      "job": "examples",
+      "exit_code": 0,
+      "wall_seconds": 3.602251897988026,
+      "argv": [
+        "cargo",
+        "build",
+        "--offline",
+        "--release",
+        "-p",
+        "kassiber-journals",
+        "--examples",
+        "--features",
+        "test-harness,timing"
+      ]
+    },
+    {
+      "job": "clippy",
+      "exit_code": 0,
+      "wall_seconds": 19.611492807991453,
+      "argv": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "-p",
+        "kassiber-tax-core",
+        "-p",
+        "kassiber-journals",
+        "-p",
+        "kassiber-custody",
+        "--all-targets",
+        "--features",
+        "kassiber-journals/test-harness,kassiber-journals/timing",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    },
+    {
+      "job": "python-parity",
+      "exit_code": 0,
+      "wall_seconds": 594.0338751260133,
+      "argv": [
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_rust_custody_loader.py",
+        "tests/test_rust_journal_render.py",
+        "tests/test_rust_journal_persistence.py",
+        "tests/test_rust_journal_process.py",
+        "tests/test_custody_fusion_builder.py",
+        "tests/test_tax_ledger_contract.py",
+        "tests/test_tax_ledger_goldens.py",
+        "tests/test_tax_ledger_prepare.py",
+        "tests/test_tax_mutations.py"
+      ]
+    },
+    {
+      "job": "campaign",
+      "exit_code": 0,
+      "wall_seconds": 575.098566243003,
+      "argv": [
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/.venv/bin/python",
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/target/perf-conversions/campaign.py"
+      ]
+    },
+    {
+      "job": "mutations-journals",
+      "exit_code": 0,
+      "wall_seconds": 631.1002194850007,
+      "argv": [
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/.venv/bin/python",
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/target/perf-conversions/run_mutations.py",
+        "journals"
+      ]
+    },
+    {
+      "job": "mutations-tax",
+      "exit_code": 0,
+      "wall_seconds": 3037.806778441998,
+      "argv": [
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/.venv/bin/python",
+        "/home/tg/.t3/worktrees/kassiber/t3-7247190b/target/perf-conversions/run_mutations.py",
+        "tax"
+      ]
+    }
+  ],
+  "final_checks": [
+    {
+      "job": "classification",
+      "argv": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "tests.rust_port.classify_tests",
+        "update"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 31.635016077998444
+    },
+    {
+      "job": "preflight",
+      "argv": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "scripts/python_test_shards.py",
+        "run",
+        "preflight",
+        "--ci"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 86.86401142600516
+    },
+    {
+      "job": "format",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 2.694586022000294
+    }
+  ],
+  "rust_tests": 823,
+  "python_tests": 1145,
+  "python_subtests": 14,
+  "campaigns": {
+    "evidence": {
+      "counts": {
+        "books": 2000,
+        "request": 1419,
+        "permutations": 58,
+        "empty": 568,
+        "refusal": 71
+      },
+      "scenarios": {
+        "ordinary": {
+          "request": 69
+        },
+        "transfer": {
+          "request": 69
+        },
+        "fanout": {
+          "request": 69
+        },
+        "shared_fee": {
+          "request": 69
+        },
+        "contradiction": {
+          "empty": 69
+        },
+        "samourai": {
+          "request": 69
+        },
+        "channel": {
+          "request": 69
+        },
+        "loan": {
+          "request": 69
+        },
+        "liquid": {
+          "request": 69
+        },
+        "excluded_anchor": {
+          "empty": 69
+        },
+        "missing_anchor": {
+          "empty": 69
+        },
+        "gap": {
+          "request": 69
+        },
+        "receipt_overlap": {
+          "empty": 69
+        },
+        "zero_delta": {
+          "empty": 69
+        },
+        "duplicate_fee": {
+          "request": 69
+        },
+        "scope_conflict": {
+          "empty": 69
+        },
+        "exact_integer": {
+          "request": 69
+        },
+        "surrogate": {
+          "empty": 69
+        },
+        "receipt_success": {
+          "request": 69
+        },
+        "receipt_deprecated": {
+          "request": 69
+        },
+        "receipt_priority": {
+          "request": 69
+        },
+        "receipt_label": {
+          "request": 69
+        },
+        "receipt_id": {
+          "refusal": 69
+        },
+        "duplicate_slot": {
+          "request": 69
+        },
+        "tampered_graph": {
+          "request": 69
+        },
+        "tampered_quantity": {
+          "request": 69
+        },
+        "historical_overcount": {
+          "empty": 69
+        },
+        "nonaddress_overcount": {
+          "request": 69
+        },
+        "duplicate_fee_keeper": {
+          "request": 68
+        }
+      },
+      "active_distinct_seed_requests": {
+        "ordinary": 69,
+        "transfer": 69,
+        "fanout": 69,
+        "shared_fee": 69,
+        "contradiction": 0,
+        "samourai": 69,
+        "channel": 69,
+        "loan": 69,
+        "liquid": 69,
+        "excluded_anchor": 0,
+        "missing_anchor": 0,
+        "gap": 69,
+        "receipt_overlap": 0,
+        "zero_delta": 0,
+        "duplicate_fee": 69,
+        "scope_conflict": 0,
+        "exact_integer": 69,
+        "surrogate": 0,
+        "receipt_success": 69,
+        "receipt_deprecated": 69,
+        "receipt_priority": 69,
+        "receipt_label": 69,
+        "receipt_id": 0,
+        "duplicate_slot": 69,
+        "tampered_graph": 69,
+        "tampered_quantity": 69,
+        "historical_overcount": 0,
+        "nonaddress_overcount": 69,
+        "duplicate_fee_keeper": 68
+      }
+    },
+    "components": {
+      "counts": {
+        "books": 2000,
+        "empty": 2107,
+        "permutations": 312,
+        "request": 205
+      },
+      "scenarios": {
+        "balanced": {
+          "empty": 13
+        },
+        "no_legs": {
+          "request": 13
+        },
+        "missing_source": {
+          "empty": 13
+        },
+        "missing_destination": {
+          "empty": 13
+        },
+        "unknown_role": {
+          "empty": 13
+        },
+        "unbalanced": {
+          "empty": 13
+        },
+        "unit_mismatch": {
+          "empty": 13
+        },
+        "missing_time": {
+          "empty": 13
+        },
+        "invalid_time": {
+          "empty": 13
+        },
+        "chronology": {
+          "empty": 13
+        },
+        "location_continuity": {
+          "empty": 13
+        },
+        "allocation_required": {
+          "empty": 13
+        },
+        "multi_allocation": {
+          "empty": 13
+        },
+        "allocation_invalid": {
+          "empty": 13
+        },
+        "allocation_quantity": {
+          "empty": 13
+        },
+        "allocation_source_coverage": {
+          "empty": 13
+        },
+        "allocation_sink_coverage": {
+          "empty": 13
+        },
+        "fee_asset": {
+          "empty": 13
+        },
+        "fee_wallet": {
+          "empty": 13
+        },
+        "fee_scope": {
+          "empty": 13
+        },
+        "fee_orphan": {
+          "empty": 13
+        },
+        "scope_invalid_chain": {
+          "empty": 13
+        },
+        "scope_rail_chain": {
+          "empty": 13
+        },
+        "scope_invalid_network": {
+          "empty": 13
+        },
+        "scope_mismatch": {
+          "empty": 13
+        },
+        "scope_laundering": {
+          "empty": 13
+        },
+        "cross_scope_laundering": {
+          "empty": 13
+        },
+        "cross_location_continuity": {
+          "empty": 13
+        },
+        "conversion": {
+          "empty": 13
+        },
+        "conversion_topology": {
+          "empty": 13
+        },
+        "conversion_retained": {
+          "empty": 13
+        },
+        "conversion_review": {
+          "empty": 13
+        },
+        "conversion_policy": {
+          "empty": 13
+        },
+        "conversion_missing_value": {
+          "empty": 13
+        },
+        "conversion_no_values": {
+          "empty": 13
+        },
+        "conversion_unbalanced": {
+          "empty": 13
+        },
+        "conversion_fee_quantity": {
+          "empty": 13
+        },
+        "conversion_fee_value": {
+          "empty": 13
+        },
+        "value_only_loss": {
+          "empty": 13
+        },
+        "suspense": {
+          "empty": 13
+        },
+        "suspense_mode": {
+          "empty": 13
+        },
+        "suspense_review": {
+          "empty": 13
+        },
+        "suspense_no_allocations": {
+          "empty": 13
+        },
+        "suspense_anchor": {
+          "empty": 13
+        },
+        "suspense_missing_time": {
+          "empty": 13
+        },
+        "suspense_source": {
+          "empty": 13
+        },
+        "suspense_asset": {
+          "empty": 13
+        },
+        "suspense_quantity": {
+          "empty": 13
+        },
+        "suspense_network": {
+          "empty": 13
+        },
+        "suspense_time": {
+          "empty": 13
+        },
+        "suspense_fee": {
+          "empty": 13
+        },
+        "content_missing": {
+          "empty": 13
+        },
+        "leg_count": {
+          "empty": 13
+        },
+        "allocation_count": {
+          "empty": 13
+        },
+        "term_count": {
+          "empty": 13
+        },
+        "commitment_header": {
+          "empty": 13
+        },
+        "commitment_count": {
+          "empty": 13
+        },
+        "commitment_ordinals": {
+          "empty": 13
+        },
+        "commitment_zero": {
+          "empty": 13
+        },
+        "commitment_no_anchors": {
+          "request": 13
+        },
+        "commitment_hash": {
+          "empty": 13
+        },
+        "commitment_volatile": {
+          "empty": 13
+        },
+        "commitment_rejected": {
+          "empty": 13
+        },
+        "anchor_missing": {
+          "empty": 13
+        },
+        "anchor_retracted": {
+          "empty": 13
+        },
+        "anchor_identity": {
+          "empty": 13
+        },
+        "anchor_excluded": {
+          "empty": 13
+        },
+        "anchor_source_direction": {
+          "empty": 13
+        },
+        "anchor_destination_direction": {
+          "empty": 13
+        },
+        "anchor_loss_direction": {
+          "empty": 13
+        },
+        "anchor_asset": {
+          "empty": 13
+        },
+        "anchor_wallet": {
+          "empty": 13
+        },
+        "anchor_time_invalid": {
+          "empty": 13
+        },
+        "anchor_time_mismatch": {
+          "empty": 13
+        },
+        "anchor_time_warning": {
+          "empty": 13
+        },
+        "anchor_coverage": {
+          "empty": 13
+        },
+        "anchor_partial": {
+          "empty": 13
+        },
+        "anchor_partial_zero": {
+          "empty": 13
+        },
+        "anchor_partial_excess": {
+          "empty": 13
+        },
+        "anchor_rail": {
+          "empty": 13
+        },
+        "anchor_chain": {
+          "empty": 13
+        },
+        "anchor_network": {
+          "empty": 13
+        },
+        "owned_wallet_missing": {
+          "empty": 13
+        },
+        "retained_location": {
+          "empty": 13
+        },
+        "transaction_anchor_missing": {
+          "request": 13
+        },
+        "lineage_conflict": {
+          "empty": 13
+        },
+        "revision_missing": {
+          "empty": 13
+        },
+        "revision_scope": {
+          "empty": 13
+        },
+        "revision_lineage": {
+          "empty": 13
+        },
+        "revision_order": {
+          "empty": 13
+        },
+        "revision_forward": {
+          "empty": 13
+        },
+        "revision_valid": {
+          "empty": 13
+        },
+        "membership_conflict": {
+          "empty": 13
+        },
+        "membership_empty_anchor": {
+          "empty": 13
+        },
+        "component_order": {
+          "empty": 13
+        },
+        "children_order": {
+          "empty": 13
+        },
+        "native_supported": {
+          "request": 13
+        },
+        "native_partial": {
+          "request": 13
+        },
+        "native_contradicted": {
+          "request": 13
+        },
+        "native_exact_sink": {
+          "request": 13
+        },
+        "native_other_asset": {
+          "request": 13
+        },
+        "hash_kind": {
+          "empty": 13
+        },
+        "hash_payment": {
+          "empty": 13
+        },
+        "hash_payment_source": {
+          "empty": 13
+        },
+        "hash_refund_txid": {
+          "empty": 13
+        },
+        "hash_refund_vout": {
+          "empty": 13
+        },
+        "hash_wallet": {
+          "empty": 13
+        },
+        "hash_direction": {
+          "empty": 13
+        },
+        "hash_asset": {
+          "empty": 13
+        },
+        "hash_amount": {
+          "empty": 13
+        },
+        "hash_fee": {
+          "empty": 13
+        },
+        "hash_included": {
+          "empty": 13
+        },
+        "hash_event": {
+          "empty": 13
+        },
+        "integer_semantics": {
+          "empty": 13
+        },
+        "time_semantics": {
+          "empty": 13
+        },
+        "scope_enriched_mismatch": {
+          "empty": 13
+        },
+        "lineage_ties": {
+          "empty": 13
+        },
+        "location_ties": {
+          "empty": 13
+        },
+        "transactionless_wallet_missing": {
+          "empty": 13
+        },
+        "anchor_row_time_invalid": {
+          "empty": 13
+        },
+        "revision_backward": {
+          "empty": 13
+        },
+        "chronology_after_boundary": {
+          "empty": 13
+        },
+        "asset_l_btc_alias": {
+          "empty": 13
+        },
+        "lightning_chain_default": {
+          "empty": 13
+        },
+        "lightning_kind_scope": {
+          "empty": 13
+        },
+        "core_ln_kind_scope": {
+          "empty": 13
+        },
+        "liquid_kind_conflict": {
+          "empty": 13
+        },
+        "inactive_header": {
+          "request": 13
+        },
+        "peg_in": {
+          "empty": 12
+        },
+        "peg_out": {
+          "empty": 12
+        },
+        "lightning_receive_lnd": {
+          "empty": 12
+        },
+        "lightning_receive_nwc": {
+          "empty": 12
+        },
+        "lightning_receive_cln": {
+          "empty": 12
+        },
+        "lightning_receive_core_ln": {
+          "empty": 12
+        },
+        "swap_terms": {
+          "request": 12
+        },
+        "untracked_route": {
+          "empty": 12
+        },
+        "liquid_wallet_omitted_scope": {
+          "request": 12
+        },
+        "wallet_scope_conflict": {
+          "request": 12
+        },
+        "conversion_inferred": {
+          "empty": 12
+        },
+        "conversion_inferred_chronology": {
+          "empty": 12
+        },
+        "conversion_ambiguous": {
+          "empty": 12
+        },
+        "native_namespace_gate": {
+          "empty": 12
+        },
+        "native_excluded_rows": {
+          "request": 12
+        },
+        "lineage_other_profile": {
+          "empty": 12
+        },
+        "authored_source_default": {
+          "empty": 12
+        },
+        "retained_reviewed_notes": {
+          "empty": 12
+        },
+        "liquid_substring_kind": {
+          "empty": 12
+        },
+        "generic_elements_domain": {
+          "request": 12
+        },
+        "fee_null_domain": {
+          "empty": 12
+        },
+        "missing_time_empty": {
+          "empty": 12
+        },
+        "transaction_id_empty": {
+          "empty": 12
+        },
+        "zero_amount_chronology": {
+          "empty": 12
+        },
+        "authoritative_chronology": {
+          "empty": 12
+        },
+        "asset_upper_semantics": {
+          "empty": 12
+        },
+        "asset_hash_upper_019b": {
+          "empty": 12
+        },
+        "asset_hash_upper_0264": {
+          "empty": 12
+        }
+      },
+      "active_distinct_seed_requests": {
+        "balanced": 0,
+        "no_legs": 13,
+        "missing_source": 0,
+        "missing_destination": 0,
+        "unknown_role": 0,
+        "unbalanced": 0,
+        "unit_mismatch": 0,
+        "missing_time": 0,
+        "invalid_time": 0,
+        "chronology": 0,
+        "location_continuity": 0,
+        "allocation_required": 0,
+        "multi_allocation": 0,
+        "allocation_invalid": 0,
+        "allocation_quantity": 0,
+        "allocation_source_coverage": 0,
+        "allocation_sink_coverage": 0,
+        "fee_asset": 0,
+        "fee_wallet": 0,
+        "fee_scope": 0,
+        "fee_orphan": 0,
+        "scope_invalid_chain": 0,
+        "scope_rail_chain": 0,
+        "scope_invalid_network": 0,
+        "scope_mismatch": 0,
+        "scope_laundering": 0,
+        "cross_scope_laundering": 0,
+        "cross_location_continuity": 0,
+        "conversion": 0,
+        "conversion_topology": 0,
+        "conversion_retained": 0,
+        "conversion_review": 0,
+        "conversion_policy": 0,
+        "conversion_missing_value": 0,
+        "conversion_no_values": 0,
+        "conversion_unbalanced": 0,
+        "conversion_fee_quantity": 0,
+        "conversion_fee_value": 0,
+        "value_only_loss": 0,
+        "suspense": 0,
+        "suspense_mode": 0,
+        "suspense_review": 0,
+        "suspense_no_allocations": 0,
+        "suspense_anchor": 0,
+        "suspense_missing_time": 0,
+        "suspense_source": 0,
+        "suspense_asset": 0,
+        "suspense_quantity": 0,
+        "suspense_network": 0,
+        "suspense_time": 0,
+        "suspense_fee": 0,
+        "content_missing": 0,
+        "leg_count": 0,
+        "allocation_count": 0,
+        "term_count": 0,
+        "commitment_header": 0,
+        "commitment_count": 0,
+        "commitment_ordinals": 0,
+        "commitment_zero": 0,
+        "commitment_no_anchors": 13,
+        "commitment_hash": 0,
+        "commitment_volatile": 0,
+        "commitment_rejected": 0,
+        "anchor_missing": 0,
+        "anchor_retracted": 0,
+        "anchor_identity": 0,
+        "anchor_excluded": 0,
+        "anchor_source_direction": 0,
+        "anchor_destination_direction": 0,
+        "anchor_loss_direction": 0,
+        "anchor_asset": 0,
+        "anchor_wallet": 0,
+        "anchor_time_invalid": 0,
+        "anchor_time_mismatch": 0,
+        "anchor_time_warning": 0,
+        "anchor_coverage": 0,
+        "anchor_partial": 0,
+        "anchor_partial_zero": 0,
+        "anchor_partial_excess": 0,
+        "anchor_rail": 0,
+        "anchor_chain": 0,
+        "anchor_network": 0,
+        "owned_wallet_missing": 0,
+        "retained_location": 0,
+        "transaction_anchor_missing": 13,
+        "lineage_conflict": 0,
+        "revision_missing": 0,
+        "revision_scope": 0,
+        "revision_lineage": 0,
+        "revision_order": 0,
+        "revision_forward": 0,
+        "revision_valid": 0,
+        "membership_conflict": 0,
+        "membership_empty_anchor": 0,
+        "component_order": 0,
+        "children_order": 0,
+        "native_supported": 13,
+        "native_partial": 13,
+        "native_contradicted": 13,
+        "native_exact_sink": 13,
+        "native_other_asset": 13,
+        "hash_kind": 0,
+        "hash_payment": 0,
+        "hash_payment_source": 0,
+        "hash_refund_txid": 0,
+        "hash_refund_vout": 0,
+        "hash_wallet": 0,
+        "hash_direction": 0,
+        "hash_asset": 0,
+        "hash_amount": 0,
+        "hash_fee": 0,
+        "hash_included": 0,
+        "hash_event": 0,
+        "integer_semantics": 0,
+        "time_semantics": 0,
+        "scope_enriched_mismatch": 0,
+        "lineage_ties": 0,
+        "location_ties": 0,
+        "transactionless_wallet_missing": 0,
+        "anchor_row_time_invalid": 0,
+        "revision_backward": 0,
+        "chronology_after_boundary": 0,
+        "asset_l_btc_alias": 0,
+        "lightning_chain_default": 0,
+        "lightning_kind_scope": 0,
+        "core_ln_kind_scope": 0,
+        "liquid_kind_conflict": 0,
+        "inactive_header": 13,
+        "peg_in": 0,
+        "peg_out": 0,
+        "lightning_receive_lnd": 0,
+        "lightning_receive_nwc": 0,
+        "lightning_receive_cln": 0,
+        "lightning_receive_core_ln": 0,
+        "swap_terms": 1,
+        "untracked_route": 0,
+        "liquid_wallet_omitted_scope": 12,
+        "wallet_scope_conflict": 12,
+        "conversion_inferred": 0,
+        "conversion_inferred_chronology": 0,
+        "conversion_ambiguous": 0,
+        "native_namespace_gate": 0,
+        "native_excluded_rows": 12,
+        "lineage_other_profile": 0,
+        "authored_source_default": 0,
+        "retained_reviewed_notes": 0,
+        "liquid_substring_kind": 0,
+        "generic_elements_domain": 12,
+        "fee_null_domain": 0,
+        "missing_time_empty": 0,
+        "transaction_id_empty": 0,
+        "zero_amount_chronology": 0,
+        "authoritative_chronology": 0,
+        "asset_upper_semantics": 0,
+        "asset_hash_upper_019b": 0,
+        "asset_hash_upper_0264": 0
+      }
+    },
+    "samourai": {
+      "counts": {
+        "books": 2000,
+        "request": 1642,
+        "permutations": 68,
+        "empty": 426
+      },
+      "scenarios": {
+        "tx0": {
+          "request": 59
+        },
+        "tx0_fee": {
+          "request": 59
+        },
+        "mixing": {
+          "request": 59
+        },
+        "remix": {
+          "request": 59
+        },
+        "fanout": {
+          "request": 59
+        },
+        "badbank": {
+          "request": 59
+        },
+        "untrusted_source": {
+          "empty": 59
+        },
+        "untrusted_target": {
+          "empty": 59
+        },
+        "unknown_fee": {
+          "request": 59
+        },
+        "implicit_delta": {
+          "request": 59
+        },
+        "oversize": {
+          "empty": 59
+        },
+        "wrong_asset": {
+          "empty": 59
+        },
+        "group_mismatch": {
+          "request": 59
+        },
+        "multiple_sources": {
+          "empty": 59
+        },
+        "invalid_role": {
+          "request": 59
+        },
+        "empty_group": {
+          "request": 59
+        },
+        "empty_section": {
+          "request": 59
+        },
+        "bool_group": {
+          "request": 59
+        },
+        "dict_group": {
+          "request": 59
+        },
+        "list_group": {
+          "request": 59
+        },
+        "nonprintable_group": {
+          "request": 59
+        },
+        "numeric_group": {
+          "request": 59
+        },
+        "false_presence_gate": {
+          "request": 59
+        },
+        "decoded_config": {
+          "request": 59
+        },
+        "mixing_residual": {
+          "request": 59
+        },
+        "fee_inclusive": {
+          "request": 59
+        },
+        "tampered_hash": {
+          "empty": 59
+        },
+        "sorted_targets": {
+          "request": 59
+        },
+        "duplicate_target": {
+          "empty": 58
+        },
+        "reviewed_reservation": {
+          "request": 58
+        },
+        "multiple_groups": {
+          "request": 58
+        },
+        "post_unicode14_group": {
+          "request": 58
+        },
+        "implicit_mix_residual": {
+          "request": 58
+        },
+        "exact_msat": {
+          "request": 58
+        }
+      },
+      "active_distinct_seed_requests": {
+        "tx0": 59,
+        "tx0_fee": 59,
+        "mixing": 59,
+        "remix": 59,
+        "fanout": 59,
+        "badbank": 59,
+        "untrusted_source": 0,
+        "untrusted_target": 0,
+        "unknown_fee": 59,
+        "implicit_delta": 59,
+        "oversize": 0,
+        "wrong_asset": 0,
+        "group_mismatch": 59,
+        "multiple_sources": 0,
+        "invalid_role": 59,
+        "empty_group": 59,
+        "empty_section": 59,
+        "bool_group": 59,
+        "dict_group": 59,
+        "list_group": 59,
+        "nonprintable_group": 59,
+        "numeric_group": 59,
+        "false_presence_gate": 59,
+        "decoded_config": 59,
+        "mixing_residual": 59,
+        "fee_inclusive": 59,
+        "tampered_hash": 0,
+        "sorted_targets": 59,
+        "duplicate_target": 0,
+        "reviewed_reservation": 58,
+        "multiple_groups": 58,
+        "post_unicode14_group": 58,
+        "implicit_mix_residual": 58,
+        "exact_msat": 58
+      }
+    },
+    "recorded": {
+      "counts": {
+        "books": 2000,
+        "request": 1731,
+        "permutations": 92,
+        "empty": 361
+      },
+      "scenarios": {
+        "bitcoin": {
+          "request": 44
+        },
+        "bitcoin_upper_txid": {
+          "request": 44
+        },
+        "bitcoin_typed_external": {
+          "request": 44
+        },
+        "bitcoin_timestamp_skew": {
+          "request": 44
+        },
+        "bitcoin_fee_inclusive": {
+          "request": 44
+        },
+        "bitcoin_implicit_residual": {
+          "request": 44
+        },
+        "bitcoin_partial": {
+          "request": 44
+        },
+        "exact_msat": {
+          "request": 44
+        },
+        "liquid_main": {
+          "request": 44
+        },
+        "liquid_test": {
+          "request": 44
+        },
+        "liquid_regtest": {
+          "request": 44
+        },
+        "liquid_asset_id": {
+          "request": 44
+        },
+        "lightning_lnd": {
+          "request": 44
+        },
+        "lightning_cln": {
+          "request": 44
+        },
+        "lightning_circular": {
+          "request": 44
+        },
+        "lightning_hash_case": {
+          "request": 44
+        },
+        "untrusted_source": {
+          "request": 44
+        },
+        "untrusted_target": {
+          "request": 44
+        },
+        "tampered_quantity": {
+          "request": 44
+        },
+        "lightning_chronology": {
+          "empty": 44
+        },
+        "untrusted_both": {
+          "request": 44
+        },
+        "same_wallet": {
+          "request": 44
+        },
+        "zero_inbound": {
+          "empty": 43
+        },
+        "negative_outbound": {
+          "empty": 43
+        },
+        "multiple_sources": {
+          "empty": 43
+        },
+        "multiple_targets": {
+          "empty": 43
+        },
+        "different_txid": {
+          "request": 43
+        },
+        "network_separation": {
+          "request": 43
+        },
+        "lightning_shortfall": {
+          "request": 43
+        },
+        "lightning_forged_source": {
+          "request": 43
+        },
+        "lightning_forged_lnd": {
+          "request": 43
+        },
+        "lightning_bad_hash": {
+          "request": 43
+        },
+        "lightning_wrong_kind": {
+          "request": 43
+        },
+        "lightning_chain_hash": {
+          "request": 43
+        },
+        "lightning_duplicate": {
+          "request": 43
+        },
+        "lightning_no_network": {
+          "request": 43
+        },
+        "lightning_asset_case": {
+          "request": 43
+        },
+        "liquid_missing_identity": {
+          "empty": 43
+        },
+        "liquid_asset_separation": {
+          "request": 43
+        },
+        "synthetic_id": {
+          "request": 43
+        },
+        "reviewed_reservation": {
+          "request": 43
+        },
+        "multiple_events": {
+          "request": 43
+        },
+        "nonpositive_placeholder": {
+          "empty": 43
+        },
+        "nonfinite_graph_identity": {
+          "empty": 43
+        },
+        "lightning_skew_boundary": {
+          "request": 43
+        },
+        "lightning_invalid_timestamp": {
+          "request": 43
+        }
+      },
+      "active_distinct_seed_requests": {
+        "bitcoin": 44,
+        "bitcoin_upper_txid": 44,
+        "bitcoin_typed_external": 44,
+        "bitcoin_timestamp_skew": 44,
+        "bitcoin_fee_inclusive": 44,
+        "bitcoin_implicit_residual": 44,
+        "bitcoin_partial": 44,
+        "exact_msat": 44,
+        "liquid_main": 44,
+        "liquid_test": 44,
+        "liquid_regtest": 44,
+        "liquid_asset_id": 44,
+        "lightning_lnd": 44,
+        "lightning_cln": 44,
+        "lightning_circular": 44,
+        "lightning_hash_case": 44,
+        "untrusted_source": 44,
+        "untrusted_target": 44,
+        "tampered_quantity": 44,
+        "lightning_chronology": 0,
+        "untrusted_both": 44,
+        "same_wallet": 44,
+        "zero_inbound": 0,
+        "negative_outbound": 0,
+        "multiple_sources": 0,
+        "multiple_targets": 0,
+        "different_txid": 43,
+        "network_separation": 43,
+        "lightning_shortfall": 43,
+        "lightning_forged_source": 43,
+        "lightning_forged_lnd": 43,
+        "lightning_bad_hash": 43,
+        "lightning_wrong_kind": 43,
+        "lightning_chain_hash": 43,
+        "lightning_duplicate": 43,
+        "lightning_no_network": 43,
+        "lightning_asset_case": 43,
+        "liquid_missing_identity": 0,
+        "liquid_asset_separation": 43,
+        "synthetic_id": 43,
+        "reviewed_reservation": 43,
+        "multiple_events": 43,
+        "nonpositive_placeholder": 0,
+        "nonfinite_graph_identity": 0,
+        "lightning_skew_boundary": 43,
+        "lightning_invalid_timestamp": 43
+      }
+    },
+    "fanout": {
+      "counts": {
+        "books": 2000,
+        "request": 1564,
+        "permutations": 94,
+        "upstream_refusal": 178,
+        "empty": 352
+      },
+      "scenarios": {
+        "bitcoin": {
+          "request": 43
+        },
+        "liquid_main": {
+          "request": 43
+        },
+        "liquid_test": {
+          "request": 43
+        },
+        "liquid_regtest": {
+          "request": 43
+        },
+        "liquid_asset_id": {
+          "request": 43
+        },
+        "bitcoin_graph": {
+          "request": 43
+        },
+        "liquid_graph": {
+          "request": 43
+        },
+        "three_destinations": {
+          "request": 43
+        },
+        "equal_amount_ties": {
+          "request": 43
+        },
+        "amount_order": {
+          "request": 43
+        },
+        "provider_ids": {
+          "request": 43
+        },
+        "multiple_events": {
+          "request": 43
+        },
+        "exact_msat": {
+          "request": 43
+        },
+        "value_pricing": {
+          "request": 43
+        },
+        "exact_value_pricing": {
+          "request": 43
+        },
+        "existing_rate": {
+          "request": 43
+        },
+        "existing_exact_rate": {
+          "request": 43
+        },
+        "zero_value": {
+          "request": 43
+        },
+        "negative_value": {
+          "request": 43
+        },
+        "missing_value": {
+          "request": 43
+        },
+        "zero_exact_value_fallback": {
+          "request": 43
+        },
+        "zero_rate": {
+          "request": 43
+        },
+        "whitespace_value": {
+          "request": 43
+        },
+        "unicode_value": {
+          "request": 43
+        },
+        "nan_value": {
+          "upstream_refusal": 43
+        },
+        "nan_payload": {
+          "upstream_refusal": 43
+        },
+        "infinite_value": {
+          "upstream_refusal": 42
+        },
+        "negative_infinite_value": {
+          "upstream_refusal": 42
+        },
+        "untrusted_source": {
+          "request": 42
+        },
+        "untrusted_target": {
+          "request": 42
+        },
+        "tampered_quantity": {
+          "request": 42
+        },
+        "fee_inclusive": {
+          "request": 42
+        },
+        "partial_total": {
+          "empty": 42
+        },
+        "over_total": {
+          "empty": 42
+        },
+        "duplicate_wallet": {
+          "empty": 42
+        },
+        "same_wallet": {
+          "empty": 42
+        },
+        "one_destination": {
+          "request": 42
+        },
+        "multiple_sources": {
+          "empty": 42
+        },
+        "zero_source": {
+          "request": 42
+        },
+        "zero_destination": {
+          "empty": 42
+        },
+        "negative_destination": {
+          "empty": 42
+        },
+        "unknown_direction": {
+          "empty": 42
+        },
+        "asset_separation": {
+          "request": 42
+        },
+        "network_separation": {
+          "request": 42
+        },
+        "synthetic_source": {
+          "request": 42
+        },
+        "synthetic_destination": {
+          "request": 42
+        },
+        "reviewed_reservation": {
+          "request": 42
+        }
+      },
+      "active_distinct_seed_requests": {
+        "bitcoin": 43,
+        "liquid_main": 43,
+        "liquid_test": 43,
+        "liquid_regtest": 43,
+        "liquid_asset_id": 43,
+        "bitcoin_graph": 43,
+        "liquid_graph": 43,
+        "three_destinations": 43,
+        "equal_amount_ties": 43,
+        "amount_order": 43,
+        "provider_ids": 43,
+        "multiple_events": 43,
+        "exact_msat": 43,
+        "value_pricing": 43,
+        "exact_value_pricing": 43,
+        "existing_rate": 43,
+        "existing_exact_rate": 43,
+        "zero_value": 43,
+        "negative_value": 43,
+        "missing_value": 43,
+        "zero_exact_value_fallback": 43,
+        "zero_rate": 43,
+        "whitespace_value": 43,
+        "unicode_value": 43,
+        "nan_value": 0,
+        "nan_payload": 0,
+        "infinite_value": 0,
+        "negative_infinite_value": 0,
+        "untrusted_source": 42,
+        "untrusted_target": 42,
+        "tampered_quantity": 42,
+        "fee_inclusive": 42,
+        "partial_total": 0,
+        "over_total": 0,
+        "duplicate_wallet": 0,
+        "same_wallet": 0,
+        "one_destination": 42,
+        "multiple_sources": 0,
+        "zero_source": 42,
+        "zero_destination": 0,
+        "negative_destination": 0,
+        "unknown_direction": 0,
+        "asset_separation": 42,
+        "network_separation": 42,
+        "synthetic_source": 42,
+        "synthetic_destination": 42,
+        "reviewed_reservation": 42
+      }
+    },
+    "graph": {
+      "counts": {
+        "books": 2000,
+        "request": 2016,
+        "permutations": 16
+      },
+      "scenarios": {
+        "bitcoin_ownership": {
+          "request": 250
+        },
+        "liquid_ownership": {
+          "request": 250
+        },
+        "bitcoin_consolidation": {
+          "request": 250
+        },
+        "liquid_consolidation": {
+          "request": 250
+        },
+        "liquid_rawhex": {
+          "request": 250
+        },
+        "liquid_rawhex_short_locktime": {
+          "request": 250
+        },
+        "liquid_rawhex_flag": {
+          "request": 250
+        },
+        "liquid_rawhex_nonminimal": {
+          "request": 250
+        }
+      },
+      "active_distinct_seed_requests": {
+        "bitcoin_ownership": 250,
+        "liquid_ownership": 250,
+        "bitcoin_consolidation": 250,
+        "liquid_consolidation": 250,
+        "liquid_rawhex": 250,
+        "liquid_rawhex_short_locktime": 250,
+        "liquid_rawhex_flag": 250,
+        "liquid_rawhex_nonminimal": 250
+      }
+    },
+    "pipeline": {
+      "counts": {
+        "books": 2000,
+        "request": 1856,
+        "permutations": 24,
+        "empty": 168
+      },
+      "scenarios": {
+        "bitcoin_consolidation": {
+          "request": 167
+        },
+        "liquid_consolidation": {
+          "request": 167
+        },
+        "bitcoin_fanout": {
+          "request": 167
+        },
+        "liquid_fanout": {
+          "request": 167
+        },
+        "bitcoin_ownership": {
+          "request": 167
+        },
+        "liquid_ownership": {
+          "request": 167
+        },
+        "bitcoin_mixed": {
+          "request": 167
+        },
+        "liquid_mixed": {
+          "request": 167
+        },
+        "bitcoin_normalized": {
+          "request": 166
+        },
+        "bitcoin_collaborative": {
+          "request": 166
+        },
+        "bitcoin_residual": {
+          "request": 166
+        },
+        "bitcoin_blocked": {
+          "empty": 166
+        }
+      },
+      "active_distinct_seed_requests": {
+        "bitcoin_consolidation": 167,
+        "liquid_consolidation": 167,
+        "bitcoin_fanout": 167,
+        "liquid_fanout": 167,
+        "bitcoin_ownership": 167,
+        "liquid_ownership": 167,
+        "bitcoin_mixed": 167,
+        "liquid_mixed": 167,
+        "bitcoin_normalized": 166,
+        "bitcoin_collaborative": 7,
+        "bitcoin_residual": 166,
+        "bitcoin_blocked": 0
+      }
+    },
+    "safety": {
+      "counts": {
+        "books": 2000,
+        "empty": 1281,
+        "permutations": 78,
+        "request": 797
+      },
+      "scenarios": {
+        "pending_pair": {
+          "empty": 52
+        },
+        "pending_fanout": {
+          "empty": 52
+        },
+        "pending_consolidation": {
+          "empty": 52
+        },
+        "pending_ownership": {
+          "empty": 52
+        },
+        "replaced_spend": {
+          "request": 52
+        },
+        "conflict_none_confirmed": {
+          "empty": 52
+        },
+        "conflict_both_confirmed": {
+          "empty": 52
+        },
+        "unscoped_provider": {
+          "empty": 52
+        },
+        "blank_identity": {
+          "request": 52
+        },
+        "unresolved_fanout": {
+          "empty": 52
+        },
+        "unresolved_consolidation": {
+          "empty": 52
+        },
+        "unresolved_many_many": {
+          "empty": 51
+        },
+        "privacy_coinjoin": {
+          "empty": 51
+        },
+        "privacy_collaborative": {
+          "empty": 51
+        },
+        "privacy_payjoin": {
+          "empty": 51
+        },
+        "privacy_payment_in_coinjoin": {
+          "empty": 51
+        },
+        "privacy_sweep": {
+          "empty": 51
+        },
+        "privacy_exact_pair": {
+          "request": 51
+        },
+        "privacy_fanout": {
+          "request": 51
+        },
+        "privacy_consolidation": {
+          "request": 51
+        },
+        "privacy_untrusted_pair": {
+          "empty": 51
+        },
+        "privacy_rowless": {
+          "empty": 51
+        },
+        "confirmed_pair": {
+          "request": 51
+        },
+        "status_string": {
+          "request": 51
+        },
+        "legacy_missing_status": {
+          "request": 51
+        },
+        "privacy_unknown": {
+          "request": 51
+        },
+        "closed_newer_pending": {
+          "empty": 51
+        },
+        "closed_newer_confirmed": {
+          "request": 51
+        },
+        "closed_equal_disagreement": {
+          "empty": 51
+        },
+        "closed_invalid_timestamp": {
+          "request": 51
+        },
+        "liquid_pending": {
+          "empty": 51
+        },
+        "liquid_privacy_pair": {
+          "request": 51
+        },
+        "samourai_unverified": {
+          "empty": 51
+        },
+        "samourai_verified": {
+          "request": 51
+        },
+        "normalized_fee_only": {
+          "request": 51
+        },
+        "privacy_reviewed": {
+          "empty": 51
+        },
+        "dependency_pending": {
+          "empty": 51
+        },
+        "dependency_privacy": {
+          "empty": 51
+        },
+        "lightning_chain_no_hash": {
+          "request": 51
+        }
+      },
+      "active_distinct_seed_requests": {
+        "pending_pair": 0,
+        "pending_fanout": 0,
+        "pending_consolidation": 0,
+        "pending_ownership": 0,
+        "replaced_spend": 52,
+        "conflict_none_confirmed": 0,
+        "conflict_both_confirmed": 0,
+        "unscoped_provider": 0,
+        "blank_identity": 52,
+        "unresolved_fanout": 0,
+        "unresolved_consolidation": 0,
+        "unresolved_many_many": 0,
+        "privacy_coinjoin": 0,
+        "privacy_collaborative": 0,
+        "privacy_payjoin": 0,
+        "privacy_payment_in_coinjoin": 0,
+        "privacy_sweep": 0,
+        "privacy_exact_pair": 51,
+        "privacy_fanout": 51,
+        "privacy_consolidation": 51,
+        "privacy_untrusted_pair": 0,
+        "privacy_rowless": 0,
+        "confirmed_pair": 51,
+        "status_string": 51,
+        "legacy_missing_status": 51,
+        "privacy_unknown": 51,
+        "closed_newer_pending": 0,
+        "closed_newer_confirmed": 51,
+        "closed_equal_disagreement": 0,
+        "closed_invalid_timestamp": 51,
+        "liquid_pending": 0,
+        "liquid_privacy_pair": 51,
+        "samourai_unverified": 0,
+        "samourai_verified": 51,
+        "normalized_fee_only": 51,
+        "privacy_reviewed": 0,
+        "dependency_pending": 0,
+        "dependency_privacy": 0,
+        "lightning_chain_no_hash": 51
+      }
+    },
+    "channels": {
+      "counts": {
+        "books": 2000,
+        "request": 1613,
+        "permutations": 64,
+        "empty": 451
+      },
+      "scenarios": {
+        "open_close": {
+          "request": 63
+        },
+        "strict_lnd": {
+          "request": 63
+        },
+        "strict_coreln": {
+          "request": 63
+        },
+        "batched": {
+          "request": 63
+        },
+        "force_trusted": {
+          "request": 63
+        },
+        "force_untrusted": {
+          "request": 63
+        },
+        "force_multiple": {
+          "request": 63
+        },
+        "force_duplicate": {
+          "request": 63
+        },
+        "peer_payment": {
+          "request": 63
+        },
+        "fee_tie": {
+          "request": 63
+        },
+        "missing_funding": {
+          "empty": 63
+        },
+        "open_mismatch": {
+          "empty": 63
+        },
+        "close_mismatch": {
+          "request": 63
+        },
+        "strict_zero": {
+          "empty": 63
+        },
+        "owner_conflict": {
+          "request": 63
+        },
+        "network_conflict": {
+          "request": 63
+        },
+        "graph_conflict": {
+          "request": 62
+        },
+        "pending_open": {
+          "request": 62
+        },
+        "privacy_close": {
+          "request": 62
+        },
+        "splice_tag": {
+          "request": 62
+        },
+        "loan_collateral": {
+          "request": 62
+        },
+        "loan_principal": {
+          "request": 62
+        },
+        "loan_all": {
+          "request": 62
+        },
+        "loan_pending": {
+          "empty": 62
+        },
+        "mixed_recorded": {
+          "request": 62
+        },
+        "mixed_pipeline": {
+          "request": 62
+        },
+        "mixed_samourai": {
+          "request": 62
+        },
+        "loan_wrong_direction": {
+          "empty": 62
+        },
+        "loan_unknown_role": {
+          "empty": 62
+        },
+        "loan_empty_ids": {
+          "request": 62
+        },
+        "strict_owner_conflict": {
+          "empty": 62
+        },
+        "multiple_close_scopes": {
+          "request": 62
+        }
+      },
+      "active_distinct_seed_requests": {
+        "open_close": 63,
+        "strict_lnd": 63,
+        "strict_coreln": 63,
+        "batched": 63,
+        "force_trusted": 63,
+        "force_untrusted": 63,
+        "force_multiple": 63,
+        "force_duplicate": 63,
+        "peer_payment": 63,
+        "fee_tie": 63,
+        "missing_funding": 0,
+        "open_mismatch": 0,
+        "close_mismatch": 63,
+        "strict_zero": 0,
+        "owner_conflict": 63,
+        "network_conflict": 63,
+        "graph_conflict": 62,
+        "pending_open": 62,
+        "privacy_close": 62,
+        "splice_tag": 62,
+        "loan_collateral": 62,
+        "loan_principal": 62,
+        "loan_all": 62,
+        "loan_pending": 0,
+        "mixed_recorded": 62,
+        "mixed_pipeline": 62,
+        "mixed_samourai": 62,
+        "loan_wrong_direction": 0,
+        "loan_unknown_role": 0,
+        "loan_empty_ids": 62,
+        "strict_owner_conflict": 0,
+        "multiple_close_scopes": 62
+      }
+    },
+    "native": {
+      "counts": {
+        "books": 2000,
+        "request": 1689,
+        "permutations": 110,
+        "empty": 345,
+        "refusal": 76
+      },
+      "scenarios": {
+        "lnd_settle": {
+          "request": 37
+        },
+        "cln_settle": {
+          "request": 37
+        },
+        "cln_alias_settle": {
+          "request": 37
+        },
+        "nwc_untrusted": {
+          "request": 37
+        },
+        "lnd_forged": {
+          "request": 37
+        },
+        "reverse_settle": {
+          "request": 37
+        },
+        "timeout_refund": {
+          "request": 37
+        },
+        "raw_refund": {
+          "request": 37
+        },
+        "raw_claim": {
+          "request": 37
+        },
+        "core_attestation": {
+          "request": 37
+        },
+        "fee_next_day": {
+          "empty": 37
+        },
+        "fee_unknown_time": {
+          "empty": 37
+        },
+        "zero_fee_next_day": {
+          "request": 37
+        },
+        "utc_same_day": {
+          "request": 37
+        },
+        "utc_different_day": {
+          "empty": 37
+        },
+        "dismiss_active": {
+          "request": 37
+        },
+        "dismiss_expired": {
+          "request": 37
+        },
+        "dismiss_equal": {
+          "request": 37
+        },
+        "dismiss_invalid": {
+          "request": 37
+        },
+        "dismiss_future": {
+          "request": 37
+        },
+        "duplicate_ln": {
+          "empty": 36
+        },
+        "duplicate_chain": {
+          "empty": 36
+        },
+        "duplicate_occupied": {
+          "request": 36
+        },
+        "duplicate_dismissed": {
+          "request": 36
+        },
+        "network_mismatch": {
+          "request": 36
+        },
+        "network_unknown": {
+          "empty": 36
+        },
+        "amount_increase": {
+          "request": 36
+        },
+        "amount_excess_fee": {
+          "request": 36
+        },
+        "canonical_mismatch": {
+          "empty": 36
+        },
+        "source_untrusted": {
+          "request": 36
+        },
+        "target_stale": {
+          "request": 36
+        },
+        "observer_mismatch": {
+          "request": 36
+        },
+        "occupied_loan": {
+          "request": 36
+        },
+        "occupied_channel": {
+          "request": 36
+        },
+        "privacy_native": {
+          "request": 36
+        },
+        "pending_claim": {
+          "empty": 36
+        },
+        "failed_payment": {
+          "request": 36
+        },
+        "timeout_missing_proof": {
+          "request": 36
+        },
+        "refund_wrong_outpoint": {
+          "request": 36
+        },
+        "refund_duplicate_funding": {
+          "empty": 36
+        },
+        "refund_partial_output": {
+          "request": 36
+        },
+        "refund_batched": {
+          "request": 36
+        },
+        "provider_conflict": {
+          "refusal": 36
+        },
+        "provider_same_edge": {
+          "request": 36
+        },
+        "provider_only": {
+          "request": 36
+        },
+        "provider_different_network": {
+          "refusal": 36
+        },
+        "policy_taxable": {
+          "request": 36
+        },
+        "policy_austria": {
+          "request": 36
+        },
+        "alias_asset": {
+          "request": 36
+        },
+        "raw_reverse_prefix": {
+          "request": 36
+        },
+        "raw_wrong_hash": {
+          "request": 36
+        },
+        "mixed_recorded": {
+          "request": 36
+        },
+        "mixed_pipeline": {
+          "request": 36
+        },
+        "mixed_samourai": {
+          "request": 36
+        },
+        "mixed_channel": {
+          "request": 36
+        }
+      },
+      "active_distinct_seed_requests": {
+        "lnd_settle": 37,
+        "cln_settle": 37,
+        "cln_alias_settle": 37,
+        "nwc_untrusted": 37,
+        "lnd_forged": 37,
+        "reverse_settle": 37,
+        "timeout_refund": 37,
+        "raw_refund": 37,
+        "raw_claim": 37,
+        "core_attestation": 37,
+        "fee_next_day": 0,
+        "fee_unknown_time": 0,
+        "zero_fee_next_day": 37,
+        "utc_same_day": 37,
+        "utc_different_day": 0,
+        "dismiss_active": 37,
+        "dismiss_expired": 37,
+        "dismiss_equal": 37,
+        "dismiss_invalid": 37,
+        "dismiss_future": 37,
+        "duplicate_ln": 0,
+        "duplicate_chain": 0,
+        "duplicate_occupied": 36,
+        "duplicate_dismissed": 36,
+        "network_mismatch": 36,
+        "network_unknown": 0,
+        "amount_increase": 36,
+        "amount_excess_fee": 36,
+        "canonical_mismatch": 0,
+        "source_untrusted": 36,
+        "target_stale": 36,
+        "observer_mismatch": 36,
+        "occupied_loan": 36,
+        "occupied_channel": 36,
+        "privacy_native": 36,
+        "pending_claim": 0,
+        "failed_payment": 36,
+        "timeout_missing_proof": 36,
+        "refund_wrong_outpoint": 36,
+        "refund_duplicate_funding": 0,
+        "refund_partial_output": 36,
+        "refund_batched": 36,
+        "provider_conflict": 0,
+        "provider_same_edge": 36,
+        "provider_only": 36,
+        "provider_different_network": 0,
+        "policy_taxable": 36,
+        "policy_austria": 36,
+        "alias_asset": 36,
+        "raw_reverse_prefix": 36,
+        "raw_wrong_hash": 36,
+        "mixed_recorded": 36,
+        "mixed_pipeline": 36,
+        "mixed_samourai": 36,
+        "mixed_channel": 36
+      }
+    },
+    "reconciliation": {
+      "counts": {
+        "books": 2000,
+        "request": 1968,
+        "permutations": 50,
+        "empty": 82
+      },
+      "scenarios": {
+        "recovered": {
+          "request": 80
+        },
+        "same_time": {
+          "request": 80
+        },
+        "reverse_txid": {
+          "request": 80
+        },
+        "wallet_cycle": {
+          "request": 80
+        },
+        "source_fee": {
+          "request": 80
+        },
+        "intermediate_fee": {
+          "request": 80
+        },
+        "residual_suspense": {
+          "request": 80
+        },
+        "residual_fee": {
+          "request": 80
+        },
+        "extra_activity": {
+          "request": 80
+        },
+        "outside_activity": {
+          "request": 80
+        },
+        "zero_activity": {
+          "empty": 80
+        },
+        "untrusted_source": {
+          "request": 80
+        },
+        "untrusted_middle": {
+          "request": 80
+        },
+        "inexact_fee": {
+          "request": 80
+        },
+        "partial_route": {
+          "request": 80
+        },
+        "direct_only": {
+          "request": 80
+        },
+        "blocked_middle": {
+          "request": 80
+        },
+        "protected_middle": {
+          "request": 80
+        },
+        "economic_terms": {
+          "request": 80
+        },
+        "draft_component": {
+          "request": 80
+        },
+        "two_sources": {
+          "request": 80
+        },
+        "fifo_mismatch": {
+          "request": 80
+        },
+        "two_targets": {
+          "request": 80
+        },
+        "liquid": {
+          "request": 80
+        },
+        "inclusive_fee": {
+          "request": 80
+        }
+      },
+      "active_distinct_seed_requests": {
+        "recovered": 4,
+        "same_time": 4,
+        "reverse_txid": 4,
+        "wallet_cycle": 4,
+        "source_fee": 4,
+        "intermediate_fee": 4,
+        "residual_suspense": 4,
+        "residual_fee": 4,
+        "extra_activity": 4,
+        "outside_activity": 4,
+        "zero_activity": 0,
+        "untrusted_source": 4,
+        "untrusted_middle": 4,
+        "inexact_fee": 4,
+        "partial_route": 4,
+        "direct_only": 4,
+        "blocked_middle": 4,
+        "protected_middle": 4,
+        "economic_terms": 4,
+        "draft_component": 4,
+        "two_sources": 4,
+        "fifo_mismatch": 4,
+        "two_targets": 4,
+        "liquid": 4,
+        "inclusive_fee": 4
+      }
+    },
+    "gaps": {
+      "counts": {
+        "books": 2000,
+        "empty": 1807,
+        "permutations": 64,
+        "request": 257
+      },
+      "scenarios": {
+        "missing_wallet": {
+          "empty": 63
+        },
+        "whirlpool_policy": {
+          "empty": 63
+        },
+        "whirlpool_tx0": {
+          "empty": 63
+        },
+        "untyped": {
+          "request": 63
+        },
+        "fee": {
+          "empty": 63
+        },
+        "inclusive_fee": {
+          "empty": 63
+        },
+        "excess": {
+          "empty": 63
+        },
+        "split_sources": {
+          "empty": 63
+        },
+        "split_returns": {
+          "empty": 63
+        },
+        "postmix_fan_in": {
+          "empty": 63
+        },
+        "multiple_wallets": {
+          "empty": 63
+        },
+        "separate_eras": {
+          "empty": 63
+        },
+        "long_horizon": {
+          "empty": 63
+        },
+        "external_return": {
+          "empty": 63
+        },
+        "external_source": {
+          "empty": 63
+        },
+        "equal_competitors": {
+          "empty": 63
+        },
+        "clear_margin": {
+          "empty": 62
+        },
+        "cross_network": {
+          "request": 62
+        },
+        "cross_chain": {
+          "empty": 62
+        },
+        "source_capacity": {
+          "request": 62
+        },
+        "return_capacity": {
+          "empty": 62
+        },
+        "era_capacity": {
+          "empty": 62
+        },
+        "large_structured": {
+          "empty": 62
+        },
+        "large_untyped": {
+          "request": 62
+        },
+        "large_empty": {
+          "empty": 62
+        },
+        "large_no_returns": {
+          "empty": 62
+        },
+        "loan_ignored": {
+          "empty": 62
+        },
+        "blocked_competitor": {
+          "empty": 62
+        },
+        "excluded": {
+          "empty": 62
+        },
+        "same_time": {
+          "empty": 62
+        },
+        "unicode_labels": {
+          "empty": 62
+        },
+        "missing_wallet_and_disposal": {
+          "empty": 62
+        }
+      },
+      "active_distinct_seed_requests": {
+        "missing_wallet": 0,
+        "whirlpool_policy": 0,
+        "whirlpool_tx0": 0,
+        "untyped": 18,
+        "fee": 0,
+        "inclusive_fee": 0,
+        "excess": 0,
+        "split_sources": 0,
+        "split_returns": 0,
+        "postmix_fan_in": 0,
+        "multiple_wallets": 0,
+        "separate_eras": 0,
+        "long_horizon": 0,
+        "external_return": 0,
+        "external_source": 0,
+        "equal_competitors": 0,
+        "clear_margin": 0,
+        "cross_network": 19,
+        "cross_chain": 0,
+        "source_capacity": 19,
+        "return_capacity": 0,
+        "era_capacity": 0,
+        "large_structured": 0,
+        "large_untyped": 18,
+        "large_empty": 0,
+        "large_no_returns": 0,
+        "loan_ignored": 0,
+        "blocked_competitor": 0,
+        "excluded": 0,
+        "same_time": 0,
+        "unicode_labels": 0,
+        "missing_wallet_and_disposal": 0
+      }
+    },
+    "replay": {
+      "requests": 159,
+      "permutations": 159,
+      "skipped": 0,
+      "problems": []
+    }
+  },
+  "retained_recording_sha256": {
+    "kassiber-r2d-recorded-census/055eb26745e1869b415cc104-3-000042.json": "d36f08d61d67a556e16861f441d1f14d8d9cfcab455df0a813dade4a2d4ac2f0",
+    "kassiber-r2d-recorded-census/055eb26745e1869b415cc104-3-000044.json": "bc60b71e5c5ef5c95e594f127bcf65436a2e7c68ef3ca71b8d7dc41808a92790",
+    "kassiber-r2d-recorded-census/1e7a26c1135fd8cc75dc7339-3-000002.json": "51b295429fccf03095b6fe2a889535b44dedca609e1d6c9ae6c3cce9b2af88aa",
+    "kassiber-r2d-recorded-census/264c89fae0b9165d1cb45aaa-3-000036.json": "74f4791c0ba204a261239449913ce9064a0bb4870c51774e7ec2359751aa97c4",
+    "kassiber-r2d-recorded-census/264c89fae0b9165d1cb45aaa-3-000038.json": "a95c8c022c64afca96bd187d831a5b4351ace53b954f8287fbb248f9176cb3ed",
+    "kassiber-r2d-recorded-census/276b7c6491602f7fa95ee4ab-3-000007.json": "3118f33c8b8c53b5dfa57d678588919646b1941a71216f0eb62d0e6d7c7f45c3",
+    "kassiber-r2d-recorded-census/2956081dfc92e54f2e32cc58-3-000026.json": "e39baff3302d72c2d7f4f81bebd886c1ea4c9dbe2d657f42422ab0a2a1dd3393",
+    "kassiber-r2d-recorded-census/3a55f209836400c527375aa1-4-000001.json": "50242bdf0c4c6870de48a3f2b14a878151bc3aebd3d60e8b74d92b97747ae814",
+    "kassiber-r2d-recorded-census/3bf3d8476d28062e7713a9e0-4-000000.json": "9267267b0f6492967034d94143fb43ae6791eef4e357d06152d296640efef27a",
+    "kassiber-r2d-recorded-census/3ee3e214c5151f1815a98907-3-000051.json": "45c4a808a17d2912845c17c5d8c3922be628dd7bf9c2d181713ab5f981409ac3",
+    "kassiber-r2d-recorded-census/3f585f06403fb72f33018dd2-3-000000.json": "9d56002e6057a360e827fbdb6bae421695819823354c6cb50d9708968315ebc2",
+    "kassiber-r2d-recorded-census/41982e0c81d32aa32ced6d9f-3-000012.json": "e8fb2a22e9673bf88173d4e0c95deca604397c586a00f3e9a69163c107f2d8b7",
+    "kassiber-r2d-recorded-census/41982e0c81d32aa32ced6d9f-3-000013.json": "34a57612d8a8cad748da558b4dbed93ae8128077a7a912a4ecb817c69a8fa9f9",
+    "kassiber-r2d-recorded-census/452d6915c95873834304f363-3-000005.json": "b13b608ad407204cf7eae5a82e0924e090eefa61608810e9c47fc6dea8d95186",
+    "kassiber-r2d-recorded-census/46ea0e358a3646fff2bb2d9f-3-000023.json": "62a24eb2e6652fcaf15745b59beeb896a13817b34bb81c921fb6be970d50fb49",
+    "kassiber-r2d-recorded-census/4e0a957a3359515d367fd327-3-000028.json": "9cc02a5780d127404df54c07e56301264553cb8bcc5380ea4c5217deb18a9250",
+    "kassiber-r2d-recorded-census/50a74f2d6f987fa700fab03d-3-000025.json": "c30e8fc0e54670a3ee7a94ce49e341c651c43908deb45cbd9d1c6e2863c68554",
+    "kassiber-r2d-recorded-census/50a74f2d6f987fa700fab03d-3-000027.json": "38c200387e2ff703723bbca402745f6452893dc3265e2cdf16ce8de6c1afe0c0",
+    "kassiber-r2d-recorded-census/51a0e3a1d693fc01fba0fc9e-3-000004.json": "a36c03bf371ef73318d8a593b9c52b3bcb807477e068ee7276c8785cafeba544",
+    "kassiber-r2d-recorded-census/556eefb93b9bfa96d98b4be2-3-000064.json": "ce6570f4f902ea02e4bda596b8540bf4d6ece036c0585cab9bc543d66d79c16d",
+    "kassiber-r2d-recorded-census/55d047f7462bd1e6a523e91e-3-000039.json": "a3fbdd4a7f3f9fa16279494c473436ac8bc856b187436088974948af7746e95e",
+    "kassiber-r2d-recorded-census/564b9b55932fc828700acd6d-3-000063.json": "12421b81149badd67896a06a168b9d8c4f5119a76ef00f90182f6029176b7d03",
+    "kassiber-r2d-recorded-census/5836a2e93490d2be12450c71-3-000009.json": "e05f2f3f04e45a1e2564e5610bdb889f51577b44292b5667a27bfff4b86ac969",
+    "kassiber-r2d-recorded-census/5d91999da960bd7a6b2bd4fe-3-000049.json": "2b1871517714a08f83c6ab96049924a087f8782e48dce096a2c1a349cb19e37f",
+    "kassiber-r2d-recorded-census/6129652acad64e708c1f563f-3-000048.json": "11aef2f07b04fb5cf351e79befe194e39fb761b13e54200ed1b41029f9437e79",
+    "kassiber-r2d-recorded-census/6129652acad64e708c1f563f-3-000050.json": "49995c2f78dfd0cf653306655607a1620b73f8ac8b183452eb5974bc0692e8d2",
+    "kassiber-r2d-recorded-census/61788cebd1c9ac00dbb3f302-3-000017.json": "0923071041c4061dd58c4e7731039999b0987c3a240da13cf6375d412857c460",
+    "kassiber-r2d-recorded-census/698609d39838305c271ee91f-4-000002.json": "2e67a37303975d41fdb58dd9933aaeb8358f0d5346f3d26e862a359307e3dd08",
+    "kassiber-r2d-recorded-census/6f909b3971052be8858b2325-3-000058.json": "9915ff3384b122033aced5a227f0c09f0158036adf249b05f8480cfa5317c670",
+    "kassiber-r2d-recorded-census/6f909b3971052be8858b2325-3-000059.json": "b7ad1717916551f61a54508409a9c49247976a1e676b37dcec065ee8cff1267c",
+    "kassiber-r2d-recorded-census/715897d2c602c0364d397a2d-3-000032.json": "839fc90fef9057b17c0c7b29bc1fb7542e23dc704efd2c25e5fad535f5260714",
+    "kassiber-r2d-recorded-census/72a99b1428c2bdb149240b56-3-000020.json": "b17e9fd388c6dcaf8664faa49d326be897214e2ef0d3ff6cf2316ee044733488",
+    "kassiber-r2d-recorded-census/72a99b1428c2bdb149240b56-3-000021.json": "267eebabb8ef8a84661c4e40c9cbac2825d1f1a5e3c8c04ff31cd4e89c500104",
+    "kassiber-r2d-recorded-census/76aadc5f975c6bcb15892094-3-000019.json": "51073c8926239f2e392a869d5e7210035f43ed7d22d4910d13db8a103f144903",
+    "kassiber-r2d-recorded-census/7cd16b74cb3d8c59c1cfd1e2-3-000011.json": "1adc151ce67760d01d1c71dda455f982ed20180caf99e2b1a124f07733a3d76b",
+    "kassiber-r2d-recorded-census/7dae5019ac2818302500249e-3-000034.json": "6094d949a74b66b0600673642bdbcee75b6acd59ec92b9b7936a83ae2accc0be",
+    "kassiber-r2d-recorded-census/81aeb497d5b3601367a80a1d-3-000055.json": "04b70de882c1b9ae964df46959609531f4e7f41d0d0c2f2097bead30bc7a25d7",
+    "kassiber-r2d-recorded-census/875433123fffc29d022a12f2-3-000006.json": "7cad49f302f7206222af5a94e7246b492dd3089c0f022d46efc3c134c6470fd6",
+    "kassiber-r2d-recorded-census/875433123fffc29d022a12f2-3-000008.json": "b1af36e529ae9817be9c551d66ba65f68f036ea98f053bbbcf73e2460cd37052",
+    "kassiber-r2d-recorded-census/882baf72dba15030035bdf96-3-000043.json": "0deb51a53ac65c7dce65b595ca9f9769d7c0c9e8274ee90f2edbdb66167bd9dd",
+    "kassiber-r2d-recorded-census/8d523adcdfab70b6fdeb232c-3-000066.json": "346c5d09262e9166e42c023dda31eadbe09df9815548b31c9b9c2bffd2c30e66",
+    "kassiber-r2d-recorded-census/93e420c9465a7f990e462685-3-000037.json": "4333a3afbfcbf2ab0244d8842d8b0d7426765a7f26251e9ab3c542e30f1f3608",
+    "kassiber-r2d-recorded-census/992a9c681a99ea46e0b4aeaa-3-000024.json": "09fa4bc941932c95a619e1d38e5d8ab65defae7072719aae3a239caaf22f2599",
+    "kassiber-r2d-recorded-census/a893522de18b3ed1042eaf83-4-000003.json": "c9c63b611e47c07b8267486a4ef0a57977b41dd9e1863db1e39e37dd78a07b31",
+    "kassiber-r2d-recorded-census/b12c91bb554e6043bba891e5-3-000018.json": "1cc9f9cf4388038e7d470befd673bb78d839afcbcf4996148e462bd512a0e922",
+    "kassiber-r2d-recorded-census/b2cbafdc960a89cc510ad80d-3-000035.json": "fb4508dfb92498a0ff2cd7e2513832ef7e2a56c5cf0a186b27efeb1ebd731731",
+    "kassiber-r2d-recorded-census/b50a33b7aa4502c5b7a3e02e-3-000010.json": "b7a1f4db35313a944079ff586359782a6d416b6540a2bcc606e4d85d4689fa1c",
+    "kassiber-r2d-recorded-census/b59d50f6e71f18241b326331-3-000003.json": "189d23d46fd733e74ee8636b66531ac6ed68c2732d4bda065c25666b9ba0ade0",
+    "kassiber-r2d-recorded-census/bb82c9e3d81a4cb1bd76ce88-3-000065.json": "9a004f95764b8cd6e8a8efb73492c56cef0c0bd29c28649af36c9a0e15ff9622",
+    "kassiber-r2d-recorded-census/bdef89ba4a94ba7c8f9658f7-3-000016.json": "93f4819ba76915568ce8dc44dcb30023f5a9821ef10b46826957a29d43c5f1bb",
+    "kassiber-r2d-recorded-census/bf56c5d08e71439923258a91-3-000060.json": "7c40efa290a30662d36a9c9fcc94f914f918155f2c06be750748f2b7ebd5a2a9",
+    "kassiber-r2d-recorded-census/c1e86b6f53ffaadfdad42e2d-3-000014.json": "2a0202f6f0f5261602c57f621ded523ef8fd31bf4434b5cc287bfd5bd44743d1",
+    "kassiber-r2d-recorded-census/c6fe9d49b61c0c31d5974569-4-000005.json": "63aa271d1b8bb96abca971eacf1d661fe4809df0995156df1172563f7c673768",
+    "kassiber-r2d-recorded-census/c7ed3add2a6f494883edf747-3-000057.json": "2500f26b4e0c112c5a81ef1c9a46144dc02373fae7b087d4fe78b2a5c0ac3242",
+    "kassiber-r2d-recorded-census/cd7ce6cd62b4eb49140dc012-3-000061.json": "6b60f776542f4213030cdf4745926974aa1f07d8f533886c3ee0874dae20fb89",
+    "kassiber-r2d-recorded-census/d1d4efaf9c40cebce9b4eabc-3-000029.json": "491dcff01fba5d4ded83120f171232f170bbe1f77e7e958730507d0dae61ba82",
+    "kassiber-r2d-recorded-census/d1d4efaf9c40cebce9b4eabc-3-000030.json": "0a65d8f6ccaddf4dd3ef21684343eaeb65b4c4f8037ee3470a3ed619dfd7da34",
+    "kassiber-r2d-recorded-census/d74bfcd65d70e7aba17ebfd5-3-000040.json": "f6625b545b55fc13060aec491ff9fb830c895d40b57b6afa88f426cf383f2c87",
+    "kassiber-r2d-recorded-census/d74bfcd65d70e7aba17ebfd5-3-000041.json": "da5c37653429cb233419377fa56caac14f14bcb0daafc9856597d4a1deb994af",
+    "kassiber-r2d-recorded-census/d8b0ce519e20d5e5e1badcfb-3-000054.json": "9c01015b19cd416d5a40e499e284ce8824b26897b67b7b3bad7728cd202a5cc3",
+    "kassiber-r2d-recorded-census/d8b0ce519e20d5e5e1badcfb-3-000056.json": "e93d01655ad4d94c79d686b070c7ef6a553d09ec76e4956c890608fc65f74801",
+    "kassiber-r2d-recorded-census/da7aec2208a0ed1303458b10-3-000046.json": "464512b10301f92c498139c028f1b7d35c9e5d73aa9215a80eecca6b9f24b3b3",
+    "kassiber-r2d-recorded-census/da7aec2208a0ed1303458b10-3-000047.json": "41b5cf7f9c98c83e2b545a883ce1c86682c05684eeda021427a698681d9dd867",
+    "kassiber-r2d-recorded-census/dac5f11fc6a034f77386eceb-3-000062.json": "ad9c87897e98f5129887a8a351c05c1ff61644c4f760ead9e13dab7756bbe4eb",
+    "kassiber-r2d-recorded-census/e1c2473390e5b2da315b96be-3-000052.json": "491cb72185ef9ea7069f12a6b8902494637831ab9f7695fa49ced801486ecd0a",
+    "kassiber-r2d-recorded-census/e1c2473390e5b2da315b96be-3-000053.json": "8b59bde87202e25966040cdf74fef2134817548b3d281a426715612173675f54",
+    "kassiber-r2d-recorded-census/e76271863a251a3fa0a8f341-3-000022.json": "f8913b61f0f1e9acade62fa3e626875ec1be0d0992cbaf86a4616ffa45e10d8f",
+    "kassiber-r2d-recorded-census/ea74ddffde974996f0554a2a-4-000004.json": "7af96b6bbca267b84bc9949cc40401fa17da353a9f53ea7b1c2f6299f2bc8036",
+    "kassiber-r2d-recorded-census/eb806a181b9478a9362d1072-3-000031.json": "47cbe3cb9b740c5121d20abe5ba22ce0fe598b339d82fc8753b1d62745f21497",
+    "kassiber-r2d-recorded-census/eb806a181b9478a9362d1072-3-000033.json": "e00d4302dbdcd00053a5b9ba500cf5e84431eddf45621504ea3630ee1b49d171",
+    "kassiber-r2d-recorded-census/f6480f80c436a378f26bf7b4-3-000001.json": "7824d7ba13fd6d10ae94a703696170eb4d2517e51e4f4a3137bd76049531341d",
+    "kassiber-r2d-recorded-census/f89a68e8f7c7d8adeadc08f4-3-000045.json": "0ba64bd2b055ab2c3b53a1a466adc2e14a16c193170117dbe366c9e5885a2bc9",
+    "kassiber-r2d-recorded-census/f9ca8e7abc6cd47b4a6ba28a-3-000015.json": "70c29aa34b174a0089e1ce9840ebaec1f227925c3fd0854b90780759a656726b",
+    "kassiber-r2d-recorded-shadow/114a563ad8a8d673b2a1ec35-3-000002.json": "307020558a111034dd3ce2297222c1b9d4073999a7f13643193ba441bdc0a0f0",
+    "kassiber-r2d-recorded-shadow/4d7506ebbd69dfcc6e41ae71-3-000001.json": "bca3e27e775e610cfba5d322b9f12996a8ae31ce172efa61ab16a4ffdd2101c8",
+    "kassiber-r2d-recorded-shadow/70abd95d932713a3a46e2e10-3-000005.json": "110afd0e713d7dd6df2ef5e646e5fee5ac581b8a1762866065810f3ffd4d6fa0",
+    "kassiber-r2d-recorded-shadow/a796df5b6c4686b28aed058b-3-000004.json": "5e6e1acc7252b7776f18d07e14cee85de389f96c90dd62dc96555c0dacc68453",
+    "kassiber-r2d-recorded-shadow/a94e0d101f47813c886f04f0-3-000000.json": "c2cbac76c1b61b4f560b83ea60726049491115199ed63f4a313ccfc3a606aa5c",
+    "kassiber-r2d-recorded-shadow/c44b025b352b9100acdbeeb3-3-000003.json": "47d8197b28199ecb4aa2fd7e6114dc9bbc205b26aef00595e35d5e72fd54484f",
+    "kassiber-r2e-census-snapshots/00c2274d0555c5580f6b1d92-44-000007.json": "cd3b7fdfae86adae617ee30592ec9e25f07746b2a4506fe19ce68311f6b00219",
+    "kassiber-r2e-census-snapshots/0306dd2c371777b7ca55be4e-44-000036.json": "d97797882f866ec41164f20b8c90e026cd55236b30161fbeafdf183d638ed067",
+    "kassiber-r2e-census-snapshots/09e7ba6ce2e8ef6bb0189419-44-000001.json": "50e8fe17782519191d6308ff405de8abc1216dd9bc56b34cef3a088cbebc5b6c",
+    "kassiber-r2e-census-snapshots/0f9cbd1655b920808a4b795a-44-000034.json": "ed0f1c4b436ef984644659654700934494a15218ab6941f16ec29579a62210c0",
+    "kassiber-r2e-census-snapshots/1458ba99ac588f1a22bc1cde-44-000020.json": "797f7b53de1850d71feed83da74d62fd4e6bdf985568a1178df0f9985f049332",
+    "kassiber-r2e-census-snapshots/19b32a8fe1d71e8cf361ca53-44-000006.json": "fa25f68f11f4179e6f2f3daca5d97a73043b0c49d6eef6ae2e0cd38862c9380f",
+    "kassiber-r2e-census-snapshots/2db45e8fc916ee34b07449ed-44-000004.json": "604f11dc4b38768d4aa53a5f17ef1f84f6cb0fe2434352ae15149a171460c993",
+    "kassiber-r2e-census-snapshots/2fd0df1b69ed25357c1024b4-44-000019.json": "b90b59ec96bfe78e8d2707e8a907209617a87c26e70b7feacb20321eb78353a6",
+    "kassiber-r2e-census-snapshots/378cfeaba2a43d141ce1fc6e-44-000038.json": "34f8775d2271864bf1ddde1596c895788dab81255bca3dac82e1c9442e25d694",
+    "kassiber-r2e-census-snapshots/42127d5fe5358cabafbc43fc-44-000037.json": "9b12cba25fe7ec6c00e813f0ae3b01697d871d56956bbf6fb551145c69dd4db4",
+    "kassiber-r2e-census-snapshots/44090d4d801786a90515933d-44-000008.json": "3fd7ece246bda73a33f4d3462be65a07108d1f534b0582d7ee59114a014c6865",
+    "kassiber-r2e-census-snapshots/4fa87aff9f65d5933a39f04b-44-000021.json": "d6b3f1a36298db9267444ea2fbb101470b7bd469a40f70d7d91b5f34ff215ffc",
+    "kassiber-r2e-census-snapshots/69e5837c4601a543a7564092-44-000000.json": "60d9f52a6f0be62adb3384c843ff3fe3853a686256e460f9822714bbf9234100",
+    "kassiber-r2e-census-snapshots/6eea8fba5c8ed2da5331e486-44-000030.json": "cf892c3c491bfefd973e38be4f8c6ede66d9506e1423b9be9244daebd61de962",
+    "kassiber-r2e-census-snapshots/77a1d2be46da2b7a30de1df5-44-000023.json": "59da711138f8a4e1eb23dd50727dcafb4fed5db79fe832b433556546994af5ff",
+    "kassiber-r2e-census-snapshots/7dd7469ecc20d353060bf73a-44-000017.json": "44e29d14a391da8dd9703ac6fdeb86407e38190aa75ca794c29ccc4f67e6384d",
+    "kassiber-r2e-census-snapshots/7dd7469ecc20d353060bf73a-44-000018.json": "7f502305d539bb02a05625adb26f994900bb15c0574bfb77360310208659ae67",
+    "kassiber-r2e-census-snapshots/8173c745beaea93a9ddd70f8-44-000009.json": "017d3f48fdbff2a60cb0d40eb2189eb2acddd944444d636e4d48ebd3dc435847",
+    "kassiber-r2e-census-snapshots/86024697fe1aa4f010ca7f77-44-000024.json": "c79ba74659c7477bf7fc5b4615631a7de189c9854f53c7dce7e5f573a05118c0",
+    "kassiber-r2e-census-snapshots/86024697fe1aa4f010ca7f77-44-000025.json": "3b7cc21a95836bf85ab2424085b66c88f8f0a508425599631004098ed9f041f2",
+    "kassiber-r2e-census-snapshots/8ef6582b335e03fc31e01992-44-000035.json": "ae2a6b78eb86501ab57650fabf33e8aa295a1694f84acb0f4f9ee347cbe218fa",
+    "kassiber-r2e-census-snapshots/9cb1d23f6d838f75c35548e5-44-000015.json": "bf1e34ac9b214bf87fcb46d35ab513fccdaf030ad157136ace40a73400be8a01",
+    "kassiber-r2e-census-snapshots/9cb1d23f6d838f75c35548e5-44-000016.json": "a52d6c985807a35e2aa0e51a505340707b6bfa261d78777d989faf67fb571903",
+    "kassiber-r2e-census-snapshots/a2209a0be1195ffe8c32ed8a-44-000005.json": "d573a9b27244adb7c40660fdc519172198088dea8cce88d25bc8e0c39f4dea7c",
+    "kassiber-r2e-census-snapshots/a531f4b5f7a12c937ffd9a96-44-000010.json": "bb7de8be250655f2aeeda43e26491d27dbde90b4d5f0484a791c97cb07c208e6",
+    "kassiber-r2e-census-snapshots/bc08df65e28bac94cc7737b1-44-000003.json": "8ede6871426580f9b0c1e85ed61d89cbef60e753124d427a4e009ee640e22e47",
+    "kassiber-r2e-census-snapshots/c0277dae8225e3f5988d16f7-44-000033.json": "9e9b6b74b9df2efe7a108713eefbea4715be3dda2ee28c91b55b3693b53c9087",
+    "kassiber-r2e-census-snapshots/d4506db29001442cfbee27ef-44-000026.json": "9167ae3e86a6240fecedb84985214733827f94ecdd0781b8c67df6e06190b81d",
+    "kassiber-r2e-census-snapshots/d4506db29001442cfbee27ef-44-000027.json": "59ba7fd4d3e4920a69c647a68394b54ee133bd50289e093968c7fbcb75abb623",
+    "kassiber-r2e-census-snapshots/d87d31b4950b15356a9ba8bf-44-000031.json": "0a04b2df414483413ba638adb3b8b2e7d91ff8d64039179db778cafc2fe82ee7",
+    "kassiber-r2e-census-snapshots/d9f07dbf1edc34008f3798cf-44-000011.json": "37323c3ed2cd3e244ebb6a23afb6a43ffa6834d226cd9ac3593a8b892319c7f8",
+    "kassiber-r2e-census-snapshots/db585a9baab9d7264e9096a6-44-000013.json": "d57592df6c79a22315618d0d986d7ec7bda06be0ca8e764383e8c0a875de73fb",
+    "kassiber-r2e-census-snapshots/db585a9baab9d7264e9096a6-44-000014.json": "3430870a1b607be6598b214c1f0c67de3bf59f368022e3048078ed3623317b11",
+    "kassiber-r2e-census-snapshots/dded68825b38fee183f11c08-44-000002.json": "d38a4c4173b19859c58ff31cfe9b7a7434cea40baf4629ce32da2f47071dd1dc",
+    "kassiber-r2e-census-snapshots/e0ed12dba73ed427ee854cfa-44-000022.json": "644666c5483dbfd48c5fe45be60a75a2bb1f7915f5db70aada90ba8e152bfa87",
+    "kassiber-r2e-census-snapshots/e40b63b520a96bab0c0cc951-44-000012.json": "17d86a41aa54dc4e5157e64989688d369c791569b054de61b220b3b93c565857",
+    "kassiber-r2e-census-snapshots/e4437b2fabf66883c0334599-44-000032.json": "5380e64f5390ba0acc2bd6386ca13e3c6da952f09b7f74fae8a7d662343a6106",
+    "kassiber-r2e-census-snapshots/f49c87c856cd023eac8e9f3e-44-000039.json": "e765fd8a06f8263281b6cf2bcec462ecb6ec13a39d97c0dd43f801012470f408",
+    "kassiber-r2e-census-snapshots/f4b0b10ed4d2d8802b07c588-44-000028.json": "0f9f000ae1f28965541bf14b859e8a8523f8da15dda3cf577a0bd80ef604d9dd",
+    "kassiber-r2e-census-snapshots/f4b0b10ed4d2d8802b07c588-44-000029.json": "78f249e58335a8eef6e5566fabe8960a55fa9713bb979d857f359376b51f281e",
+    "kassiber-r2e-shadow-snapshots/1458ba99ac588f1a22bc1cde-44-000020.json": "237af737fb54d18487fc0f81d9997221f7c861e835ce6e1aa5e946466318318e",
+    "kassiber-r2e-shadow-snapshots/19b32a8fe1d71e8cf361ca53-44-000006.json": "3a552e3fc63bec53037af9a851c22d3cac460e8e45e108c17bbf4c67de3a9c3e",
+    "kassiber-r2e-shadow-snapshots/2bd0d5d3121f31111ccad036-44-000038.json": "2f6c806b82548ff5e18a97a39f2ff2b632bfb32f258c4161fa175d0f05e797bd",
+    "kassiber-r2e-shadow-snapshots/2db45e8fc916ee34b07449ed-44-000004.json": "e8b441d2dfc38cfde7223b55d927c57a64953f40f063a2ec57b9cdf6f4678920",
+    "kassiber-r2e-shadow-snapshots/2ee7440333d58612fe60a583-44-000032.json": "c67fe482473d610ebb7a6dc0d655b1b124f0abd049fc3b495593cc22194abeb5",
+    "kassiber-r2e-shadow-snapshots/2fd0df1b69ed25357c1024b4-44-000019.json": "c66fc61ce2d67c7ee39eb4257400adbbd074379a0dbc9d470ed0d29e2d10f01f",
+    "kassiber-r2e-shadow-snapshots/4885cdf2e2f0b8d63c57e92a-44-000000.json": "1ec632713f479271d922adab5c5116934436ae3440084573e60b02387fbb9f11",
+    "kassiber-r2e-shadow-snapshots/4fa87aff9f65d5933a39f04b-44-000021.json": "904740ce82e050166158517df02ed568349633766d782402693d053a83eab6fb",
+    "kassiber-r2e-shadow-snapshots/6d2a698fbc632d6c383bc69a-44-000036.json": "8c6c5e82e6e4dd2f6e2a415e3fc4c7dcd47266efd2195ae1cf3ead04955f7cc4",
+    "kassiber-r2e-shadow-snapshots/6eea8fba5c8ed2da5331e486-44-000030.json": "f3bab7f5bb0af67a50d2b5ff037d1ea52932a65f9f84519d490f2a82b53f12b2",
+    "kassiber-r2e-shadow-snapshots/77a1d2be46da2b7a30de1df5-44-000023.json": "86020d8ffaad9f3b7511e1e40ba5fe385f0aeb49259001aa4258939fd68969f6",
+    "kassiber-r2e-shadow-snapshots/7dd7469ecc20d353060bf73a-44-000017.json": "a969b6705e5e8787ef25fb30570b1090f0da3488b660f88f264b8f2a9aecf912",
+    "kassiber-r2e-shadow-snapshots/7dd7469ecc20d353060bf73a-44-000018.json": "da1340747a7f92fba48b64d018a7c17524374b82977056d87aa261f65a3e111d",
+    "kassiber-r2e-shadow-snapshots/800c1a3d30672489702fabd5-44-000008.json": "7d389677633b42a9eaf8d2a4110d96a0b0a4a098796c0dc808968abd6104f3d9",
+    "kassiber-r2e-shadow-snapshots/8173c745beaea93a9ddd70f8-44-000009.json": "f9c0188665791f63ca83af0edf3f8171bbe2992e9363a8c350e179b3e330e109",
+    "kassiber-r2e-shadow-snapshots/86024697fe1aa4f010ca7f77-44-000024.json": "0bb3bb497ee875e465e2b9203de622c4c1a4a3703613a880066034540e0abd41",
+    "kassiber-r2e-shadow-snapshots/86024697fe1aa4f010ca7f77-44-000025.json": "d2532a0b70b914073e932692c23bf278e6f95c88ff1b591e2f712c8c3d69e4d6",
+    "kassiber-r2e-shadow-snapshots/9cb1d23f6d838f75c35548e5-44-000015.json": "7bda55202ded0448ef128b6c2b2840c3a1f08df07806ae773ae1d0e5127d444e",
+    "kassiber-r2e-shadow-snapshots/9cb1d23f6d838f75c35548e5-44-000016.json": "2e457ffc311c5cf59bc0d440da635d2e8009e1c21f3201577c0bbfe481c42edc",
+    "kassiber-r2e-shadow-snapshots/a2209a0be1195ffe8c32ed8a-44-000005.json": "d9ba7cd6512ebba0252642e0fdc8fa22ff14bfae4a50fa1c883dbea04ae8d290",
+    "kassiber-r2e-shadow-snapshots/a531f4b5f7a12c937ffd9a96-44-000010.json": "235f5278f034c3dfc5ff76376d4cebcc503ac4049633fcad5b17b808e6fd576b",
+    "kassiber-r2e-shadow-snapshots/ba7607206de85698f5e6de54-44-000007.json": "b77835a84b20a017337bce2bfad73082abb0478b1995f67110bd8167cb9cddd1",
+    "kassiber-r2e-shadow-snapshots/bc08df65e28bac94cc7737b1-44-000003.json": "292abb5df40bab6fbf71d3adc465cb7e3068962f7892fcc0a1ca19e2f7b15ec9",
+    "kassiber-r2e-shadow-snapshots/bf6de1ebdd599c5cf2fba8e0-44-000035.json": "fe0476882f482f93ff3cbf9dd01c28cae6f56afe26948e1069a29079f2a2f5b4",
+    "kassiber-r2e-shadow-snapshots/c0277dae8225e3f5988d16f7-44-000033.json": "8487b3fc9fea30e9d0ac76bbfc7ce857212de3f7b8e1e0e42e61a3b5e268c013",
+    "kassiber-r2e-shadow-snapshots/d4506db29001442cfbee27ef-44-000026.json": "4107474bd11910fa9937d1844eada3a7d382d89315488a1a3a6506aa9be2df87",
+    "kassiber-r2e-shadow-snapshots/d4506db29001442cfbee27ef-44-000027.json": "fb45d3a0319d65494ab7bacf2618486c64d4e95a246741ba07591837f8f5e976",
+    "kassiber-r2e-shadow-snapshots/d87d31b4950b15356a9ba8bf-44-000031.json": "4d43306fa0e51e077710dbbdfdc7319d6d6ca5c19544e3d7c59951466b1a1f79",
+    "kassiber-r2e-shadow-snapshots/d9f07dbf1edc34008f3798cf-44-000011.json": "c239783b4463a41a3369fce9472791698391534b79ae8ae53783e04f0ac1d2a5",
+    "kassiber-r2e-shadow-snapshots/db585a9baab9d7264e9096a6-44-000013.json": "d24739c54ac12d1bece02438c09fe96d75eb4acf11f07b57012a9e2421e1eaaa",
+    "kassiber-r2e-shadow-snapshots/db585a9baab9d7264e9096a6-44-000014.json": "e61374dfcb74f6cf95029ff684b45d4433ca7ec06adb14681472b8dfd00a6f06",
+    "kassiber-r2e-shadow-snapshots/dded68825b38fee183f11c08-44-000002.json": "1d32591c6ae8dac10ac3d0454efae672e5b832b7ca6e11b96663907961fc4b98",
+    "kassiber-r2e-shadow-snapshots/e0ed12dba73ed427ee854cfa-44-000022.json": "fd13d2aeaa16b86d80f1369bcbff7bccc19997812cf916e27a279cad0aa03083",
+    "kassiber-r2e-shadow-snapshots/e40b63b520a96bab0c0cc951-44-000012.json": "707e454e1e62079254a0c85d0872154db4f465da07082153d625590fa3e057fe",
+    "kassiber-r2e-shadow-snapshots/e590b3699e8d31d5adf61855-44-000001.json": "f8653b1a125206ca3b0095882fb058cc90988830a3db018014f32e5161c63082",
+    "kassiber-r2e-shadow-snapshots/e7b394326dd5544bec8d964a-44-000037.json": "f7d5434a230e158b6869578025c4c0f0b11c9f5bd83f0055f9c52cab5523b516",
+    "kassiber-r2e-shadow-snapshots/ef622071ea2ac79e627509d5-44-000034.json": "9a35e20bc52588d5c4ca9d732ba25e43fddee4756f47e3fd80a2c4704bed8b09",
+    "kassiber-r2e-shadow-snapshots/f49c87c856cd023eac8e9f3e-44-000039.json": "ef52eb3d843ed32c75c3281a9fb15e4c0f80f27a8edce192ffffea089c7109e8",
+    "kassiber-r2e-shadow-snapshots/f4b0b10ed4d2d8802b07c588-44-000028.json": "2b95df6b32fb50046fd3b7aaec7aa97f9ba57f4a019ab7fa5dedd4bb4fd8057f",
+    "kassiber-r2e-shadow-snapshots/f4b0b10ed4d2d8802b07c588-44-000029.json": "bb19df79e098a70ab91ea9bca7e253a2564a4de717a3508929672f2fb04efc67"
+  },
+  "mutation_runs": {
+    "journals": {
+      "catalog": "crates/journals/scripts/mutations.json",
+      "entries": 33,
+      "ids": [
+        "JR-native-asdict",
+        "JR-loan-reason",
+        "JR-lightning-reason",
+        "JR-legacy-identity",
+        "JR-owned-amount",
+        "JR-review-kind",
+        "JR-review-fee",
+        "JR-review-confidence",
+        "JR-refusal-code",
+        "JR-refusal-cause",
+        "JR-refusal-wrapper",
+        "JR-balance-small-add",
+        "JR-balance-wide-add",
+        "JR-balance-wallet-kind",
+        "JR-balance-reason",
+        "JR-review-pairable-early",
+        "JR-review-pairable-filter",
+        "JR-review-physical-group",
+        "JR-review-legacy-group",
+        "JR-review-prefer-exact",
+        "JR-balance-current-key",
+        "JPROCESS-writer-lock",
+        "JPROCESS-outer-rollback",
+        "JPROCESS-commit",
+        "JPROCESS-repair",
+        "JPROCESS-pricing",
+        "JPROCESS-tax-before-repair",
+        "JPROCESS-all-counters",
+        "JPROCESS-stale-marker",
+        "JENGINE-typed-result",
+        "JENGINE-wire-refusal",
+        "JPROCESS-operand-quantity",
+        "JPROCESS-operand-projection"
+      ],
+      "exit_code": 0,
+      "baseline_tests": 10,
+      "killed": [
+        "JR-native-asdict",
+        "JR-loan-reason",
+        "JR-lightning-reason",
+        "JR-legacy-identity",
+        "JR-owned-amount",
+        "JR-review-kind",
+        "JR-review-fee",
+        "JR-review-confidence",
+        "JR-refusal-code",
+        "JR-refusal-cause",
+        "JR-refusal-wrapper",
+        "JR-balance-small-add",
+        "JR-balance-wide-add",
+        "JR-balance-wallet-kind",
+        "JR-balance-reason",
+        "JR-review-pairable-early",
+        "JR-review-pairable-filter",
+        "JR-review-physical-group",
+        "JR-review-legacy-group",
+        "JR-review-prefer-exact",
+        "JR-balance-current-key",
+        "JPROCESS-writer-lock",
+        "JPROCESS-outer-rollback",
+        "JPROCESS-commit",
+        "JPROCESS-repair",
+        "JPROCESS-pricing",
+        "JPROCESS-tax-before-repair",
+        "JPROCESS-all-counters",
+        "JPROCESS-stale-marker",
+        "JENGINE-typed-result",
+        "JENGINE-wire-refusal",
+        "JPROCESS-operand-quantity",
+        "JPROCESS-operand-projection"
+      ],
+      "log": "baseline: 10 tests pass unmutated\nkilled   JR-native-asdict (1 failing)\nkilled   JR-loan-reason (1 failing)\nkilled   JR-lightning-reason (1 failing)\nkilled   JR-legacy-identity (1 failing)\nkilled   JR-owned-amount (1 failing)\nkilled   JR-review-kind (1 failing)\nkilled   JR-review-fee (1 failing)\nkilled   JR-review-confidence (1 failing)\nkilled   JR-refusal-code (1 failing)\nkilled   JR-refusal-cause (1 failing)\nkilled   JR-refusal-wrapper (1 failing)\nkilled   JR-balance-small-add (1 failing)\nkilled   JR-balance-wide-add (1 failing)\nkilled   JR-balance-wallet-kind (1 failing)\nkilled   JR-balance-reason (1 failing)\nkilled   JR-review-pairable-early (1 failing)\nkilled   JR-review-pairable-filter (1 failing)\nkilled   JR-review-physical-group (1 failing)\nkilled   JR-review-legacy-group (1 failing)\nkilled   JR-review-prefer-exact (1 failing)\nkilled   JR-balance-current-key (1 failing)\nkilled   JPROCESS-writer-lock (1 failing)\nkilled   JPROCESS-outer-rollback (1 failing)\nkilled   JPROCESS-commit (1 failing)\nkilled   JPROCESS-repair (1 failing)\nkilled   JPROCESS-pricing (1 failing)\nkilled   JPROCESS-tax-before-repair (1 failing)\nkilled   JPROCESS-all-counters (1 failing)\nkilled   JPROCESS-stale-marker (1 failing)\nkilled   JENGINE-typed-result (1 failing)\nkilled   JENGINE-wire-refusal (1 failing)\nkilled   JPROCESS-operand-quantity (1 failing)\nkilled   JPROCESS-operand-projection (1 failing)\nall 33 mutations killed\n"
+    },
+    "tax": {
+      "catalog": "tax-engine/scripts/mutations.json",
+      "entries": 189,
+      "ids": [
+        "confirmed-conflict-spend-held",
+        "wallet-pool-scope-allowed",
+        "at-policy-drops-generic-lot-methods",
+        "unscoped-review-keeps-txid-case",
+        "unscoped-review-flags-nothing",
+        "builder-drops-conflict-hold",
+        "builder-skips-wallet-label-tokens",
+        "builder-ignores-currency",
+        "builder-allows-any-pool-scope",
+        "builder-allows-crossed-move",
+        "builder-accepts-negative-fee",
+        "builder-accepts-negative-amount",
+        "builder-accepts-shared-leg",
+        "builder-accepts-unreviewed-privacy-pair",
+        "builder-drops-coarse-flag",
+        "builder-text-prefers-description",
+        "builder-reorders-rows",
+        "builder-anchors-to-row-ids",
+        "reader-enriches-partner-leg",
+        "reader-hold-without-external-id",
+        "validate-stage-default-code",
+        "method-gate-cause-not-apperror",
+        "shadow-capabilities-miss-austrian-swaps",
+        "shadow-capabilities-ignore-the-in-leg",
+        "shadow-capabilities-ignore-the-out-leg",
+        "request-reads-a-missing-hold-as-none",
+        "empty-projection-builds-a-request",
+        "normalize-ignores-holds",
+        "normalize-moves-a-held-leg",
+        "normalize-reviews-moves-priced-exactly",
+        "normalize-reviews-moves-without-the-opt-in",
+        "normalize-reviews-the-out-leg-of-an-in-priced-move",
+        "normalize-partner-leg-is-the-reviewed-leg",
+        "normalize-reviews-coarse-events-without-the-opt-in",
+        "normalize-books-moves-of-a-blocked-group",
+        "normalize-block-keeps-the-last-reason",
+        "normalize-flags-named-transactions-again",
+        "normalize-taints-from-quarantined-rows-only",
+        "normalize-taints-from-untimed-rows",
+        "walk-ungrouped-flags-its-own-transaction-twice",
+        "walk-ungrouped-in-leg-paired-leg-is-a-bool",
+        "walk-group-move-not-checked-again",
+        "walk-group-recheck-flags-the-whole-group",
+        "walk-group-not-checked-at-its-first-move",
+        "walk-failed-group-books-later-moves",
+        "walk-group-flags-in-legs-as-out-legs",
+        "walk-group-names-a-transaction-twice",
+        "walk-move-gate-ignores-the-account",
+        "walk-moves-leave-the-destination-empty",
+        "walk-move-fee-stays-priced",
+        "walk-swap-out-faces-the-account-gate",
+        "walk-sale-skips-the-priced-gate",
+        "walk-taints-after-its-start-only",
+        "walk-dispositions-leave-the-account",
+        "walk-listed-kinds-read-as-income",
+        "walk-unclassified-income-books",
+        "walk-generic-books-hold-airdrops",
+        "walk-airdrops-taint-generic-lots",
+        "walk-gate-drops-taint-nothing",
+        "walk-hands-over-entries-without-inbound",
+        "walk-entries-in-insertion-order",
+        "walk-fee-value-checked-in-the-constructor",
+        "walk-infinite-values-checked-first",
+        "walk-fee-valued-at-the-amount",
+        "walk-fee-only-spend-sells",
+        "walk-holder-stripped",
+        "order-inbound-after-moves",
+        "order-moves-ignore-chain-evidence",
+        "order-slices-take-wallet-hints",
+        "order-hints-may-close-a-cycle",
+        "order-reach-walks-everything",
+        "order-cycles-drop-moves",
+        "order-ready-not-resorted",
+        "order-hints-run-backwards",
+        "describe-generic-notes-name-the-pool",
+        "describe-global-pool-kept",
+        "describe-election-dropped",
+        "describe-legs-write-any-regime",
+        "describe-move-notes-drop-the-proof",
+        "reader-audit-anchor-is-the-row-id",
+        "reader-audit-drops-the-group",
+        "normalize-values-acquisitions-at-the-price",
+        "normalize-moves-send-no-fee",
+        "normalize-books-unpriced-move-fees",
+        "normalize-leaves-blocked-siblings-unflagged",
+        "normalize-books-privacy-hops",
+        "normalize-drops-reviewed-coinjoin-moves",
+        "compose-unit-cost-multiplies",
+        "compose-merges-holding-periods",
+        "compose-fees-realize-gains",
+        "compose-income-is-negated",
+        "compose-move-fees-are-disposals",
+        "compose-transfer-fee-wallet",
+        "compose-legs-ignore-earlier-assets",
+        "compose-holdings-keep-empty-balances",
+        "compose-holdings-use-lot-acquisition-values",
+        "compose-holdings-ignore-sold-share",
+        "compose-summary-keeps-fees-and-moves",
+        "compose-summary-in-engine-order",
+        "run-method-gate-without-computation",
+        "run-compute-failure-names-no-asset",
+        "run-gates-before-normalize",
+        "reader-fragment-time-as-stored",
+        "reader-drops-the-kennzahl",
+        "reader-legs-swap-wallets",
+        "reader-legs-exact-quantities",
+        "regimes-cutoff-inclusive",
+        "regimes-unread-time-is-neu",
+        "regimes-order-ignores-direction",
+        "regimes-order-ignores-time",
+        "regimes-held-rows-tracked",
+        "regimes-alt-fallback-disabled",
+        "regimes-alt-fallback-always",
+        "regimes-election-not-recorded",
+        "regimes-election-without-alt",
+        "regimes-availability-not-per-wallet",
+        "regimes-move-draws-alt-first",
+        "regimes-move-credits-no-destination",
+        "regimes-move-fee-from-last-regime",
+        "regimes-move-fee-regime-from-what-moved",
+        "regimes-move-applies-at-its-in-leg",
+        "normalize-austrian-events-without-regime",
+        "normalize-inbound-regime-ignores-the-cutoff",
+        "normalize-override-keeps-election",
+        "normalize-event-override-ignored",
+        "normalize-move-override-ignored",
+        "normalize-moves-without-flows",
+        "walk-move-fee-regime-dropped",
+        "walk-last-constructor-failure-wins",
+        "compose-categories-ignore-overrides",
+        "compose-taxability-off-clears-non-reportable",
+        "compose-none-override-kept",
+        "compose-fees-keep-their-category",
+        "compose-groups-ignore-categories",
+        "compose-classification-errors-ignored",
+        "run-swap-runner-results-dropped",
+        "manifest-default-inbound-is-income",
+        "builder-cutoff-reads-rp2s-parse",
+        "builder-default-holding-period",
+        "errors-builtin-value-error-is-rp2s",
+        "describe-swap-link-first",
+        "normalize-events-ignore-swap-links",
+        "swaplinks-every-policy-considered",
+        "swaplinks-in-leg-reason-ignored",
+        "swaplinks-reason-skips-the-anchor",
+        "swaplinks-reason-skips-the-pairs-transaction",
+        "swaplinks-gates-only",
+        "swaplinks-last-reason-wins",
+        "swaplinks-missing-event-not-blocked",
+        "swaplinks-unavailable-leg-reason",
+        "swaplinks-alt-swaps-linked",
+        "swaplinks-relink-appends",
+        "swaplinks-direct-payout-quarantines-both-legs",
+        "swaplinks-direct-payout-target-books",
+        "swaplinks-direct-payout-target-by-fallback-id",
+        "swaplinks-out-amount-with-fee",
+        "run-no-second-pass",
+        "run-second-pass-keeps-blocked-rows",
+        "run-swap-quarantines-dropped",
+        "carry-austrian-books-carried",
+        "carry-every-policy-carried",
+        "carry-every-asset-carried",
+        "carry-one-pass",
+        "carry-stops-after-a-pass",
+        "carry-never-settles",
+        "carry-first-pricing-unchanged",
+        "carry-blocks-reconsidered",
+        "carry-blocked-rows-stay-in",
+        "carry-direct-payout-target-kept",
+        "carry-reason-of-the-in-leg",
+        "carry-unavailable-reason-renamed",
+        "carry-basis-of-the-in-leg",
+        "carry-rate-ignores-the-amount",
+        "carry-rate-without-an-amount",
+        "carry-value-not-normalized",
+        "carry-in-leg-not-carried",
+        "carry-coarse-kept",
+        "carry-quarantines-the-out-leg-only",
+        "carry-rail-pair-by-its-rows",
+        "run-carry-pricing-unread",
+        "run-carry-blocks-unread",
+        "run-carried-rows-unreported",
+        "run-carry-quarantines-dropped",
+        "engine-country-default-holding-period",
+        "holding-period-boundary-exclusive",
+        "reader-carried-rows-ignored",
+        "reader-carried-pricing-method",
+        "LTE-typed-schema",
+        "LTE-typed-operation"
+      ],
+      "exit_code": 0,
+      "baseline_tests": 122,
+      "killed": [
+        "confirmed-conflict-spend-held",
+        "wallet-pool-scope-allowed",
+        "at-policy-drops-generic-lot-methods",
+        "unscoped-review-keeps-txid-case",
+        "unscoped-review-flags-nothing",
+        "builder-drops-conflict-hold",
+        "builder-skips-wallet-label-tokens",
+        "builder-ignores-currency",
+        "builder-allows-any-pool-scope",
+        "builder-allows-crossed-move",
+        "builder-accepts-negative-fee",
+        "builder-accepts-negative-amount",
+        "builder-accepts-shared-leg",
+        "builder-accepts-unreviewed-privacy-pair",
+        "builder-drops-coarse-flag",
+        "builder-text-prefers-description",
+        "builder-reorders-rows",
+        "builder-anchors-to-row-ids",
+        "reader-enriches-partner-leg",
+        "reader-hold-without-external-id",
+        "validate-stage-default-code",
+        "method-gate-cause-not-apperror",
+        "shadow-capabilities-miss-austrian-swaps",
+        "shadow-capabilities-ignore-the-in-leg",
+        "shadow-capabilities-ignore-the-out-leg",
+        "request-reads-a-missing-hold-as-none",
+        "empty-projection-builds-a-request",
+        "normalize-ignores-holds",
+        "normalize-moves-a-held-leg",
+        "normalize-reviews-moves-priced-exactly",
+        "normalize-reviews-moves-without-the-opt-in",
+        "normalize-reviews-the-out-leg-of-an-in-priced-move",
+        "normalize-partner-leg-is-the-reviewed-leg",
+        "normalize-reviews-coarse-events-without-the-opt-in",
+        "normalize-books-moves-of-a-blocked-group",
+        "normalize-block-keeps-the-last-reason",
+        "normalize-flags-named-transactions-again",
+        "normalize-taints-from-quarantined-rows-only",
+        "normalize-taints-from-untimed-rows",
+        "walk-ungrouped-flags-its-own-transaction-twice",
+        "walk-ungrouped-in-leg-paired-leg-is-a-bool",
+        "walk-group-move-not-checked-again",
+        "walk-group-recheck-flags-the-whole-group",
+        "walk-group-not-checked-at-its-first-move",
+        "walk-failed-group-books-later-moves",
+        "walk-group-flags-in-legs-as-out-legs",
+        "walk-group-names-a-transaction-twice",
+        "walk-move-gate-ignores-the-account",
+        "walk-moves-leave-the-destination-empty",
+        "walk-move-fee-stays-priced",
+        "walk-swap-out-faces-the-account-gate",
+        "walk-sale-skips-the-priced-gate",
+        "walk-taints-after-its-start-only",
+        "walk-dispositions-leave-the-account",
+        "walk-listed-kinds-read-as-income",
+        "walk-unclassified-income-books",
+        "walk-generic-books-hold-airdrops",
+        "walk-airdrops-taint-generic-lots",
+        "walk-gate-drops-taint-nothing",
+        "walk-hands-over-entries-without-inbound",
+        "walk-entries-in-insertion-order",
+        "walk-fee-value-checked-in-the-constructor",
+        "walk-infinite-values-checked-first",
+        "walk-fee-valued-at-the-amount",
+        "walk-fee-only-spend-sells",
+        "walk-holder-stripped",
+        "order-inbound-after-moves",
+        "order-moves-ignore-chain-evidence",
+        "order-slices-take-wallet-hints",
+        "order-hints-may-close-a-cycle",
+        "order-reach-walks-everything",
+        "order-cycles-drop-moves",
+        "order-ready-not-resorted",
+        "order-hints-run-backwards",
+        "describe-generic-notes-name-the-pool",
+        "describe-global-pool-kept",
+        "describe-election-dropped",
+        "describe-legs-write-any-regime",
+        "describe-move-notes-drop-the-proof",
+        "reader-audit-anchor-is-the-row-id",
+        "reader-audit-drops-the-group",
+        "normalize-values-acquisitions-at-the-price",
+        "normalize-moves-send-no-fee",
+        "normalize-books-unpriced-move-fees",
+        "normalize-leaves-blocked-siblings-unflagged",
+        "normalize-books-privacy-hops",
+        "normalize-drops-reviewed-coinjoin-moves",
+        "compose-unit-cost-multiplies",
+        "compose-merges-holding-periods",
+        "compose-fees-realize-gains",
+        "compose-income-is-negated",
+        "compose-move-fees-are-disposals",
+        "compose-transfer-fee-wallet",
+        "compose-legs-ignore-earlier-assets",
+        "compose-holdings-keep-empty-balances",
+        "compose-holdings-use-lot-acquisition-values",
+        "compose-holdings-ignore-sold-share",
+        "compose-summary-keeps-fees-and-moves",
+        "compose-summary-in-engine-order",
+        "run-method-gate-without-computation",
+        "run-compute-failure-names-no-asset",
+        "run-gates-before-normalize",
+        "reader-fragment-time-as-stored",
+        "reader-drops-the-kennzahl",
+        "reader-legs-swap-wallets",
+        "reader-legs-exact-quantities",
+        "regimes-cutoff-inclusive",
+        "regimes-unread-time-is-neu",
+        "regimes-order-ignores-direction",
+        "regimes-order-ignores-time",
+        "regimes-held-rows-tracked",
+        "regimes-alt-fallback-disabled",
+        "regimes-alt-fallback-always",
+        "regimes-election-not-recorded",
+        "regimes-election-without-alt",
+        "regimes-availability-not-per-wallet",
+        "regimes-move-draws-alt-first",
+        "regimes-move-credits-no-destination",
+        "regimes-move-fee-from-last-regime",
+        "regimes-move-fee-regime-from-what-moved",
+        "regimes-move-applies-at-its-in-leg",
+        "normalize-austrian-events-without-regime",
+        "normalize-inbound-regime-ignores-the-cutoff",
+        "normalize-override-keeps-election",
+        "normalize-event-override-ignored",
+        "normalize-move-override-ignored",
+        "normalize-moves-without-flows",
+        "walk-move-fee-regime-dropped",
+        "walk-last-constructor-failure-wins",
+        "compose-categories-ignore-overrides",
+        "compose-taxability-off-clears-non-reportable",
+        "compose-none-override-kept",
+        "compose-fees-keep-their-category",
+        "compose-groups-ignore-categories",
+        "compose-classification-errors-ignored",
+        "run-swap-runner-results-dropped",
+        "manifest-default-inbound-is-income",
+        "builder-cutoff-reads-rp2s-parse",
+        "builder-default-holding-period",
+        "errors-builtin-value-error-is-rp2s",
+        "describe-swap-link-first",
+        "normalize-events-ignore-swap-links",
+        "swaplinks-every-policy-considered",
+        "swaplinks-in-leg-reason-ignored",
+        "swaplinks-reason-skips-the-anchor",
+        "swaplinks-reason-skips-the-pairs-transaction",
+        "swaplinks-gates-only",
+        "swaplinks-last-reason-wins",
+        "swaplinks-missing-event-not-blocked",
+        "swaplinks-unavailable-leg-reason",
+        "swaplinks-alt-swaps-linked",
+        "swaplinks-relink-appends",
+        "swaplinks-direct-payout-quarantines-both-legs",
+        "swaplinks-direct-payout-target-books",
+        "swaplinks-direct-payout-target-by-fallback-id",
+        "swaplinks-out-amount-with-fee",
+        "run-no-second-pass",
+        "run-second-pass-keeps-blocked-rows",
+        "run-swap-quarantines-dropped",
+        "carry-austrian-books-carried",
+        "carry-every-policy-carried",
+        "carry-every-asset-carried",
+        "carry-one-pass",
+        "carry-stops-after-a-pass",
+        "carry-never-settles",
+        "carry-first-pricing-unchanged",
+        "carry-blocks-reconsidered",
+        "carry-blocked-rows-stay-in",
+        "carry-direct-payout-target-kept",
+        "carry-reason-of-the-in-leg",
+        "carry-unavailable-reason-renamed",
+        "carry-basis-of-the-in-leg",
+        "carry-rate-ignores-the-amount",
+        "carry-rate-without-an-amount",
+        "carry-value-not-normalized",
+        "carry-in-leg-not-carried",
+        "carry-coarse-kept",
+        "carry-quarantines-the-out-leg-only",
+        "carry-rail-pair-by-its-rows",
+        "run-carry-pricing-unread",
+        "run-carry-blocks-unread",
+        "run-carried-rows-unreported",
+        "run-carry-quarantines-dropped",
+        "engine-country-default-holding-period",
+        "holding-period-boundary-exclusive",
+        "reader-carried-rows-ignored",
+        "reader-carried-pricing-method",
+        "LTE-typed-schema",
+        "LTE-typed-operation"
+      ],
+      "log": "baseline: 122 tests pass unmutated\nkilled   confirmed-conflict-spend-held (2 failing)\nkilled   wallet-pool-scope-allowed (1 failing)\nkilled   at-policy-drops-generic-lot-methods (3 failing)\nkilled   unscoped-review-keeps-txid-case (1 failing)\nkilled   unscoped-review-flags-nothing (2 failing)\nkilled   builder-drops-conflict-hold (1 failing)\nkilled   builder-skips-wallet-label-tokens (2 failing)\nkilled   builder-ignores-currency (1 failing)\nkilled   builder-allows-any-pool-scope (1 failing)\nkilled   builder-allows-crossed-move (1 failing)\nkilled   builder-accepts-negative-fee (2 failing)\nkilled   builder-accepts-negative-amount (4 failing)\nkilled   builder-accepts-shared-leg (1 failing)\nkilled   builder-accepts-unreviewed-privacy-pair (1 failing)\nkilled   builder-drops-coarse-flag (1 failing)\nkilled   builder-text-prefers-description (1 failing)\nkilled   builder-reorders-rows (1 failing)\nkilled   builder-anchors-to-row-ids (2 failing)\nkilled   reader-enriches-partner-leg (2 failing)\nkilled   reader-hold-without-external-id (1 failing)\nkilled   validate-stage-default-code (3 failing)\nkilled   method-gate-cause-not-apperror (2 failing)\nkilled   shadow-capabilities-miss-austrian-swaps (1 failing)\nkilled   shadow-capabilities-ignore-the-in-leg (2 failing)\nkilled   shadow-capabilities-ignore-the-out-leg (2 failing)\nkilled   request-reads-a-missing-hold-as-none (1 failing)\nkilled   empty-projection-builds-a-request (1 failing)\nkilled   normalize-ignores-holds (1 failing)\nkilled   normalize-moves-a-held-leg (1 failing)\nkilled   normalize-reviews-moves-priced-exactly (1 failing)\nkilled   normalize-reviews-moves-without-the-opt-in (1 failing)\nkilled   normalize-reviews-the-out-leg-of-an-in-priced-move (1 failing)\nkilled   normalize-partner-leg-is-the-reviewed-leg (2 failing)\nkilled   normalize-reviews-coarse-events-without-the-opt-in (1 failing)\nkilled   normalize-books-moves-of-a-blocked-group (2 failing)\nkilled   normalize-block-keeps-the-last-reason (1 failing)\nkilled   normalize-flags-named-transactions-again (1 failing)\nkilled   normalize-taints-from-quarantined-rows-only (1 failing)\nkilled   normalize-taints-from-untimed-rows (1 failing)\nkilled   walk-ungrouped-flags-its-own-transaction-twice (1 failing)\nkilled   walk-ungrouped-in-leg-paired-leg-is-a-bool (1 failing)\nkilled   walk-group-move-not-checked-again (1 failing)\nkilled   walk-group-recheck-flags-the-whole-group (1 failing)\nkilled   walk-group-not-checked-at-its-first-move (1 failing)\nkilled   walk-failed-group-books-later-moves (1 failing)\nkilled   walk-group-flags-in-legs-as-out-legs (1 failing)\nkilled   walk-group-names-a-transaction-twice (1 failing)\nkilled   walk-move-gate-ignores-the-account (1 failing)\nkilled   walk-moves-leave-the-destination-empty (1 failing)\nkilled   walk-move-fee-stays-priced (1 failing)\nkilled   walk-swap-out-faces-the-account-gate (1 failing)\nkilled   walk-sale-skips-the-priced-gate (1 failing)\nkilled   walk-taints-after-its-start-only (1 failing)\nkilled   walk-dispositions-leave-the-account (1 failing)\nkilled   walk-listed-kinds-read-as-income (1 failing)\nkilled   walk-unclassified-income-books (1 failing)\nkilled   walk-generic-books-hold-airdrops (1 failing)\nkilled   walk-airdrops-taint-generic-lots (1 failing)\nkilled   walk-gate-drops-taint-nothing (1 failing)\nkilled   walk-hands-over-entries-without-inbound (1 failing)\nkilled   walk-entries-in-insertion-order (1 failing)\nkilled   walk-fee-value-checked-in-the-constructor (1 failing)\nkilled   walk-infinite-values-checked-first (1 failing)\nkilled   walk-fee-valued-at-the-amount (1 failing)\nkilled   walk-fee-only-spend-sells (1 failing)\nkilled   walk-holder-stripped (1 failing)\nkilled   order-inbound-after-moves (1 failing)\nkilled   order-moves-ignore-chain-evidence (1 failing)\nkilled   order-slices-take-wallet-hints (1 failing)\nkilled   order-hints-may-close-a-cycle (1 failing)\nkilled   order-reach-walks-everything (1 failing)\nkilled   order-cycles-drop-moves (1 failing)\nkilled   order-ready-not-resorted (2 failing)\nkilled   order-hints-run-backwards (1 failing)\nkilled   describe-generic-notes-name-the-pool (1 failing)\nkilled   describe-global-pool-kept (1 failing)\nkilled   describe-election-dropped (1 failing)\nkilled   describe-legs-write-any-regime (1 failing)\nkilled   describe-move-notes-drop-the-proof (1 failing)\nkilled   reader-audit-anchor-is-the-row-id (1 failing)\nkilled   reader-audit-drops-the-group (1 failing)\nkilled   normalize-values-acquisitions-at-the-price (2 failing)\nkilled   normalize-moves-send-no-fee (2 failing)\nkilled   normalize-books-unpriced-move-fees (2 failing)\nkilled   normalize-leaves-blocked-siblings-unflagged (2 failing)\nkilled   normalize-books-privacy-hops (1 failing)\nkilled   normalize-drops-reviewed-coinjoin-moves (1 failing)\nkilled   compose-unit-cost-multiplies (2 failing)\nkilled   compose-merges-holding-periods (1 failing)\nkilled   compose-fees-realize-gains (2 failing)\nkilled   compose-income-is-negated (1 failing)\nkilled   compose-move-fees-are-disposals (2 failing)\nkilled   compose-transfer-fee-wallet (2 failing)\nkilled   compose-legs-ignore-earlier-assets (1 failing)\nkilled   compose-holdings-keep-empty-balances (1 failing)\nkilled   compose-holdings-use-lot-acquisition-values (1 failing)\nkilled   compose-holdings-ignore-sold-share (1 failing)\nkilled   compose-summary-keeps-fees-and-moves (1 failing)\nkilled   compose-summary-in-engine-order (1 failing)\nkilled   run-method-gate-without-computation (2 failing)\nkilled   run-compute-failure-names-no-asset (1 failing)\nkilled   run-gates-before-normalize (2 failing)\nkilled   reader-fragment-time-as-stored (2 failing)\nkilled   reader-drops-the-kennzahl (1 failing)\nkilled   reader-legs-swap-wallets (2 failing)\nkilled   reader-legs-exact-quantities (1 failing)\nkilled   regimes-cutoff-inclusive (1 failing)\nkilled   regimes-unread-time-is-neu (2 failing)\nkilled   regimes-order-ignores-direction (1 failing)\nkilled   regimes-order-ignores-time (1 failing)\nkilled   regimes-held-rows-tracked (2 failing)\nkilled   regimes-alt-fallback-disabled (1 failing)\nkilled   regimes-alt-fallback-always (1 failing)\nkilled   regimes-election-not-recorded (3 failing)\nkilled   regimes-election-without-alt (1 failing)\nkilled   regimes-availability-not-per-wallet (1 failing)\nkilled   regimes-move-draws-alt-first (1 failing)\nkilled   regimes-move-credits-no-destination (1 failing)\nkilled   regimes-move-fee-from-last-regime (1 failing)\nkilled   regimes-move-fee-regime-from-what-moved (1 failing)\nkilled   regimes-move-applies-at-its-in-leg (1 failing)\nkilled   normalize-austrian-events-without-regime (2 failing)\nkilled   normalize-inbound-regime-ignores-the-cutoff (2 failing)\nkilled   normalize-override-keeps-election (1 failing)\nkilled   normalize-event-override-ignored (2 failing)\nkilled   normalize-move-override-ignored (3 failing)\nkilled   normalize-moves-without-flows (3 failing)\nkilled   walk-move-fee-regime-dropped (2 failing)\nkilled   walk-last-constructor-failure-wins (1 failing)\nkilled   compose-categories-ignore-overrides (2 failing)\nkilled   compose-taxability-off-clears-non-reportable (1 failing)\nkilled   compose-none-override-kept (1 failing)\nkilled   compose-fees-keep-their-category (2 failing)\nkilled   compose-groups-ignore-categories (1 failing)\nkilled   compose-classification-errors-ignored (2 failing)\nkilled   run-swap-runner-results-dropped (1 failing)\nkilled   manifest-default-inbound-is-income (1 failing)\nkilled   builder-cutoff-reads-rp2s-parse (1 failing)\nkilled   builder-default-holding-period (4 failing)\nkilled   errors-builtin-value-error-is-rp2s (1 failing)\nkilled   describe-swap-link-first (2 failing)\nkilled   normalize-events-ignore-swap-links (2 failing)\nkilled   swaplinks-every-policy-considered (1 failing)\nkilled   swaplinks-in-leg-reason-ignored (1 failing)\nkilled   swaplinks-reason-skips-the-anchor (1 failing)\nkilled   swaplinks-reason-skips-the-pairs-transaction (1 failing)\nkilled   swaplinks-gates-only (2 failing)\nkilled   swaplinks-last-reason-wins (1 failing)\nkilled   swaplinks-missing-event-not-blocked (1 failing)\nkilled   swaplinks-unavailable-leg-reason (1 failing)\nkilled   swaplinks-alt-swaps-linked (2 failing)\nkilled   swaplinks-relink-appends (1 failing)\nkilled   swaplinks-direct-payout-quarantines-both-legs (2 failing)\nkilled   swaplinks-direct-payout-target-books (2 failing)\nkilled   swaplinks-direct-payout-target-by-fallback-id (1 failing)\nkilled   swaplinks-out-amount-with-fee (1 failing)\nkilled   run-no-second-pass (3 failing)\nkilled   run-second-pass-keeps-blocked-rows (3 failing)\nkilled   run-swap-quarantines-dropped (2 failing)\nkilled   carry-austrian-books-carried (2 failing)\nkilled   carry-every-policy-carried (1 failing)\nkilled   carry-every-asset-carried (1 failing)\nkilled   carry-one-pass (1 failing)\nkilled   carry-stops-after-a-pass (1 failing)\nkilled   carry-never-settles (1 failing)\nkilled   carry-first-pricing-unchanged (1 failing)\nkilled   carry-blocks-reconsidered (1 failing)\nkilled   carry-blocked-rows-stay-in (1 failing)\nkilled   carry-direct-payout-target-kept (2 failing)\nkilled   carry-reason-of-the-in-leg (1 failing)\nkilled   carry-unavailable-reason-renamed (1 failing)\nkilled   carry-basis-of-the-in-leg (1 failing)\nkilled   carry-rate-ignores-the-amount (1 failing)\nkilled   carry-rate-without-an-amount (1 failing)\nkilled   carry-value-not-normalized (1 failing)\nkilled   carry-in-leg-not-carried (1 failing)\nkilled   carry-coarse-kept (1 failing)\nkilled   carry-quarantines-the-out-leg-only (1 failing)\nkilled   carry-rail-pair-by-its-rows (1 failing)\nkilled   run-carry-pricing-unread (2 failing)\nkilled   run-carry-blocks-unread (2 failing)\nkilled   run-carried-rows-unreported (2 failing)\nkilled   run-carry-quarantines-dropped (2 failing)\nkilled   engine-country-default-holding-period (2 failing)\nkilled   holding-period-boundary-exclusive (2 failing)\nkilled   reader-carried-rows-ignored (1 failing)\nkilled   reader-carried-pricing-method (1 failing)\nkilled   LTE-typed-schema (1 failing)\nkilled   LTE-typed-operation (1 failing)\nall 189 mutations killed\n"
+    }
+  },
+  "catalog_applicability": {
+    "crates/journals/scripts/mutations.json": {
+      "entries": 124,
+      "sha256": "937d4660a5de0d59e11aa91da3e58ee7fd4b01ad6eedfd1271fa90023db2bcd0",
+      "problems": []
+    },
+    "crates/journals/scripts/loader_mutations.json": {
+      "entries": 136,
+      "sha256": "046c8a3d5aaba4b9ed2cf920b89a064c668dd0dfbdcaec23db43cc9b0fbb3740",
+      "problems": []
+    },
+    "crates/custody/scripts/mutations.json": {
+      "entries": 2327,
+      "sha256": "6ffe72695584729df7014105c88bd9257cf43c8225916481fd04f06533f943ac",
+      "problems": []
+    },
+    "tax-engine/scripts/mutations.json": {
+      "entries": 189,
+      "sha256": "4953cf86da42015547ba28ada699f6711b5dc17c85acd0ea45231ee18bc331d8",
+      "problems": []
+    }
+  },
+  "logs": {
+    "python-parity": "........................................................................ [  6%]\n........................................................................ [ 12%]\n........................................................................ [ 18%]\n........................................................................ [ 25%]\n........................................................................ [ 31%]\n........................................................................ [ 37%]\n........................................................................ [ 44%]\n........................................................................ [ 50%]\n........................................................................ [ 56%]\n........................................................................ [ 62%]\n........................................................................ [ 69%]\n........................................................................ [ 75%]\n........................................................................ [ 81%]\n........................................................................ [ 88%]\n........................................................................ [ 94%]\n................................................................. [100%]\n=============================== warnings summary ===============================\ntests/test_tax_ledger_goldens.py::test_the_live_oracle_gives_the_stored_outcome[at-ledger-moving_average_at]\n  /home/tg/.t3/worktrees/kassiber/t3-7247190b/.venv/lib/python3.11/site-packages/ezodf/tableutils.py:31: DeprecationWarning: invalid escape sequence '\\d'\n    CELL_ADDRESS = re.compile('^([A-Z]+)(\\d+)$')\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1145 passed, 1 warning, 14 subtests passed in 589.97s (0:09:49)\n",
+    "campaign": "evidence 500 {'books': 500, 'request': 386, 'permutations': 58, 'empty': 153, 'refusal': 19}\nevidence 1000 {'books': 1000, 'request': 729, 'permutations': 58, 'empty': 293, 'refusal': 36}\nevidence 1500 {'books': 1500, 'request': 1074, 'permutations': 58, 'empty': 431, 'refusal': 53}\nevidence 2000 {'books': 2000, 'request': 1419, 'permutations': 58, 'empty': 568, 'refusal': 71}\ncomponents 500 {'books': 500, 'empty': 741, 'permutations': 312, 'request': 71}\ncomponents 1000 {'books': 1000, 'empty': 1198, 'permutations': 312, 'request': 114}\ncomponents 1500 {'books': 1500, 'empty': 1655, 'permutations': 312, 'request': 157}\ncomponents 2000 {'books': 2000, 'empty': 2107, 'permutations': 312, 'request': 205}\nsamourai 500 {'books': 500, 'request': 451, 'permutations': 68, 'empty': 117}\nsamourai 1000 {'books': 1000, 'request': 846, 'permutations': 68, 'empty': 222}\nsamourai 1500 {'books': 1500, 'request': 1246, 'permutations': 68, 'empty': 322}\nsamourai 2000 {'books': 2000, 'request': 1642, 'permutations': 68, 'empty': 426}\nrecorded 500 {'books': 500, 'request': 490, 'permutations': 92, 'empty': 102}\nrecorded 1000 {'books': 1000, 'request': 903, 'permutations': 92, 'empty': 189}\nrecorded 1500 {'books': 1500, 'request': 1315, 'permutations': 92, 'empty': 277}\nrecorded 2000 {'books': 2000, 'request': 1731, 'permutations': 92, 'empty': 361}\nfanout 500 {'books': 500, 'request': 446, 'permutations': 94, 'upstream_refusal': 52, 'empty': 96}\nfanout 1000 {'books': 1000, 'request': 818, 'permutations': 94, 'upstream_refusal': 92, 'empty': 184}\nfanout 1500 {'books': 1500, 'request': 1186, 'permutations': 94, 'upstream_refusal': 136, 'empty': 272}\nfanout 2000 {'books': 2000, 'request': 1564, 'permutations': 94, 'upstream_refusal': 178, 'empty': 352}\ngraph 500 {'books': 500, 'request': 516, 'permutations': 16}\ngraph 1000 {'books': 1000, 'request': 1016, 'permutations': 16}\ngraph 1500 {'books': 1500, 'request': 1516, 'permutations': 16}\ngraph 2000 {'books': 2000, 'request': 2016, 'permutations': 16}\npipeline 500 {'books': 500, 'request': 481, 'permutations': 24, 'empty': 43}\npipeline 1000 {'books': 1000, 'request': 939, 'permutations': 24, 'empty': 85}\npipeline 1500 {'books': 1500, 'request': 1397, 'permutations': 24, 'empty': 127}\npipeline 2000 {'books': 2000, 'request': 1856, 'permutations': 24, 'empty': 168}\nsafety 500 {'books': 500, 'empty': 356, 'permutations': 78, 'request': 222}\nsafety 1000 {'books': 1000, 'empty': 665, 'permutations': 78, 'request': 413}\nsafety 1500 {'books': 1500, 'empty': 975, 'permutations': 78, 'request': 603}\nsafety 2000 {'books': 2000, 'empty': 1281, 'permutations': 78, 'request': 797}\nchannels 500 {'books': 500, 'request': 442, 'permutations': 64, 'empty': 122}\nchannels 1000 {'books': 1000, 'request': 833, 'permutations': 64, 'empty': 231}\nchannels 1500 {'books': 1500, 'request': 1223, 'permutations': 64, 'empty': 341}\nchannels 2000 {'books': 2000, 'request': 1613, 'permutations': 64, 'empty': 451}\nnative 500 {'books': 500, 'request': 489, 'permutations': 110, 'empty': 99, 'refusal': 22}\nnative 1000 {'books': 1000, 'request': 890, 'permutations': 110, 'empty': 180, 'refusal': 40}\nnative 1500 {'books': 1500, 'request': 1288, 'permutations': 110, 'empty': 264, 'refusal': 58}\nnative 2000 {'books': 2000, 'request': 1689, 'permutations': 110, 'empty': 345, 'refusal': 76}\nreconciliation 500 {'books': 500, 'request': 528, 'permutations': 50, 'empty': 22}\nreconciliation 1000 {'books': 1000, 'request': 1008, 'permutations': 50, 'empty': 42}\nreconciliation 1500 {'books': 1500, 'request': 1488, 'permutations': 50, 'empty': 62}\nreconciliation 2000 {'books': 2000, 'request': 1968, 'permutations': 50, 'empty': 82}\ngaps 500 {'books': 500, 'empty': 493, 'permutations': 64, 'request': 71}\ngaps 1000 {'books': 1000, 'empty': 931, 'permutations': 64, 'request': 133}\ngaps 1500 {'books': 1500, 'empty': 1368, 'permutations': 64, 'request': 196}\ngaps 2000 {'books': 2000, 'empty': 1807, 'permutations': 64, 'request': 257}\nreplay (159, 159, 0, [])\n",
+    "clippy": "    Checking cfg-if v1.0.5\n    Checking typenum v1.20.1\n    Checking memchr v2.8.3\n    Checking libc v0.2.189\n    Checking subtle v2.6.1\n    Checking serde_core v1.0.228\n    Checking zeroize v1.9.1\n    Checking num-traits v0.2.19\n    Checking zmij v1.0.23\n    Checking itoa v1.0.18\n    Checking cpufeatures v0.2.17\n    Checking arrayvec v0.7.8\n    Checking bitcoin-io v0.1.101\n    Checking zerocopy v0.8.63\n    Checking smallvec v1.16.4\n    Checking hex-conservative v0.2.3\n    Checking const-oid v0.10.2\n    Checking bitflags v2.13.2\n    Checking foldhash v0.2.0\n    Checking cpufeatures v0.3.1\n    Checking num-integer v0.1.47\n    Checking secp256k1-sys v0.10.1\n    Checking tinystr v0.8.5\n    Checking hashbrown v0.17.1\n    Checking bech32 v0.11.1\n    Checking unic-langid-impl v0.9.6\n    Checking num-bigint v0.4.8\n    Checking aho-corasick v1.1.5\n    Checking opaque-debug v0.3.1\n    Checking const-oid v0.9.6\n    Checking generic-array v0.14.7\n    Checking hybrid-array v0.4.15\n    Checking regex-syntax v0.8.11\n    Checking getrandom v0.2.17\n    Checking block-buffer v0.10.4\n    Checking rand_core v0.6.4\n    Checking crypto-common v0.2.2\n    Checking block-buffer v0.12.1\n    Checking crypto-common v0.1.7\n    Checking inout v0.1.4\n    Checking kassiber-pydecimal v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/pydecimal)\n    Checking digest v0.10.7\n    Checking serde v1.0.228\n    Checking serde_json v1.0.151\n    Checking cipher v0.4.4\n    Checking sha2 v0.10.9\n    Checking digest v0.11.3\n    Checking kassiber-pyjson v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/pyjson)\n    Checking hmac v0.12.1\n    Checking sha2 v0.11.1\n    Checking universal-hash v0.5.1\n    Checking ff v0.13.1\n    Checking getrandom v0.4.3\n    Checking der v0.7.10\n    Checking unic-langid v0.9.6\n    Checking bitcoin_hashes v0.14.101\n    Checking once_cell v1.21.4\n    Checking linux-raw-sys v0.12.1\n    Checking futures-core v0.3.34\n    Checking bit-vec v0.8.0\n    Checking base16ct v0.2.0\n    Checking regex-automata v0.4.18\n    Checking futures-sink v0.3.34\n    Checking rustix v1.1.6\n    Checking bit-set v0.8.0\n    Checking futures-channel v0.3.34\n    Checking kassiber-tax-core v0.2.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/tax-engine/core)\n    Checking sec1 v0.7.3\n    Checking bitcoin-units v0.1.101\n    Checking hex_lit v0.1.1\n    Checking group v0.13.0\n    Checking hkdf v0.12.4\n    Checking crypto-bigint v0.5.5\n    Checking kassiber-custody v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/custody)\n    Checking base58ck v0.1.101\n    Checking rustls-pki-types v1.15.1\n    Checking futures-io v0.3.34\n    Checking rustc-hash v2.1.3\n    Checking log v0.4.34\n    Checking futures-task v0.3.34\n    Checking slab v0.4.12\n    Checking pin-project-lite v0.2.17\n    Checking base64 v0.21.7\n    Checking futures-util v0.3.34\n    Checking type-map v0.5.1\n    Checking nix v0.30.1\n    Checking ppv-lite86 v0.2.21\n    Checking elliptic-curve v0.13.8\n    Checking openssl-sys v0.9.117\n    Checking polyval v0.6.2\n    Checking rand_chacha v0.3.1\n    Checking kassiber-pytext v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/pytext)\n    Checking rand v0.8.8\n    Checking fancy-regex v0.20.0\n    Checking aead v0.5.2\n    Checking thiserror v2.0.21\n    Checking simd-adler32 v0.3.10\n    Checking untrusted v0.9.0\n    Checking base64 v0.22.1\n    Checking same-file v1.0.6\n    Checking ring v0.17.14\n    Checking kassiber-paths v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/paths)\n    Checking walkdir v2.5.0\n    Checking fluent-syntax v0.12.0\n    Checking secp256k1 v0.29.1\n    Checking libsqlite3-sys v0.38.2\n    Checking ghash v0.5.1\n    Checking primeorder v0.13.6\n    Checking intl-memoizer v0.5.3\n    Checking crc32fast v1.5.3\n    Checking fluent-langneg v0.13.1\n    Checking intl_pluralrules v7.0.2\n    Checking poly1305 v0.8.0\n    Checking ctr v0.9.2\n    Checking bitcoin v0.32.102\n    Checking kassiber-envelope v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/envelope)\n    Checking aes v0.8.4\n    Checking chacha20 v0.9.1\n    Checking hashlink v0.12.2\n    Checking self_cell v1.3.0\n    Checking adler2 v2.0.1\n    Checking utf8_iter v1.0.4\n    Checking idna_adapter v1.0.0\n    Checking scopeguard v1.2.0\n    Checking fallible-iterator v0.3.0\n    Checking fastrand v2.5.0\n    Checking percent-encoding v2.3.2\n    Checking fallible-streaming-iterator v0.1.9\n    Checking futures-executor v0.3.34\n    Checking form_urlencoded v1.2.2\n    Checking lock_api v0.4.14\n    Checking tempfile v3.27.0\n    Checking rustls-webpki v0.103.16\n    Checking aes-gcm v0.10.3\n    Checking futures v0.3.34\n    Checking rusqlite v0.40.1\n    Checking idna v1.1.0\n    Checking miniz_oxide v0.8.9\n    Checking chacha20poly1305 v0.10.1\n    Checking fluent-bundle v0.16.0\n    Checking p256 v0.13.2\n    Checking kassiber-ownership v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/ownership)\n    Checking rust-embed-utils v8.13.0\n    Checking parking_lot_core v0.9.12\n    Checking keccak v0.1.6\n    Checking zlib-rs v0.6.8\n    Checking openssl-probe v0.2.2\n    Checking rust-embed v8.13.0\n    Checking rustls-native-certs v0.8.5\n    Checking sha3 v0.10.9\n    Checking rustls v0.23.46\n    Checking parking_lot v0.12.5\n    Checking curve25519-dalek v4.1.3\n    Checking fluent v0.17.0\n    Checking hpke v0.12.0\n    Checking url v2.5.8\n    Checking kassiber-store v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/store)\n    Checking secp256k1-zkp-sys v0.10.1\n    Checking httparse v1.10.1\n    Checking cookie-factory v0.3.3\n    Checking bitcoin-private v0.1.0\n    Checking webpki-roots v1.0.11\n    Checking arc-swap v1.9.3\n    Checking pbkdf2 v0.12.2\n    Checking salsa20 v0.10.2\n    Checking kem v0.3.0-pre.0\n    Checking flate2 v1.1.9\n    Checking hybrid-array v0.2.3\n    Checking thiserror v1.0.69\n    Checking nom v8.0.0\n    Checking secrecy v0.10.3\n    Checking io_tee v0.1.1\n    Checking equivalent v1.0.3\n   Compiling kassiber-diagnostics v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/diagnostics)\n    Checking bumpalo v3.20.3\n    Checking zopfli v0.8.4\n    Checking indexmap v2.14.2\n    Checking ml-kem v0.2.3\n    Checking pin-project v1.1.13\n    Checking i18n-embed v0.16.0\n    Checking scrypt v0.11.0\n    Checking x25519-dalek v2.0.1\n    Checking secp256k1-zkp v0.11.2\n    Checking xattr v1.7.0\n    Checking filetime v0.2.29\n    Checking typed-path v0.13.0\n    Checking lazy_static v1.5.1\n    Checking tar v0.4.46\n    Checking uuid v1.29.0\n    Checking regex v1.13.1\n    Checking kassiber-net v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/net)\n    Checking miniscript v12.3.8\n    Checking bdk_core v0.6.3\n    Checking elements v0.25.3\n    Checking kassiber-chain v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/chain)\n    Checking kassiber-rates v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/rates)\n    Checking zip v9.1.3\n    Checking age-core v0.12.0\n    Checking age v0.12.1\n    Checking rust_xlsxwriter v0.102.0\n    Checking kassiber-setup v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/setup)\n    Checking bdk_chain v0.23.3\n    Checking elements-miniscript v0.4.0\n    Checking bdk_wallet v3.0.0\n    Checking kassiber-xlsx v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/xlsx)\n    Checking kassiber-wallets v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/wallets)\n    Checking kassiber-reports v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/reports)\n    Checking kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/journals)\n    Finished `dev` profile [unoptimized] target(s) in 19.52s\n",
+    "examples": "   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/journals)\n    Finished `release` profile [optimized] target(s) in 3.56s\n",
+    "classification": "wrote tests/rust_port/dispositions.json\n",
+    "preflight": "> /home/tg/.t3/worktrees/kassiber/t3-7247190b/.venv/bin/python -m pytest /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/rust_port/test_contracts.py /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/rust_port/test_inventory.py /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/test_ci_shards.py /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/test_connection_catalog_drift.py /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/test_dependency_drift.py /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/test_report_contract_drift.py /home/tg/.t3/worktrees/kassiber/t3-7247190b/tests/test_workflow_pins.py\n============================= test session starts ==============================\nplatform linux -- Python 3.11.17, pytest-9.1.1, pluggy-1.6.0\nrootdir: /home/tg/.t3/worktrees/kassiber/t3-7247190b\nconfigfile: pyproject.toml\nplugins: xdist-3.8.0\ncollected 57 items\n\ntests/rust_port/test_contracts.py ..                                     [  3%]\ntests/rust_port/test_inventory.py ........                               [ 17%]\ntests/test_ci_shards.py ..................                               [ 49%]\ntests/test_connection_catalog_drift.py ..................                [ 80%]\ntests/test_dependency_drift.py ....                                      [ 87%]\ntests/test_report_contract_drift.py .                                    [ 89%]\ntests/test_workflow_pins.py ......                                       [100%]\n\n======================== 57 passed in 79.02s (0:01:19) =========================\n",
+    "format": "",
+    "rust-verified": "    Finished `test` profile [unoptimized] target(s) in 0.17s\n     Running unittests src/lib.rs (target/cargo/debug/deps/kassiber_custody-6afff76e9dd530e9)\n\nrunning 194 tests\ntest components::tests::component_exception_catch_families ... ok\ntest components::tests::component_header_sort_retains_python_type_errors ... ok\ntest components::tests::component_integer_refusal_messages_match_python ... ok\ntest components::tests::component_raw_integer_order_is_exact ... ok\ntest components::time::tests::cpython_component_integers ... ok\ntest components::time::tests::cpython_component_times ... ok\ntest components::time::tests::cpython_component_uppercase ... ok\ntest confirmation::tests::conflict_scope_falls_back_only_on_unambiguous_identity ... ok\ntest evidence::semantic_tests::cpython_event_semantics ... ok\ntest finalized_projection::money::tests::finalized_price_errors_keep_field_code_and_message ... ok\ntest gaps::search::amount_tests::gap_amount_paths_agree_at_the_i64_boundary ... ok\ntest gaps::search::amount_tests::gap_amount_paths_agree_on_fixture_books ... ok\ntest gaps::search::amount_tests::gap_beam_unique_and_duplicate_id_python_hashes ... ok\ntest gaps::tests::gap_compute_retains_limit_and_admission_precedence ... ok\ntest gaps::tests::gaps_ignored_ids_vectors ... ok\ntest gaps::tests::gaps_operation_vectors ... ok\ntest gates::network::inventory_tests::typed_network_inventory_admission ... ok\ntest gates::network::tests::typed_network_evidence_matches_historical_semantics ... ok\ntest gates::network::tests::typed_network_payload_arrays_are_not_object_facts ... ok\ntest gates::tests::cpython_network_evidence ... ok\ntest graph::semantic_tests::cpython_graph_indexes ... ok\ntest graph::semantic_tests::cpython_onchain_scopes ... ok\ntest graph::semantic_tests::graph_arithmetic_fees ... ok\ntest graph::semantic_tests::graph_arithmetic_native ... ok\ntest graph::semantic_tests::graph_index_precedence ... ok\ntest graph::semantic_tests::graph_mapping_admission ... ok\ntest graph::semantic_tests::graph_mapping_nonfinite ... ok\ntest graph::semantic_tests::graph_mapping_values ... ok\ntest graph::semantic_tests::graph_merge_conflicts ... ok\ntest graph::semantic_tests::graph_profile_merge ... ok\ntest graph::semantic_tests::graph_scope_recovery ... ok\ntest interpretation::channels::tests::channel_lifecycle_helper_vectors ... ok\ntest interpretation::chronology::tests::reconciliation_chronology_vectors ... ok\ntest interpretation::consolidation::tests::consolidation_collaborative_vectors ... ok\ntest interpretation::consolidation::tests::consolidation_production_vectors ... ok\ntest interpretation::fanout::tests::fanout_boundary_bad_decimal ... ok\ntest interpretation::fanout::tests::fanout_boundary_bad_fee ... ok\ntest interpretation::fanout::tests::fanout_boundary_bad_source ... ok\ntest interpretation::fanout::tests::fanout_boundary_bad_target ... ok\ntest interpretation::fanout::tests::fanout_boundary_bad_type ... ok\ntest interpretation::fanout::tests::fanout_boundary_empty_exact_rate ... ok\ntest interpretation::fanout::tests::fanout_boundary_empty_rate ... ok\ntest interpretation::fanout::tests::fanout_boundary_empty_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_false_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_fee_string ... ok\ntest interpretation::fanout::tests::fanout_boundary_float_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_handled_other_source ... ok\ntest interpretation::fanout::tests::fanout_boundary_handled_source ... ok\ntest interpretation::fanout::tests::fanout_boundary_handled_target ... ok\ntest interpretation::fanout::tests::fanout_boundary_huge_integer ... ok\ntest interpretation::fanout::tests::fanout_boundary_long_nan_zero_prefix ... ok\ntest interpretation::fanout::tests::fanout_boundary_nan_payload_limit ... ok\ntest interpretation::fanout::tests::fanout_boundary_nan_payload_overflow ... ok\ntest interpretation::fanout::tests::fanout_boundary_negative_other_source ... ok\ntest interpretation::fanout::tests::fanout_boundary_negative_target ... ok\ntest interpretation::fanout::tests::fanout_boundary_negative_zero_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_nonstring_ids ... ok\ntest interpretation::fanout::tests::fanout_boundary_numeric_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_overflow_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_positive_nan_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_single_destination ... ok\ntest interpretation::fanout::tests::fanout_boundary_snan_value ... ok\ntest interpretation::fanout::tests::fanout_boundary_source_string ... ok\ntest interpretation::fanout::tests::fanout_boundary_source_unicode ... ok\ntest interpretation::fanout::tests::fanout_boundary_sum_above_i64 ... ok\ntest interpretation::fanout::tests::fanout_boundary_target_string ... ok\ntest interpretation::fanout::tests::fanout_boundary_unicode_wallet_ids ... ok\ntest interpretation::fanout::tests::fanout_boundary_zero_other_source ... ok\ntest interpretation::fanout::tests::fanout_boundary_zero_target ... ok\ntest interpretation::fifo::tests::reconciliation_fifo_vectors ... ok\ntest interpretation::holds::tests::graphless_confirmation_facts_preserve_full_decoder ... ok\ntest interpretation::holds::tests::held_pair_filter_vectors ... ok\ntest interpretation::holds::tests::raw_observation_detector_vectors ... ok\ntest interpretation::holds::tests::raw_observation_hold_vectors ... ok\ntest interpretation::holds::tests::raw_observation_scope_vectors ... ok\ntest interpretation::htlc::tests::native_htlc_helper_vectors ... ok\ntest interpretation::matcher::tests::native_matcher_helper_vectors ... ok\ntest interpretation::native::tests::native_production_helper_vectors ... ok\ntest interpretation::ownership::tests::ownership_helper_vectors ... ok\ntest interpretation::ownership::tests::ownership_production_vectors ... ok\ntest interpretation::pairs::tests::pair_allowed_residual ... ok\ntest interpretation::pairs::tests::pair_audit_bad_amount ... ok\ntest interpretation::pairs::tests::pair_audit_bad_fee ... ok\ntest interpretation::pairs::tests::pair_audit_null_fee ... ok\ntest interpretation::pairs::tests::pair_audit_raw_huge ... ok\ntest interpretation::pairs::tests::pair_audit_raw_strings ... ok\ntest interpretation::pairs::tests::pair_audit_skipped_bad_amount ... ok\ntest interpretation::pairs::tests::pair_audit_virtual_raw ... ok\ntest interpretation::pairs::tests::pair_bad_timestamp ... ok\ntest interpretation::pairs::tests::pair_chronology ... ok\ntest interpretation::pairs::tests::pair_cross_rail ... ok\ntest interpretation::pairs::tests::pair_cross_rail_unreviewed ... ok\ntest interpretation::pairs::tests::pair_empty_anchor ... ok\ntest interpretation::pairs::tests::pair_exact_msat ... ok\ntest interpretation::pairs::tests::pair_excluded_source ... ok\ntest interpretation::pairs::tests::pair_excluded_target ... ok\ntest interpretation::pairs::tests::pair_explicit_fee ... ok\ntest interpretation::pairs::tests::pair_fanout ... ok\ntest interpretation::pairs::tests::pair_fanout_amount ... ok\ntest interpretation::pairs::tests::pair_fanout_bad_amount ... ok\ntest interpretation::pairs::tests::pair_fanout_conversion_order ... ok\ntest interpretation::pairs::tests::pair_fanout_duplicate_target ... ok\ntest interpretation::pairs::tests::pair_fanout_duplicate_wallet ... ok\ntest interpretation::pairs::tests::pair_fanout_forged ... ok\ntest interpretation::pairs::tests::pair_fanout_group_admission_order ... ok\ntest interpretation::pairs::tests::pair_fanout_nonconserving ... ok\ntest interpretation::pairs::tests::pair_fanout_raw_string ... ok\ntest interpretation::pairs::tests::pair_fanout_target_admission_order ... ok\ntest interpretation::pairs::tests::pair_fanout_wallet_admission_order ... ok\ntest interpretation::pairs::tests::pair_fee_floor_boundary ... ok\ntest interpretation::pairs::tests::pair_fee_percent_above ... ok\ntest interpretation::pairs::tests::pair_fee_percent_boundary ... ok\ntest interpretation::pairs::tests::pair_forged_label ... ok\ntest interpretation::pairs::tests::pair_forged_native_transition ... ok\ntest interpretation::pairs::tests::pair_implausible_fee ... ok\ntest interpretation::pairs::tests::pair_implicit_fee ... ok\ntest interpretation::pairs::tests::pair_implicit_source_order ... ok\ntest interpretation::pairs::tests::pair_metadata ... ok\ntest interpretation::pairs::tests::pair_network_mismatch ... ok\ntest interpretation::pairs::tests::pair_observed_target ... ok\ntest interpretation::pairs::tests::pair_ordinary ... ok\ntest interpretation::pairs::tests::pair_pair_order ... ok\ntest interpretation::pairs::tests::pair_proof_amount ... ok\ntest interpretation::pairs::tests::pair_proof_confidence ... ok\ntest interpretation::pairs::tests::pair_proof_conflict ... ok\ntest interpretation::pairs::tests::pair_proof_exact ... ok\ntest interpretation::pairs::tests::pair_proof_float_amount ... ok\ntest interpretation::pairs::tests::pair_proof_kind ... ok\ntest interpretation::pairs::tests::pair_proof_method ... ok\ntest interpretation::pairs::tests::pair_proof_policy ... ok\ntest interpretation::pairs::tests::pair_proof_refund ... ok\ntest interpretation::pairs::tests::pair_proof_source_hash ... ok\ntest interpretation::pairs::tests::pair_proof_string_amount ... ok\ntest interpretation::pairs::tests::pair_proof_target_hash ... ok\ntest interpretation::pairs::tests::pair_request_fallback ... ok\ntest interpretation::pairs::tests::pair_request_false ... ok\ntest interpretation::pairs::tests::pair_request_float ... ok\ntest interpretation::pairs::tests::pair_request_huge ... ok\ntest interpretation::pairs::tests::pair_request_huge_negative ... ok\ntest interpretation::pairs::tests::pair_request_invalid ... ok\ntest interpretation::pairs::tests::pair_request_negative ... ok\ntest interpretation::pairs::tests::pair_request_precedence ... ok\ntest interpretation::pairs::tests::pair_request_type_error ... ok\ntest interpretation::pairs::tests::pair_request_unicode ... ok\ntest interpretation::pairs::tests::pair_request_zero ... ok\ntest interpretation::pairs::tests::pair_rowless ... ok\ntest interpretation::pairs::tests::pair_rowless_alias ... ok\ntest interpretation::pairs::tests::pair_rowless_reserved ... ok\ntest interpretation::pairs::tests::pair_rowless_target_alias ... ok\ntest interpretation::pairs::tests::pair_rowless_untrusted ... ok\ntest interpretation::pairs::tests::pair_same_native_skew ... ok\ntest interpretation::pairs::tests::pair_skew_boundary ... ok\ntest interpretation::pairs::tests::pair_source_cursor ... ok\ntest interpretation::pairs::tests::pair_source_fallback ... ok\ntest interpretation::pairs::tests::pair_target_cursor ... ok\ntest interpretation::pairs::tests::pair_time_overflow ... ok\ntest interpretation::pairs::tests::pair_unlike_exposure ... ok\ntest interpretation::pairs::tests::pair_virtual_channel_excluded ... ok\ntest interpretation::pairs::tests::pair_virtual_channel_source ... ok\ntest interpretation::pairs::tests::pair_wrong_direction ... ok\ntest interpretation::pipeline::tests::pipeline_helper_vectors ... ok\ntest interpretation::pipeline::tests::pipeline_production_vectors ... ok\ntest interpretation::privacy::tests::privacy_evidence_vectors ... ok\ntest interpretation::privacy::tests::privacy_resolution_vectors ... ok\ntest interpretation::reconciliation::tests::reconciliation_compilation_vectors ... ok\ntest interpretation::reconciliation::tests::reconciliation_helper_vectors ... ok\ntest interpretation::recorded::tests::recorded_cpython_transfer_predicates ... ok\ntest interpretation::reviewed::tests::reconciliation_reviewed_vectors ... ok\ntest interpretation::stage_tests::interpretation_full_vectors ... ok\ntest interpretation::stage_tests::interpretation_operation_vectors ... ok\ntest interpretation::stage_tests::interpretation_wrapper_vectors ... ok\ntest ledger_request::tests::fusion_builder_admission_order ... ok\ntest ledger_request::tests::fusion_builder_configuration ... ok\ntest ledger_request::tests::fusion_builder_empty ... ok\ntest ledger_request::tests::fusion_builder_field_choice ... ok\ntest ledger_request::tests::fusion_builder_pair_invariants ... ok\ntest ledger_request::tests::fusion_graphless_rows_keep_physical_confirmation_scope ... ok\ntest ledger_request::tests::fusion_graphless_rows_match_confirmation_detectors ... ok\ntest ledger_request::tests::fusion_request_wire_order ... ok\ntest liquid::tests::liquid_flags ... ok\ntest liquid::tests::liquid_hex ... ok\ntest liquid::tests::liquid_issuance ... ok\ntest liquid::tests::liquid_prefixes ... ok\ntest liquid::tests::liquid_seeded ... ok\ntest liquid::tests::liquid_truncation ... ok\ntest liquid::tests::liquid_valid ... ok\ntest liquid::tests::liquid_varints ... ok\ntest liquid::tests::liquid_witness ... ok\ntest quantity::arbitration::tests::quantity_claim_constructor_vectors ... ok\ntest quantity::native::tests::quantity_native_borrowed_event_order ... ok\ntest quantity::runtime::tests::quantity_unused_alias_validation ... ok\ntest snapshot::record::tests::shared_record_preserves_map_semantics ... ok\ntest snapshot::tests::shared_snapshot_config_admission_checks_every_population ... ok\ntest snapshot::tests::shared_snapshot_keeps_exact_msat_admission ... ok\n\ntest result: ok. 194 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.08s\n\n     Running tests/component_cases.rs (target/cargo/debug/deps/component_cases-d4439d310e134e72)\n\nrunning 181 tests\ntest components_allocation_beyond_i128 ... ok\ntest components_allocation_count ... ok\ntest components_allocation_invalid ... ok\ntest components_allocation_quantity ... ok\ntest components_allocation_required ... ok\ntest components_allocation_sink_coverage ... ok\ntest components_allocation_source_coverage ... ok\ntest components_anchor_asset ... ok\ntest components_anchor_chain ... ok\ntest components_anchor_coverage ... ok\ntest components_anchor_destination_direction ... ok\ntest components_anchor_excluded ... ok\ntest components_anchor_identity ... ok\ntest components_anchor_loss_direction ... ok\ntest components_anchor_missing ... ok\ntest components_anchor_network ... ok\ntest components_anchor_partial ... ok\ntest components_anchor_partial_excess ... ok\ntest components_anchor_partial_zero ... ok\ntest components_anchor_rail ... ok\ntest components_anchor_retracted ... ok\ntest components_anchor_row_time_invalid ... ok\ntest components_anchor_source_direction ... ok\ntest components_anchor_time_invalid ... ok\ntest components_anchor_time_mismatch ... ok\ntest components_anchor_time_warning ... ok\ntest components_anchor_wallet ... ok\ntest components_asset_hash_upper ... ok\ntest components_asset_l_btc_alias ... ok\ntest components_asset_upper_semantics ... ok\ntest components_authored_source_default ... ok\ntest components_authoritative_chronology ... ok\ntest components_balanced ... ok\ntest components_children_order ... ok\ntest components_chronology ... ok\ntest components_chronology_after_boundary ... ok\ntest components_commitment_count ... ok\ntest components_commitment_hash ... ok\ntest components_commitment_header ... ok\ntest components_commitment_missing_ignores_ordinal ... ok\ntest components_commitment_no_anchors ... ok\ntest components_commitment_ordinals ... ok\ntest components_commitment_rejected ... ok\ntest components_commitment_volatile ... ok\ntest components_commitment_zero ... ok\ntest components_component_order ... ok\ntest components_content_missing ... ok\ntest components_conversion ... ok\ntest components_conversion_ambiguous ... ok\ntest components_conversion_fee_quantity ... ok\ntest components_conversion_fee_value ... ok\ntest components_conversion_inferred ... ok\ntest components_conversion_inferred_chronology ... ok\ntest components_conversion_missing_value ... ok\ntest components_conversion_no_values ... ok\ntest components_conversion_policy ... ok\ntest components_conversion_retained ... ok\ntest components_conversion_review ... ok\ntest components_conversion_topology ... ok\ntest components_conversion_unbalanced ... ok\ntest components_core_ln_kind_scope ... ok\ntest components_cross_location_continuity ... ok\ntest components_cross_scope_laundering ... ok\ntest components_fee_asset ... ok\ntest components_fee_null_domain ... ok\ntest components_fee_orphan ... ok\ntest components_fee_scope ... ok\ntest components_fee_wallet ... ok\ntest components_generic_elements_domain ... ok\ntest components_hash_amount ... ok\ntest components_hash_asset ... ok\ntest components_hash_direction ... ok\ntest components_hash_event ... ok\ntest components_hash_fee ... ok\ntest components_hash_included ... ok\ntest components_hash_kind ... ok\ntest components_hash_payment ... ok\ntest components_hash_payment_source ... ok\ntest components_hash_refund_txid ... ok\ntest components_hash_refund_vout ... ok\ntest components_hash_wallet ... ok\ntest components_inactive_header ... ok\ntest components_integer_semantics ... ok\ntest components_invalid_time ... ok\ntest components_leg_count ... ok\ntest components_lightning_chain_default ... ok\ntest components_lightning_kind_scope ... ok\ntest components_lightning_receive_cln ... ok\ntest components_lightning_receive_core_ln ... ok\ntest components_lightning_receive_lnd ... ok\ntest components_lightning_receive_nwc ... ok\ntest components_lineage_conflict ... ok\ntest components_lineage_other_profile ... ok\ntest components_lineage_ties ... ok\ntest components_liquid_kind_conflict ... ok\ntest components_liquid_substring_kind ... ok\ntest components_liquid_wallet_omitted_scope ... ok\ntest components_location_continuity ... ok\ntest components_location_ties ... ok\ntest components_membership_conflict ... ok\ntest components_membership_empty_anchor ... ok\ntest components_missing_destination ... ok\ntest components_missing_source ... ok\ntest components_missing_time ... ok\ntest components_missing_time_empty ... ok\ntest components_multi_allocation ... ok\ntest components_native_contradicted ... ok\ntest components_native_exact_sink ... ok\ntest components_native_excluded_rows ... ok\ntest components_native_namespace_gate ... ok\ntest components_native_other_asset ... ok\ntest components_native_partial ... ok\ntest components_native_supported ... ok\ntest components_no_legs ... ok\ntest components_owned_wallet_missing ... ok\ntest components_peg_in ... ok\ntest components_peg_out ... ok\ntest components_rate_precedence_ignores_later_junk ... ok\ntest components_refusal_child_before_mode ... ok\ntest components_refusal_chronology_overflow ... ok\ntest components_refusal_competing_revision ... ok\ntest components_refusal_dict_integer ... ok\ntest components_refusal_evidence_count_before_ordinal ... ok\ntest components_refusal_excluded_amount ... ok\ntest components_refusal_excluded_fee ... ok\ntest components_refusal_global_leg_order ... ok\ntest components_refusal_integer ... ok\ntest components_refusal_legs_before_allocations ... ok\ntest components_refusal_list_integer ... ok\ntest components_refusal_missing_child_field ... ok\ntest components_refusal_mode ... ok\ntest components_refusal_mode_missing ... ok\ntest components_refusal_mode_token ... ok\ntest components_refusal_null_integer ... ok\ntest components_refusal_rate_exact ... ok\ntest components_refusal_rate_legacy ... ok\ntest components_refusal_rate_value ... ok\ntest components_refusal_revision_target ... ok\ntest components_refusal_time_before_count ... ok\ntest components_refusal_utc_overflow ... ok\ntest components_refusal_utc_underflow ... ok\ntest components_retained_location ... ok\ntest components_retained_reviewed_notes ... ok\ntest components_revision_backward ... ok\ntest components_revision_forward ... ok\ntest components_revision_lineage ... ok\ntest components_revision_missing ... ok\ntest components_revision_order ... ok\ntest components_revision_scope ... ok\ntest components_revision_valid ... ok\ntest components_scope_enriched_mismatch ... ok\ntest components_scope_invalid_chain ... ok\ntest components_scope_invalid_network ... ok\ntest components_scope_laundering ... ok\ntest components_scope_mismatch ... ok\ntest components_scope_rail_chain ... ok\ntest components_suspense ... ok\ntest components_suspense_anchor ... ok\ntest components_suspense_asset ... ok\ntest components_suspense_fee ... ok\ntest components_suspense_missing_time ... ok\ntest components_suspense_mode ... ok\ntest components_suspense_network ... ok\ntest components_suspense_no_allocations ... ok\ntest components_suspense_quantity ... ok\ntest components_suspense_review ... ok\ntest components_suspense_source ... ok\ntest components_suspense_time ... ok\ntest components_swap_terms ... ok\ntest components_term_count ... ok\ntest components_time_semantics ... ok\ntest components_transaction_anchor_missing ... ok\ntest components_transaction_id_empty ... ok\ntest components_transactionless_wallet_missing ... ok\ntest components_unbalanced ... ok\ntest components_unit_mismatch ... ok\ntest components_unknown_role ... ok\ntest components_untracked_route ... ok\ntest components_value_only_loss ... ok\ntest components_wallet_scope_conflict ... ok\ntest components_zero_amount_chronology ... ok\n\ntest result: ok. 181 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 51.09s\n\n     Running tests/evidence_cases.rs (target/cargo/debug/deps/evidence_cases-35df90179e150c49)\n\nrunning 19 tests\ntest duplicate_fee_keeper ... ok\ntest duplicate_slot ... ok\ntest historical_overcount ... ok\ntest nonaddress_overcount ... ok\ntest owned_fee_false ... ok\ntest owned_fee_float ... ok\ntest owned_fee_nan ... ok\ntest owned_fee_unbounded_cancellation ... ok\ntest owned_fee_unbounded_shape ... ok\ntest receipt_deprecated ... ok\ntest receipt_id ... ok\ntest receipt_label ... ok\ntest receipt_priority ... ok\ntest receipt_success ... ok\ntest receipt_unbounded_graph ... ok\ntest shared_fee ... ok\ntest tampered_graph ... ok\ntest tampered_quantity ... ok\ntest zero_delta ... ok\n\ntest result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s\n\n     Running tests/gap_cases.rs (target/cargo/debug/deps/gap_cases-e48e5c7ea2e48941)\n\nrunning 10 tests\ntest gaps_adversarial_timing_smoke ... ok\ntest gaps_compute_admission_precedes_ignored_ids ... ok\ntest gaps_compute_vectors ... ok\ntest gaps_cursor_vectors ... ok\ntest gaps_fingerprint_vectors ... ok\ntest gaps_review_revision_vectors ... ok\ntest gaps_search_vectors ... ok\ntest gaps_seeded_pagination_vectors ... ok\ntest gaps_snapshot_vectors ... ok\ntest gaps_worklist_ranges_vectors ... ok\n\ntest result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.24s\n\n     Running tests/hash_vectors.rs (target/cargo/debug/deps/hash_vectors-1fbc558d45a02d14)\n\nrunning 6 tests\ntest event_and_evidence_commitments_match_all_r0_vectors ... ok\ntest graph_commitments_match_all_r0_vectors ... ok\ntest observed_quantity_commitments_match_all_r0_vectors ... ok\ntest quantity_issue_ids_match_all_r0_vectors ... ok\ntest quantity_store_ids_match_all_r0_vectors ... ok\ntest reconciled_observation_hashes_match_all_r0_vectors ... ok\n\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s\n\n     Running tests/interpretation_cases.rs (target/cargo/debug/deps/interpretation_cases-66d3c3948c2a9690)\n\nrunning 137 tests\ntest interpretation_channel_projection ... ok\ntest interpretation_consolidation_projection ... ok\ntest interpretation_fanout_amount_order ... ok\ntest interpretation_fanout_asset_separation ... ok\ntest interpretation_fanout_bitcoin ... ok\ntest interpretation_fanout_bitcoin_graph ... ok\ntest interpretation_fanout_duplicate_wallet ... ok\ntest interpretation_fanout_equal_amount_ties ... ok\ntest interpretation_fanout_exact_msat ... ok\ntest interpretation_fanout_exact_value_pricing ... ok\ntest interpretation_fanout_existing_exact_rate ... ok\ntest interpretation_fanout_existing_rate ... ok\ntest interpretation_fanout_fee_inclusive ... ok\ntest interpretation_fanout_infinite_value ... ok\ntest interpretation_fanout_liquid_asset_id ... ok\ntest interpretation_fanout_liquid_graph ... ok\ntest interpretation_fanout_liquid_main ... ok\ntest interpretation_fanout_liquid_regtest ... ok\ntest interpretation_fanout_liquid_test ... ok\ntest interpretation_fanout_missing_value ... ok\ntest interpretation_fanout_multiple_events ... ok\ntest interpretation_fanout_multiple_sources ... ok\ntest interpretation_fanout_nan_payload ... ok\ntest interpretation_fanout_nan_value ... ok\ntest interpretation_fanout_negative_destination ... ok\ntest interpretation_fanout_negative_infinite_value ... ok\ntest interpretation_fanout_negative_value ... ok\ntest interpretation_fanout_network_separation ... ok\ntest interpretation_fanout_one_destination ... ok\ntest interpretation_fanout_over_total ... ok\ntest interpretation_fanout_partial_total ... ok\ntest interpretation_fanout_provider_ids ... ok\ntest interpretation_fanout_reviewed_reservation ... ok\ntest interpretation_fanout_same_wallet ... ok\ntest interpretation_fanout_synthetic_destination ... ok\ntest interpretation_fanout_synthetic_source ... ok\ntest interpretation_fanout_tampered_quantity ... ok\ntest interpretation_fanout_three_destinations ... ok\ntest interpretation_fanout_unicode_value ... ok\ntest interpretation_fanout_unknown_direction ... ok\ntest interpretation_fanout_untrusted_source ... ok\ntest interpretation_fanout_untrusted_target ... ok\ntest interpretation_fanout_value_pricing ... ok\ntest interpretation_fanout_whitespace_value ... ok\ntest interpretation_fanout_zero_destination ... ok\ntest interpretation_fanout_zero_exact_value_fallback ... ok\ntest interpretation_fanout_zero_rate ... ok\ntest interpretation_fanout_zero_source ... ok\ntest interpretation_fanout_zero_value ... ok\ntest interpretation_native_projection ... ok\ntest interpretation_ownership_projection ... ok\ntest interpretation_pipeline_projection ... ok\ntest interpretation_recorded_bitcoin ... ok\ntest interpretation_recorded_bitcoin_fee_inclusive ... ok\ntest interpretation_recorded_bitcoin_implicit_residual ... ok\ntest interpretation_recorded_bitcoin_partial ... ok\ntest interpretation_recorded_bitcoin_timestamp_skew ... ok\ntest interpretation_recorded_bitcoin_typed_external ... ok\ntest interpretation_recorded_bitcoin_upper_txid ... ok\ntest interpretation_recorded_different_txid ... ok\ntest interpretation_recorded_exact_msat ... ok\ntest interpretation_recorded_lightning_asset_case ... ok\ntest interpretation_recorded_lightning_bad_hash ... ok\ntest interpretation_recorded_lightning_chain_hash ... ok\ntest interpretation_recorded_lightning_chronology ... ok\ntest interpretation_recorded_lightning_circular ... ok\ntest interpretation_recorded_lightning_cln ... ok\ntest interpretation_recorded_lightning_duplicate ... ok\ntest interpretation_recorded_lightning_forged_lnd ... ok\ntest interpretation_recorded_lightning_forged_source ... ok\ntest interpretation_recorded_lightning_hash_case ... ok\ntest interpretation_recorded_lightning_invalid_timestamp ... ok\ntest interpretation_recorded_lightning_lnd ... ok\ntest interpretation_recorded_lightning_no_network ... ok\ntest interpretation_recorded_lightning_shortfall ... ok\ntest interpretation_recorded_lightning_skew_boundary ... ok\ntest interpretation_recorded_lightning_wrong_kind ... ok\ntest interpretation_recorded_liquid_asset_id ... ok\ntest interpretation_recorded_liquid_asset_separation ... ok\ntest interpretation_recorded_liquid_main ... ok\ntest interpretation_recorded_liquid_missing_identity ... ok\ntest interpretation_recorded_liquid_regtest ... ok\ntest interpretation_recorded_liquid_test ... ok\ntest interpretation_recorded_multiple_events ... ok\ntest interpretation_recorded_multiple_sources ... ok\ntest interpretation_recorded_multiple_targets ... ok\ntest interpretation_recorded_negative_outbound ... ok\ntest interpretation_recorded_network_separation ... ok\ntest interpretation_recorded_nonfinite_graph_identity ... ok\ntest interpretation_recorded_nonpositive_placeholder ... ok\ntest interpretation_recorded_reviewed_reservation ... ok\ntest interpretation_recorded_same_wallet ... ok\ntest interpretation_recorded_synthetic_id ... ok\ntest interpretation_recorded_tampered_quantity ... ok\ntest interpretation_recorded_untrusted_both ... ok\ntest interpretation_recorded_untrusted_source ... ok\ntest interpretation_recorded_untrusted_target ... ok\ntest interpretation_recorded_zero_inbound ... ok\ntest interpretation_safety_projection ... ok\ntest interpretation_samourai_badbank ... ok\ntest interpretation_samourai_bool_group ... ok\ntest interpretation_samourai_decoded_config ... ok\ntest interpretation_samourai_dict_group ... ok\ntest interpretation_samourai_duplicate_target ... ok\ntest interpretation_samourai_empty_group ... ok\ntest interpretation_samourai_empty_section ... ok\ntest interpretation_samourai_exact_msat ... ok\ntest interpretation_samourai_false_presence_gate ... ok\ntest interpretation_samourai_fanout ... ok\ntest interpretation_samourai_fee_inclusive ... ok\ntest interpretation_samourai_float_overflow ... ok\ntest interpretation_samourai_group_mismatch ... ok\ntest interpretation_samourai_implicit_delta ... ok\ntest interpretation_samourai_implicit_mix_residual ... ok\ntest interpretation_samourai_invalid_role ... ok\ntest interpretation_samourai_list_group ... ok\ntest interpretation_samourai_mixing ... ok\ntest interpretation_samourai_mixing_residual ... ok\ntest interpretation_samourai_multiple_groups ... ok\ntest interpretation_samourai_multiple_sources ... ok\ntest interpretation_samourai_nonprintable_group ... ok\ntest interpretation_samourai_numeric_group ... ok\ntest interpretation_samourai_oversize ... ok\ntest interpretation_samourai_post_unicode14_group ... ok\ntest interpretation_samourai_remix ... ok\ntest interpretation_samourai_reviewed_reservation ... ok\ntest interpretation_samourai_sorted_targets ... ok\ntest interpretation_samourai_tampered_hash ... ok\ntest interpretation_samourai_tx0 ... ok\ntest interpretation_samourai_tx0_fee ... ok\ntest interpretation_samourai_unknown_fee ... ok\ntest interpretation_samourai_untrusted_source ... ok\ntest interpretation_samourai_untrusted_target ... ok\ntest interpretation_samourai_wrong_asset ... ok\ntest interpretation_shared_aliases ... ok\ntest interpretation_shared_anchor_alias ... ok\ntest interpretation_shared_reservations ... ok\n\ntest result: ok. 137 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.92s\n\n     Running tests/projection_cases.rs (target/cargo/debug/deps/projection_cases-51a4b1bd7ebdba6b)\n\nrunning 25 tests\ntest projection_base_row_vectors ... ok\ntest projection_connected_path_vectors ... ok\ntest projection_contract_vectors ... ok\ntest projection_dependency_origins_complete_and_sorted ... ok\ntest projection_fee_allocation_vectors ... ok\ntest projection_fee_row_vectors ... ok\ntest projection_identity_vectors ... ok\ntest projection_inbound_fee_not_taxable ... ok\ntest projection_moves_sorted ... ok\ntest projection_nonzero_slice_pricing ... ok\ntest projection_payout_admission_vectors ... ok\ntest projection_payout_component_binding ... ok\ntest projection_payout_price_vectors ... ok\ntest projection_payout_settlement_vectors ... ok\ntest projection_payout_time_vectors ... ok\ntest projection_quarantine_composition_vectors ... ok\ntest projection_review_operator_sweep ... ok\ntest projection_reviewed_conversion_vectors ... ok\ntest projection_same_asset_not_carry ... ok\ntest projection_scoped_basis_vectors ... ok\ntest projection_selected_composition_vectors ... ok\ntest projection_slice_pricing_vectors ... ok\ntest projection_sweep_privacy ... ok\ntest projection_target_blocked ... ok\ntest projection_unreviewed_payout_slice ... ok\n\ntest result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s\n\n     Running tests/projection_lossless.rs (target/cargo/debug/deps/projection_lossless-1f15c716d1a952fd)\n\nrunning 4 tests\ntest projection_lossless_missing_reason_refusal ... ok\ntest projection_lossless_order_and_last_write ... ok\ntest projection_lossless_special_values ... ok\ntest projection_lossless_surrogate_keys_and_values ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n     Running tests/projection_stage.rs (target/cargo/debug/deps/projection_stage-87f776cf9491ac0c)\n\nrunning 5 tests\ntest projection_adapter_input_families ... ok\ntest projection_adapter_lossless_diagnostics ... ok\ntest projection_capture_precedes_rates ... ok\ntest projection_raw_adapter_vectors ... ok\ntest projection_unknown_surrogate_blocker_is_irrelevant ... ok\n\ntest result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s\n\n     Running tests/quantity_cases.rs (target/cargo/debug/deps/quantity_cases-c81b7a088e407a40)\n\nrunning 31 tests\ntest quantity_arbitration_vectors ... ok\ntest quantity_balance_vectors ... ok\ntest quantity_bundle_anchor_identity ... ok\ntest quantity_bundle_earliest_timestamp ... ok\ntest quantity_component_runtime_vectors ... ok\ntest quantity_empty_asset_identity_refusal ... ok\ntest quantity_empty_observation_hash_refusal ... ok\ntest quantity_empty_target_hash_message ... ok\ntest quantity_equal_quantity_direct_payout ... ok\ntest quantity_evidence_subject_identity ... ok\ntest quantity_fifo_exact_capacity_terminates ... ok\ntest quantity_fifo_vectors ... ok\ntest quantity_gap_hold_composition_vectors ... ok\ntest quantity_inclusive_gap_principal ... ok\ntest quantity_invalid_inbound_inclusive_order ... ok\ntest quantity_invalid_included_fee_order ... ok\ntest quantity_mixed_bundle_priority ... ok\ntest quantity_native_augmentation_vectors ... ok\ntest quantity_native_reconciled_filter ... ok\ntest quantity_operator_audit_vectors ... ok\ntest quantity_rejected_rows_earliest ... ok\ntest quantity_reviewed_compilation_vectors ... ok\ntest quantity_runtime_wrapper_vectors ... ok\ntest quantity_scoped_tax_barrier_vectors ... ok\ntest quantity_transfer_vectors ... ok\ntest quantity_unknown_state_ineligible ... ok\ntest quantity_whole_state_vectors ... ok\ntest quantity_zero_blocker_unquantified ... ok\ntest quantity_zero_component_fallback ... ok\ntest quantity_zero_gap_fallback ... ok\ntest quantity_zero_unobserved_allocations ... ok\n\ntest result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.10s\n\n     Running tests/typed_rows.rs (target/cargo/debug/deps/typed_rows-af7d67e04a796f44)\n\nrunning 7 tests\ntest typed_identifiers_share_only_within_their_book ... ok\ntest typed_network_containers_wait_for_accounting_admission ... ok\ntest typed_network_scalar_storage_classes ... ok\ntest typed_rows_keep_presence_order_unknown_columns_and_storage_classes ... ok\ntest typed_scalars_preserve_historical_transport_shapes ... ok\ntest typed_snapshot_keeps_absent_nullable_fields_absent ... ok\ntest typed_sql_quantities_refuse_float_bool_text_and_out_of_range ... ok\n\ntest result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s\n\n   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-7247190b/crates/journals)\n    Finished `test` profile [unoptimized] target(s) in 1.56s\n     Running unittests src/lib.rs (target/cargo/debug/deps/kassiber_journals-f84de605bc8216bb)\n\nrunning 28 tests\ntest boundary::joins::tests::balance_current_keys_preserve_python_stringification ... ok\ntest boundary::joins::tests::balance_join_matches_existing_comparator_and_promotes_before_overflow ... ok\ntest loader::direct::tests::native_loader_filters_only_safe_confirmation_columns ... ok\ntest loader::direct::tests::native_loader_reads_direct_columns_without_conversion ... ok\ntest loader::ownership::tests::native_loader_outpoint_integer_preserves_python_refusals ... ok\ntest loader::receipts::tests::native_loader_receipt_filter_never_rejects_possible_identities ... ok\ntest loader::revisions::tests::native_loader_revision_order_preserves_python_numeric_identity ... ok\ntest loader::tests::native_loader_bounds_gap_worklist ... ok\ntest loader::tests::native_loader_caught_integer_errors_still_propagate_overflow ... ok\ntest loader::tests::native_loader_integer_overflow_refusals_match_python ... ok\ntest loader::tests::native_loader_keeps_sql_values_and_refuses_blob_coercion ... ok\ntest loader::tests::native_loader_legacy_scalars_keep_downstream_admission ... ok\ntest loader::tests::native_loader_matches_python_database_bytes ... ok\ntest loader::tests::native_loader_preserves_nonfinite_real_until_downstream ... ok\ntest loader::tests::native_loader_preserves_receipt_error_precedence ... ok\ntest loader::tests::native_loader_refuses_mixed_revision_references_before_output ... ok\ntest loader::tests::native_loader_requires_caller_write_transaction ... ok\ntest loader::tests::native_loader_revision_queries_keep_sqlite_binding_types ... ok\ntest loader::tests::native_loader_selects_bounded_worklist_from_active_count ... ok\ntest loader::tests::native_loader_utf8_optional_reviews_preserve_python_fallback ... ok\ntest loader::tests::native_loader_utf8_refusals_preserve_python_column_order_and_message ... ok\ntest render::tests::msat_conversion_matches_python_at_rounding_and_width_boundaries ... ok\ntest storage::tests::entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids ... ok\ntest storage::tests::mixed_timestamps_and_signed_zero_force_entry_rewrites ... ok\ntest storage::tests::posting_deltas_reject_duplicates_and_keep_unchanged_rows ... ok\ntest storage::tests::quarantine_deduplication_and_enrichment_match_lossless_python_json ... ok\ntest storage::tests::scoped_cache_and_checkpoint_restore_exact_settings ... ok\ntest storage::tests::storage_encodings_and_markers_match_python ... ok\n\ntest result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.69s\n\n     Running tests/fusion_parity.rs (target/cargo/debug/deps/fusion_parity-f16fa1885d82d132)\n\nrunning 4 tests\ntest decision_only_builds_skip_fusion ... ok\ntest pipeline_fusion_matches_the_harness ... ok\ntest typed_engine_boundary_keeps_wire_columns_for_wide_amounts ... ok\ntest typed_engine_boundary_matches_text_and_refusal_attributes ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.54s\n\n     Running tests/oracle.rs (target/cargo/debug/deps/oracle-f54b327eb82ec8c5)\n\nrunning 4 tests\ntest ledger_rendering_matches_python ... ok\ntest ownership_reviews_and_reconciliations_match_python ... ok\ntest quarantine_candidate_enrichment_is_compact_sorted_and_ascii ... ok\ntest refusal_mapping_matches_python ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s\n\n     Running tests/persistence.rs (target/cargo/debug/deps/persistence-714a6f177f6b9086)\n\nrunning 9 tests\ntest absent_quantity_preserves_quantity_rows_and_clears_reconciliations ... ok\ntest dump_comparison_preserves_scalar_types_and_every_real_bit ... ok\ntest every_write_failure_and_panic_rolls_back_the_journal ... ok\ntest journal_persistence_matches_complete_python_dumps ... ok\ntest persistence_refuses_without_a_caller_transaction ... ok\ntest repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions ... ok\ntest sqlcipher_delete_full_preserves_complete_dumps_and_cache_settings ... ok\ntest synthetic_quarantines_are_filtered_before_readiness ... ok\ntest wal_checkpoint_waits_for_commit_and_retains_active_readers ... ok\n\ntest result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 59.56s\n\n     Running tests/process.rs (target/cargo/debug/deps/process-6923c768b33dfe0e)\n\nrunning 6 tests\ntest process_commits_repairs_and_pricing_with_the_projection ... ok\ntest process_complete_dumps_match_python_from_raw_books ... ok\ntest process_missing_prebuild_and_nested_transactions_fail_closed ... ok\ntest process_persistence_failure_rolls_back_prebuild_and_freshness ... ok\ntest process_prebuild_refusals_and_phase_panics_restore_the_entire_book ... ok\ntest process_refuses_tax_policy_before_prebuild_and_rolls_back_fusion_refusals ... ok\n\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.43s\n\n     Running unittests src/lib.rs (target/cargo/debug/deps/kassiber_tax_core-a8b3269d05d3e384)\n\nrunning 110 tests\ntest austria::tests::cutoff_is_vienna_midnight ... ok\ntest austria::tests::frist_anniversary_handles_the_leap_day ... ok\ntest austria::tests::markers_tokenize_on_the_documented_separators ... ok\ntest austria::tests::repr_matches_python ... ok\ntest heap::tests::layout_matches_cpython ... ok\ntest heap::tests::pops_in_order_with_a_total_order ... ok\ntest ledger::carry::tests::a_blocked_direct_payout_withholds_its_target_asset_disposal ... ok\ntest ledger::carry::tests::a_coarse_in_leg_the_carry_prices_is_not_reviewed ... ok\ntest ledger::carry::tests::a_pair_priced_and_then_blocked_keeps_its_pricing_and_its_block ... ok\ntest ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs ... ok\ntest ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good ... ok\ntest ledger::carry::tests::a_source_without_an_amount_carries_no_rate ... ok\ntest ledger::carry::tests::a_source_without_basis_or_a_reason_blocks_its_pair_as_unavailable ... ok\ntest ledger::carry::tests::carries_that_do_not_settle_keep_the_last_passs_pricing ... ok\ntest ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried ... ok\ntest ledger::carry::tests::only_carrying_value_bitcoin_rail_pairs_carry ... ok\ntest ledger::carry::tests::the_method_gate_fails_the_first_carry_pass ... ok\ntest ledger::compose::tests::a_failing_computation_names_its_asset ... ok\ntest ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs ... ok\ntest ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost ... ok\ntest ledger::compose::tests::an_austrian_classification_failure_is_raised_unwrapped ... ok\ntest ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries ... ok\ntest ledger::compose::tests::each_asset_lists_its_normalize_quarantines_then_its_gates ... ok\ntest ledger::compose::tests::fragments_carry_their_values_and_their_event_and_lot ... ok\ntest ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis ... ok\ntest ledger::compose::tests::long_lists_are_written_as_serde_writes_them ... ok\ntest ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period ... ok\ntest ledger::compose::tests::the_first_failing_constructor_in_walk_order_fails_the_pass ... ok\ntest ledger::compose::tests::the_method_gate_fails_the_multi_asset_stage_once_an_asset_is_computed ... ok\ntest ledger::compose::tests::the_tax_summary_drops_fees_and_moves_and_sorts_by_year_type_and_holding_period ... ok\ntest ledger::describe::tests::a_description_alone_is_the_notes ... ok\ntest ledger::describe::tests::a_single_regime_marker_precedes_the_text ... ok\ntest ledger::describe::tests::an_empty_marker_value_is_not_written ... ok\ntest ledger::describe::tests::generic_notes_carry_no_pool ... ok\ntest ledger::describe::tests::markers_come_in_a_fixed_order ... ok\ntest ledger::describe::tests::markers_without_a_description_end_the_notes ... ok\ntest ledger::describe::tests::move_notes_put_the_regime_and_pool_before_the_proof_and_the_text ... ok\ntest ledger::describe::tests::nothing_composes_to_empty_notes ... ok\ntest ledger::describe::tests::the_notes_markers_are_the_ones_the_lot_engine_reads ... ok\ntest ledger::describe::tests::the_pool_is_stripped_as_python_strips_it ... ok\ntest ledger::describe::tests::the_regime_basis_follows_the_regime_and_the_global_pool_is_default ... ok\ntest ledger::describe::tests::transfer_legs_describe_the_move_without_its_text ... ok\ntest ledger::normalize::tests::a_blocked_group_flags_each_transaction_once ... ok\ntest ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group ... ok\ntest ledger::normalize::tests::a_group_blocked_twice_keeps_its_first_reason ... ok\ntest ledger::normalize::tests::a_held_row_is_quarantined_and_unpairs_its_move ... ok\ntest ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg ... ok\ntest ledger::normalize::tests::amounts_are_cpythons_msat_to_btc ... ok\ntest ledger::normalize::tests::an_austrian_time_the_tracker_cannot_read_fails_before_normalize_reads_a_price ... ok\ntest ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides ... ok\ntest ledger::normalize::tests::coarse_events_are_reviewed_only_when_the_profile_asks ... ok\ntest ledger::normalize::tests::contamination_starts_at_the_earliest_slice_of_a_quarantined_transaction ... ok\ntest ledger::normalize::tests::non_finite_values_compare_as_cpythons ... ok\ntest ledger::normalize::tests::occurred_at_is_falsy_only_when_empty_or_none ... ok\ntest ledger::order::tests::a_large_bucket_with_chain_evidence_orders_as_the_full_walk_does ... ok\ntest ledger::order::tests::a_move_into_a_wallet_precedes_a_move_out_of_it ... ok\ntest ledger::order::tests::a_move_made_ready_joins_the_waiting_ones_in_normalizes_order ... ok\ntest ledger::order::tests::a_wallet_cycle_keeps_normalizes_order ... ok\ntest ledger::order::tests::a_wallet_hint_that_would_close_a_cycle_is_dropped ... ok\ntest ledger::order::tests::buckets_follow_the_text_of_their_time_and_put_inbounds_first ... ok\ntest ledger::order::tests::chain_evidence_orders_moves_and_overrules_wallet_hints ... ok\ntest ledger::order::tests::slices_of_one_transaction_take_no_wallet_hint ... ok\ntest ledger::regimes::tests::a_move_applies_at_its_out_legs_time ... ok\ntest ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first ... ok\ntest ledger::regimes::tests::a_move_whose_fee_takes_the_last_neu_is_neu ... ok\ntest ledger::regimes::tests::a_move_whose_out_leg_is_not_visited_applies_at_its_in_leg ... ok\ntest ledger::regimes::tests::a_post_cutoff_sale_from_an_alt_only_wallet_is_alt ... ok\ntest ledger::regimes::tests::a_sale_from_a_mixed_wallet_elects_neu ... ok\ntest ledger::regimes::tests::a_sale_from_a_neu_only_wallet_is_forced_neu ... ok\ntest ledger::regimes::tests::an_alt_only_move_is_alt_and_a_move_from_nothing_keeps_its_preference ... ok\ntest ledger::regimes::tests::availability_is_per_wallet_and_a_disposal_depletes_only_its_regime ... ok\ntest ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id ... ok\ntest ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error ... ok\ntest ledger::request::tests::decimal_text_round_trips ... ok\ntest ledger::request::tests::non_finite_text_is_cpythons ... ok\ntest ledger::request::tests::operation_checks_the_version_first ... ok\ntest ledger::response::tests::failures_name_their_stage_and_class ... ok\ntest ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal ... ok\ntest ledger::swaplinks::tests::a_fallback_id_like_a_direct_payout_withholds_only_the_pair ... ok\ntest ledger::swaplinks::tests::a_later_pair_relinks_a_shared_row_in_its_place ... ok\ntest ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair ... ok\ntest ledger::swaplinks::tests::a_legs_transaction_is_looked_up_before_the_pairs ... ok\ntest ledger::swaplinks::tests::a_link_keeps_its_first_pass_regime_and_the_second_pass_aborts ... ok\ntest ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis ... ok\ntest ledger::swaplinks::tests::a_reason_is_found_through_the_pairs_transaction ... ok\ntest ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason ... ok\ntest ledger::swaplinks::tests::an_alt_swap_is_not_linked ... ok\ntest ledger::swaplinks::tests::taxable_pairs_and_pairs_with_a_leg_outside_are_skipped ... ok\ntest ledger::text::tests::timestamps_render_as_strftime_does ... ok\ntest ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own ... ok\ntest ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw ... ok\ntest ledger::walk::tests::an_asset_without_an_inbound_entry_hands_the_lot_engine_nothing ... ok\ntest ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction ... ok\ntest ledger::walk::tests::an_unpriced_move_without_a_fee_is_priced_zero ... ok\ntest ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit ... ok\ntest ledger::walk::tests::dropped_inbounds_taint_the_lots_from_their_time ... ok\ntest ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order ... ok\ntest ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined ... ok\ntest ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them ... ok\ntest ledger::walk::tests::outbound_gates_hold_dispositions_shortfalls_and_tainted_lots ... ok\ntest ledger::walk::tests::the_holder_is_the_profile_label_as_it_is ... ok\ntest manifest::tests::categories_and_reasons_are_complete_and_distinct ... ok\ntest manifest::tests::cutoff_is_march_first_2021_in_vienna ... ok\ntest manifest::tests::inbound_kinds_book_as_types_an_acquisition_accepts ... ok\ntest manifest::tests::kind_tokens_match_substrings_of_non_empty_kinds ... ok\ntest manifest::tests::manifest_serializes_every_table ... ok\ntest manifest::tests::marker_names_are_the_ones_the_lot_engine_reads ... ok\ntest par::tests::results_keep_item_order_and_panics_wait_for_their_item ... ok\ntest swaps::tests::cycles_follow_sorted_depth_first_order ... ok\ntest time::tests::civil_dates_round_trip ... ok\n\ntest result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.31s\n\n     Running tests/api.rs (target/cargo/debug/deps/api-361e472142848d01)\n\nrunning 4 tests\ntest a_valid_entry_and_history_succeed ... ok\ntest country_hooks_answer_without_assets_outside_austria ... ok\ntest malformed_requests_are_request_errors ... ok\ntest parse_errors_keep_their_class_and_position ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n     Running tests/engine_fixtures.rs (target/cargo/debug/deps/engine_fixtures-a5c7f1783c826248)\n\nrunning 5 tests\ntest differences_are_reported_by_path ... ok\ntest engine_matches_extra_at_fixtures ... ok\ntest engine_matches_extra_fixtures ... ok\ntest engine_matches_rp2_at_fixtures ... ok\ntest engine_matches_rp2_fixtures ... ok\n\ntest result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.95s\n\n     Running tests/ledger_fixtures.rs (target/cargo/debug/deps/ledger_fixtures-8ff2845cc3ad37ef)\n\nrunning 9 tests\ntest a_failed_prepare_lists_the_stages_it_reached ... ok\ntest a_missing_nullable_field_is_refused ... ok\ntest every_stored_request_reads_and_writes_back_unchanged ... ok\ntest other_schema_versions_and_unknown_fields_are_refused ... ok\ntest prepare_normalizes_and_walks_every_book ... ok\ntest the_ledger_operation_reproduces_every_stored_response ... ok\ntest the_manifest_operation_lists_the_engines_tables ... ok\ntest typed_ledger_checks_its_header ... ok\ntest typed_ledger_matches_text_for_every_stored_request ... ok\n\ntest result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.97s\n\n     Running tests/ledger_properties.rs (target/cargo/debug/deps/ledger_properties-ed78533eaf0c7862)\n\nrunning 23 tests\ntest austrian_books_give_the_same_bytes ... ok\ntest austrian_categories_follow_the_reviewed_overrides ... ok\ntest austrian_entries_carry_their_regime_and_moves_their_regime_flows ... ok\ntest austrian_msat_are_conserved_and_wallets_end_at_their_holdings ... ok\ntest carried_rail_legs_conserve_their_sources_basis ... ok\ntest every_wallet_ends_at_its_holding_and_never_below_zero ... ok\ntest generic_entries_are_long_term_from_their_holding_period ... ok\ntest msat_are_conserved_per_asset_and_per_move ... ok\ntest neu_swaps_carry_the_pool_basis_of_what_they_swap ... ok\ntest pricing_a_purchase_can_release_a_sale_that_blocks_a_later_rail_pair ... ok\ntest pricing_a_purchase_can_release_a_sale_that_starves_a_later_move ... ok\ntest pricing_an_austrian_move_can_release_a_neu_shortfall ... ok\ntest pricing_an_unpriced_austrian_inbound_row_quarantines_no_new_row ... ok\ntest pricing_an_unpriced_inbound_row_of_a_rail_book_quarantines_no_new_row ... ok\ntest pricing_an_unpriced_inbound_row_of_a_swap_book_quarantines_no_new_row ... ok\ntest pricing_an_unpriced_inbound_row_quarantines_no_new_row ... ok\ntest rail_books_conserve_msat_and_wallets_end_at_their_holdings ... ok\ntest rail_books_give_the_same_bytes ... ok\ntest swap_books_conserve_msat_and_wallets_end_at_their_holdings ... ok\ntest swap_books_give_the_same_bytes ... ok\ntest swap_books_succeed_or_fail_as_the_oracle_does ... ok\ntest swap_pairs_book_both_legs_linked_or_neither ... ok\ntest the_same_request_gives_the_same_bytes ... ok\n\ntest result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 61.56s\n\n     Running tests/ledger_text.rs (target/cargo/debug/deps/ledger_text-45652bf38b28c04c)\n\nrunning 2 tests\ntest entry_text_matches_rp2_in_the_fixtures ... ok\ntest entry_text_matches_rp2_on_edge_cases ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s\n\n   Doc-tests kassiber_journals\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s\n\n   Doc-tests kassiber_tax_core\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+  },
+  "harness_sources": {
+    "run": "#!/usr/bin/env bash\nset -euo pipefail\nexport CARGO_TARGET_DIR=\"$PWD/target/cargo\"\nexport CARGO_BUILD_BUILD_DIR=\"$CARGO_TARGET_DIR\"\nexport CARGO_NET_OFFLINE=true\nexport CARGO_BUILD_JOBS=8 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0\nexport MATURIN_NO_INSTALL_RUST=1 TMPDIR=\"$PWD/target/perf-conversions/scratch\"\nexport UV_CACHE_DIR=\"$PWD/target/uv-cache\" KASSIBER_NO_EGRESS=1 KASSIBER_DISABLE_UPDATE_CHECK=1\nexec mise exec rust@1.99.1 uv@latest -- \"$@\"\n",
+    "verify.py": "import json\nimport os\nfrom pathlib import Path\nimport subprocess\nimport sys\nimport time\n\nroot=Path.cwd()\nfolder=root/'target/perf-conversions'\nenv=dict(os.environ,RUST_TEST_THREADS='1',KASSIBER_TEST_JOURNAL_PROCESS_BIN=str(root/'target/cargo/release/examples/journal-process'),KASSIBER_TEST_CUSTODY_LOADER_BIN=str(root/'target/cargo/release/examples/custody-load'))\njobs=[\n    ('examples',['cargo','build','--offline','--release','-p','kassiber-journals','--examples','--features','test-harness,timing']),\n    ('clippy',['cargo','clippy','--offline','-p','kassiber-tax-core','-p','kassiber-journals','-p','kassiber-custody','--all-targets','--features','kassiber-journals/test-harness,kassiber-journals/timing','--','-D','warnings']),\n    ('python-parity',[sys.executable,'-m','pytest','-q','tests/test_rust_custody_loader.py','tests/test_rust_journal_render.py','tests/test_rust_journal_persistence.py','tests/test_rust_journal_process.py','tests/test_custody_fusion_builder.py','tests/test_tax_ledger_contract.py','tests/test_tax_ledger_goldens.py','tests/test_tax_ledger_prepare.py','tests/test_tax_mutations.py']),\n    ('campaign',[sys.executable,str(folder/'campaign.py')]),\n    ('mutations-journals',[sys.executable,str(folder/'run_mutations.py'),'journals']),\n    ('mutations-tax',[sys.executable,str(folder/'run_mutations.py'),'tax']),\n]\nsummary=[]\nfor name,argv in jobs:\n    print('START',name,flush=True)\n    started=time.monotonic()\n    with (folder/(name+'.log')).open('w') as output:\n        result=subprocess.run(argv,cwd=root,env=env,stdout=output,stderr=subprocess.STDOUT)\n    record=dict(job=name,exit_code=result.returncode,wall_seconds=time.monotonic()-started,argv=argv)\n    summary.append(record)\n    (folder/'verification.json').write_text(json.dumps(summary,indent=2)+'\\n')\n    print('DONE',name,result.returncode,round(record['wall_seconds'],1),flush=True)\n    if result.returncode:sys.exit(result.returncode)\n",
+    "campaign.py": "from collections import Counter\nfrom contextlib import contextmanager\nimport hashlib\nimport json\nfrom pathlib import Path\nimport subprocess\nimport sys\nfrom unittest.mock import patch\n\nROOT=Path.cwd()\nsys.path.insert(0,str(ROOT))\nimport kassiber_tax\nfrom tests.custody_engine_compare import compare_rust, permuted_snapshot, python_refusal, rust_results\nfrom tests.custody_finalized_stage import python_stages\nfrom tests.custody_fusion_stage import add_fusion\nfrom tests.custody_interpretation_stage import suites\nfrom tests.custody_gap_generator import SCENARIOS as GAP_SCENARIOS, snapshot as gap_snapshot\nfrom tests.custody_snapshot import check_rust\n\n@contextmanager\ndef native_binding():\n    with (ROOT/'target/perf-conversions/fusion-probe.log').open('w') as errors:\n        process=subprocess.Popen([str(ROOT/'target/cargo/release/examples/journal-fusion')],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,bufsize=1)\n        def custody(request,finalized=True):\n            process.stdin.write(json.dumps(dict(request=request,finalized=finalized))+'\\n')\n            process.stdin.flush()\n            response=process.stdout.readline()\n            if not response:\n                raise AssertionError('native fusion probe stopped; see fusion-probe.log')\n            return response\n        try:\n            with patch.object(kassiber_tax,'custody',custody):\n                yield\n        finally:\n            process.stdin.close()\n            process.wait(timeout=30)\n            if process.returncode:\n                raise AssertionError(f'fusion probe exit {process.returncode}')\n\nsummary={}\nwith native_binding():\n    for name,scenarios,generate in (*suites(),('gaps',GAP_SCENARIOS,gap_snapshot)):\n        counts=Counter()\n        scenario_counts={case:Counter() for case in scenarios}\n        distinct={case:set() for case in scenarios}\n        for seed in range(2000):\n            book=generate(seed)\n            case=scenarios[seed%len(scenarios)]\n            for permutation,request in enumerate((book,permuted_snapshot(book)) if seed<len(scenarios)*2 else (book,)):\n                try:\n                    stages=python_stages(request)\n                except Exception as error:\n                    code,stage=python_refusal(request)\n                    rust_results(request,python_error=error,python_stage=stage)\n                    outcome='upstream_refusal'\n                else:\n                    add_fusion(request,stages)\n                    implemented,skipped=compare_rust(request,stages['evidence'],python_stages=stages)\n                    assert len(implemented)==7 and not skipped,(name,seed,implemented,skipped)\n                    outcome=stages['fusion']['outcome']\n                    if outcome=='request' and not permutation:\n                        distinct[case].add(hashlib.sha256(json.dumps(stages['fusion']['request'],sort_keys=True).encode()).hexdigest())\n                counts['permutations' if permutation else 'books']+=1\n                counts[outcome]+=1\n                if not permutation:\n                    scenario_counts[case][outcome]+=1\n            if seed%500==499:\n                print(name,seed+1,dict(counts),flush=True)\n        assert counts['books']==2000\n        assert counts['request']>0\n        assert all(sum(value.values())==2000//len(scenarios)+(index<2000%len(scenarios)) for index,value in enumerate(scenario_counts.values()))\n        summary[name]=dict(counts=counts,scenarios=scenario_counts,active_distinct_seed_requests={key:len(value) for key,value in distinct.items()})\n        (ROOT/'target/perf-conversions/campaign.json').write_text(json.dumps(summary,indent=2)+'\\n')\n    assert sum(value['counts']['books'] for value in summary.values())==24000\n    assert sum(value['counts']['permutations'] for value in summary.values())==1030\n    result=check_rust(Path('/home/tg/.cache/kassiber-verify/custody-recordings'),permuted=True)\n    assert result[:3]==(159,159,0) and not result[3],result\n    summary['replay']=dict(requests=result[0],permutations=result[1],skipped=result[2],problems=result[3])\n    (ROOT/'target/perf-conversions/campaign.json').write_text(json.dumps(summary,indent=2)+'\\n')\n    print('replay',result,flush=True)\n",
+    "run_mutations.py": "import importlib.util\nimport json\nimport os\nfrom pathlib import Path\nimport sys\n\nsys.stdout.reconfigure(line_buffering=True)\n\nroot=Path.cwd()\nspec=importlib.util.spec_from_file_location('conversion_mutations',root/'tax-engine/scripts/mutation_check.py')\nchecker=importlib.util.module_from_spec(spec)\nsys.modules[spec.name]=checker\nspec.loader.exec_module(checker)\nrun=checker._run\ndef offline(command,cwd,env):\n    if command[0]=='cargo':\n        command=[*command[:2],'--offline',*command[2:]]\n    return run(command,cwd,env)\nchecker._run=offline\nos.environ['RUST_TEST_THREADS']='1'\nos.environ['CARGO_TARGET_DIR']=str(root/'target/perf-conversions/mutation-target')\nos.environ['CARGO_BUILD_BUILD_DIR']=os.environ['CARGO_TARGET_DIR']\nif sys.argv[1]=='journals':\n    checker.ENGINE_PACKAGES=('-p','kassiber-journals','--features','test-harness')\n    catalog=root/'crates/journals/scripts/mutations.json'\n    paths={'crates/journals/src/process.rs','crates/journals/src/boundary.rs','crates/journals/src/boundary/joins.rs','crates/journals/src/engine.rs'}\n    mutations=[mutation for mutation in checker.load(catalog) if mutation.file in paths]\nelse:\n    catalog=root/'tax-engine/scripts/mutations.json'\n    mutations=checker.load(catalog)\nassert mutations\nsummary={'catalog':str(catalog.relative_to(root)),'entries':len(mutations),'ids':[m.id for m in mutations]}\n(root/f'target/perf-conversions/mutations-{sys.argv[1]}-selection.json').write_text(json.dumps(summary,indent=2)+'\\n')\nresult=checker.check(mutations)\nsummary['exit_code']=result\n(root/f'target/perf-conversions/mutations-{sys.argv[1]}-selection.json').write_text(json.dumps(summary,indent=2)+'\\n')\nsys.exit(result)\n",
+    "finish.py": "import json\nimport os\nfrom pathlib import Path\nimport subprocess\nimport sys\nimport time\n\nfolder = Path('target/perf-conversions')\nenv = dict(os.environ, UV_OFFLINE='1')\nenv.pop('UV_NO_SYNC', None)\njobs = [\n    ('classification', ['uv', 'run', '--locked', 'python', '-m', 'tests.rust_port.classify_tests', 'update']),\n    ('preflight', ['uv', 'run', '--locked', 'python', 'scripts/python_test_shards.py', 'run', 'preflight', '--ci']),\n    ('format', ['cargo', 'fmt', '--all', '--', '--check']),\n]\nrecords = []\nfor name, argv in jobs:\n    print('START', name, flush=True)\n    started = time.monotonic()\n    with (folder / (name + '.log')).open('w') as output:\n        result = subprocess.run(argv, env=env, stdout=output, stderr=subprocess.STDOUT)\n    records.append(dict(job=name, argv=argv, exit_code=result.returncode, wall_seconds=time.monotonic()-started))\n    (folder / 'finish.json').write_text(json.dumps(records, indent=2)+'\\n')\n    print('DONE', name, result.returncode, flush=True)\n    if result.returncode:\n        sys.exit(result.returncode)\n"
+  }
+}

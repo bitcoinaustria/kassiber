@@ -1,7 +1,10 @@
 # Tax engine
 
 Kassiber's tax engine is a Rust crate (`tax-engine/core`) called from Python
-through a PyO3 binding (`tax-engine/python`, imported as `kassiber_tax`). It
+through a PyO3 binding (`tax-engine/python`, imported as `kassiber_tax`). Native
+callers can use `ledger_typed(&LedgerRequest) -> Result<LedgerResponse,
+StagedError>` without serializing a request or response. It accepts schema 2's
+`ledger` operation and shares computation with the text entry point. It
 replaced RP2 under [plan 20](../plan/20-kassiber-tax-engine.md). This page owns
 the engine contract: the schema-2 `ledger` format journal processing uses,
 the schema-1 operations kept as the lot engine's fixture API, the Python

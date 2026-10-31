@@ -1936,5 +1936,25 @@
       "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[carry-two-hop-spaced]"
     ],
     "rule": "A carried row's pricing method is carrying_value."
+  },
+  {
+    "id": "LTE-typed-schema",
+    "file": "tax-engine/core/src/api.rs",
+    "find": "if request.schema_version != v2::SCHEMA_VERSION {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_ledger_checks_its_header"
+    ],
+    "rule": "The typed ledger entry point must reject unsupported schema versions before computation."
+  },
+  {
+    "id": "LTE-typed-operation",
+    "file": "tax-engine/core/src/api.rs",
+    "find": "if request.operation != v2::Operation::Ledger {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_ledger_checks_its_header"
+    ],
+    "rule": "The typed ledger entry point must reject operations that do not return a ledger response."
   }
 ]

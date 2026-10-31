@@ -8,6 +8,8 @@ production authority. CLI `journals process`, `--auto-pair`, daemon
 `ui.journals.process`, desktop refresh and AI mutations retain their existing
 routing.
 
+The conversion boundary also incorporates t3code/perf-conversions@60b1a4506.
+
 ## Continuation stage snapshot
 
 The local continuation `t3code/r4-13-journals-process-2` starts at
@@ -276,14 +278,24 @@ flushes the response. SQLCipher retains DELETE/FULL. The example flushes before
 consuming this handle. CLI and daemon transports are not implemented here.
 
 The composition reuses the kernel stage representations and the existing
-render/persistence boundaries. It still converts native rows for typed
-admission, materializes JSON stage operands, and calls the text ledger
-boundary. It does **not** satisfy the design's no-JSON production-path gate.
+persistence boundary. The conversion checkpoint adds `ledger_typed` and passes
+its native response directly to rendering. The renderer receives borrowed
+`RenderOperands`, avoiding the aggregate JSON tree and its repeated stage,
+row and ownership-index clones. Only native reconciliations are projected from
+the interpretation stage. An in-memory request decoder still converts the
+fusion builder's JSON value into `LedgerRequest`; quantity and finalized
+projection values still use `stage_value`. Text is used at the engine boundary
+only when that decoder refuses, retaining the original request's diagnostic
+column. This remains a partial R4-8 handoff and does **not** satisfy the design's
+no-JSON production-path gate.
 Floating NaN, surrogate strings and non-string stage keys at the renderer seam refuse
 explicitly pending lossless R4-11 integration. Other loader legacy-value and
 refusal limitations remain those in the loader checkpoint.
 
 ## Verification scope
+
+This section records the original integration's evidence. Fresh results for the
+conversion boundary checkpoint appear below.
 
 Six native integration tests cover fourteen frozen raw starting books with
 complete Python dump expectations, ordered phases, writer reservation,
@@ -312,11 +324,11 @@ Regeneration includes inherited disposition evidence and summary drift. A
 documentation-only flag reorder makes the quantity checkpoint's offline
 `uv sync --locked` example satisfy the locked-workflow check.
 
-The 24,000 generated books with per-scenario activity, 1,030 permutations,
-159 retained requests and their permutations/fresh recordings, census and
-shadow campaigns have **not** been rerun for this integration. Sampled and
-inherited component evidence cannot substitute for those gates. No served
-shape or zero-hybrid-fallback result is claimed.
+At the original integration, the 24,000 generated books with per-scenario
+activity, 1,030 permutations, 159 retained requests and their permutations/fresh
+recordings, census and shadow campaigns had **not** been rerun. Sampled and
+inherited component evidence cannot substitute for those gates. No served shape
+or zero-hybrid-fallback result is claimed.
 
 ## Mutation ownership
 
@@ -397,6 +409,112 @@ conversions, cloned stage operands, custody work and post-COMMIT destruction
 need profiling and integration work. Every line above that exceeds the design
 by more than 10% remains an open performance defect; no budget exception or
 authority switch is claimed.
+
+## Conversion boundary checkpoint (partial R4-8)
+
+The native process now calls `ledger_typed` and gives its `LedgerResponse`
+directly to rendering. An unrepresentable request alone takes the original
+text boundary, so overflowing amounts keep the exact request-column refusal.
+The JSON renderer adapter remains available to the oracle; native composition
+constructs borrowed `RenderOperands` and projects only the interpretation's
+native reconciliations. Custody kernels and persistence implementation are
+unchanged.
+
+This is a bounded checkpoint, not completion of the requested typed handoff.
+Fusion still builds a JSON value, decoded in memory into `LedgerRequest`.
+`stage_value` still materializes quantity and finalized projection values.
+Replace those three adapters before accepting R4-8 or the no-JSON gate.
+
+### Before/after process CPU
+
+The baseline is `925800ebe` with timing instrumentation alone. The
+[raw record](r4-journal-conversions-measurements.json) embeds the exact baseline
+patch, source and binary hashes, all samples, dump hashes, load averages and
+CPU/wall spans. Both binaries use Rust 1.99.1 release builds, offline Cargo and
+eight build jobs. Three books were regenerated from the committed generators;
+the multi-wallet 20k book reuses a checkpointed disposable loader fixture after
+checking every CSV hash and its 300 authored pegs.
+
+Five adjacent before/after pairs alternate AB/BA; each pair also runs Python
+on another disposable copy. All **20/20 three-way comparisons** match complete
+scalar-exact dumps, payloads and phase order. There are zero engine text-refusal
+spans in the twenty successful candidate processes. The 1-minute load ranged
+from **40.01 to 66.67**. These remain prepared-book measurements on a shared
+host; R4-10 and registered command acceptance remain open.
+
+CPU uses `getrusage(RUSAGE_SELF)` and includes every worker thread. Timing's
+CPU clock is injected by the example, with no new dependency or product I/O;
+without the `timing` feature these spans are disabled. Whole-process CPU also
+includes response, destruction, deferred checkpoint and exit. Each cell below
+is **best / median of five**, in seconds.
+
+| Book | Before CPU | After CPU | Python CPU |
+| --- | ---: | ---: | ---: |
+| generic 2k | 1.753 / 1.905 | 1.285 / 1.602 | 2.089 / 2.635 |
+| multi-wallet 2k | 1.940 / 2.386 | 1.618 / 1.964 | 2.431 / 2.596 |
+| generic 20k | 16.685 / 20.446 | 13.539 / 16.155 | 15.865 / 18.635 |
+| multi-wallet 20k | 20.492 / 27.492 | 17.133 / 25.083 | 29.732 / 35.873 |
+
+The following process-CPU spans come from each version's fastest complete
+process. They are inclusive: `fusion_engine` contains request and engine spans,
+and the candidate engine boundary contains request conversion and computation.
+Do not add overlapping spans. Every trial's spans and wall times remain in the
+raw record.
+
+| Span, before → after CPU seconds | generic 20k | multi-wallet 20k |
+| --- | ---: | ---: |
+| Snapshot load | 0.384 → 0.458 | 0.491 → 0.540 |
+| Custody including typed admission | 7.517 → 8.923 | 11.417 → 10.339 |
+| Renderer operands and context | 3.205 → 0.822 | 2.449 → 1.009 |
+| Fusion request value construction | 0.511 → 0.355 | 0.540 → 0.456 |
+| Engine boundary including conversions | 1.324 → 0.443 | 1.806 → 1.074 |
+| Fusion and engine together | 1.835 → 0.798 | 2.346 → 1.530 |
+| Rendering and joins | 0.218 → 0.168 | 0.282 → 0.229 |
+| Persistence and COMMIT | 1.371 → 1.062 | 1.815 → 1.660 |
+
+Candidate request conversion adds **0.066 / 0.094 s** inside the engine
+boundary; typed engine computation is **0.321 / 0.907 s**. Request construction
+plus conversion is **0.421 / 0.550 s**, still above the **0.10 s** target.
+Whole-process best CPU improves **18.9% / 16.4%** against the same-run native
+baseline. Its Python ratios are **1.17× / 1.74×**, below the owner's 4× target.
+Unchanged custody and storage spans also vary under this load; their differences
+are not credited as optimizations. Neither the remaining conversion targets
+nor whole-pipeline performance acceptance is closed.
+
+### Verification of this checkpoint
+
+The affected Rust suites pass **823 tests**: 619 custody, 51 journals and 153
+tax-core tests. Journals and tax-core frozen vectors include typed/text response
+byte equivalence, refusal attributes, typed header admission and overflowing
+amount diagnostic columns. All-target clippy passes with
+`test-harness,timing` and warnings denied; workspace formatting passes.
+
+The live loader/render/persistence/process and ledger Python suites pass
+**1,145 tests and 14 subtests**, including all sixteen SQLite/SQLCipher
+prepared-process comparisons. All twelve generated suites pass **24,000 books
+and 1,030 permutations**, recording per-scenario outcomes and distinct active
+seed requests. The retained corpus passes **159 requests and 159 permutations**
+with no skips or differences. The comparison-only `journal-fusion` example
+checks each emitted engine request against the text oracle: response bytes on
+success and refusal attributes on failure. This covers the seven custody/fusion
+stages and the engine boundary; it is not 24,000 complete database-dump
+comparisons. Fresh census/shadow and registered-command acceptance remain open.
+
+All **33/33 touched-file journal mutations and 189/189 ledger mutations were
+freshly killed**, after 10 and 122 named baseline tests passed respectively.
+The journal run includes every existing recipe for the changed process,
+boundary and join files plus four new conversion-wiring recipes. The ledger
+catalog adds the two typed-header recipes. Existing anchors still match exactly
+once; none required relocation or weakening. Applicability checks cover all
+124 journal, 136 loader, 2,327 custody and 189 ledger entries. The untouched
+journal, loader and custody recipes are not claimed as freshly killed.
+
+The [verification record](r4-journal-conversions-verification.json) retains the
+commands, source and recording hashes, complete per-scenario activity, named
+kill sets, logs and exact campaign harnesses. Verification uses offline Cargo,
+eight build jobs, locked Python 3.11 and disposable roots under `target/`.
+The required classification update passes without inventory changes; CI
+preflight passes **57 tests**. The final workspace formatting check passes.
 
 ## Remaining integration work
 

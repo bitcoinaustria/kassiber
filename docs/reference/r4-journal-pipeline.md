@@ -254,9 +254,12 @@ kassiber journals process (CLI) / ui.journals.process, journal_refresh job (daem
   depends on `crates/store`, `crates/custody` and `tax-engine/core`.
 - `crates/custody` stays pure: typed snapshot in, typed stages out, no SQL,
   no clock. `custody_with_finalized(&str, bool)` remains as the JSON adapter.
-- `tax-engine/core` gains a typed entry point, `ledger_typed(&LedgerRequest)
-  -> Result<LedgerResponse, StagedError>`, beside today's `ledger(&str)`. The
-  text entry stays for Python and fixtures.
+- `tax-engine/core` exposes `ledger_typed(&LedgerRequest)
+  -> Result<LedgerResponse, StagedError>` beside `ledger(&str)`. Both use the
+  same computation. The prepared native process passes its typed response to
+  the renderer; direct typed fusion and the remaining custody value adapters
+  are still open in the [conversion checkpoint](r4-journal-process-checkpoint.md).
+  The text entry stays for Python and fixtures.
 - The CLI and daemon register `journals process` and `ui.journals.process`
   through one module each; the freshness `journal_refresh` handler calls the
   same `process`.

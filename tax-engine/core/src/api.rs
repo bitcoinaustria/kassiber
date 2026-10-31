@@ -26,7 +26,7 @@ use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult, ErrorClass};
 use crate::ledger::request::{self as v2, LedgerRequest, ManifestRequest};
 use crate::ledger::response::{
-    ErrorResponse as V2ErrorResponse, ManifestResponse, PrepareFailure, StagedError,
+    ErrorResponse as V2ErrorResponse, LedgerResponse, ManifestResponse, PrepareFailure, StagedError,
 };
 use crate::ledger::run;
 use crate::manifest::manifest;
@@ -155,6 +155,22 @@ pub fn ledger(request: &str) -> String {
     }
 }
 
+pub fn ledger_typed(request: &LedgerRequest) -> Result<LedgerResponse, StagedError> {
+    if request.schema_version != v2::SCHEMA_VERSION {
+        return Err(StagedError::contract(EngineError::request(format!(
+            "unsupported schema_version {}; the ledger operations read {}",
+            request.schema_version,
+            v2::SCHEMA_VERSION
+        ))));
+    }
+    if request.operation != v2::Operation::Ledger {
+        return Err(StagedError::contract(EngineError::request(
+            "ledger_typed requires operation ledger",
+        )));
+    }
+    run::ledger(request)
+}
+
 fn ledger_inner(request: &str) -> Result<String, StagedError> {
     // A document that reads whole as a ledger or prepare request of this
     // schema version has the version and operation the head reads below
@@ -212,7 +228,7 @@ fn run_parsed(request: LedgerRequest) -> Result<String, StagedError> {
             Err(failure) => v2_json(&failure),
         },
         _ => {
-            let response = run::ledger(&request)?;
+            let response = ledger_typed(&request)?;
             let _serialize = crate::timing::span("serialize");
             response.to_json().map_err(serialization_failed)
         }

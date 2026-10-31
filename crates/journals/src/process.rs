@@ -185,40 +185,39 @@ fn process_with_clocks<'a>(
     let auto_priced = prebuild.price(conn, &profile)?;
     progress("building");
     let clock = build_clock()?;
-    let span = kassiber_custody::timing::span("snapshot_load");
+    let span = crate::timing::span("snapshot_load");
     let loaded = loader::load(conn, codec::from_json(&profile)?, &clock).map_err(load_error)?;
     let snapshot = loaded.into_custody().map_err(load_error)?;
     drop(span);
+    let span = crate::timing::span("custody");
     let stages = kassiber_custody::run_loaded(&snapshot, true).map_err(custody_error)?;
-    let span = kassiber_custody::timing::span("render_input");
-    let custody = render_inputs(&snapshot, &stages)?;
+    drop(span);
+    let span = crate::timing::span("render_input");
     let wallets = wallet_refs(&snapshot);
+    let custody = render_inputs(&snapshot, &stages, &wallets)?;
     let refs = wallets
         .iter()
         .map(|w| (w["id"].clone(), w.clone()))
         .collect::<Vec<_>>();
     drop(span);
-    let span = kassiber_custody::timing::span("fusion_engine");
-    let response = match ledger_request::build_request(
-        &profile,
-        &custody["finalized_tax_projection"],
-        &refs,
-        "ledger",
-    )
-    .map_err(fusion_error)?
-    {
+    let span = crate::timing::span("fusion_engine");
+    let request_span = crate::timing::span("fusion_request");
+    let outcome = ledger_request::build_request(&profile, &custody.projection, &refs, "ledger")
+        .map_err(fusion_error)?;
+    drop(request_span);
+    let engine_span = crate::timing::span("engine_boundary");
+    let response = match outcome {
         ledger_request::Outcome::Empty => boundary::empty_response(),
-        ledger_request::Outcome::Request(request) => {
-            let text = ledger_request::request_json(&request);
-            let response = kassiber_tax_core::ledger(&text);
-            let response = codec::loads(&response)?;
-            boundary::ledger_response(&codec::to_json(&response))?
-        }
+        ledger_request::Outcome::Request(request) => crate::engine::ledger(&request)?,
     };
+    drop(engine_span);
     drop(span);
-    let state = boundary::build(&profile, &custody, &wallets, &response, String::new)?;
+    let render_span = crate::timing::span("render_boundary");
+    let operands = custody.operands(&snapshot, &stages);
+    let state = boundary::build_operands(&profile, &operands, &wallets, &response, String::new)?;
+    drop(render_span);
     progress("storing");
-    let span = kassiber_custody::timing::span("persistence_commit");
+    let span = crate::timing::span("persistence_commit");
     let stored_at = now()?;
     let stored = persistence::store_ledger_state_with_clock(
         conn, &profile, &state, &stored_at, now, ids, writes,
@@ -320,7 +319,50 @@ fn wallet_refs(snapshot: &Snapshot) -> Vec<Value> {
         .collect()
 }
 
-fn render_inputs(snapshot: &Snapshot, stages: &Stages) -> Result<Value, Refusal> {
+struct RenderContext {
+    quantity: Value,
+    projection: Value,
+    native_reconciliations: Value,
+    roles: Value,
+    loan_legs: Vec<Value>,
+    transfers: Value,
+    ignored: Value,
+    accounting: Value,
+    warnings: Value,
+    rates: Value,
+}
+
+impl RenderContext {
+    fn operands<'a>(
+        &'a self,
+        snapshot: &'a Snapshot,
+        stages: &'a Stages,
+    ) -> boundary::RenderOperands<'a> {
+        boundary::RenderOperands {
+            rows: snapshot.rows(),
+            owned_index: snapshot.owned_index.as_ref().unwrap_or(&Value::Null),
+            loan_legs: &self.loan_legs,
+            channel_roles: &self.roles,
+            components: crate::array(&stages.components["components"]),
+            component_blockers: &stages.components["blockers"],
+            native_reconciliations: crate::array(&self.native_reconciliations),
+            quantity: &self.quantity,
+            direct_payout_records: crate::array(&self.quantity["reviewed_direct_payouts"]),
+            transfers: &self.transfers,
+            projection: &self.projection,
+            ignored: &self.ignored,
+            accounting_ignored: &self.accounting,
+            warnings: &self.warnings,
+            rates: &self.rates,
+        }
+    }
+}
+
+fn render_inputs(
+    snapshot: &Snapshot,
+    stages: &Stages,
+    wallets: &[Value],
+) -> Result<RenderContext, Refusal> {
     let quantity = stage_value(&stages.quantity)?;
     let projection = stages
         .finalized_projection
@@ -328,7 +370,6 @@ fn render_inputs(snapshot: &Snapshot, stages: &Stages) -> Result<Value, Refusal>
         .ok_or_else(|| Refusal::new("RuntimeError", "journal processing requires finalization"))?;
     let (roles, ignored, accounting) =
         kassiber_custody::interpretation::journal_context(snapshot, stages)?;
-    let wallets = wallet_refs(snapshot);
     let refs = Value::Object(
         wallets
             .iter()
@@ -340,21 +381,33 @@ fn render_inputs(snapshot: &Snapshot, stages: &Stages) -> Result<Value, Refusal>
         crate::array(&quantity["tax_eligibility"]["eligible_decisions"]),
         &refs,
     )?;
-    Ok(json!({
-        "rows": snapshot.rows(), "owned_index": snapshot.owned_index,
-        "loan_legs": snapshot.loan_legs, "channel_roles": roles,
-        "active_components": stages.components["components"],
-        "component_blockers": stages.components["blockers"],
-        "interpretation": stage_value(&stages.interpretation)?,
-        "quantity_state": quantity,
-        "direct_payout_records": quantity["reviewed_direct_payouts"],
-        "custody_transfers": transfers,
-        "finalized_tax_projection": stage_value(projection)?,
-        "gap_ignored_transaction_ids": ignored,
-        "gap_accounting_ignored_transaction_ids": accounting,
-        "warnings": warnings(snapshot, &wallets),
-        "rates": rates(snapshot)?,
-    }))
+    let native_reconciliations = match &stages.interpretation {
+        kassiber_pyjson::Value::Dict(items) => items.iter().find_map(|(key, value)|
+            matches!(key, kassiber_pyjson::Key::Str(key) if key.is("native_component_reconciliations"))
+                .then_some(value)),
+        _ => None,
+    };
+    let native_reconciliations = native_reconciliations
+        .map(stage_value)
+        .transpose()?
+        .unwrap_or(Value::Null);
+    let projection = stage_value(projection)?;
+    Ok(RenderContext {
+        quantity,
+        projection,
+        native_reconciliations,
+        roles,
+        loan_legs: snapshot
+            .loan_legs
+            .iter()
+            .map(|row| Value::Object(row.clone().into_map()))
+            .collect(),
+        transfers,
+        ignored: json!(ignored),
+        accounting: json!(accounting),
+        warnings: json!(warnings(snapshot, wallets)),
+        rates: rates(snapshot)?,
+    })
 }
 
 fn stage_value(value: &kassiber_pyjson::Value) -> Result<Value, Refusal> {

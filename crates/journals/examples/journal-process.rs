@@ -131,6 +131,8 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     if prepared != true && v["native_prebuild"] != true {
         return Err("explicit native or prepared pipeline mode required".into());
     }
+    #[cfg(feature = "timing")]
+    kassiber_journals::timing::set_cpu_clock(cpu);
     let start = std::time::Instant::now();
     let started_cpu = cpu();
     let c = if let Some(path) = v["database"].as_str() {
@@ -219,6 +221,7 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     }
     #[cfg(feature = "timing")]
     {
+        reply["cpu_spans"] = serde_json::to_value(kassiber_journals::timing::take())?;
         reply["spans"] = serde_json::to_value(kassiber_custody::timing::take())?;
     }
     println!("{reply}");

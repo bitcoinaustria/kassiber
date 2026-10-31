@@ -19,11 +19,67 @@ pub fn build<'a>(
     response: &LedgerResponse,
     ids: impl FnMut() -> String,
 ) -> Result<JournalState<'a>, Refusal> {
+    build_operands(
+        profile,
+        &RenderOperands::from_json(c),
+        wallets,
+        response,
+        ids,
+    )
+}
+
+pub struct RenderOperands<'a> {
+    pub rows: &'a [Value],
+    pub owned_index: &'a Value,
+    pub loan_legs: &'a [Value],
+    pub channel_roles: &'a Value,
+    pub components: &'a [Value],
+    pub component_blockers: &'a Value,
+    pub native_reconciliations: &'a [Value],
+    pub quantity: &'a Value,
+    pub direct_payout_records: &'a [Value],
+    pub transfers: &'a Value,
+    pub projection: &'a Value,
+    pub ignored: &'a Value,
+    pub accounting_ignored: &'a Value,
+    pub warnings: &'a Value,
+    pub rates: &'a Value,
+}
+
+impl<'a> RenderOperands<'a> {
+    pub fn from_json(c: &'a Value) -> Self {
+        Self {
+            rows: array(&c["rows"]),
+            owned_index: &c["owned_index"],
+            loan_legs: array(&c["loan_legs"]),
+            channel_roles: &c["channel_roles"],
+            components: array(&c["active_components"]),
+            component_blockers: &c["component_blockers"],
+            native_reconciliations: array(&c["interpretation"]["native_component_reconciliations"]),
+            quantity: &c["quantity_state"],
+            direct_payout_records: array(&c["direct_payout_records"]),
+            transfers: &c["custody_transfers"],
+            projection: &c["finalized_tax_projection"],
+            ignored: &c["gap_ignored_transaction_ids"],
+            accounting_ignored: &c["gap_accounting_ignored_transaction_ids"],
+            warnings: &c["warnings"],
+            rates: &c["rates"],
+        }
+    }
+}
+
+pub fn build_operands<'a>(
+    profile: &Value,
+    c: &RenderOperands<'a>,
+    wallets: &[Value],
+    response: &LedgerResponse,
+    ids: impl FnMut() -> String,
+) -> Result<JournalState<'a>, Refusal> {
     let input = LedgerInputs {
         profile,
-        projection: &c["finalized_tax_projection"],
+        projection: c.projection,
         wallets,
-        direct_payout_records: array(&c["direct_payout_records"]),
+        direct_payout_records: c.direct_payout_records,
     };
     let span = kassiber_custody::timing::span("render");
     let ledger = render_ledger(&input, response, ids)?;
@@ -53,30 +109,30 @@ pub fn finish(c: &Value, ledger: LedgerState) -> Result<JournalState<'_>, Refusa
             _ => value.clone(),
         }
     }
-    let reconciliations = array(&c["interpretation"]["native_component_reconciliations"])
+    let reconciliations = c
+        .native_reconciliations
         .iter()
         .map(asdict)
         .collect::<Vec<_>>();
     Ok(JournalState {
         entries: ledger.entries,
         quarantines: ledger.quarantines,
-        cross_asset_pairs: &c["finalized_tax_projection"]["cross_asset_pairs"],
+        cross_asset_pairs: &c.projection["cross_asset_pairs"],
         direct_swap_payouts: ledger.direct_swap_payouts,
         tax_summary: ledger.tax_summary,
         account_holdings: ledger.account_holdings,
         wallet_holdings: ledger.wallet_holdings,
         ownership_review_counts: counts,
         ownership_review_candidates: candidates,
-        custody_component_blockers: &c["component_blockers"],
+        custody_component_blockers: c.component_blockers,
         custody_native_reconciliations: json!(reconciliations),
-        custody_quantity: &c["quantity_state"],
-        custody_transfers: &c["custody_transfers"],
+        custody_quantity: c.quantity,
+        custody_transfers: c.transfers,
         quantity_differences,
-        latest_rates: &c["rates"],
-        warnings: &c["warnings"],
-        custody_gap_ignored_transaction_ids: &c["gap_ignored_transaction_ids"],
-        custody_gap_accounting_ignored_transaction_ids: &c
-            ["gap_accounting_ignored_transaction_ids"],
+        latest_rates: c.rates,
+        warnings: c.warnings,
+        custody_gap_ignored_transaction_ids: c.ignored,
+        custody_gap_accounting_ignored_transaction_ids: c.accounting_ignored,
     })
 }
 fn get<T: DeserializeOwned>(v: &Value, k: &str) -> Result<T, Refusal> {
@@ -326,6 +382,10 @@ pub fn empty_response() -> LedgerResponse {
         carried_rows: vec![],
     }
 }
+pub fn staged_error(error: kassiber_tax_core::ledger::response::StagedError) -> Refusal {
+    ledger_error(&serde_json::to_value(error).expect("staged error fields"))
+}
+
 fn ledger_error(e: &Value) -> Refusal {
     let class = string(&e["inner"]["class"]);
     let message = string(&e["inner"]["message"]);

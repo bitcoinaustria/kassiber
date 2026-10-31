@@ -69,3 +69,82 @@ fn decision_only_builds_skip_fusion() {
     assert!(computed.stages.finalized_projection.is_none());
     assert_eq!(computed.fusion, Fusion::Skipped);
 }
+
+#[test]
+fn typed_engine_boundary_matches_text_and_refusal_attributes() {
+    use kassiber_journals::{boundary, engine};
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tax-engine/core/tests/data/ledger_fixtures.json"
+    ))
+    .unwrap();
+    let mut successes = 0;
+    let mut refusals = 0;
+    for case in cases["cases"].as_array().unwrap() {
+        let request = &case["request"];
+        if request.is_null() {
+            continue;
+        }
+        let text = kassiber_custody::ledger_request::request_json(request);
+        let expected = kassiber_tax_core::ledger(&text);
+        let expected: Value = serde_json::from_str(&expected).unwrap();
+        let expected = boundary::ledger_response(&expected);
+        let actual = engine::ledger(request);
+        match (actual, expected) {
+            (Ok(actual), Ok(expected)) => {
+                successes += 1;
+                assert_eq!(
+                    actual.to_json().unwrap(),
+                    expected.to_json().unwrap(),
+                    "{}",
+                    case["name"]
+                );
+            }
+            (Err(actual), Err(expected)) => {
+                refusals += 1;
+                assert_eq!(
+                    serde_json::to_value(actual).unwrap(),
+                    serde_json::to_value(expected).unwrap(),
+                    "{}",
+                    case["name"]
+                );
+            }
+            _ => panic!("boundary outcome differs: {}", case["name"]),
+        }
+    }
+    assert!(successes >= 100);
+    assert!(refusals >= 25);
+}
+
+#[test]
+fn typed_engine_boundary_keeps_wire_columns_for_wide_amounts() {
+    use kassiber_journals::{boundary, engine};
+    let cases: Value = serde_json::from_str(include_str!(
+        "../../../tax-engine/core/tests/data/ledger_fixtures.json"
+    ))
+    .unwrap();
+    let mut request = cases["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| &case["request"])
+        .find(|request| {
+            request["rows"]
+                .as_array()
+                .is_some_and(|rows| !rows.is_empty())
+        })
+        .unwrap()
+        .clone();
+    for field in ["amount_msat", "fee_msat"] {
+        request["rows"][0][field] = serde_json::from_str("18446744073709551616").unwrap();
+        let text = kassiber_custody::ledger_request::request_json(&request);
+        let expected: Value = serde_json::from_str(&kassiber_tax_core::ledger(&text)).unwrap();
+        let expected = boundary::ledger_response(&expected).unwrap_err();
+        let actual = engine::ledger(&request).unwrap_err();
+        assert!(actual.message.contains(" at line 1 column "));
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
+        request["rows"][0][field] = json!(1);
+    }
+}

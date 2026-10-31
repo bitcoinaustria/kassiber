@@ -4,6 +4,7 @@
 //! No production command is registered; checkpoint references own acceptance.
 pub mod boundary;
 mod integer;
+pub mod engine;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod loader;
 mod model;
@@ -13,6 +14,7 @@ pub mod prebuild;
 pub mod process;
 mod render;
 pub mod storage;
+pub mod timing;
 pub use model::*;
 pub use render::{enrich_quarantine_detail, render_ledger, LedgerInputs, LedgerState};
 use serde_json::Value;
