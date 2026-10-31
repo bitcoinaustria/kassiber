@@ -341,9 +341,11 @@ exactly 24 hours is allowed. At equal instants the cache wins, retaining manual
 priority over provider rows. This is the current owner-selected policy, open to
 owner revision. Older, future or undated quotes cannot fill a valuation.
 The source and actual quote timestamp are shown in the PDF, XLSX and desktop
-FMV card. Missing FMV is a readiness
-barrier (`status.missingFmvAssets`); affected values remain null and handoffs are
-explicitly incomplete drafts. Wallet-context assets use the same lookup,
+FMV card. Missing FMV sets incomplete readiness
+(`status.missingFmvAssets`): the desktop shows a top banner above Export,
+affected values remain null, and PDF/XLSX handoffs are labelled incomplete
+drafts. Preview and export remain available for review; missing prices prevent
+a complete estimate. Wallet-context assets use the same lookup,
 and the XLSX assumptions sheet discloses quarantines and incomplete estimates.
 Missing FMV for any held asset, including a wallet-only rail without an
 acquisition bucket, keeps market-value, gain and estimated-tax totals null;

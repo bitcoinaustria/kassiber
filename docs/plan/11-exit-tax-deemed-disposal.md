@@ -173,7 +173,8 @@ defaults it invoked.
 - **Incomplete estimates:** if quarantines or missing prices exist, the estimate
   is incomplete. The payload surfaces `status.needsJournals`, `status.quarantines`
   and `status.missingFmvAssets`. The GUI links quarantines to their queue and
-  flags missing FMV on its quote card; never present a partial estimate as final.
+  flags missing FMV above Export and on its quote card. Exports remain available
+  as labelled incomplete drafts; never present a partial estimate as final.
 - **Historical wallet context:** rebuild wallet quantities through the same
   cutoff, including transfers and excluding duplicate income recognition.
   Current stored holdings supply labels only. Wallet-context assets receive

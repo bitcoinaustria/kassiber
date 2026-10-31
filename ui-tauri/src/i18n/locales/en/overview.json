@@ -393,5 +393,12 @@
       "missing": "Missing"
     },
     "incomplete": "Estimate incomplete: no usable FMV quote for {{assets}}."
+  },
+  "exitTaxReadiness": {
+    "title": "This estimate is incomplete.",
+    "journals": "Journals are not processed yet.",
+    "quarantines_one": "{{count}} quarantined transaction is excluded. Resolve it in the <queue>quarantine queue</queue> before relying on the number.",
+    "quarantines_other": "{{count}} quarantined transactions are excluded. Resolve them in the <queue>quarantine queue</queue> before relying on the number.",
+    "exportDraft": "Incomplete draft — exports remain available for review."
   }
 }

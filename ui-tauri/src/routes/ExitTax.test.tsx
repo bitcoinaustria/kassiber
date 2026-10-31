@@ -41,3 +41,22 @@ describe("exit-tax FMV disclosure", () => {
     expect(html).toContain(language === "en" ? "Unavailable" : "Nicht verfügbar");
   });
 });
+
+it.each(["en", "de"])("puts missing-FMV readiness above enabled exports in %s", async (language) => {
+  await i18n.changeLanguage(language);
+  state.report = buildExitTaxFixture();
+  state.report.status = { needsJournals: false, quarantines: 0, missingFmvAssets: ["BTC"] };
+  state.report.fmvSource[0] = { asset: "BTC", pair: "BTC-EUR", rate: null, source: "missing", asOf: null };
+  const html = renderToStaticMarkup(<ExitTax />);
+  const title = language === "en" ? "This estimate is incomplete." : "Diese Schätzung ist unvollständig.";
+  expect(html).toContain(title);
+  expect(html.indexOf(title)).toBeLessThan(html.indexOf("Export PDF"));
+  const missing = language === "en" ? "Estimate incomplete: no usable FMV quote for BTC." : "Schätzung unvollständig: kein verwendbarer Marktwertkurs für BTC.";
+  expect(html.indexOf(missing)).toBeLessThan(html.indexOf("Export PDF"));
+  expect(html).toContain(language === "en" ? "Incomplete draft — exports remain available for review." : "Unvollständiger Entwurf — Exporte bleiben zur Prüfung verfügbar.");
+  for (const format of ["PDF", "XLSX"]) {
+    const button = html.match(new RegExp(`<button[^>]*>(?:(?!<\\/button>).)*Export ${format}<\\/button>`, "s"))?.[0];
+    expect(button).toBeDefined();
+    expect(button).not.toMatch(/\sdisabled(?:=|\s|>)/);
+  }
+});

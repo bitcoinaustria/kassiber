@@ -10,6 +10,7 @@
 
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -250,29 +251,39 @@ function ExitTaxBody({
   exportStatus,
   onExport,
 }: BodyProps) {
+  const { t } = useTranslation("overview");
+  const missingFmv = report.status.missingFmvAssets ?? [];
   const totals = report.totals;
   const deferred = totals.collectionTiming === "deferred";
-  const incomplete = report.status.needsJournals || report.status.quarantines > 0;
+  const incomplete = report.status.needsJournals || report.status.quarantines > 0 || missingFmv.length > 0;
   // Alt/Neu is Austrian terminology; a generic profile gets neutral labels.
   const isAt = report.jurisdictionCode === "AT";
 
   return (
     <div className="grid gap-4">
       {incomplete ? (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+        <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
-            <p className="font-medium">This estimate is incomplete.</p>
-            <p className="text-muted-foreground">
-              {report.status.needsJournals
-                ? "Journals are not processed yet."
-                : `${report.status.quarantines} quarantined transaction(s) are excluded.`}{" "}
-              Resolve them in the{" "}
-              <Link to="/review" className="underline underline-offset-2">
-                quarantine queue
-              </Link>{" "}
-              before relying on the number.
-            </p>
+            <p className="font-medium">{t("exitTaxReadiness.title")}</p>
+            {report.status.needsJournals ? (
+              <p className="text-muted-foreground">{t("exitTaxReadiness.journals")}</p>
+            ) : null}
+            {report.status.quarantines > 0 ? (
+              <p className="text-muted-foreground">
+                <Trans
+                  t={t}
+                  i18nKey="exitTaxReadiness.quarantines"
+                  count={report.status.quarantines}
+                  components={{ queue: <Link to="/review" className="underline underline-offset-2" /> }}
+                />
+              </p>
+            ) : null}
+            {missingFmv.length > 0 ? (
+              <p className="text-muted-foreground">
+                {t("exitTaxFmv.incomplete", { assets: missingFmv.join(", ") })}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -436,6 +447,11 @@ function ExitTaxBody({
             <p className="mt-1 text-xs text-muted-foreground">
               Export the estimate for your tax adviser to review and stamp.
             </p>
+            {incomplete ? (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                {t("exitTaxReadiness.exportDraft")}
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-col gap-2">
               <Button
                 variant="default"
