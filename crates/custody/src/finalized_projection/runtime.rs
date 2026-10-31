@@ -13,6 +13,109 @@ fn exact(value: &Py) -> Result<Value, String> {
     Ok(converted)
 }
 
+// Validate every supplied value, including fields the compiler does not read,
+// before projecting only the operands it uses. The rare non-lossless case
+// keeps the original exact round trip and its refusal ordering.
+fn records(value: &Py, select: fn(&Py) -> Value) -> Result<Value, String> {
+    if !matches!(value, Py::List(_)) || !codec::lossless(value) {
+        return exact(value);
+    }
+    Ok(Value::Array(
+        crate::par::map(stored::list(value), select)
+            .into_iter()
+            .map(crate::par::unwrap)
+            .collect(),
+    ))
+}
+fn fields(value: &Py, names: &[&str]) -> Value {
+    let Py::Dict(items) = value else {
+        return codec::to_json(value);
+    };
+    Value::Object(
+        items
+            .iter()
+            .filter_map(|(key, value)| {
+                let kassiber_pyjson::Key::Str(key) = key else {
+                    return None;
+                };
+                let key = key.as_str()?;
+                names
+                    .contains(&key)
+                    .then(|| (key.to_owned(), codec::to_json(value)))
+            })
+            .collect(),
+    )
+}
+fn observation(value: &Py) -> Value {
+    fields(
+        value,
+        &[
+            "quantity_hash",
+            "profile_id",
+            "wallet_id",
+            "asset",
+            "direction",
+            "occurred_at",
+            "transaction_id",
+            "anchor_transaction_id",
+            "event_key",
+            "amount_msat",
+            "fee_msat",
+            "authoritative_chain_observation",
+            "fee_attribution",
+        ],
+    )
+}
+fn decision(value: &Py) -> Value {
+    fields(
+        value,
+        &[
+            "source",
+            "target",
+            "state",
+            "selected_claim_id",
+            "reason",
+            "atomic_bundle_id",
+            "component_id",
+            "transfer_policy",
+            "transfer_kind",
+            "destination_kind",
+            "external_economic_subtype",
+        ],
+    )
+}
+fn event(value: &Py) -> Value {
+    let Py::Dict(items) = value else {
+        return codec::to_json(value);
+    };
+    Value::Object(
+        items
+            .iter()
+            .filter_map(|(key, value)| {
+                let kassiber_pyjson::Key::Str(key) = key else {
+                    return None;
+                };
+                let key = key.as_str()?;
+                match key {
+                    "event_key" => Some((key.to_owned(), codec::to_json(value))),
+                    "legs" => Some((
+                        key.to_owned(),
+                        match value {
+                            Py::List(legs) => Value::Array(
+                                legs.iter()
+                                    .map(|leg| fields(leg, &["occurred_at", "quantity_hash"]))
+                                    .collect(),
+                            ),
+                            value => codec::to_json(value),
+                        },
+                    )),
+                    _ => None,
+                }
+            })
+            .collect(),
+    )
+}
+
 fn pools(value: &Py) -> Result<Value, String> {
     let mut value = exact(value)?;
     for pair in value.as_array_mut().ok_or("TypeError")? {
@@ -141,14 +244,17 @@ pub fn stage_with_rows(
     input.insert("rows".into(), rows);
     input.insert(
         "observations".into(),
-        exact(stored::get(projection, "observations"))?,
+        records(stored::get(projection, "observations"), observation)?,
     );
     input.insert(
         "decisions".into(),
-        exact(stored::get(projection, "decisions"))?,
+        records(stored::get(projection, "decisions"), decision)?,
     );
     input.insert("eligible".into(), Value::Array(eligible));
-    input.insert("events".into(), exact(stored::get(canonical, "events"))?);
+    input.insert(
+        "events".into(),
+        records(stored::get(canonical, "events"), event)?,
+    );
     input.insert(
         "pool_barriers".into(),
         pools(stored::get(eligibility, "pool_barriers"))?,

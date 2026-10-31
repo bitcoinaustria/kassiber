@@ -22186,7 +22186,7 @@
   {
     "id": "projection8-observations",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    input.insert(\n        \"observations\".into(),\n        exact(stored::get(projection, \"observations\"))?,\n    );",
+    "find": "    input.insert(\n        \"observations\".into(),\n        records(stored::get(projection, \"observations\"), observation)?,\n    );",
     "replace": "    input.insert(\"observations\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
@@ -22196,7 +22196,7 @@
   {
     "id": "projection8-decisions",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    input.insert(\n        \"decisions\".into(),\n        exact(stored::get(projection, \"decisions\"))?,\n    );",
+    "find": "    input.insert(\n        \"decisions\".into(),\n        records(stored::get(projection, \"decisions\"), decision)?,\n    );",
     "replace": "    input.insert(\"decisions\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
@@ -22206,7 +22206,7 @@
   {
     "id": "projection8-events",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    input.insert(\"events\".into(), exact(stored::get(canonical, \"events\"))?);",
+    "find": "    input.insert(\n        \"events\".into(),\n        records(stored::get(canonical, \"events\"), event)?,\n    );",
     "replace": "    input.insert(\"events\".into(), json!([]));",
     "expect_failing": [
       "projection_adapter_input_families"
@@ -22756,8 +22756,8 @@
   {
     "id": "FUSION-FIELD-rate",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "decimal(&[&row[\"fiat_rate_exact\"], &row[\"fiat_rate\"]])",
-    "replace": "decimal(&[&row[\"fiat_rate\"], &row[\"fiat_rate_exact\"]])",
+    "find": "let values = [&row[exact], &row[field]];",
+    "replace": "let values = if index == 0 { [&row[field], &row[exact]] } else { [&row[exact], &row[field]] };",
     "expect_failing": [
       "fusion_builder_field_choice"
     ],
@@ -22766,8 +22766,8 @@
   {
     "id": "FUSION-OMISSION-chain",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": ",\"chain_order\":order",
-    "replace": ",\"omitted_chain_order\":order",
+    "find": "        (\"chain_order\".into(), order),",
+    "replace": "        (\"omitted_chain_order\".into(), order),",
     "expect_failing": [
       "fusion_builder_field_choice"
     ],
@@ -22806,8 +22806,8 @@
   {
     "id": "FUSION-WIRE-ORDER",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "keys.iter()\n                        .filter_map",
-    "replace": "keys.iter().rev()\n                        .filter_map",
+    "find": "for key in keys {",
+    "replace": "for key in keys.iter().rev() {",
     "expect_failing": [
       "fusion_request_wire_order"
     ],
@@ -22816,8 +22816,8 @@
   {
     "id": "FUSION-WIRE-FIELD",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "&Options::new().compact().ensure_ascii(false)",
-    "replace": "&Options::new().compact().ensure_ascii(true)",
+    "find": "let options = Options::new().compact().ensure_ascii(false);",
+    "replace": "let options = Options::new().compact().ensure_ascii(true);",
     "expect_failing": [
       "fusion_request_wire_order"
     ],
@@ -22826,8 +22826,8 @@
   {
     "id": "FUSION-WIRE-OMISSION",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "keys.iter()\n                        .filter_map",
-    "replace": "keys.iter().skip(1)\n                        .filter_map",
+    "find": "for key in keys {",
+    "replace": "for key in keys.iter().skip(1) {",
     "expect_failing": [
       "fusion_request_wire_order"
     ],
@@ -23262,5 +23262,26 @@
       "quantity_arbitration_vectors"
     ],
     "rule": "Arbitration emits observations in ascending quantity-hash order."
+  },
+  {
+    "id": "FUSION-GRAPHLESS-SCOPE",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": ".is_some_and(|id| id.starts_with(\"custody-tax:\"))",
+    "replace": ".is_some_and(|_| true)",
+    "expect_failing": [
+      "fusion_graphless_rows_keep_physical_confirmation_scope"
+    ],
+    "rule": "Only custody slice ids are excluded from both physical-scope paths without renaming; other synthetic rows retain confirmation holds."
+  },
+  {
+    "id": "FUSION-GRAPHLESS-GRAPH",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "let graphless = graphless_projection(row);",
+    "replace": "let graphless = true;",
+    "expect_failing": [
+      "fusion_builder_field_choice",
+      "fusion_graphless_rows_match_confirmation_detectors"
+    ],
+    "rule": "Custody slices with a stored graph retain pending and closed-confirmation holds."
   }
 ]

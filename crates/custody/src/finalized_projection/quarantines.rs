@@ -165,7 +165,7 @@ impl<'a> Quarantines<'a> {
         &mut self,
         rows: &[Value],
         receipts: &[Value],
-        observations: &BTreeMap<String, Value>,
+        observations: &BTreeMap<String, &Value>,
     ) -> Result<(), String> {
         let mut groups: BTreeMap<(String, String), Vec<&Value>> = BTreeMap::new();
         for issue in array(&self.input["issues"]) {

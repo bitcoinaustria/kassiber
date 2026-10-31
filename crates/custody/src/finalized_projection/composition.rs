@@ -28,17 +28,18 @@ fn slice_key(v: &Value) -> Result<(String, BigInt, BigInt), String> {
     ))
 }
 fn observation<'a>(
-    observations: &'a BTreeMap<String, Value>,
+    observations: &BTreeMap<String, &'a Value>,
     slice: &Value,
 ) -> Result<&'a Value, String> {
     observations
         .get(&string(&slice["observation_hash"]))
+        .copied()
         .ok_or_else(|| "KeyError".into())
 }
 /// Close selected internal paths and propagate their complete root origins.
 pub(super) fn connected(
-    decisions: &[Value],
-    observations: &BTreeMap<String, Value>,
+    decisions: &[&Value],
+    observations: &BTreeMap<String, &Value>,
     explicit: &BTreeSet<String>,
 ) -> Result<Value, String> {
     let mut neighbors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -151,11 +152,11 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
     } else {
         Value::Null
     };
-    let observations: BTreeMap<String, Value> = array(&v["observations"])
+    let observations: BTreeMap<String, &Value> = array(&v["observations"])
         .iter()
-        .map(|o| (string(&o["quantity_hash"]), o.clone()))
+        .map(|o| (string(&o["quantity_hash"]), o))
         .collect();
-    let mut decisions = array(&v["decisions"]).to_vec();
+    let mut decisions: Vec<_> = array(&v["decisions"]).iter().collect();
     // Resolve every source before sorting, matching Python's key admission.
     let mut keyed = Vec::new();
     for d in decisions.drain(..) {
@@ -187,7 +188,11 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
             }
         }
     }
-    let order = orders(&v["events"]);
+    let order = if array(&v["pool_barriers"]).is_empty() {
+        BTreeMap::new()
+    } else {
+        orders(&v["events"])
+    };
     if v["op"] == "basis" {
         return codec::from_json(&json!(array(&v["observations"])
             .iter()
@@ -206,7 +211,7 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
     let mut barrier_receipts = Vec::new();
     let mut quarantines =
         super::quarantines::Quarantines::with_interpreter(v, &closure, diagnostics)?;
-    let mut fees = FeeAllocation::new(&decisions)?;
+    let mut fees = FeeAllocation::from_decisions(decisions.iter().copied())?;
     for d in &decisions {
         let source = observation(&observations, &d["source"])?;
         let target = if d["target"].is_null() {
@@ -353,7 +358,7 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
         }
     }
     let mut ordered: Vec<_> = array(&v["observations"]).iter().collect();
-    ordered.sort_by_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
+    ordered.sort_by_cached_key(|o| (string(&o["occurred_at"]), string(&o["quantity_hash"])));
     for o in ordered {
         if o["direction"] != "inbound" || rows.get(string(&o["transaction_id"])).is_none() {
             continue;
@@ -425,10 +430,10 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
         let mut result = serde_json::Map::new();
         result.insert("$type".into(), json!("FinalizedTaxProjection"));
         result.insert("rows".into(), Value::Array(projected));
-        result.insert("intra_pairs".into(), json!(intra));
-        result.insert("cross_asset_pairs".into(), json!(cross));
-        result.insert("selected_move_ids".into(), json!(moves));
-        let mut result = codec::from_json(&Value::Object(result))?;
+        result.insert("intra_pairs".into(), Value::Array(intra));
+        result.insert("cross_asset_pairs".into(), Value::Array(cross));
+        result.insert("selected_move_ids".into(), Value::Array(moves));
+        let mut result = into_python(Value::Object(result))?;
         crate::graph::stored::put(&mut result, "quarantines", Py::List(quarantines));
         return Ok(result);
     }
@@ -436,4 +441,28 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
     codec::from_json(
         &json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),
     )
+}
+
+// The compiler owns its completed JSON tree. Move its strings and container
+// storage into the existing Python-value output instead of copying that tree
+// and then immediately destroying the original. Scalar admission stays shared.
+fn into_python(value: Value) -> Result<Py, String> {
+    match value {
+        Value::String(value) => Ok(Py::Str(value.into())),
+        Value::Number(value) => match value.as_i64() {
+            Some(value) => Ok(Py::Int(BigInt::from(value))),
+            None => codec::from_json(&Value::Number(value)),
+        },
+        Value::Array(values) => values
+            .into_iter()
+            .map(into_python)
+            .collect::<Result<Vec<_>, _>>()
+            .map(Py::List),
+        Value::Object(values) => values
+            .into_iter()
+            .map(|(key, value)| Ok((kassiber_pyjson::Key::Str(key.into()), into_python(value)?)))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Py::Dict),
+        value => codec::from_json(&value),
+    }
 }

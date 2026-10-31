@@ -81,7 +81,7 @@ pub fn build_request(
         }
     }
     config::pool_scope(profile)?;
-    invariants(rows, list(&projection["intra_pairs"]), wallets)?;
+    let decimals = invariants(rows, list(&projection["intra_pairs"]), wallets)?;
     let holds = holds(rows)?;
     // Keep expression evaluation sequential. A deferred timestamp object does
     // not suppress the immediate cutoff conversion error of the same row.
@@ -92,7 +92,8 @@ pub fn build_request(
     }
     let rows = rows
         .iter()
-        .map(|row| request_row(row, &holds))
+        .zip(decimals)
+        .map(|(row, [rate, value])| request_row(row, &holds, rate, value))
         .collect::<Result<Vec<_>, _>>()?;
     let mut intra = Vec::new();
     for pair in list(&projection["intra_pairs"]) {
@@ -109,15 +110,25 @@ pub fn build_request(
             .collect();
         cross.push(json!({"pair_id":pair_id,"out_id":out_id,"in_id":in_id,"out_transaction_id":text(&pair["out_transaction_id"]),"in_transaction_id":text(&pair["in_transaction_id"]),"out_asset":text(&pair["out_asset"]),"in_asset":text(&pair["in_asset"]),"policy":text(&pair["policy"]),"bitcoin_rail":assets==BTreeSet::from(["BTC".into(),"LBTC".into()])}));
     }
-    Ok(Outcome::Request(
-        json!({"schema_version":2,"operation":operation,"policy":policy,"config":names,"holder":holder,"wallets":refs,"rows":rows,"intra_pairs":intra,"cross_asset_pairs":cross}),
-    ))
+    Ok(Outcome::Request(Value::Object(serde_json::Map::from_iter(
+        [
+            ("schema_version".into(), json!(2)),
+            ("operation".into(), json!(operation)),
+            ("policy".into(), policy),
+            ("config".into(), names),
+            ("holder".into(), holder),
+            ("wallets".into(), Value::Array(refs)),
+            ("rows".into(), Value::Array(rows)),
+            ("intra_pairs".into(), Value::Array(intra)),
+            ("cross_asset_pairs".into(), Value::Array(cross)),
+        ],
+    ))))
 }
 /// Python's compact request wire order is observable in engine parse errors.
 /// Restrict ordering to the builder's schema; never serialize caller metadata.
 pub fn request_json(request: &Value) -> String {
-    use kassiber_pyjson::{Key, Options, Value as Py};
-    fn ordered(value: &Value) -> Py {
+    use kassiber_pyjson::Options;
+    fn ordered(value: &Value, options: &Options, out: &mut String) {
         match value {
             Value::Object(items) => {
                 let keys: &[&str] = if items.contains_key("schema_version") {
@@ -201,26 +212,52 @@ pub fn request_json(request: &Value) -> String {
                     items.keys().all(|key| keys.contains(&key.as_str())),
                     "unknown ledger request field"
                 );
-                Py::Dict(
-                    keys.iter()
-                        .filter_map(|key| {
-                            items
-                                .get(*key)
-                                .map(|value| (Key::Str((*key).into()), ordered(value)))
-                        })
-                        .collect(),
-                )
+                out.push('{');
+                let mut first = true;
+                for key in keys {
+                    if let Some(value) = items.get(*key) {
+                        if !first {
+                            out.push(',');
+                        }
+                        first = false;
+                        kassiber_pyjson::dumps_str_into(key, options, out);
+                        out.push(':');
+                        ordered(value, options, out);
+                    }
+                }
+                out.push('}');
             }
-            Value::Array(items) => Py::List(items.iter().map(ordered).collect()),
-            _ => codec::from_json(value).expect("builder scalar"),
+            Value::Array(items) => {
+                out.push('[');
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    ordered(item, options, out);
+                }
+                out.push(']');
+            }
+            Value::String(value) => kassiber_pyjson::dumps_str_into(value, options, out),
+            Value::Null => out.push_str("null"),
+            Value::Bool(true) => out.push_str("true"),
+            Value::Bool(false) => out.push_str("false"),
+            Value::Number(value) if value.as_i64().is_some() => {
+                out.push_str(&value.as_i64().unwrap().to_string());
+            }
+            // Keep Python's exact integer and float spelling, including amounts
+            // the engine will refuse. Their wire position appears in its error.
+            value => out.push_str(
+                &kassiber_pyjson::dumps(&codec::from_json(value).expect("builder scalar"), options)
+                    .expect("builder request serialization"),
+            ),
         }
     }
-    kassiber_pyjson::dumps(
-        &ordered(request),
-        &Options::new().compact().ensure_ascii(false),
-    )
-    .expect("builder request serialization")
+    let options = Options::new().compact().ensure_ascii(false);
+    let mut out = String::new();
+    ordered(request, &options, &mut out);
+    out
 }
+
 fn required<'a>(value: &'a Value, key: &str) -> Result<&'a Value, Refusal> {
     value
         .get(key)
@@ -230,6 +267,9 @@ fn list(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 fn string(v: &Value) -> String {
+    if let Value::String(value) = v {
+        return value.clone();
+    }
     crate::interpretation::python_value_string(&codec::from_json(v).expect("JSON operand"))
 }
 fn repr(v: &Value) -> String {
@@ -282,7 +322,18 @@ fn decimal(values: &[&Value]) -> Result<Value, ()> {
     }
     Ok(Value::Null)
 }
-fn invariants(rows: &[Value], pairs: &[Value], wallets: &[(Value, Value)]) -> Result<(), Refusal> {
+fn invariants(
+    rows: &[Value],
+    pairs: &[Value],
+    wallets: &[(Value, Value)],
+) -> Result<Vec<[Value; 2]>, Refusal> {
+    struct Quoted<'a>(&'a str);
+    impl std::fmt::Display for Quoted<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(&repr(&json!(self.0)))
+        }
+    }
+    let mut decimals = Vec::with_capacity(rows.len());
     for (key, item) in wallets {
         if string(key) != string(&item["id"]) {
             return Err(Refusal::contract(
@@ -298,7 +349,7 @@ fn invariants(rows: &[Value], pairs: &[Value], wallets: &[(Value, Value)]) -> Re
     let ids: BTreeSet<_> = wallets.iter().map(|(key, _)| string(key)).collect();
     for row in rows {
         let id = or_text(&row["id"]);
-        let quoted = repr(&json!(id));
+        let quoted = Quoted(&id);
         let fail = |name, detail| Err(Refusal::contract(name, detail));
         if ![
             "custody-tax:",
@@ -381,16 +432,27 @@ fn invariants(rows: &[Value], pairs: &[Value], wallets: &[(Value, Value)]) -> Re
                 format!("row {quoted} carries custody component fields"),
             );
         }
-        for field in ["fiat_rate", "fiat_value"] {
-            let values = [&row[format!("{field}_exact")], &row[field]];
-            if decimal(&values).is_err() {
-                let corrupt = values.into_iter().find(|v| !empty(v)).unwrap();
-                return fail(
-                    "corrupt_decimal_text",
-                    format!("row {quoted} has {field} {}", repr(corrupt)),
-                );
+        let mut row_decimals = [Value::Null, Value::Null];
+        for (index, (field, exact)) in [
+            ("fiat_rate", "fiat_rate_exact"),
+            ("fiat_value", "fiat_value_exact"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let values = [&row[exact], &row[field]];
+            match decimal(&values) {
+                Ok(value) => row_decimals[index] = value,
+                Err(()) => {
+                    let corrupt = values.into_iter().find(|v| !empty(v)).unwrap();
+                    return fail(
+                        "corrupt_decimal_text",
+                        format!("row {quoted} has {field} {}", repr(corrupt)),
+                    );
+                }
             }
         }
+        decimals.push(row_decimals);
     }
     let mut legs = BTreeSet::new();
     for pair in pairs {
@@ -433,16 +495,21 @@ fn invariants(rows: &[Value], pairs: &[Value], wallets: &[(Value, Value)]) -> Re
             ));
         }
     }
-    Ok(())
+    Ok(decimals)
 }
 fn holds(rows: &[Value]) -> Result<BTreeMap<String, &'static str>, Refusal> {
     let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
     for row in rows {
         let asset = string(&row["asset"]);
+        let graphless = graphless_projection(row);
         if let Some((_, group)) = groups.iter_mut().find(|(a, _)| *a == asset) {
-            group.push(row.clone());
+            if !graphless {
+                group.push(row.clone());
+            }
         } else {
-            groups.push((asset, vec![row.clone()]));
+            // Retain the asset's first-seen position even when its first row
+            // has no physical scope: later groups can refuse in that order.
+            groups.push((asset, if graphless { vec![] } else { vec![row.clone()] }));
         }
     }
     let mut holds = BTreeMap::new();
@@ -472,7 +539,43 @@ fn holds(rows: &[Value]) -> Result<BTreeMap<String, &'static str>, Refusal> {
     }
     Ok(holds)
 }
-fn request_row(row: &Value, holds: &BTreeMap<String, &str>) -> Result<Value, Refusal> {
+
+// Custody slice ids are excluded by onchain_scope and are deliberately absent
+// from the confirmation detector's renamed synthetic-id list. Its remaining
+// fallback requires a parsed graph. Prove that graph absent before copying and
+// parsing ordinary commercial rows twice. Anything uncertain takes the full
+// detector, including malformed JSON, graph arrays and Liquid raw hex.
+fn graphless_projection(row: &Value) -> bool {
+    if !row["id"]
+        .as_str()
+        .is_some_and(|id| id.starts_with("custody-tax:"))
+    {
+        return false;
+    }
+    let parsed;
+    let raw = if let Some(text) = row["raw_json"].as_str() {
+        let Ok(value) = serde_json::from_str::<Value>(text) else {
+            return false;
+        };
+        parsed = value;
+        &parsed
+    } else {
+        &row["raw_json"]
+    };
+    if !raw.is_object() {
+        return true;
+    }
+    !codec::truth(&raw["raw_hex"])
+        && [raw, &raw["tx"], &raw["ownership_graph"]]
+            .into_iter()
+            .all(|payload| !payload["vin"].is_array() || !payload["vout"].is_array())
+}
+fn request_row(
+    row: &Value,
+    holds: &BTreeMap<String, &str>,
+    rate: Value,
+    value: Value,
+) -> Result<Value, Refusal> {
     let id = string(required(row, "id")?);
     let anchor = required(row, "journal_transaction_id")?;
     let asset = string(&row["asset"]);
@@ -482,20 +585,6 @@ fn request_row(row: &Value, holds: &BTreeMap<String, &str>) -> Result<Value, Ref
     let cutoff = time::cutoff(&row["occurred_at"])?;
     let amount = required(row, "amount")?;
     let fee = required(row, "fee")?;
-    let rate = decimal(&[&row["fiat_rate_exact"], &row["fiat_rate"]]).map_err(|_| {
-        Refusal::new(
-            "construction",
-            "InvalidOperation",
-            "[<class 'decimal.ConversionSyntax'>]",
-        )
-    })?;
-    let value = decimal(&[&row["fiat_value_exact"], &row["fiat_value"]]).map_err(|_| {
-        Refusal::new(
-            "construction",
-            "InvalidOperation",
-            "[<class 'decimal.ConversionSyntax'>]",
-        )
-    })?;
     let kind = if empty(&row["kind_override"]) {
         &row["kind"]
     } else {
@@ -539,14 +628,80 @@ fn request_row(row: &Value, holds: &BTreeMap<String, &str>) -> Result<Value, Ref
         parents.sort_by_key(|p| list(p).iter().map(string).collect::<Vec<_>>());
         json!({"scope":list(&order["scope"]).iter().map(string).collect::<Vec<_>>(),"parents":parents.iter().map(|p|list(p).iter().map(string).collect::<Vec<_>>()).collect::<Vec<_>>()})
     };
-    Ok(
-        json!({"id":id,"anchor":anchor,"asset":asset,"wallet_id":wallet,"direction":direction,"ts":ts,"cutoff_instant":cutoff,"amount_msat":amount,"fee_msat":fee,"rate":rate,"value":value,"coarse":row["pricing_quality"]=="coarse_fallback","kind":kind,"text":row_text,"regime_override":regime,"category_override":category,"taxability_off":taxability,"privacy_hop":privacy(row),"hold":holds.get(&id),"chain_order":order}),
-    )
+    let hold = holds
+        .get(&id)
+        .map(|hold| json!(hold))
+        .unwrap_or(Value::Null);
+    Ok(Value::Object(serde_json::Map::from_iter([
+        ("id".into(), Value::String(id)),
+        ("anchor".into(), anchor.clone()),
+        ("asset".into(), Value::String(asset)),
+        ("wallet_id".into(), Value::String(wallet)),
+        ("direction".into(), direction.clone()),
+        ("ts".into(), ts),
+        ("cutoff_instant".into(), cutoff),
+        ("amount_msat".into(), amount.clone()),
+        ("fee_msat".into(), fee.clone()),
+        ("rate".into(), rate),
+        ("value".into(), value),
+        (
+            "coarse".into(),
+            Value::Bool(row["pricing_quality"] == "coarse_fallback"),
+        ),
+        ("kind".into(), Value::String(kind)),
+        ("text".into(), row_text),
+        ("regime_override".into(), regime),
+        ("category_override".into(), category),
+        ("taxability_off".into(), Value::Bool(taxability)),
+        ("privacy_hop".into(), Value::Bool(privacy(row))),
+        ("hold".into(), hold),
+        ("chain_order".into(), order),
+    ])))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fusion_graphless_rows_keep_physical_confirmation_scope() {
+        let txid = "a".repeat(64);
+        let row = json!({"id":"cross-split:pending", "external_id":txid,
+            "external_id_kind":"txid", "asset":"BTC",
+            "raw_json":{"txid":txid,"status":{"confirmed":false}}});
+        assert_eq!(
+            holds(&[row]).unwrap().get("cross-split:pending"),
+            Some(&"pending_onchain_confirmation")
+        );
+    }
+
+    #[test]
+    fn fusion_graphless_rows_match_confirmation_detectors() {
+        let txid = "a".repeat(64);
+        for raw in [
+            json!({}),
+            json!({"txid":txid,"status":{"confirmed":false}}),
+            json!({"tx":{"txid":txid,"status":{"confirmed":false}}}),
+            json!({"txid":txid,"status":{"confirmed":false},"vin":[],"vout":[]}),
+            json!({"ownership_graph":{"txid":txid,"vin":[],"vout":[]}}),
+            json!({"chain":"liquid","raw_hex":"00"}),
+        ] {
+            for raw in [raw.clone(), json!(raw.to_string())] {
+                let rows = [json!({"id":"custody-tax:pending", "external_id":txid,
+                    "external_id_kind":"txid", "asset":"BTC", "raw_json":raw})];
+                let conflicts = crate::interpretation::ledger_conflicts(&rows).unwrap();
+                let pending = crate::interpretation::ledger_pending(&rows).unwrap();
+                let expected = if !conflicts.is_empty() {
+                    Some(&"conflicting_spend")
+                } else if !pending.is_empty() {
+                    Some(&"pending_onchain_confirmation")
+                } else {
+                    None
+                };
+                assert_eq!(holds(&rows).unwrap().get("custody-tax:pending"), expected);
+            }
+        }
+    }
 
     #[test]
     fn fusion_request_wire_order() {

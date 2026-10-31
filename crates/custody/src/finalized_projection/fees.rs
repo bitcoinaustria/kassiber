@@ -19,6 +19,11 @@ pub struct FeeAllocation {
 }
 impl FeeAllocation {
     pub fn new(decisions: &[Value]) -> Result<Self, String> {
+        Self::from_decisions(decisions)
+    }
+    pub(super) fn from_decisions<'a>(
+        decisions: impl IntoIterator<Item = &'a Value>,
+    ) -> Result<Self, String> {
         let mut result = Self::default();
         for decision in decisions {
             if decision["destination_kind"] != "fee" {
