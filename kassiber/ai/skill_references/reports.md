@@ -232,7 +232,7 @@ prices leave an incomplete estimate. The closest cached or transaction quote win
 24 hours before the cutoff. Older prices are missing FMV, never zero tax.
 `status.missingFmvAssets` identifies incomplete readiness; previews and exports
 remain available as labelled incomplete drafts. PDF/XLSX and the
-desktop FMV card disclose quote source and `asOf`. Exit-tax exports intentionally create no
+desktop FMV card disclose quote source and `asOf` in UTC (`Z`). Exit-tax exports intentionally create no
 ordinary realized-report snapshot. PDF/XLSX stamp `departureTimezone`, `journalInputVersion` and FMV
 quotes for manual freshness comparison, without automatic amendment tracking.
 See `docs/plan/11-exit-tax-deemed-disposal.md`.
