@@ -93,6 +93,10 @@ Complete quoted values are scrubbed across line breaks. If the closing quote
 is missing, the floor scrubs through the next whitespace or end of line. Python
 and the webview share exact expected outputs in
 `tests/fixtures/secret_redaction_cases.json`, including truncated diagnostics.
+The corpus also covers URL userinfo, Silent Payments scan keys, prefixed
+credential names, Basic authorization, Core Lightning runes, and escaped quotes
+in recovery material. Quoted recovery values use the same escape-aware parser
+as passwords; underscore/dot prefixes do not hide a credential name.
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by

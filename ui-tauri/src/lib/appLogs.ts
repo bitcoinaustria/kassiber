@@ -103,9 +103,13 @@ const BARE_BIP39_WORD_RUN_PATTERNS: Array<[RegExp, TextBackstopReplacement]> =
     "[redacted-seed-phrase]",
   ]);
 
+// Keep assignment names aligned with Python and the shared exact-output corpus.
+const SECRET_KEY_NAME = String.raw`(?:[A-Za-z0-9]+[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan(?:[_-]?key)?))?|sp[_-]?descriptor|spscan|spspend|token|xprv)`;
+const SECRET_ASSIGNMENT = String.raw`(["']?\b${SECRET_KEY_NAME}\b["']?)(\s*[:=]\s*)`;
+
 const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   [
-    /\b(mnemonic|recovery[_-]?phrase|seed(?:[_-]?phrase)?)\b(\s*[:=]\s*)(.+)$/gim,
+    /\b((?:[A-Za-z0-9]+[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?))\b(\s*[:=]\s*)(?=[^'"\s])[^,;}{\r\n]*?(?=(?:\s+[A-Za-z0-9_.-]+\s*[:=])|[,;}'"\r\n]|$)/gi,
     "$1$2[redacted]",
   ],
   [
@@ -137,25 +141,21 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     /\b(wpkh|sh|wsh|tr|pkh|combo|sp)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
     (match) => maskDescriptor(match),
   ],
+  [/\b(Authorization\s*[:=]\s*)(?:Basic|Bearer)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]"],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3/gi,
+    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3`, "gi"),
     "$1$2$3[redacted]$3",
   ],
   [
-    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    new RegExp(String.raw`${SECRET_ASSIGNMENT}([^\s,;}"']+)`, "gi"),
     "$1$2[redacted]",
   ],
-  // JSON-shaped assignments, e.g. a logged object `{"api_key":"sk-..."}`. The
-  // pattern above stops at the key's closing quote, so the quoted value
-  // survives without this; keep the key and redact the value in place.
+  // Complete quotes run first. Never reprocess their redacted output here.
   [
-    /(["'](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)["']\s*:\s*)(["'])((?:\\[\s\S]|(?!\2)[^\\])*)\2/gi,
-    '$1$2[redacted]$2',
+    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])(?!\[redacted\])[^\s]*`, "gi"),
+    "$1$2$3[redacted]",
   ],
-  // Truncated quoted values stop at whitespace or the end of the line.
-  [/\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)(["'])(?!\[redacted\])[^\s]*/gi, "$1$2$3[redacted]"],
-  [/(["'](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|rpc[_-]?(?:password|auth)|macaroon|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)["']\s*:\s*)(["'])(?!\[redacted\])[^\s]*/gi, "$1$2[redacted]"],
 ];
 
 const PUBLIC_SAFE_AMOUNT_NUMBER =
