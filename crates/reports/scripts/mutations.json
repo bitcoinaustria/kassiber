@@ -6809,5 +6809,515 @@
       "gain_daemon_arguments_preserve_reference_year_alias_and_context"
     ],
     "rule": "Core desktop transport preserves the tax_year alias."
+  },
+  {
+    "id": "cross-msat-tolerance",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "abs(a - b) < 1000.into()",
+    "replace": "abs(a - b) <= 1000.into()",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "One-sat differences are material; sub-sat differences retain the reference tolerance."
+  },
+  {
+    "id": "cross-msat-rounding",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": ".to_fixed_places(0, Rounding::HalfUp)",
+    "replace": ".to_fixed_places(0, Rounding::HalfEven)",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Platform quantities round half-up to integer msat."
+  },
+  {
+    "id": "cross-date-display",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "s[..19].trim_start_matches('0')",
+    "replace": "&s[..19]",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Malformed stored rows retain the reference minimum-year display."
+  },
+  {
+    "id": "cross-date-overflow",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "if !(0..315_537_897_600_000_000).contains(&at) {\n        return Err(AppError::new(\"internal_error\", \"date value out of range\"));\n    }",
+    "replace": "if !(0..315_537_897_600_000_000).contains(&at) {\n        return Ok(None);\n    }",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "UTC conversion overflows retain the reference refusal."
+  },
+  {
+    "id": "cross-liquid-identity",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "\"LBTC\" | \"L-BTC\" => (\"liquid:lbtc\".into(), \"L-BTC\".into())",
+    "replace": "\"LBTC\" | \"L-BTC\" => (\"bitcoin:btc\".into(), \"BTC\".into())",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Liquid Bitcoin retains a distinct comparison asset."
+  },
+  {
+    "id": "cross-included-fee",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "amount -= &fee;",
+    "replace": "amount += &fee;",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Fee-inclusive outbound observations expose principal separately."
+  },
+  {
+    "id": "cross-journal-income",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "v.get(\"income\").or_else(|| v.get(\"proceeds\"))",
+    "replace": "v.get(\"proceeds\").or_else(|| v.get(\"cost\"))",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Stored journal income has cash-value authority before observation pricing."
+  },
+  {
+    "id": "cross-probable-window",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "<= 26 * 3_600_000_000",
+    "replace": "< 26 * 3_600_000_000",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "The probable-match window includes exactly twenty-six hours."
+  },
+  {
+    "id": "cross-chain-conflict",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "&& t.txid.to_lowercase() != b.txid.to_lowercase()",
+    "replace": "&& false",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Distinct full chain IDs never probable-match."
+  },
+  {
+    "id": "cross-offset-minimum",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "total >= 3 && h != 0",
+    "replace": "total >= 2 && h != 0",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Clock offset needs at least three identified pairs."
+  },
+  {
+    "id": "cross-offset-majority",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "n * 5 >= total * 4",
+    "replace": "n * 5 >= total * 3",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Clock offset needs an eighty-percent majority."
+  },
+  {
+    "id": "cross-offset-cap",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "h.abs() <= 14",
+    "replace": "h.abs() <= 15",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Clock offsets over fourteen hours are refused."
+  },
+  {
+    "id": "cross-mixed-classification",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "classes.contains(tc) && !mixed",
+    "replace": "classes.contains(tc)",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Mixed disposal/transfer journal types cannot hide tax differences."
+  },
+  {
+    "id": "cross-neutral-swap",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "if swap || categories.contains(\"neu_swap\")",
+    "replace": "if swap",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Neutral Austrian swap categories retain transfer classification."
+  },
+  {
+    "id": "cross-reviewed-income",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "&& !b.non_taxable",
+    "replace": "&& true",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Reviewed non-taxable income stays out of income totals."
+  },
+  {
+    "id": "cross-stale-types",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "let diffs = differences(t, b, offset, vienna, types)?;",
+    "replace": "let diffs = differences(t, b, offset, vienna, !types)?;",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Stale journals disable tax-type comparison without disabling diagnostics."
+  },
+  {
+    "id": "cross-id-nearest",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": ".min_by_key(|(_, b)| abs(&b.amount - &t.amount))",
+    "replace": ".max_by_key(|(_, b)| abs(&b.amount - &t.amount))",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Repeated active IDs choose the closest principal."
+  },
+  {
+    "id": "cross-excluded-id-first",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "b.excluded\n                    && b.direction == row.direction",
+    "replace": "b.excluded\n                    && b.asset == row.asset\n                    && b.direction == row.direction",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Excluded duplicate IDs preserve Python first-row asset-blind lookup."
+  },
+  {
+    "id": "cross-year-severity",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "let crosses = year(shifted, vienna)? != year(b.at, vienna)?;",
+    "replace": "let crosses = false;",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Different accounting years are tax-relevant even within the time notice window."
+  },
+  {
+    "id": "cross-source-filter",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "tool_rows.retain(|t| wanted.contains(&s(&t.source)));",
+    "replace": "tool_rows.retain(|t| !wanted.contains(&s(&t.source)));",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Tool-source selection filters the diagnostic rows."
+  },
+  {
+    "id": "cross-tool-wallets",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "if !truthy(value(args, \"include_tool_wallets\"))",
+    "replace": "if truthy(value(args, \"include_tool_wallets\"))",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Imported tool wallets are skipped unless explicitly included."
+  },
+  {
+    "id": "cross-local-calendar",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "let vienna = text(&profile, \"tax_country\").to_lowercase() == \"at\";",
+    "replace": "let vienna = false;",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Austrian period selection uses Vienna years."
+  },
+  {
+    "id": "cross-csv-currency",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "text.to_ascii_lowercase()",
+    "replace": "text.to_ascii_uppercase()",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Unsupported Liquid asset diagnostics retain lowercase hex identity."
+  },
+  {
+    "id": "cross-csv-control-space",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "kassiber_pytext::strip(v).to_owned()",
+    "replace": "v.trim().to_owned()",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Presentation cells use CPython control-whitespace stripping."
+  },
+  {
+    "id": "cross-csv-fee-fiat",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "n.add(&fee_cash)",
+    "replace": "n.sub(&fee_cash)",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Inbound fiat fees increase acquisition cost."
+  },
+  {
+    "id": "cross-csv-fee-standalone",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "out_asset = bitcoin(&fee_asset);",
+    "replace": "out_asset = bitcoin(\"BTC\");",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Standalone Bitcoin fees remain a single outbound amount."
+  },
+  {
+    "id": "cross-csv-decimal-comma",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "text.replace(',', \".\")",
+    "replace": "text.replace(',', \"\")",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "A single comma is a locale decimal point."
+  },
+  {
+    "id": "cross-csv-row-error",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "error: e.message,",
+    "replace": "error: String::new(),",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Unreadable rows remain visible with their reference row error."
+  },
+  {
+    "id": "cross-csv-nonfinite-error",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "Err(e) if e.code == \"internal_error\" => return Err(e),",
+    "replace": "Err(e) if e.code == \"never\" => return Err(e),",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Non-finite arithmetic errors are not converted into row-level validation."
+  },
+  {
+    "id": "cross-csv-date-format",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "(1..=2).contains(&day.chars().count())",
+    "replace": "false",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "European date spellings retain their calendar interpretation."
+  },
+  {
+    "id": "cross-csv-quote",
+    "file": "crates/reports/src/cross_check_dialect.rs",
+    "find": "if ch == quote && start",
+    "replace": "if ch == quote && !start",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Quoted platform fields retain delimiter and newline contents."
+  },
+  {
+    "id": "cross-csv-delimiter",
+    "file": "crates/reports/src/cross_check_dialect.rs",
+    "find": "let (delimiter, quote, double, skip) = sniff(text);",
+    "replace": "let (_, quote, double, skip) = sniff(text);\n    let delimiter = ',';",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "The parser recognizes semicolon, tab and pipe dialects."
+  },
+  {
+    "id": "cross-nonfinite-money",
+    "file": "crates/reports/src/cross_check_number.rs",
+    "find": "Self::Nan(n) => Ok(s(n.as_str()))",
+    "replace": "Self::Nan(_) => Ok(s(\"\"))",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "A quiet NaN cash cell retains the reference read value."
+  },
+  {
+    "id": "cross-money-tolerance",
+    "file": "crates/reports/src/cross_check_number.rs",
+    "find": ".max(Decimal::from(1))",
+    "replace": ".max(Decimal::from(2))",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Value tolerance retains a one-unit minimum plus the one-percent bound."
+  },
+  {
+    "id": "cross-xlsx-quantity-format",
+    "file": "crates/reports/src/cross_check_xlsx.rs",
+    "find": "#,##0.00000000###",
+    "replace": "#,##0.00000000",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Cross-check quantities retain meaningful milllisatoshi workbook formatting."
+  },
+  {
+    "id": "cross-xlsx-freeze",
+    "file": "crates/reports/src/cross_check_xlsx.rs",
+    "find": "Operation::Freeze { row: 1, col: 0 }",
+    "replace": "Operation::Freeze { row: 0, col: 0 }",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Detail sheets freeze their header row."
+  },
+  {
+    "id": "cross-xlsx-nonfinite",
+    "file": "crates/reports/src/cross_check_xlsx.rs",
+    "find": "let non_finite = raw.trim_start_matches(['+', '-']).starts_with(\"NaN\")\n        || raw.parse::<f64>().is_ok_and(|v| !v.is_finite());",
+    "replace": "let non_finite = false;",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Non-finite workbook values retain the Python write-number refusal."
+  },
+  {
+    "id": "cross-upload-authority",
+    "file": "crates/reports/src/cross_check_request.rs",
+    "find": "if !unknown.is_empty()",
+    "replace": "if false",
+    "expect_failing": [
+      "cross_check_upload_validates_bytes_and_scope_before_reads"
+    ],
+    "rule": "Desktop uploads cannot name arbitrary filesystem arguments."
+  },
+  {
+    "id": "cross-upload-year",
+    "file": "crates/reports/src/cross_check_request.rs",
+    "find": "Value::Null | Value::Int(_)",
+    "replace": "Value::Null | Value::Int(_) | Value::Bool(_)",
+    "expect_failing": [
+      "cross_check_upload_validates_bytes_and_scope_before_reads"
+    ],
+    "rule": "Desktop year arguments reject booleans."
+  },
+  {
+    "id": "cross-upload-leading-padding",
+    "file": "crates/reports/src/cross_check_request.rs",
+    "find": "if count == 0",
+    "replace": "if false",
+    "expect_failing": [
+      "cross_check_upload_validates_bytes_and_scope_before_reads"
+    ],
+    "rule": "Strict base64 rejects leading padding."
+  },
+  {
+    "id": "cross-upload-padding",
+    "file": "crates/reports/src/cross_check_request.rs",
+    "find": "pads != 4 - count % 4",
+    "replace": "pads < 4 - count % 4",
+    "expect_failing": [
+      "cross_check_upload_validates_bytes_and_scope_before_reads"
+    ],
+    "rule": "Strict base64 rejects excess padding after incomplete quanta."
+  },
+  {
+    "id": "cross-upload-wallets",
+    "file": "crates/reports/src/cross_check_request.rs",
+    "find": "replace(&mut normalized, \"wallets\", wallets);",
+    "replace": "replace(&mut normalized, \"wallets\", Value::Null);",
+    "expect_failing": [
+      "cross_check_upload_validates_bytes_and_scope_before_reads"
+    ],
+    "rule": "Desktop uploads preserve explicit wallet scope."
+  },
+  {
+    "id": "cross-publication-size",
+    "file": "crates/reports/src/cross_check_xlsx.rs",
+    "find": "Value::Int(bytes.len().into())",
+    "replace": "Value::Int((bytes.len()+1).into())",
+    "expect_failing": [
+      "cross_check_publication_preserves_bytes_and_diagnostic_history"
+    ],
+    "rule": "Reported workbook size binds the actual native bytes."
+  },
+  {
+    "id": "cross-publication-write",
+    "file": "crates/reports/src/cross_check_xlsx.rs",
+    "find": "std::fs::write(path, &bytes)",
+    "replace": "std::fs::write(path, [])",
+    "expect_failing": [
+      "cross_check_publication_preserves_bytes_and_diagnostic_history"
+    ],
+    "rule": "Native publication writes the complete XLSX artifact."
+  },
+  {
+    "id": "cross-cli-scope",
+    "file": "crates/cli/src/reports.rs",
+    "find": "(k, args.get(k).cloned().unwrap_or(Value::Null))",
+    "replace": "(k, Value::Null)",
+    "expect_failing": [
+      "cross_check_cli_forwards_filters_files_and_native_registration"
+    ],
+    "rule": "CLI forwards every cross-check filter and output path."
+  },
+  {
+    "id": "cross-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"reports.cross-check\",\n",
+    "replace": "",
+    "expect_failing": [
+      "cross_check_cli_forwards_filters_files_and_native_registration"
+    ],
+    "rule": "Cross-check is registered as a native CLI leaf."
+  },
+  {
+    "id": "cross-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.reports.export_cross_check\",\n",
+    "replace": "",
+    "expect_failing": [
+      "cross_check_daemon_preserves_uploaded_bytes_and_registration"
+    ],
+    "rule": "Cross-check workbook export is registered natively."
+  },
+  {
+    "id": "cross-daemon-bytes",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    Ok(args)\n}\n",
+    "replace": "    Ok(dict::<&str>([]))\n}\n",
+    "expect_failing": [
+      "cross_check_daemon_preserves_uploaded_bytes_and_registration"
+    ],
+    "rule": "Desktop cross-check forwards the upload and filters without loss."
+  },
+  {
+    "id": "cross-probable-date-bounds",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "if at < window || at + window >= 315_537_897_600_000_000",
+    "replace": "if false && (at < window || at + window >= 315_537_897_600_000_000)",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Probable matching preserves Python datetime-bound overflow refusals."
+  },
+  {
+    "id": "cross-journal-nonfinite",
+    "file": "crates/reports/src/cross_check.rs",
+    "find": "let amount = Number::from_value(value(",
+    "replace": "let amount = (|v: &Value| decimal(v).map(Number::from))(value(",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Journal cash aggregation retains Python Decimal specials and their publication refusals."
+  },
+  {
+    "id": "cross-csv-bare-cr",
+    "file": "crates/reports/src/cross_check_dialect.rs",
+    "find": "!['\\r', '\\n'].contains(c)",
+    "replace": "false",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "Bare carriage-return row separators retain the Python StringIO reader refusal."
   }
 ]

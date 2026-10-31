@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 pub fn handles(command: &str) -> bool {
     matches!(
         command,
-        "reports.export-csv"
+        "reports.cross-check"
+            | "ui.reports.export_cross_check"
+            | "reports.export-csv"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
             | "reports.export-commercial-subledger-csv"
@@ -50,7 +52,7 @@ fn range(
         &tzpath,
     )
 }
-fn managed(root: &Path, stem: &str, suffix: &str, stamp: &str) -> Result<PathBuf> {
+pub(super) fn managed(root: &Path, stem: &str, suffix: &str, stamp: &str) -> Result<PathBuf> {
     let root = root.join("reports");
     std::fs::create_dir_all(&root).map_err(|e| export::io_error(e, Some(&root)))?;
     let stamp = stamp
@@ -84,7 +86,7 @@ fn freshness(conn: &Connection, profile: &Value) -> Result<()> {
         ("sources", Value::List(sources)),
     ])))
 }
-fn wallet_args(kind: &str, args: &Value) -> Result<Value> {
+pub(super) fn wallet_args(kind: &str, args: &Value) -> Result<Value> {
     let wallets = value(args, "wallets");
     let wallet = value(args, "wallet");
     if !matches!(wallets, Value::Null) {
@@ -118,6 +120,12 @@ pub fn execute(
     exports_root: &Path,
     sources: &dyn Sources,
 ) -> Result<Value> {
+    if matches!(
+        command,
+        "reports.cross-check" | "ui.reports.export_cross_check"
+    ) {
+        return cross_check_request::execute(conn, command, args, exports_root, sources);
+    }
     if command == "reports.export-commercial-subledger-csv" {
         return commercial::export(conn, args);
     }

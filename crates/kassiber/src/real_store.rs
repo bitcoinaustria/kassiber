@@ -1209,6 +1209,21 @@ impl Book for RealBook {
                 })
                 .map_err(error)?;
             let mut args = args.clone();
+            if command == "reports.cross-check" {
+                if let Some(raw) = kassiber_envelope::get(&args, "xlsx")
+                    .filter(|v| kassiber_envelope::truthy(v))
+                    .map(kassiber_envelope::py_str)
+                {
+                    let path = context()?.expand_user(Path::new(&raw)).map_err(error)?;
+                    if let Value::Dict(fields) = &mut args {
+                        for (k, v) in fields {
+                            if *k == "xlsx".into() {
+                                *v = kassiber_envelope::s(path.to_string_lossy().into_owned());
+                            }
+                        }
+                    }
+                }
+            }
             if !command.starts_with("ui.") {
                 let key = if command == "reports.export-austrian-e1kv-csv" {
                     "dir"

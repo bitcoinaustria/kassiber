@@ -31,7 +31,7 @@ verification, including per-command Rust routing counts.
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
-| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains and retained explanations, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian/full-report/exit-tax XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers |
+| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains and retained explanations, live/historical holdings and journal listing, cross-check diagnostics, report readiness, CSV and transaction/Austrian/full-report/exit-tax/cross-check XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers |
 
 ## Command line
 
@@ -5591,6 +5591,165 @@ Individual snapshot/amendment reads retain the prior process-caller deferral.
 PDF rendering, PDF-containing bundles/audit packages and AI projections stay
 Python. No dependencies, lockfiles, schema, tax rules or Python product code
 change in this checkpoint.
+
+## Cross-check checkpoint (R5 sixteenth reports continuation, partial)
+
+`t3code/r5-reports-16` starts at `be4aac52d`. Native
+`reports cross-check` (including `--xlsx`), `ui.reports.cross_check` and
+`ui.reports.export_cross_check` share the diagnostic service. CoinTracking and
+Blockpit CSV readers retain the reference vocabulary, dialect detection,
+locale decimals, row refusals, fiat fees and standalone Bitcoin fees. Quantities
+remain integer msat through matching, fee comparisons and totals. Identified
+matches precede excluded-ID and probable matches; distinct full chain IDs never
+probable-match. Clock-offset votes, time bounds, cash tolerances, classifications,
+reviewed non-taxable status, Vienna years, source/wallet filters and wallet
+pairing retain Python behavior.
+
+This diagnostic does not rebuild journals, run the tax engine, acquire prices
+or reinterpret custody. Stale journals disable type comparison with a notice;
+stored journal cash values remain authoritative. Neither read nor workbook
+export requires final-accounting readiness or source freshness in Python, so
+the native paths retain that boundary. Cross-check publication creates no saved
+snapshot, dependency capture or filed marker. Desktop requests accept uploaded
+CSV bytes and a basename, never an arbitrary input path; native decoding stays
+in RAM. All I/O is local and explicitly requested. No new egress is introduced.
+
+The owner explicitly defers desktop gains refresh and daemon registration until
+the accepted native R4 journal producer is available. This supersedes the prior
+checkpoint's instruction to finish that dependency before starting cross-check.
+The exit-tax port is unchanged; Python fixes on other branches are not mirrored.
+
+The approved `rust_xlsxwriter` renderer emits Summary, Differences, Only in tool,
+Only in Kassiber, Excluded in Kassiber, Matched and Not comparable sheets with
+reference typed values, styles, dimensions, panes, filters and metadata. The
+oracle loads both formulas and cached values through openpyxl and validates
+ZIP/XML. Each runtime's
+reported XLSX byte count is checked against its own file; only that container
+size is normalized. Other response bytes, errors and all 112 database tables
+compare without normalization.
+
+Reference bugs and omissions remain unchanged:
+
+- Excluded duplicate IDs use an asset-blind first-row index. A later excluded
+  row with the correct asset can remain unmatched outside the probable window.
+- An interior malformed stored date becomes the minimum datetime, displayed
+  as `1-01-01T00:00:00Z` on the Linux reference. Malformed book year bounds and
+  overflowing UTC/probable-window dates retain their internal errors.
+- A fee folded into an otherwise equal outbound total reports `Same total,
+  but the fee is split differently`, rather than the unreachable dedicated
+  folded-fee notice.
+- Non-finite Decimal input can escape as an internal arithmetic/conversion
+  error. A quiet NaN cash value from the uploaded CSV or stored journals can
+  appear in a read and then fail XLSX numeric publication with Python's exact
+  write-number refusal. Signed NaN payloads retain their sign even through
+  Python's absolute-value operation.
+- Workbook publication registers no saved report snapshot.
+- Bare carriage-return row separators retain the Python StringIO CSV reader's
+  internal refusal, even though conventional CRLF and LF rows are accepted.
+
+Reproduce these on synthetic data under `target/`, preserving account `HOME`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_cross_check.py
+```
+
+The frozen corpus contains 228 cases: 183 successful workbook documents,
+seven successful reads with workbook refusals and 38 read refusals.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Real native service | 456 read/XLSX comparisons over every frozen case; canonical response bytes, openpyxl content and all 112 tables |
+| CLI | Four generic/Austrian/stale/raw-hex scenarios, 28 calls each; literal stdout/stderr/status and every table after each call |
+| Daemon | Four ready/stale/source-blocked/no-context sessions, 42 cross-check requests each; literal responses, workbook content and every table after each session |
+| Diagnostic history | No saved snapshot, dependency capture, filing or journal refresh; publication and read tests preserve stale journals |
+
+All 464 new Python tests pass. The CLI scenarios record 112 Rust calls with
+zero fallback; the four native daemon sessions serve 168 cross-check requests
+(84 reads and 84 exports) with zero fallback.
+
+The mutation catalog has 731 applicable entries. All 51 new `cross-*` entries
+are killed by these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `cross_check_vectors_pin_parsing_matching_totals_and_workbooks` | 40 |
+| `cross_check_upload_validates_bytes_and_scope_before_reads` | 5 |
+| `cross_check_publication_preserves_bytes_and_diagnostic_history` | 2 |
+| `cross_check_cli_forwards_filters_files_and_native_registration` | 2 |
+| `cross_check_daemon_preserves_uploaded_bytes_and_registration` | 2 |
+
+All five selections pass unmutated against the final corpus. Five initial
+survivors needed focused witnesses or corrected recipes; two later recipes
+first failed to compile and were corrected and killed. Build errors and absent
+selections never count as kills. Signed NaN and material folded-fee witnesses
+also corrected gaps in the initial fixtures. The 680 inherited entries retain
+their prior evidence and are not freshly rerun. Per-entry killers and campaign
+logs are retained in `target/r5-reports16/mutation-summary.json`.
+
+An interrupted campaign left a compiled journal mutant in the shared Cargo
+output. A later default-feature daemon selection also reused its earlier
+argument-dropping mutant, despite the separately unified workspace test graph
+passing. Source inspection identified both cached mutations. After the last
+mutation, all report, CLI, daemon and binary package artifacts were explicitly
+cleaned across feature profiles. Both clippy configurations, all five named
+tests and the real native probes were then rebuilt from the worktree before
+the process comparisons. `build-cache-audit.json` records the failures and
+cleanup; neither failed baseline contributes kill evidence.
+
+Rust 1.99.1 offline/locked verification passes formatting, production and
+harness workspace/all-target clippy with `-D warnings`, 1,523 workspace tests
+and 14 guarded binary tests. After the final malformed-CSV and folded-fee
+witnesses, both clippy configurations and all five affected named tests pass
+again. The native probes are rebuilt after all mutation work. Owned-loopback
+fixtures run with sandbox access.
+
+The broader locked Python 3.11 regression passes all 1,385 tests plus four
+subtests, including all 464 cross-check cases, inherited report/workbook/CSV
+oracles and the original cross-check, explanation and platform-export contracts.
+Twenty selected AI, capability and wire-contract tests plus four subtests pass.
+Distinct broader logs record 929 native report/transaction CLI calls and 26
+native daemon sessions with zero report-family fallback. The broader suite's
+28 Python `journals.process` setup calls and 18 unported CoinTracking/Blockpit
+CSV export calls are outside this family's acceptance. The latter exports are
+owned by the parallel branch. Counts exclude pytest symlink aliases;
+`target/r5-reports16/routing-summary.json` retains per-command counts and the
+distinct raw routing logs.
+
+Both generators check cleanly and the reference repro passes all 12 assertions.
+The required classifier update records 5,709 definitions, with all three new
+Python test definitions reviewed as retained report oracles. The module is in
+the serial daemon CI lane. Required CI preflight passes all 57 tests.
+`target/r5-reports16/verification-summary.json` retains the gates, routing,
+mutation evidence, corpus counts, reference repro and build-cache audit.
+After moving the new registration literals to the array ends, formatting and
+the two transport selections pass again. A freshly rebuilt binary passes all
+eight real CLI/daemon scenarios again, with another 112 native CLI calls and
+168 cross-check daemon requests and zero fallback; these supplemental logs are
+kept separate from the broader totals above.
+
+Verification preserves account `HOME` and isolates books, preferences, owner
+locks and scratch under `target/`. After the owner's shared-machine resource
+update, the 25 GB intermediate tree was removed while retaining the running
+suite's probes. The final build uses `CARGO_BUILD_JOBS=8`, no incremental cache
+and no debug information; its build tree is 2.8 GB. Owned mutation and
+verification build/data trees are removed after writing the summaries; logs,
+raw routing records and summaries remain.
+
+The native inventory contains 153 CLI leaves, including 21 report commands,
+and 15 report daemon kinds plus the two transaction export kinds.
+
+This completes the cross-check family only. This branch still owns Lightning
+reads/CSV followed by non-PDF source-funds reads; neither family is started in
+this checkpoint. The parallel `t3code/r5-reports-b` branch owns year-handoff
+XLSX, CoinTracking/Blockpit CSV and other permitted non-PDF artifacts, and
+privacy hygiene/mirror/PSBT reads. New registration entries and mutations are
+appended to limit shared-file conflicts. Desktop gains refresh/registration
+remains pending on R4. Individual snapshot/amendment reads retain their
+process-caller deferral. PDF rendering, PDF-containing bundles/audit packages and AI projections
+stay Python. No Python product, tax-rule, schema, dependency or lockfile changes
+are included. Verification is Linux-only; the full Python/frontend quality gate,
+Docker regtest and packaged/platform checks are not claimed here.
 
 ## Not yet ported
 

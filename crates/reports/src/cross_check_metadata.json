@@ -1,0 +1,381 @@
+{
+  "fiat": [
+    "AED",
+    "ARS",
+    "AUD",
+    "BRL",
+    "CAD",
+    "CHF",
+    "CLP",
+    "CNY",
+    "CZK",
+    "DKK",
+    "EUR",
+    "GBP",
+    "HKD",
+    "HUF",
+    "ILS",
+    "INR",
+    "JPY",
+    "KRW",
+    "MXN",
+    "NOK",
+    "NZD",
+    "PLN",
+    "RON",
+    "SEK",
+    "SGD",
+    "THB",
+    "TRY",
+    "USD",
+    "ZAR"
+  ],
+  "cointracking_types": {
+    "deposit": "Deposit",
+    "income": "Income",
+    "gift / tip": "Gift received",
+    "gift/tip(in)": "Gift received",
+    "reward / bonus": "Income",
+    "mining": "Mining",
+    "airdrop": "Airdrop",
+    "staking": "Staking",
+    "masternode": "Income",
+    "minting": "Income",
+    "mining (commercial)": "Mining",
+    "dividends income": "Income",
+    "lending income": "Lending Interest",
+    "interest income": "Interest",
+    "lp rewards": "Income",
+    "other income": "Income",
+    "income (non taxable)": "Gift received",
+    "other income (non taxable)": "Gift received",
+    "airdrop (non taxable)": "Gift received",
+    "withdrawal": "Withdrawal",
+    "spend": "Spend",
+    "donation": "Donation",
+    "gift": "Gift sent",
+    "gift(out)": "Gift sent",
+    "stolen": "Stolen",
+    "stolen / hacked / fraud": "Stolen",
+    "lost": "Lost",
+    "other fee": "Spend",
+    "other expense": "Spend",
+    "expense (non taxable)": "Gift sent"
+  },
+  "blockpit_types": {
+    "unlabeled deposit": "Deposit",
+    "unlabeled incoming": "Deposit",
+    "unlabeled (in)": "Deposit",
+    "unlabeled incoming (deposit)": "Deposit",
+    "fehlendes label (ein)": "Deposit",
+    "deposit": "Deposit",
+    "non-taxable (in)": "Gift received",
+    "steuerfrei (ein)": "Gift received",
+    "airdrop": "Airdrop",
+    "bounty": "Income",
+    "staking": "Staking",
+    "interest": "Interest",
+    "zinsen": "Interest",
+    "gift (incoming)": "Gift received",
+    "gift (in)": "Gift received",
+    "geschenk (ein)": "Gift received",
+    "cashback": "Income",
+    "income": "Income",
+    "other income": "Income",
+    "sonstiger ertrag": "Income",
+    "hard fork": "Fork",
+    "hardfork": "Fork",
+    "mining": "Mining",
+    "masternode": "Income",
+    "security token income": "Income",
+    "security-token-ertrag": "Income",
+    "unlabeled withdrawal": "Withdrawal",
+    "unlabeled outgoing": "Withdrawal",
+    "unlabeled (out)": "Withdrawal",
+    "unlabeled outgoing (withdrawal)": "Withdrawal",
+    "fehlendes label (aus)": "Withdrawal",
+    "withdrawal": "Withdrawal",
+    "non-taxable (out)": "Gift sent",
+    "steuerfrei (aus)": "Gift sent",
+    "payment": "Spend",
+    "zahlung": "Spend",
+    "fee": "Spend",
+    "geb\u00fchr": "Spend",
+    "gift (outgoing)": "Gift sent",
+    "gift (out)": "Gift sent",
+    "geschenk (aus)": "Gift sent",
+    "lost": "Lost",
+    "verloren": "Lost"
+  },
+  "generic_types": {
+    "buy": [
+      "inbound",
+      "buy"
+    ],
+    "purchase": [
+      "inbound",
+      "buy"
+    ],
+    "sell": [
+      "outbound",
+      "sell"
+    ],
+    "deposit": [
+      "inbound",
+      "deposit"
+    ],
+    "receive": [
+      "inbound",
+      "deposit"
+    ],
+    "transfer in": [
+      "inbound",
+      "deposit"
+    ],
+    "withdrawal": [
+      "outbound",
+      "withdrawal"
+    ],
+    "withdraw": [
+      "outbound",
+      "withdrawal"
+    ],
+    "send": [
+      "outbound",
+      "withdrawal"
+    ],
+    "transfer out": [
+      "outbound",
+      "withdrawal"
+    ],
+    "spend": [
+      "outbound",
+      "spend"
+    ],
+    "payment": [
+      "outbound",
+      "spend"
+    ],
+    "income": [
+      "inbound",
+      "income"
+    ],
+    "salary": [
+      "inbound",
+      "wages"
+    ],
+    "wages": [
+      "inbound",
+      "wages"
+    ],
+    "mining": [
+      "inbound",
+      "mining"
+    ],
+    "staking": [
+      "inbound",
+      "staking"
+    ],
+    "interest": [
+      "inbound",
+      "interest"
+    ],
+    "lending interest": [
+      "inbound",
+      "lending_interest"
+    ],
+    "airdrop": [
+      "inbound",
+      "airdrop"
+    ],
+    "fork": [
+      "inbound",
+      "hardfork"
+    ],
+    "hard fork": [
+      "inbound",
+      "hardfork"
+    ],
+    "gift received": [
+      "inbound",
+      null
+    ],
+    "gift sent": [
+      "outbound",
+      "gift"
+    ],
+    "gift": [
+      "outbound",
+      "gift"
+    ],
+    "donation": [
+      "outbound",
+      "donation"
+    ],
+    "lost": [
+      "outbound",
+      "lost"
+    ],
+    "stolen": [
+      "outbound",
+      "stolen"
+    ]
+  },
+  "cointracking_required": [
+    "Type",
+    "Buy Amount",
+    "Buy Currency",
+    "Sell Amount",
+    "Sell Currency",
+    "Date"
+  ],
+  "blockpit_required": [
+    "Date (UTC)",
+    "Integration Name",
+    "Label",
+    "Outgoing Asset",
+    "Outgoing Amount",
+    "Incoming Asset",
+    "Incoming Amount"
+  ],
+  "columns": [
+    [
+      "status",
+      "Status",
+      16
+    ],
+    [
+      "match",
+      "Match",
+      10
+    ],
+    [
+      "differences",
+      "Differences",
+      40
+    ],
+    [
+      "tool_row",
+      "{tool} row",
+      8
+    ],
+    [
+      "tool_source",
+      "{tool} source",
+      18
+    ],
+    [
+      "tool_type",
+      "{tool} type",
+      14
+    ],
+    [
+      "tool_date",
+      "{tool} date (UTC)",
+      20
+    ],
+    [
+      "direction",
+      "Direction",
+      10
+    ],
+    [
+      "asset",
+      "Asset",
+      7
+    ],
+    [
+      "tool_amount",
+      "{tool} amount",
+      16
+    ],
+    [
+      "tool_fee",
+      "{tool} fee",
+      14
+    ],
+    [
+      "tool_value",
+      "{tool} value ({fiat})",
+      14
+    ],
+    [
+      "wallet",
+      "Kassiber wallet",
+      18
+    ],
+    [
+      "classification",
+      "Kassiber type",
+      18
+    ],
+    [
+      "book_date",
+      "Kassiber date (UTC)",
+      20
+    ],
+    [
+      "book_amount",
+      "Kassiber amount",
+      16
+    ],
+    [
+      "book_fee",
+      "Kassiber fee",
+      14
+    ],
+    [
+      "book_value",
+      "Kassiber value ({fiat})",
+      14
+    ],
+    [
+      "txid",
+      "Transaction id",
+      30
+    ],
+    [
+      "kassiber_ref",
+      "Kassiber ref",
+      14
+    ]
+  ],
+  "sheets": [
+    [
+      "Differences",
+      [
+        "different"
+      ]
+    ],
+    [
+      "Only in tool",
+      [
+        "only_tool"
+      ]
+    ],
+    [
+      "Only in Kassiber",
+      [
+        "only_kassiber"
+      ]
+    ],
+    [
+      "Excluded in Kassiber",
+      [
+        "excluded_in_kassiber"
+      ]
+    ],
+    [
+      "Matched",
+      [
+        "matched"
+      ]
+    ],
+    [
+      "Not comparable",
+      [
+        "not_comparable"
+      ]
+    ]
+  ]
+}

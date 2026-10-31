@@ -25,12 +25,24 @@ fn main() {
                 .unwrap_or("reports.export-transactions-xlsx");
             if matches!(
                 command,
-                "reports.exit-tax"
+                "reports.cross-check"
+                    | "ui.reports.cross_check"
+                    | "reports.exit-tax"
                     | "reports.explain-capital-gain"
                     | "ui.reports.explain_capital_gain"
                     | "ui.reports.capital_gains"
             ) {
-                kassiber_reports::execute_with_sources(&conn, command, &args, &Fixed)
+                if command == "reports.cross-check" {
+                    kassiber_reports::export_request::execute(
+                        &conn,
+                        command,
+                        &args,
+                        Path::new("."),
+                        &Fixed,
+                    )
+                } else {
+                    kassiber_reports::execute_with_sources(&conn, command, &args, &Fixed)
+                }
             } else {
                 kassiber_reports::export::export(
                     &conn,

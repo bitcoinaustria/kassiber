@@ -422,8 +422,12 @@ registers them; exit-tax preserves its reference no-registration boundary.
   native core projection is verified; Python rebuilds stale journals before
   serving the kind, so registration waits for the accepted native R4 producer.
   See the [partial gain checkpoint](docs/reference/rust-shell.md#gain-explanation-checkpoint-r5-fifteenth-reports-continuation-partial).
+- [x] Port cross-check reads and workbooks through native CLI/desktop services,
+  retaining diagnostic stale-journal behavior and Python reference quirks.
+  Compare openpyxl content, response bytes and all 112 tables with zero hybrid
+  fallbacks and named mutation kills; cross-check creates no saved snapshot.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
-  privacy, Lightning and cross-check reads.
+  Lightning reads/CSV, non-PDF source funds and privacy hygiene/mirror/PSBT.
   The reviewed commercial subledger CLI read and its CSV export now run
   natively, with reference vectors, killed mutations and hybrid routing proof.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
@@ -446,10 +450,13 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port full-report XLSX, including profile-wide verification, CLI/desktop
   registration, actual-byte saved hashes and repeated explicit filing; compare
   openpyxl content and every database table with zero hybrid fallbacks.
-- [ ] Port year-handoff and cross-check XLSX projections and
-  registration. Verify their saved completions, Rust-byte hashes, explicit
-  filing, complete normalized DB sequences and native routing before marking
-  XLSX complete. PDF stays Python.
+- [ ] Port year-handoff XLSX projection and registration. Verify its reference
+  completion behavior, Rust-byte hashes where saved, explicit filing, complete
+  normalized DB sequences and native routing before marking XLSX complete.
+  Cross-check XLSX is complete at its reference no-snapshot boundary. PDF stays
+  Python.
+- [ ] Port CoinTracking/Blockpit transaction CSV and their desktop export kind,
+  then other permitted non-PDF artifacts.
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
 - [x] Keep PDF rendering and PDF-containing source-funds bundles in Python by

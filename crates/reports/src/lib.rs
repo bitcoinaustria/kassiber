@@ -10,6 +10,12 @@ mod calendar;
 mod capital_csv;
 mod commercial;
 mod components;
+mod cross_check;
+mod cross_check_csv;
+mod cross_check_dialect;
+mod cross_check_number;
+mod cross_check_request;
+mod cross_check_xlsx;
 mod desktop;
 mod exit_tax;
 mod exit_xlsx;
@@ -135,6 +141,18 @@ pub fn execute_with_sources(
                     .with_details(dict([("type", s(kassiber_envelope::type_name(args)))])));
             }
             return gain_explanation::explain(conn, &profile, value(args, "reference"));
+        }
+        if command == "reports.cross-check" {
+            return cross_check::read_cli(conn, args);
+        }
+        if command == "ui.reports.cross_check" {
+            return cross_check_request::execute(
+                conn,
+                command,
+                args,
+                std::path::Path::new("."),
+                sources,
+            );
         }
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
         if command == "reports.explain-capital-gain" {

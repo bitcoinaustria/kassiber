@@ -188,6 +188,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-btcpay",
     "wallets.import-ledger",
     "wallets.import-wasabi",
+    "reports.cross-check",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

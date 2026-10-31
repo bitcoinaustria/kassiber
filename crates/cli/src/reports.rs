@@ -25,6 +25,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.export-austrian-e1kv-csv",
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
+    "reports.cross-check",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -34,6 +35,9 @@ pub fn kind(command: &str) -> Option<&'static str> {
     }
 }
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if command == "reports.cross-check" {
+        return book.reports(command, &cross_check_request(args));
+    }
     if matches!(
         command,
         "reports.export-csv"
@@ -50,6 +54,23 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
         return book.reports(command, &snapshot_request(args));
     }
     book.reports(command, &request(args))
+}
+
+fn cross_check_request(args: &Namespace) -> Value {
+    dict(
+        [
+            "workspace",
+            "profile",
+            "tool",
+            "file",
+            "wallets",
+            "year",
+            "tool_sources",
+            "include_tool_wallets",
+            "xlsx",
+        ]
+        .map(|k| (k, args.get(k).cloned().unwrap_or(Value::Null))),
+    )
 }
 
 fn export_request(args: &Namespace) -> Value {
@@ -146,6 +167,56 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn cross_check_cli_forwards_filters_files_and_native_registration() {
+        let args = crate::argparse::parse_args(
+            &[
+                "reports",
+                "cross-check",
+                "--tool",
+                "cointracking",
+                "--file",
+                "source.csv",
+                "--wallet",
+                "cold",
+                "--wallet",
+                "hot",
+                "--year",
+                "2024",
+                "--source",
+                "Exchange",
+                "--include-tool-wallets",
+                "--xlsx",
+                "out.xlsx",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ]
+            .map(String::from),
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        let payload = cross_check_request(&args);
+        for k in [
+            "workspace",
+            "profile",
+            "tool",
+            "file",
+            "wallets",
+            "year",
+            "tool_sources",
+            "include_tool_wallets",
+            "xlsx",
+        ] {
+            assert_eq!(get(&payload, k), args.get(k));
+        }
+        assert!(COMMANDS.contains(&"reports.cross-check"));
+        assert!(crate::describe::IMPLEMENTED.contains(&"reports.cross-check"));
+    }
     #[test]
     fn gain_cli_forwards_complete_reference_and_scope() {
         let args = crate::argparse::parse_args(

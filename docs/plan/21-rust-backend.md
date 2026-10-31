@@ -1205,11 +1205,37 @@ Desktop gains computation is ported as a core projection, but its daemon kind
 remains unregistered. Python automatically rebuilds stale journals before that
 read; the native R4 producer is not accepted at this base. This is a partial
 boundary within the first requested family, not completion of that family.
-Finish native refresh/registration before cross-check, Lightning, source funds,
-year-handoff, platform CSV or privacy reads. The
+Native refresh/registration remains pending on that accepted R4 producer;
+the owner has authorized the independent report families to continue. The
 [gain explanation checkpoint](../reference/rust-shell.md#gain-explanation-checkpoint-r5-fifteenth-reports-continuation-partial)
 records the exact boundary, reference repro and verification. Python product
 code, AI projections, tax rules, schema and dependencies are unchanged.
+
+### R5 cross-check continuation (partial)
+
+The sixteenth reports continuation starts at `be4aac52d` and ports
+`reports cross-check` (including `--xlsx`), `ui.reports.cross_check` and
+`ui.reports.export_cross_check`. The native inventory contains 153 CLI leaves,
+including 21 report commands, and 15 report daemon kinds plus the two
+transaction export kinds. The shared service reads stored observations and
+journals without rebuilding, repricing or acquiring data. Cross-check remains
+a diagnostic: stale journals disable type comparison with a notice, and neither
+read nor export gains a final-accounting readiness barrier or saved snapshot.
+
+CoinTracking/Blockpit parsing, integer-msat matching, exclusions, clock offsets,
+cash/type/year differences, filters, totals and wallet pairing retain the
+unchanged Python reference. The approved native renderer produces the workbook;
+openpyxl content, response bytes and all 112 database tables are compared.
+The [cross-check checkpoint](../reference/rust-shell.md#cross-check-checkpoint-r5-sixteenth-reports-continuation-partial)
+records routing, named mutation kills and reference-bug repros.
+
+Desktop gains refresh/registration stays pending on R4; the exit-tax port is
+unchanged while Python fixes proceed elsewhere. This branch next owns Lightning
+reads/CSV and non-PDF source-funds reads. The parallel `t3code/r5-reports-b`
+branch owns year-handoff XLSX, CoinTracking/Blockpit CSV and other permitted
+artifacts, and privacy hygiene/mirror/PSBT reads. PDF-containing exports and AI
+projections stay Python. No Python product, tax-rule, schema, dependency or
+lockfile changes are included.
 
 ### Service slice contract (R4 onward)
 

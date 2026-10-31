@@ -18,8 +18,16 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_csv",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
+    "ui.reports.cross_check",
+    "ui.reports.export_cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if matches!(
+        kind,
+        "ui.reports.cross_check" | "ui.reports.export_cross_check"
+    ) {
+        return book.reports(kind, &cross_check_args(raw)?);
+    }
     if matches!(
         kind,
         "ui.reports.capital_gains" | "ui.reports.explain_capital_gain"
@@ -118,6 +126,17 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
         }
     };
     book.reports(kind, &dict([("wallet", wallet)]))
+}
+fn cross_check_args(raw: Option<&Value>) -> Result<Value, AppError> {
+    let args = raw
+        .filter(|v| !matches!(v, Value::Null))
+        .cloned()
+        .unwrap_or_else(|| dict::<&str>([]));
+    if !matches!(args, Value::Dict(_)) {
+        return Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(type_name(&args)))])));
+    }
+    Ok(args)
 }
 
 fn gain_args(kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
@@ -269,6 +288,22 @@ fn tax_summary_args(args: &Value) -> Result<Value, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cross_check_daemon_preserves_uploaded_bytes_and_registration() {
+        let args = kassiber_pytext::loads(r#"{"tool":"cointracking","filename":"history.csv","source_bytes_base64":"YQ==","wallets":["cold"],"year":2024,"tool_sources":["Exchange"],"include_tool_wallets":true}"#).unwrap();
+        for kind in ["ui.reports.cross_check", "ui.reports.export_cross_check"] {
+            assert!(KINDS.contains(&kind));
+            assert_eq!(cross_check_args(Some(&args)).unwrap(), args);
+        }
+        assert_eq!(cross_check_args(None).unwrap(), dict::<&str>([]));
+        assert_eq!(
+            cross_check_args(Some(&Value::Null)).unwrap(),
+            dict::<&str>([])
+        );
+        let error = cross_check_args(Some(&Value::List(vec![]))).unwrap_err();
+        assert_eq!(error.message, "daemon args must be an object");
+        assert_eq!(error.details, Some(dict([("type", s("list"))])));
+    }
     #[test]
     fn gain_daemon_arguments_preserve_reference_year_alias_and_context() {
         let args = kassiber_pytext::loads(
