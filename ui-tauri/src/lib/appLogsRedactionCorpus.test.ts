@@ -33,3 +33,11 @@ it.each(secrets)("floors the same secret as Python for $input", (testCase) => {
   expect(record!.msg).toBe(testCase.expected);
   expect(record!.fields.detail.value).toBe(testCase.expected);
 });
+
+it.each(["-", "."])("redacts 100k characters in well under a second (%s)", (separator) => {
+  const text = `word${separator}`.repeat(20_000);
+  const start = performance.now();
+  const record = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: text, fields: {} });
+  expect(record!.msg).toBe(text);
+  expect(performance.now() - start).toBeLessThan(500);
+});

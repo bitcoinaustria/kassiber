@@ -63,13 +63,13 @@ _QUOTED_SECRET_VALUE = r'''(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')'''
 # A truncated quoted value may contain spaces. Fail closed through end of line.
 _UNTERMINATED_SECRET_VALUE = r'''["'][^\r\n]*'''
 _ASSIGNED_SECRET_RE = re.compile(
-    rf"(?P<key>['\"]?\b{_SECRET_KEY_NAME}\b['\"]?)"
+    rf"(?<![A-Za-z0-9_.-])(?P<key>['\"]?\b{_SECRET_KEY_NAME}\b['\"]?)"
     r"(?P<sep>\s*[:=]\s*)"
     rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
     re.IGNORECASE,
 )
 _RECOVERY_ASSIGNMENT_RE = re.compile(
-    r"(?P<key>\b(?:[A-Za-z0-9]+[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
+    r"(?<![A-Za-z0-9_.-])(?P<key>\b(?:[A-Za-z0-9]+[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
     r"(?P<sep>\s*[:=]\s*)"
     # Quoted values belong to the escape-aware assignment parser below.
     r"(?=[^'\"\s])(?P<value>[^,;}{\r\n]*?)"
