@@ -6,12 +6,16 @@ use kassiber_store::rusqlite::{
 
 mod legacy;
 mod overlap;
+mod pipeline;
 mod pricing;
 mod sources;
 
 pub use legacy::{refresh_drifted_legacy_pair_components, ConsolidationResult, LegacyRefresh};
 pub use overlap::{
     repair_journal_source_overlaps, source_overlap_result_fields, source_overlap_warning,
+};
+pub use pipeline::{
+    prepare_journals, repair_journal_inputs, with_prebuild, Prepared, RepairedInputs,
 };
 
 pub struct PricingScope<'a> {

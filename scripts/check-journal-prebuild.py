@@ -20,6 +20,7 @@ from tests.rust_port.journal_prebuild_oracle import capture, rate, seed, transac
 from tests.rust_port.journal_persistence_oracle import dump
 from tests.rust_port.journal_source_overlap_oracle import vectors as source_vectors
 from tests.rust_port.journal_legacy_refresh_oracle import vectors as legacy_vectors
+from tests.rust_port.journal_pipeline_oracle import vectors as pipeline_vectors
 
 
 def deny_network():
@@ -63,14 +64,19 @@ def connection(path, cipher):
     return conn
 
 
-def parity(binary, root):
-    cases = [*vectors(), *(dict(v, stage="sources") for v in source_vectors()),
-             *(dict(v, stage="legacy") for v in legacy_vectors())]
+def parity(binary, root, stage=None):
+    families = {"pricing": vectors, "sources": source_vectors,
+                "legacy": legacy_vectors, "pipeline": pipeline_vectors}
+    cases = [dict(v, stage=name) for name, generate in families.items()
+             if stage is None or stage == name for v in generate()]
     requests = []
     for cipher in (False, True):
         for i, case in enumerate(cases):
             path = root / f"parity-{cipher}-{i}.sqlite3"
             conn = connection(path, cipher)
+            # Fixture construction has no durability requirement. This setting
+            # is connection-local; the native replay reopens with FULL sync.
+            conn.execute("PRAGMA synchronous=OFF")
             seed(conn)
             conn.execute("PRAGMA foreign_keys=OFF")
             conn.execute("BEGIN")
@@ -95,7 +101,10 @@ def parity(binary, root):
     rows = native(binary, requests)
     for row, request in zip(rows, requests, strict=True):
         assert row["verified"], request["name"]
-        if request.get("stage") == "legacy":
+        if request.get("stage") == "pipeline":
+            assert row["result"] == request["result"], request["name"]
+            assert row["projection_wire"] == request["wire_fields"], request["name"]
+        elif request.get("stage") == "legacy":
             assert row["result"] == request["result"], request["name"]
         elif request.get("stage") == "sources":
             assert row["result"] == request["result"], request["name"]
@@ -153,6 +162,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--benchmark", action="store_true")
+    parser.add_argument("--stage", choices=("pricing", "sources", "legacy", "pipeline"))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     scratch = ROOT / "target/r4-10/scratch"
@@ -161,7 +171,7 @@ def main():
         root = Path(directory)
         probe = subprocess.run([sys.executable, "-c", "import socket; socket.socket()"], preexec_fn=deny_network)
         assert probe.returncode == -31, probe.returncode
-        record = dict(boundary="source repairs, drifted legacy pair refresh/profile reload, and cached pricing; separate stage entry points", full_dump_comparisons=parity(args.binary, root),
+        record = dict(boundary="ordered source repairs, drifted legacy pair refresh/profile reload, and cached pricing", full_dump_comparisons=parity(args.binary, root, args.stage),
                       network="native process killed on socket/connect/send syscalls; guard self-test passed")
         if args.benchmark: record["timings"] = benchmark(args.binary, root)
     args.out.parent.mkdir(parents=True, exist_ok=True)

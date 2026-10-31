@@ -419,11 +419,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
-  expose the ordered combined stage, and complete generated/recorded book and
-  legacy/refusal coverage, whole-pipeline rollback, mutation and CPU acceptance.
+  complete generated/recorded book and legacy/refusal coverage, mutation and
+  CPU acceptance.
   Cached pricing, source-overlap repair/warnings, and drifted legacy-pair refresh
   with profile reload have unregistered native interfaces and complete-dump
-  oracles; R4-13 still needs the combined stage and later-failure rollback gate.
+  oracles. The combined stage and split repair/price interface for R4-13 retain
+  whole-pipeline rollback after later build/persistence failures.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

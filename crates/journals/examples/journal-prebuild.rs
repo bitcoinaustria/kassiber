@@ -2,9 +2,9 @@
 #[path = "../tests/support/mod.rs"]
 mod support;
 use kassiber_journals::prebuild::{
-    auto_price_transactions_from_rates_cache, refresh_drifted_legacy_pair_components,
-    repair_journal_source_overlaps, source_overlap_result_fields, source_overlap_warning,
-    PricingScope,
+    auto_price_transactions_from_rates_cache, prepare_journals,
+    refresh_drifted_legacy_pair_components, repair_journal_source_overlaps,
+    source_overlap_result_fields, source_overlap_warning, PricingScope,
 };
 use kassiber_pydecimal::{Context, Rounding};
 use kassiber_store::rusqlite::Connection;
@@ -79,6 +79,15 @@ fn run(v: &Value) -> Result<Value, Box<dyn std::error::Error>> {
             )
             .map_err(|e| kassiber_journals::Refusal::from(e.to_string()))?);
             Ok(json!({"repair":repair,"warning":warning}))
+        })
+    } else if v["stage"] == "pipeline" {
+        prepare_journals(&conn, &v["profile"], Context::new(32, Rounding::HalfEven), &mut clock, &mut identity).and_then(|p| {
+            projection_wire = json!(kassiber_pyjson::dumps(&p.repaired.result_fields()?, &kassiber_pyjson::Options::new())
+                .map_err(|e| kassiber_journals::Refusal::from(e.to_string()))?);
+            let r = p.repaired;
+            Ok(json!({"repair":r.source_overlap_repair,"warning":r.source_overlap_warning,
+                "consolidation":{"activated":r.consolidation.activated,"unchanged":r.consolidation.unchanged,"skipped":r.consolidation.skipped},
+                "profile":r.profile,"auto_priced":p.auto_priced}))
         })
     } else if v["stage"] == "legacy" {
         refresh_drifted_legacy_pair_components(&conn, &v["profile"], &mut clock).map(|result| {

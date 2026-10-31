@@ -1,0 +1,35 @@
+{
+  "schema": "kassiber.r4-prebuild-pipeline-checkpoint.v1",
+  "boundary": "Ordered source repair/warning, legacy refresh/profile reload and cached pricing; unregistered library API for R4-13",
+  "combined_scenarios": 8,
+  "native_pipeline_tests": 6,
+  "native_journal_tests": 61,
+  "combined_driver_dump_comparisons": 16,
+  "inherited_separate_stage_dump_comparisons": 280,
+  "drivers": ["SQLite", "SQLCipher"],
+  "network_guard": "Native socket/connect/send syscall rejection with a socket-construction self-test; Python DNS/connect/send patches",
+  "rollback": {
+    "build": "Actual boundary builder refuses a missing acquisition source after all pre-build stages wrote successfully",
+    "persistence": "Actual acquisition persistence succeeds, then failure and unwind are injected after every storage observer write",
+    "comparison": "Every table, rowid and SQLite scalar compared; earlier caller writes retained and writer remains open"
+  },
+  "split_interface": "Repair phase plus cached-pricing phase matches the combined ordered result and complete dump",
+  "pipeline_mutation_entries": 7,
+  "verification": {
+    "rust_formatting": "passed",
+    "release_clippy_all_targets_test_harness_warnings_denied": "passed",
+    "python_oracle_reproducibility": "8 complete dumps reproduced",
+    "pipeline_mutation_applicability": "7 entries apply",
+    "classifier_update": "passed; no inventory delta",
+    "ci_preflight": "57 passed"
+  },
+  "mutation_campaign": "Recipe applicability only at this boundary; execution remains in the coverage campaign",
+  "remaining": [
+    "Twelve-generator per-scenario activity and frozen campaign vectors",
+    "Recorded and fresh-book campaign on both drivers",
+    "Broader legacy and refusal corpus",
+    "Focused census and shadow",
+    "Whole-stage branch mutation campaign, including 21 legacy and 7 pipeline entries",
+    "Whole-stage 20k process CPU profiling and cache optimization"
+  ]
+}

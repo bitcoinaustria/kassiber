@@ -363,7 +363,7 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-7 | Typed finalized projection; custody in-process total checked | 1.05 / 1.16 | custody ≤ 0.51 s generic, ≤ 1.21 s multi-wallet (10× Python) |
 | R4-8 | Typed fusion to `LedgerRequest`, `ledger_typed` in the engine, text only for refusal fidelity and comparison | builder 1.31 / 1.42, wire 0.19, engine parse and serialize about 0.08 | request ≤ 0.10 s; engine no slower |
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [accepted except the BLOB corruption class (pending owner decision) and 16 seed-dependent messages (pending Python fix)](r4-native-loader-checkpoint.md#loader-9-acceptance); all 308 loader and 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; inherited non-BLOB audit has 16,384 matches, zero writes/unsafe admissions; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
-| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Auto-pricing checkpoint](#r4-10-auto-pricing-checkpoint); combined interface and campaign acceptance remain open. | Python 0.03 | ≤ 0.03 s |
+| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity. [Combined interface](#r4-10-combined-pre-build-contract) and later-failure rollback are implemented; campaign and CPU acceptance remain open. | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
@@ -481,9 +481,8 @@ example (`--features test-harness`) and
 `uv run --locked python scripts/check-journal-prebuild.py --binary
 <absolute-example-path> --benchmark --out <target/results.json>`.
 
-Remaining R4-10 acceptance work: expose the combined ordered pre-build stage for R4-13;
-prove whole-pipeline rollback after subsequent build/persistence refusals;
-compare the twelve generators with per-scenario activity, recorded books and
+Remaining R4-10 acceptance work: compare the twelve generators with
+per-scenario activity, recorded books and
 fresh recordings on both drivers; expand the legacy/refusal corpus beyond
 these bounded decimal and timestamp fixtures; complete the inherited census,
 shadow, frozen-vector and whole-catalog mutation gates. The pricing-only
@@ -566,9 +565,8 @@ Legacy refresh retains the distinction between migration domain refusals
 back). The private component-authoring helpers in `crates/transfers` normally
 map SQLite errors to `AppError`; the refresh preserves their raw errors in a
 bounded scoped capture so the journal boundary can propagate their exception
-family. No combined pre-build entry
-point is available at this checkpoint, so R4-13 still needs the complete
-Python pre-build pipeline until that port and its rollback gate are finished.
+family. The combined interface below composes the stages for R4-13; production
+routing remains outside this checkpoint.
 
 ### R4-10 legacy-refresh checkpoint
 
@@ -608,8 +606,8 @@ after partial activation. Native tests also inject clock refusal/unwinding and
 a late SQL failure after an earlier group's successful work. Both changed
 outcomes independently prove profile reload. The bounded legacy mutation
 catalog is `crates/journals/scripts/legacy_mutations.json`; the inherited
-whole-stage campaign, combined interface, later-stage rollback and CPU gates
-remain open. No production route calls this checkpoint.
+whole-stage campaign and CPU gates remain open. No production route calls this
+checkpoint.
 
 The separate-stage replay passes **280 full-dump comparisons**: all 53 pricing,
 49 source and 38 legacy cases on each real driver under the native socket
@@ -617,6 +615,65 @@ guard. All seven legacy tests and 41 transfer tests pass, as do the existing
 journal unit, render, join, persistence, source and pricing suites. The
 [checkpoint evidence](r4-prebuild-legacy-results.json) records the exact scope;
 these results do not establish whole-stage campaign or performance acceptance.
+
+### R4-10 combined pre-build contract
+
+`prebuild::prepare_journals(conn, profile, decimal_context, clock, identity)`
+returns `Result<Prepared, Refusal>`. It runs source repair, source warning,
+legacy refresh/profile reload, then cached pricing in that order. `Prepared`
+contains `repaired: RepairedInputs` and `auto_priced: usize`. `RepairedInputs`
+contains the returned `profile`, optional `source_overlap_repair` and
+`source_overlap_warning`, and the legacy `consolidation` counts. Use the returned
+profile for every later loader, builder and persistence call. The explicit
+decimal context is precision 32, half-even, as in the pricing interface.
+Clock and identity callbacks retain the individual stages' ordering and
+refusal semantics; only source audit records request identities. No stage
+contacts a provider, including on a cache miss with auto-refresh enabled.
+
+For R4-13's separate repair and price progress events, call
+`prebuild::repair_journal_inputs(conn, profile, clock, identity)` to obtain
+`RepairedInputs`, then `auto_price_transactions_from_rates_cache` using its
+returned profile. This split retains the same ordering as `prepare_journals`.
+Map `source_overlap_repair`, `source_overlap_warning`, and
+`consolidation.activated` to R4-13's `Repairs`; the last is
+`custody_pair_evidence_repairs` and is emitted only when nonzero. Append
+`RepairedInputs::result_fields()` after ordinary journal fields to preserve
+Python's nested dictionary insertion order. `auto_priced` remains an ordinary
+journal field. Never serialize the optional `serde_json::Value` projections
+directly when byte parity is required.
+
+All three entry points require the caller's existing writer reservation
+(`BEGIN IMMEDIATE`); none commits. The repair and combined interfaces own
+nested savepoints. The caller must keep its whole-process savepoint alive
+through snapshot loading, build and persistence, so a later refusal restores
+successful repair/pricing writes as well. Alternatively,
+`prebuild::with_prebuild(conn, profile, context, clock, identity, continuation)`
+owns this enclosing savepoint and invokes a fallible continuation with
+`&Prepared`. It returns `(Prepared, continuation_result)` on success. Any
+refusal or unwind restores every database write since entry while retaining
+earlier caller writes and leaving the writer transaction open. Final commit
+and rollback remain with the caller. Callback consumption and side effects
+outside the connection cannot be rewound.
+
+The combined Python oracle freezes eight complete before/after dumps,
+including a book with all three stages active, a skipped migration, warning,
+repeat, and refusals after earlier successful repair work. Native rollback
+tests execute an actual journal build refusal and inject a failure or panic
+after every write in actual acquisition persistence, comparing every table
+after restoration. This scope establishes the composition contract, not the
+whole-stage campaign or performance target.
+
+All **61 journal tests** pass, including the six combined-interface tests.
+The Python combined oracle reproduces its eight frozen vectors, and the real
+SQLite/SQLCipher replay passes **16 combined-stage full-dump comparisons**
+under the socket syscall guard. These extend the earlier 280 separate-stage
+comparisons; that unchanged separate-stage corpus was not rerun to completion
+at this boundary. Release clippy with warnings denied and all seven pipeline
+mutation recipe applicability checks pass. Mutation execution belongs to the
+coverage campaign. The required classifier refresh leaves no inventory delta,
+and all **57 Python preflight checks** pass before this checkpoint commit.
+[Checkpoint evidence](r4-prebuild-pipeline-results.json)
+records this scope.
 
 ## Performance budget
 
