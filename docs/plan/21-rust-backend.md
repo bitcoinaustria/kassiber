@@ -3111,6 +3111,27 @@ idempotent receipts, canonical writer integration, filed impacts, rollback and
 CLI/daemon/AI consent parity still require implementation and proof. There is no
 new hybrid fallback or Python product change.
 
+### R5 transfers: native case-reader checkpoint (partial)
+
+The transfers-11 continuation starts at `4af9249bf` and implements the case
+reader under `test-harness`: scope/version/processed-time cursors, current-build
+case paging, named waiting roots, exact observed pair evidence and fingerprints
+that bind allocations, plus bounded historical receipt summaries. It preserves
+owned and caller-owned transactions, including build failures/unwinding, and
+proves consistent reads during a concurrent writer. Reviewed custody remains
+distinct from observations, suggestions and evidence.
+
+The [checkpoint](../reference/rust-shell.md#native-review-case-reader-r5-transfers-11-partial)
+records 56 complete native/Python build matches, 2,850 case-result matches on
+plaintext/SQLCipher and 36 independent waiting-root witnesses. The comparison
+drivers supply actual native build quarantines to the reader as separate test
+seams; live callback integration remains pending. Counts stay **26/29 CLI
+leaves and 25/28 daemon kinds**. Normalized operations, artifacts and policy
+effects, planning/validation, atomic apply/receipts, journal and filed-impact
+storage, loader admission and CLI/daemon/AI consent parity remain open. R4-9
+owns its acceptance record, including the pending BLOB corruption decision.
+Python product code and route registration are unchanged.
+
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 
 The unregistered `wallets::fetch::Fetch` captures the supported single-wallet

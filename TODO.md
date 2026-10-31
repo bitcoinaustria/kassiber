@@ -675,11 +675,14 @@ Python.
   `b5eb38ea8` base contains the native SQL snapshot/ownership loader and journal
   writer checkpoints. Transfers-10 joins loading, custody, fusion and rendering
   behind `test-harness`, with complete build-state comparisons and RAM-only
-  SQLite/SQLCipher planning snapshots. Production counts remain **26/29 CLI
-  leaves and 25/28 daemon kinds**. Finish lossless/refusal admission, current-case
-  pagination and waiting roots, exact artifacts/economic effects, ordered mixed
-  operations and writer-locked apply/receipts before registering the three
-  routes. Prove full DB/filed-impact parity, late rollback, idempotent retries,
+  SQLite/SQLCipher planning snapshots. Transfers-11 adds the tested case-reader
+  library, cursor freshness, waiting roots and pair evidence/fingerprints; its
+  live native-build callback integration remains pending. Production counts
+  remain **26/29 CLI leaves and 25/28 daemon kinds**. Finish lossless/refusal
+  admission with the loader-9 acceptance record and its explicit pending BLOB
+  decision, join the case reader, implement exact artifacts/economic effects,
+  ordered mixed operations and writer-locked apply/receipts before registering
+  the three routes. Prove full DB/filed-impact parity, late rollback, idempotent retries,
   caller-owned transactions, CLI/daemon envelopes and AI once-only consent.
   Retain readiness barriers rather than reading stale journals; see the
   [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).

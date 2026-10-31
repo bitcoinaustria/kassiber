@@ -8736,6 +8736,101 @@ authorship, and AI once-only consent/receipt projections. Finally register
 `review cases|plan|apply` and `ui.review.cases|plan|apply` with zero hybrid
 fallbacks. This checkpoint does not claim those services or R5 completion.
 
+### Native review-case reader (R5 transfers-11, partial)
+
+`t3code/r5-transfers-11` starts at `4af9249bf`. It adds the current-case
+reader under `kassiber-transfers`'s `test-harness` feature. Product counts
+remain **26/29 CLI leaves and 25/28 corresponding daemon kinds**; all three
+review workflow routes and their daemon counterparts remain unregistered.
+
+`review_cases::inspect` owns a read transaction only when the caller has none.
+Its canonical-build callback receives the same connection and freshly resolved
+profile. Cursor validation precedes the build and binds profile, input version
+and `last_processed_at`, including Python's cursor decoding, numeric equality
+and refusal precedence. An owned read rolls back on errors and unwinding;
+caller-owned read/write transactions and pending edits remain intact. A
+concurrent-WAL-writer witness proves cursor scope, build reads and freshness
+share the same snapshot.
+
+Waiting rows resolve through explicit roots, dependency chains and transfer
+groups, with cycle protection and deterministic earliest-root selection.
+Timestamp-only contamination names a root only when exactly one same-asset
+root fits. Unnamed or ambiguous dependencies stay actionable. Pair evidence
+reuses the current authored-review materializer, displays observed quantities
+separately from allocated slices and binds the review, observations and every
+allocation to its fingerprint. Note-only revisions retain the fingerprint;
+allocation-only revisions change it. Different txids and reverse chronology
+remain hints for the owner. None of these reads creates reviewed custody.
+
+The synthetic oracle contains fourteen complete books, 475 case requests and
+36 independent waiting-root witnesses. It covers current, stale, unprocessed
+and empty books; exact msat above `2**53`; receipt ordering, limits and
+first-page-only summaries; sibling pairs; note/allocation revisions; same and
+different canonical txids; reverse chronology; and cross-asset hint suppression.
+Native tests compare literal case/error JSON, every table's typed logical rows,
+`total_changes`, transaction ownership and build-call/refusal ordering in
+plaintext and SQLCipher across autocommit, caller-read and caller-writer modes.
+The separate native-build driver compares all eighteen build-state fields
+before its actual quarantines are supplied to the case driver: **56/56 complete
+builds and 2,850/2,850 case results match Python**, with no masked fields.
+The drivers batch pages per fixture to avoid repeated encrypted-book setup.
+
+| Verification | Result | Scope |
+| --- | ---: | --- |
+| Native transfer suite | 46 passed | Full suite, followed by all six case tests after the final cursor/index refinements |
+| Joined native build/case comparison | 56 builds; 2,850 cases matched | Complete outputs in plaintext/SQLCipher and owned/caller transactions |
+| Python fixture regeneration | 1 passed | Rebuilds all fourteen books and 36 waiting-root witnesses from unchanged Python |
+| Case mutation campaign | 11/11 killed | Four passing witness baselines; zero survivors or build errors |
+| Rust formatting and clippy | Passed | Workspace formatting and transfers all-target clippy with `test-harness` and `-D warnings` |
+| Required inventory update | 5,777 tests in 358 modules | Adds the reviewed case-regeneration oracle and refreshes disposition totals |
+| Required CI preflight | 57 passed | Runs after the inventory update |
+
+The mutation catalogue is
+`crates/transfers/scripts/review_cases_mutations.json`. Its named witnesses
+cover current pages/refusal ordering, concurrent snapshot consistency, waiting
+chains/ambiguity and pair observations/allocation fingerprints. These eleven
+kills supplement the preceding build checkpoint; its mutation campaign was not
+rerun here.
+
+No check is sandbox-blocked. Verification summaries and the mutation log remain
+under `target/r5-evidence/`; owned verification/mutation build trees and scratch
+are removed after summarizing. No background job remains at handoff.
+
+This is a case-reader library checkpoint. The application still needs to join
+the callback directly to the native assembler on the live connection, then
+implement operation normalization, artifacts/policy effects, ordered planning
+and validation, atomic apply, historical idempotency, canonical journal storage,
+filed impacts and durable receipts. Full CLI/daemon envelopes, authorship,
+AI once-only consent and zero-fallback route witnesses remain pending.
+
+R4-9's acceptance record is owned by `t3code/r4-9-loader-9`; integrate its final
+record and fixes before production admission. The local audit of `c5966c1ff`
+still listed campaign requirements and explicitly pending BLOB corruption and
+sixteen seed-dependent message exceptions. This checkpoint closes none of
+those barriers and does not grant a waiver. The assembler's transitional
+serialization and exact-refusal limits remain relevant to review integration.
+
+Python pair authoring also has a retained, independent repro:
+`crates/transfers/scripts/repro_pair_residual_fee.py`. A 1,000 msat principal,
+separate 10 msat fee and 998 msat receipt produces a source of only 1,000 msat
+with no fee allocation, then refuses `custody_suspense_fee_coverage_mismatch`.
+The same happens above `2**53`; this is not a float-rounding diagnosis. Python
+product code is unchanged.
+
+Reproduce with the preceding checkpoint's Rust/Python pins, offline Cargo,
+`MATURIN_NO_INSTALL_RUST=1`, `CARGO_BUILD_JOBS=8`, and `TMPDIR`,
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` under this worktree's `target/`.
+Run one verification job at a time:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo test --offline -p kassiber-transfers --features test-harness -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- cargo build --offline -p kassiber-journals -p kassiber-transfers --features test-harness --example review-build --example review-cases
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/verify_review_cases.py "$CARGO_TARGET_DIR/debug/examples/review-build" "$CARGO_TARGET_DIR/debug/examples/review-cases"
+mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_review_cases.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/review_cases_mutation_check.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/repro_pair_residual_fee.py
+```
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements

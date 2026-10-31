@@ -17,6 +17,8 @@ mod pairing_commands;
 mod payout_create;
 mod payout_delete;
 mod records;
+#[cfg(any(test, feature = "test-harness"))]
+pub mod review_cases;
 mod rules;
 mod sql;
 
