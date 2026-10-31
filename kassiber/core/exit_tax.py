@@ -40,7 +40,7 @@ from . import report_context as core_report_context
 from . import custody_journal
 from . import rates as core_rates
 from .journal_markers import MARKER_REGIME, parse_marker
-from .austrian import infer_regime_from_timestamp, kennzahl_for_disposal_category
+from .austrian import AT_TAX_TZ, infer_regime_from_timestamp, kennzahl_for_disposal_category
 from ..msat import dec
 
 # Austrian capital-gains special rate (§ 27a Abs 1 Z 2 EStG). Headline-estimate
@@ -162,17 +162,21 @@ def _normalize_destination(destination: Optional[str]) -> str:
     )
 
 
-def _resolve_departure(departure_date: Optional[str]) -> tuple[str, str]:
-    """Return (UTC departure day, exclusive cutoff at the next UTC midnight)."""
+def _resolve_departure(departure_date: Optional[str], jurisdiction: str = "generic") -> tuple[str, str]:
+    """Return the jurisdiction's civil day and its next midnight in UTC.
 
-    if not departure_date:
-        day = datetime.now(timezone.utc).date().isoformat()
-    else:
-        # parse_timestamp validates and normalizes; keep only the date part.
-        day = parse_timestamp(str(departure_date))[:10]
-    next_day = datetime.fromisoformat(day).date() + timedelta(days=1)
-    cutoff = f"{next_day.isoformat()}T00:00:00Z"
-    return day, cutoff
+    A date-only input names that civil day. An offset/timed input denotes an
+    instant and selects its civil day in Europe/Vienna (AT) or UTC (generic).
+    Construct the next local midnight before converting to UTC so DST applies.
+    """
+
+    zone = AT_TAX_TZ if jurisdiction.strip().lower() == "at" else timezone.utc
+    instant = (datetime.fromisoformat(parse_timestamp(str(departure_date)).replace("Z", "+00:00"))
+               if departure_date else datetime.now(timezone.utc))
+    day = instant.astimezone(zone).date()
+    next_day = day + timedelta(days=1)
+    cutoff = datetime.combine(next_day, datetime.min.time(), tzinfo=zone)
+    return day.isoformat(), cutoff.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _description_at_regime(description: Any) -> Optional[str]:
@@ -306,7 +310,7 @@ def compute_deemed_disposal(
     jurisdiction = str(profile.get("tax_country") or "generic").strip().lower()
     is_at = jurisdiction == "at"
     fiat_currency = str(profile.get("fiat_currency") or "EUR").upper()
-    day, cutoff = _resolve_departure(departure_date)
+    day, cutoff = _resolve_departure(departure_date, jurisdiction)
     dest = _normalize_destination(destination)
     policy = build_tax_policy(profile)
     method = str(profile.get("gains_algorithm") or policy.default_accounting_method).strip().lower()
@@ -519,6 +523,7 @@ def compute_deemed_disposal(
         "jurisdictionCode": "AT" if is_at else "generic",
         "fiatCurrency": fiat_currency,
         "departureDate": day,
+        "departureTimezone": "Europe/Vienna" if is_at else "UTC",
         "destination": dest,
         "method": method,
         "journalInputVersion": (
@@ -571,7 +576,7 @@ def report_exit_tax(
         )
     workspace = report_context.workspace
     profile = report_context.profile
-    day, cutoff = _resolve_departure(departure_date)
+    day, cutoff = _resolve_departure(departure_date, str(profile["tax_country"] or "generic"))
     state = custody_journal.load_stored_ledger_state(conn, profile, rate_cutoff=cutoff, rate_cutoff_exclusive=True)
     profile = dict(profile)
     workspace_label = workspace["label"] if "label" in workspace.keys() else None
@@ -627,6 +632,7 @@ def format_exit_tax_lines(report: Mapping[str, Any]) -> list[str]:
     lines: list[str] = []
     lines.append(f"Exit-tax estimate — {report['profile']} ({report['jurisdictionCode']})")
     lines.append(f"Departure date: {report['departureDate']}    Destination: {report['destination']}")
+    lines.append(f"Departure timezone: {report['departureTimezone']}")
     lines.append(f"Accounting method: {report['method']}")
     version = report.get("journalInputVersion")
     lines.append(f"Journal input version: {version if version is not None else 'unavailable'}")

@@ -3774,7 +3774,6 @@ def _tax_free_balance_snapshot(
                 "at_category": row["at_category"],
             }
         )
-    today = datetime.now(timezone.utc).date().isoformat()
     report = report_builders.compute_deemed_disposal(
         conn,
         dict(profile),
@@ -3785,7 +3784,6 @@ def _tax_free_balance_snapshot(
             "quarantines": [],
             "latest_rates": {},
         },
-        departure_date=today,
         destination="eu_eea",
     )
     totals = report["totals"]

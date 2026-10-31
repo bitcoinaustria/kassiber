@@ -97,6 +97,8 @@ def test_regime_inventory_matches_realized_lots_and_dashboard(engine_book, metho
     remaining = {"alt": Decimal(0), "neu": Decimal(0)}
     basis = {"alt": Decimal(0), "neu": Decimal(0)}
     for entry in entries:
+        if entry["occurred_at"] == "2024-04-01T01:30:00+02:00" and country == "at":
+            continue
         if entry["entry_type"] != "acquisition":
             continue
         regime = infer_regime_from_timestamp(entry["occurred_at"]) if country == "at" else "neu"
@@ -132,17 +134,19 @@ def test_regime_inventory_matches_realized_lots_and_dashboard(engine_book, metho
         profile = conn.execute("SELECT * FROM profiles").fetchone()
         tile = ui_snapshot._tax_free_balance_snapshot(conn, profile, {})
         assert tile["taxFreeQuantitySats"] == totals["altQuantitySats"]
-        assert tile["taxableQuantitySats"] == totals["neuQuantitySats"]
+        assert tile["taxableQuantitySats"] == totals["neuQuantitySats"] + 5_000_000
         if method in ("fifo", "lofo", "moving_average"):
             assert totals["altQuantitySats"] == 74_970_000
-            assert totals["neuQuantitySats"] == 86_000_000
-            assert totals["neuCostBasis"] == 27880.00
-            assert totals["neuGain"] == 28020.00
-            assert totals["estimatedTax"] == 7705.50
+            assert totals["neuQuantitySats"] == 81_000_000
+            assert totals["neuCostBasis"] == 24880.00
+            assert totals["neuGain"] == 27770.00
+            assert totals["estimatedTax"] == 7636.75
 
 
 def test_reviewer_headline_also_accounts_for_the_consumed_alt_fee(engine_book):
-    conn = engine_book(regime_rows(), pair=True, quotes=[("2024-03-31T12:00:00Z", 65000)])
+    rows = [(tid, wallet, "2024-03-31T23:30:00+02:00" if tid == "offset" else at, *rest)
+            for tid, wallet, at, *rest in regime_rows()]
+    conn = engine_book(rows, pair=True, quotes=[("2024-03-31T21:59:59.999999Z", 65000)])
     report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
     assert report["totals"]["estimatedTax"] == 7705.50
     # Pin the review's exact EUR 3,782.05 -> EUR 7,703.93 comparison using
@@ -187,7 +191,7 @@ def test_old_fee_journals_require_one_rebuild_without_rewriting_evidence(engine_
 
 
 @pytest.mark.parametrize("quote_source", ("cache", "transaction"))
-@pytest.mark.parametrize("last_instant", ("2024-03-31T23:59:59.500000Z", "2024-03-31T23:59:59.999999Z"))
+@pytest.mark.parametrize("last_instant", ("2024-03-31T21:59:59.500000Z", "2024-03-31T21:59:59.999999Z"))
 def test_full_departure_day_includes_fractional_inventory_and_quotes(engine_book, quote_source, last_instant):
     rows = [
         ("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy"),
@@ -207,9 +211,9 @@ def test_full_departure_day_includes_fractional_inventory_and_quotes(engine_book
 
 @pytest.mark.parametrize(("quote_at", "priced"), [
     ("2021-06-01T00:00:00Z", False),
-    ("2024-12-30T23:59:59.999999Z", False),  # 24h + 1 microsecond
-    ("2024-12-31T00:00:00Z", True),          # exactly 24h
-    ("2024-12-31T23:59:59.500000Z", True),
+    ("2024-12-30T22:59:59.999999Z", False),  # 24h + 1 microsecond
+    ("2024-12-30T23:00:00Z", True),          # exactly 24h
+    ("2024-12-31T22:59:59.500000Z", True),
 ])
 def test_transaction_fmv_age_limit_through_real_engine(engine_book, quote_at, priced):
     conn = engine_book([("buy", "Cold", quote_at, "inbound", BTC, 0, 30000, "buy")])
@@ -329,8 +333,15 @@ def test_reviewer_method_jurisdiction_override_matrix(engine_book, method, count
         from kassiber.tax_policy import build_tax_policy
         assert method not in build_tax_policy({"tax_country": country}).accounting_methods
         return
-    conn = engine_book(reviewer_rows(), method=method, country=country, pair=True,
-                       overrides={"sell": override}, quotes=[("2024-03-31T12:00:00Z", 65000)])
+    rows = reviewer_rows()
+    if country == "at":
+        rows = [(tid, wallet, {"offset": "2024-03-31T23:30:00+02:00",
+                              "fraction": "2024-03-31T23:59:59.500000+02:00"}.get(tid, at),
+                 *rest) for tid, wallet, at, *rest in rows]
+    conn = engine_book(rows, method=method, country=country, pair=True,
+                       overrides={"sell": override}, quotes=[(
+                           "2024-03-31T21:59:59.999999Z" if country == "at"
+                           else "2024-03-31T23:59:59.999999Z", 65000)])
     report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
     assert report["totals"]["estimatedTax" if country == "at" else "neuGain"] == (
         REVIEW_TAX if country == "at" else REVIEW_GAIN)[method]
@@ -437,9 +448,9 @@ def test_downgrade_and_rebuild_cannot_reuse_outflow_semantics(engine_book, monke
 
 @pytest.mark.parametrize(("quote_at", "priced"), [
     ("2024-01-01T00:00:00Z", False),
-    ("2024-12-30T23:59:59.999999Z", False),
-    ("2024-12-31T00:00:00Z", True),
-    ("2024-12-31T23:59:59.999999Z", True),
+    ("2024-12-30T22:59:59.999999Z", False),
+    ("2024-12-30T23:00:00Z", True),
+    ("2024-12-31T22:59:59.999999Z", True),
     ("2025-01-01T00:00:00Z", False),
 ])
 def test_cached_fmv_uses_the_same_age_limit(engine_book, quote_at, priced):
@@ -474,3 +485,105 @@ def test_cached_fmv_chooses_closest_instant_across_offsets(engine_book):
     report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-12-31")
     assert report["fmvSource"][0]["rate"] == 65000
     assert report["totals"]["estimatedTax"] == 9625
+
+
+@pytest.mark.parametrize(("day", "cutoff"), [
+    ("2024-03-31", "2024-03-31T22:00:00Z"),  # DST starts: 23-hour day
+    ("2024-06-15", "2024-06-15T22:00:00Z"),
+    ("2024-10-27", "2024-10-27T23:00:00Z"),  # DST ends: 25-hour day
+    ("2024-12-31", "2024-12-31T23:00:00Z"),
+])
+@pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("source", ("cache", "transaction"))
+def test_civil_day_cutoff_bounds_inventory_and_both_quote_sources(engine_book, day, cutoff, country, source):
+    from datetime import datetime, timedelta, timezone
+    if country == "generic":
+        cutoff = (datetime.fromisoformat(day) + timedelta(days=1)).isoformat() + "Z"
+    instant = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
+    last = (instant - timedelta(microseconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    conn = engine_book([
+        ("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy"),
+        ("last", "Cold", last, "inbound", BTC // 1000, 0, 61000, "buy"),
+        ("next", "Cold", cutoff, "inbound", BTC, 0, 99000, "buy"),
+    ], country=country, quotes=[(last, 65000), (cutoff, 95000)] if source == "cache" else [])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date=day)
+    assert report["totals"]["neuQuantitySats"] == 100_100_000
+    assert report["walletHoldings"][0]["quantitySats"] == 100_100_000
+    assert report["fmvSource"][0]["asOf"] == last
+    assert report["fmvSource"][0]["source"] == source
+    assert report["fmvSource"][0]["rate"] == (65000 if source == "cache" else 61000)
+    assert report["departureTimezone"] == ("Europe/Vienna" if country == "at" else "UTC")
+
+
+@pytest.mark.parametrize(("departure", "at_day", "generic_day"), [
+    ("2024-03-31T23:30:00Z", "2024-04-01", "2024-03-31"),
+    ("2024-12-31T23:30:00Z", "2025-01-01", "2024-12-31"),
+    ("2024-04-01T00:30:00+02:00", "2024-04-01", "2024-03-31"),
+    ("2024-12-31T23:30:00-01:00", "2025-01-01", "2025-01-01"),
+])
+@pytest.mark.parametrize("country", ("at", "generic"))
+def test_offset_departure_selects_jurisdiction_civil_day(engine_book, departure, at_day, generic_day, country):
+    conn = engine_book([("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy")], country=country)
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date=departure)
+    assert report["departureDate"] == (at_day if country == "at" else generic_day)
+
+
+@pytest.mark.parametrize(("day", "start", "priced"), [
+    ("2024-03-31", "2024-03-30T23:00:00Z", True),
+    ("2024-10-27", "2024-10-26T22:00:00Z", False),
+])
+@pytest.mark.parametrize("source", ("cache", "transaction"))
+def test_dst_day_keeps_quote_age_at_24_elapsed_hours(engine_book, day, start, priced, source):
+    conn = engine_book([("buy", "Cold", start if source == "transaction" else "2022-01-01T00:00:00Z",
+                         "inbound", BTC, 0, 30000, "buy")], quotes=[(start, 65000)] if source == "cache" else [])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date=day)
+    assert report["fmvSource"][0]["source"] == (source if priced else "missing")
+
+
+@pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("format", ("pdf", "xlsx"))
+def test_handoffs_stamp_departure_timezone(engine_book, tmp_path, country, format):
+    conn = engine_book([("buy", "Cold", "2024-12-31T12:00:00Z", "inbound", BTC, 0, 30000, "buy")], country=country)
+    zone = "Europe/Vienna" if country == "at" else "UTC"
+    artifact = tmp_path / f"zone.{format}"
+    getattr(reports, f"export_exit_tax_{format}_report")(
+        conn, "W", "P", artifact, handlers._report_hooks(), departure_date="2024-12-31")
+    if format == "pdf":
+        assert f"Departure timezone: {zone}" in artifact.read_bytes().decode("latin1")
+    else:
+        workbook = openpyxl.load_workbook(artifact)
+        try:
+            overview = {r[0].value: r[1].value for r in workbook["Overview"]}
+            assert overview["Departure timezone"] == zone
+        finally:
+            workbook.close()
+
+
+@pytest.mark.parametrize("method", METHODS)
+def test_original_reviewer_timestamps_obey_new_vienna_cutoff(engine_book, method):
+    conn = engine_book(reviewer_rows(), method=method, pair=True, quotes=[("2024-03-31T12:00:00Z", 65000)])
+    report = reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date="2024-03-31")
+    # Original offset/fractional receipts fall on April 1 in Vienna. Their
+    # combined EUR 254 gain (EUR 69.85 tax) leaves the old UTC-day figure.
+    expected = (Decimal(str(REVIEW_TAX[method])) - Decimal("69.85"))
+    assert Decimal(str(report["totals"]["estimatedTax"])) == expected
+
+
+def test_dashboard_today_uses_the_same_vienna_civil_day(engine_book, monkeypatch):
+    from datetime import datetime, timezone
+    from kassiber.core import exit_tax
+
+    class MidnightVienna(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2025, 1, 1, 23, 30, tzinfo=timezone.utc).astimezone(tz or timezone.utc)
+
+    conn = engine_book([
+        ("buy", "Cold", "2022-01-01T00:00:00Z", "inbound", BTC, 0, 30000, "buy"),
+        ("night", "Cold", "2025-01-02T00:15:00+01:00", "inbound", BTC // 1000, 0, 65000, "buy"),
+    ])
+    monkeypatch.setattr(exit_tax, "datetime", MidnightVienna)
+    monkeypatch.setattr(ui_snapshot, "datetime", MidnightVienna)
+    profile = conn.execute("SELECT * FROM profiles").fetchone()
+    tile = ui_snapshot._tax_free_balance_snapshot(conn, profile, {})
+    assert tile["taxableQuantitySats"] == 100_100_000
