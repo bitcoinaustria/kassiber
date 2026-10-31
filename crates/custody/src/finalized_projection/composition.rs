@@ -141,11 +141,13 @@ fn privacy(row: &Value) -> bool {
 }
 pub(super) fn evaluate(v: &Value) -> Result<Value, String> {
     let diagnostics = codec::from_json(&v["interpreter_quarantines"])?;
-    evaluate_lossless(v, crate::graph::stored::list(&diagnostics)).map(|v| codec::to_json(&v))
+    evaluate_lossless(v, crate::graph::stored::list(&diagnostics))
+        .map(|v| codec::to_json(&v))
+        .map_err(Error::legacy_code)
 }
 
 /// Diagnostic records remain CPython values for their entire lifetime.
-pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, String> {
+pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Error> {
     let finalize = v["op"] == "finalize";
     let payouts = if v["op"] == "compose" || finalize {
         payouts::valid(&v["payouts"], &v["rows"])?
@@ -171,7 +173,7 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
     let explicit = strings(&v["blocked_transaction_ids"]);
     let closure = connected(&decisions, &observations, &explicit)?;
     if v["op"] == "connected" {
-        return codec::from_json(&json!({"blocked":closure["blocked"]}));
+        return Ok(codec::from_json(&json!({"blocked":closure["blocked"]}))?);
     }
     let blocked = strings(&closure["blocked"]);
     let non_events = strings(&v["non_event_transaction_ids"]);
@@ -194,10 +196,10 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
         orders(&v["events"])
     };
     if v["op"] == "basis" {
-        return codec::from_json(&json!(array(&v["observations"])
+        return Ok(codec::from_json(&json!(array(&v["observations"])
             .iter()
             .map(|o| held(o, v, &order))
-            .collect::<Vec<_>>()));
+            .collect::<Vec<_>>()))?);
     }
     let eligible: BTreeSet<_> = array(&v["eligible"])
         .iter()
@@ -438,9 +440,9 @@ pub(super) fn evaluate_lossless(v: &Value, diagnostics: &[Py]) -> Result<Py, Str
         return Ok(result);
     }
     validate(&projected, &intra).map_err(|(family, _)| family.to_owned())?;
-    codec::from_json(
+    Ok(codec::from_json(
         &json!({"rows":projected,"intra_pairs":intra,"cross_asset_pairs":cross,"selected_move_ids":moves,"barrier_held_receipts":barrier_receipts,"blocked_transaction_ids":closure["blocked"]}),
-    )
+    )?)
 }
 
 // The compiler owns its completed JSON tree. Move its strings and container

@@ -1228,5 +1228,75 @@
       "native_loader_preserves_receipt_error_precedence"
     ],
     "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
+  },
+  {
+    "id": "JL-loaded-admission",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.snapshot.validate_loaded().map_err(Error::Invalid)?;",
+    "replace": "self.snapshot.validate().map_err(Error::Invalid)?;",
+    "expect_failing": [
+      "native_loader_legacy_scalars_keep_downstream_admission"
+    ],
+    "rule": "Database scalars survive native admission until their consuming stage."
+  },
+  {
+    "id": "JL-projection-loaded-admission",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".validate_loaded()\n            .map_err",
+    "replace": ".validate()\n            .map_err",
+    "expect_failing": [
+      "native_loader_legacy_scalars_keep_downstream_admission"
+    ],
+    "rule": "Direct projection uses database admission rather than v1 transport admission."
+  },
+  {
+    "id": "JL-component-integer-infinity",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if matches!(codec::from_json(v), Ok(kassiber_pyjson::Value::Float(value)) if value.is_infinite())",
+    "replace": "if matches!(codec::from_json(v), Ok(kassiber_pyjson::Value::Float(value)) if value.is_nan())",
+    "expect_failing": [
+      "component_integer_refusal_messages_match_python"
+    ],
+    "rule": "Component int(infinity) retains uncaught OverflowError."
+  },
+  {
+    "id": "JL-component-integer-message",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "invalid literal for int() with base 10: {}",
+    "replace": "invalid integer quantity: {}",
+    "expect_failing": [
+      "component_integer_refusal_messages_match_python"
+    ],
+    "rule": "Malformed component integer TEXT keeps Python's rendered message."
+  },
+  {
+    "id": "JL-component-sort-message",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "'<' not supported between instances of '{}' and '{}'",
+    "replace": "'>' not supported between instances of '{}' and '{}'",
+    "expect_failing": [
+      "component_header_sort_retains_python_type_errors"
+    ],
+    "rule": "Component timestamp sort errors retain operand types and comparison direction."
+  },
+  {
+    "id": "JL-price-message",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "message: format!(\"{field} {reason}\"),",
+    "replace": "message: format!(\"{reason}\"),",
+    "expect_failing": [
+      "finalized_price_errors_keep_field_code_and_message"
+    ],
+    "rule": "Finalized price validation names the original transaction and field."
+  },
+  {
+    "id": "JL-price-code",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "code: \"validation\".into(),",
+    "replace": "code: \"app_error\".into(),",
+    "expect_failing": [
+      "finalized_price_errors_keep_field_code_and_message"
+    ],
+    "rule": "Finalized decimal errors retain the validation code."
   }
 ]

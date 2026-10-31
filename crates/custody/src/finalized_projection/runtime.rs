@@ -191,7 +191,7 @@ pub fn stage_with_rows(
     rows: Value,
     quantity: &Py,
     interpreter: &Py,
-) -> Result<Py, String> {
+) -> Result<Py, super::Error> {
     let span = crate::timing::span("finalized.input");
     let projection = stored::get(quantity, "projection");
     let eligibility = stored::get(quantity, "tax_eligibility");
@@ -284,13 +284,16 @@ pub fn stage_with_rows(
     let input = Value::Object(input);
     drop(span);
     let _span = crate::timing::span("finalized.compose");
-    super::compose_lossless(
+    super::compose_lossless_detailed(
         &input,
         stored::list(stored::get(interpreter, "quarantines")),
     )
     .map_err(|error| {
-        if error == "AppError" {
-            "validation".into()
+        if error.code == "AppError" {
+            super::Error {
+                code: "validation".into(),
+                message: error.message,
+            }
         } else {
             error
         }
@@ -306,4 +309,5 @@ pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py,
         quantity,
         interpreter,
     )
+    .map_err(|error| error.code)
 }

@@ -199,6 +199,51 @@ def test_loader_preserves_infinite_rate_for_downstream_validation(loose_book, va
     assert exception_boundaries(replayed.value) == exception_boundaries(expected.value)
     assert expected.value.code == "validation"
     assert str(expected.value) == "transaction nonfinite-rate: fiat_rate must be a finite decimal number"
+    _check_projection(conn)
+
+
+def _check_projection(conn):
+    from crates.journals.scripts.audit_loader_storage import expected, classify_projection
+    profile = dict(_profile(conn))
+    reference = expected(conn, profile, project=True)
+    request = {"sql": "\n".join(conn.iterdump()), "profile": profile,
+               "as_of": AS_OF, "project": True}
+    response = subprocess.run([BINARY], input=json.dumps(request).encode(),
+                              capture_output=True, check=True, timeout=120)
+    assert not response.stderr
+    actual = json.loads(response.stdout)
+    assert actual["writes"] == 0
+    if "text" in actual.get("projection", {}):
+        actual["projection"] = {"value": json.loads(actual["projection"]["text"])}
+    assert classify_projection(reference, actual).startswith("equal_"), (reference.get("projection"), actual.get("projection", actual))
+    return actual
+
+
+@pytest.mark.parametrize("table,column", [
+    ("custody_component_legs", "ordinal"),
+    ("custody_component_legs", "amount_msat"),
+    ("custody_component_legs", "valuation_amount"),
+    ("custody_component_allocations", "ordinal"),
+    ("custody_component_allocations", "source_amount_msat"),
+    ("custody_component_allocations", "sink_amount_msat"),
+    ("custody_component_economic_terms", "payout_amount_msat"),
+    ("custody_component_economic_terms", "reviewed_source_amount_msat"),
+    ("custody_component_economic_terms", "swap_fee_msat"),
+    ("custody_components", "created_at"),
+    ("transactions", "amount"),
+    ("transactions", "fee"),
+])
+@pytest.mark.parametrize("expression", ["NULL", "7", "1.5", "''", "'legacy scalar'", "1e999", "-1e999"])
+def test_loader_non_blob_scalars_reach_their_reference_projection_stage(loose_book, monkeypatch, table, column, expression):
+    from crates.journals.scripts.audit_loader_storage import without_affinity
+    monkeypatch.setattr(__import__(__name__, fromlist=["check"]), "check", lambda _conn: None)
+    test_loader_covers_every_structural_table_column_and_filter(loose_book)
+    conn = without_affinity(loose_book[0])
+    try:
+        conn.execute(f'UPDATE "{table}" SET "{column}"={expression} WHERE rowid=(SELECT MIN(rowid) FROM "{table}")')
+        _check_projection(conn)
+    finally:
+        conn.close()
 
 
 def test_loader_probe_compares_native_projection_without_snapshot_text(loose_book):
@@ -242,8 +287,9 @@ def test_loader_probe_compares_native_projection_without_snapshot_text(loose_boo
                               capture_output=True, check=True, timeout=120)
     assert not response.stderr
     actual = json.loads(response.stdout)
-    assert actual["projection"]["stage"] == "snapshot"
-    assert actual["projection"]["boundaries"]["cli"]["code"] == "custody_snapshot_invalid"
+    assert actual["projection"]["stage"] == "finalized_projection"
+    assert actual["projection"]["boundaries"]["cli"] == {
+        "code": "validation", "message": "transaction buy: fiat_rate must be a finite decimal number"}
     assert "value" not in actual["projection"]
     assert actual["writes"] == 0
 

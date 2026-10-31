@@ -89,6 +89,80 @@ impl StageSnapshot {
         let text = serde_json::to_string(self).map_err(|e| e.to_string())?;
         serde_json::from_str::<BookSnapshot>(&text).map_err(|e| e.to_string())
     }
+
+    /// Database loading retains legacy SQLite scalars until their consuming
+    /// stage applies Python's conversion/refusal rules. The JSON adapter keeps
+    /// its stricter quantity contract in `validate`; configuration admission
+    /// applies to both paths and never admits wallet configuration secrets.
+    pub fn validate_loaded(&self) -> Result<(), String> {
+        if self.schema_version != 1 || self.operation != "custody" {
+            return Err("unsupported custody snapshot schema or operation".into());
+        }
+        if self.as_of.is_empty() {
+            return Err("custody snapshot requires as_of".into());
+        }
+        let names = ["config_json", "wallet_config_json"];
+        let values = self
+            .wallets
+            .iter()
+            .chain(&self.transactions)
+            .chain(&self.anchor_wallets)
+            .chain(&self.channel_records)
+            .chain(&self.gap_worklist.rows)
+            .flat_map(|row| names.map(|name| row.get(name)))
+            .chain(
+                self.anchors
+                    .values()
+                    .filter_map(Value::as_object)
+                    .flat_map(|row| names.map(|name| row.get(name))),
+            )
+            .flatten()
+            .filter(|value| !value.is_null());
+        let mut checked = std::collections::HashSet::new();
+        for value in values {
+            if value.as_str().is_some_and(|text| checked.contains(text)) {
+                continue;
+            }
+            let config: Value = if let Some(text) = value.as_str() {
+                serde_json::from_str(text)
+                    .map_err(|_| "custody configuration must be normalized facts")?
+            } else {
+                value.clone()
+            };
+            let object = config
+                .as_object()
+                .ok_or("custody configuration must be normalized facts")?;
+            if object.keys().any(|key| {
+                ![
+                    "chain",
+                    "network",
+                    "bitcoin_network",
+                    "chain_network",
+                    "chain_instance_id",
+                    "samourai",
+                ]
+                .contains(&key.as_str())
+            }) {
+                return Err(
+                    "custody configuration contains fields outside normalized facts".into(),
+                );
+            }
+            if let Some(block) = config.get("samourai").and_then(Value::as_object) {
+                if block
+                    .keys()
+                    .any(|key| !["role", "group_id", "section"].contains(&key.as_str()))
+                {
+                    return Err(
+                        "custody Samourai metadata contains fields outside normalized facts".into(),
+                    );
+                }
+            }
+            if let Some(text) = value.as_str() {
+                checked.insert(text);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -162,6 +236,7 @@ mod tests {
                 snapshot.transactions =
                     vec![serde_json::from_str(&format!("{{\"{field}\":{text}}}")).unwrap()];
                 assert_eq!(snapshot.validate().is_ok(), valid, "{field} {text}");
+                assert!(snapshot.validate_loaded().is_ok(), "{field} {text}");
             }
         }
     }

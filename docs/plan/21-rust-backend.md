@@ -2285,25 +2285,28 @@ remain open.
 
 ### R4-9 loader continuation (unaccepted)
 
-The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) now compares
+The [loader checkpoint](../reference/r4-native-loader-checkpoint.md) compares
 corruption refusals at the CLI/daemon code and rendered-message boundary.
-Loader-6 carries SQLite infinities through the record boundary, preserves
-numeric revision bindings/order, and propagates integer overflow in authority
-and scan-depth conversions. Its 66 byte fixtures and 43 refusals supplement the
-23-table/360-column storage audit. The audit now separately compares native
-finalized projection with Python, including outcomes for snapshots that cannot
-be serialized; transport equality alone cannot establish acceptance. The 123
-loader catalogue entries are killed but remain a partial branch inventory.
-The expanded audit covers 22,528 cases with zero writes and zero native
-admissions of Python-refused projections; 4,678 composed outcomes remain open.
-Loader-6's 20k paired CPU totals including admission are 0.288152 s generic /
-0.436581 s multi-wallet, within 5% of the supplied loader-5 baselines.
-BLOB/raw storage, exact downstream refusal messages, mixed revision
-identity/refusal parity, complete branch-to-mutation coverage, the full
-2,292-entry custody campaign and final corpus/replay/census/shadow gates still
-block R4-9 acceptance. Infinite transaction rates are refused by Python's
-downstream finite-decimal barrier; no Python reference-bug waiver is claimed.
-Python retains production journal authority.
+Loader-7 closes 216 of the 232 non-BLOB composed audit gaps: component integer
+messages, early amount/fee admission and component timestamp sorting. Native
+loading retains database scalars for the reference-equivalent consuming stage;
+the JSON adapter keeps its strict signed-64 quantity contract. Infinite rates
+now retain the exact downstream finite-decimal validation message.
+
+The non-BLOB audit covers 16,384 cases over the same 23 tables/360 columns,
+with zero writes and zero native admissions of Python-refused projections.
+Sixteen mixed numeric/TEXT revision sort messages remain unresolved, including
+Python hash-seed-dependent operand order. No reference-bug waiver is claimed.
+At the owner's direction, the 4,446 BLOB corruption-class gaps are set aside
+and remain **pending an owner decision**, with their loader-6 inventory retained.
+
+The exhaustive branch map, full 2,292-entry custody mutation campaign and final
+generated/permutation/replay/census/shadow gates remain open. R4-9 is not
+accepted; the acceptance-except-BLOB wording is conditional on completing all
+other requirements. Python retains production journal authority. Loader-7's
+paired 20k CPU totals including admission are 0.279943 s generic and 0.424456 s
+multi-wallet, both within 5% of the supplied loader-6 baselines; the checkpoint
+owns the full timing and verification evidence.
 
 ### R4-0 integrated stack
 

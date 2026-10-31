@@ -1,0 +1,51 @@
+{
+  "schema": "kassiber.custody-loader-mixed-revision-refusals.v1",
+  "fixture": "crates/journals/tests/data/loader.json:structural-columns",
+  "fixture_file_sha256": "b5f42dada69f20b6369983849adbc514cfdbed31550eaa3ed4f1698133e338d2",
+  "setup": "Remove the TEXT affinity from supersedes_component_id; update that field on active-a to the specified SQLite scalar; call load_custody_snapshot with the fixture profile/as_of in CPython 3.11.",
+  "status": "unresolved; no Python reference-bug waiver",
+  "results": [
+    {
+      "scalar": "7",
+      "messages_by_hash_seed": {
+        "1": "'<' not supported between instances of 'int' and 'str'",
+        "2": "'<' not supported between instances of 'int' and 'str'",
+        "3": "'<' not supported between instances of 'int' and 'str'",
+        "4": "'<' not supported between instances of 'int' and 'str'"
+      }
+    },
+    {
+      "scalar": "1.5",
+      "messages_by_hash_seed": {
+        "1": "'<' not supported between instances of 'str' and 'float'",
+        "2": "'<' not supported between instances of 'float' and 'str'",
+        "3": "'<' not supported between instances of 'float' and 'str'",
+        "4": "'<' not supported between instances of 'str' and 'float'"
+      }
+    },
+    {
+      "scalar": "1e999",
+      "messages_by_hash_seed": {
+        "1": "'<' not supported between instances of 'float' and 'str'",
+        "2": "'<' not supported between instances of 'float' and 'str'",
+        "3": "'<' not supported between instances of 'float' and 'str'",
+        "4": "'<' not supported between instances of 'float' and 'str'"
+      }
+    },
+    {
+      "scalar": "-1e999",
+      "messages_by_hash_seed": {
+        "1": "'<' not supported between instances of 'str' and 'float'",
+        "2": "'<' not supported between instances of 'float' and 'str'",
+        "3": "'<' not supported between instances of 'float' and 'str'",
+        "4": "'<' not supported between instances of 'str' and 'float'"
+      }
+    }
+  ],
+  "boundary_codes": {
+    "cli": "internal_error",
+    "daemon": "internal_error"
+  },
+  "all_runs_refused": true,
+  "native_behavior": "The existing mixed text/numeric guard still refuses before output; exact message parity remains open."
+}

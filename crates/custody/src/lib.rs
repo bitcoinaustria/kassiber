@@ -165,7 +165,7 @@ pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages,
     drop(span);
     let span = timing::span("evidence");
     let evidence = evidence::compute(snapshot)
-        .map_err(|message| Refusal::new("evidence", "custody_evidence_invalid", message))?;
+        .map_err(|error| Refusal::new("evidence", error.code, error.message))?;
     drop(span);
     let span = timing::span("interpretation");
     let interpretation = interpretation::stage(snapshot, &components, &evidence, migration)
@@ -189,7 +189,7 @@ pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages,
                 &quantity,
                 &interpretation,
             )
-            .map_err(|code| Refusal::code("finalized_projection", code))?,
+            .map_err(|error| Refusal::new("finalized_projection", error.code, error.message))?,
         )
     } else {
         None

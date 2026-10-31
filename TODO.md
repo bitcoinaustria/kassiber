@@ -413,20 +413,17 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   close the write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,
   complete dump oracle and caller-owned storage scopes are implemented.
-  R4-9's test-only loader now shares column layouts across native custody rows;
-  loader-6 generic 20k meets 0.30 s at 0.288 s CPU / 0.291 s wall. Multi-wallet
-  20k takes 0.437 / 0.440 s, both within 5% of loader-5. The physical safe-row
-  omission,
-  selected scalar refusals and inventory labels are fixed. Loader-6 adds lossless
-  infinity transport, numeric revision binding/order and integer-overflow
-  refusals, with 66 byte fixtures/43 load refusals and 123 killed mutations.
-  Its 23-table/360-column audit now separately compares native finalized
-  projection with Python, including exact refusal envelopes and zero writes.
-  All 22,528 cases prove zero writes; 4,678 composed outcomes remain unresolved,
-  with zero native admissions of Python-refused projections. Transport equality
-  alone cannot establish acceptance; the branch map remains partial.
-  Complete the lossless BLOB/raw boundary, downstream messages and mixed
-  revision refusals, exhaustive branch mutation map and full custody/parity campaigns
+  R4-9's test-only loader shares column layouts across native custody rows.
+  Loader-7 closes 216/232 non-BLOB composed-audit gaps, preserving raw quantities
+  until the reference-equivalent consumer and exact infinite-rate validation
+  messages. Its 16,384-case non-BLOB audit proves zero writes and zero native
+  admissions of Python-refused projections. Sixteen mixed numeric/TEXT revision
+  sort messages remain unresolved; Python's operand order can vary by hash seed.
+  Paired 20k CPU is 0.280 s generic and 0.424 s multi-wallet, within the 5% budget.
+  The 4,446 BLOB corruption-class gaps are set aside **pending an owner decision**,
+  with the loader-6 inventory retained. Finish the mixed-reference fidelity,
+  exhaustive branch mutation map, full 2,292-entry custody campaign and final
+  generated/permutation/replay/census/shadow gates before acceptance
   ([evidence and remaining work](docs/reference/r4-native-loader-checkpoint.md)).
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):
   close legacy-value/refusal gaps and complete exhaustive branch mutations

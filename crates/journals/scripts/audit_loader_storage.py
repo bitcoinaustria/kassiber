@@ -167,9 +167,11 @@ def without_affinity(source):
     return conn
 
 
-def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, project=True):
+def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, project=True, non_blob=False):
     records = []
     inventories = {}
+    storage_cases = {key: value for key, value in STORAGE.items()
+                     if not non_blob or not key.startswith("blob")}
     with tempfile.TemporaryDirectory(prefix="loader-storage-audit-") as directory:
         source = open_db(Path(directory))
         helper = OwnershipDeriverHandlerTest()
@@ -233,7 +235,7 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
                                     if not rowids:
                                         continue
                                     for rowid in rowids:
-                                        for storage, expression in STORAGE.items():
+                                        for storage, expression in storage_cases.items():
                                             update = f'UPDATE "{table}" SET "{column}"={expression} WHERE rowid={rowid}'
                                             conn.execute("SAVEPOINT storage_audit")
                                             try:
@@ -320,7 +322,8 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
               "affinities": ["declared"] if declared_only else ["declared", "none"],
               "loaded_tables": list(LOADED_TABLES),
               "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-              "storage": STORAGE, "read_columns": inventories,
+              "storage": storage_cases, "read_columns": inventories,
+              "excluded_storage": [key for key in STORAGE if key not in storage_cases],
               "summary": dict(sorted(Counter(record["status"] for record in records).items())),
               "populated_summary": dict(sorted(Counter(record["status"] for record in records if record["changed_rows"]).items())),
               "empty_table_cases": sum(not record["changed_rows"] for record in records),
@@ -352,10 +355,12 @@ def main():
     parser.add_argument("--first-row", action="store_true", help="reproduce the historical read-column/first-row audit")
     parser.add_argument("--declared-only", action="store_true", help="skip the no-affinity storage variant")
     parser.add_argument("--snapshot-only", action="store_true", help="historical v1 transport audit without native projection")
+    parser.add_argument("--non-blob", action="store_true", help="exclude the BLOB corruption class pending an owner decision")
     args = parser.parse_args()
     args.out.with_suffix(".jsonl").write_text("")
     return run(args.binary.resolve(), args.out, args.summary_out,
-               first_row=args.first_row, declared_only=args.declared_only, project=not args.snapshot_only)
+               first_row=args.first_row, declared_only=args.declared_only, project=not args.snapshot_only,
+               non_blob=args.non_blob)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,30 @@ use super::*;
 use crate::python_text::{decimal_digit, PythonText};
 use kassiber_pydecimal::{Context, Decimal, DecimalError};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn finalized_price_errors_keep_field_code_and_message() {
+        for (raw, reason) in [
+            ("1e999", "must be a finite decimal number"),
+            ("-1e999", "must be a finite decimal number"),
+            ("\"legacy scalar\"", "must be a decimal number"),
+            ("\"1e-14\"", "is outside the supported decimal range"),
+        ] {
+            let value: Value = serde_json::from_str(raw).unwrap();
+            let error = Money::finite_field(&value, "transaction sample: fiat_rate")
+                .err()
+                .unwrap();
+            assert_eq!(error.code, "validation");
+            assert_eq!(
+                error.message,
+                format!("transaction sample: fiat_rate {reason}")
+            );
+        }
+    }
+}
+
 fn error(e: DecimalError) -> String {
     match e {
         DecimalError::ConversionSyntax | DecimalError::DivisionUndefined => "InvalidOperation",
@@ -22,6 +46,31 @@ pub(super) enum Money {
     Special(String),
 }
 impl Money {
+    pub(super) fn finite_field(v: &Value, field: &str) -> Result<Self, super::Error> {
+        let refused = |reason| super::Error {
+            code: "validation".into(),
+            message: format!("{field} {reason}"),
+        };
+        let value = Self::parse(v).map_err(|_| refused("must be a decimal number"))?;
+        let Self::Finite(number) = &value else {
+            return Err(refused("must be a finite decimal number"));
+        };
+        if !number.to_string().parse::<f64>().is_ok_and(f64::is_finite) {
+            return Err(refused("must be a finite decimal number"));
+        }
+        if !number.is_zero()
+            && (number.exponent().unsigned_abs() > 308
+                || number.copy_abs() < Decimal::from_str("1e-13").unwrap())
+        {
+            return Err(refused("is outside the supported decimal range"));
+        }
+        Ok(if number.is_zero() {
+            Self::Finite(Decimal::zero())
+        } else {
+            value
+        })
+    }
+
     pub(super) fn parse(v: &Value) -> Result<Self, String> {
         let raw = string(v);
         let s = raw.py_strip();

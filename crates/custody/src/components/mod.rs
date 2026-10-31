@@ -124,7 +124,7 @@ fn group<K: PartialEq>(
     }
     result
 }
-fn integer(v: &Value) -> Result<Value, Error> {
+pub(crate) fn integer(v: &Value) -> Result<Value, Error> {
     let kind = match v {
         Value::Null => Some("NoneType"),
         Value::Array(_) => Some("list"),
@@ -134,7 +134,27 @@ fn integer(v: &Value) -> Result<Value, Error> {
     if let Some(kind) = kind {
         return Err(Error {code:"TypeError",message:format!("int() argument must be a string, a bytes-like object or a real number, not '{kind}'")});
     }
-    codec::integer(v).map_err(Error::value)
+    if matches!(codec::from_json(v), Ok(kassiber_pyjson::Value::Float(value)) if value.is_infinite())
+    {
+        return Err(Error {
+            code: "OverflowError",
+            message: "cannot convert float infinity to integer".into(),
+        });
+    }
+    codec::integer(v).map_err(|message| {
+        if let Value::String(_) = v {
+            let value = codec::from_json(v).expect("string scalar");
+            Error::value(format!(
+                "invalid literal for int() with base 10: {}",
+                crate::interpretation::value_repr(&value)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
+            ))
+        } else {
+            Error::value(message)
+        }
+    })
 }
 // SQLite orders raw INTEGER/REAL facts before TEXT. Do not int() here:
 // malformed numeric text must be refused at the reference's conversion point.
@@ -528,6 +548,40 @@ fn materialize(
     result.insert("validation".into(), validation);
     Ok(Value::Object(result))
 }
+fn header_order(a: &Component, b: &Component) -> Result<std::cmp::Ordering, Error> {
+    for key in ["created_at", "revision", "id"] {
+        let (a, b) = (&a.header[key], &b.header[key]);
+        if a == b {
+            continue;
+        }
+        if (a.is_string() && b.is_string()) || (a.is_number() && b.is_number()) {
+            let order = raw_order(a, b);
+            if !order.is_eq() {
+                return Ok(order);
+            }
+            continue;
+        }
+        let kind = |v: &Value| match v {
+            Value::Null => "NoneType",
+            Value::Bool(_) => "bool",
+            Value::Number(n) if n.as_i64().is_some() || n.as_u64().is_some() => "int",
+            Value::Number(_) => "float",
+            Value::String(_) => "str",
+            Value::Array(_) => "list",
+            Value::Object(_) => "dict",
+        };
+        return Err(Error {
+            code: "TypeError",
+            message: format!(
+                "'<' not supported between instances of '{}' and '{}'",
+                kind(a),
+                kind(b)
+            ),
+        });
+    }
+    Ok(std::cmp::Ordering::Equal)
+}
+
 pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
     let profile = pystr(&snapshot.profile["id"]);
     let mut components: Vec<_> = snapshot
@@ -535,12 +589,16 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
         .iter()
         .filter(|c| c.header["profile_id"] == profile && c.header["state"] == "active")
         .collect();
-    components.sort_by(|a, b| {
-        pystr(&a.header["created_at"])
-            .cmp(&pystr(&b.header["created_at"]))
-            .then_with(|| raw_order(&a.header["revision"], &b.header["revision"]))
-            .then_with(|| pystr(&a.header["id"]).cmp(&pystr(&b.header["id"])))
-    });
+    // SQL returns the normal population in this order already. Compare the
+    // original Python tuple operands: stringifying a corrupt timestamp would
+    // hide the pure repository's TypeError and continue materialization.
+    for index in 1..components.len() {
+        let mut at = index;
+        while at > 0 && header_order(components[at], components[at - 1])?.is_lt() {
+            components.swap(at, at - 1);
+            at -= 1;
+        }
+    }
     // The SQL reference reads all quantity legs before any allocations, in
     // component/ordinal/id order; convert only after that raw ordering.
     let mut raw_legs = Vec::new();
@@ -612,6 +670,68 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn component_integer_refusal_messages_match_python() {
+        for (raw, code, message) in [
+            (
+                "\"\"",
+                "ValueError",
+                "invalid literal for int() with base 10: ''",
+            ),
+            (
+                "\"legacy scalar\"",
+                "ValueError",
+                "invalid literal for int() with base 10: 'legacy scalar'",
+            ),
+            (
+                "1e999",
+                "OverflowError",
+                "cannot convert float infinity to integer",
+            ),
+            (
+                "-1e999",
+                "OverflowError",
+                "cannot convert float infinity to integer",
+            ),
+        ] {
+            let error = integer(&serde_json::from_str::<Value>(raw).unwrap()).unwrap_err();
+            assert_eq!((error.code, error.message.as_str()), (code, message));
+        }
+        assert_eq!(integer(&json!(1.5)).unwrap(), json!(1));
+    }
+
+    #[test]
+    fn component_header_sort_retains_python_type_errors() {
+        let component = |created_at: Value| Component {
+            header: serde_json::from_value(json!({"created_at":created_at,"revision":1,"id":"a"}))
+                .unwrap(),
+            legs: vec![],
+            allocations: vec![],
+            economic_terms: vec![],
+            commitments: vec![],
+        };
+        for (raw, kind) in [
+            ("null", "NoneType"),
+            ("7", "int"),
+            ("1.5", "float"),
+            ("1e999", "float"),
+        ] {
+            let a = component(json!("2026-01-01"));
+            let b = component(serde_json::from_str(raw).unwrap());
+            let error = header_order(&a, &b).unwrap_err();
+            assert_eq!(error.code, "TypeError");
+            assert_eq!(
+                error.message,
+                format!("'<' not supported between instances of 'str' and '{kind}'")
+            );
+            let error = header_order(&b, &a).unwrap_err();
+            assert_eq!(
+                error.message,
+                format!("'<' not supported between instances of '{kind}' and 'str'")
+            );
+        }
+    }
+
     #[test]
     fn component_exception_catch_families() {
         for code in [

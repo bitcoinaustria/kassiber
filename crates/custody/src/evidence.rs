@@ -9,6 +9,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+fn integer_or_zero(value: &Value) -> Result<Value, Error> {
+    if truth(value) {
+        crate::components::integer(value)
+    } else {
+        Ok(json!(0))
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EventKey {
     pub chain: String,
@@ -234,7 +242,7 @@ pub fn event_key(row: &Value) -> Result<EventKey, Error> {
 }
 pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {
     Ok(
-        json!({"schema_version":1,"event":key.payload(),"wallet_id":text(&row["wallet_id"]),"direction":text(&row["direction"]).py_lower(),"asset":text(&row["asset"]).py_upper(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
+        json!({"schema_version":1,"event":key.payload(),"wallet_id":text(&row["wallet_id"]),"direction":text(&row["direction"]).py_lower(),"asset":text(&row["asset"]).py_upper(),"amount_msat":integer_or_zero(&row["amount"])? ,"fee_msat":integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
     )
 }
 pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, Error> {
@@ -258,7 +266,7 @@ pub fn observed_hash(row: &Value) -> Result<(String, String), Error> {
         a.py_upper()
     };
     codec::hash(
-        &json!({"schema_version":1,"wallet_id":text(&row["wallet_id"]),"external_id":strip(&text(&row["external_id"])).py_lower(),"direction":strip(&text(&row["direction"])).py_lower(),"asset":asset,"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
+        &json!({"schema_version":1,"wallet_id":text(&row["wallet_id"]),"external_id":strip(&text(&row["external_id"])).py_lower(),"direction":strip(&text(&row["direction"])).py_lower(),"asset":asset,"amount_msat":integer_or_zero(&row["amount"])? ,"fee_msat":integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
         true,
     ).map_err(Error::from)
 }
@@ -475,9 +483,8 @@ pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
             if i != keeper {
                 let fee = int(&result[i]["fee"]);
                 if !truth(&result[i]["amount_includes_fee"]) {
-                    result[i]["amount"] = json!(
-                        wide(&codec::integer_or_zero(&result[i]["amount"])?) + i128::from(fee)
-                    );
+                    result[i]["amount"] =
+                        json!(wide(&integer_or_zero(&result[i]["amount"])?) + i128::from(fee));
                 }
                 result[i]["fee"] = json!(0);
                 result[i]["custody_duplicate_event_fee_normalized"] = json!(true);
@@ -543,7 +550,7 @@ pub(crate) fn observation_fields(row: &Value, key: &EventKey) -> Result<Value, E
     } else {
         "unknown".into()
     };
-    let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).py_upper(),"direction":text(&row["direction"]).py_lower(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
+    let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).py_upper(),"direction":text(&row["direction"]).py_lower(),"amount_msat":integer_or_zero(&row["amount"])? ,"fee_msat":integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
     Ok(result)
 }
 fn issue(key: &EventKey, code: &str, message: &str, rows: &[&Value], details: Value) -> Value {

@@ -16,6 +16,37 @@ pub mod runtime;
 pub use fees::FeeAllocation;
 pub use principal::slice_row;
 
+/// A downstream refusal retains its public code and rendered message.
+#[derive(Debug)]
+pub struct Error {
+    pub code: String,
+    pub message: String,
+}
+impl Error {
+    // The private primitive vectors predate rendered message comparisons and
+    // retain their exception-family-only contract.
+    fn legacy_code(self) -> String {
+        if self.code == "validation" {
+            "AppError".into()
+        } else {
+            self.code
+        }
+    }
+}
+impl From<String> for Error {
+    fn from(code: String) -> Self {
+        Self {
+            message: code.clone(),
+            code,
+        }
+    }
+}
+impl From<&str> for Error {
+    fn from(code: &str) -> Self {
+        code.to_owned().into()
+    }
+}
+
 fn string(value: &Value) -> String {
     // str() of a JSON string is the string itself.
     if let Value::String(text) = value {
@@ -127,7 +158,7 @@ fn chain_order(row: &Value) -> Result<Value, String> {
     )
 }
 
-pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, String> {
+pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, Error> {
     let source = &rows[text(&observation["transaction_id"])];
     let source = if codec::truth(source) {
         source
@@ -146,7 +177,11 @@ pub fn base_row(observation: &Value, rows: &Value) -> Result<Value, String> {
         "fiat_rate_exact",
     ] {
         if !money::empty(&result[field]) {
-            money::Money::finite(&result[field])?;
+            let label = format!(
+                "transaction {}: {field}",
+                string(&observation["anchor_transaction_id"])
+            );
+            money::Money::finite_field(&result[field], &label)?;
         }
     }
     result["custody_chain_order"] = chain_order(&result)?;
@@ -168,7 +203,7 @@ pub fn fee_row(
     amount: &BigInt,
     rows: &Value,
     side: &str,
-) -> Result<Value, String> {
+) -> Result<Value, Error> {
     let mut base = base_row(observation, rows)?;
     if codec::truth(&observation["authoritative_chain_observation"])
         && observation["fee_attribution"] == "exact"
@@ -209,6 +244,10 @@ fn number(n: &BigInt) -> Value {
 /// snapshot admission: callers still supply the independently compared operands.
 /// The copied diagnostic population never passes through serde JSON values.
 pub fn compose_lossless(value: &Value, diagnostics: &[Py]) -> Result<Py, String> {
+    compose_lossless_detailed(value, diagnostics).map_err(Error::legacy_code)
+}
+
+pub(crate) fn compose_lossless_detailed(value: &Value, diagnostics: &[Py]) -> Result<Py, Error> {
     composition::evaluate_lossless(value, diagnostics)
 }
 
@@ -246,11 +285,13 @@ pub fn primitive(value: &Value) -> Value {
             &value["rows"],
             &string(&value["side"]),
             &integer("fee"),
-        ),
+        )
+        .map_err(Error::legacy_code),
         "payout_valid" => payouts::valid(&value["records"], &value["rows"]),
         "payout_time" => payouts::time(&value["payout"]),
         "payout_settlement" => {
             payouts::settlement(&value["observation"], &value["payout"], &value["rows"])
+                .map_err(Error::legacy_code)
         }
         "payout_price" => {
             payouts::price(value["row"].clone(), &value["payout"], &integer("amount"))
@@ -258,13 +299,14 @@ pub fn primitive(value: &Value) -> Value {
         "fees" => fees::evaluate(value),
         "conversions" => conversions::evaluate(value),
         "finalize" | "compose" | "connected" | "basis" => composition::evaluate(value),
-        "base" => base_row(&value["observation"], &value["rows"]),
+        "base" => base_row(&value["observation"], &value["rows"]).map_err(Error::legacy_code),
         "fee" => fee_row(
             &value["observation"],
             &integer("amount"),
             &value["rows"],
             &string(&value["side"]),
-        ),
+        )
+        .map_err(Error::legacy_code),
         _ => panic!("unknown private projection operation"),
     };
     match result {

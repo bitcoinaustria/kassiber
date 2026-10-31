@@ -17,12 +17,12 @@ pub struct LoadedSnapshot {
 impl LoadedSnapshot {
     /// Compare the native composition without a v1/text admission round trip.
     /// This seam is test-only until the native journal orchestrator is routed.
-    #[cfg(feature = "test-harness")]
+    #[cfg(any(test, feature = "test-harness"))]
     pub fn project(
         &self,
     ) -> std::result::Result<kassiber_custody::Stages, kassiber_custody::Refusal> {
         self.snapshot
-            .validate()
+            .validate_loaded()
             .map_err(|message| kassiber_custody::Refusal {
                 stage: "snapshot",
                 code: "custody_snapshot_invalid".into(),
@@ -32,7 +32,7 @@ impl LoadedSnapshot {
     }
 
     pub fn into_custody(self) -> Result<Snapshot> {
-        self.snapshot.validate().map_err(Error::Invalid)?;
+        self.snapshot.validate_loaded().map_err(Error::Invalid)?;
         Ok(self.snapshot)
     }
     pub fn v1(&self) -> Result<String> {

@@ -7,7 +7,7 @@ pub fn slice_row(
     rows: &Value,
     side: &str,
     fee: &BigInt,
-) -> Result<Value, String> {
+) -> Result<Value, Error> {
     let mut base = base_row(observation, rows)?;
     let original = if codec::truth(&base["amount"]) {
         &base["amount"]

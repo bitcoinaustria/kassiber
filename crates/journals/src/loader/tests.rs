@@ -202,8 +202,10 @@ fn native_loader_matches_python_database_bytes() {
             "{}",
             text(get(&case, "name"))
         );
-        // The same in-memory structure as the text adapter, with no wire text.
-        let adapter = snapshot.into_custody();
+        // The same raw records as Python's bytes, with no wire text. Database
+        // admission retains legacy quantities; v1's strict quantity admission
+        // is independently pinned in the snapshot tests.
+        let adapter = snapshot.into_custody().unwrap();
         // Python's v1 uses Infinity constants, while serde's text grammar
         // accepts only JSON numbers. Preserve their float value as overflowing
         // exponents for this separate admission/record comparison. The exact
@@ -212,7 +214,8 @@ fn native_loader_matches_python_database_bytes() {
             &convert(kassiber_pytext::loads(&text(get(&case, "expected"))).unwrap()).unwrap(),
         )
         .unwrap();
-        let reference = kassiber_custody::parse(&reference_text);
+        let reference: kassiber_custody::snapshot::Snapshot =
+            serde_json::from_str(&reference_text).unwrap();
         // Typed rows serialize REALs from f64; the native compatibility rows
         // retain Python's exponent spelling. Compare the exact Python scalar
         // model (including integer/float distinctions and signed zero), while
@@ -224,14 +227,12 @@ fn native_loader_matches_python_database_bytes() {
             )
             .unwrap()
         };
-        match (adapter, reference) {
-            (Ok(adapter), Ok(reference)) => assert_eq!(
-                scalar_text(serde_json::to_value(adapter).unwrap()),
-                scalar_text(serde_json::to_value(reference).unwrap())
-            ),
-            (Err(_), Err(_)) => (),
-            _ => panic!("native/text admission differ"),
-        }
+        assert_eq!(
+            scalar_text(serde_json::to_value(adapter).unwrap()),
+            scalar_text(serde_json::to_value(reference).unwrap()),
+            "{}",
+            text(get(&case, "name"))
+        );
         assert_eq!(conn.total_changes(), changes);
         assert!(!conn.is_autocommit());
         conn.execute_batch("ROLLBACK").unwrap();
@@ -304,6 +305,39 @@ fn native_loader_preserves_nonfinite_real_until_downstream() {
         );
     }
     assert!(float_storage(f64::NAN).is_err());
+}
+
+#[test]
+fn native_loader_legacy_scalars_keep_downstream_admission() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(&text(get(case, "sql"))).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE; UPDATE transactions SET amount=1.5,fee=''")
+        .unwrap();
+    let changes = conn.total_changes();
+    let loaded = load(
+        &conn,
+        get(case, "profile").clone(),
+        &text(get(case, "as_of")),
+    )
+    .unwrap();
+    assert_eq!(loaded.project().err().unwrap().stage, "components");
+    let snapshot = loaded.into_custody().unwrap();
+    for row in &snapshot.transactions {
+        assert_eq!(row["amount"], serde_json::json!(1.5));
+        assert_eq!(row["fee"], "");
+    }
+    assert_eq!(changes, conn.total_changes());
+    assert!(!conn.is_autocommit());
+    conn.execute_batch("ROLLBACK").unwrap();
 }
 
 #[test]
