@@ -3,7 +3,9 @@
 //! Cache-aware preparation retains Python's protocol checkpoints. There is no
 //! canonical-chain selection, ownership or database access. Cache-aware Esplora
 //! prepares absence candidates only after a complete source-bound round.
-use crate::scan::{script_hash, Cancellation, Scope};
+#[cfg(test)]
+use crate::scan::Cancellation;
+use crate::scan::{script_hash, Control, Scope};
 use bitcoin::{consensus::deserialize, hex::FromHex, Transaction};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
 use kassiber_envelope::AppError;
@@ -178,8 +180,30 @@ impl Acquisition {
         scope: &Scope,
         consent: Option<&AcquisitionConsent>,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
+        progress: impl FnMut(Value),
+    ) -> Result<Value> {
+        self.run_with_history(
+            gate,
+            scope,
+            consent,
+            deadline,
+            cancel,
+            progress,
+            &mut |_| Ok(()),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn run_with_history(
+        &self,
+        gate: &Gate,
+        scope: &Scope,
+        consent: Option<&AcquisitionConsent>,
+        deadline: Instant,
+        cancel: &dyn Control,
         mut progress: impl FnMut(Value),
+        history: &mut dyn FnMut(&Value) -> Result<()>,
     ) -> Result<Value> {
         cancel.check(deadline)?;
         if scope != &self.scope {
@@ -209,7 +233,7 @@ impl Acquisition {
         }
         let result = match (self.protocol, self.cache.as_ref()) {
             (Protocol::Esplora, Some(cache)) => {
-                self.cached_esplora(gate, &proof.transport, deadline, cancel, cache)
+                self.cached_esplora(gate, &proof.transport, deadline, cancel, cache, history)
             }
             (Protocol::Electrum, Some(cache)) => {
                 self.cached_electrum(gate, &proof.transport, deadline, cancel, cache)
@@ -235,7 +259,7 @@ impl Acquisition {
         gate: &Gate,
         consent: &Consent,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         progress: &mut impl FnMut(Value),
     ) -> Result<Value> {
         let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
@@ -285,7 +309,7 @@ impl Acquisition {
         gate: &Gate,
         consent: &Consent,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         progress: &mut impl FnMut(Value),
     ) -> Result<Value> {
         let mut client =
@@ -432,7 +456,7 @@ fn esplora_history(
     max_pages: Option<usize>,
     consent: &Consent,
     deadline: Instant,
-    cancel: &Cancellation,
+    cancel: &dyn Control,
 ) -> Result<Vec<Value>> {
     let mut transactions = vec![];
     let mut seen = BTreeSet::new();
@@ -485,7 +509,7 @@ fn calls(
     method: &str,
     params: &[Value],
     deadline: Instant,
-    cancel: &Cancellation,
+    cancel: &dyn Control,
 ) -> Result<Vec<Value>> {
     let mut result = vec![];
     // The underlying client's own batches obey its backend limit. Check
@@ -503,7 +527,7 @@ fn fetch_transactions(
     txids: &[String],
     result: &mut Map<String, Value>,
     deadline: Instant,
-    cancel: &Cancellation,
+    cancel: &dyn Control,
 ) -> Result<()> {
     let raw = calls(
         client,

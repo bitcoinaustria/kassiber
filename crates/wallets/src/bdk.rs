@@ -1,8 +1,10 @@
 //! Native, request-local BDK execution. No BDK connector or file persistence.
 //! This preparatory seam is intentionally not registered as product sync.
+#[cfg(test)]
+use crate::scan::Cancellation;
 use crate::{
     bdk_state,
-    scan::{Cancellation, Scope},
+    scan::{Control, Scope},
 };
 use bdk_chain::{BlockId, CheckPoint, ConfirmationBlockTime, Merge};
 use bdk_core::{spk_client::SpkWithExpectedTxids, TxUpdate};
@@ -216,7 +218,7 @@ impl Execution {
         scope: &Scope,
         consent: Option<&ExecutionConsent>,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         start_time: u64,
     ) -> Result<Prepared> {
         cancel.check(deadline)?;
@@ -266,7 +268,7 @@ impl Execution {
         gate: &Gate,
         proof: &ExecutionConsent,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         result: Prepared,
     ) -> Result<Prepared> {
         cancel.check(deadline)?;
@@ -416,7 +418,7 @@ trait Rpc {
 struct Wire<'a> {
     client: ElectrumClient,
     deadline: Instant,
-    cancel: &'a Cancellation,
+    cancel: &'a dyn Control,
 }
 impl Rpc for Wire<'_> {
     fn call(&mut self, method: &str, params: Value) -> Result<Value> {

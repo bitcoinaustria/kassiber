@@ -29,6 +29,14 @@ impl From<rusqlite::Error> for Failure {
 
 pub trait Handler {
     fn supports(&self, job_type: &str) -> bool;
+    fn prefetch(
+        &mut self,
+        _conn: &Connection,
+        _jobs: &[Value],
+        _observer: &mut dyn FnMut(&Value) -> Result<()>,
+    ) -> Result<()> {
+        Ok(())
+    }
     fn run(
         &mut self,
         conn: &mut Connection,

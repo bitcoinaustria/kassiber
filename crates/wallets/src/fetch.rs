@@ -11,7 +11,7 @@ use crate::{
         row::{field, first, or_text},
         wallet::{fallback, network_scope, require_supported},
     },
-    scan::{Cancellation, CompatibilityDiscovery, DiscoveryConsent, Scope},
+    scan::{Cancellation, CompatibilityDiscovery, Control, DiscoveryConsent, Scope},
 };
 use kassiber_chain::Backend;
 use kassiber_envelope::AppError;
@@ -19,6 +19,7 @@ use kassiber_net::{Consent, Gate};
 use kassiber_store::rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::{
+    cell::RefCell,
     collections::BTreeSet,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -28,6 +29,23 @@ use std::{
 };
 
 type Result<T> = std::result::Result<T, AppError>;
+
+struct ProgressControl<'a> {
+    control: &'a dyn Control,
+    progress: RefCell<&'a mut dyn FnMut(Value) -> Result<()>>,
+}
+
+impl Control for ProgressControl<'_> {
+    fn check(&self, deadline: Instant) -> Result<()> {
+        self.control.check(deadline)
+    }
+    fn cancellation(&self) -> &Cancellation {
+        self.control.cancellation()
+    }
+    fn progress(&self, event: Value) -> Result<()> {
+        (self.progress.borrow_mut())(event)
+    }
+}
 
 struct Observer {
     identity: Value,
@@ -416,6 +434,32 @@ impl Fetch {
         cancel: &Cancellation,
         start_time: u64,
     ) -> Result<Value> {
+        self.run_with_progress(
+            gate,
+            scope,
+            consent,
+            deadline,
+            cancel,
+            start_time,
+            &mut |_| Ok(()),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_with_progress(
+        &self,
+        gate: &Gate,
+        scope: &Scope,
+        consent: Option<&FetchConsent>,
+        deadline: Instant,
+        control: &dyn Control,
+        start_time: u64,
+        progress: &mut dyn FnMut(Value) -> Result<()>,
+    ) -> Result<Value> {
+        let cancel = &ProgressControl {
+            control,
+            progress: RefCell::new(progress),
+        };
         cancel.check(deadline)?;
         if scope != &self.scope {
             return Err(AppError::new("stale_context", "Wallet fetch scope changed"));
@@ -459,33 +503,34 @@ impl Fetch {
                 &self.plan.network,
             )?;
             let grant = AcquisitionConsent::for_fetch(&action, proof.transport.clone());
-            let acquired = action.run(gate, scope, Some(&grant), deadline, cancel, |_| {})?;
             let tracked = targets
                 .iter()
                 .filter_map(|t| t["script_pubkey"].as_str().map(str::to_owned))
                 .collect();
-            let mut txs: Vec<_> = acquired["transactions"]
-                .as_object()
-                .into_iter()
-                .flatten()
-                .map(|(_, v)| v)
-                .collect();
-            txs.sort_by_key(|tx| {
-                (
-                    tx["status"]["block_time"].as_i64().unwrap_or(0),
-                    text(&tx["txid"]),
-                )
-            });
-            for tx in txs {
-                if let Some(record) =
-                    crate::bitcoin_records::from_esplora(tx, &tracked, text(&self.backend["name"]))?
-                {
-                    records.push(record);
+            let acquired = action.run_with_history(gate, scope, Some(&grant), deadline, cancel, |_| {}, &mut |history| {
+                let mut txs: Vec<_> = history["transactions"].as_object().into_iter().flatten()
+                    .map(|(_, v)| v).collect();
+                txs.sort_by_key(|tx| (tx["status"]["block_time"].as_i64().unwrap_or(0), text(&tx["txid"])));
+                let total = txs.len();
+                for (index, tx) in txs.into_iter().enumerate() {
+                    cancel.check(deadline)?;
+                    if let Some(record) = crate::bitcoin_records::from_esplora(tx, &tracked, text(&self.backend["name"]))? {
+                        records.push(record);
+                    }
+                    if (index + 1).is_multiple_of(100) || index + 1 == total {
+                        cancel.progress(json!({"phase":"decode_enrich", "transactions_seen":index+1,
+                            "transactions_total":total,"records":records.len(),"processed":index+1,"total":total}))?;
+                    }
                 }
-            }
+                Ok(())
+            })?;
             esplora_metadata(&acquired, &self.plan.network)?
         } else {
             for observer in &self.observers {
+                cancel.check(deadline)?;
+                cancel.progress(
+                    json!({"phase":"backend_fetch","observer":"bdk","status":"scanning"}),
+                )?;
                 let grant = ExecutionConsent::for_fetch(&observer.action, proof.transport.clone());
                 let prepared =
                     observer
@@ -499,6 +544,9 @@ impl Fetch {
                     observer.prior.as_ref(),
                     observer.current.clone(),
                 )?;
+                cancel.progress(json!({"phase":"decode_enrich","observer":"bdk",
+                    "transactions_seen":update["facts"]["transaction_records"].as_array().map_or(0,Vec::len),
+                    "utxos_seen":update["facts"]["outputs"].as_array().map_or(0,Vec::len)}))?;
                 updates.push(json!({"identity":observer.identity,"expected_epoch":observer.epoch,"update":update}));
             }
             json!({"observer_route":"bdk"})

@@ -192,8 +192,8 @@
   {
     "id": "acquisition-esplora-tip-reuse",
     "file": "crates/wallets/src/acquisition/cached.rs",
-    "find": "if same_tip\n                && cache::esplora_reusable(",
-    "replace": "if cache::esplora_reusable(",
+    "find": "let reused = same_tip\n                && cache::esplora_reusable(",
+    "replace": "let reused = cache::esplora_reusable(",
     "expect_failing": [
       "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
     ],

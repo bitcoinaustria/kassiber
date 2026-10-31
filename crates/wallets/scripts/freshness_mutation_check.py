@@ -1,6 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import tempfile
@@ -23,9 +24,20 @@ class Runner(BaseRunner):
         )
         if build.returncode:
             return "error", build.stderr[-4000:]
+        if "test_native_freshness_live_stream_matches_python" in test:
+            build = checker._run(
+                ["cargo", "build", "--offline", "--locked", "-p", "kassiber", "--features", "test-harness"],
+                self.scratch, self.cargo_env,
+            )
+            if build.returncode:
+                return "error", build.stderr[-4000:]
+            self.env["KASSIBER_RUST_BIN"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/kassiber")
         self.env["KASSIBER_RUST_FRESHNESS_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/freshness_fixture")
         self.env["KASSIBER_RUST_FRESHNESS_SYNC_FIXTURE"] = str(Path(self.env["CARGO_TARGET_DIR"]) / "debug/examples/freshness_sync_fixture")
-        return super().outcome("pytest", test)
+        status, output = super().outcome("pytest", test)
+        if re.search(r"\b\d+ skipped\b", output):
+            return "error", output
+        return status, output
 
 
 def main():

@@ -14,6 +14,10 @@ use kassiber_wallets::{
 use serde_json::Value;
 use std::{
     io::Read,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -30,6 +34,27 @@ impl Sources for Fixed {
         "2030-01-01T00:00:01Z".into()
     }
 }
+
+fn backend(conn: &Connection, input: &Value, executing: bool) -> Value {
+    let mut value = if executing {
+        input
+            .get("changed_backend")
+            .unwrap_or(&input["backend"])
+            .clone()
+    } else {
+        input["backend"].clone()
+    };
+    if input["saved_backend_url"] == true {
+        let url: String = conn
+            .query_row("SELECT url FROM backends WHERE name='fixture'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        value["url"] = Value::String(url);
+    }
+    value
+}
+
 fn main() {
     let mut raw = String::new();
     std::io::stdin()
@@ -40,9 +65,11 @@ fn main() {
     let mut conn = Connection::open(input["book"].as_str().unwrap()).unwrap();
     conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     let offline = input["offline"] == true;
+    let current_offline = Arc::new(AtomicBool::new(offline));
+    let transport_offline = current_offline.clone();
     let gate = Gate::new(
         move || {
-            if offline {
+            if transport_offline.load(Ordering::SeqCst) {
                 Offline::Offline
             } else {
                 Offline::Online
@@ -66,7 +93,7 @@ fn main() {
             &conn,
             &request,
             input["version"].as_str().unwrap(),
-            |_, _| Ok(input["backend"].clone()),
+            |conn, _| Ok(backend(conn, &input, false)),
         )?;
         let proof = Consent::explicit_trigger(&plan);
         let plan = if input["foreign"] == true {
@@ -75,7 +102,7 @@ fn main() {
                 &conn,
                 &request,
                 input["version"].as_str().unwrap(),
-                |_, _| Ok(input["backend"].clone()),
+                |conn, _| Ok(backend(conn, &input, false)),
             )?
         } else {
             plan
@@ -102,6 +129,24 @@ fn main() {
             },
             &mut |value| {
                 events.push(value.clone());
+                let event = serde_json::from_str::<Value>(
+                    &kassiber_pyjson::dumps(value, &Default::default()).unwrap(),
+                )
+                .unwrap();
+                if input["at_phase"] == event["phase"] && input["at_phase"].is_string() {
+                    match input["during_progress"].as_str() {
+                        Some("revoke") => proof.revoke(),
+                        Some("cancel") => cancel.cancel(),
+                        Some("offline") => current_offline.store(true, Ordering::SeqCst),
+                        Some("closed") => {
+                            return Err(kassiber_envelope::AppError::new(
+                                "cancelled",
+                                "Freshness output closed",
+                            ))
+                        }
+                        _ => {}
+                    }
+                }
                 Ok(())
             },
             &gate,
@@ -110,12 +155,7 @@ fn main() {
             Instant::now() + Duration::from_secs(60),
             input["start_time"].as_u64().unwrap_or(1_700_000_000),
             input["version"].as_str().unwrap(),
-            |_, _| {
-                Ok(input
-                    .get("changed_backend")
-                    .unwrap_or(&input["backend"])
-                    .clone())
-            },
+            |conn, _| Ok(backend(conn, &input, true)),
         )
     })();
     let envelope = match result {

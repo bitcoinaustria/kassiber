@@ -46,12 +46,13 @@ def round_trip(tmp_path, chain, protocol, url, python_book, rust_book, index, wo
         args["force_full"] = force
     route = daemon_freshness._workspace_freshness_run_payload if workspace else daemon_freshness._freshness_run_payload
     conn = connect(python_book)
+    events = []
     try:
         with deterministic_sources(f"r{index}"), bdk_request_clock(1_700_000_000), ExitStack() as stack:
             for module in (*CLOCK_MODULES, daemon_freshness):
                 stack.enter_context(patch.object(module, "now_iso", return_value="2030-01-01T00:00:01Z"))
             stack.enter_context(patch.object(core_sync, "time", SimpleNamespace(monotonic=lambda: 100.0)))
-            expected = build_envelope("freshness.sync", route(conn, rt, args))
+            expected = build_envelope("freshness.sync", route(conn, rt, args, progress_observer=events.append))
     finally:
         conn.close()
     with chain.lock:
@@ -61,7 +62,9 @@ def round_trip(tmp_path, chain, protocol, url, python_book, rust_book, index, wo
     if workspace:
         payload["workspace_id"] = "w"
     actual = invoke(tmp_path, payload)
+    (tmp_path / "events.json").write_text(json.dumps({"actual": actual["events"], "expected": events}, indent=2))
     assert json.dumps(actual["envelope"], sort_keys=True) == json.dumps(expected, sort_keys=True)
+    assert json.dumps(actual["events"], sort_keys=True) == json.dumps(events, sort_keys=True)
     assert dump_bytes(rust_book) == dump_bytes(python_book)
     return actual
 
@@ -165,3 +168,161 @@ def test_native_freshness_admitted_book_execution_is_inert_without_run(tmp_path)
     assert len(rows[1]["data"]["enqueued"]) == 1
     assert rows[1]["data"]["completed"] == []
     assert "ui.freshness.run" not in rows[0]["data"]["supported_kinds"]
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+@pytest.mark.parametrize("control", ["cancel", "book", "config", "backend"])
+@pytest.mark.parametrize("workspace", [False, True])
+def test_native_freshness_controls_between_fetch_batches(tmp_path, protocol, control, workspace):
+    config, chain, _ = _fixture("empty")
+    book = tmp_path / "book.sqlite"
+    create_book(book, config, extra_sql=CONTEXT_SQL)
+
+    class ControlledHits(list):
+        changed_at = None
+
+        def append(self, request):
+            super().append(request)
+            fetching = (request.get("method") == "blockchain.scripthash.get_history" if isinstance(request, dict)
+                        else request.startswith("/scripthash/"))
+            if fetching and self.changed_at is None:
+                self.changed_at = len(self)
+                with connect(book) as conn:
+                    if control == "cancel":
+                        conn.execute("UPDATE freshness_jobs SET cancel_requested=1 WHERE status IN ('queued','running')")
+                    elif control == "book":
+                        conn.execute("UPDATE settings SET value='' WHERE key='context_profile'")
+                    elif control == "config":
+                        conn.execute("UPDATE wallets SET config_json='{}'")
+                    else:
+                        conn.execute("UPDATE backends SET url='http://127.0.0.1:1' WHERE name='fixture'")
+
+    chain.hits = hits = ControlledHits()
+    with serve(chain, protocol) as url:
+        if control == "backend":
+            with connect(book) as conn:
+                conn.execute("INSERT INTO backends(name,kind,url,batch_size,created_at,updated_at) VALUES('fixture',?,?,2,'fixed','fixed')",
+                             (protocol, url))
+        result = invoke(tmp_path, {"book": str(book), "backend": runtime(protocol, url)["backends"]["fixture"],
+                                  "version": __version__, "saved_backend_url": control == "backend",
+                                  **({"workspace_id": "w"} if workspace else {})})
+    assert hits.changed_at is not None
+    # The request already on the wire may finish, including its second batch
+    # member. No later batch or publication may start.
+    assert len(hits) <= hits.changed_at + 1
+    data = result["envelope"]["data"]
+    completed = (data["books"][0] if workspace else data)["completed"]
+    assert len(completed) == 1
+    assert completed[0]["status"] == ("cancelled" if control == "cancel" else "error")
+    if control != "cancel":
+        assert completed[0]["error"]["code"] == "stale_context"
+    with connect(book) as conn:
+        for table in ("transactions", "chain_observer_instances", "wallet_utxo_refreshes"):
+            assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+@pytest.mark.parametrize("control", ["revoke", "cancel", "offline", "closed"])
+@pytest.mark.parametrize("phase", ["discovery", "decode_enrich"])
+def test_native_freshness_progress_authority_fences(tmp_path, protocol, control, phase):
+    config, chain, _ = _fixture("receive-change")
+    book = tmp_path / "book.sqlite"
+    create_book(book, config, extra_sql=CONTEXT_SQL)
+    with serve(chain, protocol) as url:
+        result = invoke(tmp_path, {"book": str(book), "backend": runtime(protocol, url)["backends"]["fixture"],
+            "version": __version__, "at_phase": phase, "during_progress": control})
+    assert any(event["phase"] == phase for event in result["events"])
+    job = result["envelope"]["data"]["completed"][0]
+    assert job["status"] == ("cancelled" if control in {"cancel", "closed"} else "error")
+    if control in {"revoke", "offline"}:
+        assert job["error"]["code"] == ("interaction_required" if control == "revoke" else "network_egress_disabled")
+    if phase == "discovery":
+        assert chain.hits == []
+    with connect(book) as conn:
+        assert conn.execute("SELECT count(*) FROM transactions").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM chain_observer_instances").fetchone()[0] == 0
+
+
+@pytest.mark.skipif(not os.environ.get("KASSIBER_RUST_BIN"), reason="requires the guarded Rust daemon")
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+def test_native_freshness_live_stream_matches_python(tmp_path, protocol):
+    from kassiber.core import freshness
+    from tests.test_rust_wallet_sync_cli import _books, _environment
+
+    config, chain, _ = _fixture("receive-change")
+    roots, books = _books(tmp_path, config)
+    before = copy.deepcopy({key: value for key, value in chain.__dict__.items() if key not in {"lock", "hits"}})
+    expected_events = []
+    with serve(chain, protocol) as url:
+        conn = connect(books[0])
+        try:
+            with deterministic_sources("r0"), bdk_request_clock(1_700_000_000), \
+                    patch.object(daemon_freshness, "now_iso", side_effect=lambda: freshness.now_iso()), \
+                    patch.object(core_sync, "time", SimpleNamespace(monotonic=lambda: 100.0)):
+                expected = daemon_freshness._freshness_run_payload(conn, runtime(protocol, url),
+                    {"rates": False, "journals": False}, progress_observer=expected_events.append)
+        finally:
+            conn.close()
+        with chain.lock:
+            chain.__dict__.update(before)
+        env = _environment(tmp_path, protocol, url)
+        requests = [{"request_id": "sync", "kind": "test.freshness.execute", "args": {"rates": False, "journals": False}},
+                    {"request_id": "stop", "kind": "daemon.shutdown"}]
+        result = subprocess.run([str(Path(os.environ["KASSIBER_RUST_BIN"]).resolve()), "--data-root", str(roots[1]), "daemon"],
+            input="".join(json.dumps(row) + "\n" for row in requests), capture_output=True, text=True, timeout=90, env=env)
+    assert result.returncode == 0 and result.stderr == "", result.stderr
+    rows = [json.loads(line) for line in result.stdout.splitlines()]
+    assert rows[0]["kind"] == "daemon.ready"
+    assert rows[-1]["kind"] == "daemon.shutdown"
+    assert rows[1:-2] == [{**build_envelope("test.freshness.execute.progress", event), "request_id": "sync"}
+                          for event in expected_events]
+    assert rows[-2] == {**build_envelope("test.freshness.execute", expected), "request_id": "sync"}
+    assert dump_bytes(books[1]) == dump_bytes(books[0])
+    assert "ui.freshness.run" not in rows[0]["data"]["supported_kinds"]
+
+
+@pytest.mark.parametrize("protocol", ["electrum", "esplora"])
+def test_reference_prefetch_cancellation_repro_and_native_terminal_parity(tmp_path, protocol):
+    """Repro: Python prefetch keeps fetching after persisted job cancellation."""
+    config, chain, _ = _fixture("empty")
+    python_book, rust_book = tmp_path / "python.sqlite", tmp_path / "rust.sqlite"
+    create_book(python_book, config, extra_sql=CONTEXT_SQL)
+    copy_book(python_book, rust_book)
+
+    class CancelHits(list):
+        cancelled_at = None
+
+        def __init__(self, book):
+            super().__init__()
+            self.book = book
+
+        def append(self, request):
+            super().append(request)
+            fetching = (request.get("method") == "blockchain.scripthash.get_history" if isinstance(request, dict)
+                        else request.startswith("/scripthash/"))
+            if fetching and self.cancelled_at is None:
+                self.cancelled_at = len(self)
+                with connect(self.book) as conn:
+                    conn.execute("UPDATE freshness_jobs SET cancel_requested=1 WHERE status='queued'")
+
+    with serve(chain, protocol) as url:
+        chain.hits = reference_hits = CancelHits(python_book)
+        conn = connect(python_book)
+        try:
+            with deterministic_sources("job"), bdk_request_clock(1_700_000_000), ExitStack() as stack:
+                for module in (*CLOCK_MODULES, daemon_freshness):
+                    stack.enter_context(patch.object(module, "now_iso", return_value="2030-01-01T00:00:01Z"))
+                stack.enter_context(patch.object(core_sync, "time", SimpleNamespace(monotonic=lambda: 100.0)))
+                expected = build_envelope("freshness.sync", daemon_freshness._freshness_run_payload(conn,
+                    runtime(protocol, url), {"rates": False, "journals": False}))
+        finally:
+            conn.close()
+        chain.hits = native_hits = CancelHits(rust_book)
+        actual = invoke(tmp_path, {"book": str(rust_book), "backend": runtime(protocol, url)["backends"]["fixture"],
+                                  "version": __version__})
+    assert actual["envelope"] == expected
+    assert dump_bytes(rust_book) == dump_bytes(python_book)
+    assert expected["data"]["completed"][0]["status"] == "cancelled"
+    assert reference_hits.cancelled_at is not None and native_hits.cancelled_at is not None
+    assert len(native_hits) - native_hits.cancelled_at <= 1
+    assert len(reference_hits) - reference_hits.cancelled_at > 1

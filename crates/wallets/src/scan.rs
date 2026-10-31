@@ -34,6 +34,41 @@ pub struct Scope {
 /// In-flight I/O retains the supplied overall deadline and backend timeout.
 #[derive(Clone, Default)]
 pub struct Cancellation(Arc<AtomicBool>);
+
+/// A request can add synchronous authority checks at protocol boundaries.
+/// Database checks run on the connection's owning thread; parallel discovery
+/// workers receive only the clonable cancellation flag.
+pub trait Control {
+    fn check(&self, deadline: Instant) -> Result<()>;
+    fn cancellation(&self) -> &Cancellation;
+    fn progress(&self, _event: Value) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct Checked<'a> {
+    pub cancel: &'a Cancellation,
+    pub check: &'a dyn Fn() -> Result<()>,
+}
+
+impl Control for Checked<'_> {
+    fn check(&self, deadline: Instant) -> Result<()> {
+        self.cancel.check(deadline)?;
+        (self.check)()
+    }
+    fn cancellation(&self) -> &Cancellation {
+        self.cancel
+    }
+}
+
+impl Control for Cancellation {
+    fn check(&self, deadline: Instant) -> Result<()> {
+        Cancellation::check(self, deadline)
+    }
+    fn cancellation(&self) -> &Cancellation {
+        self
+    }
+}
 impl Cancellation {
     pub fn cancel(&self) {
         self.0.store(true, Ordering::SeqCst);
@@ -206,7 +241,7 @@ impl CompatibilityDiscovery {
         current_scope: &Scope,
         consent: Option<&DiscoveryConsent>,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         mut progress: impl FnMut(Value),
     ) -> Result<Value> {
         cancel.check(deadline)?;
@@ -257,6 +292,7 @@ impl CompatibilityDiscovery {
                                 .iter()
                                 .map(|target| {
                                     let client = &client;
+                                    let cancel = cancel.cancellation();
                                     let checkpoint = &self.checkpoint;
                                     let transport = &proof.transport;
                                     threads.spawn(move || {
@@ -412,7 +448,7 @@ fn scan_plan(
     plan: &Plan,
     checkpoint: &Value,
     batch_size: usize,
-    cancel: &Cancellation,
+    cancel: &dyn Control,
     deadline: Instant,
     progress: &mut impl FnMut(Value),
     mut used: impl FnMut(&[Value]) -> Result<Vec<bool>>,
@@ -480,10 +516,10 @@ fn scan_plan(
                     break;
                 }
             }
-            progress(
-                json!({"phase":"discovery","targets_checked":checked,"retained_targets":targets.len(),
-                "branch_index":branch.index,"gap_limit":gap,"unused_streak":unused,"processed":checked}),
-            );
+            let event = json!({"phase":"discovery","targets_checked":checked,"retained_targets":targets.len(),
+                "branch_index":branch.index,"gap_limit":gap,"unused_streak":unused,"processed":checked});
+            progress(event.clone());
+            cancel.progress(event)?;
         }
     }
     Ok(targets)

@@ -133,8 +133,9 @@ impl Acquisition {
         gate: &Gate,
         consent: &Consent,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         c: &CacheInput,
+        history_ready: &mut dyn FnMut(&Value) -> Result<()>,
     ) -> Result<Value> {
         let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
         cancel.check(deadline)?;
@@ -149,41 +150,84 @@ impl Acquisition {
         let mut transactions = Map::new();
         let mut stats = Map::new();
         let mut members = BTreeMap::new();
-        let mut changed = 0;
-        for target in &self.targets {
+        let workers = self.backend.batch_size().clamp(1, 8);
+        let total = self.targets.len();
+        let report = |event: Value| cancel.progress(event);
+        let fetched = |index: usize, total: usize| -> Result<()> {
+            if index.is_multiple_of(workers) || index == total {
+                report(
+                    json!({"phase":"backend_fetch","targets_checked":index,"target_count":total,
+                    "processed":index,"total":total}),
+                )?;
+            }
+            Ok(())
+        };
+        let mut observations = vec![];
+        for (index, target) in self.targets.iter().enumerate() {
             cancel.check(deadline)?;
             let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
-            let path = format!("scripthash/{hash}");
-            let before = client.get_json(&path, Some(consent), deadline)?;
+            let before = client.get_json(&format!("scripthash/{hash}"), Some(consent), deadline)?;
+            observations.push((target, hash, before));
+            fetched(index + 1, total)?;
+        }
+        let mut changed = 0;
+        for (index, (target, hash, before)) in observations.into_iter().enumerate() {
+            cancel.check(deadline)?;
             let fingerprint = cache::stats_fingerprint(&before);
             let mempool = metadata_count(&before["mempool_stats"]["tx_count"])?;
-            let total = metadata_count(&before["chain_stats"]["tx_count"])? + &mempool;
+            let count = metadata_count(&before["chain_stats"]["tx_count"])? + &mempool;
             let dirty = mempool > 0.into();
-            highest(&mut cp, target, total > 0.into())?;
-            stats.insert(hash.clone(),json!({"fingerprint":fingerprint,"tx_count":integer_json(total),"mempool_tx_count":integer_json(mempool),"mempool_dirty":dirty}));
-            if same_tip
+            highest(&mut cp, target, count > 0.into())?;
+            stats.insert(hash.clone(),json!({"fingerprint":fingerprint,"tx_count":integer_json(count),"mempool_tx_count":integer_json(mempool),"mempool_dirty":dirty}));
+            let reused = same_tip
                 && cache::esplora_reusable(
                     &c.checkpoint["esplora_scripthashes"][&hash],
                     prior.get(&hash),
                     &fingerprint,
-                )
-            {
+                );
+            if reused {
                 members.insert(hash.clone(), prior[&hash].clone());
-                scripts.push(json!({"target":target,"before":before,"reused":true}));
-                continue;
+            } else {
+                changed += 1;
             }
-            changed += 1;
+            scripts.push(json!({"target":target,"before":before,"reused":reused}));
+            if (index + 1).is_multiple_of(workers) || index + 1 == total {
+                report(
+                    json!({"phase":"backend_fetch","targets_checked":index+1,"target_count":total,
+                    "scripts_changed":changed,"scripts_unchanged":index+1-changed,"processed":index+1,"total":total}),
+                )?;
+            }
+        }
+        let mut histories = vec![];
+        for script in scripts.iter().filter(|s| s["reused"] != true) {
+            cancel.check(deadline)?;
+            let target = &script["target"];
+            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+            let path = format!("scripthash/{hash}");
             let history =
                 esplora_history(&client, &path, self.max_pages, consent, deadline, cancel)?;
+            cancel.check(deadline)?;
             let after = client.get_json(&path, Some(consent), deadline)?;
+            histories.push((hash, history, after));
+            fetched(histories.len(), changed)?;
+        }
+        for (index, (script, (hash, history, after))) in scripts
+            .iter_mut()
+            .filter(|s| s["reused"] != true)
+            .zip(histories)
+            .enumerate()
+        {
+            cancel.check(deadline)?;
+            let before = &script["before"];
+            let fingerprint = cache::stats_fingerprint(before);
             let ids: BTreeSet<_> = history
                 .iter()
-                .filter(|tx| matches(tx, target["script_pubkey"].as_str().unwrap()))
+                .filter(|tx| matches(tx, script["target"]["script_pubkey"].as_str().unwrap()))
                 .filter_map(|tx| tx["txid"].as_str().map(str::to_ascii_lowercase))
                 .collect();
             let complete = self.max_pages.is_none()
-                && count(&before) == Some(history.len() as u64)
-                && count(&after) == count(&before)
+                && count(before) == Some(history.len() as u64)
+                && count(&after) == count(before)
                 && cache::stats_fingerprint(&after) == fingerprint
                 && ids.len() == history.len();
             members.insert(
@@ -193,8 +237,17 @@ impl Acquisition {
             for tx in &history {
                 transactions.insert(tx["txid"].as_str().ok_or_else(invalid)?.into(), tx.clone());
             }
-            scripts.push(json!({"target":target,"before":before,"after":after,"history":history,"reused":false}));
+            script["after"] = after;
+            script["history"] = json!(history);
+            if (index + 1).is_multiple_of(workers) || index + 1 == changed {
+                report(
+                    json!({"phase":"backend_fetch","targets_checked":index+1,"target_count":changed,
+                    "known_txids":transactions.len(),"processed":index+1,"total":changed}),
+                )?;
+            }
         }
+        cancel.check(deadline)?;
+        history_ready(&json!({"transactions":transactions}))?;
         let skipped = !c.checkpoint.as_object().is_none_or(Map::is_empty)
             && changed == 0
             && !scripts.is_empty();
@@ -208,7 +261,8 @@ impl Acquisition {
                 .ok()
                 .and_then(|s| kassiber_pytext::parse_int(kassiber_pytext::strip(&s)).ok())
                 .and_then(|n| i64::try_from(n).ok());
-            for script in &mut scripts {
+            let mut utxos_seen = 0;
+            for (index, script) in scripts.iter_mut().enumerate() {
                 cancel.check(deadline)?;
                 let h = script_hash(
                     script["target"]["script_pubkey"]
@@ -217,6 +271,13 @@ impl Acquisition {
                 )?;
                 script["utxos"] =
                     client.get_json(&format!("scripthash/{h}/utxo"), Some(consent), deadline)?;
+                utxos_seen += script["utxos"].as_array().map_or(0, Vec::len);
+                if (index + 1).is_multiple_of(workers) || index + 1 == total {
+                    report(
+                        json!({"phase":"backend_fetch","targets_checked":index+1,"target_count":total,
+                        "utxos_seen":utxos_seen,"processed":index+1,"total":total}),
+                    )?;
+                }
             }
         }
         cp["backend"] = identity(self, c);
@@ -234,7 +295,7 @@ impl Acquisition {
         gate: &Gate,
         consent: &Consent,
         deadline: Instant,
-        cancel: &Cancellation,
+        cancel: &dyn Control,
         c: &CacheInput,
     ) -> Result<Value> {
         let mut client =

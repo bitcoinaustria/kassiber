@@ -84,6 +84,8 @@ pub(crate) fn handle(
                 if flag("cancel") == Some(true) {
                     cancel.cancel();
                 }
+                let output = daemon.output.clone();
+                let progress_id = request_id.clone();
                 daemon.book_mut()?.freshness_execute(
                     plan,
                     &kassiber_wallets::freshness::execution::Options {
@@ -92,7 +94,14 @@ pub(crate) fn handle(
                     },
                     (flag("consent") != Some(false)).then_some(&proof),
                     &cancel,
-                    &mut |_| Ok(()),
+                    &mut |event| {
+                        output
+                            .write(&with_request_id(
+                                success("test.freshness.execute.progress", event.clone()),
+                                &progress_id,
+                            ))
+                            .map_err(|_| AppError::new("cancelled", "Freshness output closed"))
+                    },
                 )?
             } else {
                 plan.specifications()

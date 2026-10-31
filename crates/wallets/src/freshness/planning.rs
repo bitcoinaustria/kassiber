@@ -364,6 +364,9 @@ impl Plan {
                 } else {
                     enqueued.clone()
                 };
+                if workspace.is_none() {
+                    handler.prefetch(conn, &selected, &mut book_progress)?;
+                }
                 execution::run_requested(
                     conn,
                     &id,

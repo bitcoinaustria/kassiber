@@ -2959,3 +2959,27 @@ request lifecycle/replay controls and after-response graph grants still need
 the next handoff step. The three product daemon routes remain on Python,
 including no-refresh shapes. See the final checkpoint in
 `docs/reference/rust-shell.md` for verification and the exact continuation.
+
+### R5 Bitcoin sync: fetch progress and batch controls (partial)
+
+Native freshness execution now forwards discovery, BDK scan/decode and Esplora
+stats/history/decode/UTXO progress. Active-book runs prefetch selected on-chain
+jobs before running-job events; workspace runs fetch inside their job context,
+matching Python's distinct stream ordering. Prefetched outcomes remain bound to
+the exact job and are revalidated before publication. A captured fetch failure
+is recorded by its job without repeating transport.
+
+Protocol boundaries now run synchronous checks on the admitted connection for
+persisted cancellation, book scope, wallet inputs and backend revisions, in
+addition to the atomic cancellation flag and `kassiber-net` permission checks.
+Parallel discovery workers retain only the atomic flag; connection checks run
+before and after their batch on the owning thread. Failed progress callbacks
+stop acquisition and publication. The guarded daemon kind streams ordered,
+request-bound envelopes through the real `Book` seam.
+
+This is an internal continuation of step 2. Product request-loop lifecycle
+controls, early request cancellation and after-response graph grants with a
+stoppable, connection-owning worker remain outstanding. Step 3 validation,
+inert no-refresh hybrid selection and product registration have not started.
+The explicit no-refresh admission choice remains; default journal processing
+continues through Python. All three product daemon routes remain unregistered.

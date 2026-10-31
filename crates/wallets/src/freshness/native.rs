@@ -6,10 +6,10 @@ use super::{
 use crate::{
     fetch::{Fetch, FetchConsent},
     publication::{
-        row::{field, or_text, Result},
+        row::{field, first, or_text, Result},
         wallet,
     },
-    scan::Cancellation,
+    scan::{Cancellation, Checked},
 };
 use kassiber_envelope::{dict, s, truthy, AppError};
 use kassiber_net::Gate;
@@ -92,12 +92,19 @@ impl Consent {
     }
 }
 
+#[derive(Clone)]
 struct Source {
     profile: String,
     key: String,
     wallet: Value,
     backend_name: String,
     backend: Result<Json>,
+}
+
+struct Prepared {
+    action: Fetch,
+    grant: Arc<FetchConsent>,
+    fetch: Json,
 }
 
 pub(super) struct Native<'a, B> {
@@ -110,6 +117,7 @@ pub(super) struct Native<'a, B> {
     start_time: u64,
     version: String,
     backend: B,
+    prefetched: std::collections::BTreeMap<String, Result<Prepared>>,
 }
 
 impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
@@ -162,6 +170,120 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             start_time,
             version: version.into(),
             backend,
+            prefetched: Default::default(),
+        })
+    }
+
+    fn source(&self, job: &Value) -> Result<Source> {
+        self.sources
+            .iter()
+            .find(|source| {
+                field(job, "profile_id") == &s(source.profile.as_str())
+                    && field(job, "source_key") == &s(source.key.as_str())
+            })
+            .cloned()
+            .ok_or_else(|| AppError::new("stale_context", "Freshness source was not admitted"))
+    }
+
+    fn prepare(
+        &mut self,
+        conn: &Connection,
+        job: &Value,
+        emit: &mut dyn FnMut(&Value) -> Result<()>,
+    ) -> Result<Prepared> {
+        let id = or_text(field(job, "id"));
+        check(
+            conn,
+            &self.context,
+            self.proof,
+            self.cancel,
+            self.deadline,
+            &id,
+        )?;
+        let selected = self.source(job)?;
+        if (self.backend)(conn, &selected.backend_name) != selected.backend {
+            return Err(AppError::new(
+                "stale_context",
+                "Wallet sync backend changed",
+            ));
+        }
+        let backend = selected.backend.as_ref().map_err(Clone::clone)?;
+        let wallet_id = or_text(field(&selected.wallet, "id"));
+        let action = Fetch::new(
+            conn,
+            &selected.profile,
+            &wallet_id,
+            backend,
+            truthy(field(field(job, "payload"), "force_full")),
+            &self.version,
+        )?;
+        if action.captured_config() != or_text(field(&selected.wallet, "config_json")) {
+            return Err(AppError::new(
+                "stale_context",
+                "Wallet sync selection changed",
+            ));
+        }
+        let grant = self.proof.grant(&action)?;
+        let label = field(&selected.wallet, "label");
+        emit(&dict([
+            ("phase", s("discovery")),
+            ("wallet", label.clone()),
+        ]))?;
+        let resolver = std::cell::RefCell::new(&mut self.backend);
+        let check_batch = || {
+            check(
+                conn,
+                &self.context,
+                self.proof,
+                self.cancel,
+                self.deadline,
+                &id,
+            )?;
+            let current = first(
+                conn,
+                "SELECT kind,config_json FROM wallets WHERE id=? AND profile_id=?",
+                [&wallet_id, &selected.profile],
+            )?;
+            if current.as_ref().is_none_or(|wallet| {
+                ["kind", "config_json"]
+                    .iter()
+                    .any(|key| field(wallet, key) != field(&selected.wallet, key))
+            }) {
+                return Err(AppError::new(
+                    "stale_context",
+                    "Wallet sync selection changed",
+                ));
+            }
+            if resolver.borrow_mut()(conn, &selected.backend_name) != selected.backend {
+                return Err(AppError::new(
+                    "stale_context",
+                    "Wallet sync backend changed",
+                ));
+            }
+            action.revalidate(conn)
+        };
+        let control = Checked {
+            cancel: self.cancel,
+            check: &check_batch,
+        };
+        let fetch = action.run_with_progress(
+            self.gate,
+            action.scope(),
+            Some(&grant),
+            self.deadline,
+            &control,
+            self.start_time,
+            &mut |event| {
+                let mut event = kassiber_pytext::loads(&event.to_string())
+                    .map_err(|_| AppError::new("internal_error", "Invalid wallet progress JSON"))?;
+                put(&mut event, "wallet", label.clone());
+                emit(&event)
+            },
+        )?;
+        Ok(Prepared {
+            action,
+            grant,
+            fetch,
         })
     }
 }
@@ -210,6 +332,22 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
     fn supports(&self, kind: &str) -> bool {
         kind == "onchain_wallet_history"
     }
+    fn prefetch(
+        &mut self,
+        conn: &Connection,
+        jobs: &[Value],
+        observer: &mut dyn FnMut(&Value) -> Result<()>,
+    ) -> Result<()> {
+        for job in jobs {
+            if field(job, "job_type") == &s("onchain_wallet_history")
+                && [s("queued"), s("rate_limited")].contains(field(job, "status"))
+            {
+                let result = self.prepare(conn, job, observer);
+                self.prefetched.insert(or_text(field(job, "id")), result);
+            }
+        }
+        Ok(())
+    }
     fn run(
         &mut self,
         conn: &mut Connection,
@@ -229,39 +367,8 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
                 this.deadline,
                 &id,
             )?;
-            let selected = this
-                .sources
-                .iter()
-                .find(|source| {
-                    field(job, "profile_id") == &s(source.profile.as_str())
-                        && field(job, "source_key") == &s(source.key.as_str())
-                })
-                .ok_or_else(|| {
-                    AppError::new("stale_context", "Freshness source was not admitted")
-                })?;
-            if (this.backend)(conn, &selected.backend_name) != selected.backend {
-                return Err(AppError::new(
-                    "stale_context",
-                    "Wallet sync backend changed",
-                ));
-            }
-            let backend = selected.backend.as_ref().map_err(Clone::clone)?;
+            let selected = this.source(job)?;
             let wallet_id = or_text(field(&selected.wallet, "id"));
-            let action = Fetch::new(
-                conn,
-                &selected.profile,
-                &wallet_id,
-                backend,
-                truthy(field(field(job, "payload"), "force_full")),
-                &this.version,
-            )?;
-            if action.captured_config() != or_text(field(&selected.wallet, "config_json")) {
-                return Err(AppError::new(
-                    "stale_context",
-                    "Wallet sync selection changed",
-                ));
-            }
-            let grant = this.proof.grant(&action)?;
             let label = field(&selected.wallet, "label");
             progress.emit(
                 conn,
@@ -271,22 +378,18 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
                 conn,
                 &dict([("phase", s("backend_fetch")), ("wallet", label.clone())]),
             )?;
-            check(
-                conn,
-                &this.context,
-                this.proof,
-                this.cancel,
-                this.deadline,
-                &id,
-            )?;
-            let fetch = action.run(
-                this.gate,
-                action.scope(),
-                Some(&grant),
-                this.deadline,
-                this.cancel,
-                this.start_time,
-            )?;
+            let Prepared {
+                action,
+                grant,
+                fetch,
+            } = if let Some(result) = this.prefetched.remove(&id) {
+                if result.is_err() {
+                    progress.emit(conn, &dict([("phase", s("batch_prefetch"))]))?;
+                }
+                result?
+            } else {
+                this.prepare(conn, job, &mut |event| progress.emit(conn, event))?
+            };
             check(
                 conn,
                 &this.context,
@@ -314,6 +417,12 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
                         this.deadline,
                         &id,
                     )?;
+                    if (this.backend)(conn, &selected.backend_name) != selected.backend {
+                        return Err(AppError::new(
+                            "stale_context",
+                            "Wallet sync backend changed",
+                        ));
+                    }
                     action.check_permission(this.gate, Some(&grant))
                 },
             )?;

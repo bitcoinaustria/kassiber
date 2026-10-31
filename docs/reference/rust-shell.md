@@ -7806,3 +7806,111 @@ summarizing their results. Account HOME is preserved, and no background job
 is left running. The full quality gate, inherited mutation campaigns,
 tax/custody shadow overlays, Docker regtest and packaged/platform gates were
 not run. This checkpoint does not establish live daemon route acceptance.
+
+### Bitcoin wallet-sync fetch progress and batch controls (R5, partial)
+
+Local branch `t3code/r5-sync-18` starts at `16765561d`. This continuation
+implements the fetch-progress and protocol-batch portion of step 2. It does
+not complete the product request lifecycle or graph handoff, and step 3 has
+not started. All three product daemon routes remain on Python, including
+explicit no-refresh shapes. Successful native product calls added here are
+zero for `ui.wallets.sync`, `ui.freshness.run` and
+`ui.workspace.freshness.run`.
+
+`scan::Control` carries synchronous request checks through compatibility
+discovery/acquisition and BDK RPC batches. The native freshness handler checks
+persisted cancellation, active book context, wallet inputs, selected backend
+revisions and the captured fetch before another batch starts. Invalid wallet
+edits return `stale_context`, rather than a capability handoff after execution
+has started. Parallel discovery workers receive only the atomic stop flag;
+database checks run before and after their batch on the connection-owning
+thread. In-flight requests retain their existing timeout and may finish.
+Transport remains behind `kassiber-net`, including offline/no-egress and
+revocation checks. No endpoint, background trigger or dependency was added.
+
+The fetch service forwards compatibility discovery counts, BDK scanning and
+decode counts, and Esplora stats/history/decode/UTXO progress. Esplora
+acquisition now separates fetch and summary phases to preserve Python's event
+order. Active-book freshness prefetches selected on-chain jobs before running
+job events; workspace freshness fetches inside each job. Prefetched results
+remain bound to the exact job and captured fetch, with publication
+revalidation. A captured failure is recorded without repeating transport.
+Progress callback failures stop acquisition and publication.
+
+The guarded `test.freshness.execute` kind streams request-bound progress
+envelopes through the real `Book` seam before its terminal response. It remains
+absent from release builds and desktop/AI allowlists. The differential oracle
+now compares complete typed event payload sequences as well as terminal
+envelopes and every logical table. Separate live-daemon cases compare stream
+envelopes, results and full books on both protocols; these use a guarded test
+kind, not a registered product route or a hybrid served-by workload.
+
+A Python reference bug is reproduced by
+`test_reference_prefetch_cancellation_repro_and_native_terminal_parity` in
+`tests/test_rust_freshness_native.py`: cancellation persisted during active-book
+prefetch does not stop Python's later backend requests. Rust stops before the
+next batch, while its terminal envelope and every logical table match Python's
+cancelled outcome. The repro runs on both disposable protocols. Python was not
+changed; the cancelled prefetch event streams deliberately differ because the
+native fence prevents the remaining work.
+
+The exact remaining handoff is:
+
+1. Finish step 2's product request-loop lifecycle: early/request cancellation,
+   concurrent source controls and book-switch/lock/shutdown quiescence, plus
+   request-bound offline/revocation/replay controls. The fetch primitives here
+   enforce the state they observe; the synchronous guarded daemon handler does
+   not yet service a second control request while a refresh is running.
+2. Add after-response graph-grant publication and a stoppable worker that owns
+   its connection, including SQLCipher passphrase handoff/cleanup, request and
+   book revocation, bounded graph work, and unsolicited event envelopes.
+   Persisted or recovered jobs alone must never authorize graph traffic.
+   Prove lifecycle/graph parity and named mutation kills before calling step 2
+   complete.
+3. Implement step 3's product argument validation and inert whole-invocation
+   hybrid selection for explicit no-refresh variants. The current choice is
+   still explicit journal opt-out; default requests remain Python. An optional
+   narrow Python journal bridge must preserve auto-pairing, current-journal
+   skipping and disabled/deferred/error summaries. Native refresh still needs
+   R4-13.
+4. Run full product daemon envelope/event/book parity on the broader fixture,
+   restart and reviewed-book corpus, prove zero served-shape hybrid fallbacks,
+   and register only the routes that pass. No product route is registered by
+   this checkpoint.
+
+Focused native verification covers all 72 current parametrized cases across a
+66-case run and a 20-case control/stream/repro run (14 overlap). They cover both
+protocols, active-book/workspace ordering, complete typed progress and terminal
+envelopes, every logical table, cancellation and changed book/wallet/backend
+inputs, revoked consent, offline/no-egress and closed output. Another 270
+Python regressions and two subtests pass across queue/admission/execution, the
+registered CLI fixture/restart/reviewed corpus, hybrid refusal and daemon
+protocol/catalogue checks. All 204 affected Rust tests pass, including 179
+wallet tests, encrypted rollback and the inherited 102-round sync corpus.
+None of these runs skips a test.
+
+All 16 new progress/control mutations are killed by their named tests after
+12 unmutated baseline selections pass. They pin active/workspace event order,
+BDK and Esplora counts, discovery forwarding, wallet labels, callback failures,
+batch/request checks, backend revisions, invalid wallet edits and live guarded
+stream envelopes. The adjusted inherited `acquisition-esplora-tip-reuse` and
+`routing-current-offline` recipes each pass their baseline and are killed by
+their named test. Build failures, skips and empty selections do not count as
+kills. The progress catalogue, combined inherited sync catalogue and routing
+catalogue pass static checks (16, 547 and 14 entries); other inherited mutation
+campaigns were not rerun.
+
+Formatting and affected production/harness clippy pass with warnings denied.
+The required `classify_tests update` records 5,773 definitions, and
+`python_test_shards.py run preflight --ci` passes all 57 tests. A manual second
+pass reviewed request-local authority, prefetch identity and errors, protocol
+boundaries, connection ownership, progress redaction, guarded routing,
+classification and documentation. No verification remains sandbox-blocked.
+
+Command logs, verification scripts and the summary remain under
+`target/r5-sync-18-artifacts/`. Mutation and verification build trees and
+disposable books are removed after summarizing their results. Account HOME is
+preserved, and no background job is left running. The full quality gate,
+tax/custody shadow overlays, Docker regtest and packaged/platform gates were
+not run. This partial checkpoint does not establish product daemon route
+acceptance or complete step 2 or step 3.
