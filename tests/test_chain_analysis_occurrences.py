@@ -85,7 +85,8 @@ class OccurrenceIndexTests(unittest.TestCase):
 
     def test_bound_regtest_books_cannot_borrow_each_others_cache(self):
         self.conn.execute("CREATE TABLE book_network_bindings(profile_id TEXT PRIMARY KEY,environment_id TEXT,environment TEXT,revision INTEGER,chain_instance_id TEXT,domains_json TEXT,acknowledgements_json TEXT)")
-        self.conn.execute("INSERT INTO profiles VALUES('other',NULL,0,0,0)")
+        self.conn.execute("""INSERT INTO profiles(id,last_processed_at,journal_input_version,
+            last_processed_input_version,last_processed_tx_count) VALUES('other',NULL,0,0,0)""")
         for profile, instance in (("p", "11111111-1111-4111-8111-111111111111"), ("other", "22222222-2222-4222-8222-222222222222")):
             domain = {"domain_id": digest(["bitcoin", "regtest", instance]), "chain": "bitcoin", "network": "regtest", "chain_instance_id": instance}
             self.conn.execute("INSERT INTO book_network_bindings VALUES(?,?,'regtest',1,?,?, '[]')", (profile, profile, instance, json.dumps([domain])))

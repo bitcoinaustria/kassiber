@@ -69,9 +69,13 @@ Journal builds now stamp `profiles.journal_semantics_version` separately after
 publishing their input markers. A trigger clears that stamp whenever a writer
 updates the processing markers, including an older binary that cannot stamp
 its semantics. The update also requires a stamp for an older binary's first
-build in a new book. Required semantics survive that update. Current readers
-refuse unstamped or incompatible journals even when input versions and counts match;
-rebuilding with current Kassiber restores freshness. The first upgrade also
+build in a new book. Required semantics survive that update. Report builders
+refuse unstamped or incompatible journals even when input versions and counts match.
+Graph readers mark retained custody edges stale, and diagnostics count these
+books as stale. Daemon report reads and maintenance rebuild locally through the
+same canonical freshness check; they do not acquire network consent by doing so.
+A reader missing either semantics column fails closed. Rebuilding with current
+Kassiber restores freshness. The first upgrade also
 requires a stamped rebuild of previously processed books, because the earlier
 custody-hold correction applied to every such book. Raw observations, authored
 reviews, retained journals and filed snapshots are not rewritten by this guard.
