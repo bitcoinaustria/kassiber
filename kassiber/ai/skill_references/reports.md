@@ -230,7 +230,8 @@ FMV uses only cached or transaction prices strictly before that same cutoff
 and discloses their actual source timestamps. Quarantines and missing
 prices leave an incomplete estimate. The closest cached or transaction quote wins; both sources must be within
 24 hours before the cutoff. Older prices are missing FMV, never zero tax.
-`status.missingFmvAssets` identifies that readiness barrier. PDF/XLSX and the
+`status.missingFmvAssets` identifies incomplete readiness; previews and exports
+remain available as labelled incomplete drafts. PDF/XLSX and the
 desktop FMV card disclose quote source and `asOf`. Exit-tax exports intentionally create no
 ordinary realized-report snapshot. PDF/XLSX stamp `departureTimezone`, `journalInputVersion` and FMV
 quotes for manual freshness comparison, without automatic amendment tracking.
