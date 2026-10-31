@@ -463,6 +463,7 @@ fn assert_import_vectors(cases: &Json) {
             "bullbitcoin_csv" => Format::Bull,
             "coinfinity_csv" => Format::Coinfinity,
             "21bitcoin_csv" => Format::TwentyOne,
+            "strike_csv" => Format::Strike,
             "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
@@ -2167,4 +2168,161 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
     assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 1000000);
     assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+}
+
+#[test]
+fn python_strike_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_strike_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+const STRIKE_HEADER: &str = "Reference,Date & Time (UTC),Transaction Type,Amount EUR,Fee EUR,Amount BTC,Fee BTC,BTC Price,Cost Basis (EUR),Destination,Description,Transaction Hash,Note\n";
+const STRIKE_BUY: &str =
+    "buy,Mar 08 2026 09:15:00,Buy,-100,1,0.001,0,,100,balance,purchase,,note\n";
+#[test]
+fn strike_active_ledger_dedupe_updates_identity_runs_and_readiness() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let first = format!("{STRIKE_HEADER}{STRIKE_BUY}");
+    let result = import_kind(&conn, &first, Format::Strike).unwrap();
+    assert_eq!(kassiber_envelope::get(&result, "mode"), Some(&s("full")));
+    assert_eq!(
+        kassiber_envelope::get(&result, "strike_rows"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE external_id='strike:buy' AND excluded=0 AND amount=100000000 AND fee=0 AND kind='buy' AND fiat_value='101'"),1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 0);
+    let corrected_fee = first.replace("0.001,0,,100", "0.001,0.00001,,100");
+    let unchanged = import_kind(&conn, &corrected_fee, Format::Strike).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&unchanged, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 0);
+    assert_eq!(
+        kassiber_envelope::get(&unchanged, "updated"),
+        Some(&Py::from(1)),
+        "{unchanged:?}"
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        2
+    );
+    let second=format!("{STRIKE_HEADER}{}ln,Mar 08 2026 10:00:00,Receive,,,0.002,0,,,lnbc1invoice,,{},lightning\nchain,Mar 09 2026 10:00:00,Send,,,-0.001,0.00001,60000,,bc1address,chain,{},withdrawal\n",STRIKE_BUY.replace("purchase","updated"),"ab".repeat(32),"cd".repeat(32));
+    let result = import_kind(&conn, &second, Format::Strike).unwrap();
+    for (key, value) in [("imported", 2), ("updated", 1), ("strike_rows", 3)] {
+        assert_eq!(
+            kassiber_envelope::get(&result, key),
+            Some(&Py::from(value)),
+            "{key}"
+        );
+    }
+    assert_eq!(
+        scalar(&conn, "SELECT sum(rows_updated) FROM import_batches"),
+        1
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
+        3
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        3
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE external_id='strike:ln' AND payment_hash IS NOT NULL AND payment_hash_source='importer' AND pricing_source_kind IS NULL AND excluded=0"),1);
+    assert_eq!(scalar(&conn,&format!("SELECT count(*) FROM transactions WHERE external_id='{}' AND payment_hash IS NULL AND direction='outbound' AND fee=1000000 AND excluded=0","cd".repeat(32))),1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE raw_json LIKE '%_strike_lightning%'"
+        ),
+        3
+    );
+}
+#[test]
+fn strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses() {
+    let conn = fixture();
+    let request = |mode| Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: "missing-strike-input.csv".into(),
+        format: Format::Strike,
+        mode,
+    };
+    let error = execute(&conn, request(Some("relevant".into())), None).unwrap_err();
+    assert_eq!(
+        (&*error.code, &*error.message),
+        (
+            "validation",
+            "strike_csv is an active custodial ledger import"
+        )
+    );
+    assert_eq!(
+        error.hint.as_deref(),
+        Some("Import the complete platform ledger, then review custody-transfer candidates.")
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 1);
+    conn.execute_batch("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    let identity = Identity {
+        ids: vec!["provider".into()],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(None), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM wallets WHERE id='provider' AND label='Strike' AND kind='strike' AND account_id='treasury' AND config_json='{\"source_format\": \"strike_csv\"}'"),1);
+    let error = execute(
+        &conn,
+        request(Some("full".into())),
+        Some(&Identity {
+            ids: vec![],
+            timestamp: "2025-01-01".into(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 2);
+    assert!(conn.is_autocommit());
+}
+#[test]
+fn strike_late_failure_rolls_back_observations_runs_and_readiness() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    conn.execute_batch("CREATE TRIGGER refuse_strike BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'strike denied');END;").unwrap();
+    let result = import_kind(
+        &conn,
+        &format!("{STRIKE_HEADER}{STRIKE_BUY}"),
+        Format::Strike,
+    );
+    assert!(result.is_err());
+    for table in [
+        "transactions",
+        "import_batches",
+        "import_batch_transactions",
+    ] {
+        assert_eq!(
+            scalar(&conn, &format!("SELECT count(*) FROM {table}")),
+            0,
+            "{table}"
+        );
+    }
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        0
+    );
+    assert!(conn.is_autocommit());
 }

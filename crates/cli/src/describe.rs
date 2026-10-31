@@ -124,6 +124,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-bullbitcoin",
     "wallets.import-coinfinity",
     "wallets.import-21bitcoin",
+    "wallets.import-strike",
     "wallets.import-pocket",
     "wallets.import-pocketbitcoin",
     "wallets.import-phoenix",

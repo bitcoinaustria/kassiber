@@ -2048,6 +2048,136 @@ Strike remains before batch 1 is complete. Batch 2, exchange APIs and AI
 projections remain outside this checkpoint. Python production code,
 dependencies and egress are unchanged.
 
+
+## Strike file-ingestion continuation and batch-1 completion (R5)
+
+Native `wallets import-strike` uses the full active custodial ledger coordinator.
+Relevant mode refuses before wallet/file admission; full mode creates/reuses the
+Strike wallet. Zero/fiat-only BTC rows are skipped only after provider-reference
+validation. UTC English-month dates preserve Python's month lookup and distinct
+Unicode day/year/clock regex rules, with ordinary timestamp normalization as
+the fallback. UTF-8 retains BOM data; CSV/header families and quoting follow
+Python.
+
+Fiat currency follows sanitized header insertion order, ignoring BTC families.
+Amount/fee columns prefer plain names; cost basis prefers parentheses. Buys add
+fiat fees, sales deduct fees with a zero floor, and rate-only rows multiply exact
+BTC quantity. Cost basis is used only on buys when no amount or rate exists.
+All arithmetic uses the shared Decimal context and integer msat conversion.
+Lightning types/destinations retain provider-scoped IDs and validated payment
+hashes separately; on-chain rows retain their exported chain hash. Conditional
+pricing provenance, description/note composition and raw Lightning flags match
+Python. Reimports, corrected-fee identity matching, update/run counts, journal
+invalidation and atomic rollback share the same native core.
+
+The frozen Python oracle contains **307 files**. Hybrid tests compare complete
+typed book dumps and responses/refusals for every file, plus default wallet,
+reimports, changes and rollback. Existing smoke fixtures exercise the provider's
+five BTC-side row types. Direct wire/state/rollback tests cover SQLite and
+SQLCipher. Provenance capture, commercial matching, custody and tax facts stay
+separate; no prior report grants ledger totals or basis authority.
+
+Strike verification passes: **307 frozen-file full-book comparisons**, six
+encrypted/plaintext wire/state/rollback scenarios, and **314 hybrid importer
+calls served by Rust with zero importer fallbacks** (307 frozen files, six
+coordinator calls and the existing smoke fixture).
+
+There are **70 added Strike mutations** (470 wallet entries total). Shared
+active-ledger admission, priced updates, run counts, provider dedupe, journal
+invalidation and atomicity entries also name Strike tests. The inherited column
+whitespace mutation follows the added ordered-key accessor without changing its
+rule.
+
+The complete wallet audit passes **65 named baseline tests** and kills
+**470/470 mutations**, with no survivors or build errors: 228 inherited,
+53 Coinfinity, 67 21bitcoin, 52 Pocket and 70 Strike. Its scratch source and
+build trees were removed after recording the summary.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-strike-header` | `python_strike_import_vectors` |
+| `W-strike-reference` | `python_strike_import_vectors` |
+| `W-strike-reference-error` | `python_strike_import_vectors` |
+| `W-strike-dash` | `python_strike_import_vectors` |
+| `W-strike-amount` | `python_strike_import_vectors` |
+| `W-strike-zero` | `python_strike_import_vectors` |
+| `W-strike-direction` | `python_strike_import_vectors` |
+| `W-strike-absolute-amount` | `python_strike_import_vectors` |
+| `W-strike-btc-fee` | `python_strike_import_vectors` |
+| `W-strike-fiat-amount` | `python_strike_import_vectors` |
+| `W-strike-fiat-fee` | `python_strike_import_vectors` |
+| `W-strike-fiat-cost-basis` | `python_strike_import_vectors` |
+| `W-strike-price` | `python_strike_import_vectors` |
+| `W-strike-currency` | `python_strike_import_vectors` |
+| `W-strike-currency-parentheses` | `python_strike_import_vectors` |
+| `W-strike-currency-order` | `python_strike_import_vectors` |
+| `W-strike-fiat-precedence` | `python_strike_import_vectors` |
+| `W-strike-kind-buy` | `python_strike_import_vectors` |
+| `W-strike-kind-sell` | `python_strike_import_vectors` |
+| `W-strike-kind-receive` | `python_strike_import_vectors` |
+| `W-strike-kind-send` | `python_strike_import_vectors` |
+| `W-strike-kind-withdrawal` | `python_strike_import_vectors` |
+| `W-strike-kind-fallback` | `python_strike_import_vectors` |
+| `W-strike-type` | `python_strike_import_vectors` |
+| `W-strike-destination` | `python_strike_import_vectors` |
+| `W-strike-description` | `python_strike_import_vectors` |
+| `W-strike-note` | `python_strike_import_vectors` |
+| `W-strike-hash` | `python_strike_import_vectors` |
+| `W-strike-lightning-type` | `python_strike_import_vectors` |
+| `W-strike-lightning-prefixes` | `python_strike_import_vectors` |
+| `W-strike-payment-hash` | `python_strike_import_vectors` |
+| `W-strike-external` | `python_strike_import_vectors` |
+| `W-strike-chain-identity` | `python_strike_import_vectors` |
+| `W-strike-buy-fiat-fee` | `python_strike_import_vectors` |
+| `W-strike-sell-fiat-fee` | `python_strike_import_vectors` |
+| `W-strike-other-fiat` | `python_strike_import_vectors` |
+| `W-strike-rate-value` | `python_strike_import_vectors` |
+| `W-strike-cost-value` | `python_strike_import_vectors` |
+| `W-strike-derive-rate` | `python_strike_import_vectors` |
+| `W-strike-priced` | `python_strike_import_vectors` |
+| `W-strike-raw-lightning` | `python_strike_import_vectors` |
+| `W-strike-raw` | `python_strike_import_vectors` |
+| `W-strike-date` | `python_strike_import_vectors` |
+| `W-strike-date-year` | `python_strike_import_vectors` |
+| `W-strike-date-clock-width` | `python_strike_import_vectors` |
+| `W-strike-date-regex` | `python_strike_import_vectors` |
+| `W-strike-date-month-case` | `python_strike_import_vectors` |
+| `W-strike-month-jan` | `python_strike_import_vectors` |
+| `W-strike-month-feb` | `python_strike_import_vectors` |
+| `W-strike-month-mar` | `python_strike_import_vectors` |
+| `W-strike-month-apr` | `python_strike_import_vectors` |
+| `W-strike-month-may` | `python_strike_import_vectors` |
+| `W-strike-month-jun` | `python_strike_import_vectors` |
+| `W-strike-month-jul` | `python_strike_import_vectors` |
+| `W-strike-month-aug` | `python_strike_import_vectors` |
+| `W-strike-month-sep` | `python_strike_import_vectors` |
+| `W-strike-month-oct` | `python_strike_import_vectors` |
+| `W-strike-month-nov` | `python_strike_import_vectors` |
+| `W-strike-month-dec` | `python_strike_import_vectors` |
+| `W-strike-pricing_source_kind` | `python_strike_import_vectors` |
+| `W-strike-pricing_provider` | `python_strike_import_vectors` |
+| `W-strike-pricing_method` | `python_strike_import_vectors` |
+| `W-strike-pricing_quality` | `python_strike_import_vectors` |
+| `W-strike-pair` | `python_strike_import_vectors` |
+| `W-strike-counterparty` | `python_strike_import_vectors` |
+| `W-strike-default-label` | `strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses` |
+| `W-strike-default-kind` | `strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses` |
+| `W-strike-rows` | `strike_active_ledger_dedupe_updates_identity_runs_and_readiness` |
+| `W-strike-active` | `strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses` |
+| `W-strike-kind-casefold` | `python_strike_import_vectors` |
+
+Stack verification passes: workspace formatting, workspace and test-harness
+clippy with `-D warnings`, locked/offline workspace tests (**1,523 passed**),
+harness tests (**14 passed**), a rebuilt harness binary, the requested Python
+suites (**95 tests and 3,027 subtests passed**), inventory/contracts and the
+**57-check preflight**. All 470 wallet mutations are killed.
+
+Batch-1 command coverage is complete. Review reproduced a separate Python
+reference bug: reactivating an unpriced legacy 21bitcoin withdrawal does not
+invalidate journals. Its reference correction remains necessary for readiness
+acceptance. Python production code, dependencies and egress are unchanged by
+the Strike continuation. No batch-2 command or API/sync/AI projection is enabled.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

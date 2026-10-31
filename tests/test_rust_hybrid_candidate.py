@@ -406,6 +406,49 @@ class HybridCandidateTest(unittest.TestCase):
         self.assertEqual(len(calls),8)
         self.assertTrue(all(item["served_by"]=="rust" for item in calls))
 
+    def test_strike_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Strike workspace"))
+        self.ok(self.cli("profiles", "create", "Strike book", "--workspace", "Strike workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Strike workspace", "--profile", "Strike book"))
+        self.ok(self.cli("wallets", "create", "--label", "Strike source", "--kind", "strike"))
+        source = self.data_root.parent / "strike.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_strike_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-strike", "--wallet", "Strike source", "--file", str(source))
+                    self.assertIn(result.returncode, (0,1), (result.stdout,result.stderr))
+                    self.assertNotIn("Traceback",result.stderr)
+        calls=[item for item in self.served() if item["command"]=="wallets.import-strike"]
+        self.assertEqual(calls,[{"command":"wallets.import-strike","served_by":"rust"}]*len(cases))
+
+    def test_strike_default_ledger_reimport_updates_and_rollback_dump(self):
+        from tests.test_cli_smoke import _STRIKE_CSV
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Strike workspace"))
+        self.ok(self.cli("profiles", "create", "Strike book", "--workspace", "Strike workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Strike workspace", "--profile", "Strike book"))
+        source = self.data_root.parent / "strike.csv"
+        source.write_text(_STRIKE_CSV)
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            result=self.ok(self.cli("wallets", "import-strike", "--file", str(source)))["data"]
+            self.assertEqual((result["wallet"],result["mode"],result["imported"]),("Strike","full",5))
+            repeated=self.ok(self.cli("wallets", "import-strike", "--file", str(source)))["data"]
+            self.assertEqual(repeated["imported"],0)
+            source.write_text(_STRIKE_CSV.replace("BTC purchase","Updated purchase")+"new,Mar 10 2026 01:02:03,Buy,-10,0,0.0001,0,100000,10,balance,new,,note\n")
+            changed=self.ok(self.cli("wallets", "import-strike", "--file", str(source)))["data"]
+            self.assertEqual(changed["imported"],1)
+            self.assertGreaterEqual(changed["updated"],1)
+            self.ok(self.cli("imports", "rollback", "--batch", changed["import_batch_id"], "--confirm"))
+            self.ok(self.cli("wallets", "import-strike", "--file", str(source)))
+            self.assertEqual(self.cli("wallets", "import-strike", "--wallet", "missing", "--file", str(source)).returncode,1)
+            self.assertEqual(self.cli("wallets", "import-strike", "--file", str(source.parent/"missing.csv")).returncode,1)
+            self.assertEqual(self.cli("wallets", "import-strike", "--mode", "relevant", "--file", str(source)).returncode,2)
+        calls=[item for item in self.served() if item["command"]=="wallets.import-strike"]
+        self.assertEqual(calls,[{"command":"wallets.import-strike","served_by":"rust"}]*6)
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

@@ -7,6 +7,7 @@ mod generic_json;
 mod phoenix;
 mod pocket;
 mod river;
+mod strike;
 mod twentyone;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
@@ -41,6 +42,7 @@ pub enum Format {
     Bull,
     Coinfinity,
     TwentyOne,
+    Strike,
     Pocket,
 }
 impl Format {
@@ -53,6 +55,7 @@ impl Format {
             Self::Bull => "bullbitcoin_csv",
             Self::Coinfinity => "coinfinity_csv",
             Self::TwentyOne => "21bitcoin_csv",
+            Self::Strike => "strike_csv",
             Self::Pocket => "pocketbitcoin_csv",
         }
     }
@@ -65,6 +68,7 @@ impl Format {
             Self::Bull => bull::parse(csv::load(file)?),
             Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),
             Self::TwentyOne => twentyone::parse(csv::load(file)?),
+            Self::Strike => strike::parse(csv::load(file)?),
             Self::Pocket => pocket::parse(csv::load(file)?),
         }
     }
@@ -72,13 +76,14 @@ impl Format {
         matches!(self, Self::Bull | Self::Coinfinity | Self::Pocket)
     }
     fn active(self) -> bool {
-        self == Self::TwentyOne
+        matches!(self, Self::TwentyOne | Self::Strike)
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
+            Self::Strike => ("Strike", "strike", "strike_rows"),
             _ => ("Bull Bitcoin", "bullbitcoin", "bullbitcoin_rows"),
         }
     }

@@ -49,6 +49,9 @@ impl Columns {
                 .filter(|v| !v.is_empty())
         })
     }
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|(key, _)| key.as_str())
+    }
     pub fn json(&self) -> Json {
         Json::Object(self.0.iter().cloned().collect())
     }

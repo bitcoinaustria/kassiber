@@ -1960,6 +1960,52 @@ added mutations and verification are recorded in the
 [Pocket checkpoint](../reference/rust-shell.md#pocket-file-ingestion-continuation-r5-importers-batch-1-partial).
 Strike remains before batch 1 is complete.
 
+### R5 exchange file-import batch 1: Strike and completion
+
+Native `wallets import-strike` imports the active custodial ledger in full mode,
+with provider-wallet admission and relevant-mode refusal before file access.
+It preserves exact Decimal/msat amounts and fees, fiat-column precedence,
+English-month/Unicode date rules, trade and transfer kinds, separate Lightning
+payment hashes/on-chain IDs, conditional pricing provenance, dedupe, updates,
+runs, journal invalidation and rollback.
+
+The 307 frozen Python files compare complete typed book dumps. Native,
+coordinator and encrypted/plaintext wire/state tests verify surrounding paths.
+The 70 added mutations and final verification are recorded in the
+[Strike checkpoint](../reference/rust-shell.md#strike-file-ingestion-continuation-and-batch-1-completion-r5).
+
+Batch-1 command coverage is complete. Workspace/harness fmt and strict clippy,
+1,523 workspace tests, 14 harness tests, 95 requested Python tests and 3,027
+subtests, inventory/contracts and 57 preflight checks pass. All 470 wallet
+mutations are killed. A separately reproduced Python reference bug in unpriced
+legacy 21bitcoin reactivation still needs its own readiness correction.
+
+### R5 file-import batch 2 sizing
+
+Batch 2 is nine provider/format slices, with separate acceptance and commits.
+These are relative implementation sizes, including parser/coordinator parity,
+edge-file dump comparisons, rollback and named mutation evidence, rather than
+elapsed-time promises. The generic-ledger and tax-platform work should precede
+CoinTracking/Blockpit because their parsers share that normalization machinery.
+
+| Importer | Size | Main work beyond batch 1 |
+| --- | --- | --- |
+| `ledger-live` | Small | Movement CSV, operation aliases, exact fees, xpub redaction; informational fiat values remain non-authoritative. |
+| `ledger` | Large | CSV/TSV/XLSX loading, column-map validation/inference, locale/type mapping, per-row refusals and empty-file rules; XLSX needs a native format strategy because the current Rust manifest has no spreadsheet/ZIP/XML reader. |
+| `cointracking` | Medium | Shared tax-platform normalization, dedicated migration-wallet admission, standalone fee/cross-asset refusals, row identities and revision/history behavior. Prior tax reports remain evidence. |
+| `blockpit` | Medium | Same migration coordinator plus localized type/header families, standalone BTC fee legs and non-taxable expense mapping. |
+| `binance-supplemental` | Medium | AutoInvest and dividend variants, provider references and evidence matching, without duplicating authoritative wallet observations. |
+| `wasabi` | Large | Sanitized JSON/bundle loading, wallet metadata, labels and transaction/privacy provenance with sensitive fields discarded. |
+| `samourai` | Large | Parent/child wallet sets, deposit/badbank/premix/postmix/ricochet account plans, descriptors and privacy metadata; retain watch-only and no-contact admission. |
+| `btcpay` file | Medium | JSON/CSV invoice/payment/method mapping and metadata/provenance enrichment. Greenfield/API synchronization is a separate network slice. |
+| `document` | Largest | Draft validation and confidence/quarantine rules, local PDF/image/OCR preparation, explicit provider-contact consent, bounded input limits, attachment storage and cross-resource rollback. |
+
+This is substantially larger than the four-importer continuation: one small,
+four medium, three large and one largest slice. Reuse the exact Decimal/msat,
+CSV, evidence and active-ledger coordinators without merging provenance,
+commercial matching, reviewed custody or tax authority. No batch-2 command is
+enabled by batch-1 completion.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

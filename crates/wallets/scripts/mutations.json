@@ -596,7 +596,8 @@
     "replace": "let invalidated = false;",
     "expect_failing": [
       "csv_import_dedupe_batch_membership_and_journal_invalidation",
-      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority",
+      "strike_active_ledger_dedupe_updates_identity_runs_and_readiness"
     ],
     "rule": "New and enriched observations invalidate the owning book journal."
   },
@@ -607,7 +608,8 @@
     "replace": "for id in inserted_ids.into_iter().take(0) {",
     "expect_failing": [
       "csv_import_dedupe_batch_membership_and_journal_invalidation",
-      "pocket_paired_economics_full_flags_dedupe_and_observation_authority"
+      "pocket_paired_economics_full_flags_dedupe_and_observation_authority",
+      "strike_active_ledger_dedupe_updates_identity_runs_and_readiness"
     ],
     "rule": "Only created transactions are linked to a run."
   },
@@ -629,7 +631,8 @@
     "expect_failing": [
       "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness",
       "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",
-      "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation"
+      "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation",
+      "strike_late_failure_rolls_back_observations_runs_and_readiness"
     ],
     "rule": "A failed batch record rolls back its observations and invalidation."
   },
@@ -1493,7 +1496,8 @@
       "bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
       "coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
       "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",
-      "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation"
+      "pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation",
+      "strike_late_failure_rolls_back_observations_runs_and_readiness"
     ],
     "rule": "River metadata failures roll back the entire import and journal invalidation."
   },
@@ -2000,8 +2004,8 @@
   {
     "id": "W-bull-columns-whitespace",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": ".filter(|v| !v.is_empty())\n        })\n    }\n    pub fn json",
-    "replace": ".filter(|_| true)\n        })\n    }\n    pub fn json",
+    "find": ".filter(|v| !v.is_empty())\n        })\n    }\n    pub fn keys",
+    "replace": ".filter(|_| true)\n        })\n    }\n    pub fn keys",
     "expect_failing": [
       "python_bull_import_vectors"
     ],
@@ -3290,7 +3294,7 @@
   {
     "id": "W-twentyone-active-format",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "self == Self::TwentyOne",
+    "find": "matches!(self, Self::TwentyOne | Self::Strike)",
     "replace": "false",
     "expect_failing": [
       "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read"
@@ -3303,7 +3307,8 @@
     "find": "if mode != \"full\" {",
     "replace": "if mode != \"full\" && false {",
     "expect_failing": [
-      "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read"
+      "twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_read",
+      "strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses"
     ],
     "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
   },
@@ -3343,7 +3348,8 @@
     "find": "if request.format.active() && updated_count > 0 {",
     "replace": "if false {",
     "expect_failing": [
-      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness",
+      "strike_active_ledger_dedupe_updates_identity_runs_and_readiness"
     ],
     "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
   },
@@ -3353,7 +3359,8 @@
     "find": "if request.format.evidence() || request.format.active() { updated_count }",
     "replace": "if request.format.evidence() { updated_count }",
     "expect_failing": [
-      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness"
+      "twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness",
+      "strike_active_ledger_dedupe_updates_identity_runs_and_readiness"
     ],
     "rule": "Preserve active custodial ledger admission, run accounting and legacy reconciliation cleanup."
   },
@@ -4003,8 +4010,709 @@
     "find": "let relax = string(&r.fields, \"pricing_source_kind\") == \"exchange_execution\" || r.ignore_fee;",
     "replace": "let relax = false;",
     "expect_failing": [
-      "pocket_reimport_matches_provider_identity_when_fee_changes"
+      "pocket_reimport_matches_provider_identity_when_fee_changes",
+      "strike_active_ledger_dedupe_updates_identity_runs_and_readiness"
     ],
     "rule": "Exact Pocket execution reimports match provider identity despite fee corrections."
+  },
+  {
+    "id": "W-strike-header",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "exchange::headers(&rows, REQUIRED, \"Strike\")?;",
+    "replace": "",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Strike validates its required exported headers."
+  },
+  {
+    "id": "W-strike-reference",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "c.opt(&[\"Reference\"])",
+    "replace": "c.opt(&[\"absent\"])",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Strike requires provider row references even before skipping fiat rows."
+  },
+  {
+    "id": "W-strike-reference-error",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "Strike CSV has a BTC-side row without a Reference",
+    "replace": "Strike reference absent",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the reference missing-identity refusal."
+  },
+  {
+    "id": "W-strike-dash",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "[\"-\", \"\u2013\", \"\u2014\"]",
+    "replace": "[\"missing\", \"\u2013\", \"\u2014\"]",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Dash placeholders represent absent monetary values."
+  },
+  {
+    "id": "W-strike-amount",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "decimal(c.get(&[\"Amount BTC\"]))?",
+    "replace": "decimal(c.get(&[\"Amount EUR\"]))?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "The BTC amount supplies exact msat quantity and direction."
+  },
+  {
+    "id": "W-strike-zero",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "if !truth(&amount_signed) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Zero BTC and fiat-only rows are skipped."
+  },
+  {
+    "id": "W-strike-direction",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "if positive(&amount_signed)? {",
+    "replace": "if !positive(&amount_signed)? {",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Signed BTC direction matches the reference."
+  },
+  {
+    "id": "W-strike-absolute-amount",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "let amount = abs(amount_signed)?;",
+    "replace": "let amount = zero();",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Store absolute BTC quantity separately from direction."
+  },
+  {
+    "id": "W-strike-btc-fee",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "decimal(c.get(&[\"Fee BTC\"]))?",
+    "replace": "decimal(c.get(&[\"missing-fee\"]))?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the exact BTC fee leg."
+  },
+  {
+    "id": "W-strike-fiat-amount",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "family(\"Amount\", false)?",
+    "replace": "family(\"missing\", false)?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the selected fiat column family."
+  },
+  {
+    "id": "W-strike-fiat-fee",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "family(\"Fee\", false)?",
+    "replace": "family(\"missing\", false)?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the selected fiat column family."
+  },
+  {
+    "id": "W-strike-fiat-cost-basis",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "family(\"Cost Basis\", true)?",
+    "replace": "family(\"missing\", true)?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the selected fiat column family."
+  },
+  {
+    "id": "W-strike-price",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "decimal(c.get(&[\"BTC Price\"]))?",
+    "replace": "decimal(c.get(&[\"missing-price\"]))?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Explicit BTC execution prices remain authoritative."
+  },
+  {
+    "id": "W-strike-currency",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "let fiat = currency(&c);",
+    "replace": "let fiat = Some(\"USD\".to_owned());",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Fiat currency follows the first exported fiat header family."
+  },
+  {
+    "id": "W-strike-currency-parentheses",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "label.contains('(')",
+    "replace": "false && label.contains('(')",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Parenthesized fiat headers extract their inner currency."
+  },
+  {
+    "id": "W-strike-currency-order",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "self.0.iter().map(|(key, _)| key.as_str())",
+    "replace": "self.0.iter().rev().map(|(key, _)| key.as_str())",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Fiat header family selection preserves sanitized insertion order."
+  },
+  {
+    "id": "W-strike-fiat-precedence",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "if parentheses_first {",
+    "replace": "if !parentheses_first {",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Amount and fee prefer plain columns while cost basis prefers parentheses."
+  },
+  {
+    "id": "W-strike-kind-buy",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"buy\" | \"purchase\" => \"buy\".into()",
+    "replace": "\"buy\" | \"purchase\" => \"other\".into()",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the exported Strike kind aliases."
+  },
+  {
+    "id": "W-strike-kind-sell",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"sell\" => \"sell\".into()",
+    "replace": "\"sell\" => \"other\".into()",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the exported Strike kind aliases."
+  },
+  {
+    "id": "W-strike-kind-receive",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"receive\" | \"received\" => \"receive\".into()",
+    "replace": "\"receive\" | \"received\" => \"other\".into()",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the exported Strike kind aliases."
+  },
+  {
+    "id": "W-strike-kind-send",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"send\" | \"sent\" => \"send\".into()",
+    "replace": "\"send\" | \"sent\" => \"other\".into()",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the exported Strike kind aliases."
+  },
+  {
+    "id": "W-strike-kind-withdrawal",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"withdraw\" | \"withdrawal\" => \"withdrawal\".into()",
+    "replace": "\"withdraw\" | \"withdrawal\" => \"other\".into()",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the exported Strike kind aliases."
+  },
+  {
+    "id": "W-strike-kind-fallback",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "_ => tag.replace(' ', \"_\"),",
+    "replace": "_ => \"unknown\".into(),",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Unknown provider types retain the reference normalized kind."
+  },
+  {
+    "id": "W-strike-type",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "c\n        .opt(&[\"Transaction Type\"])",
+    "replace": "c\n        .opt(&[\"absent-type\"])",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Retain the provider transaction type in kind and description."
+  },
+  {
+    "id": "W-strike-destination",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "c.opt(&[\"Destination\"])",
+    "replace": "c.opt(&[\"absent-destination\"])",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Destination participates in Lightning detection."
+  },
+  {
+    "id": "W-strike-description",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "c.opt(&[\"Description\"])",
+    "replace": "c.opt(&[\"absent-description\"])",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Retain provider description provenance."
+  },
+  {
+    "id": "W-strike-note",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "c.opt(&[\"Note\"])",
+    "replace": "c.opt(&[\"absent-note\"])",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Retain provider note provenance."
+  },
+  {
+    "id": "W-strike-hash",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "c.opt(&[\"Transaction Hash\"])",
+    "replace": "c.opt(&[\"absent-hash\"])",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Transaction hashes supply chain identity or Lightning payment hash."
+  },
+  {
+    "id": "W-strike-lightning-type",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": ".contains(\"lightning\")",
+    "replace": ".contains(\"missing\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Lightning types select provider IDs and payment hashes."
+  },
+  {
+    "id": "W-strike-lightning-prefixes",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "[\"lnbc\", \"lntb\", \"lnbcrt\", \"lightning:\"]",
+    "replace": "[\"missing\", \"other\", \"unused\", \"unknown\"]",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Invoice and Lightning URI prefixes identify Lightning rows."
+  },
+  {
+    "id": "W-strike-payment-hash",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "transaction.as_deref().and_then(hash)",
+    "replace": "None::<String>",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Valid Lightning hashes are stored separately from external IDs."
+  },
+  {
+    "id": "W-strike-external",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "format!(\"strike:{reference}\")",
+    "replace": "format!(\"other:{reference}\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Non-chain identities remain provider scoped."
+  },
+  {
+    "id": "W-strike-chain-identity",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "(false, Some(hash)) => hash,",
+    "replace": "(false, Some(_hash)) => format!(\"strike:{reference}\"),",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "On-chain transaction hashes remain the external identity."
+  },
+  {
+    "id": "W-strike-buy-fiat-fee",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "arithmetic(&abs(value)?, &fee_fiat, '+')?",
+    "replace": "arithmetic(&abs(value)?, &fee_fiat, '-')?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Fiat acquisition values include fiat fees."
+  },
+  {
+    "id": "W-strike-sell-fiat-fee",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "nonnegative(arithmetic(&abs(value)?, &fee_fiat, '-')?)?",
+    "replace": "nonnegative(arithmetic(&abs(value)?, &fee_fiat, '+')?)?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Fiat disposal proceeds deduct fiat fees and floor at zero."
+  },
+  {
+    "id": "W-strike-other-fiat",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "abs(value)?\n        })",
+    "replace": "zero()\n        })",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Non-trade fiat values retain their absolute exported amount."
+  },
+  {
+    "id": "W-strike-rate-value",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "arithmetic(&amount, rate, '*')?",
+    "replace": "arithmetic(&amount, rate, '+')?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Rate-only rows derive value by multiplying exact BTC quantity."
+  },
+  {
+    "id": "W-strike-cost-value",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "cost_basis.map(abs).transpose()?",
+    "replace": "None",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Only buys may use exported cost basis when no amount or rate exists."
+  },
+  {
+    "id": "W-strike-derive-rate",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "arithmetic(value, &amount, '/')?",
+    "replace": "arithmetic(value, &amount, '*')?",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Missing rate derives from exact fiat value divided by BTC quantity."
+  },
+  {
+    "id": "W-strike-priced",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "rate.is_some() || value.is_some()",
+    "replace": "false",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Execution-pricing provenance exists only for priced rows."
+  },
+  {
+    "id": "W-strike-raw-lightning",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "raw[\"_strike_lightning\"] = json!(lightning);",
+    "replace": "raw[\"_strike_lightning\"] = json!(!lightning);",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Raw provenance preserves the Lightning classification."
+  },
+  {
+    "id": "W-strike-raw",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "config::stored_json(&raw)",
+    "replace": "config::stored_json(&json!({}))",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the entire sanitized provider record."
+  },
+  {
+    "id": "W-strike-date",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "date(c.get(&[\"Date & Time (UTC)\"]))",
+    "replace": "Some(\"2025-01-01\".to_owned())",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve UTC provider dates and shared timestamp normalization."
+  },
+  {
+    "id": "W-strike-date-year",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "bits[2].chars().count() != 4",
+    "replace": "bits[2].chars().count() != 2",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "English month dates require exactly four year digits."
+  },
+  {
+    "id": "W-strike-date-clock-width",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "if !(1..=2).contains(&v.len())",
+    "replace": "if !(1..=4).contains(&v.len())",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Match Python clock and day regex widths."
+  },
+  {
+    "id": "W-strike-date-regex",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "if !valid(bits[1], 0) || !valid(clock[0], 1) || !valid(clock[1], 2) || !valid(clock[2], 3)",
+    "replace": "if false",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Signed and overpadded clock fields must not enter integer conversion."
+  },
+  {
+    "id": "W-strike-date-month-case",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": ".map(|ch| ch.to_ascii_lowercase())",
+    "replace": ".map(|ch| if ch == '\u0131' { 'i' } else { ch.to_ascii_lowercase() })",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Non-ASCII month forms rejected by Python month lookup remain refused."
+  },
+  {
+    "id": "W-strike-month-jan",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"jan\" | \"january\" => 1",
+    "replace": "\"jan\" | \"january\" => 2",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-feb",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"feb\" | \"february\" => 2",
+    "replace": "\"feb\" | \"february\" => 3",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-mar",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"mar\" | \"march\" => 3",
+    "replace": "\"mar\" | \"march\" => 4",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-apr",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"apr\" | \"april\" => 4",
+    "replace": "\"apr\" | \"april\" => 5",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-may",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"may\" => 5",
+    "replace": "\"may\" => 6",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-jun",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"jun\" | \"june\" => 6",
+    "replace": "\"jun\" | \"june\" => 7",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-jul",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"jul\" | \"july\" => 7",
+    "replace": "\"jul\" | \"july\" => 8",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-aug",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"aug\" | \"august\" => 8",
+    "replace": "\"aug\" | \"august\" => 9",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-sep",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"sep\" | \"september\" => 9",
+    "replace": "\"sep\" | \"september\" => 10",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-oct",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"oct\" | \"october\" => 10",
+    "replace": "\"oct\" | \"october\" => 11",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-nov",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"nov\" | \"november\" => 11",
+    "replace": "\"nov\" | \"november\" => 12",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-month-dec",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"dec\" | \"december\" => 12",
+    "replace": "\"dec\" | \"december\" => 1",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve the English provider calendar month mapping."
+  },
+  {
+    "id": "W-strike-pricing_source_kind",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"pricing_source_kind\":priced.then_some(\"exchange_execution\")",
+    "replace": "\"pricing_source_kind\":priced.then_some(\"changed\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve conditional Strike pricing_source_kind."
+  },
+  {
+    "id": "W-strike-pricing_provider",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"pricing_provider\":priced.then_some(\"Strike\")",
+    "replace": "\"pricing_provider\":priced.then_some(\"changed\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve conditional Strike pricing_provider."
+  },
+  {
+    "id": "W-strike-pricing_method",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"pricing_method\":priced.then_some(\"strike_csv\")",
+    "replace": "\"pricing_method\":priced.then_some(\"changed\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve conditional Strike pricing_method."
+  },
+  {
+    "id": "W-strike-pricing_quality",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"pricing_quality\":priced.then_some(\"exact\")",
+    "replace": "\"pricing_quality\":priced.then_some(\"changed\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Preserve conditional Strike pricing_quality."
+  },
+  {
+    "id": "W-strike-pair",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "format!(\"BTC-{f}\")",
+    "replace": "format!(\"BTC-USD{f}\")",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Pricing pairs retain the selected fiat currency."
+  },
+  {
+    "id": "W-strike-counterparty",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "\"counterparty\":\"Strike\"",
+    "replace": "\"counterparty\":\"Changed\"",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Keep Strike as counterparty independently of pricing."
+  },
+  {
+    "id": "W-strike-default-label",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Strike\", \"strike\", \"strike_rows\")",
+    "replace": "(\"Changed\", \"strike\", \"strike_rows\")",
+    "expect_failing": [
+      "strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses"
+    ],
+    "rule": "Strike uses active custodial admission, default wallet and run counts."
+  },
+  {
+    "id": "W-strike-default-kind",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Strike\", \"strike\", \"strike_rows\")",
+    "replace": "(\"Strike\", \"custom\", \"strike_rows\")",
+    "expect_failing": [
+      "strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses"
+    ],
+    "rule": "Strike uses active custodial admission, default wallet and run counts."
+  },
+  {
+    "id": "W-strike-rows",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Strike\", \"strike\", \"strike_rows\")",
+    "replace": "(\"Strike\", \"strike\", \"wrong_rows\")",
+    "expect_failing": [
+      "strike_active_ledger_dedupe_updates_identity_runs_and_readiness"
+    ],
+    "rule": "Strike uses active custodial admission, default wallet and run counts."
+  },
+  {
+    "id": "W-strike-active",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "matches!(self, Self::TwentyOne | Self::Strike)",
+    "replace": "self == Self::TwentyOne",
+    "expect_failing": [
+      "strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses"
+    ],
+    "rule": "Strike uses active custodial admission, default wallet and run counts."
+  },
+  {
+    "id": "W-strike-kind-casefold",
+    "file": "crates/wallets/src/file_import/strike.rs",
+    "find": "let tag = kassiber_pytext::casefold(kassiber_pytext::strip(tag));",
+    "replace": "let tag = kassiber_pytext::lower(kassiber_pytext::strip(tag));",
+    "expect_failing": [
+      "python_strike_import_vectors"
+    ],
+    "rule": "Provider kinds use full Unicode casefold before alias mapping."
   }
 ]

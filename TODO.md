@@ -283,6 +283,9 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port Pocket/Pocketbitcoin evidence files and both CLI aliases with exact
   withdrawal pairing, complete book-dump/rollback parity and named mutation
   killers. See the Pocket continuation in plan 21.
+- [x] Port Strike active custodial history with separate Lightning/chain
+  identities, complete book-dump/rollback parity and named mutation killers.
+  Complete exchange-file batch 1; see the final checkpoint in plan 21.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.
