@@ -158,11 +158,11 @@ fn selected_leaf(namespace: &Namespace) -> (Vec<&'static str>, ParserId) {
 #[cfg(feature = "test-probe")]
 pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
-// The transaction-export leaf also contains XLSX and platform formats. Keep
-// those whole invocations unported and refuse them before opening a book.
+// Platform transaction formats remain unported; refuse before opening a book.
 fn implemented(command: &str, args: &Namespace) -> bool {
     IMPLEMENTED.contains(&command)
-        && (command != "transactions.export" || args.text("export_format") == Some("csv"))
+        && (command != "transactions.export"
+            || matches!(args.text("export_format"), Some("csv" | "xlsx")))
 }
 
 /// Runs one command line (without the program name); returns the exit code.
@@ -806,7 +806,7 @@ mod export_tests {
     use super::*;
 
     #[test]
-    fn transaction_export_admission_only_registers_native_csv() {
+    fn transaction_export_admission_only_registers_native_csv_and_xlsx() {
         for format in ["csv", "xlsx", "cointracking-csv", "blockpit-csv"] {
             let argv = [
                 "transactions",
@@ -825,7 +825,10 @@ mod export_tests {
                 },
             )
             .unwrap();
-            assert_eq!(implemented("transactions.export", &args), format == "csv");
+            assert_eq!(
+                implemented("transactions.export", &args),
+                ["csv", "xlsx"].contains(&format)
+            );
         }
     }
 }

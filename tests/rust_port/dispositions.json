@@ -2433,6 +2433,12 @@
       "test_renderer_export_fixture_corpus": {"disposition": "oracle", "flags": ["mock", "sql", "subprocess"], "group": "reports", "reason": "compares independent Python XlsxWriter workbooks and native Rust renderer content, styles, cached formulas and deterministic metadata over report contract books and inherited export fixtures; retained until Python retirement", "reviewed": true, "tests": 1},
       "test_renderer_cross_check": {"disposition": "oracle", "flags": ["mock", "sql", "subprocess"], "group": "reports", "reason": "compares independent Python XlsxWriter workbooks and native Rust renderer content, styles, cached formulas and deterministic metadata over report contract books and inherited export fixtures; retained until Python retirement", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_xlsx_exports.py": {
+      "test_native_transaction_fixture_corpus": {"disposition": "oracle", "flags": ["mock", "sql", "subprocess"], "group": "reports", "reason": "compares native transaction XLSX projections, metadata, all database tables and CLI/daemon routing with Python over inherited export fixtures and ready/stale books", "reviewed": true, "tests": 1},
+      "test_transaction_cli_workbooks_state_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native transaction XLSX projections, metadata, all database tables and CLI/daemon routing with Python over inherited export fixtures and ready/stale books", "reviewed": true, "tests": 1},
+      "test_transaction_daemon_workbooks_and_native_routing": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native transaction XLSX projections, metadata, all database tables and CLI/daemon routing with Python over inherited export fixtures and ready/stale books", "reviewed": true, "tests": 1},
+      "test_transaction_xlsx_filesystem_refusals_leave_database_unchanged": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native transaction XLSX projections, metadata, all database tables and CLI/daemon routing with Python over inherited export fixtures and ready/stale books", "reviewed": true, "tests": 1}
+    },
     "tests/test_samourai_import.py": {
       "SamouraiImportTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "imports", "reason": "calls kassiber.core.custody_authored_migration, kassiber.core.chain_observer directly", "reviewed": false, "tests": 6}
     },

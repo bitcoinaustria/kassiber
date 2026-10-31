@@ -297,6 +297,20 @@ pub(super) fn report_rows_current(
                     .collect::<Vec<_>>()
                     .join("\n")),
             );
+            // Rendering needs link/name pairing; the CSV header projection
+            // continues to emit only the existing flattened text fields.
+            replace(
+                &mut result,
+                "attachments_list",
+                Value::List(
+                    attachments
+                        .iter()
+                        .map(|(name, url)| {
+                            dict([("display_name", s(name.as_str())), ("url", s(url.as_str()))])
+                        })
+                        .collect(),
+                ),
+            );
             Ok(result)
         })
         .collect()

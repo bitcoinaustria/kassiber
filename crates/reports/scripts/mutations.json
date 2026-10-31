@@ -5323,10 +5323,10 @@
   {
     "id": "request-cli-format-admission",
     "file": "crates/cli/src/run.rs",
-    "find": "args.text(\"export_format\") == Some(\"csv\")",
+    "find": "matches!(args.text(\"export_format\"), Some(\"csv\" | \"xlsx\"))",
     "replace": "args.text(\"export_format\").is_some()",
     "expect_failing": [
-      "transaction_export_admission_only_registers_native_csv"
+      "transaction_export_admission_only_registers_native_csv_and_xlsx"
     ],
     "rule": "Unported transaction formats remain refused before bootstrap and are not falsely served by the Rust hybrid probe."
   },
@@ -5559,5 +5559,29 @@
       "reviewed_commercial_subledger_python_vectors"
     ],
     "rule": "Whole-unit amounts convert the exact observed msat amount."
+  },
+  {
+    "id": "xlsx-transaction-money-format",
+    "file": "crates/reports/src/artifact_xlsx.rs",
+    "find": "\"unrealized_pnl\",\n    ]\n    .contains(&header)\n    {\n        5",
+    "replace": "\"unrealized_pnl\",\n    ]\n    .contains(&header)\n    {\n        2",
+    "expect_failing": ["transaction_xlsx_cells_preserve_types_formats_and_links"],
+    "rule": "Monetary values remain numeric and retain the money number format."
+  },
+  {
+    "id": "xlsx-transaction-link",
+    "file": "crates/reports/src/artifact_xlsx.rs",
+    "find": "if entries.len() == 1 && truthy(value(&entries[0], \"url\")) {",
+    "replace": "if false && entries.len() == 1 && truthy(value(&entries[0], \"url\")) {",
+    "expect_failing": ["transaction_xlsx_cells_preserve_types_formats_and_links"],
+    "rule": "A single URL attachment remains a named link, without fetching it."
+  },
+  {
+    "id": "xlsx-transaction-native-bytes",
+    "file": "crates/reports/src/export.rs",
+    "find": "if command.ends_with(\"-xlsx\") {",
+    "replace": "if false && command.ends_with(\"-xlsx\") {",
+    "expect_failing": ["transaction_xlsx_export_publishes_native_bytes_and_registers_nothing"],
+    "rule": "XLSX publication consumes native workbook bytes, never CSV or a Python fallback."
   }
 ]

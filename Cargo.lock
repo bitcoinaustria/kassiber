@@ -1798,6 +1798,7 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "kassiber-wallets",
+ "kassiber-xlsx",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",

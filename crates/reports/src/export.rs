@@ -166,7 +166,7 @@ fn complete(
     Ok(result)
 }
 
-/// `reports export-csv`, `export-austrian-e1kv-csv` or a transactions CSV.
+/// Publish a prepared native report or observed transaction list.
 /// `target` is the caller's already expanded file or bundle directory.
 pub fn export(
     conn: &Connection,
@@ -188,8 +188,18 @@ pub fn export_with(
     sources: &dyn Sources,
     published: &mut dyn FnMut() -> Result<()>,
 ) -> Result<Value> {
-    if command == "reports.export-transactions-csv" {
-        let prepared = artifact_csv::prepare(conn, command, args, sources)?;
+    let prepare = || {
+        if command.ends_with("-xlsx") {
+            artifact_xlsx::prepare(conn, command, args, sources)
+        } else {
+            artifact_csv::prepare(conn, command, args, sources)
+        }
+    };
+    if matches!(
+        command,
+        "reports.export-transactions-csv" | "reports.export-transactions-xlsx"
+    ) {
+        let prepared = prepare()?;
         return complete(
             conn,
             &Value::Null,
@@ -201,7 +211,7 @@ pub fn export_with(
         );
     }
     admitted(conn, || {
-        let prepared = artifact_csv::prepare(conn, command, args, sources)?;
+        let prepared = prepare()?;
         let (_, profile) = kassiber_setup::references::scope(conn, args)?;
         let bundle = command == "reports.export-austrian-e1kv-csv";
         complete(conn, &profile, prepared, target, bundle, sources, published)

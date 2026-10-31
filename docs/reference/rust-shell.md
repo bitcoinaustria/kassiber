@@ -4254,6 +4254,73 @@ tests do not establish native admission or routing for the unregistered XLSX
 report commands. Native projections and their CLI/daemon transport, completion
 hashes/summaries and explicit filing need separate verification.
 
+## Transaction XLSX transport (R5, partial)
+
+The continuation from renderer commit `209224cae` enables
+`transactions export --export-format xlsx` (also the CLI default) and
+`ui.transactions.export_xlsx`. `artifact_xlsx` reuses the admitted transaction
+projection, including draft warnings, journal-column suppression, wallet/range
+selection and literal attachment references. It renders bytes in RAM and uses
+the existing native publication path and managed filename collision handling.
+The byte count is taken from the Rust artifact. Observed transaction lists
+create neither a saved snapshot nor a filed marker.
+
+| Native transaction parity corpus | Success | Refusal |
+| --- | ---: | ---: |
+| Every inherited transaction export service fixture | 67 | 7 |
+| Empty, Unicode, long text, huge/tiny/negative fiat, named URL and 500 added rows | 8 | 0 |
+| CLI ready/stale books, ranges/scopes and filesystem failures | 10 | 8 |
+| Nine daemon XLSX requests, including collisions and invalid arguments | 6 | 3 |
+
+`tests/test_rust_xlsx_exports.py` passes all 86 parametrized cases. It compares
+the canonical workbooks, exact metadata/errors (except the intentionally
+different ZIP byte count), and every database table. The process routing log
+contains 18 Rust `transactions.export` invocations and one Rust daemon session
+with nine XLSX requests, with zero fallbacks. The new process module runs in the
+serial daemon CI lane. Evidence is `target/xlsx/native-final.log`.
+
+The inherited `test_rust_report_exports.py` and `test_rust_reports.py` suites
+pass all 35 process scenarios, preserving non-XLSX response/artifact bytes and
+complete normalized database dumps, including saved export and explicit filing
+sequences. Evidence is `target/xlsx/non-xlsx.log`.
+
+The test-only `tests/rust_port/xlsx_reference.py` CLI/pytest wrapper also runs
+existing smoke, handoff, cross-check, Austrian, draft-list, saved-report and
+daemon export fixtures through the recorder and renderer. All 60 tests and six
+subtests pass: 18 workbooks containing 172 sheets compare without content
+differences (`target/xlsx/original-fixtures.{log,jsonl}`). This is rendering
+evidence, not native routing evidence for those other report services. The
+wrapper isolates owner locks under its disposable scratch root. The renderer's
+JSONL test adapter normalizes equivalent float spellings before serde's tagged
+enum buffer; its regression also runs with the workspace's arbitrary-precision
+JSON feature enabled. Production callers construct the typed document directly.
+
+All four affected transport mutations are killed in
+`target/xlsx/transaction-mutations.log`:
+
+| Mutation | Named test |
+| --- | --- |
+| `request-cli-format-admission` | `transaction_export_admission_only_registers_native_csv_and_xlsx` |
+| `xlsx-transaction-money-format`, `xlsx-transaction-link` | `transaction_xlsx_cells_preserve_types_formats_and_links` |
+| `xlsx-transaction-native-bytes` | `transaction_xlsx_export_publishes_native_bytes_and_registers_nothing` |
+
+The disposable mutation source and build trees are removed after their summary.
+
+Final verification passes: workspace formatting; workspace/all-target clippy and
+the test-harness binary's all-target clippy with `-D warnings`; all 1,001
+workspace tests; the adapter regression with arbitrary-precision JSON enabled;
+the required disposition update; and all 57 CI preflight tests. The existing
+owned-loopback workspace fixtures need sandbox access. Logs are under
+`target/xlsx/{fmt,clippy,harness-clippy,workspace-tests-allowed,adapter,classifier,preflight}.log`.
+
+No additional content difference was found beyond the renderer repairs above.
+Platform transaction formats remain unregistered. Full-report XLSX (including
+verification sheets), Austrian E1kv, exit-tax, year-handoff and cross-check still
+need native service projections, CLI/daemon registration and routing evidence.
+Their saved completions must hash the Rust bytes, retain exact summaries and
+dependencies under admission, and establish filed markers only on explicit
+filing. PDF remains Python. This is not complete XLSX or reports acceptance.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

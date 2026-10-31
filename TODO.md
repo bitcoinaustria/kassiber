@@ -330,13 +330,20 @@ The snapshot-write continuation adds the explicit saved/filed marker CLI leaf.
   CLI/daemon process oracles prove byte parity and zero CSV fallbacks, including
   desktop capital-gains CSV. Graphless Liquid dependency capture now matches
   Python's local parse-success boundary, with stored identity and ambiguity
-  guards intact. XLSX/PDF and platform transaction
+  guards intact. Platform transaction
   formats remain separate work; see the
   [CSV transport checkpoint](docs/reference/rust-shell.md#csv-export-transport-checkpoint-r5-tenth-continuation).
+- [x] Add the isolated deterministic `rust_xlsxwriter` renderer and strict
+  openpyxl content oracle for all report workbook shapes; port transaction-list
+  XLSX projection, publication and CLI/daemon registration with zero fallbacks.
+- [ ] Port full-report (including verification), Austrian E1kv, exit-tax,
+  year-handoff and cross-check XLSX projections and registration. Verify their
+  saved completions, Rust-byte hashes, explicit filing, complete normalized DB
+  sequences and native routing before marking XLSX complete. PDF stays Python.
 - [x] Port explicit saved/filed markers and filing a captured local export,
   preserving sealed identity, frozen dependency copies and existing impact history.
-- [ ] Port PDF/XLSX artifacts in a later slice. Keep unsupported commands
-  disabled and all AI projections in Python.
+- [ ] Keep PDF artifacts in Python pending a later rendering decision. Keep
+  unsupported commands disabled and all AI projections in Python.
 
 ## Rust backend R4
 

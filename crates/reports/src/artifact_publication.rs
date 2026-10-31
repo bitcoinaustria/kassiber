@@ -1,4 +1,4 @@
-//! Low-level publication of already prepared CSV bytes. This does not complete
+//! Low-level publication of already prepared report bytes. This does not complete
 //! an export: callers must retain their admitted book snapshot through the
 //! saved-marker/dependency transaction before enabling a command or kind.
 use crate::artifact_csv::Prepared;

@@ -11,6 +11,7 @@ pub fn handles(command: &str) -> bool {
             | "reports.export-austrian-e1kv-csv"
             | "transactions.export"
             | "ui.transactions.export_csv"
+            | "ui.transactions.export_xlsx"
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_capital_gains_csv"
@@ -126,6 +127,8 @@ fn execute_admitted(
     sources: &dyn Sources,
 ) -> Result<Value> {
     let desktop = command.starts_with("ui.");
+    let xlsx = command == "ui.transactions.export_xlsx"
+        || (command == "transactions.export" && text(raw, "export_format") == "xlsx");
     if !desktop && command != "transactions.export" {
         let target = PathBuf::from(text(
             raw,
@@ -151,7 +154,12 @@ fn execute_admitted(
     }
     let (_, profile) = kassiber_setup::references::scope(conn, &args)?;
     let mut range_label = None;
-    if desktop && command != "ui.transactions.export_csv" {
+    if desktop
+        && !matches!(
+            command,
+            "ui.transactions.export_csv" | "ui.transactions.export_xlsx"
+        )
+    {
         freshness(conn, &profile)?;
     }
     let (native, stem, suffix, scope) = match command {
@@ -196,7 +204,7 @@ fn execute_admitted(
                 "capital_gains",
             )
         }
-        "transactions.export" | "ui.transactions.export_csv" => {
+        "transactions.export" | "ui.transactions.export_csv" | "ui.transactions.export_xlsx" => {
             if desktop {
                 let allowed = ["wallet", "wallets", "range", "from", "to", "timezone"];
                 if let Value::Dict(fields) = raw {
@@ -234,7 +242,7 @@ fn execute_admitted(
                     }
                 }
             } else {
-                if text(raw, "export_format") != "csv" {
+                if !["csv", "xlsx"].contains(&text(raw, "export_format").as_str()) {
                     return Err(AppError::new(
                         "not_implemented",
                         "This transaction export format is not implemented in the Rust backend yet",
@@ -272,9 +280,13 @@ fn execute_admitted(
                 range_label.map(|l| format!("-{l}")).unwrap_or_default()
             );
             (
-                "reports.export-transactions-csv",
+                if xlsx {
+                    "reports.export-transactions-xlsx"
+                } else {
+                    "reports.export-transactions-csv"
+                },
                 stem,
-                ".csv",
+                if xlsx { ".xlsx" } else { ".csv" },
                 "transactions",
             )
         }
@@ -299,7 +311,7 @@ fn execute_admitted(
     };
     let mut result = export::export(conn, native, &args, &target, sources)?;
     if desktop {
-        replace(&mut result, "format", s("csv"));
+        replace(&mut result, "format", s(if xlsx { "xlsx" } else { "csv" }));
         replace(&mut result, "scope", s(scope));
         if scope == "capital_gains" {
             replace(&mut result, "tax_year", value(raw, "year").clone());

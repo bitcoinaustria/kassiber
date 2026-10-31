@@ -5,6 +5,25 @@ use artifact_csv::{File, Prepared, Section};
 const STALE: &str = "Reports require fresh journals. Run `kassiber journals process` first.";
 
 pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Result<Prepared> {
+    let (section, metadata) = project(conn, profile, args)?;
+    let count = section.rows.len();
+    Ok(Prepared {
+        files: vec![File {
+            name: "report.csv".into(),
+            sheet: "".into(),
+            bytes: artifact_csv::document(&text(&metadata, "title"), &[section]),
+            rows: count,
+        }],
+        metadata,
+        completion: None,
+    })
+}
+
+pub(super) fn project(
+    conn: &Connection,
+    profile: &Value,
+    args: &Value,
+) -> Result<(Section, Value)> {
     let id = text(profile, "id");
     let mut reasons = Vec::new();
     if let Err(error) = require_context(conn, profile, false) {
@@ -159,21 +178,14 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
         headers: transaction_csv::HEADERS,
         rows: transactions,
     };
-    Ok(Prepared {
-        files: vec![File {
-            name: "report.csv".into(),
-            sheet: "".into(),
-            bytes: artifact_csv::document(&title, &[section]),
-            rows: count,
-        }],
-        metadata: dict([
+    Ok((
+        section,
+        dict([
             ("title", s(title)),
             ("wallet", s(scope)),
             ("rows", Value::Int(count.into())),
             ("warnings", Value::List(warnings)),
             ("range", range),
         ]),
-        // Observed transaction lists never register a saved report.
-        completion: None,
-    })
+    ))
 }

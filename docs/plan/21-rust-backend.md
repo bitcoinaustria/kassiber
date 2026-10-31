@@ -1113,6 +1113,16 @@ Native projection, export completion and CLI/daemon routing require their own
 parity and refusal evidence before registration. The generic-ledger import
 template and XLSX reading remain outside the report-export slice.
 
+The transaction continuation registers `transactions export`'s XLSX format
+(including its default format) and `ui.transactions.export_xlsx`. It reuses
+the CSV transaction projection and native admission/publication path; observed
+lists create neither saved nor filed markers. The native service oracle covers
+all 74 inherited transaction export cases plus eight generated edge books.
+CLI/daemon differentials compare content, metadata and every database table;
+18 CLI invocations and one daemon session with nine XLSX requests are served by
+Rust with zero fallbacks. The [checkpoint](../reference/rust-shell.md#transaction-xlsx-transport-r5-partial)
+records the remaining report projections and acceptance gates.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one
