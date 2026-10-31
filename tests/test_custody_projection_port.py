@@ -24,6 +24,10 @@ def projection_driver():
 def test_projection_frozen_python_vectors(projection_driver):
     frozen=json.loads(PATH.read_text())
     assert frozen==vectors()
+    priced_names={'slice_rounding_denominator_priced', 'payout_settlement_denominator_rounding_priced'}
+    priced={v['case']:v for v in frozen if v['case'] in priced_names}
+    assert set(priced)==priced_names
+    assert all('expected' in v for v in priced.values()), 'denominator rounding requires admitted prices'
     assert projection_driver(frozen)==[{k:v[k] for k in ('expected','error','message') if k in v} for v in frozen]
 
 

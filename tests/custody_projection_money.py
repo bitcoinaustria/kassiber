@@ -85,6 +85,9 @@ def operands():
         ('float',dict(fiat_value=0.1)),('prefer_exact',dict(fiat_value_exact='1.00',fiat_value=9)),
         ('raw_gross',dict(amount=107,amount_includes_fee=True,fiat_value_exact='3')),
         ('rounding_denominator',dict(amount=int('12345678901234567890123456789012345678901234567890123456789012345678901'),fiat_value_exact='123456789.50000000000000000000000005')),
+        # Keep an admitted rate after the finite-price floor, so denominator
+        # precision remains observable alongside the original refusal case.
+        ('rounding_denominator_priced',dict(amount=int('12345678901234567890123456789012345678901234567890123456789012345678901'),fiat_value_exact='123456789.50000000000000000000000005e60')),
         ('one_msat',dict(amount=1,fiat_value_exact='0.0000000000000000000000000000000005')),
         ('half_even_down',dict(amount=10**11,fiat_value_exact='1.'+'0'*30+'25')),
         ('half_even_up',dict(amount=10**11,fiat_value_exact='1.'+'0'*30+'35')),
@@ -114,6 +117,8 @@ def operands():
     for i,value in enumerate(times):yield dict(case=f'payout_time_{i}',op='payout_time',payout=dict(base,payout_occurred_at=value))
     for case,changes in [('valid',{}),('one_msat',dict(payout_amount=1)),('huge',dict(payout_amount=10**120+1)),('zero',dict(payout_amount=0,payout_fiat_value='bad')),('bad_amount',dict(payout_amount=[1])),('negative_value',dict(payout_fiat_value='-1')),('zero_value',dict(payout_fiat_value='0')),('empty_value',dict(payout_fiat_value='')),('bad_value',dict(payout_fiat_value='bad',payout_occurred_at='bad')),('nan',dict(payout_fiat_value='NaN')),('snan',dict(payout_fiat_value='sNaN')),('inf',dict(payout_fiat_value='Infinity')),('negative_inf',dict(payout_fiat_value='-Infinity')),('overflow',dict(payout_fiat_value='1e999')),('derived_overflow',dict(payout_amount=1,payout_fiat_value='1e308')),('value_before_time',dict(payout_fiat_value='Infinity',payout_occurred_at='bad')),('value_before_base',dict(payout_fiat_value='Infinity')),('bad_time',dict(payout_occurred_at='bad')),('legacy',dict(payout_occurred_at=times[7])),('fallback_id',dict(id='',payout_external_id=0)),('external',dict(payout_external_id='known',payout_asset='StraßeΣİ')),('denominator_rounding',dict(payout_amount=int('12345678901234567890123456789012345678901234567890123456789012345678901'),payout_fiat_value='123456789.50000000000000000000000005'))]:
         yield dict(case='payout_settlement_'+case,op='payout_settlement',observation=obs,payout=dict(base,**changes),rows={'source':row})
+    yield dict(case='payout_settlement_denominator_rounding_priced',op='payout_settlement',observation=obs,
+               payout=dict(base,payout_amount=int('12345678901234567890123456789012345678901234567890123456789012345678901'),payout_fiat_value='123456789.50000000000000000000000005e60'),rows={'source':row})
     for case,value in [('exact','1.000000000000000000000000000000005'),('empty',''),('negative','-1'),('zero','-0.00'),('bad','bad'),('nan','NaN12'),('inf','Infinity'),('snan','sNaN'),('overflow','1e999'),('derived_overflow','1e308')]:
         yield dict(case='payout_price_'+case,op='payout_price',payout=dict(payout_fiat_value=value),amount=3,row=dict(id='projected',fiat_rate=9))
     for amount in (0,-1):
