@@ -1567,6 +1567,29 @@ def _build_manual_multi_pair_transfers(
     return trigger_transfers, consumed_row_ids, quarantines
 
 
+def transaction_price_quarantine(
+    profile: Mapping[str, Any], row: Mapping[str, Any], wallet_label: str,
+) -> dict[str, Any] | None:
+    """Explain a standalone event's price even when prior basis blocks it."""
+    direction = _row_get(row, "direction")
+    if direction not in {"inbound", "outbound"}:
+        return None
+    amount = msat_to_btc(_row_msat(row, "amount"))
+    fee = msat_to_btc(_row_msat(row, "fee"))
+    if direction == "outbound" and amount + fee <= 0:
+        return None
+    asset = str(row["asset"])
+    if _pricing_needs_review(row) and _profile_requires_coarse_review(profile):
+        return build_tax_quarantine(profile, row, "pricing_review_required",
+            _pricing_review_detail(row, wallet_label, asset, direction))
+    if _spot_price_from_row(row, amount if amount > 0 else fee) is None:
+        return build_tax_quarantine(profile, row, "missing_spot_price", {
+            "wallet": wallet_label, "asset": asset, "direction": direction,
+            "required_for": "acquisition" if direction == "inbound" else "disposal",
+        })
+    return None
+
+
 def normalize_tax_asset_inputs(
     profile: Mapping[str, Any],
     asset: str,
@@ -2426,64 +2449,20 @@ def normalize_tax_asset_inputs(
                 privacy_hop,
             )
             continue
+        price_cause = transaction_price_quarantine(profile, row, wallet["label"])
+        if price_cause is not None:
+            quarantines.append(price_cause)
+            continue
         if direction == "inbound":
-            if _pricing_needs_review(row) and _profile_requires_coarse_review(profile):
-                quarantines.append(
-                    build_tax_quarantine(
-                        profile,
-                        row,
-                        "pricing_review_required",
-                        _pricing_review_detail(row, wallet["label"], asset, direction),
-                    )
-                )
-                continue
             spot_price = _spot_price_from_row(row, amount)
-            if spot_price is None:
-                quarantines.append(
-                    build_tax_quarantine(
-                        profile,
-                        row,
-                        "missing_spot_price",
-                        {
-                            "wallet": wallet["label"],
-                            "asset": asset,
-                            "direction": direction,
-                            "required_for": "acquisition",
-                        },
-                    )
-                )
-                continue
+            assert spot_price is not None
             fiat_value = _positive_fiat_value(row, amount * spot_price)
         elif direction == "outbound":
-            if _pricing_needs_review(row) and _profile_requires_coarse_review(profile):
-                quarantines.append(
-                    build_tax_quarantine(
-                        profile,
-                        row,
-                        "pricing_review_required",
-                        _pricing_review_detail(row, wallet["label"], asset, direction),
-                    )
-                )
-                continue
             needed = amount + fee
             if needed <= 0:
                 continue
             spot_price = _spot_price_from_row(row, amount if amount > 0 else fee)
-            if spot_price is None:
-                quarantines.append(
-                    build_tax_quarantine(
-                        profile,
-                        row,
-                        "missing_spot_price",
-                        {
-                            "wallet": wallet["label"],
-                            "asset": asset,
-                            "direction": direction,
-                            "required_for": "disposal",
-                        },
-                    )
-                )
-                continue
+            assert spot_price is not None
             fiat_value = _positive_fiat_value(row, amount * spot_price)
         else:
             quarantines.append(
