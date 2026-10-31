@@ -331,11 +331,19 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   linear replay and completed custody, parity and mutation gates. Round 4 adds
   the R5/R4 continuations in the
   [R7 integration audit](docs/reference/rust-backend-r7-integration.md).
-- [ ] R4-1: commit the Rust end-to-end bench, bench-book generators and the
+- [x] R4-1: commit the Rust end-to-end bench, bench-book generators and the
   regression record; record the baseline. The harness, generators and record
-  format are integrated; the accepted baseline remains to be recorded.
+  format and four recovered baseline records are integrated.
 - [ ] R4-2 to R4-8: typed rows, custody stages and fusion, one step per run,
   each with the full mutation catalog rerun and before/after timings.
+  R4-2's first prototype stopped at 0.301 s against its 0.250 s target;
+  the continuation adds typed rows, book-local identifiers and typed network
+  observation admission, with an explicit timed boundary to unported stages.
+  This is a partial R4-2 checkpoint; R4-3 and the remaining acceptance gates
+  remain open. See the [checkpoint](docs/reference/r4-journal-pipeline.md#typed-row-and-admission-checkpoint-r4-2-partial).
+  Complete typed components/evidence and measure the remaining conversion cost
+  before accepting R4-2/R4-3
+  ([earlier probe](docs/reference/r4-journal-pipeline.md#recovered-baseline-and-r4-2-target-probe)).
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):

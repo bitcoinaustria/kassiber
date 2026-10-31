@@ -1,18 +1,27 @@
 //! Admission gates run before every ported stage; no partial results on refusal.
-use crate::codec::{object, text, truth};
+#[cfg(test)]
+use crate::codec::object;
+use crate::codec::text;
+#[cfg(test)]
+use crate::codec::truth;
+mod network;
 use crate::python_text::strip;
 use crate::python_text::PythonText;
-use crate::snapshot::Snapshot;
-use serde_json::{json, Value};
+use crate::snapshot::BookSnapshot as Snapshot;
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use std::collections::BTreeSet;
 
 type Error = (&'static str, String);
+#[cfg(test)]
 fn nonempty(v: &Value) -> bool {
     !v.is_null() && v != ""
 }
 fn normalized(v: &Value) -> String {
     strip(&text(v)).py_lower()
 }
+#[cfg(test)]
 fn domain(v: &Value) -> Option<&'static str> {
     match normalized(v).as_str() {
         "main" | "mainnet" | "bitcoin" | "liquid" | "liquidv1" => Some("main"),
@@ -22,6 +31,7 @@ fn domain(v: &Value) -> Option<&'static str> {
         _ => None,
     }
 }
+#[cfg(test)]
 fn domain_evidence(raw: &Value, config: &Value, asset: &Value) -> (Option<String>, bool) {
     let mut families = BTreeSet::new();
     let mut domains = BTreeSet::new();
@@ -54,6 +64,7 @@ fn domain_evidence(raw: &Value, config: &Value, asset: &Value) -> (Option<String
     }
     (domains.first().map(|s| (*s).to_owned()), true)
 }
+#[cfg(test)]
 fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
     let mut raw = object(&row["raw_json"]);
     let config = object(if truth(&row["config_json"]) {
@@ -102,80 +113,7 @@ fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
     )
 }
 pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
-    if let Some(facts) = &snapshot.book_network {
-        let mut environments = BTreeSet::new();
-        let mut instances = BTreeSet::new();
-        let mut conflict = false;
-        let observations = facts["observations"].as_array().ok_or((
-            "custody_snapshot_invalid",
-            "missing network observations".into(),
-        ))?;
-        let references = facts["references"].as_array().ok_or((
-            "custody_snapshot_invalid",
-            "missing network references".into(),
-        ))?;
-        let mut add = |row: &Value, reference: bool| {
-            let (environment, instance, valid) = evidence(row);
-            conflict |= !valid;
-            if valid {
-                if let Some(environment) = environment {
-                    if reference || environment == "regtest" {
-                        if let Some(instance) = instance {
-                            instances.insert(instance);
-                        }
-                    }
-                    environments.insert(environment);
-                }
-            }
-        };
-        for wallet in &snapshot.wallets {
-            let rows: Vec<_> = observations
-                .iter()
-                .filter(|r| r["wallet_id"] == wallet["id"])
-                .collect();
-            if rows.is_empty() {
-                add(
-                    &json!({"wallet_kind":wallet["kind"],"config_json":wallet["config_json"]}),
-                    false,
-                );
-            } else {
-                for row in rows {
-                    add(row, false);
-                }
-            }
-        }
-        for source in references {
-            let row = if source["table"] == "wallet_policy_epochs"
-                && !truth(&source["private_material_present"])
-                && !truth(&source["source_present"])
-            {
-                json!({})
-            } else {
-                json!({"raw_json":object(&source["payload_json"]),"config_json":{"chain":source["chain"],"network":source["network"]}})
-            };
-            add(&row, true);
-        }
-        if conflict || environments.len() > 1 || instances.len() > 1 {
-            return Err((
-                "book_network_review_required",
-                "This book contains incompatible network histories".into(),
-            ));
-        }
-        let binding = &facts["binding"];
-        if !binding.is_null()
-            && (environments
-                .iter()
-                .any(|e| Some(e.as_str()) != binding["environment"].as_str())
-                || instances
-                    .iter()
-                    .any(|i| Some(i.as_str()) != binding["chain_instance_id"].as_str()))
-        {
-            return Err((
-                "book_network_review_required",
-                "Book observations no longer match its network binding".into(),
-            ));
-        }
-    }
+    network::require(snapshot)?;
     let original = snapshot.profile.get("tax_country").unwrap_or(&Value::Null);
     let country = normalized(original);
     if !["", "generic", "at"].contains(&country.as_str()) {
@@ -199,38 +137,44 @@ pub(crate) fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
     use std::str::FromStr;
     let mut seen = BTreeSet::new();
     for row in &snapshot.rate_rows {
-        let asset = row.get("asset").ok_or(("KeyError", "'asset'".into()))?;
-        if seen.contains(&asset.to_string()) {
+        let asset = row.asset.present().ok_or(("KeyError", "'asset'".into()))?;
+        if seen.contains(&asset.json().to_string()) {
             continue;
         }
-        let parse = |value: &Value| -> Result<(), Error> {
-            let raw = if value.is_null() || value == "" {
+        let parse = |value: &crate::snapshot::SqlValue| -> Result<(), Error> {
+            let raw = if value.is_null() || value.as_str() == Some("") {
                 "0".into()
             } else {
-                crate::codec::pystr(value)
+                crate::codec::pystr(&value.json())
             };
             match Decimal::from_str(strip(&raw)) {
                 Ok(_) | Err(DecimalError::NonFinite) => Ok(()),
                 Err(_) => Err((
                     "app_error",
-                    format!("Invalid decimal value: {}", crate::codec::pystr(value)),
+                    format!(
+                        "Invalid decimal value: {}",
+                        crate::codec::pystr(&value.json())
+                    ),
                 )),
             }
         };
         let mut rate = false;
         let mut value = false;
-        for (key, present) in [
-            ("fiat_rate_exact", &mut rate),
-            ("fiat_value_exact", &mut value),
+        for (column, present) in [
+            (&row.fiat_rate_exact, &mut rate),
+            (&row.fiat_value_exact, &mut value),
         ] {
-            if let Some(v) = row.get(key).filter(|v| !v.is_null()) {
+            if let Some(v) = column.present().filter(|v| !v.is_null()) {
                 parse(v)?;
                 *present = true;
             }
         }
-        for (key, present) in [("fiat_rate", &mut rate), ("fiat_value", &mut value)] {
+        for (key, column, present) in [
+            ("fiat_rate", &row.fiat_rate, &mut rate),
+            ("fiat_value", &row.fiat_value, &mut value),
+        ] {
             if !*present {
-                let v = row.get(key).ok_or(("KeyError", format!("'{key}'")))?;
+                let v = column.present().ok_or(("KeyError", format!("'{key}'")))?;
                 if !v.is_null() {
                     parse(v)?;
                     *present = true;
@@ -238,12 +182,15 @@ pub(crate) fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
             }
         }
         if rate {
-            seen.insert(asset.to_string());
+            seen.insert(asset.json().to_string());
         } else if value {
-            let amount = row.get("amount").ok_or(("KeyError", "'amount'".into()))?;
-            if truth(amount) {
-                crate::codec::integer(amount).map_err(|message| ("ValueError", message))?;
-                seen.insert(asset.to_string());
+            let amount = row
+                .amount
+                .present()
+                .ok_or(("KeyError", "'amount'".into()))?;
+            if amount.truth() {
+                crate::codec::integer(&amount.json()).map_err(|message| ("ValueError", message))?;
+                seen.insert(asset.json().to_string());
             }
         }
     }

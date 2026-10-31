@@ -722,6 +722,32 @@ pub(super) fn compute(snapshot: &Snapshot) -> Result<Value, String> {
             .collect(),
     )
 }
+pub(super) fn admit_typed(snapshot: &crate::snapshot::BookSnapshot) -> Result<(), String> {
+    if snapshot.channel_records.is_empty() {
+        return Ok(());
+    }
+    context(
+        &snapshot
+            .channel_records
+            .iter()
+            .map(|r| json!(r))
+            .collect::<Vec<_>>(),
+        &snapshot
+            .transactions
+            .iter()
+            .map(|r| r.json())
+            .collect::<Vec<_>>(),
+        &snapshot
+            .wallets
+            .iter()
+            .map(|w| {
+                let row = w.json();
+                (pystr(&row["id"]), row)
+            })
+            .collect(),
+    )
+    .map(|_| ())
+}
 pub(super) fn compile(snapshot: &Snapshot) -> Value {
     compute(snapshot).unwrap_or_else(|error| json!({"error":error}))
 }

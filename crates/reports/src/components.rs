@@ -132,17 +132,18 @@ pub fn blockers(conn: &Connection, profile: &Value) -> Result<Vec<Value>> {
             &id,
         )?);
     }
-    // Start with an empty cache; transaction views are initialized by custody.
-    let mut snapshot = Snapshot::default();
-    snapshot.schema_version = 1;
-    snapshot.operation = "custody".into();
-    snapshot.as_of = "report-read".into();
-    snapshot.profile = json_value(profile)?.as_object().cloned().unwrap();
-    snapshot.components = components;
-    snapshot.anchors = anchors;
-    snapshot.anchor_wallets = anchor_wallets;
-    snapshot.revision_headers = revision_headers;
-    snapshot.transactions = records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",&id)?;
+    let snapshot = Snapshot {
+        schema_version: 1,
+        operation: "custody".into(),
+        as_of: "report-read".into(),
+        profile: json_value(profile)?.as_object().cloned().unwrap(),
+        components,
+        anchors,
+        anchor_wallets,
+        revision_headers,
+        transactions: records(conn,"SELECT t.*,w.kind AS wallet_kind,w.config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",&id)?.into_iter().map(serde_json::Value::Object).collect(),
+        ..Default::default()
+    };
     // Python admission uses include_local_evidence=False.
     let computed = kassiber_custody::components::compute(&snapshot)
         .map_err(|e| AppError::new("internal_error", e.message))?;

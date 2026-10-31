@@ -5,7 +5,7 @@
 //! finalized projection, the profile and the wallets in exactly the JSON
 //! model `kassiber_custody::custody_with_fusion` reads from the request and
 //! response texts, so both build the same ledger request.
-use kassiber_custody::{codec, ledger_request, snapshot::Snapshot, timing};
+use kassiber_custody::{codec, ledger_request, snapshot::BookSnapshot as Snapshot, timing};
 use serde_json::Value;
 
 pub use kassiber_custody::{Refusal, Stages};

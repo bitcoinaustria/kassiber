@@ -99,9 +99,9 @@ pub fn custody_with_finalized(request: &str, finalized: bool) -> String {
 }
 
 /// The v1 snapshot in `request`, admitted by its schema checks.
-pub fn parse(request: &str) -> Result<snapshot::Snapshot, Refusal> {
+pub fn parse(request: &str) -> Result<snapshot::BookSnapshot, Refusal> {
     let _span = timing::span("parse");
-    serde_json::from_str::<snapshot::Snapshot>(request)
+    serde_json::from_str::<snapshot::BookSnapshot>(request)
         .map_err(|e| e.to_string())
         .and_then(|snapshot| {
             snapshot.validate()?;
@@ -112,7 +112,7 @@ pub fn parse(request: &str) -> Result<snapshot::Snapshot, Refusal> {
 
 /// Admission and every stage, in Python's order. The first refusal ends the
 /// operation; decision-only operations skip finalization.
-pub fn run(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stages, Refusal> {
+pub fn run(snapshot: &snapshot::BookSnapshot, finalized: bool) -> Result<Stages, Refusal> {
     struct Memos;
     impl Drop for Memos {
         fn drop(&mut self) {
@@ -128,15 +128,20 @@ pub fn run(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stages, Ref
     let gate = timing::span("admission.confirmation");
     // Python captures confirmation provenance before rates and channel
     // admission, retaining the original rows rather than enriched rows.
-    let projection_rows = finalized_projection::runtime::confirmation_rows(snapshot)
+    let projection_rows = finalized_projection::runtime::typed_confirmations(snapshot)
         .map_err(|code| Refusal::code("components", code))?;
     drop(gate);
     let gate = timing::span("admission.rates_channels");
     gates::require_rates(snapshot)
         .map_err(|(code, message)| Refusal::new("components", code, message))?;
-    interpretation::admit_channels(snapshot).map_err(|code| Refusal::code("components", code))?;
+    interpretation::admit_typed_channels(snapshot)
+        .map_err(|code| Refusal::code("components", code))?;
     drop(gate);
     drop(admission);
+    let boundary = timing::span("boundary");
+    let snapshot = snapshot.stages();
+    let snapshot = &snapshot;
+    drop(boundary);
     let span = timing::span("components+migration");
     let components = components::compute(snapshot)
         .map_err(|error| Refusal::new("components", error.code, error.message))?;
@@ -163,7 +168,7 @@ pub fn run(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stages, Ref
     let span = timing::span("finalized_projection");
     let finalized_projection = if finalized {
         Some(
-            finalized_projection::runtime::stage_with_rows(
+            finalized_projection::runtime::stage_with_confirmations(
                 snapshot,
                 projection_rows,
                 &quantity,

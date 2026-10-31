@@ -39,7 +39,8 @@ rusqlite bundled-sqlcipher bundled-sqlcipher-vendored-openssl backup functions
 security-framework OSX_10_15
 security-framework-sys
 serde derive
-serde_json arbitrary_precision float_roundtrip
+# raw_value retains local custody snapshot fragments; it adds no transport.
+serde_json arbitrary_precision float_roundtrip raw_value
 sha2
 tauri
 tauri-build

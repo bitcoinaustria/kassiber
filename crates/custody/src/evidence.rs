@@ -3,7 +3,7 @@ use crate::codec::{self, int, integer, text, truth, wide};
 use crate::components::Error;
 use crate::python_text::PythonText;
 use crate::python_text::{isalnum, strip};
-use crate::snapshot::{Record, Snapshot};
+use crate::snapshot::Snapshot;
 use kassiber_pyjson::{Key, Value as Py};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -379,10 +379,24 @@ pub fn authority(row: &Value) -> Result<Value, Error> {
 }
 
 const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
-pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
+pub trait RowRecord: Sync {
+    fn record_view(&self) -> &serde_json::Map<String, Value>;
+}
+impl RowRecord for Value {
+    fn record_view(&self) -> &serde_json::Map<String, Value> {
+        self.as_object().expect("snapshot row")
+    }
+}
+impl RowRecord for serde_json::Map<String, Value> {
+    fn record_view(&self) -> &serde_json::Map<String, Value> {
+        self
+    }
+}
+pub fn enriched_rows<R: RowRecord>(rows: &[R]) -> Result<Vec<Value>, Error> {
     let fields: BTreeSet<&str> = FIELDS.split_whitespace().collect();
     // Rows are enriched independently; keep them, or the first refusal, in order.
-    let enrich = |row: &Record| -> Result<Value, Error> {
+    let enrich = |value: &R| -> Result<Value, Error> {
+        let row = value.record_view();
         // Indexing a JSON object yields null for an absent field.
         let original = |key: &str| row.get(key).unwrap_or(&Value::Null);
         let mut item = Value::Object(

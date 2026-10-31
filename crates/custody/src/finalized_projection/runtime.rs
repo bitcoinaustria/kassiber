@@ -43,17 +43,34 @@ fn blocked_ids(interpreter: &Py, projection: &Py) -> Result<Value, String> {
     Ok(Value::Array(ids))
 }
 
-/// Capture the original row population before rates and interpreter admission.
-pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
-    // Rows are captured independently; insert them, or the first refusal, in order.
-    let captured = crate::par::map(&snapshot.transactions, |raw| {
-        let mut row = Value::Object(raw.clone());
-        row["_closed_confirmation_observation"] = interpretation::capture_confirmation(&row)?;
-        Ok::<_, String>(row)
+/// Admission captures only confirmation facts, not a second copy of every row.
+/// Closed evidence is still owned by the unported evidence stage, so only rows
+/// carrying its version marker cross that neighbour's boundary here.
+pub fn typed_confirmations(snapshot: &crate::snapshot::BookSnapshot) -> Result<Vec<Value>, String> {
+    let captured = crate::par::map(&snapshot.transactions, |row| {
+        if matches!(
+            row.observation_authority_version.value(),
+            crate::snapshot::SqlValue::Null
+        ) {
+            Ok(Value::Null)
+        } else {
+            interpretation::capture_confirmation(&row.json())
+        }
     });
+    captured.into_iter().map(crate::par::unwrap).collect()
+}
+
+/// Full row copies belong to the finalized stage's boundary, after admission.
+pub fn stage_with_confirmations(
+    snapshot: &Snapshot,
+    captured: Vec<Value>,
+    quantity: &Py,
+    interpreter: &Py,
+) -> Result<Py, String> {
     let mut rows = Map::new();
-    for row in captured {
-        let row = crate::par::unwrap(row)?;
+    for (row, confirmation) in snapshot.transactions.iter().zip(captured) {
+        let mut row = row.clone();
+        row["_closed_confirmation_observation"] = confirmation;
         let id = if codec::truth(&row["id"]) {
             codec::pystr(&row["id"])
         } else {
@@ -61,7 +78,7 @@ pub fn confirmation_rows(snapshot: &Snapshot) -> Result<Value, String> {
         };
         rows.insert(id, row);
     }
-    Ok(Value::Object(rows))
+    stage_with_rows(snapshot, Value::Object(rows), quantity, interpreter)
 }
 
 /// Assemble Python compiler operands from previously computed Rust stages.
@@ -172,9 +189,11 @@ pub fn stage_with_rows(
 }
 
 pub fn stage(snapshot: &Snapshot, quantity: &Py, interpreter: &Py) -> Result<Py, String> {
-    stage_with_rows(
+    let text = serde_json::to_string(snapshot).map_err(|e| e.to_string())?;
+    let typed = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    stage_with_confirmations(
         snapshot,
-        confirmation_rows(snapshot)?,
+        typed_confirmations(&typed)?,
         quantity,
         interpreter,
     )

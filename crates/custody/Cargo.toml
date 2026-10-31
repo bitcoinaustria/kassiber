@@ -12,9 +12,10 @@ publish.workspace = true
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 # Existing JSON boundary libraries; retain exact integers and parse float literals with CPython's
-# correctly rounded value. Raw commitment objects keep order in our Py codec.
+# correctly rounded value. raw_value keeps unported v1 fragments ordered without
+# a second Value tree; it adds no dependency or external I/O.
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip", "raw_value"] }
 # std has no SHA-256; persisted observer/evidence commitments require it.
 sha2 = "0.10"
 # Legacy HTLC witness replay needs HASH160; std and sha2 have no RIPEMD160.

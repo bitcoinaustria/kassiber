@@ -209,10 +209,12 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
         .iter()
         .filter(|r| r.get("profile_id") == Some(&profile) && !truth(&r["excluded"]))
         .collect();
-    let mut rows: Vec<_> = crate::par::map(&selected, |r| without_provenance(r))
-        .into_iter()
-        .map(crate::par::unwrap)
-        .collect();
+    let mut rows: Vec<_> = crate::par::map(&selected, |r| {
+        without_provenance(r.as_object().expect("snapshot row"))
+    })
+    .into_iter()
+    .map(crate::par::unwrap)
+    .collect();
     rows.sort_by_cached_key(order);
     let rows = evidence::enriched_rows(&rows)?;
     let mut observations: Vec<Value> = Vec::new();

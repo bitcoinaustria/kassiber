@@ -1,6 +1,17 @@
 //! Raw v1 request. Open record fields preserve historical SQLite shapes.
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+mod book;
+mod identifiers;
+pub use identifiers::InternedId;
+mod network;
+mod rows;
+pub use book::BookSnapshot;
+pub use network::{NetworkArray, NetworkFacts, NetworkObject};
+pub use rows::{Column, NetworkRow, RateRow, SqlValue, TxRow, WalletRef, WorklistRow};
+/// Compatibility model for stages and native callers awaiting their typed slice.
+/// Text parsing and admission use `BookSnapshot` directly.
+pub type Snapshot = StageSnapshot;
 
 /// Exact signed-64 database quantity. Never a binary float or decimal BTC.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -28,14 +39,14 @@ pub struct GapWorklist {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Snapshot {
+pub struct StageSnapshot {
     pub schema_version: u32,
     pub operation: String,
     pub as_of: String,
     pub profile: Record,
     pub book_network: Option<Value>,
     pub wallets: Vec<Record>,
-    pub transactions: Vec<Record>,
+    pub transactions: Vec<Value>,
     pub rate_rows: Vec<Record>,
     pub owned_index: Option<Value>,
     pub ownership_warnings: Vec<String>,
@@ -51,83 +62,19 @@ pub struct Snapshot {
     pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,
-    /// `transactions` as JSON objects, built once on first use.
-    #[serde(skip)]
-    rows: std::sync::OnceLock<Vec<Value>>,
 }
 
-impl Snapshot {
-    /// Each transaction row as a JSON object, in order; shared by every reader.
+impl StageSnapshot {
+    /// The one explicit JSON boundary for neighbours awaiting their typed slice.
     pub fn rows(&self) -> &[Value] {
-        self.rows.get_or_init(|| {
-            crate::par::map(&self.transactions, |row| Value::Object(row.clone()))
-                .into_iter()
-                .map(crate::par::unwrap)
-                .collect()
-        })
+        &self.transactions
     }
+
+    /// Test-only legacy constructors receive the same typed schema admission.
     pub fn validate(&self) -> Result<(), String> {
-        if self.schema_version != 1 || self.operation != "custody" {
-            return Err("unsupported custody snapshot schema or operation".into());
-        }
-        if self.as_of.is_empty() {
-            return Err("custody snapshot requires as_of".into());
-        }
-        let mut records: Vec<&Record> = self
-            .wallets
-            .iter()
-            .chain(&self.transactions)
-            .chain(&self.anchor_wallets)
-            .chain(&self.channel_records)
-            .chain(&self.gap_worklist.rows)
-            .collect();
-        records.extend(self.anchors.values().filter_map(Value::as_object));
-        for row in records {
-            for name in ["config_json", "wallet_config_json"] {
-                if let Some(value) = row.get(name).filter(|v| !v.is_null()) {
-                    let config: Value = if let Some(text) = value.as_str() {
-                        serde_json::from_str(text)
-                            .map_err(|_| "custody configuration must be normalized facts")?
-                    } else {
-                        value.clone()
-                    };
-                    let object = config
-                        .as_object()
-                        .ok_or("custody configuration must be normalized facts")?;
-                    if object.keys().any(|key| {
-                        ![
-                            "chain",
-                            "network",
-                            "bitcoin_network",
-                            "chain_network",
-                            "chain_instance_id",
-                            "samourai",
-                        ]
-                        .contains(&key.as_str())
-                    }) {
-                        return Err(
-                            "custody configuration contains fields outside normalized facts".into(),
-                        );
-                    }
-                    if let Some(block) = config.get("samourai").and_then(Value::as_object) {
-                        if block
-                            .keys()
-                            .any(|key| !["role", "group_id", "section"].contains(&key.as_str()))
-                        {
-                            return Err("custody Samourai metadata contains fields outside normalized facts".into());
-                        }
-                    }
-                }
-            }
-        }
-        for row in &self.transactions {
-            for name in ["amount", "fee"] {
-                if let Some(value) = row.get(name).filter(|v| !v.is_null()) {
-                    serde_json::from_value::<Msat>(value.clone())
-                        .map_err(|_| format!("{name} must be an exact signed-64 msat integer"))?;
-                }
-            }
-        }
-        Ok(())
+        let text = serde_json::to_string(self).map_err(|e| e.to_string())?;
+        serde_json::from_str::<BookSnapshot>(&text)
+            .map_err(|e| e.to_string())?
+            .validate()
     }
 }

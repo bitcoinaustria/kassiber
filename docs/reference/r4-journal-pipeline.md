@@ -1,7 +1,9 @@
 # R4 journal pipeline design
 
-**Status:** R4-0 round 4 integrated, 2026-10-31; the R4-1 bench harness is
-committed and its accepted baseline remains open. The R4-11 renderer has a
+**Status:** R4-0 round 4 integrated, 2026-10-31; the R4-1 bench harness and
+four recovered baseline records are committed. The typed row and admission
+continuation is an **R4-2 checkpoint**, with acceptance still open; R4-3's
+components/evidence rewrite is not implemented. The R4-11 renderer has a
 [partial checkpoint](r4-journal-render-checkpoint.md); production acceptance
 remains open. [Storage-format speedups](#storage-format-speedups) run Python
 first; compact calculations are implemented with the Rust schema mirror.
@@ -312,7 +314,7 @@ permutations, plus fresh recordings), census and custody-shadow, the frozen
 vectors and the mutation catalog. A typed rewrite moves mutation anchors.
 Each step therefore re-anchors every recipe in the code it rewrites to an
 equivalent mutant, as the performance checkpoint did, reruns the **whole**
-catalog (2,246 recipes), and reports kill set equals catalog. The catalog may
+catalog (currently 2,309 recipes), and reports kill set equals catalog. The catalog may
 not shrink without a reviewed equivalence note. Each step also records
 before and after timings from the bench books, back to back.
 
@@ -464,9 +466,266 @@ The lines map the profile onto the pipeline. Python's paths are under
 | Persistence | `store` | — |
 | JSON parse and admission | — | `parse`, `admission` (the R4-2 target) |
 
-Accepted baseline records will be committed as `r4-bench-records.jsonl`;
-no accepted record is checked in yet. Evidence of each run stays with the
+The four recovered baseline records and checkpoint measurements are committed
+as `r4-bench-records.jsonl`. Evidence of each run stays with the
 step's local verification.
+
+### Recovered baseline and R4-2 target probe
+
+`52b1e2b9` records the owner's decisions without an implementation change.
+`ae79db2a`'s commit body reports unchanged corpus response hashes and kills
+for its five moved `lib.rs` mutation recipes; it does not report a fresh
+whole-catalog rerun.
+
+The baseline file named above was absent at `ae79db2a`. The continuation
+recovered all four R4-1 records before evaluating R4-2. The measured Rust
+executables were built from that clean commit. Each book is a disposable
+SQLite backup of the original design book, and every stored raw CSV row was
+compared with the committed generator's seed output. The multi-wallet books
+retain 171 and 300 active peg components. No original book was modified.
+
+The owner's continuation instructions use a load cap of 8 and best of five
+alternating Python/Rust pairs above that cap. Every record here used five
+pairs, records all three load averages before each pair, and has stable Rust
+ledger request/response hashes. All timings are observations under load.
+Times below belong to the fastest complete run of each engine.
+
+| R4-1 baseline, seconds | Python end to end | Rust compute | Rust parse | Rust admission | 1-minute load range |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| generic 2,000 | 1.860 | 0.791 | 0.043 | 0.033 | 11.52–12.55 |
+| multi-wallet 2,000 | 2.386 | 1.252 | 0.059 | 0.035 | 12.67–13.79 |
+| generic 20,000 | 13.546 | 7.007 | 0.450 | 0.306 | 8.56–21.38 |
+| multi-wallet 20,000 | 24.317 | 10.975 | 0.513 | 0.360 | 13.69–19.10 |
+
+The multi-wallet 20,000 record's `dirty` flag reflects prototype edits made
+while its saved baseline executable ran; its Rust executable and Python
+implementation remained the baseline. The source `commit` on all four records
+is `ae79db2a`.
+
+The first R4-2 prototype used direct row visitors for `TxRow`, `WalletRef`,
+`RateRow`, worklist rows and lossless SQL/transport values. It captured only
+confirmation facts during admission and converted rows at the unported-stage
+boundary. Its generic 20,000 probe alternated Python, saved baseline Rust and
+prototype Rust for five pairs, at 1-minute loads 12.37, 14.35, 23.52, 38.53 and
+43.81. The request and ledger response hashes agreed across both Rust binaries.
+
+| Generic 20,000 probe, seconds | Baseline in the same pairs | Prototype |
+| --- | ---: | ---: |
+| Parse | 0.479 | 0.201 |
+| Accounting admission | 0.100 | 0.097 |
+| Confirmation capture | 0.111 | 0.001 |
+| Rate/channel admission | 0.102 | 0.002 |
+| Admission total | 0.312 | 0.100 |
+| **Parse + admission (target ≤ 0.250)** | **0.791** | **0.301 — missed** |
+| Explicit unported-stage boundary conversion | included in admission/stages | 0.304 |
+| Full compute | 7.284 | 7.783 |
+
+R4-2 stops at this failed target. Accounting admission still parses the
+untyped `book_network.observations` population, taking 0.097 s; with this
+parse cost it must fit within about 0.049 s. The additional 0.304 s boundary
+conversion and retaining both typed inputs and unported stage operands also
+make full compute slower. Re-planning should address accounting's network
+facts and the lifetime/cost of boundary conversions before another full gate.
+The prototype was preserved locally under `target/r4-2-prototype` and removed
+from the shipped tree. Its later round-trip adapter and wrapper edits were
+not measured or verified. No R4-2 parity, round-trip, replay, census/shadow or
+mutation-kill acceptance is claimed, and R4-3 was not started.
+
+The recovered prototype baseline contained **2,285** mutation recipes, rather
+than the 2,246 recorded in the initial design. The discarded prototype re-anchored
+four recipes (`REC-OPERATION-03`, `projection8-capture-before-rates`,
+`projection8-row-order`, `projection8-confirmation`); its applicability check
+found all 2,285 applicable, but no kill rerun was performed. Those recipe
+edits were withdrawn with the implementation, so the shipped catalog is
+unchanged. For this records-only continuation, the baseline executable builds,
+all four benchmark runs, workspace formatting, the journal fusion tests and
+preflight pass; inventory regeneration leaves the checked-in inventory
+unchanged.
+
+### Typed row and admission checkpoint (R4-2, partial)
+
+The continuation starts at integrated R7 `dd433e4e` and takes the recovered
+records from `4f663a62`, preserving the newer integration notes. It recovers
+the archived row prototype and types the network observation inventory as well.
+This is a checkpoint, **not R4-2/R4-3 acceptance**.
+
+The shared types are exported by `crates/custody/src/snapshot.rs`:
+
+- `snapshot/rows.rs`: `TxRow`, `WalletRef`, `RateRow`, `WorklistRow`,
+  `NetworkRow`, `Column` and `SqlValue`. Direct visitors preserve missing
+  versus null columns, storage classes, unknown columns and their order.
+  Transport-only booleans, containers and wide integers are not silently
+  coerced into SQL scalars. Signed and unsigned 128-bit visits from existing
+  JSON values retain exact integers too.
+- `snapshot/identifiers.rs`: `InternedId`, backed by `Arc<str>`. Transaction,
+  wallet, profile, workspace, account and asset identifiers share allocations
+  within one parse. The pool is released on success or refusal; independent
+  books do not share an identifier cache.
+- `snapshot/network.rs`: typed network observations and lossless malformed
+  container operands. Network admission reads only relevant embedded payload
+  fields and skips unrelated commercial evidence. The complete raw inventory
+  remains available to the v1 oracle.
+- `snapshot/book.rs`: `BookSnapshot`, including the ordered v1 text adapter.
+  `parse` and `run` use this model. Nullable optional fields remain optional.
+  `Snapshot` remains the compatibility alias for the unported `StageSnapshot`;
+  its transaction objects are built once at the explicit timed boundary.
+
+Accounting, confirmation capture, rate admission and channel admission retain
+Python's order. Confirmation capture holds only the captured facts, rather
+than a second original-row population. Nonempty channel contexts still use
+the existing interpreter. Admitted network facts are not copied into the
+legacy stage operands because no downstream stage reads them. Native component
+callers in reports and transfers retain their existing validation algorithms.
+
+The existing `serde_json/raw_value` feature retains the wire order of unported
+fields, which `serde_json::Value` maps cannot retain. It adds no package or
+network capability and changes no lockfile dependency. Its feature review and
+license credit are updated. Python production code is unchanged.
+
+Components and evidence still run their original JSON algorithms. R4-3 must
+consume the typed input rows directly, provide typed stage outputs and shrink
+the boundary. No R4-3 speed or full-custody non-regression acceptance is claimed
+by the implementation alone.
+
+All four R4-1 bench books ran as five back-to-back alternating before/after
+pairs, with Python first in every pair. The recorded 1-minute loads were
+14.73–22.65, above eight, so these are best-of-five measurements under load.
+The four complete records, including per-run loads, stage spans and matching
+ledger request/response hashes, are appended to
+[`r4-bench-records.jsonl`](r4-bench-records.jsonl) as `R4-2-checkpoint`.
+The measured source was the dirty checkpoint before this commit, against the
+saved integrated `dd433e4e` executable.
+
+| Seconds at 20,000 | Generic before | Generic checkpoint | Multi-wallet before | Multi-wallet checkpoint |
+| --- | ---: | ---: | ---: | ---: |
+| Parse | 0.4835 | 0.2151 | 0.4857 | 0.2602 |
+| Admission | 0.3476 | 0.0165 | 0.3515 | 0.0387 |
+| Boundary conversion | 0.0000 | 0.2908 | 0.0000 | 0.3301 |
+| components+migration | 0.0000 | 0.0000 | 0.8286 | 0.8315 |
+| evidence | 0.3935 | 0.3826 | 0.4193 | 0.4387 |
+| interpretation | 0.5139 | 0.5294 | 1.9394 | 1.9949 |
+| gaps | 0.4705 | 0.4772 | 0.4696 | 0.4414 |
+| quantity | 2.0533 | 2.0560 | 2.2551 | 2.1577 |
+| finalized_projection | 1.4987 | 1.5391 | 1.3417 | 1.6167 |
+| Custody total (admission through finalized) | 5.2775 | 5.2916 | 7.6053 | 7.8498 |
+| Pipeline compute (also parse, fusion, engine) | 8.2256 | 7.8055 | 11.7030 | 11.6814 |
+
+Generic parse plus admission is **0.2316 s**, meeting the 0.250 s row/admission
+target. This does not close the step's acceptance: conversion still costs
+0.291/0.330 s, and custody totals regress despite slightly faster whole-pipeline
+compute. The 2,000-row pipeline totals are 0.8523 → 0.8371 s generic and
+1.3074 → 1.2980 s multi-wallet. Typed components/evidence and the full
+non-regression target remain open.
+
+The integrated catalog starts with **2,292** custody recipes and now contains
+**2,309**; no recipe was removed. Four recipes move to equivalent operations:
+
+- `REC-OPERATION-03` still skips channel admission before components, using
+  the typed admission entry point.
+- `projection8-capture-before-rates` still moves rate admission before
+  confirmation capture, preserving the same first-refusal counterexample.
+- `projection8-row-order` reverses the row/confirmation pairs rather than
+  the former vector of already copied rows.
+- `projection8-confirmation` still replaces captured confirmation with null.
+
+The seventeen new recipes cover typed column order, unknown columns, boolean
+storage, REAL signs, wide integers, exact msat admission, book-local identifier
+sharing, network conflicts/binding/epochs/malformed inventories, and signed
+and unsigned 128-bit visits. A second-pass correction also prevents serde's
+positional struct-array deserialization from turning a non-object embedded
+payload into network facts; `R4-network-payload-object` kills that regression.
+Exhaustive new-branch coverage remains an open acceptance audit.
+
+<!-- R4-2 checkpoint gate results. -->
+
+The final manual-review correction passes workspace formatting, clippy with
+`-D warnings` and all **1,503 workspace tests**. Every recipe in a touched
+source file was rerun: **192 custody, 6 reports and 25 transfers**. Each kill
+set equals its touched-file catalog. The custody catalog totals **2,309**;
+the whole-catalog integration rerun is still required. The mutation scratch
+build and the 25 GB workspace verification build were removed after saving
+their summaries.
+
+The final binaries match the saved integrated custody baseline over **25,348
+requests**: the twelve generators' 24,000 books and 1,030 permutations, plus
+159 retained replay requests and 159 permutations. Both full and decision-only
+response hashes match, including their stage results and refusals. The typed
+`BookSnapshot` text round-trip gate compares all 25,348 request lines with
+zero byte differences. Recorded Python/Rust replay independently passes all
+159 requests and 159 permutations with zero differences. Frozen custody and
+refusal vectors pass in the workspace suite; all four benchmark books retain
+matching before/after ledger request and response hashes.
+
+The vacuous fusion witness passes as a regression test and also rejects a
+standalone probe with exit status 1 and `vacuous fusion probe`: the seed has
+zero distinct active inputs while its companion has one. Its local log and
+counts are saved as `target/r4-3-verify/vacuous-failing-process.{log,json}`.
+`classify_tests update` leaves the inventory unchanged, and the required
+preflight passes all **57 tests**. The broader per-seed activity audit below
+is still open.
+
+Both requested Python lanes ran with `KASSIBER_TEST_TAX_ENGINE=census`;
+the census pass also enabled `KASSIBER_TEST_CUSTODY_ENGINE=census`, and the
+shadow pass used `run-custody-shadow`. These are the complete lane results,
+without deselecting their failures:
+
+| Lane | Passed | Failed | Skipped | Passed subtests |
+| --- | ---: | ---: | ---: | ---: |
+| core-accounting census | 2,031 | 2 | 75 | 460 |
+| core-accounting custody-shadow | 679 | 2 | 40 | 231 |
+| reports-contracts census | 2,471 | 4 | 10 | 2,824 |
+| reports-contracts custody-shadow | 1,871 | 4 | 10 | 146 |
+
+The core-accounting census exposes an existing harness mismatch in
+`tests/test_pyfix_review.py::test_split_payout_fails_closed`, for both
+`taxable-EUR` and `carrying-value-LBTC`. The test monkeypatches Python's
+finalization to split an already computed payout decision; that alteration is
+absent from the raw snapshot Rust receives. Census compares the deliberately
+altered Python refusal with Rust's unaltered computation. The checkpoint and
+the saved integrated baseline produce identical custody bytes and ledger
+request/response hashes on both captured inputs. No Python code or test
+expectation is changed here.
+
+Reproduce on a disposable temporary root (create the directory first):
+
+```sh
+TMPDIR="$PWD/target/r4-3-verify/tmp" \
+KASSIBER_TEST_TAX_ENGINE=census KASSIBER_TEST_CUSTODY_ENGINE=census \
+MATURIN_NO_INSTALL_RUST=1 CARGO_NET_OFFLINE=true \
+mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest \
+  tests/test_pyfix_review.py::test_split_payout_fails_closed -q
+```
+
+The local capture/replay helper, two raw snapshots and structured baseline
+comparison are retained under `target/r4-3-verify/payout-repro/` (helper:
+`target/r4-3-verify/repro-injected-payout.py`). This mismatch must be resolved
+in the harness before calling the full census/shadow gates green.
+
+The required worktree-local `TMPDIR` also exposes four pre-existing absolute
+path assumptions in `tests/test_tax_shadow_harness.py::SessionEndTest`:
+`test_a_swallowed_difference_still_fails_the_session`,
+`test_a_test_that_stubs_the_engine_runs_uncompared`,
+`test_an_ld5_refusal_is_counted_and_fails_the_session`, and
+`test_census_fails_an_engine_caller_outside_the_overlay`. Each test's child
+session produces the expected status and route counts, but its test-file path
+is normalized to `target/r4-3-verify/tmp/...`; the assertion expects `in /`
+or `overlay (...): /`. Reproduce with the same environment above and the
+selector `tests/test_tax_shadow_harness.py::SessionEndTest`. The temporary
+root remains in this worktree as required; the tests are not patched or
+deselected to hide the mismatch.
+
+Exactly what remains before accepting this run:
+
+- Implement R4-3's typed component/evidence inputs and outputs, consume the
+  shared rows directly, and reduce their 20,000-row compute spans to at most
+  one third of the recorded 0.33/1.15 s baseline.
+- Remove the remaining row-conversion cost and satisfy full-custody
+  non-regression against back-to-back R4-1 runs.
+- Finish the new-branch mutation audit and the fresh per-seed distinct-input
+  activity report for all twelve generators. Corpus hash equality alone does
+  not close that activity requirement.
+- Resolve the two harness issues above, repeat the required census/shadow and
+  parity gates after R4-3, and run the whole mutation catalog in integration.
 
 ## Authority switch (R4-16)
 

@@ -11546,8 +11546,8 @@
   {
     "id": "REC-OPERATION-03",
     "file": "crates/custody/src/lib.rs",
-    "find": "interpretation::admit_channels(snapshot).map_err(",
-    "replace": "Ok::<(), String>(()).map_err(",
+    "find": "interpretation::admit_typed_channels(snapshot)\n        .map_err(",
+    "replace": "Ok::<(), String>(())\n        .map_err(",
     "rule": "Admit channel facts before authored component facts.",
     "expect_failing": [
       "interpretation_operation_vectors"
@@ -22146,8 +22146,8 @@
   {
     "id": "projection8-row-order",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "    for row in captured {",
-    "replace": "    for row in captured.into_iter().rev() {",
+    "find": "    for (row, confirmation) in snapshot.transactions.iter().zip(captured) {",
+    "replace": "    for (row, confirmation) in snapshot.transactions.iter().zip(captured).rev() {",
     "expect_failing": [
       "projection_adapter_input_families"
     ],
@@ -22176,8 +22176,8 @@
   {
     "id": "projection8-confirmation",
     "file": "crates/custody/src/finalized_projection/runtime.rs",
-    "find": "interpretation::capture_confirmation(&row)?",
-    "replace": "Value::Null",
+    "find": "interpretation::capture_confirmation(&row.json())",
+    "replace": "Ok(Value::Null)",
     "expect_failing": [
       "projection_raw_adapter_vectors"
     ],
@@ -22366,8 +22366,8 @@
   {
     "id": "projection8-capture-before-rates",
     "file": "crates/custody/src/lib.rs",
-    "find": "let projection_rows = finalized_projection::runtime::confirmation_rows(snapshot)",
-    "replace": "let projection_rows = (|| { gates::require_rates(snapshot).map_err(|(code, _)| code.to_owned())?; finalized_projection::runtime::confirmation_rows(snapshot) })()",
+    "find": "let projection_rows = finalized_projection::runtime::typed_confirmations(snapshot)",
+    "replace": "let projection_rows = (|| { gates::require_rates(snapshot).map_err(|(code, _)| code.to_owned())?; finalized_projection::runtime::typed_confirmations(snapshot) })()",
     "expect_failing": [
       "projection_capture_precedes_rates"
     ],
@@ -22932,5 +22932,175 @@
       "projection_slice_pricing_vectors"
     ],
     "rule": "Derived zero rates use Python finite_decimal canonical zero even for wide quantities."
+  },
+  {
+    "id": "R4-row-known-order",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "row.order.push($key::$field);",
+    "replace": "let _ = &$key::$field;",
+    "expect_failing": [
+      "typed_rows_keep_presence_order_unknown_columns_and_storage_classes"
+    ],
+    "rule": "Retain every known column in its original wire position."
+  },
+  {
+    "id": "R4-row-unknown-order",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "row.order.push($key::Unknown);",
+    "replace": "let _ = &$key::Unknown;",
+    "expect_failing": [
+      "typed_rows_keep_presence_order_unknown_columns_and_storage_classes"
+    ],
+    "rule": "Retain unknown columns as ordered input facts."
+  },
+  {
+    "id": "R4-row-bool-storage",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "Ok(SqlValue::Bool(v))",
+    "replace": "Ok(SqlValue::Int(i64::from(v)))",
+    "expect_failing": [
+      "typed_scalars_preserve_historical_transport_shapes"
+    ],
+    "rule": "Keep JSON booleans distinct from stored integers."
+  },
+  {
+    "id": "R4-row-real-sign",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "Ok(SqlValue::Real(v))",
+    "replace": "Ok(SqlValue::Real(v.abs()))",
+    "expect_failing": [
+      "typed_scalars_preserve_historical_transport_shapes"
+    ],
+    "rule": "Preserve the sign of historical REAL zero values."
+  },
+  {
+    "id": "R4-row-wide-integer",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "Self::IntegerText(v) => serde_json::from_str(v).expect(\"JSON integer\"),",
+    "replace": "Self::IntegerText(_) => Value::Null,",
+    "expect_failing": [
+      "typed_scalars_preserve_historical_transport_shapes"
+    ],
+    "rule": "Preserve integers beyond SQLite signed-64 range until the owning admission gate."
+  },
+  {
+    "id": "R4-row-exact-msat",
+    "file": "crates/custody/src/snapshot/book.rs",
+    "find": "if !matches!(value.value(), SqlValue::Null | SqlValue::Int(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_sql_quantities_refuse_float_bool_text_and_out_of_range"
+    ],
+    "rule": "Snapshot quantities admit only exact signed-64 integers or null."
+  },
+  {
+    "id": "R4-row-book-interning",
+    "file": "crates/custody/src/snapshot/identifiers.rs",
+    "find": "return Self(id.clone());",
+    "replace": "return Self(Arc::from(value));",
+    "expect_failing": [
+      "typed_identifiers_share_only_within_their_book"
+    ],
+    "rule": "Repeated book identifiers share one Arc allocation."
+  },
+  {
+    "id": "R4-network-conflicts",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "if conflict || environments.len() > 1 || instances.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_network_inventory_admission"
+    ],
+    "rule": "Incompatible observation histories block accounting admission."
+  },
+  {
+    "id": "R4-network-binding",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "if !binding.is_null()",
+    "replace": "if false && !binding.is_null()",
+    "expect_failing": [
+      "typed_network_inventory_admission"
+    ],
+    "rule": "Current observations must still match the stored network binding."
+  },
+  {
+    "id": "R4-network-empty-epoch",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "&& !crate::codec::truth(&source[\"source_present\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "typed_network_inventory_admission"
+    ],
+    "rule": "A policy epoch with a source is evidence even without private material."
+  },
+  {
+    "id": "R4-network-inventory-type",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "return Err((\n            \"custody_snapshot_invalid\",\n            \"missing network observations\".into(),\n        ));",
+    "replace": "return Ok(());",
+    "expect_failing": [
+      "typed_network_containers_wait_for_accounting_admission"
+    ],
+    "rule": "Malformed network inventories refuse in accounting admission before components."
+  },
+  {
+    "id": "R4-network-payload-domain",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "valid && instances.len() <= 1",
+    "replace": "true",
+    "expect_failing": [
+      "typed_network_evidence_matches_historical_semantics"
+    ],
+    "rule": "Invalid or conflicting network payloads remain invalid."
+  },
+  {
+    "id": "R4-row-i128-storage",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "            fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E> {",
+    "replace": "            fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E> {\n                return Ok(SqlValue::Null);",
+    "expect_failing": [
+      "typed_scalars_preserve_historical_transport_shapes"
+    ],
+    "rule": "Preserve exact wide integers when an existing JSON value uses the i128 visitor."
+  },
+  {
+    "id": "R4-row-u128-storage",
+    "file": "crates/custody/src/snapshot/rows.rs",
+    "find": "            fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E> {",
+    "replace": "            fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E> {\n                return Ok(SqlValue::Null);",
+    "expect_failing": [
+      "typed_scalars_preserve_historical_transport_shapes"
+    ],
+    "rule": "Preserve exact wide integers when an existing JSON value uses the u128 visitor."
+  },
+  {
+    "id": "R4-network-i128-storage",
+    "file": "crates/custody/src/snapshot/network.rs",
+    "find": "                    fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E> {",
+    "replace": "                    fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E> { return Ok($name::Other(SqlValue::Null));",
+    "expect_failing": [
+      "typed_network_scalar_storage_classes"
+    ],
+    "rule": "Keep malformed wide-integer network containers lossless until accounting admission."
+  },
+  {
+    "id": "R4-network-u128-storage",
+    "file": "crates/custody/src/snapshot/network.rs",
+    "find": "                    fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E> {",
+    "replace": "                    fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E> { return Ok($name::Other(SqlValue::Null));",
+    "expect_failing": [
+      "typed_network_scalar_storage_classes"
+    ],
+    "rule": "Keep malformed wide-integer network containers lossless until accounting admission."
+  },
+  {
+    "id": "R4-network-payload-object",
+    "file": "crates/custody/src/gates/network.rs",
+    "find": "            SqlValue::Text(s) if !s.trim_start().starts_with('{') => Self::default(),",
+    "replace": "",
+    "expect_failing": [
+      "typed_network_payload_arrays_are_not_object_facts"
+    ],
+    "rule": "Only JSON objects contribute embedded network facts; positional arrays are ignored."
   }
 ]

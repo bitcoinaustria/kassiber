@@ -12,6 +12,8 @@
 //!     journals-bench --check <requests.jsonl>...
 //!
 //! compares the pipeline's fusion with `custody_with_fusion` for every request.
+//! `--roundtrip <requests.jsonl>...` reconstructs the typed snapshot's v1
+//! CPython text and requires byte equality for every line, including refusals.
 use kassiber_journals::{compute, Fusion};
 use std::io::BufRead;
 use std::time::{Duration, Instant};
@@ -97,10 +99,29 @@ fn check(paths: &[String]) {
     }
 }
 
+fn roundtrip(paths: &[String]) {
+    let mut compared = 0;
+    for path in paths {
+        let file = std::fs::File::open(path).expect("requests");
+        for (index, line) in std::io::BufReader::new(file).lines().enumerate() {
+            let request = line.expect("request line");
+            let snapshot: kassiber_custody::snapshot::BookSnapshot =
+                serde_json::from_str(&request).unwrap_or_else(|e| panic!("{path}:{index}: {e}"));
+            let text = snapshot.text().expect("snapshot text");
+            assert!(text == request, "snapshot bytes differ at {path}:{index}");
+            compared += 1;
+        }
+    }
+    println!("round-tripped {compared} requests; 0 byte differences");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|a| a == "--check") {
         return check(&args[1..]);
+    }
+    if args.first().is_some_and(|a| a == "--roundtrip") {
+        return roundtrip(&args[1..]);
     }
     let path = args.first().expect("snapshot path");
     let runs: usize = args

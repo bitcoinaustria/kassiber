@@ -43,6 +43,12 @@ pub fn admit_channels(snapshot: &Snapshot) -> Result<(), String> {
     channels::compute(snapshot).map(|_| ())
 }
 
+/// Channel context remains an unported neighbour; empty channel populations
+/// require no row materialization. Nonempty contexts retain their exact reader.
+pub fn admit_typed_channels(snapshot: &crate::snapshot::BookSnapshot) -> Result<(), String> {
+    channels::admit_typed(snapshot)
+}
+
 /// Channel lifecycle exclusions used by finalized projection.
 pub(crate) fn channel_non_event_ids(snapshot: &Snapshot) -> Result<Vec<String>, String> {
     let channels = channels::compute(snapshot)?;
