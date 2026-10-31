@@ -212,6 +212,25 @@ class HybridCandidateTest(unittest.TestCase):
         calls = [item for item in self.served() if item["command"] == "wallets.import-bull"]
         self.assertEqual(calls, [{"command":"wallets.import-bull","served_by":"rust"}] * (2 * len(cases)))
 
+    def test_coinfinity_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Coinfinity workspace"))
+        self.ok(self.cli("profiles", "create", "Coinfinity book", "--workspace", "Coinfinity workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Coinfinity workspace", "--profile", "Coinfinity book"))
+        self.ok(self.cli("wallets", "create", "--label", "Coinfinity source", "--kind", "coinfinity"))
+        source = self.data_root.parent / "coinfinity.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_coinfinity_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for mode in ("relevant", "full"):
+                for case in cases:
+                    with self.subTest(mode=mode, case=case["name"]):
+                        source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                        result = self.cli("wallets", "import-coinfinity", "--wallet", "Coinfinity source", "--mode", mode, "--file", str(source))
+                        self.assertIn(result.returncode, (0,1), (result.stdout, result.stderr))
+                        self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-coinfinity"]
+        self.assertEqual(calls, [{"command":"wallets.import-coinfinity","served_by":"rust"}] * (2 * len(cases)))
+
     def test_bull_coordinator_default_wallet_alias_reimport_and_rollback_dump(self):
         from tests.test_cli_smoke import _BULLBITCOIN_EXISTING_CSV, _BULLBITCOIN_ORDERS_CSV
         self.ok(self.cli("init"))
@@ -240,6 +259,41 @@ class HybridCandidateTest(unittest.TestCase):
             self.ok(self.cli("imports", "rollback", "--batch", batch, "--confirm"))
             self.ok(self.cli("wallets", "import-bullbitcoin", "--mode", "full", "--file", str(source)))
         calls=[item for item in self.served() if item["command"] in {"wallets.import-bull","wallets.import-bullbitcoin"}]
+        self.assertEqual(len(calls),6)
+        self.assertTrue(all(item["served_by"]=="rust" for item in calls))
+
+    def test_coinfinity_coordinator_default_economics_reimport_and_rollback_dump(self):
+        import csv
+        import io
+        from tests.test_cli_smoke import _COINFINITY_ORDERS_CSV
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Coinfinity workspace"))
+        self.ok(self.cli("profiles", "create", "Coinfinity book", "--workspace", "Coinfinity workspace", "--fiat-currency", "EUR"))
+        self.ok(self.cli("context", "set", "--workspace", "Coinfinity workspace", "--profile", "Coinfinity book"))
+        self.ok(self.cli("wallets", "create", "--label", "Observed", "--kind", "custom"))
+        source = self.data_root.parent / "coinfinity.csv"
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            source.write_text("date,txid,amount,fee\n2025-01-02,observed,0.002,0.00001\n2025-01-02,ambiguous1,0.003,0\n2025-01-03,ambiguous2,0.003,0\n2025-01-05,outside,0.004,0\n")
+            self.ok(self.cli("wallets", "import-csv", "--wallet", "Observed", "--file", str(source)))
+            output=io.StringIO(); writer=csv.writer(output)
+            writer.writerow(["Order ID","Type","Date","Amount EUR","Amount Crypto","Crypto","Rate EUR","Mining Fee Crypto","Total Fee EUR","Transaction"])
+            for i,amount in enumerate(("0.002","0.003","0.004")):
+                writer.writerow([str(i),"sell","2025-01-02","100",amount,"BTC","","0","1",""])
+            source.write_text(output.getvalue())
+            relevant=self.ok(self.cli("wallets", "import-coinfinity", "--file", str(source)))["data"]
+            self.assertEqual((relevant["matched"],relevant["skipped_ambiguous"],relevant["skipped_unmatched"]),(1,1,1))
+            self.ok(self.cli("wallets", "import-coinfinity", "--mode", "full", "--file", str(source)))
+            repeated=self.ok(self.cli("wallets", "import-coinfinity", "--mode", "full", "--file", str(source)))["data"]
+            self.assertEqual(repeated["imported"],0)
+            batch=self.ok(self.cli("imports", "list", "--wallet", "Coinfinity"))["data"]["batches"][0]["id"]
+            self.ok(self.cli("imports", "rollback", "--batch", batch, "--confirm"))
+            self.ok(self.cli("wallets", "import-coinfinity", "--mode", "full", "--file", str(source)))
+            source.write_text(_COINFINITY_ORDERS_CSV)
+            self.ok(self.cli("wallets", "import-coinfinity", "--file", str(source)))
+            for mode in ("bad"," "):
+                self.assertEqual(self.cli("wallets", "import-coinfinity", "--mode", mode, "--file", str(source)).returncode,2)
+            self.assertEqual(self.cli("wallets", "import-coinfinity", "--wallet", "missing", "--file", str(source)).returncode,1)
+        calls=[item for item in self.served() if item["command"]=="wallets.import-coinfinity"]
         self.assertEqual(len(calls),6)
         self.assertTrue(all(item["served_by"]=="rust" for item in calls))
 

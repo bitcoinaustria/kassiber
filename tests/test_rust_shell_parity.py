@@ -1276,11 +1276,13 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def _file_import_parity(self, command, scenarios, extra=()):
+    def _file_import_parity(self, command, scenarios, extra=(), fiat_currency=None):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
         self.import_run_book()
+        if fiat_currency:
+            self.ok(self.call(False, ["profiles", "set", "--fiat-currency", fiat_currency]))
         database = self.root / "kassiber.sqlite3"
         file = self.home / "input.csv"
         fixed_time = "2025-01-02T03:04:05Z"
@@ -1394,6 +1396,14 @@ class RustRealStoreParityTest(_Roots):
             "bad,header\nx,y\n",
             "",
         ], extra=("--mode", "full"))
+
+    def test_coinfinity_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_cli_smoke import _COINFINITY_ORDERS_CSV, _COINFINITY_LN_ORDERS_CSV
+        self._file_import_parity("import-coinfinity", [
+            _COINFINITY_ORDERS_CSV, _COINFINITY_LN_ORDERS_CSV,
+            "Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n",
+            "bad,header\nx,y\n", "",
+        ], extra=("--mode", "full"), fiat_currency="EUR")
 
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV
@@ -1574,6 +1584,7 @@ class RustShellDriftTest(unittest.TestCase):
         self.check("crates/wallets/scripts/generate_import_vectors.py")
         self.check("crates/wallets/scripts/generate_exchange_vectors.py")
         self.check("crates/wallets/scripts/generate_bull_vectors.py")
+        self.check("crates/wallets/scripts/generate_coinfinity_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

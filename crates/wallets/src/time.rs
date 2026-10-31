@@ -183,6 +183,16 @@ pub fn timestamp(input: &str) -> Result<String, AppError> {
         )
         .with_hint("Use RFC3339 UTC like 2025-01-01T00:00:00Z")
     })?;
+    Ok(render(us))
+}
+pub(crate) fn shifted(input: &str, seconds: i64) -> Result<String, AppError> {
+    let us = instant(input)?.expect("normalized timestamp") + seconds * 1_000_000;
+    if !(0..315_537_897_600_000_000).contains(&us) {
+        return Err(AppError::new("internal_error", "date value out of range"));
+    }
+    Ok(render(us))
+}
+fn render(us: i64) -> String {
     let day = us / 86_400_000_000;
     let seconds = (us % 86_400_000_000) / 1_000_000;
     let mut low = 1;
@@ -201,10 +211,10 @@ pub fn timestamp(input: &str) -> Result<String, AppError> {
         month += 1;
     }
     let date = day - days(year, month, 1).expect("valid month") + 1;
-    Ok(format!(
+    format!(
         "{year:04}-{month:02}-{date:02}T{:02}:{:02}:{:02}Z",
         seconds / 3600,
         seconds / 60 % 60,
         seconds % 60
-    ))
+    )
 }

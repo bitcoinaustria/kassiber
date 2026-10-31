@@ -1909,6 +1909,24 @@ Coinfinity, 21bitcoin, Pocket/Pocketbitcoin and Strike still need their own
 verified importer commits. Batch 2, exchange API syncs, wallet sync and AI
 projections remain out of scope. Python remains the reference.
 
+### R5 exchange file-import batch 1: Coinfinity continuation (partial)
+
+Native `wallets import-coinfinity` includes relevant/full coordinator paths,
+provider-wallet creation/reuse, reference-first matching and conservative
+profile-wide economic matching when both transaction id and invoice are absent.
+The inclusive two-day window preserves Python's timestamp overflow errors;
+ambiguous rows never become guessed ownership. Full imports remain excluded
+commercial evidence with rollback-capable runs and reconciliation flags.
+
+The 248 frozen Python files pin UTF-8-sig/BOM behavior, CSV/header branches,
+broker-side trade reversal, exact fiat/fee arithmetic, integer msat, references,
+timestamps and provenance. Complete typed book dumps compare in both modes;
+additional scenarios cover coordinator admission, dedupe and rollback.
+Verification, 505 native hybrid calls with zero fallbacks, and the 53 added
+mutations (281 wallet mutations killed in total) are recorded in the
+[Coinfinity checkpoint](../reference/rust-shell.md#coinfinity-file-ingestion-continuation-r5-importers-batch-1-partial).
+21bitcoin, Pocket/Pocketbitcoin and Strike remain before batch 1 is complete.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

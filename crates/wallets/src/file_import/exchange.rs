@@ -97,7 +97,7 @@ pub(super) fn wallet(
     if !request.wallet.is_empty() {
         return resolve(conn, &request.profile_id, &request.wallet);
     }
-    let label = "Bull Bitcoin";
+    let (label, kind, _) = request.format.provider();
     let existing: Option<String> = conn
         .query_row(
             "SELECT id FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
@@ -123,7 +123,7 @@ pub(super) fn wallet(
             workspace_id: workspace,
             profile_id: request.profile_id.clone(),
             label: label.into(),
-            kind: "bullbitcoin".into(),
+            kind: kind.into(),
             account: None,
             config: json!({"source_format":request.format.name()}),
         },
@@ -146,6 +146,9 @@ pub(super) fn find_profile(
     exclude: Option<&str>,
 ) -> Result<(Option<Fields>, &'static str), AppError> {
     let external = string(&r.fields, "external_id");
+    if r.economics {
+        return find_economics(conn, profile, r, exclude);
+    }
     if external.is_empty() {
         return Ok((None, "unmatched"));
     }
@@ -190,6 +193,54 @@ pub(super) fn find_profile(
         0 => "unmatched",
         1 => "matched",
         _ => "ambiguous",
+    };
+    Ok((if rows.len() == 1 { rows.pop() } else { None }, status))
+}
+fn find_economics(
+    conn: &Connection,
+    profile: &str,
+    r: &Record,
+    exclude: Option<&str>,
+) -> Result<(Option<Fields>, &'static str), AppError> {
+    let occurred = string(&r.fields, "occurred_at");
+    let start = crate::time::shifted(&occurred, -r.tolerance.max(0))?;
+    let end = crate::time::shifted(&occurred, r.tolerance.max(0))?;
+    let mut stmt = conn.prepare("SELECT w.label AS wallet_label,t.*,(SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=t.id) AS observation_authority_version,(SELECT graph_hash FROM chain_observation_provenance WHERE transaction_id=t.id) AS observation_graph_hash,(SELECT quantity_hash FROM chain_observation_provenance WHERE transaction_id=t.id) AS observation_quantity_hash FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND direction=? AND asset=? AND amount=? AND (? IS NULL OR wallet_id!=?) AND NOT (excluded=1 AND pricing_method=?) AND occurred_at BETWEEN ? AND ? ORDER BY t.created_at DESC LIMIT 2").map_err(database_error)?;
+    let names = stmt
+        .column_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+    let mut rows = stmt
+        .query_map(
+            params![
+                profile,
+                r.fields["direction"],
+                r.fields["asset"],
+                r.fields["amount"],
+                exclude,
+                exclude,
+                r.fields["pricing_method"],
+                start,
+                end
+            ],
+            |row| {
+                names
+                    .iter()
+                    .enumerate()
+                    .map(|(i, k)| Ok((k.clone(), row.get(i)?)))
+                    .collect()
+            },
+        )
+        .map_err(database_error)?
+        .collect::<Result<Vec<Fields>, _>>()
+        .map_err(database_error)?;
+    let status = if rows.is_empty() {
+        "unmatched"
+    } else if rows.len() == 1 {
+        "matched"
+    } else {
+        "ambiguous"
     };
     Ok((if rows.len() == 1 { rows.pop() } else { None }, status))
 }
@@ -264,7 +315,7 @@ pub(super) fn enrich(
     result.extend([
         ("updated_records", Py::List(updated)),
         ("mode", s("relevant")),
-        ("bullbitcoin_rows", Py::from(rows.len() as i64)),
+        (request.format.provider().2, Py::from(rows.len() as i64)),
         ("input_format", s(request.format.name())),
         (
             "file",
@@ -305,6 +356,7 @@ pub(super) fn reconcile(
         )
         .map_err(database_error)?;
     let mut reconciled = Vec::new();
+    let (provider, slug, _) = request.format.provider();
     let mut excluded = 0;
     for (r, (existing, status)) in records.iter().zip(matches) {
         let Some(imported) = find(conn, &wallet.id, r, &fingerprint(&wallet.id, r))? else {
@@ -316,7 +368,7 @@ pub(super) fn reconcile(
             ("unmatched", "wallet-gap", "wallet gap"),
             ("ambiguous", "ambiguous", "ambiguous"),
         ] {
-            let code = format!("bullbitcoin-{suffix}");
+            let code = format!("{slug}-{suffix}");
             let found: Option<String> = conn
                 .query_row(
                     "SELECT id FROM tags WHERE profile_id=? AND code=?",
@@ -329,7 +381,7 @@ pub(super) fn reconcile(
                 id
             } else {
                 let id = ids.next(conn)?;
-                conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES(?,?,?,?,?,?)",params![id,workspace,request.profile_id,code,format!("Bull Bitcoin {label}"),ids.time(conn)?]).map_err(database_error)?;
+                conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES(?,?,?,?,?,?)",params![id,workspace,request.profile_id,code,format!("{provider} {label}"),ids.time(conn)?]).map_err(database_error)?;
                 id
             };
             conn.execute(

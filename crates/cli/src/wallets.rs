@@ -27,7 +27,7 @@ pub fn execute(
             );
         }
         "import-csv" | "import-json" | "import-phoenix" | "import-river" | "import-bull"
-        | "import-bullbitcoin" => {
+        | "import-bullbitcoin" | "import-coinfinity" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,
                 wallet,
@@ -39,6 +39,7 @@ pub fn execute(
                         kassiber_wallets::file_import::Format::Bull
                     }
                     Some("import-river") => kassiber_wallets::file_import::Format::River,
+                    Some("import-coinfinity") => kassiber_wallets::file_import::Format::Coinfinity,
                     Some("import-phoenix") => kassiber_wallets::file_import::Format::Phoenix,
                     _ => kassiber_wallets::file_import::Format::Csv,
                 },

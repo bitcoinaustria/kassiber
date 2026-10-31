@@ -1,5 +1,6 @@
 //! User-triggered, local file ingestion. No provider, transport or AI dispatch.
 mod bull;
+mod coinfinity;
 mod csv;
 mod exchange;
 mod generic_json;
@@ -36,6 +37,7 @@ pub enum Format {
     Phoenix,
     River,
     Bull,
+    Coinfinity,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -45,6 +47,7 @@ impl Format {
             Self::Phoenix => "phoenix_csv",
             Self::River => "river_csv",
             Self::Bull => "bullbitcoin_csv",
+            Self::Coinfinity => "coinfinity_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
@@ -54,6 +57,16 @@ impl Format {
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
+            Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),
+        }
+    }
+    fn evidence(self) -> bool {
+        matches!(self, Self::Bull | Self::Coinfinity)
+    }
+    fn provider(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
+            _ => ("Bull Bitcoin", "bullbitcoin", "bullbitcoin_rows"),
         }
     }
 }
@@ -110,6 +123,7 @@ fn dec(value: &str) -> Result<Decimal, AppError> {
         .parse()
         .map_err(|_| AppError::new("app_error", format!("Invalid decimal value: {value}")))
 }
+#[derive(Clone)]
 enum PriceNumber {
     Finite(Decimal),
     Special(String),
@@ -330,6 +344,8 @@ struct Record {
     fingerprint_identity: Option<String>,
     ignore_fee: bool,
     binding_errors: BTreeMap<String, AppError>,
+    economics: bool,
+    tolerance: i64,
 }
 impl Record {
     fn insert_binding_error(&self) -> Option<&AppError> {
@@ -669,6 +685,11 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
         fingerprint_identity: optional(row, "_tax_platform_row_identity"),
         ignore_fee: !text(row, "_match_existing_ignore_fee").is_empty(),
         binding_errors: BTreeMap::new(),
+        economics: row.get("_exchange_evidence_match_by_economics") == Some(&Json::Bool(true)),
+        tolerance: row
+            .get("_exchange_evidence_match_time_tolerance_seconds")
+            .and_then(Json::as_i64)
+            .unwrap_or(0),
     })
 }
 fn privacy_boundary(row: &Json, raw: &Json) -> Result<Option<String>, AppError> {
@@ -1104,7 +1125,7 @@ pub fn execute(
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
     let mut ids = Ids { identity, at: 0 };
-    let mode = if request.format == Format::Bull {
+    let mode = if request.format.evidence() {
         Some(exchange::mode(request.mode.as_deref())?)
     } else {
         None
@@ -1203,7 +1224,7 @@ fn apply(
             &string(&r.fields, "asset"),
         )?;
     }
-    let reconciliation = if request.format == Format::Bull {
+    let reconciliation = if request.format.evidence() {
         Some(
             records
                 .iter()
@@ -1237,6 +1258,8 @@ fn apply(
                 fingerprint_identity: r.fingerprint_identity.clone(),
                 ignore_fee: false,
                 binding_errors: BTreeMap::new(),
+                economics: r.economics,
+                tolerance: r.tolerance,
             };
             idless
                 .fields
@@ -1395,14 +1418,14 @@ fn apply(
     }
     if !inserted_ids.is_empty() {
         let batch = ids.next(conn)?;
-        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),ids.time(conn)?,inserted_ids.len() as i64,if request.format == Format::Bull { updated_count } else { 0 },skipped]).map_err(database_error)?;
+        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         for id in inserted_ids {
             conn.execute("INSERT OR IGNORE INTO import_batch_transactions(batch_id,transaction_id) VALUES(?,?)",[&batch,&id]).map_err(database_error)?;
         }
         result.push(("import_batch_id", s(batch)));
     }
-    if request.format == Format::Bull {
-        result.push(("bullbitcoin_rows", Py::from(records.len() as i64)));
+    if request.format.evidence() {
+        result.push((request.format.provider().2, Py::from(records.len() as i64)));
     }
     result.push(("input_format", s(format)));
     let path = kassiber_paths::abspath(std::path::Path::new(&request.file))

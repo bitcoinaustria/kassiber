@@ -274,6 +274,9 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port Bull/Bullbitcoin order files with profile-wide commercial matching,
   excluded full-mode reconciliation, complete book-dump/rollback parity and
   named mutation killers. See the Bull continuation in plan 21.
+- [x] Port Coinfinity order files with reference-first/economic matching,
+  excluded full-mode reconciliation, complete book-dump/rollback parity and
+  named mutation killers. See the Coinfinity continuation in plan 21.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.

@@ -63,10 +63,10 @@ pub(super) fn abs(n: PriceNumber) -> Result<PriceNumber, AppError> {
         PriceNumber::Special(v) => Ok(PriceNumber::Special(v.trim_start_matches('-').into())),
     }
 }
-fn zero() -> PriceNumber {
+pub(super) fn zero() -> PriceNumber {
     PriceNumber::Finite(Decimal::zero())
 }
-fn truth(n: &PriceNumber) -> bool {
+pub(super) fn truth(n: &PriceNumber) -> bool {
     !matches!(n, PriceNumber::Finite(v) if v.is_zero())
 }
 pub(super) fn repr(n: &PriceNumber) -> String {
@@ -136,7 +136,7 @@ pub(super) fn arithmetic(
         if negative { "-Infinity" } else { "Infinity" }.into(),
     ))
 }
-fn nonnegative(n: PriceNumber) -> Result<PriceNumber, AppError> {
+pub(super) fn nonnegative(n: PriceNumber) -> Result<PriceNumber, AppError> {
     if repr(&n).contains("NaN") {
         return Err(decimal_error(DecimalError::InvalidOperation));
     }

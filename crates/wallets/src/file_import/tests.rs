@@ -461,6 +461,7 @@ fn assert_import_vectors(cases: &Json) {
             "phoenix_csv" => Format::Phoenix,
             "river_csv" => Format::River,
             "bullbitcoin_csv" => Format::Bull,
+            "coinfinity_csv" => Format::Coinfinity,
             _ => Format::Csv,
         };
         let result = format.load(path.to_str().unwrap()).and_then(|rows| {
@@ -822,6 +823,14 @@ fn river_metadata_failure_rolls_back_observations_tags_and_run() {
 fn python_bull_import_vectors() {
     let cases: Json =
         serde_json::from_str(include_str!("../../tests/vectors/python_bull_imports.json")).unwrap();
+    assert_import_vectors(&cases);
+}
+#[test]
+fn python_coinfinity_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_coinfinity_imports.json"
+    ))
+    .unwrap();
     assert_import_vectors(&cases);
 }
 
@@ -1271,4 +1280,391 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
         version
     );
     assert!(conn.is_autocommit());
+}
+
+fn coinfinity(conn: &Connection, mode: &str) -> Py {
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,0,match\n").unwrap()).unwrap();
+    let records = rows
+        .iter()
+        .map(normalize)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: "coinfinity.csv".into(),
+        format: Format::Coinfinity,
+        mode: Some(mode.into()),
+    };
+    if mode == "relevant" {
+        exchange::enrich(conn, &request, &rows).unwrap()
+    } else {
+        apply(
+            conn,
+            &request,
+            &resolve(conn, "p", "Source").unwrap(),
+            &rows,
+            &records,
+            &mut Ids {
+                identity: None,
+                at: 0,
+            },
+        )
+        .unwrap()
+    }
+}
+
+#[test]
+fn coinfinity_full_exclusion_reconciliation_dedupe_and_readiness() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    let first = coinfinity(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&first, "coinfinity_rows"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&first, "unmatched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions WHERE excluded=1"),
+        1
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 3);
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='coinfinity-wallet-gap' AND label='Coinfinity wallet gap'"),1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        2
+    );
+    let repeat = coinfinity(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "updated"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeat, "unmatched"),
+        Some(&Py::from(1)),
+        "exclude destination wallet before insertion"
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        4
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='q'"
+        ),
+        0
+    );
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('observed','ws','p','other','match','o','2025-01-01','inbound','BTC',200000000,0,'2025-01-01');").unwrap();
+    let matched = coinfinity(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&matched, "matched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='coinfinity-matched' AND label='Coinfinity matched'"),1);
+    conn.execute_batch("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('sibling','ws','p','other','match','s','2025-01-01','inbound','BTC',200000000,0,'2025-01-01');").unwrap();
+    let ambiguous = coinfinity(&conn, "full");
+    assert_eq!(
+        kassiber_envelope::get(&ambiguous, "ambiguous"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE code='coinfinity-ambiguous' AND label='Coinfinity ambiguous'"),1);
+}
+
+#[test]
+fn coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation() {
+    for step in ["tags", "transaction_tags", "import_batches"] {
+        let conn = fixture();
+        conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+            .unwrap();
+        conn.execute_batch(&format!(
+            "CREATE TRIGGER deny BEFORE INSERT ON {step} BEGIN SELECT RAISE(ABORT,'denied');END;"
+        ))
+        .unwrap();
+        let file = std::env::temp_dir().join(format!(
+            "coinfinity-atomic-{}-{step}.csv",
+            std::process::id()
+        ));
+        std::fs::write(&file,"Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,0,atomic\n").unwrap();
+        let result = execute(
+            &conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Source".into(),
+                file: file.to_string_lossy().into_owned(),
+                format: Format::Coinfinity,
+                mode: Some("full".into()),
+            },
+            None,
+        );
+        std::fs::remove_file(file).unwrap();
+        assert!(result.is_err(), "{step}");
+        for table in [
+            "transactions",
+            "tags",
+            "transaction_tags",
+            "import_batches",
+            "import_batch_transactions",
+        ] {
+            assert_eq!(
+                scalar(&conn, &format!("SELECT count(*) FROM {table}")),
+                0,
+                "{step}: {table}"
+            );
+        }
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT journal_input_version FROM profiles WHERE id='p'"
+            ),
+            0,
+            "{step}"
+        );
+        assert!(conn.is_autocommit());
+    }
+}
+
+#[test]
+fn coinfinity_economic_matching_window_scope_exclusion_and_ambiguity() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    import(
+        &conn,
+        "date,txid,amount,fee\n2025-01-02,observed,0.002,0.00001\n",
+    )
+    .unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let record = normalize(&rows[0]).unwrap();
+    let find = |exclude| exchange::find_profile(&conn, "p", &record, exclude).unwrap();
+    assert_eq!(find(None).1, "matched");
+    assert_eq!(find(Some("wallet")).1, "unmatched");
+    for (stamp, status) in [
+        ("2024-12-30T23:59:59Z", "unmatched"),
+        ("2024-12-31T00:00:00Z", "matched"),
+        ("2025-01-04T00:00:00Z", "matched"),
+        ("2025-01-04T00:00:01Z", "unmatched"),
+    ] {
+        conn.execute("UPDATE transactions SET occurred_at=?", [stamp])
+            .unwrap();
+        assert_eq!(find(None).1, status, "{stamp}");
+    }
+    conn.execute(
+        "UPDATE transactions SET occurred_at='2025-01-02T00:00:00Z'",
+        [],
+    )
+    .unwrap();
+    for (column, different, original) in [
+        ("profile_id", "q", "p"),
+        ("direction", "outbound", "inbound"),
+        ("asset", "LBTC", "BTC"),
+        ("amount", "1", "200000000"),
+    ] {
+        conn.execute(&format!("UPDATE transactions SET {column}=?"), [different])
+            .unwrap();
+        assert_eq!(find(None).1, "unmatched", "{column}");
+        conn.execute(&format!("UPDATE transactions SET {column}=?"), [original])
+            .unwrap();
+    }
+    conn.execute(
+        "UPDATE transactions SET excluded=1,pricing_method='coinfinity_csv'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(find(None).1, "unmatched");
+    conn.execute("UPDATE transactions SET pricing_method='other'", [])
+        .unwrap();
+    assert_eq!(find(None).1, "matched");
+    conn.execute(
+        "UPDATE transactions SET excluded=0,pricing_method='coinfinity_csv'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(find(None).1, "matched");
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: "coinfinity.csv".into(),
+        format: Format::Coinfinity,
+        mode: None,
+    };
+    let result = exchange::enrich(&conn, &request, &rows).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "matched"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE fee=1000000 AND fiat_value_exact='101' AND external_id='observed' AND kind='buy'"),1);
+    conn.execute_batch("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,created_at) VALUES('sibling','ws','p','wallet','other','s','2025-01-01T00:00:00Z','inbound','BTC',200000000,0,'2025-01-01');").unwrap();
+    assert_eq!(find(None).1, "ambiguous");
+    assert_eq!(
+        kassiber_envelope::get(
+            &exchange::enrich(&conn, &request, &rows).unwrap(),
+            "skipped_ambiguous"
+        ),
+        Some(&Py::from(1))
+    );
+    // A declared transaction or invoice never falls back to economic matching.
+    let mut identified = record;
+    identified.economics = false;
+    assert_eq!(
+        exchange::find_profile(&conn, "p", &identified, None)
+            .unwrap()
+            .1,
+        "unmatched"
+    );
+}
+
+#[test]
+fn coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_read() {
+    let conn = fixture();
+    let request = || Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: std::env::temp_dir()
+            .join("missing-coinfinity-input.csv")
+            .to_string_lossy()
+            .into_owned(),
+        format: Format::Coinfinity,
+        mode: Some("full".into()),
+    };
+    let identity = Identity {
+        ids: vec![],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("treasury"), "{error:?}");
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 1);
+    conn.execute_batch("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    let identity = Identity {
+        ids: vec!["auto-wallet".into()],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("Import file not found"));
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM wallets WHERE id='auto-wallet' AND kind='coinfinity' AND label='Coinfinity' AND account_id='treasury'"),1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        1
+    );
+    // Existing default labels are reused, even when their kind is custom.
+    conn.execute(
+        "UPDATE wallets SET label='coinfinity',kind='custom' WHERE id='auto-wallet'",
+        [],
+    )
+    .unwrap();
+    let identity = Identity {
+        ids: vec![],
+        timestamp: "2025-01-01T00:00:00Z".into(),
+    };
+    let error = execute(&conn, request(), Some(&identity)).unwrap_err();
+    assert_eq!(error.code, "not_found");
+    assert!(error.message.contains("Import file not found"));
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM wallets"), 2);
+}
+
+#[test]
+fn coinfinity_economic_window_preserves_datetime_overflow() {
+    let conn = fixture();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let mut r = normalize(&rows[0]).unwrap();
+    for date in ["0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z"] {
+        r.fields
+            .insert("occurred_at".into(), Sql::Text(date.into()));
+        let error = exchange::find_profile(&conn, "p", &r, None).unwrap_err();
+        assert_eq!(
+            (error.code.as_str(), error.message.as_str()),
+            ("internal_error", "date value out of range")
+        );
+    }
+    assert_eq!(
+        crate::time::shifted("0001-01-03T00:00:00Z", -172800).unwrap(),
+        "0001-01-01T00:00:00Z"
+    );
+    assert_eq!(
+        crate::time::shifted("9999-12-29T23:59:59Z", 172800).unwrap(),
+        "9999-12-31T23:59:59Z"
+    );
+}
+
+#[test]
+fn coinfinity_declared_references_disable_economic_matching() {
+    let conn = fixture();
+    import(&conn, "date,txid,amount\n2025-01-02,observed,0.002\n").unwrap();
+    for (transaction, invoice) in [
+        ("declared", ""),
+        ("", "lnbc1declared"),
+        ("declared", "lnbc1declared"),
+    ] {
+        let input=format!("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction,LN Invoice\norder,sell,2025-01-02,100,0.002,BTC,,0,1,{transaction},{invoice}\n");
+        let rows = coinfinity::parse(csv::rows(&input).unwrap()).unwrap();
+        let r = normalize(&rows[0]).unwrap();
+        assert!(!r.economics);
+        assert_eq!(
+            exchange::find_profile(&conn, "p", &r, None).unwrap().1,
+            "unmatched"
+        );
+    }
+}
+
+#[test]
+fn coinfinity_economic_matching_preserves_closed_observation() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    import(
+        &conn,
+        "date,txid,amount,fee\n2025-01-02,observed,0.002,0.00001\n",
+    )
+    .unwrap();
+    let raw = r#"{"observer":"synthetic"}"#;
+    conn.execute("UPDATE transactions SET raw_json=?,kind='authored',description='authored',counterparty='authored'",[raw]).unwrap();
+    let id: String = conn
+        .query_row("SELECT id FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    let value = json!({"wallet_id":"wallet","external_id":"observed","direction":"inbound","asset":"BTC","amount":200000000_i64,"fee":1000000,"amount_includes_fee":0});
+    let graph = kassiber_custody::evidence::graph_hash(&json!(raw))
+        .unwrap()
+        .0;
+    let quantity = kassiber_custody::evidence::observed_hash(&value).unwrap().0;
+    conn.execute("INSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES(?,'ws','p','wallet',1,'[]','[]','bitcoin','main','r',?,?,'exact','2025-01-01','2025-01-01')",params![id,graph,quantity]).unwrap();
+    let rows=coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: "coinfinity.csv".into(),
+        format: Format::Coinfinity,
+        mode: None,
+    };
+    let result = exchange::enrich(&conn, &request, &rows).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "matched"),
+        Some(&Py::from(1))
+    );
+    let stored: String = conn
+        .query_row("SELECT raw_json FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(stored, raw);
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='authored' AND description='authored' AND counterparty='authored' AND fiat_value_exact='101' AND fee=1000000"),1);
 }

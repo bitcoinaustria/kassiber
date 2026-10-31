@@ -99,6 +99,12 @@ pub(super) fn load(file: &str) -> Result<Vec<Row>, AppError> {
 }
 
 pub(super) fn read_text(file: &str) -> Result<String, AppError> {
+    read_encoded(file, false)
+}
+pub(super) fn read_sig(file: &str) -> Result<String, AppError> {
+    read_encoded(file, true)
+}
+fn read_encoded(file: &str, sig: bool) -> Result<String, AppError> {
     if !std::path::Path::new(file).exists() {
         return Err(
             AppError::new("not_found", format!("Import file not found: {file}"))
@@ -124,7 +130,12 @@ pub(super) fn read_text(file: &str) -> Result<String, AppError> {
             ),
         )
     })?;
-    let text = std::str::from_utf8(&bytes).map_err(|e| {
+    let bytes = if sig {
+        bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes)
+    } else {
+        &bytes
+    };
+    let text = std::str::from_utf8(bytes).map_err(|e| {
         let at = e.valid_up_to();
         let n = e.error_len().unwrap_or(bytes.len() - at);
         let position = if n == 1 {

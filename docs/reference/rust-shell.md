@@ -1712,6 +1712,115 @@ active custodial coordinator paths have no native parity claim. Batch 2,
 exchange API syncs, wallet sync and AI projections remain outside this work.
 No dependency, provider probe or new egress path is added.
 
+
+## Coinfinity file-ingestion continuation (R5 importers batch 1, partial)
+
+`t3code/r5-importers-4` starts at integrated `dd433e4e` and reapplies Bull as
+`2065ef67c`. Native `wallets import-coinfinity` preserves the broker-side
+buy/sell reversal, BTC aliases (LBTC rows are skipped by the Python reference),
+exact Decimal fiat fees and prices, integer msat quantities, timestamps and raw
+provenance. Its UTF-8-sig decoder strips one BOM before decoding, including
+Python's error offsets for invalid bytes following a BOM. Delimiters, quoting,
+header variants and collisions retain the shared Python CSV behavior.
+
+Relevant mode enriches profile-wide matches without inserting observations.
+Rows with a transaction id or LN invoice match that reference; neither path
+falls back to economics. Rows lacking both match direction, asset and exact
+amount within the inclusive two-day window. Multiple candidates remain
+ambiguous. The matcher excludes the destination wallet and previously excluded
+evidence with the same pricing method. Timestamp-window overflow refuses the
+import. Full mode creates or reuses the default Coinfinity wallet, records
+excluded evidence and replaces reconciliation flags. Provenance, commercial
+matching and tax inputs remain separate; prior reports remain evidence.
+
+The frozen Python oracle has **248 files**. Hybrid tests run each through
+relevant and full mode on a populated book and compare complete typed book
+dumps, responses and refusals with Python. A separate scenario covers default
+wallet creation, matching/ambiguous/out-of-window economics, repeated imports,
+confirmed rollback, mode refusal and wallet resolution. Direct binary cases
+compare wire bytes, complete state and rollback under SQLite and SQLCipher.
+
+The frozen-file tests perform **496 complete-dump comparisons** (248 files in
+both modes). Together with the six coordinator calls and the three existing
+Coinfinity CLI fixtures, hybrid logs require **505 Rust importer calls and zero
+Python fallbacks**. Direct wire/state/rollback comparisons pass ten scenarios
+across SQLite and SQLCipher. Workspace and test-harness fmt/clippy pass with
+warnings denied.
+
+There are **53 added Coinfinity mutations**, retaining the 228 inherited
+entries. Shared CSV/Decimal, fee/reference matching, dedupe, batch membership,
+price/observation authority, error ordering and savepoint mutations remain in
+the catalog. The atomicity mutation also names Coinfinity's rollback test.
+Updated Bull mutation locations follow the shared provider coordinator without
+changing their original rules or named killers.
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-coinfinity-header` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-index` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-buy-direction` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-sell-direction` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-buy-kind` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-sell-kind` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-unknown-type` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-btc-aliases` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-amount` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-fiat` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-fiat-fee` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-btc-fee` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-rate` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-empty-amount` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-buy-fee` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-sell-fee` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-fee-floor` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-date` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-order` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-transaction` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-invoice` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-description` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-reference` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-external` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-reference-priority` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-divide` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-raw` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-pricing_source_kind` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-pricing_provider` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-pricing_quality` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-pricing_method` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-counterparty` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-pair` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-currency` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-bom` | `python_coinfinity_import_vectors` |
+| `W-coinfinity-economic-flag` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-window` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-profile` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-direction` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-asset` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-amount` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-exclude` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-evidence` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-time` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-ambiguity` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-economic-dispatch` | `coinfinity_economic_matching_window_scope_exclusion_and_ambiguity` |
+| `W-coinfinity-default-label` | `coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_read` |
+| `W-coinfinity-default-kind` | `coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_read` |
+| `W-coinfinity-rows` | `coinfinity_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-coinfinity-tags` | `coinfinity_full_exclusion_reconciliation_dedupe_and_readiness` |
+| `W-coinfinity-window-overflow` | `coinfinity_economic_window_preserves_datetime_overflow` |
+| `W-coinfinity-reference-match-precedence` | `coinfinity_declared_references_disable_economic_matching` |
+| `W-coinfinity-economic-observation-commitment` | `coinfinity_economic_matching_preserves_closed_observation` |
+
+All **281 mutations are killed**: the complete 279-entry run and the final
+two-entry audit run each passed their unmutated baselines. Mutation source and
+build trees were removed after recording the summaries. Before this importer,
+Bull's two stale frozen expectations were refreshed against the integrated
+Python reference (price-range refusal and positive zero); Python production
+code is unchanged.
+
+21bitcoin, Pocket/Pocketbitcoin and Strike remain unported at this boundary.
+Batch 2, exchange APIs, sync and AI projections remain outside this checkpoint.
+No dependencies or egress are added.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

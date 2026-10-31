@@ -1486,7 +1486,8 @@
     "replace": "if true {",
     "expect_failing": [
       "river_metadata_failure_rolls_back_observations_tags_and_run",
-      "bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation"
+      "bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation",
+      "coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation"
     ],
     "rule": "River metadata failures roll back the entire import and journal invalidation."
   },
@@ -2043,8 +2044,8 @@
   {
     "id": "W-bull-match-direction",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "direction=? AND asset=?",
-    "replace": "direction!=? AND asset=?",
+    "find": "external_id=? AND direction=? AND asset=?",
+    "replace": "external_id=? AND direction!=? AND asset=?",
     "expect_failing": [
       "bull_profile_matching_fee_precedence_ambiguity_and_scope"
     ],
@@ -2053,8 +2054,8 @@
   {
     "id": "W-bull-match-asset",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "asset=? AND amount=?",
-    "replace": "asset!=? AND amount=?",
+    "find": "external_id=? AND direction=? AND asset=? AND amount=?",
+    "replace": "external_id=? AND direction=? AND asset!=? AND amount=?",
     "expect_failing": [
       "bull_profile_matching_fee_precedence_ambiguity_and_scope"
     ],
@@ -2083,8 +2084,8 @@
   {
     "id": "W-bull-ambiguity",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "LIMIT 2",
-    "replace": "LIMIT 1",
+    "find": "(NOT ? OR fee=?) AND (? IS NULL OR wallet_id!=?) ORDER BY t.created_at DESC LIMIT 2",
+    "replace": "(NOT ? OR fee=?) AND (? IS NULL OR wallet_id!=?) ORDER BY t.created_at DESC LIMIT 1",
     "expect_failing": [
       "bull_profile_matching_fee_precedence_ambiguity_and_scope"
     ],
@@ -2103,8 +2104,8 @@
   {
     "id": "W-bull-exclude-wallet",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "wallet_id!=?",
-    "replace": "wallet_id=?",
+    "find": "(NOT ? OR fee=?) AND (? IS NULL OR wallet_id!=?)",
+    "replace": "(NOT ? OR fee=?) AND (? IS NULL OR wallet_id=?)",
     "expect_failing": [
       "bull_full_exclusion_reconciliation_dedupe_and_readiness"
     ],
@@ -2123,8 +2124,8 @@
   {
     "id": "W-bull-observation-commitment",
     "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "WHERE transaction_id=t.id) AS observation_authority_version",
-    "replace": "WHERE transaction_id='absent') AS observation_authority_version",
+    "find": "SELECT t.*,w.label AS wallet_label,(SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=t.id) AS observation_authority_version",
+    "replace": "SELECT t.*,w.label AS wallet_label,(SELECT authority_version FROM chain_observation_provenance WHERE transaction_id='absent') AS observation_authority_version",
     "expect_failing": [
       "bull_relevant_validates_only_matched_prices_and_preserves_committed_raw"
     ],
@@ -2212,9 +2213,9 @@
   },
   {
     "id": "W-bull-default-label",
-    "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "let label = \"Bull Bitcoin\";",
-    "replace": "let label = \"Bull\";",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Bull Bitcoin\", \"bullbitcoin\", \"bullbitcoin_rows\")",
+    "replace": "(\"Bull\", \"bullbitcoin\", \"bullbitcoin_rows\")",
     "expect_failing": [
       "bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
     ],
@@ -2222,9 +2223,9 @@
   },
   {
     "id": "W-bull-default-kind",
-    "file": "crates/wallets/src/file_import/exchange.rs",
-    "find": "kind: \"bullbitcoin\".into(),",
-    "replace": "kind: \"custom\".into(),",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Bull Bitcoin\", \"bullbitcoin\", \"bullbitcoin_rows\")",
+    "replace": "(\"Bull Bitcoin\", \"custom\", \"bullbitcoin_rows\")",
     "expect_failing": [
       "bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
     ],
@@ -2279,5 +2280,535 @@
       "bull_relevant_preserves_reference_error_order_and_rollback"
     ],
     "rule": "Relevant-mode matching and price validation precede normalization of later rows."
+  },
+  {
+    "id": "W-coinfinity-header",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "exchange::headers(&rows, REQUIRED, \"Coinfinity\")?;",
+    "replace": "// mutation: skip header validation",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity header parser branch."
+  },
+  {
+    "id": "W-coinfinity-index",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "index + 1",
+    "replace": "index + 2",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity index parser branch."
+  },
+  {
+    "id": "W-coinfinity-buy-direction",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"sell\" => (\"inbound\", \"buy\")",
+    "replace": "\"sell\" => (\"outbound\", \"buy\")",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity buy-direction parser branch."
+  },
+  {
+    "id": "W-coinfinity-sell-direction",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"buy\" => (\"outbound\", \"sell\")",
+    "replace": "\"buy\" => (\"inbound\", \"sell\")",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity sell-direction parser branch."
+  },
+  {
+    "id": "W-coinfinity-buy-kind",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"sell\" => (\"inbound\", \"buy\")",
+    "replace": "\"sell\" => (\"inbound\", \"sell\")",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity buy-kind parser branch."
+  },
+  {
+    "id": "W-coinfinity-sell-kind",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"buy\" => (\"outbound\", \"sell\")",
+    "replace": "\"buy\" => (\"outbound\", \"buy\")",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity sell-kind parser branch."
+  },
+  {
+    "id": "W-coinfinity-unknown-type",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "_ => return Ok(None),",
+    "replace": "_ => (\"inbound\", \"buy\"),",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity unknown-type parser branch."
+  },
+  {
+    "id": "W-coinfinity-btc-aliases",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "[\"BTC\", \"XBT\", \"XXBT\"]",
+    "replace": "[\"BTC\", \"LBTC\", \"XXBT\"]",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity btc-aliases parser branch."
+  },
+  {
+    "id": "W-coinfinity-amount",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "number(columns.get(&[\"Amount Crypto\"]))?",
+    "replace": "number(columns.get(&[\"absent\"]))?",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity amount parser branch."
+  },
+  {
+    "id": "W-coinfinity-fiat",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "number(columns.get(&[\"Amount EUR\"]))?",
+    "replace": "number(columns.get(&[\"absent\"]))?",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity fiat parser branch."
+  },
+  {
+    "id": "W-coinfinity-fiat-fee",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "number(columns.get(&[\"Total Fee EUR\"]))?",
+    "replace": "number(columns.get(&[\"absent\"]))?",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity fiat-fee parser branch."
+  },
+  {
+    "id": "W-coinfinity-btc-fee",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "number(columns.get(&[\"Mining Fee Crypto\"]))?",
+    "replace": "number(columns.get(&[\"absent\"]))?",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity btc-fee parser branch."
+  },
+  {
+    "id": "W-coinfinity-rate",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "number(columns.get(&[\"Rate EUR\"]))?",
+    "replace": "number(columns.get(&[\"absent\"]))?",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity rate parser branch."
+  },
+  {
+    "id": "W-coinfinity-empty-amount",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "Coinfinity CSV has a BTC/EUR row with an empty amount",
+    "replace": "Coinfinity CSV has an empty amount",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity empty-amount parser branch."
+  },
+  {
+    "id": "W-coinfinity-buy-fee",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "&abs(fee_fiat)?, '+'",
+    "replace": "&abs(fee_fiat)?, '-'",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity buy-fee parser branch."
+  },
+  {
+    "id": "W-coinfinity-sell-fee",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "&abs(fee_fiat)?, '-'",
+    "replace": "&abs(fee_fiat)?, '+'",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity sell-fee parser branch."
+  },
+  {
+    "id": "W-coinfinity-fee-floor",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "nonnegative(arithmetic(&abs(fiat)?, &abs(fee_fiat)?, '-')?)?",
+    "replace": "arithmetic(&abs(fiat)?, &abs(fee_fiat)?, '-')?",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity fee-floor parser branch."
+  },
+  {
+    "id": "W-coinfinity-date",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "columns.get(&[\"Date\"])",
+    "replace": "columns.get(&[\"absent\"])",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity date parser branch."
+  },
+  {
+    "id": "W-coinfinity-order",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "columns.opt(&[\"Order ID\"])",
+    "replace": "columns.opt(&[\"absent\"])",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity order parser branch."
+  },
+  {
+    "id": "W-coinfinity-transaction",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "columns.opt(&[\"Transaction\"])",
+    "replace": "columns.opt(&[\"absent\"])",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity transaction parser branch."
+  },
+  {
+    "id": "W-coinfinity-invoice",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "columns.opt(&[\"LN Invoice\"])",
+    "replace": "columns.opt(&[\"absent\"])",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity invoice parser branch."
+  },
+  {
+    "id": "W-coinfinity-description",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "columns.opt(&[\"Transaction type\"])",
+    "replace": "columns.opt(&[\"absent\"])",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity description parser branch."
+  },
+  {
+    "id": "W-coinfinity-reference",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"coinfinity:{}:{direction}:{asset}:{}:{index}\"",
+    "replace": "\"coinfinity:{direction}:{}:{asset}:{}:{index}\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity reference parser branch."
+  },
+  {
+    "id": "W-coinfinity-external",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"coinfinity:{reference}\"",
+    "replace": "\"coinfinity:wrong:{reference}\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity external parser branch."
+  },
+  {
+    "id": "W-coinfinity-reference-priority",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": ".or(invoice)",
+    "replace": ".and(invoice)",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity reference-priority parser branch."
+  },
+  {
+    "id": "W-coinfinity-divide",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "arithmetic(&value, &abs(amount.clone())?, '/')",
+    "replace": "arithmetic(&value, &abs(amount.clone())?, '*')",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity divide parser branch."
+  },
+  {
+    "id": "W-coinfinity-raw",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "config::stored_json(&columns.json())",
+    "replace": "\"{}\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity raw parser branch."
+  },
+  {
+    "id": "W-coinfinity-pricing_source_kind",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"pricing_source_kind\":\"exchange_execution\"",
+    "replace": "\"pricing_source_kind\":\"wrong\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity pricing_source_kind parser branch."
+  },
+  {
+    "id": "W-coinfinity-pricing_provider",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"pricing_provider\":\"Coinfinity\"",
+    "replace": "\"pricing_provider\":\"wrong\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity pricing_provider parser branch."
+  },
+  {
+    "id": "W-coinfinity-pricing_quality",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"pricing_quality\":\"exact\"",
+    "replace": "\"pricing_quality\":\"wrong\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity pricing_quality parser branch."
+  },
+  {
+    "id": "W-coinfinity-pricing_method",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"pricing_method\":\"coinfinity_csv\"",
+    "replace": "\"pricing_method\":\"wrong\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity pricing_method parser branch."
+  },
+  {
+    "id": "W-coinfinity-counterparty",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"counterparty\":\"Coinfinity\"",
+    "replace": "\"counterparty\":\"wrong\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity counterparty parser branch."
+  },
+  {
+    "id": "W-coinfinity-pair",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "format!(\"{asset}-EUR\")",
+    "replace": "format!(\"{asset}-USD\")",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity pair parser branch."
+  },
+  {
+    "id": "W-coinfinity-currency",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "\"fiat_currency\":\"EUR\"",
+    "replace": "\"fiat_currency\":\"USD\"",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Preserve the Python Coinfinity currency parser branch."
+  },
+  {
+    "id": "W-coinfinity-bom",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "csv::rows(&csv::read_sig(file)?)",
+    "replace": "csv::rows(&csv::read_text(file)?)",
+    "expect_failing": [
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Strip exactly one UTF-8 BOM before decoding and preserve Python codec error offsets."
+  },
+  {
+    "id": "W-coinfinity-economic-flag",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "if economics {",
+    "replace": "if false && economics {",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Enable economic matching only when both transaction and invoice references are absent."
+  },
+  {
+    "id": "W-coinfinity-window",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "json!(172800)",
+    "replace": "json!(86400)",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Match the inclusive two-day Coinfinity time window."
+  },
+  {
+    "id": "W-coinfinity-economic-profile",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "t.profile_id=? AND direction=?",
+    "replace": "t.profile_id!=? AND direction=?",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-direction",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "t.profile_id=? AND direction=?",
+    "replace": "t.profile_id=? AND direction!=?",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-asset",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "t.profile_id=? AND direction=? AND asset=?",
+    "replace": "t.profile_id=? AND direction=? AND asset!=?",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-amount",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "AND amount=? AND (? IS NULL",
+    "replace": "AND amount!=? AND (? IS NULL",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-exclude",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "wallet_id!=?) AND NOT",
+    "replace": "wallet_id=?) AND NOT",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-evidence",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "NOT (excluded=1 AND pricing_method=?)",
+    "replace": "NOT (excluded=0 AND pricing_method=?)",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-time",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "occurred_at BETWEEN ? AND ?",
+    "replace": "occurred_at NOT BETWEEN ? AND ?",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-ambiguity",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "occurred_at BETWEEN ? AND ? ORDER BY t.created_at DESC LIMIT 2",
+    "replace": "occurred_at BETWEEN ? AND ? ORDER BY t.created_at DESC LIMIT 1",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-economic-dispatch",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "if r.economics {",
+    "replace": "if false && r.economics {",
+    "expect_failing": [
+      "coinfinity_economic_matching_window_scope_exclusion_and_ambiguity"
+    ],
+    "rule": "Keep profile-wide Coinfinity economic matching conservative and unambiguous."
+  },
+  {
+    "id": "W-coinfinity-default-label",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Coinfinity\", \"coinfinity\", \"coinfinity_rows\")",
+    "replace": "(\"Coinfinity wrong\", \"coinfinity\", \"coinfinity_rows\")",
+    "expect_failing": [
+      "coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
+    ],
+    "rule": "Preserve Coinfinity coordinator identity and response fields."
+  },
+  {
+    "id": "W-coinfinity-default-kind",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Coinfinity\", \"coinfinity\", \"coinfinity_rows\")",
+    "replace": "(\"Coinfinity\", \"custom\", \"coinfinity_rows\")",
+    "expect_failing": [
+      "coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_read"
+    ],
+    "rule": "Preserve Coinfinity coordinator identity and response fields."
+  },
+  {
+    "id": "W-coinfinity-rows",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Coinfinity\", \"coinfinity\", \"coinfinity_rows\")",
+    "replace": "(\"Coinfinity\", \"coinfinity\", \"wrong_rows\")",
+    "expect_failing": [
+      "coinfinity_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Coinfinity coordinator identity and response fields."
+  },
+  {
+    "id": "W-coinfinity-tags",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "(\"Coinfinity\", \"coinfinity\", \"coinfinity_rows\")",
+    "replace": "(\"Coinfinity\", \"wrong\", \"coinfinity_rows\")",
+    "expect_failing": [
+      "coinfinity_full_exclusion_reconciliation_dedupe_and_readiness"
+    ],
+    "rule": "Preserve Coinfinity coordinator identity and response fields."
+  },
+  {
+    "id": "W-coinfinity-window-overflow",
+    "file": "crates/wallets/src/time.rs",
+    "find": "if !(0..315_537_897_600_000_000).contains(&us) {",
+    "replace": "if !(0..315_537_897_600_000_000).contains(&us) && false {",
+    "expect_failing": [
+      "coinfinity_economic_window_preserves_datetime_overflow"
+    ],
+    "rule": "Preserve Python datetime overflow refusal when constructing the economic matching window."
+  },
+  {
+    "id": "W-coinfinity-reference-match-precedence",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "transaction.is_none() && invoice.is_none()",
+    "replace": "transaction.is_none() || invoice.is_none()",
+    "expect_failing": [
+      "coinfinity_declared_references_disable_economic_matching"
+    ],
+    "rule": "A transaction id or LN invoice disables economic matching even when no reference matches in the book."
+  },
+  {
+    "id": "W-coinfinity-economic-observation-commitment",
+    "file": "crates/wallets/src/file_import/exchange.rs",
+    "find": "SELECT w.label AS wallet_label,t.*,(SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=t.id)",
+    "replace": "SELECT w.label AS wallet_label,t.*,(SELECT authority_version FROM chain_observation_provenance WHERE transaction_id='absent')",
+    "expect_failing": [
+      "coinfinity_economic_matching_preserves_closed_observation"
+    ],
+    "rule": "Economic price enrichment must preserve the closed chain observation and authored metadata."
   }
 ]
