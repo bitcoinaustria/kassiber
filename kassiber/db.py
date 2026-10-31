@@ -760,6 +760,47 @@ def _migrate_custody_hold_semantics(conn) -> int:
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
 JOURNAL_CALCULATION_SEMANTICS_VERSION = 1
+JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
+
+
+def _migrate_journal_semantics_adoption(conn) -> int:
+    """Require stamped rebuilds of retained journals once, with a local audit.
+
+    The audit, rather than column creation, keys adoption so books opened by
+    the earlier unaudited implementation acquire the same durable sentinel.
+    The caller commits the audit and requirement together.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (JOURNAL_SEMANTICS_ADOPTION_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+    )"""
+    affected_count = int(conn.execute(
+        f"SELECT COUNT(*) FROM profiles WHERE {affected}"
+    ).fetchone()[0])
+    impact = {
+        "schema_version": 1,
+        "migration": JOURNAL_SEMANTICS_ADOPTION_MIGRATION,
+        "required_journal_semantics_version": 1,
+        "affected_profile_count": affected_count,
+        "explanation": "Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.",
+    }
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (JOURNAL_SEMANTICS_ADOPTION_MIGRATION, JOURNAL_SEMANTICS_ADOPTION_MIGRATION,
+         json.dumps(impact, sort_keys=True, separators=(",", ":"))),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles
+        SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+        WHERE {affected}""")
+    return 1
 
 
 def _migrate_partial_payout_semantics(conn) -> int:
@@ -5109,19 +5150,14 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "cost_basis_pool_scope", "TEXT NOT NULL DEFAULT 'global'")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
-    semantics_added = _ensure_column_no_commit(
+    _ensure_column_no_commit(
         conn, "profiles", "required_journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
     )
     _ensure_column_no_commit(
         conn, "profiles", "journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
     )
-    if semantics_added:
-        # Historical builds did not stamp their calculation semantics. The
-        # custody-hold correction applies to every previously processed book.
-        conn.execute("""UPDATE profiles SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
-            WHERE last_processed_at IS NOT NULL OR EXISTS (
-                SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
-            )""")
+    if _migrate_journal_semantics_adoption(conn):
+        conn.commit()
     # Older binaries update these markers but know nothing about semantics.
     # Invalidate the stamp even if they rebuild twice at the same timestamp.
     # Current builders stamp separately, after publishing the input markers.

@@ -75,9 +75,12 @@ Graph readers mark retained custody edges stale, and diagnostics count these
 books as stale. Daemon report reads and maintenance rebuild locally through the
 same canonical freshness check; they do not acquire network consent by doing so.
 A reader missing either semantics column fails closed. Rebuilding with current
-Kassiber restores freshness. The first upgrade also
-requires a stamped rebuild of previously processed books, because the earlier
-custody-hold correction applied to every such book. Raw observations, authored
+Kassiber restores freshness. First-upgrade adoption is keyed on the
+`journal-calculation-semantics-adoption-v1` audit, independently of whether the
+stamp columns already exist. It records the affected book count and required
+version, and requires a stamped rebuild of previously processed books, because
+the earlier custody-hold correction applied to every such book. Adoption leaves
+unprocessed books alone and preserves input markers. Raw observations, authored
 reviews, retained journals and filed snapshots are not rewritten by this guard.
 
 This protects reopen after an older binary rebuilds; it cannot make an older
