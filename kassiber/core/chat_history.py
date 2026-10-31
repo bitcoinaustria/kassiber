@@ -131,9 +131,15 @@ def append_exchange(
     finish_reason: Optional[str] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    user_attachments: Optional[list[dict[str, Any]]] = None,
     commit: bool = True,
 ) -> dict:
-    """Append one user/assistant exchange to an existing session."""
+    """Append one user/assistant exchange to an existing session.
+
+    `user_attachments` is what the user's message shows about the files it
+    first sent (name, type, size), kept in that row's provenance so a
+    reopened chat shows them again. Never a path or a staging token.
+    """
     session = _session_row(conn, profile_id, session_id)
     timestamp = now_iso()
     next_seq = (
@@ -147,9 +153,18 @@ def append_exchange(
         INSERT INTO ai_chat_messages(id, session_id, seq, role, content,
                                      tool_calls_json, provenance_json,
                                      finish_reason, created_at)
-        VALUES(?, ?, ?, 'user', ?, NULL, NULL, NULL, ?)
+        VALUES(?, ?, ?, 'user', ?, NULL, ?, NULL, ?)
         """,
-        (str(uuid.uuid4()), session_id, next_seq, user_content, timestamp),
+        (
+            str(uuid.uuid4()),
+            session_id,
+            next_seq,
+            user_content,
+            json.dumps({"attachments": user_attachments}, sort_keys=True)
+            if user_attachments
+            else None,
+            timestamp,
+        ),
     )
     conn.execute(
         """

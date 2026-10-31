@@ -44,7 +44,7 @@ export function ProviderGlyph({
   dotPosture,
   dotClassName,
 }: {
-  provider: AiProviderRow;
+  provider: Pick<AiProviderRow, "name" | "display_name" | "base_url">;
   className?: string;
   iconClassName?: string;
   /** Overlay a posture dot (rail buttons) in this posture's colour. */

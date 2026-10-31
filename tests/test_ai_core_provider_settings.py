@@ -1,5 +1,5 @@
 """Per-provider settings: enable switch, default reasoning effort, and the
-explicit, scoped runtime check behind Settings → AI providers.
+explicit, scoped runtime check behind Settings → Assistant.
 
 The enable switch and default effort are business state, so the CLI, the
 daemon and the desktop all read them from the same `ai_providers` row; these

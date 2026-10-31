@@ -787,7 +787,9 @@
       "reasonField": "{{label}} aus Aktivität zurückgesetzt",
       "reasonEvent": "Aktivitäts-Ereignis zurückgesetzt",
       "title": "Bearbeitung zurückgesetzt",
-      "body": "Kassiber hat einen neuen Eintrag in der Bearbeitungshistorie mit dem zurückgesetzten Wert geschrieben."
+      "body": "Kassiber hat einen neuen Eintrag in der Bearbeitungshistorie mit dem zurückgesetzten Wert geschrieben.",
+      "failedTitle": "Bearbeitung nicht zurückgesetzt",
+      "failedBody": "Kassiber konnte diese Bearbeitung nicht zurücksetzen. Es wurde nichts geändert."
     }
   },
   "egress": {

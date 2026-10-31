@@ -12,6 +12,7 @@ The rules under test are the ones the feature's auditability rests on:
 """
 
 import base64
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -554,7 +555,12 @@ class AiToolBoundaryTests(unittest.TestCase):
             data_root=tmp,
             runtime_config={},
             main_thread_tasks=queue.Queue(),
-            maintenance_state={"attachment_source_file": path, **state},
+            maintenance_state={
+                "chat_files": [
+                    {"id": "file-1", "source_file": path, "filename": os.path.basename(path), "kind": "delimited"}
+                ],
+                **state,
+            },
         )
 
     def test_the_model_cannot_declare_what_a_column_is_denominated_in(self):
@@ -636,14 +642,21 @@ class AttachmentTurnNoteTests(unittest.TestCase):
     """The note announcing the attachment is prompt text, so it is egress too."""
 
     def _note(self, *, on_device):
-        from kassiber.daemon import _attachment_context_for_model
+        from kassiber.daemon import _chat_files_note
 
-        return _attachment_context_for_model(
+        return _chat_files_note(
             {
-                "attachment_filename": "Umsatzliste_Max.Mustermann_AT61.csv",
-                "attachment_label": "2024 export",
+                "chat_files": [
+                    {
+                        "id": "file-1",
+                        "filename": "Umsatzliste_Max.Mustermann_AT61.csv",
+                        "kind": "delimited",
+                        "label": "2024 export",
+                    }
+                ],
                 "provider_on_device": on_device,
-            }
+            },
+            {},
         )
 
     def test_a_remote_model_is_not_told_the_filename(self):
@@ -666,22 +679,34 @@ class AttachmentTurnNoteTests(unittest.TestCase):
 
 class ChatAttachmentContractTests(unittest.TestCase):
     def test_an_attachment_must_be_a_token_never_a_path(self):
-        from kassiber.daemon import _ai_chat_attachment
+        from kassiber.daemon import _ai_chat_attachments
 
-        self.assertIsNone(_ai_chat_attachment(None))
-        grant = _ai_chat_attachment({"token": " abc ", "label": " Kraken export "})
-        self.assertEqual(grant, {"token": "abc", "label": "Kraken export"})
+        self.assertEqual(_ai_chat_attachments(None), [])
+        grants = _ai_chat_attachments(
+            [{"token": " abc ", "label": " Kraken export "}, {"token": "def", "new": True}]
+        )
+        self.assertEqual(
+            grants,
+            [
+                {"token": "abc", "label": "Kraken export", "new": False},
+                {"token": "def", "label": None, "new": True},
+            ],
+        )
 
         for bad in (
-            {"source_file": "/etc/passwd"},
-            {"token": ""},
-            {"token": "abc", "path": "/etc/passwd"},
-            {"token": "abc", "label": "x" * 501},
-            "abc",
+            {"token": "abc"},
+            [{"source_file": "/etc/passwd"}],
+            [{"token": ""}],
+            [{"token": "abc", "path": "/etc/passwd"}],
+            [{"token": "abc", "label": "x" * 501}],
+            [{"token": "abc", "new": "yes"}],
+            [{"token": "abc"}, {"token": "abc"}],
+            [{"token": f"t{index}"} for index in range(9)],
+            ["abc"],
         ):
             with self.subTest(bad=bad):
                 with self.assertRaises(AppError):
-                    _ai_chat_attachment(bad)
+                    _ai_chat_attachments(bad)
 
     def test_the_ai_tool_cannot_name_a_file(self):
         from kassiber.ai.tools import get_tool
@@ -689,8 +714,10 @@ class ChatAttachmentContractTests(unittest.TestCase):
         entry = get_tool("ui.wallets.analyze_file")
         self.assertIsNotNone(entry)
         self.assertEqual(entry.kind_class, "read_only")
-        properties = set(entry.parameters["properties"])
-        self.assertEqual(properties, {"column_map", "sample_rows"})
+        properties = entry.parameters["properties"]
+        self.assertEqual(set(properties), {"file", "column_map", "sample_rows"})
+        # `file` is an id from the turn's note, never a path.
+        self.assertEqual(properties["file"]["pattern"], "^file-[1-9]$")
         self.assertFalse(entry.parameters["additionalProperties"])
 
     def test_the_tool_reports_a_missing_attachment_rather_than_reading_anything(self):
@@ -713,9 +740,17 @@ class ChatAttachmentContractTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             path = _write(tmp, "opaque.csv", OPAQUE_CSV)
+            label = "export from exchange XYZ, custodial"
             state = {
-                "attachment_source_file": path,
-                "attachment_label": "export from exchange XYZ, custodial",
+                "chat_files": [
+                    {
+                        "id": "file-1",
+                        "source_file": path,
+                        "filename": "opaque.csv",
+                        "kind": "delimited",
+                        "label": label,
+                    }
+                ],
             }
             remote = _analyze_attached_file_for_ai(
                 AiToolRuntime(
@@ -740,7 +775,7 @@ class ChatAttachmentContractTests(unittest.TestCase):
         self.assertNotIn("21000", repr(remote))
         # The user's own description of the file is context they typed, so it
         # travels with either provider.
-        self.assertEqual(remote["user_description"], state["attachment_label"])
+        self.assertEqual(remote["user_description"], label)
         # On-device, the model may see rows — but still not the path.
         self.assertEqual(local["preview"][0]["fiat_value"], "21000")
         self.assertNotIn("path", local["source"])

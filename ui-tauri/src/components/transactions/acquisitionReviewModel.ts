@@ -18,7 +18,7 @@ export async function planAcquisitionReview({ readScope, createPlan, isCurrent, 
     expected_input_version: scope.input_version, operations: [{ type: "kind_override", transaction_id: transactionId,
       kind, reason: "Reviewed acquisition classification" }] });
   if (!isCurrent()) return null;
-  const artifact = reviewArtifact(result, true);
+  const artifact = reviewArtifact(result);
   if (!artifact || artifact.workspace_id !== scope.workspace_id || artifact.profile_id !== scope.profile_id ||
       artifact.base_input_version !== scope.input_version) throw new Error(invalidMessage);
   return artifact;

@@ -36,11 +36,14 @@ import { currentUiLocale } from "@/lib/localeFormat";
 import {
   autoCandidatePeriods,
   historyYearsBetween,
+  isYearPeriod,
   normalizePeriodParam,
-  PERIOD_KEYS,
+  RANGE_PERIOD_KEYS,
   periodParamFromUrl,
   selectablePeriods,
   type PeriodKey,
+  type PeriodYear,
+  type RangePeriodKey,
   type ResolvedPeriodKey,
 } from "@/lib/period";
 import { useUiStore } from "@/store/ui";
@@ -893,32 +896,22 @@ export type ResolvedTimePeriod = ResolvedPeriodKey;
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
 export const periodLabelKeys = {
-  auto: "period.auto",
   "30days": "period.30days",
-  "3months": "period.3months",
-  "6months": "period.6months",
-  ytd: "period.ytd",
   "1year": "period.1year",
-  "5years": "period.5years",
+  "4years": "period.4years",
   "10years": "period.10years",
-  "15years": "period.15years",
   all: "period.all",
-} as const satisfies Record<TimePeriod, string>;
+} as const satisfies Record<RangePeriodKey, string>;
 
 export const periodShortLabelKeys = {
-  auto: "period.short.auto",
   "30days": "period.short.30days",
-  "3months": "period.short.3months",
-  "6months": "period.short.6months",
-  ytd: "period.short.ytd",
   "1year": "period.short.1year",
-  "5years": "period.short.5years",
+  "4years": "period.short.4years",
   "10years": "period.short.10years",
-  "15years": "period.short.15years",
   all: "period.short.all",
-} as const satisfies Record<TimePeriod, string>;
+} as const satisfies Record<RangePeriodKey, string>;
 
-export const periodKeys = PERIOD_KEYS;
+export const periodKeys = RANGE_PERIOD_KEYS;
 
 export const normalizeTimePeriodParam = normalizePeriodParam;
 
@@ -1198,10 +1191,22 @@ export function treasuryHistoryBounds(
   return { oldest, latest };
 }
 
-// Ranges the chart offers: "auto" plus every window the book's history covers.
-export function selectableTimePeriods(snapshot: OverviewSnapshot): TimePeriod[] {
+// Ranges the chart offers: every window the book's history covers.
+export function selectableTimePeriods(snapshot: OverviewSnapshot): RangePeriodKey[] {
   const { oldest, latest } = treasuryHistoryBounds(snapshot);
-  return ["auto", ...selectablePeriods(historyYearsBetween(oldest, latest))];
+  return selectablePeriods(historyYearsBetween(oldest, latest));
+}
+
+// Calendar years (UTC, like the chart) that hold activity, newest first.
+export function treasuryYears(snapshot: OverviewSnapshot): PeriodYear[] {
+  const counts = new Map<number, number>();
+  for (const event of activityTxs(snapshot)) {
+    const year = event.occurredAt.getUTCFullYear();
+    counts.set(year, (counts.get(year) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort(([a], [b]) => b - a)
+    .map(([year, count]) => ({ year, count }));
 }
 
 function portfolioBalanceValuesForPeriod(
@@ -1239,12 +1244,12 @@ export function resolveAutoTimePeriod(
 ): ResolvedTimePeriod {
   if (period !== "auto") return period;
   const events = activityTxs(snapshot);
-  if (!events.length) return "ytd";
+  if (!events.length) return "1year";
   const { oldest, latest } = treasuryHistoryBounds(snapshot, events);
   const meaningfulEvents = events.filter(
     (event) => event.volumeBtc >= AUTO_MIN_ACTIVITY_VOLUME_BTC,
   );
-  if (!meaningfulEvents.length) return "ytd";
+  if (!meaningfulEvents.length) return "1year";
   const targetEventCount = Math.min(
     AUTO_MIN_MEANINGFUL_EVENTS,
     meaningfulEvents.length,
@@ -1306,18 +1311,12 @@ function treasuryPeriodStart(
   const start = new Date(latestDate);
   if (period === "30days") {
     start.setUTCDate(start.getUTCDate() - 30);
-  } else if (period === "3months") {
-    start.setUTCMonth(start.getUTCMonth() - 3);
-  } else if (period === "6months") {
-    start.setUTCMonth(start.getUTCMonth() - 6);
   } else if (period === "1year") {
     start.setUTCFullYear(start.getUTCFullYear() - 1);
-  } else if (period === "5years") {
-    start.setUTCFullYear(start.getUTCFullYear() - 5);
+  } else if (period === "4years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 4);
   } else if (period === "10years") {
     start.setUTCFullYear(start.getUTCFullYear() - 10);
-  } else if (period === "15years") {
-    start.setUTCFullYear(start.getUTCFullYear() - 15);
   } else {
     return null;
   }
@@ -1330,9 +1329,7 @@ export function isTimeInTreasuryPeriod(
   period: TimePeriod | ResolvedTimePeriod,
 ) {
   if (period === "auto" || period === "all") return true;
-  if (period === "ytd") {
-    return time.getUTCFullYear() === latestDate.getUTCFullYear();
-  }
+  if (isYearPeriod(period)) return time.getUTCFullYear() === Number(period);
   const start = treasuryPeriodStart(latestDate, period);
   if (!start) return true;
   return time >= start && time <= latestDate;
@@ -2230,17 +2227,12 @@ export function samplePortfolioPoints(
 ) {
   const maxPoints =
     density === "detailed"
-      ? period === "all" ||
-        period === "5years" ||
-        period === "10years" ||
-        period === "15years"
+      ? period === "all" || period === "4years" || period === "10years"
         ? 720
         : 420
       : period === "30days"
         ? 90
-        : period === "3months"
-          ? 120
-          : 180;
+        : 180;
   if (points.length <= maxPoints) return points;
   const step = Math.ceil((points.length - 2) / Math.max(1, maxPoints - 2));
   return points.filter(
@@ -2254,14 +2246,7 @@ export function formatPortfolioTick(
   period: TimePeriod | ResolvedTimePeriod,
 ) {
   const date = parseSeriesDate(value);
-  if (period === "5years") {
-    return date.toLocaleDateString(currentUiLocale(), {
-      month: "short",
-      year: "2-digit",
-      timeZone: "UTC",
-    });
-  }
-  if (period === "30days" || period === "3months") {
+  if (period === "30days") {
     return date.toLocaleDateString(currentUiLocale(), {
       month: "short",
       day: "numeric",
@@ -2279,13 +2264,8 @@ export function portfolioTickBucket(
   point: PortfolioChartPoint,
   period: TimePeriod | ResolvedTimePeriod,
 ) {
-  if (period === "30days" || period === "3months") return point.month;
-  if (
-    period === "5years" ||
-    period === "10years" ||
-    period === "15years" ||
-    period === "all"
-  ) {
+  if (period === "30days") return point.month;
+  if (period === "4years" || period === "10years" || period === "all") {
     const date = parseSeriesDate(point.date);
     return `${date.getUTCFullYear()}-${Math.floor(date.getUTCMonth() / 3)}`;
   }

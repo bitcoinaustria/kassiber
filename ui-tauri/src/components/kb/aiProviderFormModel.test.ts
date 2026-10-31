@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { autoRemoteReason, httpOrigin } from "./aiProviderFormModel";
+import {
+  AI_PROVIDER_PRESETS,
+  AI_PROVIDER_ROUTES,
+  autoRemoteReason,
+  httpOrigin,
+  presetsForRoute,
+  routeForPreset,
+} from "./aiProviderFormModel";
+
+describe("provider routes", () => {
+  it("offers every preset under exactly one route", () => {
+    const listed = AI_PROVIDER_ROUTES.flatMap((route) => route.presets);
+    expect(new Set(listed).size).toBe(listed.length);
+    expect([...listed].sort()).toEqual(AI_PROVIDER_PRESETS.map((preset) => preset.id).sort());
+  });
+
+  it("keeps a route's presets on its side of the device", () => {
+    // Only a server on this device starts local; an app or an API is remote.
+    for (const preset of presetsForRoute("local")) {
+      expect(preset.kind).toBe("local");
+    }
+    for (const route of ["app", "api"] as const) {
+      for (const preset of presetsForRoute(route)) expect(preset.kind).toBe("remote");
+    }
+    expect(routeForPreset("openai-compatible")).toBe("local");
+    expect(routeForPreset("openai-compatible-api")).toBe("api");
+    expect(routeForPreset("nope")).toBeNull();
+  });
+});
 
 describe("provider form posture from the URL", () => {
   it("moves only a local provider, and only for an address off this device", () => {

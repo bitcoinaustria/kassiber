@@ -1,6 +1,6 @@
 /**
  * The one query behind **Check models**, shared by the model picker and
- * Settings → AI providers so a check in either place fills both.
+ * Settings → Assistant so a check in either place fills both.
  *
  * Privacy contract: the query is always created disabled. Mounting a surface
  * never runs it; only an explicit `refetch()` from a user's click does, and it

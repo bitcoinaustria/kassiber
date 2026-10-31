@@ -27,11 +27,11 @@ import {
   pageHeaderClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
-import { useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonInfinite } from "@/daemon/client";
+import { useActivityHistoryRevert } from "@/hooks/useActivityHistoryRevert";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { cn } from "@/lib/utils";
 import type {
-  HistoryRevertTarget,
   TransactionHistoryList,
   TransactionHistoryStaleSummary,
 } from "@/lib/transactionHistory";
@@ -56,8 +56,7 @@ export function Activity() {
   const [pricingOnly, setPricingOnly] = React.useState(false);
   const [aiOnly, setAiOnly] = React.useState(false);
   const [staleOnly, setStaleOnly] = React.useState(false);
-  const addNotification = useUiStore((state) => state.addNotification);
-  const revertHistory = useDaemonMutation("ui.transactions.history.revert");
+  const { revert: onRevert, isReverting } = useActivityHistoryRevert();
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction({
       notifyStart: true,
@@ -101,26 +100,6 @@ export function Activity() {
   );
   const latestStale = staleQuery.data?.data ?? pages[0]?.data?.stale;
   const staleCount = latestStale?.edit_count ?? 0;
-
-  const onRevert = React.useCallback(
-    async (target: HistoryRevertTarget) => {
-      await revertHistory.mutateAsync({
-        transaction: target.event.transaction_id,
-        event: target.event.id,
-        ...(target.field ? { field: target.field.field } : {}),
-        reason: target.field
-          ? t("activity.revert.reasonField", { label: target.field.label })
-          : t("activity.revert.reasonEvent"),
-      });
-      addNotification({
-        title: t("activity.revert.title"),
-        body: t("activity.revert.body"),
-        tone: "success",
-        dedupeKey: `activity-history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
-      });
-    },
-    [addNotification, revertHistory, t],
-  );
 
   return (
     <div className={screenShellClassName}>
@@ -269,7 +248,7 @@ export function Activity() {
             emptyLabel={t("activity.emptyLabel")}
             showTransaction
             onRevert={onRevert}
-            isReverting={revertHistory.isPending}
+            isReverting={isReverting}
             isLoading={historyQuery.isLoading}
           />
           {historyQuery.hasNextPage ? (

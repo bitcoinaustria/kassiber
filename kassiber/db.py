@@ -1894,7 +1894,8 @@ CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
     final_proposal_json TEXT NOT NULL DEFAULT '{}',
     user_edited INTEGER NOT NULL DEFAULT 0 CHECK(user_edited IN (0, 1)),
     consent_decision TEXT NOT NULL CHECK(consent_decision IN (
-        'allow_once', 'allow_session', 'deny', 'consent_timeout', 'cancelled'
+        'allow_once', 'allow_session', 'mode_auto', 'mode_full_access',
+        'mcp_host', 'deny', 'consent_timeout', 'cancelled'
     )),
     consent_requested_at TEXT NOT NULL,
     consent_decided_at TEXT NOT NULL,
@@ -2635,8 +2636,20 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     api_format TEXT NOT NULL DEFAULT 'auto',
     detected_api_format TEXT,
     omit_store_field INTEGER NOT NULL DEFAULT 0,
+    agent_access TEXT NOT NULL DEFAULT 'full',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_provider_checks (
+    provider_name TEXT NOT NULL REFERENCES ai_providers(name) ON DELETE CASCADE,
+    check_kind TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    stale INTEGER NOT NULL DEFAULT 0,
+    error_json TEXT,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (provider_name, check_kind)
 );
 
 CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
@@ -4143,6 +4156,124 @@ def _ensure_custody_leg_role_schema(conn):
         _rebuild_custody_leg_role_schema(conn)
 
 
+_CUSTODY_AI_AUDIT_COLUMNS = (
+    "id, workspace_id, profile_id, tool_name, daemon_kind, call_id, "
+    "provider_kind, model, gap_id, candidate_fingerprint, facts_sha256, "
+    "model_proposal_json, final_proposal_json, user_edited, consent_decision, "
+    "consent_requested_at, consent_decided_at, execution_status, "
+    "execution_code, result_sha256, review_id, component_id, created_at"
+)
+
+
+def _ensure_custody_ai_audit_consent_schema(conn):
+    """Admit the permission-mode and `mcp_host` consent decisions in the custody AI audit.
+
+    `mode_auto` / `mode_full_access` record a call a chat permission mode
+    approved without asking; `mcp_host` one an external agent's MCP host
+    approved. The CHECK constraint can only widen through a rebuild. Rows are copied
+    unchanged (the table is append-only and nothing references it), and a
+    current table is left alone, so a repeat open writes nothing.
+    """
+
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'custody_ai_assistance_audits'"
+    ).fetchone()
+    if row is None or all(
+        f"'{decision}'" in str(row["sql"] or "")
+        for decision in ("mode_auto", "mode_full_access", "mcp_host")
+    ):
+        return
+    count_before = int(
+        conn.execute("SELECT COUNT(*) FROM custody_ai_assistance_audits").fetchone()[0]
+    )
+    previous_fk = int(conn.execute("PRAGMA foreign_keys").fetchone()[0])
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("DROP TRIGGER IF EXISTS trg_custody_ai_assistance_immutable")
+            conn.execute("DROP INDEX IF EXISTS idx_custody_ai_assistance_profile_time")
+            conn.execute(
+                "ALTER TABLE custody_ai_assistance_audits "
+                "RENAME TO custody_ai_assistance_audits__pre_consent_widening"
+            )
+            conn.execute(
+                """
+                CREATE TABLE custody_ai_assistance_audits (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    tool_name TEXT NOT NULL,
+                    daemon_kind TEXT NOT NULL,
+                    call_id TEXT NOT NULL,
+                    provider_kind TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    gap_id TEXT,
+                    candidate_fingerprint TEXT,
+                    facts_sha256 TEXT NOT NULL CHECK(length(facts_sha256) = 64),
+                    model_proposal_json TEXT NOT NULL DEFAULT '{}',
+                    final_proposal_json TEXT NOT NULL DEFAULT '{}',
+                    user_edited INTEGER NOT NULL DEFAULT 0 CHECK(user_edited IN (0, 1)),
+                    consent_decision TEXT NOT NULL CHECK(consent_decision IN (
+                        'allow_once', 'allow_session', 'mode_auto', 'mode_full_access',
+                        'mcp_host', 'deny', 'consent_timeout', 'cancelled'
+                    )),
+                    consent_requested_at TEXT NOT NULL,
+                    consent_decided_at TEXT NOT NULL,
+                    execution_status TEXT NOT NULL CHECK(execution_status IN (
+                        'executed', 'failed', 'denied', 'cancelled'
+                    )),
+                    execution_code TEXT,
+                    result_sha256 TEXT CHECK(result_sha256 IS NULL OR length(result_sha256) = 64),
+                    review_id TEXT,
+                    component_id TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                f"INSERT INTO custody_ai_assistance_audits ({_CUSTODY_AI_AUDIT_COLUMNS}) "
+                f"SELECT {_CUSTODY_AI_AUDIT_COLUMNS} "
+                "FROM custody_ai_assistance_audits__pre_consent_widening"
+            )
+            count_after = int(
+                conn.execute("SELECT COUNT(*) FROM custody_ai_assistance_audits").fetchone()[0]
+            )
+            if count_after != count_before:
+                raise AppError(
+                    "custody AI audit migration changed the number of records",
+                    code="custody_schema_migration_failed",
+                    details={
+                        "migration": "custody_ai_audit_consent_decisions",
+                        "before": count_before,
+                        "after": count_after,
+                    },
+                    retryable=False,
+                )
+            conn.execute("DROP TABLE custody_ai_assistance_audits__pre_consent_widening")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_custody_ai_assistance_profile_time "
+                "ON custody_ai_assistance_audits(profile_id, created_at DESC, id DESC)"
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_custody_ai_assistance_immutable
+                BEFORE UPDATE ON custody_ai_assistance_audits
+                BEGIN
+                    SELECT RAISE(ABORT, 'custody_ai_assistance_immutable');
+                END
+                """
+            )
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk else 'OFF'}")
+
+
 def _custody_evidence_commitment_id(component_id, ordinal):
     encoded = json.dumps(
         ["custody-component-evidence-v1", str(component_id), int(ordinal)],
@@ -5247,11 +5378,16 @@ def ensure_schema_compat(conn):
     # `store: false`, for an endpoint that refuses it. Off for every existing
     # and new provider; Kassiber never turns it on itself.
     ensure_column(conn, "ai_providers", "omit_store_field", "INTEGER NOT NULL DEFAULT 0")
+    # Whether the assistant may use every tool and unprojected result with this
+    # provider ("full") or only what may leave the device ("restricted"). Full
+    # for every existing and new provider; the user can restrict one.
+    ensure_column(conn, "ai_providers", "agent_access", "TEXT NOT NULL DEFAULT 'full'")
     conn.execute(
         "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
     )
     conn.commit()
     _ensure_ai_provider_secret_refs_schema(conn)
+    _ensure_ai_provider_checks_schema(conn)
     _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
@@ -5418,6 +5554,7 @@ def ensure_schema_compat(conn):
     ):
         conn.commit()
     _ensure_custody_leg_role_schema(conn)
+    _ensure_custody_ai_audit_consent_schema(conn)
     if _ensure_custody_gap_review_transaction_schema(conn):
         conn.commit()
     if _backfill_custody_gap_review_transactions(conn):
@@ -6063,6 +6200,24 @@ def _ensure_ai_provider_secret_refs_schema(conn):
             state TEXT NOT NULL,
             created_at TEXT NOT NULL,
             rotated_at TEXT
+        )
+        """
+    )
+
+
+def _ensure_ai_provider_checks_schema(conn):
+    # The last explicit check of each AI provider (kassiber/ai/provider_checks.py).
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_provider_checks (
+            provider_name TEXT NOT NULL REFERENCES ai_providers(name) ON DELETE CASCADE,
+            check_kind TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            stale INTEGER NOT NULL DEFAULT 0,
+            error_json TEXT,
+            value_json TEXT NOT NULL,
+            PRIMARY KEY (provider_name, check_kind)
         )
         """
     )

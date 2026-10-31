@@ -357,15 +357,16 @@ import additionally checks the reviewed content hash before activation. AI
 schemas accept selected PSBT tokens, never paths or raw PSBT text. Mutations
 require chat consent; acquisition and dataset import require once-only consent
 with server-recomputed effects. Acquisition artifacts and dataset import/
-preview provenance are available only to on-device providers. A provider called
-"local" but hosted on the LAN does not count as on-device.
+preview provenance are available to providers with full agent access (see
+[agent access](ai.md#agent-access)), the default. A provider the user restricted
+does not get them; a provider on this device always has full access.
 Acquisition cannot inherit session-wide consent: every application needs a
 new once-only approval. Denial, cancellation, timeout, changed scope and stale
 plans make no node request. Opening the page, planning, inspecting PSBTs and
 importing local datasets do not contact node or attribution services. Source
 URLs inside dataset manifests remain metadata and are never fetched.
 
-Remote providers receive a curated topology/amount projection with opaque,
+Restricted providers receive a curated topology/amount projection with opaque,
 process-and-book-scoped references, instead of public txids, addresses, outpoints,
 wallet identities or attribution prose. They can use those references to
 continue a query. References expire on daemon restart; re-reading a case creates

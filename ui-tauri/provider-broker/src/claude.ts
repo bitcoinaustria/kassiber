@@ -2,13 +2,13 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { trackChild } from "./cleanup.js";
 import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
-import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
+import type { BrokerImage, BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import {
   providerEnvironment,
   resolveExecutable,
   runProvider,
 } from "./executables.js";
-import { promptFromMessages, systemInstructions } from "./prompt.js";
+import { promptFromMessages, promptImages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
   requestedFastMode,
@@ -289,6 +289,10 @@ export async function chatArgs(
   }
   if (request.model !== "default") args.push("--model", request.model);
   const sessionId = safeSessionCursor(request.options?.provider_session_id);
+  // Attached images need a structured message on stdin; plain text otherwise.
+  if (promptImages(request.messages, sessionId !== undefined).length) {
+    args.push("--input-format", "stream-json");
+  }
   // `--resume=<id>`, never `--resume <id>`: the attached form cannot be
   // reinterpreted as a separate flag even if validation is ever loosened.
   if (sessionId) args.push(`--resume=${sessionId}`);
@@ -304,6 +308,27 @@ export async function chatArgs(
   // Variadic, so it goes last: the CLI consumes tool names until the next flag.
   args.push("--disallowed-tools", ...CLAUDE_DISABLED_TOOLS);
   return args;
+}
+
+/**
+ * The turn as Claude's stream-json input: one user message with the prompt
+ * and the attached images as base64 image blocks, which `--print` answers
+ * once stdin closes.
+ */
+export function claudeStreamInput(prompt: string, images: BrokerImage[]): string {
+  return `${JSON.stringify({
+    type: "user",
+    message: {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        ...images.map((image) => ({
+          type: "image",
+          source: { type: "base64", media_type: image.media_type, data: image.data },
+        })),
+      ],
+    },
+  })}\n`;
 }
 
 export async function claudeChat(
@@ -349,7 +374,9 @@ export async function claudeChat(
     writeEvent({ type: "status", phase: "connecting", message: "Starting Claude" });
     // The prompt goes over stdin, not argv — a long conversation would blow
     // past the platform argument limit.
-    child.stdin.end(promptFromMessages(request.messages, resumed));
+    const prompt = promptFromMessages(request.messages, resumed);
+    const images = promptImages(request.messages, resumed);
+    child.stdin.end(images.length ? claudeStreamInput(prompt, images) : prompt);
 
     const lines = createInterface({ input: child.stdout });
     const exited = new Promise<number | null>((resolve, reject) => {

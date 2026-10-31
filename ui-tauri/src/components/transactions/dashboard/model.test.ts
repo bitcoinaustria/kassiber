@@ -10,9 +10,12 @@ import {
   buildSwapCandidates,
   buildTransactionListFilterArgs,
   buildTransferCandidates,
+  bucketSizeForKey,
   bucketTransactionDate,
   candidateReferenceReviewType,
   dashboardRecordsFromTxs,
+  dashboardRequestPeriod,
+  flowBucketSize,
   flowChartSelectionLabel,
   flowChartSelectionServerFlow,
   flowChartSelectionDateWindow,
@@ -41,7 +44,14 @@ const t = i18n.getFixedT("en", "transactions");
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
+
+// Ranges count back from today; the auto cases below are dated around mid-2026.
+function pinToday(date = new Date(2026, 6, 1, 12)) {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(date);
+}
 
 function transaction(
   overrides: Partial<Transaction> = {},
@@ -206,14 +216,14 @@ describe("transaction dashboard chart selection", () => {
 
   it("uses one exact local-calendar window for charts and list requests", () => {
     const now = new Date(2024, 2, 31, 12, 30);
-    const window = transactionPeriodDateWindow("3months", now);
+    const window = transactionPeriodDateWindow("1year", now);
     expect(window).toEqual({
-      since: new Date(2023, 11, 31, 0, 0, 0, 0).toISOString(),
+      since: new Date(2023, 2, 31, 0, 0, 0, 0).toISOString(),
       until: new Date(2024, 2, 31, 23, 59, 59, 999).toISOString(),
     });
     expect(
       buildTransactionListFilterArgs({
-        period: "3months",
+        period: "1year",
         transactionIds: [],
         flowChartSelection: null,
         quickFilter: null,
@@ -343,8 +353,8 @@ describe("transaction dashboard chart selection", () => {
     const search = serializeTransactionFilterParams("", {
       period: "30days",
       flowChartSelection: {
-        id: "5years:2024-Q1:swaps:all",
-        period: "5years",
+        id: "4years:2024-Q1:swaps:all",
+        period: "4years",
         bucketKey: "2024-Q1",
         bucketLabel: "Q1 2024",
         segment: "swaps",
@@ -364,7 +374,7 @@ describe("transaction dashboard chart selection", () => {
     const parsed = readTransactionScopeParams(search);
     expect(parsed.period).toBe("30days");
     expect(parsed.flowChartSelection).toMatchObject({
-      period: "5years",
+      period: "4years",
       bucketKey: "2024-Q1",
       segment: "swaps",
     });
@@ -424,7 +434,7 @@ describe("transaction dashboard chart selection", () => {
     expect(
       flowChartSelectionDateWindow({
         id: "bucket-2",
-        period: "5years",
+        period: "4years",
         bucketKey: "2026-Q2",
         bucketLabel: "Q2 26",
         segment: "swaps",
@@ -436,13 +446,54 @@ describe("transaction dashboard chart selection", () => {
     });
   });
 
+  it("scopes a chosen year to the book's bounds once the daemon names them", () => {
+    // Before the first answer: the local calendar year.
+    expect(transactionPeriodDateWindow("2033")).toEqual({
+      since: new Date(2033, 0, 1).toISOString(),
+      until: new Date(2034, 0, 1, 0, 0, 0, -1).toISOString(),
+    });
+    // After it: the year as the book counts it (Vienna for an Austrian book).
+    const years = [
+      { year: 2033, count: 4, since: "2032-12-31T23:00:00Z", until: "2033-12-31T22:59:59Z" },
+    ];
+    expect(transactionPeriodDateWindow("2033", undefined, years)).toEqual({
+      since: "2032-12-31T23:00:00Z",
+      until: "2033-12-31T22:59:59Z",
+    });
+    expect(dashboardRequestPeriod("2033")).toBe("1year");
+    expect(dashboardRequestPeriod("4years")).toBe("4years");
+  });
+
+  it("reads a decade and more of everything as one bar per year", () => {
+    expect(flowBucketSize("all", 9)).toBe("quarter");
+    expect(flowBucketSize("all", 12)).toBe("year");
+    expect(flowBucketSize("2033")).toBe("month");
+    expect(bucketSizeForKey("2033")).toBe("year");
+    expect(bucketSizeForKey("2033-Q2")).toBe("quarter");
+    expect(bucketSizeForKey("2033-05")).toBe("month");
+    expect(bucketSizeForKey("2033-05-01")).toBe("day");
+    expect(
+      flowChartSelectionDateWindow({
+        id: "year",
+        period: "all",
+        bucketKey: "2033",
+        bucketLabel: "2033",
+        segment: null,
+        mode: "all",
+      }),
+    ).toEqual({
+      since: new Date(2033, 0, 1).toISOString(),
+      until: new Date(2034, 0, 1, 0, 0, 0, -1).toISOString(),
+    });
+  });
+
   it("hides long-range period tabs for young transaction histories", () => {
     expect(
       availablePeriodKeysForRecords([
         transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
         transaction({ id: "older", date: "2099-08-01T12:00:00Z" }),
       ]),
-    ).toEqual(["30days", "3months", "6months", "ytd", "1year", "all"]);
+    ).toEqual(["30days", "1year", "all"]);
   });
 
   it("reveals longer period tabs as transaction history gets older", () => {
@@ -451,17 +502,7 @@ describe("transaction dashboard chart selection", () => {
         transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
         transaction({ id: "older", date: "2084-01-01T12:00:00Z" }),
       ]),
-    ).toEqual([
-      "30days",
-      "3months",
-      "6months",
-      "ytd",
-      "1year",
-      "5years",
-      "10years",
-      "15years",
-      "all",
-    ]);
+    ).toEqual(["30days", "1year", "4years", "10years", "all"]);
   });
 
   it("reveals long periods when the oldest bound extends a recent workbench slice", () => {
@@ -474,9 +515,6 @@ describe("transaction dashboard chart selection", () => {
 
     expect(availablePeriodKeysForRecords(recentSlice)).toEqual([
       "30days",
-      "3months",
-      "6months",
-      "ytd",
       "1year",
       "all",
     ]);
@@ -485,21 +523,26 @@ describe("transaction dashboard chart selection", () => {
         ...recentSlice,
         transaction({ id: "oldest-bound", date: "2019-01-15T09:00:00Z" }),
       ]),
-    ).toContain("5years");
+    ).toContain("4years");
   });
 
   it("parses auto period URLs and falls back to a stored period", () => {
     vi.stubGlobal("window", { location: { search: "" } });
-    expect(initialPeriodFromUrl("5years")).toBe("5years");
+    expect(initialPeriodFromUrl("4years")).toBe("4years");
 
     vi.stubGlobal("window", { location: { search: "?period=auto" } });
-    expect(initialPeriodFromUrl("5years")).toBe("auto");
+    expect(initialPeriodFromUrl("4years")).toBe("auto");
 
+    // A retired range lands on the closest one offered; a year is a year.
     vi.stubGlobal("window", { location: { search: "?period=6m" } });
-    expect(initialPeriodFromUrl("5years")).toBe("6months");
+    expect(initialPeriodFromUrl("4years")).toBe("1year");
+
+    vi.stubGlobal("window", { location: { search: "?period=2019" } });
+    expect(initialPeriodFromUrl("4years")).toBe("2019");
   });
 
   it("resolves auto to the smallest useful transaction period", () => {
+    pinToday();
     expect(
       resolveAutoPeriodForRecords(
         [
@@ -509,7 +552,7 @@ describe("transaction dashboard chart selection", () => {
         ],
         "auto",
       ),
-    ).toBe("ytd");
+    ).toBe("1year");
 
     expect(
       resolveAutoPeriodForRecords(
@@ -524,34 +567,37 @@ describe("transaction dashboard chart selection", () => {
   });
 
   it("widens auto past a window whose activity draws a single bar", () => {
-    // All of this year's activity sits in one month, so YTD's monthly buckets
-    // stack it into a single bar. Widening to 5 years puts the older cluster in
-    // its own quarter and the chart finally has a shape.
+    // All of this year's activity sits in one month, so twelve months' bars
+    // stack it into a single one. Widening to a halving cycle puts the older
+    // cluster in its own quarter and the chart finally has a shape.
+    pinToday();
     const oneMonthThisYear = [
       transaction({ id: "burst-1", date: "2026-06-10T09:00:00Z" }),
       transaction({ id: "burst-2", date: "2026-06-12T12:00:00Z" }),
       transaction({ id: "burst-3", date: "2026-06-14T17:00:00Z" }),
-      transaction({ id: "older-1", date: "2022-02-10T09:00:00Z" }),
-      transaction({ id: "older-2", date: "2022-02-14T09:00:00Z" }),
-      transaction({ id: "older-3", date: "2022-02-18T09:00:00Z" }),
+      transaction({ id: "older-1", date: "2022-08-10T09:00:00Z" }),
+      transaction({ id: "older-2", date: "2022-08-14T09:00:00Z" }),
+      transaction({ id: "older-3", date: "2022-08-18T09:00:00Z" }),
     ];
-    expect(resolveAutoPeriodForRecords(oneMonthThisYear, "auto")).toBe("5years");
+    expect(resolveAutoPeriodForRecords(oneMonthThisYear, "auto")).toBe("4years");
   });
 
   it("keeps the count-based window when no wider one adds a bar", () => {
     // A single afternoon's activity: zooming out cannot split one bucket, so
     // auto stays on the smallest window that holds it instead of jumping to all.
+    pinToday();
     const sameDay = [
       transaction({ id: "burst-1", date: "2026-06-10T09:00:00Z" }),
       transaction({ id: "burst-2", date: "2026-06-10T12:00:00Z" }),
       transaction({ id: "burst-3", date: "2026-06-10T17:00:00Z" }),
     ];
-    expect(resolveAutoPeriodForRecords(sameDay, "auto")).toBe("ytd");
+    expect(resolveAutoPeriodForRecords(sameDay, "auto")).toBe("1year");
   });
 
   it("takes the history depth it is given over the fetched page's span", () => {
     // A recent page from an old book: without the daemon's bounds auto cannot
     // see past the page and stops at 1 year.
+    pinToday();
     const recentPage = [
       transaction({ id: "r-1", date: "2026-06-28T12:00:00Z" }),
       transaction({ id: "r-2", date: "2026-02-20T12:00:00Z" }),
@@ -575,8 +621,8 @@ describe("transaction dashboard chart selection", () => {
       transaction({ id: "r-3", date: "2026-06-10T12:00:00Z" }),
     ];
     expect(
-      resolveAutoPeriodForRecords(recentPage, "auto", 12, "5years"),
-    ).toBe("5years");
+      resolveAutoPeriodForRecords(recentPage, "auto", 12, "4years"),
+    ).toBe("4years");
   });
 
   it("does not substitute demo rows for an empty live transaction list", () => {
@@ -696,7 +742,7 @@ describe("transaction dashboard chart selection", () => {
   it("labels and matches a whole bucket selection across flows", () => {
     const bucket = bucketTransactionDate(
       new Date("2026-04-15T12:00:00Z"),
-      "1year",
+      "month",
     );
     const selection: FlowChartSelection = {
       id: `1year:${bucket.key}:all:all`,
@@ -740,7 +786,7 @@ describe("transaction dashboard chart selection", () => {
   it("limits whole bucket selections to visible flows in external mode", () => {
     const bucket = bucketTransactionDate(
       new Date("2026-04-15T12:00:00Z"),
-      "1year",
+      "month",
     );
     const selection: FlowChartSelection = {
       id: `1year:${bucket.key}:all:external`,

@@ -21,23 +21,21 @@
  */
 @theme {
   /*
-   * Light-mode custom palette, anchored to the four Bitcoin Austria
-   * Markenfarben: Rot #e3000f, Dunkel #222222, Weiß #ffffff, Hellgrau
-   * #ececec (https://bitcoin-austria.at/marke/). `paper` = Weiß, `paper-2`
-   * = Hellgrau, `ink` = Dunkel, `accent` = Rot. The brand defines a single
-   * grey, so `ink-2/3` (muted text, AA-legible) and `line/line-2` (visible
-   * dividers) are the few derived neutrals functional UI needs. `paper-2` and
-   * `line` sit a step lighter than Hellgrau: at panel size the brand grey read
-   * as a heavy block beside white, not as a surface. `.dark` overrides all of
-   * these below — this is light-mode only.
+   * Light-mode custom palette. The accent is Bitcoin Austria Rot #e3000f
+   * (https://bitcoin-austria.at/marke/); the neutrals follow the light theme
+   * below onto Tailwind's zinc scale, so a hand-made screen and a shadcn
+   * component share one set of greys: `paper` white, `paper-2` zinc-50, `ink`
+   * zinc-900, `ink-2` zinc-700, `ink-3` zinc-500 (AA on white), `line`
+   * zinc-200, `line-2` zinc-300. `.dark` overrides all of these below — this
+   * is light-mode only.
    */
   --color-paper: #ffffff;
-  --color-paper-2: #f4f4f4;
-  --color-ink: #222222;
-  --color-ink-2: #454545;
-  --color-ink-3: #6b6b6b;
-  --color-line: #e2e2e2;
-  --color-line-2: #c4c4c4;
+  --color-paper-2: #fafafa;
+  --color-ink: #18181b;
+  --color-ink-2: #3f3f46;
+  --color-ink-3: #71717a;
+  --color-line: #e4e4e7;
+  --color-line-2: #d4d4d8;
   --color-accent: #e3000f;
   --color-accent-2: #ff4954;
 
@@ -137,16 +135,28 @@
   --glass-opacity: 80%;
   --glass-saturation: 1.14;
   /*
+   * Scrollbars, after T3 Code: a 6px lane with a quiet thumb on a transparent
+   * track, everywhere, instead of the ~15px native bar.
+   */
+  --app-scrollbar-width: 6px;
+  --app-scrollbar-thumb: #d4d4d8;
+  --app-scrollbar-thumb-hover: #a1a1aa;
+  /*
+   * The user's own message, T3 Code's light message surface: one step past
+   * the muted surface, so it stands off the near-white canvas.
+   */
+  --message-surface: #ebebed;
+  /*
    * Side-nav row surfaces, ported from T3Code's sidebar hierarchy. Rows sit on
    * their own scale rather than reusing `--sidebar-accent` for both hover and
    * active, so a hovered row and the current page stay distinguishable.
    * `--sidebar-control-surface` backs inert chrome inside the nav (the ⌘K
    * hint, count pills).
    */
-  --sidebar-muted-foreground: oklch(0.47 0 0);
-  --sidebar-control-surface: oklch(0 0 0 / 5%);
-  --sidebar-row-hover: oklch(0 0 0 / 4%);
-  --sidebar-row-active: oklch(0 0 0 / 7%);
+  --sidebar-muted-foreground: oklch(0.552 0.016 285.938);
+  --sidebar-control-surface: oklch(0.21 0.006 285.885 / 5%);
+  --sidebar-row-hover: oklch(0.21 0.006 285.885 / 4%);
+  --sidebar-row-active: oklch(0.21 0.006 285.885 / 7%);
   /*
    * Bitcoin Austria brand red, theme-aware. The `@theme inline` block at
    * the bottom remaps --color-accent to shadcn's neutral --accent, which
@@ -164,50 +174,48 @@
    */
   --kb-accent-text: #d1000e;
   /*
-   * Light theme, built on the Bitcoin Austria Markenfarben (Rot #e3000f,
-   * Dunkel #222222, Weiß #ffffff, Hellgrau #ececec). It layers the way the
-   * dark theme does: a quiet grey frame (chrome/sidebar), a near-white content
-   * panel, white cards. Edges are translucent ink hairlines rather than solid
-   * greys, so a border reads the same on the chrome, the panel and a card, the
-   * way dark mode's white-at-10% does; the solid mid-grey borders and the
-   * Hellgrau frame made light mode three competing greys. Text is brand
-   * Dunkel, dark buttons (`primary`) are Dunkel, the focus `ring` is ink
-   * (brand Rot stays the brand's accent, not a focus colour), and muted text
-   * stays dark enough for WCAG AA.
+   * Light theme, after T3 Code's default light theme. One cool zinc scale for
+   * every neutral: a near-white canvas (zinc-25) with the chrome and side nav
+   * one step down (zinc-50), white cards and menus, solid zinc-200 hairlines,
+   * zinc-300 field edges, and secondary text at zinc-500. The earlier theme
+   * framed a white panel in a darker grey and mixed flat neutral greys with
+   * near-black text, which glared. Buttons (`primary`) and the focus `ring`
+   * stay zinc-900, since brand red is the accent and red is also the
+   * invalid-field ring.
    * Dark theme is untouched in `.dark` below — this block is light-mode only.
    */
-  --background: oklch(0.987 0 0);
-  --app-chrome: oklch(0.963 0 0);
-  --foreground: oklch(0.252 0 0);
+  --background: oklch(0.992 0 0);
+  --app-chrome: oklch(0.985 0 0);
+  --foreground: oklch(0.21 0.006 285.885);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.252 0 0);
+  --card-foreground: oklch(0.21 0.006 285.885);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.252 0 0);
-  --primary: oklch(0.252 0 0);
+  --popover-foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.21 0.006 285.885);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.955 0 0);
-  --secondary-foreground: oklch(0.252 0 0);
-  --muted: oklch(0.955 0 0);
-  --muted-foreground: oklch(0.47 0 0);
-  --accent: oklch(0.955 0 0);
-  --accent-foreground: oklch(0.252 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0 0 0 / 9%);
-  --input: oklch(0 0 0 / 15%);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.871 0.006 286.286);
   /*
    * Focus is ink, not the brand red. Red is also the invalid-field ring
    * (`aria-invalid` uses `--destructive`), so a red focus ring made every
    * focused input — and every dialog opening onto one — look like an error.
    */
-  --ring: oklch(0.252 0 0 / 55%);
+  --ring: oklch(0.21 0.006 285.885 / 45%);
   --sidebar: var(--app-chrome);
-  --sidebar-foreground: oklch(0.3 0 0);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: oklch(0 0 0 / 7%);
-  --sidebar-accent-foreground: oklch(0.252 0 0);
-  --sidebar-border: oklch(0 0 0 / 8%);
+  --sidebar-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: var(--ring);
 }
 
@@ -238,6 +246,21 @@
   }
   html {
     font-size: calc(16px * var(--app-ui-scale));
+  }
+  ::-webkit-scrollbar {
+    width: var(--app-scrollbar-width);
+    height: var(--app-scrollbar-width);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--app-scrollbar-thumb);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--app-scrollbar-thumb-hover);
   }
   body {
     font-family: var(--font-sans);
@@ -279,69 +302,20 @@
   }
 
   /*
-   * The app icon as a UI tile (KassiberMark): the near-black rounded
-   * square from src-tauri/icons/icon.svg, lit along its top edge and lifted
-   * the way the dock shows it. Dark mode swaps the black contact ring, which
-   * vanishes on a near-black page, for a faint light one.
-   */
-  .kb-mark-tile {
-    border-radius: 22.5%;
-    background-color: #0a0a0a;
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 14%),
-      0 0 0 1px rgb(0 0 0 / 5%),
-      0 14px 34px -12px rgb(0 0 0 / 45%),
-      0 2px 6px rgb(0 0 0 / 12%);
-  }
-
-  .dark .kb-mark-tile {
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 14%),
-      0 0 0 1px rgb(255 255 255 / 10%),
-      0 14px 34px -12px rgb(0 0 0 / 70%);
-  }
-
-  /* Assistant chat conversation scroll — narrower than the ~15px native bar. */
-  .conversation-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent)
-      transparent;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar {
-    width: 10px;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
-    border: 2px solid transparent;
-    border-radius: 9999px;
-    background-clip: padding-box;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
-  }
-
-  /*
-   * Chat composer surface — ported from T3Code's `.chat-composer-glass-host`.
-   * An understated frosted-glass panel: a hairline 1px ring + a soft drop
-   * shadow, over a `--card`-tinted backdrop blur. The `::before` paints the
-   * frosted fill/blur behind the editor + toolbar (which sit at `z-10`), so
-   * the messages scrolling underneath dissolve into the composer. Dark mode
-   * drops the drop shadow (matching T3Code) and raises the surface slightly
-   * off the near-black background instead.
+   * Chat composer surface — ported from T3Code's composer `Host`/`Shell`
+   * after its redesign: a hairline outline and a barely-there drop
+   * (`--shadow-composer: 0 1px 2px rgb(0 0 0 / 5%)`) over a `--card`-tinted
+   * backdrop blur. The `::before` paints the frosted fill/blur behind the
+   * editor + toolbar (which sit at `z-10`), so the messages scrolling
+   * underneath dissolve into the composer. Dark mode drops the shadow, keeps
+   * a faint white outline, and adds a 1px inner highlight along the top.
    */
   .kb-composer-glass {
     --kb-composer-glass-surface: var(--card);
     position: relative;
     box-shadow:
       0 0 0 1px rgb(0 0 0 / 8%),
-      0 12px 28px -18px rgb(0 0 0 / 40%);
+      0 1px 2px rgb(0 0 0 / 5%);
   }
 
   .kb-composer-glass::before {
@@ -366,7 +340,9 @@
       var(--card) 92%,
       var(--foreground)
     );
-    box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 5%),
+      inset 0 1px 0 rgb(255 255 255 / 3%);
   }
 
   /* Graceful fallback where backdrop-filter is unsupported: solid surface. */
@@ -692,75 +668,62 @@
 }
 
 /*
- * Setup's chain artwork (Onboarding/chain), an SVG. Transforms there are in
- * user units, so these "px" are a fraction of a transaction.
- *
- * - A block glides back a slot as the chain advances, and fades as it leaves.
- * - Transactions drop into their block as they arrive, staggered by paint
- *   order; boxes already drawn keep their key, so a new layer never replays
- *   the ones below it.
- * - A found block's outline flashes Bitcoin orange, then fades as it joins
- *   the chain; a new block's outline fades in.
- * - The mempool fades in above the next block and drifts.
- *
- * Reduced motion stops all of it (see the media query below), and the live
- * chain also stops its timer then.
+ * Setup's pixel chain: every move uses discrete steps on the SVG cell grid.
+ * Packets and new transactions flicker; found frames turn Bitcoin orange.
+ * The component pauses its timer and these animations while hidden. The
+ * global reduced-motion rule also stops the transitions and flickers.
  */
 .kb-chain-block {
   transition:
-    transform 900ms cubic-bezier(0.65, 0, 0.35, 1),
-    opacity 700ms ease;
+    transform 600ms steps(4, end),
+    opacity 600ms steps(4, end);
 }
 
 .kb-chain-tx {
-  animation: kb-chain-drop 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
-  animation-delay: min(calc(var(--kb-chain-i, 0) * 5ms), 600ms);
-}
-
-.kb-chain-shell {
-  animation: kb-chain-fade-in 500ms ease both;
-  transition:
-    opacity 600ms ease,
-    stroke 300ms ease;
+  animation: kb-chain-decode 360ms steps(1, end) both;
+  animation-delay: min(calc(var(--kb-chain-i, 0) * 9ms), 300ms);
 }
 
 .kb-chain-found {
-  stroke: #f7931a;
-  stroke-width: 0.035;
-}
-
-.kb-chain-mempool {
-  animation: kb-chain-fade-in 600ms ease both;
+  color: #f7931a;
 }
 
 .kb-chain-pending {
-  animation: kb-chain-float 2.8s ease-in-out infinite alternate;
-  animation-delay: calc(var(--kb-chain-i, 0) * -450ms);
+  animation: kb-chain-packet 1800ms steps(1, end) infinite;
+  animation-delay: calc(var(--kb-chain-i, 0) * -240ms);
 }
 
-@keyframes kb-chain-drop {
-  from {
+.kb-chain-artwork[data-paused] * {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+
+.kb-chain-artwork[data-still] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+@keyframes kb-chain-decode {
+  0%, 40% {
     opacity: 0;
-    transform: translateY(-0.5px);
   }
-  to {
+  20%, 60%, 100% {
     opacity: 1;
-    transform: none;
   }
 }
 
-@keyframes kb-chain-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes kb-chain-float {
-  from {
+@keyframes kb-chain-packet {
+  0%, 100% {
+    opacity: 0.25;
     transform: translateY(0);
   }
-  to {
-    transform: translateY(-0.09px);
+  35% {
+    opacity: 1;
+    transform: translateY(4px);
+  }
+  70% {
+    opacity: 0.5;
+    transform: translateY(8px);
   }
 }
 
@@ -780,6 +743,105 @@
   }
   50% {
     opacity: 1;
+  }
+}
+
+/*
+ * Assistant visuals. Every animation moves `opacity` or `transform` (or an
+ * SVG dash offset) so it stays on the compositor, plays once on entrance,
+ * and is stopped by the reduced-motion rule below. `both` keeps a delayed
+ * element hidden until its turn instead of flashing in first.
+ */
+.kb-visual-rise {
+  animation: kb-visual-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kb-visual-grow-x {
+  animation: kb-visual-grow-x 820ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kb-visual-grow-y {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: kb-visual-grow-y 820ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kb-visual-reveal {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  animation: kb-visual-grow-x 1100ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.kb-visual-fade {
+  animation: kb-visual-fade 700ms ease-out both;
+}
+
+.kb-visual-flow {
+  animation: kb-visual-flow 1.6s linear infinite;
+}
+
+.kb-visual-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: kb-visual-shimmer 1.4s ease-in-out infinite;
+}
+
+.kb-visual-ring {
+  transition: stroke-dashoffset 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes kb-visual-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes kb-visual-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes kb-visual-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes kb-visual-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes kb-visual-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes kb-visual-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
   }
 }
 
@@ -875,6 +937,10 @@
 
   --glass-blur: 16px;
   --glass-saturation: 1.08;
+  --app-scrollbar-thumb: rgb(255 255 255 / 8%);
+  --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+  /* Level with the selected nav row, above the composer's tone. */
+  --message-surface: color-mix(in srgb, oklch(0.145 0 0) 92%, white);
 
   /* Dark rows lift off the near-black chrome with translucent white tints
      rather than fixed greys, so they read the same over the sidebar surface
@@ -921,6 +987,7 @@
   --color-sidebar-control-surface: var(--sidebar-control-surface);
   --color-sidebar-row-hover: var(--sidebar-row-hover);
   --color-sidebar-row-active: var(--sidebar-row-active);
+  --color-message: var(--message-surface);
 }
 
 /* WKWebView (macOS) draws the blue system focus ring as a native element

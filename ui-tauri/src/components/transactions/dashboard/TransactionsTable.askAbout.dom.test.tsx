@@ -88,7 +88,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
     isStreaming: false,
     abort: vi.fn(),
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     queuedPrompts: [],
     sendConsent: vi.fn(),
     selection: { provider: "copilot", model: "default" },
@@ -100,9 +100,9 @@ vi.mock("@/components/ai/assistantSession", () => ({
     sendPrompt: vi.fn(),
     reset: vi.fn(),
     branchFromMessage: vi.fn(),
-    attachment: null,
+    attachments: [],
     attachFile: vi.fn(),
-    clearAttachment: vi.fn(),
+    removeAttachment: vi.fn(),
     focus: null,
     clearFocus: vi.fn(),
   }),
@@ -207,6 +207,7 @@ describe("TransactionsTable row menu", () => {
     );
     useUiStore.setState({
       assistantPanelOpen: false,
+      rightPanelOpen: false,
       assistantClosedBar: "launcher",
     });
   });
@@ -225,7 +226,9 @@ describe("TransactionsTable row menu", () => {
       transactionId: "tx-1",
       date: TXN.date,
     });
-    expect(document.querySelector("aside[data-assistant-panel]")).not.toBeNull();
+    expect(
+      document.querySelector('[data-right-panel][data-active-tab="assistant"]'),
+    ).not.toBeNull();
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
     // The click stayed in the menu: the row behind it did not open its sheet.
@@ -242,7 +245,7 @@ describe("TransactionsTable row menu", () => {
     });
     await settle();
 
-    expect(document.querySelector("aside[data-assistant-panel]")).toBeNull();
+    expect(document.querySelector("[data-right-panel]")).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 

@@ -5,6 +5,10 @@ Use this reference when a Kassiber command shape is easy to get wrong.
 If a command fails with `unrecognized arguments`, stop and use one of these
 templates or `--help` instead of guessing.
 
+Use `kassiber --help` for usage without branding. A bare interactive
+`kassiber` launch may print the pixel wordmark before help; commands and
+machine output never include it.
+
 ## Global flags
 
 Global flags belong before the subcommand tree:
@@ -424,7 +428,7 @@ validation/import through `.start`, then poll `ui.chain_analysis.jobs.get` or
 cancel with `jobs.cancel`; CLI commands are synchronous. Reuse the completed
 dataset preview with its exact source token, normalized manifest and SHA-256
 before requesting import consent. Dataset validation/import and backend
-acquisition require an on-device provider. Public pack labels remain sourced
+acquisition are unavailable when the provider's agent access is restricted. Public pack labels remain sourced
 claims; neither they nor conditional entropy establish custody or tax facts.
 For Payjoin compare both original and proposal tokens with the actual negotiated
 constraints. A passed supported check is not a complete consensus or signing

@@ -200,9 +200,10 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   address beyond the wallet's synced depth (the ownership index derives deeper
   than the sync gap limit) and offer that wallet's scoped rescan; done when the
   quarantine row carries the used index and the rescan is a user action.
-- [ ] Bound `ui.journals.quarantine` for very large quarantines: page items in
-  SQL and compute the whole-book groups, counts and assumptions with aggregate
-  queries; done when the first page no longer parses every stored row.
+- [ ] Bound `ui.journals.quarantine` and `ui.journals.quarantine.groups` for
+  very large quarantines: page items in SQL and compute the whole-book groups,
+  counts and assumptions with aggregate queries; done when the first page no
+  longer parses every stored row.
   Carry downstream rows (`at_swap_basis_carry_unresolved`,
   `bitcoin_rail_carry_basis_unresolved`) and `basis_provenance_incomplete`
   should record their causal transaction ids so the root is exact.
@@ -232,6 +233,10 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 - [ ] Offer a stored import run's `column_map` as the default for a repeat
   platform export, with review before reuse. Generic mapping already exists;
   this task is persistence/reuse in the next import flow.
+- [ ] Extend the assistant's plan-bound attachment import
+  (`core/attachment_import.py`) from `generic_ledger` to the dedicated file
+  formats, each with its own target-wallet and mode rules. Done when a known
+  export attached in chat imports through its own importer, not a column map.
 - [ ] Identify any remaining rates/manual-adjustment workflow gap against the
   existing surfaces before defining an implementation.
 - [ ] Add CLI parity for the desktop's bare-xpub script-type probe, reusing
@@ -298,15 +303,16 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 ## Daemon, contracts, and performance
 
 - [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
-  `authorize_and_execute` path shared by chat and MCP. Executors fail open
-  when the runtime state is empty, and fresh human review for `review.apply`
-  is enforced only by the CLI client. Add per-tool
-  approval modes (`none` / `consent` / `local_human`), explicit per-tool
-  network/destructive/idempotent metadata pinned to the egress table (four
-  mutating tools egress with `egresses=False`), and per-call capability
-  checks, before any mutating tool is exposed through `kassiber mcp`. Consent
-  for MCP mutations must bind a plan digest and input version and must not
-  trust a host-answered elicitation alone.
+  `authorize_and_execute` path shared by chat and MCP. MCP now runs within the
+  user's External agents grant (per-call checks against the broker registry,
+  the Assistant's plan-bound executors, the host's tool approval as consent;
+  see [MCP](docs/reference/mcp.md)), but direct executor callers still fail
+  open when the runtime state is empty, and fresh human review for
+  `review.apply` is enforced only by the CLI client. Network, destructive, and
+  idempotent metadata lives in `kassiber/mcp/tools.py` (`MUTATING_TOOL_HINTS`,
+  `_EGRESS_WITHOUT_FLAG`) instead of the catalog, where four mutating tools
+  that egress still carry `egresses=False`; move it onto `ToolEntry`, pinned
+  to the egress table, and have chat and MCP share it.
 - [ ] Give brokered operations a full agent lifecycle: caller-supplied
   operation ids (reusing the broker's dedupe), `operator operations list`,
   `--no-wait` plus `operator operation result`, precise failed-vs-unknown for

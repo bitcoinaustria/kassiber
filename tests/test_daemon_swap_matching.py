@@ -241,6 +241,28 @@ class DaemonSwapMatchingTest(unittest.TestCase):
             )
             self.assertEqual(envelope["kind"], "ui.transfers.review_context")
             self.assertGreaterEqual(envelope["data"]["summary"]["candidate_count"], 1)
+            self.assertEqual(
+                set(envelope["data"]["exclusions"]),
+                {
+                    "excluded_by_active_pair",
+                    "excluded_by_dismissal",
+                    "excluded_already_journaled",
+                },
+            )
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.dismissals.list",
+                    "request_id": "req-dismissals",
+                    "args": {"workspace": "Main", "profile": "Swap"},
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.dismissals.list")
+            self.assertEqual(envelope["data"]["dismissals"], [])
+            self.assertEqual(
+                envelope["data"]["counts"], {"active": 0, "expired": 0, "permanent": 0}
+            )
 
         self._with_daemon(call)
 
@@ -260,6 +282,20 @@ class DaemonSwapMatchingTest(unittest.TestCase):
             )
             self.assertEqual(envelope["kind"], "ui.transfers.bulk_pair")
             self.assertGreaterEqual(envelope["data"]["summary"]["count"], 1)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.suggest",
+                    "request_id": "req-suggest-after-pair",
+                    "args": {"workspace": "Main", "profile": "Swap"},
+                },
+            )
+            # The paired legs are explained, not silently missing.
+            self.assertEqual(envelope["data"]["counts"]["total"], 0)
+            self.assertEqual(
+                envelope["data"]["exclusions"]["excluded_by_active_pair"], 2
+            )
 
             envelope = _request_response(
                 proc,

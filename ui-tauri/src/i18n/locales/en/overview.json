@@ -298,26 +298,17 @@
   },
   "period": {
     "auto": "Auto",
-    "autoResolved": "Auto: {{period}}",
     "30days": "30 Days",
-    "3months": "3 Months",
-    "6months": "6 Months",
-    "ytd": "YTD",
     "1year": "1 Year",
-    "5years": "5 Years",
+    "4years": "4 Years",
     "10years": "10 Years",
-    "15years": "15 Years",
     "all": "All Time",
     "short": {
       "auto": "Auto",
       "30days": "30D",
-      "3months": "3M",
-      "6months": "6M",
-      "ytd": "YTD",
       "1year": "1Y",
-      "5years": "5Y",
+      "4years": "4Y",
       "10years": "10Y",
-      "15years": "15Y",
       "all": "All"
     }
   },

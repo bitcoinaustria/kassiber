@@ -314,7 +314,7 @@ describe("UtxosInventoryPanel", () => {
     expect(html).not.toContain("₿");
   });
 
-  it("reveals large inventories progressively without a footer pager", () => {
+  it("reveals large inventories a page at a time from the footer", () => {
     const many = Array.from({ length: 60 }, (_, i) => {
       const txid = `${i.toString(16).padStart(2, "0")}${baseInventory.utxos[0].txid.slice(2)}`;
       return {
@@ -328,8 +328,8 @@ describe("UtxosInventoryPanel", () => {
 
     const html = renderPanel({ ...baseInventory, utxos: many });
 
-    expect(html).not.toContain("Showing 50 of 60");
-    expect(html).not.toContain("Show 10 more");
+    expect(html).toContain("Loaded 50 of 60 active UTXOs.");
+    expect(html).toContain("Show 10 more");
     expect(html).toContain("bc1qvisiblerow0");
     expect(html).not.toContain("bc1qhiddenrowmarker");
   });

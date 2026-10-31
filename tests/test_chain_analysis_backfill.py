@@ -275,7 +275,7 @@ def test_remote_model_cannot_manage_or_receive_acquisition_subjects(book):
         assert get_tool(kind) is not None
         with pytest.raises(AppError) as error:
             _chain_analysis_ai_payload(book, runtime, kind, {})
-        assert error.value.code == "local_provider_required"
+        assert error.value.code == "agent_access_restricted"
 
 
 def test_stale_revocation_and_duplicate_worker_cannot_change_grant(book):

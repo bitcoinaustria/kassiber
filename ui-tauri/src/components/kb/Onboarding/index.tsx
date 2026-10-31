@@ -9,8 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { KassiberMark } from "@/components/kb/KassiberMark";
-import { Wordmark } from "@/components/kb/Wordmark";
+import { KassiberWordmark } from "@/components/kb/KassiberWordmark";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   canImportProjects,
@@ -25,6 +24,7 @@ import {
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { setAppUpdateChecksEnabled } from "@/lib/appUpdate";
+import { celebrateBooksCreated } from "@/lib/shellReveal";
 import {
   bookIdentityKey,
   useUiStore,
@@ -466,6 +466,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       form.databaseMode === "sqlcipher" ? form.databasePassphrase : null,
     );
     setIdentity(identity);
+    // The shell's wordmark assembles, rather than decrypts, on first opening
+    // the books this setup just created.
+    celebrateBooksCreated();
     void navigate({ to: "/overview" });
   };
 
@@ -767,9 +770,8 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-3 py-6 sm:px-6 sm:py-10">
             <div className="overflow-hidden rounded-(--kb-radius-window) border border-border bg-card shadow-sm">
               <header className="space-y-4 px-5 pt-5 pb-4 sm:px-6">
-                <div className="flex items-center gap-2">
-                  <KassiberMark className="size-5" />
-                  <Wordmark size={16} />
+                <div className="flex items-center gap-3">
+                  <KassiberWordmark />
                   <span className="text-sm text-ink-3">{t("frame.setup")}</span>
                 </div>
                 <OnboardingStepper

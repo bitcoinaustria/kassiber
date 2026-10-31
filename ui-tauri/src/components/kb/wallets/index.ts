@@ -6,4 +6,7 @@ export {
   UtxosInventoryPanel,
   type WalletUtxosData,
 } from "./UtxosInventoryPanel";
-export { WalletBalanceHistoryCard } from "./WalletBalanceHistoryCard";
+export {
+  WalletBalanceHistory,
+  useWalletBalanceHistory,
+} from "./WalletBalanceHistory";

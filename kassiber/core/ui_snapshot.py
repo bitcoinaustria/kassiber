@@ -7,7 +7,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..backends import (
@@ -26,7 +26,7 @@ from .journal_markers import (
     parse_marker,
     parse_marker_int,
 )
-from ..time_utils import _iso_z, _parse_iso_datetime, now_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -37,6 +37,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from . import wallet_completeness as core_wallet_completeness
 from . import import_batches as core_import_batches
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
@@ -55,6 +56,7 @@ from . import reports as report_builders
 from .austrian import vienna_local_date
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
+from .transaction_lookup import find_transaction, reference_candidate
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
@@ -159,6 +161,9 @@ _UI_TRANSACTION_PERIOD_DAYS = {
     "1year": 365,
     "1years": 365,
     "1y": 365,
+    "4years": 365 * 4,
+    "4year": 365 * 4,
+    "4y": 365 * 4,
     "5years": 365 * 5,
     "5year": 365 * 5,
     "5y": 365 * 5,
@@ -529,7 +534,7 @@ def _coerce_ui_transaction_period(value: str) -> str:
     if normalized in _UI_TRANSACTION_PERIOD_DAYS:
         return normalized
     raise AppError(
-        "period must be one of: 30days, 3months, 6months, ytd, 1year, 5years, 10years, 15years, all",
+        "period must be one of: 30days, 3months, 6months, ytd, 1year, 4years, 5years, 10years, 15years, all",
         code="validation",
         details={"period": value},
         retryable=False,
@@ -1525,6 +1530,35 @@ def _journal_freshness(
     }
 
 
+# One sentence per counter. Several surfaces count the same book on purpose in
+# different ways; each payload says how, so a reader never has to guess why
+# two numbers differ.
+REVIEW_BADGE_DEFINITIONS = {
+    "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+    "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+    "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+    "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+}
+WORKSPACE_HEALTH_COUNT_DEFINITIONS = {
+    "wallets": "Wallets in the active book.",
+    "transactions": "Transaction rows in the active book, excluded rows included.",
+    "active_transactions": "Transaction rows that are not excluded.",
+    "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+    "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+    "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+    "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current.",
+}
+QUARANTINE_SUMMARY_DEFINITIONS = {
+    "count": "Every quarantined row in the active book, one per transaction.",
+    "by_reason": "Rows per stored primary reason.",
+    "attention_count": "Root causes plus downstream rows whose root cannot be named; the review badge's quarantine_attention counts the same set.",
+    "waiting_count": "Downstream rows that wait on a named root and clear when it is resolved.",
+    "blocking_count": "Rows named by a report-blocking custody quantity issue.",
+    "scope_count": "Rows the chosen scope lists; items pages through them.",
+    "group_count": "Cause groups in summary.groups; ui.journals.quarantine.groups counts per root transaction instead.",
+}
+
+
 def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     """Cheap unresolved-item counts for the active book's side-nav hints.
 
@@ -1558,6 +1592,7 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
+        "definitions": dict(REVIEW_BADGE_DEFINITIONS),
     }
 
 
@@ -5144,16 +5179,49 @@ def _dashboard_add_stats(stats: dict[str, Any], tx: dict[str, Any]) -> None:
         }
 
 
-def _dashboard_bucket_key(local_date: datetime, period: str) -> tuple[str, datetime]:
+# "All" over a long book reads as a run of years: a decade of quarters is
+# already forty bars.
+_DASHBOARD_YEARLY_BUCKET_MIN_YEARS = 10
+
+
+def _history_years(earliest: str, end: datetime) -> float:
+    return max(
+        0.0,
+        (
+            end.astimezone(timezone.utc)
+            - _parse_iso_datetime(earliest, "earliest")
+        ).total_seconds()
+        / (365.2425 * 24 * 60 * 60),
+    )
+
+
+def _dashboard_bucket_size(period: str, history_years: float) -> str:
     if period == "30days":
+        return "day"
+    if period == "3months":
+        return "week"
+    if period == "all" and history_years >= _DASHBOARD_YEARLY_BUCKET_MIN_YEARS:
+        return "year"
+    if period in {"4years", "5years", "10years", "15years", "all"}:
+        return "quarter"
+    return "month"
+
+
+def _dashboard_bucket_key(local_date: datetime, size: str) -> tuple[str, datetime]:
+    if size == "day":
         start = local_date.replace(hour=0, minute=0, second=0, microsecond=0)
         return start.date().isoformat(), start
-    if period == "3months":
+    if size == "week":
         start = (local_date - timedelta(days=local_date.weekday())).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         return start.date().isoformat(), start
-    if period in {"5years", "10years", "15years", "all"}:
+    if size == "year":
+        start = local_date.replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        return str(start.year), start
+    if size == "quarter":
         quarter_month = ((local_date.month - 1) // 3) * 3 + 1
         start = local_date.replace(
             month=quarter_month, day=1, hour=0, minute=0, second=0, microsecond=0
@@ -5163,12 +5231,14 @@ def _dashboard_bucket_key(local_date: datetime, period: str) -> tuple[str, datet
     return f"{start.year}-{start.month:02d}", start
 
 
-def _dashboard_next_bucket(value: datetime, period: str) -> datetime:
-    if period == "30days":
+def _dashboard_next_bucket(value: datetime, size: str) -> datetime:
+    if size == "day":
         return value + timedelta(days=1)
-    if period == "3months":
+    if size == "week":
         return value + timedelta(days=7)
-    months = 3 if period in {"5years", "10years", "15years", "all"} else 1
+    if size == "year":
+        return value.replace(year=value.year + 1, month=1, day=1)
+    months = 3 if size == "quarter" else 1
     month_index = value.year * 12 + value.month - 1 + months
     return value.replace(year=month_index // 12, month=month_index % 12 + 1, day=1)
 
@@ -5181,6 +5251,8 @@ def _dashboard_auto_period(
     earliest: str | None,
     end: datetime,
 ) -> str:
+    # Auto settles on a range the page offers: twelve months, a halving
+    # cycle, a decade, or everything.
     if not earliest:
         return "1year"
     rows = conn.execute(
@@ -5194,7 +5266,7 @@ def _dashboard_auto_period(
         [*params, _DASHBOARD_AUTO_MIN_AMOUNT_MSAT],
     ).fetchall()
     if not rows:
-        return "ytd"
+        return "1year"
     dates = [
         _parse_iso_datetime(str(row["occurred_at"]), "occurred_at").astimezone(
             end.tzinfo
@@ -5202,18 +5274,11 @@ def _dashboard_auto_period(
         for row in rows
     ]
 
-    history_years = max(
-        0.0,
-        (
-            end.astimezone(timezone.utc)
-            - _parse_iso_datetime(earliest, "earliest")
-        ).total_seconds()
-        / (365.2425 * 24 * 60 * 60),
-    )
-    candidates = ["ytd", "1year"]
+    history_years = _history_years(earliest, end)
+    candidates = ["1year"]
     candidates.extend(
         period
-        for period, years in (("5years", 5), ("10years", 10), ("15years", 15))
+        for period, years in (("4years", 4), ("10years", 10))
         if history_years >= years * 0.8
     )
     candidates.append("all")
@@ -5222,8 +5287,6 @@ def _dashboard_auto_period(
     def period_start(period: str) -> datetime | None:
         if period == "all":
             return None
-        if period == "ytd":
-            return end.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         years = int(period.removesuffix("years").removesuffix("year"))
         try:
             return end.replace(year=end.year - years)
@@ -5241,7 +5304,8 @@ def _dashboard_auto_period(
         if len(visible) < target_count:
             continue
         qualifying.append(period)
-        buckets = {_dashboard_bucket_key(date, period)[0] for date in visible}
+        size = _dashboard_bucket_size(period, history_years)
+        buckets = {_dashboard_bucket_key(date, size)[0] for date in visible}
         if len(buckets) >= _DASHBOARD_AUTO_MIN_BUCKETS:
             return period
     return qualifying[0] if qualifying else "all"
@@ -5259,6 +5323,59 @@ def _accounting_calendar(conn: sqlite3.Connection, profile_id: str) -> dict[str,
         "accountingYears": accounting_years(conn, profile),
         "accountingTimezone": str(book_timezone(profile).key),
     }
+
+
+def _dashboard_years(
+    conn: sqlite3.Connection,
+    filters: list[str],
+    params: list[Any],
+    tz: ZoneInfo,
+) -> list[dict[str, Any]]:
+    """The calendar years that hold activity, newest first.
+
+    Counted in the page's display calendar, the one its bars and row dates
+    use, so a yearly bar, the year it opens and the menu's count hold the same
+    transactions. Exports keep the book's calendar. An undated transaction is
+    stored at 1970-01-01 and is not a year of its own.
+    """
+    dated = [*filters, "t.occurred_at NOT IN ('', ?)"]
+    dated_params = [*params, UNKNOWN_OCCURRED_AT]
+    row = conn.execute(
+        f"""
+        SELECT MIN(t.occurred_at) AS first, MAX(t.occurred_at) AS last
+        FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(dated)}
+        """,
+        dated_params,
+    ).fetchone()
+    if row is None or not row["first"] or not row["last"]:
+        return []
+    first = _parse_iso_datetime(str(row["first"]), "first").astimezone(tz).year
+    last = _parse_iso_datetime(str(row["last"]), "last").astimezone(tz).year
+    years: list[dict[str, Any]] = []
+    for year in range(last, first - 1, -1):
+        start = datetime(year, 1, 1, tzinfo=tz).astimezone(timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=tz).astimezone(timezone.utc)
+        count = conn.execute(
+            f"""
+            SELECT COUNT(*) FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+            WHERE {' AND '.join(dated)}
+              AND t.occurred_at >= ? AND t.occurred_at < ?
+            """,
+            [*dated_params, _iso_z(start), _iso_z(end)],
+        ).fetchone()[0]
+        if count:
+            years.append(
+                {
+                    "year": year,
+                    "count": int(count),
+                    "since": _iso_z(start),
+                    # Inclusive, whole-second: bounds compare as text, and a
+                    # fractional until would sort before an exact timestamp.
+                    "until": _iso_z(end - timedelta(seconds=1)),
+                }
+            )
+    return years
 
 
 def build_transactions_dashboard_snapshot(
@@ -5296,6 +5413,7 @@ def build_transactions_dashboard_snapshot(
                 "latest": None,
                 "accountingYears": [],
                 "accountingTimezone": "UTC",
+                "years": [],
                 "walletOptions": [],
                 **({"autoPeriod": "1year"} if resolve_auto else {}),
             },
@@ -5308,6 +5426,7 @@ def build_transactions_dashboard_snapshot(
                 "markedSwapCount": 0,
                 "swapCandidateCount": 0,
             },
+            "bucketSize": "month",
             "buckets": [],
             "candidates": [],
             "swapCandidateTotal": 0,
@@ -5460,6 +5579,12 @@ def build_transactions_dashboard_snapshot(
         "pending": 0,
         "failed": 0,
     }
+    bucket_size = _dashboard_bucket_size(
+        period,
+        _history_years(str(history["earliest"]), datetime.now(display_timezone))
+        if history["earliest"]
+        else 0.0,
+    )
     buckets_by_key: dict[str, dict[str, Any]] = {}
     if transactions:
         start_value = (
@@ -5472,9 +5597,9 @@ def build_transactions_dashboard_snapshot(
             if until
             else _parse_iso_datetime(str(history["latest"]), "latest").astimezone(display_timezone)
         )
-        _, cursor = _dashboard_bucket_key(start_value, period)
+        _, cursor = _dashboard_bucket_key(start_value, bucket_size)
         while cursor <= end_value:
-            bucket_key, bucket_start = _dashboard_bucket_key(cursor, period)
+            bucket_key, bucket_start = _dashboard_bucket_key(cursor, bucket_size)
             buckets_by_key[bucket_key] = {
                 "bucketKey": bucket_key,
                 "bucketStart": bucket_start.isoformat(),
@@ -5483,7 +5608,7 @@ def build_transactions_dashboard_snapshot(
                     for segment in ("incoming", "outgoing", "transfers", "swaps")
                 },
             }
-            cursor = _dashboard_next_bucket(cursor, period)
+            cursor = _dashboard_next_bucket(cursor, bucket_size)
 
     external_count = 0
     for tx in transactions:
@@ -5497,7 +5622,7 @@ def build_transactions_dashboard_snapshot(
             str(tx.get("occurredAt") or tx["date"]),
             "occurredAt",
         ).astimezone(display_timezone)
-        bucket_key, bucket_start = _dashboard_bucket_key(tx_date, period)
+        bucket_key, bucket_start = _dashboard_bucket_key(tx_date, bucket_size)
         bucket = buckets_by_key.setdefault(
             bucket_key,
             {
@@ -5576,12 +5701,16 @@ def build_transactions_dashboard_snapshot(
             "earliest": history["earliest"],
             "latest": history["latest"],
             **_accounting_calendar(conn, profile_id),
+            "years": _dashboard_years(
+                conn, base_filters, base_params, display_timezone
+            ),
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
             **({"autoPeriod": auto_period} if auto_period else {}),
         },
         "counts": {"all": len(transactions), "external": external_count},
         "summary": summary,
+        "bucketSize": bucket_size,
         "buckets": list(buckets_by_key.values()),
         "candidates": compact_candidates,
         "swapCandidateTotal": sum(
@@ -5750,6 +5879,28 @@ def build_transactions_resolve_snapshot(
             + order_limit_sql,
             (context["profile_id"], *external_id_candidates),
         ).fetchone()
+    if row is None and ":" in query:
+        # A qualified txid (`<txid>:<wallet>`, `<txid>:in|out`) selects one of
+        # several rows sharing a txid; it still fails closed when it does not.
+        qualified = find_transaction(conn, context["profile_id"], query)
+        if qualified is not None:
+            row = conn.execute(
+                select_sql + " WHERE t.profile_id = ? AND t.id = ?",
+                (context["profile_id"], qualified["id"]),
+            ).fetchone()
+    shared_external_id = []
+    if row is not None and row["external_id"]:
+        shared_external_id = conn.execute(
+            """
+            SELECT t.*, w.label AS lookup_wallet_label
+            FROM transactions t
+            LEFT JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND t.external_id = ?
+            ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
+            LIMIT 21
+            """,
+            (context["profile_id"], row["external_id"]),
+        ).fetchall()
     transaction = _transaction_rows_to_ui(
         conn,
         [row],
@@ -5763,6 +5914,17 @@ def build_transactions_resolve_snapshot(
     return {
         "transaction": transaction,
         "query": query,
+        # Rows sharing the shown row's txid (a CoinJoin, a batched deposit, a
+        # self-transfer). A txid query shows the newest; the others are listed
+        # with their full ids so a caller can pick one exactly.
+        "sharedExternalIdCount": len(shared_external_id),
+        "sharedExternalIdMatches": [
+            reference_candidate(item)
+            for item in shared_external_id[:20]
+            if row is not None and item["id"] != row["id"]
+        ]
+        if len(shared_external_id) > 1
+        else [],
         # The book this reading belongs to, for a change confirmed against it.
         "workspaceId": context["workspace_id"],
         "profileId": context["profile_id"],
@@ -6027,9 +6189,16 @@ def _normalize_snapshot_tax_year(year: Any) -> int:
     return normalized
 
 
+def _sum_eur(values: Iterable[Any]) -> float:
+    total = sum((Decimal(str(value or 0)) for value in values), Decimal("0"))
+    return float(total.quantize(Decimal("0.01")))
+
+
 def build_capital_gains_snapshot(
     conn: sqlite3.Connection,
     tax_year: int | str | None = None,
+    *,
+    asset: str | None = None,
 ) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
@@ -6109,6 +6278,9 @@ def build_capital_gains_snapshot(
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
     params: list[Any] = [profile["id"]]
+    if asset:
+        where.append("je.asset = ?")
+        params.append(str(asset).upper())
     if use_vienna_year:
         from .austrian import tax_year_in_vienna, vienna_tax_year_utc_window
 
@@ -6124,7 +6296,8 @@ def build_capital_gains_snapshot(
     rows = conn.execute(
         f"""
         SELECT je.id, je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
-               je.proceeds, je.gain_loss, je.capital_gains_type
+               je.proceeds, je.gain_loss, je.capital_gains_type,
+               je.transaction_id, je.asset, je.at_category
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE {' AND '.join(where)}
@@ -6138,7 +6311,23 @@ def build_capital_gains_snapshot(
             for row in rows
             if tax_year_in_vienna(str(row["occurred_at"])) == int(latest_year)
         ]
+    # Totals cover the whole year, so a reader of the newest 200 rows does not
+    # mistake their sum for the year's result.
+    totals = {
+        "rowCount": len(rows),
+        "costEur": _sum_eur(row["cost_basis"] for row in rows),
+        "proceedsEur": _sum_eur(
+            row["proceeds"] for row in rows if row["entry_type"] != "income"
+        ),
+        "incomeEur": _sum_eur(
+            row["gain_loss"] or row["proceeds"]
+            for row in rows
+            if row["entry_type"] == "income"
+        ),
+        "gainLossEur": _sum_eur(row["gain_loss"] for row in rows),
+    }
     rows = rows[:200]
+    from .austrian import kennzahl_for_disposal_category
     from .report_explanation import result_reference
     lots = [
         {
@@ -6161,6 +6350,17 @@ def build_capital_gains_snapshot(
                 if str(row["capital_gains_type"] or "").lower() == "long"
                 else "ST"
             ),
+            "transactionId": row["transaction_id"],
+            "asset": row["asset"],
+            "entryType": row["entry_type"],
+            "quantityMsat": abs(int(row["quantity"] or 0)),
+            "gainLossEur": float(row["gain_loss"] or 0),
+            "atCategory": row["at_category"] or None,
+            "kennzahl": (
+                kennzahl_for_disposal_category(row["at_category"])
+                if use_vienna_year and row["at_category"]
+                else None
+            ),
         }
         for row in reversed(rows)
     ]
@@ -6169,7 +6369,9 @@ def build_capital_gains_snapshot(
         "year": latest_year,
         "availableYears": available_years,
         "method": _profile_policy_method(profile),
+        "asset": str(asset).upper() if asset else None,
         "lots": lots,
+        "totals": totals,
         "neutralSwapLots": _capital_gains_neutral_swap_rows(
             conn,
             profile["id"],
@@ -6925,6 +7127,9 @@ def build_wallets_list_snapshot(
         else None
     )
     wallets = []
+    completeness = core_wallet_completeness.describe_wallets(
+        conn, profile["id"], (dict(row) for row in rows)
+    )
     for row in rows:
         config = _json_config(row["config_json"])
         samourai_metadata = samourai_metadata_from_wallet_config(config)
@@ -6988,6 +7193,9 @@ def build_wallets_list_snapshot(
                     if isinstance(value, str)
                 ],
                 "created_at": row["created_at"],
+                # How complete this source can be, and the edges of what it
+                # has observed (see core/wallet_completeness.py).
+                **completeness.get(str(row["id"]), {}),
             }
         )
 
@@ -7634,6 +7842,7 @@ def build_journals_quarantine_snapshot(
             "limit": limit,
             "offset": offset,
             **review["summary"],
+            "definitions": dict(QUARANTINE_SUMMARY_DEFINITIONS),
         },
         "items": [
             {
@@ -7644,6 +7853,63 @@ def build_journals_quarantine_snapshot(
             for item in review["items"]
         ],
     }
+
+
+def build_journals_quarantine_groups_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Quarantine counts and msat totals by reason and root cause.
+
+    With ``group_id`` it pages one group's members by a journal-state-bound
+    cursor. See :func:`kassiber.core.quarantine_review.quarantine_groups`.
+    """
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"group_id", "cursor", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.journals.quarantine.groups received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    group_id = raw_args.get("group_id")
+    cursor = raw_args.get("cursor")
+    for name, value in (("group_id", group_id), ("cursor", cursor)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise AppError(
+                f"ui.journals.quarantine.groups {name} must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+    limit = (
+        _coerce_limit(
+            raw_args,
+            default=core_quarantine_review.DEFAULT_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.DEFAULT_GROUP_LIMIT,
+            maximum=core_quarantine_review.MAX_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.MAX_GROUP_LIMIT,
+        )
+        if "limit" in raw_args
+        else None
+    )
+    _context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        raise AppError(
+            "No active book is open",
+            code="no_active_profile",
+            retryable=False,
+        )
+    return core_quarantine_review.quarantine_groups(
+        conn,
+        profile,
+        group_id=group_id.strip() if isinstance(group_id, str) else None,
+        cursor=cursor.strip() if isinstance(cursor, str) else None,
+        limit=limit,
+    )
 
 
 def build_journals_transfers_list_snapshot(
@@ -8070,6 +8336,7 @@ def build_workspace_health_snapshot(
             "ready": _readiness_ready(readiness),
             "hints": readiness["hints"],
         },
+        "definitions": dict(WORKSPACE_HEALTH_COUNT_DEFINITIONS),
     }
 
 

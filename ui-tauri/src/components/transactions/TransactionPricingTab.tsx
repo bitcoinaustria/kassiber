@@ -35,6 +35,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
     hideSensitive,
     amountBtc,
     pricingValue,
+    choosePricingOption,
     updateDraft,
     updateManualPrice,
     updateManualValue,
@@ -76,12 +77,9 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                 "flex items-start gap-2.5 rounded-md border p-3 text-left transition-colors hover:bg-muted/50",
                                 selected && "border-primary bg-accent",
                               )}
+                              // Already chosen: keep the precise kind it holds.
                               onClick={() => {
-                                updateDraft(
-                                  "pricingSourceKind",
-                                  option.sourceKind,
-                                );
-                                updateDraft("pricingQuality", option.quality);
+                                if (!selected) choosePricingOption(option);
                               }}
                             >
                               <span
@@ -264,7 +262,10 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                                   aria-hidden="true"
                                 />
                               ) : null}
-                              {t("pricing.rateCacheSource")}
+                              {/* An imported price names its source, not the rate cache. */}
+                              {pricingValue === "fmv_provider"
+                                ? t("pricing.rateCacheSource")
+                                : t("pricing.priceSource")}
                             </div>
                             <Badge variant="outline" className="rounded-md">
                               {t(pricingQualityLabel(localDraft.pricingQuality))}

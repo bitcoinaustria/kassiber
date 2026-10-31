@@ -1,8 +1,7 @@
-import { AlertTriangle, Archive, FileInput, HardDrive, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { PathField } from "./SettingsControls";
+import { SettingsCopyRow, SettingsGroup, SettingsRow } from "./SettingsControls";
 import { useUiStore } from "@/store/ui";
 import { BackupSettings } from "./BackupSettings";
 import type { StatusData } from "./SettingsModel";
@@ -14,59 +13,37 @@ export function DataSettingsPanel({
   status: StatusData | null;
   onOpenImports: () => void;
 }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const daemonSession = useUiStore((state) => state.daemonSession);
   return (
     <div className="space-y-6">
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <FileInput className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">{t("data.importHeading")}</h3>
-        </div>
-        <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="max-w-prose text-sm text-muted-foreground">
-            {t("data.importDescription")}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0"
-            onClick={onOpenImports}
-          >
-            <FileInput className="size-4" aria-hidden="true" />
+      <SettingsGroup>
+        <SettingsRow
+          label={t("data.importHeading")}
+          description={t("data.importDescription")}
+        >
+          <Button type="button" variant="outline" size="sm" onClick={onOpenImports}>
             {t("data.openImportTools")}
           </Button>
-        </div>
-      </section>
+        </SettingsRow>
+      </SettingsGroup>
 
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">{t("data.backupHeading")}</h3>
-        </div>
-        <BackupSettings key={daemonSession} />
-      </section>
+      <BackupSettings key={daemonSession} />
 
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <HardDrive className="size-4 text-muted-foreground" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">
-            {t("data.localDatabaseHeading")}
-          </h3>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <PathField
-            id="settings-data-root"
-            label={t("data.dataRootLabel")}
-            value={status?.data_root ?? null}
-          />
-          <PathField
-            id="settings-db-path"
-            label={t("data.databaseLabel")}
-            value={status?.database ?? null}
-          />
-        </div>
-      </section>
+      <SettingsGroup title={t("data.localDatabaseHeading")}>
+        <SettingsCopyRow
+          label={t("data.dataRootLabel")}
+          value={status?.data_root ?? null}
+          copyLabel={t("page.copy", { label: t("data.dataRootLabel") })}
+          placeholder={t("common:state.loading")}
+        />
+        <SettingsCopyRow
+          label={t("data.databaseLabel")}
+          value={status?.database ?? null}
+          copyLabel={t("page.copy", { label: t("data.databaseLabel") })}
+          placeholder={t("common:state.loading")}
+        />
+      </SettingsGroup>
     </div>
   );
 }
@@ -99,97 +76,65 @@ export function DataStorageSettingsPanel({
     <div className="space-y-6">
       <DataSettingsPanel status={status} onOpenImports={onOpenImports} />
 
-      <section className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-        <div className="space-y-1">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-destructive">
-            <AlertTriangle className="size-4" aria-hidden="true" />
-            {t("data.dangerHeading")}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {t("data.dangerDescription")}
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium">{t("data.resetWelcomeTitle")}</p>
-            <p className="text-sm text-muted-foreground">
-              {t("data.resetWelcomeDescription")}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0"
-            onClick={onResetWelcome}
-          >
+      {/* Each action asks for confirmation before anything is cleared. */}
+      <SettingsGroup title={t("data.dangerHeading")}>
+        <SettingsRow
+          label={t("data.resetWelcomeTitle")}
+          description={t("data.resetWelcomeDescription")}
+        >
+          <Button type="button" variant="outline" size="sm" onClick={onResetWelcome}>
             {t("data.resetWelcomeButton")}
           </Button>
-        </div>
-        <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium">{t("data.resetBookTitle")}</p>
-            <p className="text-sm text-muted-foreground">
-              {t("data.resetBookDescription")}
-            </p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          label={t("data.resetBookTitle")}
+          description={t("data.resetBookDescription")}
+        >
           <Button
             type="button"
             variant="outline"
-            className="shrink-0"
+            size="sm"
             disabled={resetBookDisabled}
             onClick={onResetBook}
           >
-            <RefreshCw className="mr-2 size-4" aria-hidden="true" />
             {t("data.resetBookButton")}
           </Button>
-        </div>
-        <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium text-destructive">
-              {t("data.deleteBooksTitle")}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t("data.deleteBooksDescription")}
-            </p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          label={t("data.deleteBooksTitle")}
+          description={t("data.deleteBooksDescription")}
+        >
           <Button
             type="button"
-            variant="destructive"
-            className="shrink-0"
+            variant="outline"
+            size="sm"
+            className="hover:text-destructive"
             disabled={deleteBooksDisabled}
             onClick={onDeleteBooks}
           >
             {t("data.deleteBooksButton")}
           </Button>
-        </div>
+        </SettingsRow>
         {resetRegtestAvailable ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium text-destructive">
-                {t("data.resetRegtestTitle")}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {t("data.resetRegtestDescription")}
-              </p>
-            </div>
+          <SettingsRow
+            label={t("data.resetRegtestTitle")}
+            description={t("data.resetRegtestDescription")}
+          >
             <Button
               type="button"
-              variant="destructive"
-              className="shrink-0"
+              variant="outline"
+              size="sm"
+              className="hover:text-destructive"
               disabled={resetRegtestPending}
               onClick={onResetRegtest}
             >
-              <RefreshCw
-                className={`mr-2 size-4 ${resetRegtestPending ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
               {resetRegtestPending
                 ? t("data.resetRegtestPending")
                 : t("data.resetRegtestButton")}
             </Button>
-          </div>
+          </SettingsRow>
         ) : null}
-      </section>
+      </SettingsGroup>
     </div>
   );
 }

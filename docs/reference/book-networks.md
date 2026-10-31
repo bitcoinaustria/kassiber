@@ -39,10 +39,11 @@ ownership authority remain local.
 
 ## Split mixed history without changing the original
 
-Settings → Bitcoin → Export selected connections, or `networks split-plan` and
-`networks split`, produces a separate encrypted project backup. Choose the target
-environment and connections, review the computed partition, then choose the
-backup destination and encryption passphrase (CLI also accepts an age recipient).
+Settings → Bitcoin → Split history into a separate book, or `networks
+split-plan` and `networks split`, produces a separate encrypted project backup.
+Choose the target environment and connections, review the computed partition,
+then choose the backup destination and encryption passphrase (CLI also accepts
+an age recipient).
 The source project is never moved, pruned, or rewritten.
 
 A book that still holds archived general-ledger rows from an earlier version

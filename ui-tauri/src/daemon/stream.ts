@@ -55,6 +55,16 @@ export interface AiChatMessage {
   provider?: string;
   model?: string;
   provenance?: AiAnswerProvenance;
+  /** The files a user message first sent to the chat; display only. */
+  attachments?: AiChatMessageAttachment[];
+}
+
+/** What a sent message shows about its file: never a path or a token. */
+export interface AiChatMessageAttachment {
+  filename: string;
+  kind?: string;
+  sizeBytes?: number;
+  previewUrl?: string;
 }
 
 export interface AiAnswerProvenance {
@@ -102,10 +112,65 @@ export type AiToolCallStatus =
 
 export type AiToolConsentDecision = "allow_once" | "allow_session" | "deny";
 
+/**
+ * How much the assistant may do without asking, per chat. `approval` asks
+ * before every change; `auto` lets the daemon approve changes that can be
+ * undone and stay on this machine; `full_access` never asks, network actions
+ * included. The daemon decides which calls a mode covers; the desktop only
+ * names the mode.
+ */
+export const AI_PERMISSION_MODES = ["approval", "auto", "full_access"] as const;
+export type AiPermissionMode = (typeof AI_PERMISSION_MODES)[number];
+
+export function isAiPermissionMode(value: unknown): value is AiPermissionMode {
+  return (AI_PERMISSION_MODES as readonly unknown[]).includes(value);
+}
+
+/**
+ * Which tools a turn offers the model (`tool_profile`): `full` every tool,
+ * `scoped` the packs routed to the question (the model can load more areas),
+ * `core` the common core only. The user picks; nothing is inferred from the
+ * model.
+ */
+export const AI_TOOL_PROFILES = ["full", "scoped", "core"] as const;
+export type AiToolProfile = (typeof AI_TOOL_PROFILES)[number];
+
+export function isAiToolProfile(value: unknown): value is AiToolProfile {
+  return (AI_TOOL_PROFILES as readonly unknown[]).includes(value);
+}
+
+/** Why a tool call ran (or waits): the daemon's `approval` on `ai.chat.tool_call`. */
+export type AiToolApproval =
+  | "required"
+  | "auto"
+  | "full_access"
+  | "session"
+  | "not_needed";
+
+const AI_TOOL_APPROVALS: readonly AiToolApproval[] = [
+  "required",
+  "auto",
+  "full_access",
+  "session",
+  "not_needed",
+];
+
+function aiToolApproval(value: unknown): AiToolApproval | undefined {
+  return (AI_TOOL_APPROVALS as readonly unknown[]).includes(value)
+    ? (value as AiToolApproval)
+    : undefined;
+}
+
+// Mirrors the daemon's once-only consent tools. The daemon's
+// `can_allow_session` decides; this list only narrows it (and stands in for
+// it when an older daemon omits the field).
 const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.journals.quarantine.resolve",
   "ui.transfers.components.apply",
   "ui.review.apply",
+  "ui.wallets.import_attachment.apply",
+  "ui.wallets.import_document.apply",
+  "ui.imports.rollback",
 ]);
 
 export function aiToolAllowsSessionConsent(name: string): boolean {
@@ -119,6 +184,8 @@ export interface AiChatToolCall {
   kindClass: "read_only" | "mutating" | "unknown";
   needsConsent: boolean;
   status: AiToolCallStatus;
+  /** Why it ran without a prompt, or that it needs one (daemon `approval`). */
+  approval?: AiToolApproval;
   result?: unknown;
   reason?: string;
   /** Server-revalidated effects, separate from the model's tool arguments. */
@@ -129,11 +196,15 @@ export interface AiChatToolCall {
 
 export interface AiChatRequest {
   expectedScope?: { workspace_id: string; profile_id: string };
+  /** This chat's permission mode; the daemon treats absent as `approval`. */
+  permissionMode?: AiPermissionMode;
   provider?: string;
   model: string;
   messages: { role: AiChatMessage["role"] | "tool"; content: string }[];
   options?: Record<string, unknown>;
   toolsEnabled?: boolean;
+  /** The tool set the user chose; the daemon defaults absent to `scoped`. */
+  toolProfile?: AiToolProfile;
   toolLoopMaxIterations?: number;
   systemPromptKind?: "kassiber" | "raw" | null;
   systemPrompt?: string;
@@ -158,13 +229,13 @@ export interface AiChatRequest {
    */
   seedNotices?: { index: number; notices: AiChatNotice[] }[];
   /**
-   * One file the user attached to this chat, as an opaque staging grant minted
-   * by the native picker. A token and never a path: the renderer does not learn
-   * where the file is, and the model cannot point the analysis tool elsewhere.
-   * File contents are not sent here — the daemon reads the file locally, and
-   * only sends an off-device model the column headers.
+   * The files attached to this chat, in order, as opaque staging grants. A
+   * token and never a path: the renderer does not learn where a file is, and
+   * the model cannot point a tool elsewhere. File contents are not sent here;
+   * the daemon reads the files locally. `new` marks the files this message
+   * first sends.
    */
-  attachment?: { token: string; label?: string | null };
+  attachments?: { token: string; label?: string | null; new?: boolean }[];
   /** Typed, ephemeral UI state. Never includes descriptors, file content, or secrets. */
   screenContext?: {
     route?: string;
@@ -198,13 +269,31 @@ export interface StoredChatEntry {
   content: string;
   /** Notices kept with an assistant answer, so they survive a reload. */
   notices?: AiChatNotice[];
+  /** The files a user message first sent, as it showed them. */
+  attachments?: AiChatMessageAttachment[];
 }
 
 /** A message row as `ui.chat.sessions.get` returns it. */
 export interface StoredChatMessageShape {
   role?: string;
   content?: string;
-  provenance?: { notices?: unknown } | null;
+  provenance?: { notices?: unknown; attachments?: unknown } | null;
+}
+
+function storedAttachments(raw: unknown): AiChatMessageAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const { filename, kind, size_bytes: sizeBytes } = item as Record<string, unknown>;
+    if (typeof filename !== "string" || !filename) return [];
+    return [
+      {
+        filename,
+        ...(typeof kind === "string" && kind ? { kind } : {}),
+        ...(typeof sizeBytes === "number" ? { sizeBytes } : {}),
+      },
+    ];
+  });
 }
 
 /**
@@ -221,7 +310,14 @@ export function storedChatEntries(
     if (typeof content !== "string" || content.length === 0) continue;
     const notices =
       role === "assistant" ? aiChatNotices(message.provenance?.notices) : [];
-    entries.push(notices.length ? { role, content, notices } : { role, content });
+    const attachments =
+      role === "user" ? storedAttachments(message.provenance?.attachments) : [];
+    entries.push({
+      role,
+      content,
+      ...(notices.length ? { notices } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    });
   }
   return entries;
 }
@@ -235,20 +331,23 @@ export function buildAiChatStreamArgs(
     messages: request.messages,
     options: request.options,
     tools_enabled: request.toolsEnabled,
+    tool_profile: request.toolProfile,
     tool_loop_max_iterations: request.toolLoopMaxIterations,
     system_prompt_kind: request.systemPromptKind,
     system_prompt: request.systemPrompt,
     session_id: request.sessionId ?? undefined,
     expected_scope: request.expectedScope,
+    permission_mode: request.permissionMode,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
     seed_notices:
       request.seedHistory && request.seedNotices?.length ? request.seedNotices : undefined,
-    attachment: request.attachment
-      ? {
-          token: request.attachment.token,
-          label: request.attachment.label ?? undefined,
-        }
+    attachments: request.attachments?.length
+      ? request.attachments.map((attachment) => ({
+          token: attachment.token,
+          label: attachment.label ?? undefined,
+          new: attachment.new ? true : undefined,
+        }))
       : undefined,
     screen_context: request.screenContext
       ? {
@@ -284,6 +383,12 @@ export interface AiToolConsentRequest {
   summary: string;
   argumentsPreview: Record<string, unknown>;
   reviewPreview?: AiReviewPreview;
+  /** The daemon can undo it (an older daemon that does not say: no). */
+  reversible: boolean;
+  /** It contacts the network (an older daemon that does not say: no). */
+  egresses: boolean;
+  /** "Allow for this chat" may be offered for this call. */
+  canAllowSession: boolean;
 }
 
 export interface AiChatDeltaShape {
@@ -312,6 +417,16 @@ interface AiChatTerminalShape {
   finish_reason?: string | null;
   provenance?: AiAnswerProvenance;
   session_id?: string | null;
+  /** Tokens of attached files this turn could no longer read (expired grants). */
+  expired_attachments?: string[];
+}
+
+/** How a sent turn ended, for the caller that sent it. */
+export interface AiChatSendOutcome {
+  /** Refused before it started because another book is open. */
+  refused: boolean;
+  /** Attached files the daemon could no longer read, by their tokens. */
+  expiredAttachments?: string[];
 }
 
 export interface AiChatToolCallShape {
@@ -320,6 +435,7 @@ export interface AiChatToolCallShape {
   arguments?: Record<string, unknown>;
   kind_class?: "read_only" | "mutating" | "unknown";
   needs_consent?: boolean;
+  approval?: AiToolApproval;
 }
 
 export interface AiChatToolResultShape {
@@ -336,6 +452,9 @@ export interface AiChatToolConsentRequiredShape {
   summary?: string;
   arguments_preview?: Record<string, unknown>;
   review_preview?: AiReviewPreview;
+  reversible?: boolean;
+  egresses?: boolean;
+  can_allow_session?: boolean;
 }
 
 export function buildAiToolConsentRequest(
@@ -349,12 +468,40 @@ export function buildAiToolConsentRequest(
     summary: data.summary ?? data.name,
     argumentsPreview: data.arguments_preview ?? {},
     reviewPreview: data.review_preview,
+    // An older daemon omits these: then nothing claims the call can be
+    // undone, and session consent follows the once-only mirror above.
+    reversible: data.reversible === true,
+    egresses: data.egresses === true,
+    canAllowSession:
+      data.can_allow_session !== false && aiToolAllowsSessionConsent(data.name),
   };
 }
 
 interface AiToolConsentResponseShape {
   recorded?: boolean;
   reason?: string;
+}
+
+interface AiPermissionModeResponseShape {
+  permission_mode?: string;
+  released_call_ids?: unknown;
+}
+
+/** What a mid-turn permission-mode change did to the running answer. */
+export interface AiPermissionModeChange {
+  /** The running turn now uses the new mode. */
+  applied: boolean;
+  /** Pending approvals the new mode covers, which the daemon released. */
+  releasedCallIds: string[];
+  /** Set when the daemon refused or could not be reached. */
+  error?: { code: string; message: string };
+}
+
+export function buildPermissionModeArgs(
+  targetRequestId: string,
+  mode: AiPermissionMode,
+): Record<string, unknown> {
+  return { target_request_id: targetRequestId, permission_mode: mode };
 }
 
 export type AiChatStreamRecordData =
@@ -401,7 +548,8 @@ export interface UseAiChatStreamResult {
   messages: AiChatMessage[];
   isStreaming: boolean;
   error: { code: string; message: string } | null;
-  pendingConsent: AiToolConsentRequest | null;
+  /** Approvals the running turn waits on, in arrival order (rarely more than one). */
+  pendingConsents: AiToolConsentRequest[];
   /** Persisted session backing this conversation, if any. */
   sessionId: string | null;
   /**
@@ -413,8 +561,14 @@ export interface UseAiChatStreamResult {
   send: (
     request: AiChatRequest,
     userMessageContent: string,
-  ) => Promise<{ refused: boolean }>;
-  sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
+    userAttachments?: AiChatMessageAttachment[],
+  ) => Promise<AiChatSendOutcome>;
+  sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
+  /**
+   * Switch the running turn to `mode` (`ai.chat.permission_mode`). Nothing
+   * is sent while no turn runs; the next turn names its mode itself.
+   */
+  changePermissionMode: (mode: AiPermissionMode) => Promise<AiPermissionModeChange>;
   abort: () => void;
   reset: () => void;
   /** Replace the conversation with a stored session's messages. */
@@ -610,7 +764,7 @@ function toolResultStatus(data: AiChatToolResultShape): AiToolCallStatus {
 }
 
 export function buildToolConsentArgs(
-  request: AiToolConsentRequest,
+  request: Pick<AiToolConsentRequest, "targetRequestId" | "callId">,
   decision: AiToolConsentDecision,
 ): Record<string, unknown> {
   return {
@@ -728,6 +882,7 @@ export function applyAiChatStreamRecordToMessage(
   if (record.kind === "ai.chat.tool_call") {
     const data = record.data as AiChatToolCallShape | undefined;
     if (!data?.call_id || !data.name) return current;
+    const approval = aiToolApproval(data.approval);
     const nextToolCall: AiChatToolCall = {
       callId: data.call_id,
       name: data.name,
@@ -735,6 +890,8 @@ export function applyAiChatStreamRecordToMessage(
       kindClass: data.kind_class ?? "unknown",
       needsConsent: Boolean(data.needs_consent),
       status: data.needs_consent ? "pending" : "running",
+      // An older daemon sends no `approval`; keep what an earlier record said.
+      ...(approval ? { approval } : {}),
       segmentId: activeSegmentId(current),
     };
     const existing = current.toolCalls ?? [];
@@ -797,6 +954,7 @@ export function applyAiChatStreamRecordToMessage(
       kindClass: "mutating",
       needsConsent: true,
       status: "awaiting_consent",
+      approval: "required",
       segmentId: activeSegmentId(current),
     };
     return {
@@ -829,8 +987,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const [error, setError] = React.useState<UseAiChatStreamResult["error"]>(
     null,
   );
-  const [pendingConsent, setPendingConsent] =
-    React.useState<AiToolConsentRequest | null>(null);
+  const [pendingConsents, setPendingConsents] = React.useState<
+    AiToolConsentRequest[]
+  >([]);
+  const pendingConsentsRef = React.useRef(pendingConsents);
+  pendingConsentsRef.current = pendingConsents;
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
   const parserRef = React.useRef<ThinkParser | null>(null);
@@ -911,16 +1072,29 @@ export function useAiChatStream(): UseAiChatStreamResult {
             ? record.request_id
             : requestIdRef.current;
         if (data?.call_id && data.name && targetRequestId) {
-          setPendingConsent(buildAiToolConsentRequest(targetRequestId, data));
+          const request = buildAiToolConsentRequest(targetRequestId, data);
+          setPendingConsents((current) => [
+            ...current.filter((item) => item.callId !== request.callId),
+            request,
+          ]);
         }
       }
-      if (record.kind === "ai.chat.tool_result") {
-        const data = record.data as AiChatToolResultShape | undefined;
-        if (data?.call_id) {
-          setPendingConsent((current) =>
-            current?.callId === data.call_id ? null : current,
-          );
-        }
+      // The call left the approval: it has a result, or the daemon released
+      // it to run (approved, or covered by a permission mode switched to
+      // while it waited).
+      const settledCallId =
+        record.kind === "ai.chat.tool_result"
+          ? (record.data as AiChatToolResultShape | undefined)?.call_id
+          : record.kind === "ai.chat.tool_call" &&
+              !(record.data as AiChatToolCallShape | undefined)?.needs_consent
+            ? (record.data as AiChatToolCallShape | undefined)?.call_id
+            : undefined;
+      if (settledCallId) {
+        setPendingConsents((current) =>
+          current.some((item) => item.callId === settledCallId)
+            ? current.filter((item) => item.callId !== settledCallId)
+            : current,
+        );
       }
       recordQueueRef.current.push(record);
       scheduleRecordFlush();
@@ -960,11 +1134,13 @@ export function useAiChatStream(): UseAiChatStreamResult {
     async (
       request: AiChatRequest,
       userMessageContent: string,
-    ): Promise<{ refused: boolean }> => {
+      userAttachments?: AiChatMessageAttachment[],
+    ): Promise<AiChatSendOutcome> => {
       if (isStreaming) return { refused: false };
+      let expiredAttachments: string[] | undefined;
       setError(null);
       setIsStreaming(true);
-      setPendingConsent(null);
+      setPendingConsents([]);
       const userId = makeId();
       const assistantId = makeId();
       assistantIdRef.current = assistantId;
@@ -977,6 +1153,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: "user",
           content: userMessageContent,
           status: "done",
+          ...(userAttachments?.length ? { attachments: userAttachments } : {}),
         },
         {
           id: assistantId,
@@ -1056,6 +1233,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
         }
 
         const finishReason = envelope.data?.finish_reason ?? null;
+        const expired = envelope.data?.expired_attachments;
+        if (Array.isArray(expired) && expired.length) {
+          expiredAttachments = expired.filter((token): token is string => typeof token === "string");
+        }
         // Flush any pending tag-prefix bytes still in the parser.
         const parser = parserRef.current;
         if (parser && !controller.signal.aborted) {
@@ -1126,7 +1307,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           observedToolCallsRef.current.clear();
           if (mountedRef.current) {
             setIsStreaming(false);
-            setPendingConsent(null);
+            setPendingConsents([]);
           }
           abortRef.current = null;
           parserRef.current = null;
@@ -1134,16 +1315,25 @@ export function useAiChatStream(): UseAiChatStreamResult {
           requestIdRef.current = null;
         }
       }
-      return { refused: false };
+      return expiredAttachments ? { refused: false, expiredAttachments } : { refused: false };
     },
     [flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );
 
   const sendConsent = React.useCallback(
-    async (decision: AiToolConsentDecision) => {
-      const request = pendingConsent;
+    async (callId: string, decision: AiToolConsentDecision) => {
+      const request = pendingConsentsRef.current.find(
+        (item) => item.callId === callId,
+      );
       if (!request) return;
-      setPendingConsent(null);
+      // Answered once: the row goes at once, so a second click cannot send
+      // another decision for the same call.
+      pendingConsentsRef.current = pendingConsentsRef.current.filter(
+        (item) => item.callId !== callId,
+      );
+      setPendingConsents((current) =>
+        current.filter((item) => item.callId !== callId),
+      );
       try {
         const envelope =
           await getTransport().invoke<AiToolConsentResponseShape>({
@@ -1211,12 +1401,72 @@ export function useAiChatStream(): UseAiChatStreamResult {
         );
       }
     },
-    [pendingConsent, updateAssistant],
+    [updateAssistant],
+  );
+
+  const changePermissionMode = React.useCallback(
+    async (mode: AiPermissionMode): Promise<AiPermissionModeChange> => {
+      const targetRequestId = requestIdRef.current;
+      if (!targetRequestId) return { applied: false, releasedCallIds: [] };
+      try {
+        const envelope =
+          await getTransport().invoke<AiPermissionModeResponseShape>({
+            kind: "ai.chat.permission_mode",
+            request_id: makeDaemonRequestId(),
+            args: buildPermissionModeArgs(targetRequestId, mode),
+          });
+        // The turn ended (or a reset left it) meanwhile: the next turn names
+        // its mode itself.
+        if (!mountedRef.current || requestIdRef.current !== targetRequestId) {
+          return { applied: false, releasedCallIds: [] };
+        }
+        if (envelope.kind === "error" || envelope.error) {
+          return {
+            applied: false,
+            releasedCallIds: [],
+            error: {
+              code: envelope.error?.code ?? "permission_mode_failed",
+              message:
+                envelope.error?.message ?? "Could not change the permission mode",
+            },
+          };
+        }
+        const released = Array.isArray(envelope.data?.released_call_ids)
+          ? envelope.data.released_call_ids.filter(
+              (id): id is string => typeof id === "string",
+            )
+          : [];
+        if (released.length > 0) {
+          // The daemon runs these now; their `ai.chat.tool_call` records
+          // follow and turn the cards to running.
+          pendingConsentsRef.current = pendingConsentsRef.current.filter(
+            (item) => !released.includes(item.callId),
+          );
+          setPendingConsents((current) =>
+            current.filter((item) => !released.includes(item.callId)),
+          );
+        }
+        return { applied: true, releasedCallIds: released };
+      } catch (caught) {
+        if (!mountedRef.current || requestIdRef.current !== targetRequestId) {
+          return { applied: false, releasedCallIds: [] };
+        }
+        return {
+          applied: false,
+          releasedCallIds: [],
+          error: {
+            code: "permission_mode_failed",
+            message: caught instanceof Error ? caught.message : String(caught),
+          },
+        };
+      }
+    },
+    [],
   );
 
   const abort = React.useCallback(() => {
     cancelActiveRequest();
-    setPendingConsent(null);
+    setPendingConsents([]);
     updateAssistant((current) => ({
       ...current,
       status: "cancelled",
@@ -1235,7 +1485,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
     setMessages([]);
     setIsStreaming(false);
     setError(null);
-    setPendingConsent(null);
+    setPendingConsents([]);
     setSessionId(null);
   }, [cancelActiveRequest]);
 
@@ -1255,11 +1505,12 @@ export function useAiChatStream(): UseAiChatStreamResult {
           content: entry.content,
           status: "done" as const,
           ...(entry.notices?.length ? { notices: entry.notices } : {}),
+          ...(entry.attachments?.length ? { attachments: entry.attachments } : {}),
         })),
       );
       setIsStreaming(false);
       setError(null);
-      setPendingConsent(null);
+      setPendingConsents([]);
       setSessionId(nextSessionId);
     },
     [],
@@ -1269,10 +1520,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
     messages,
     isStreaming,
     error,
-    pendingConsent,
+    pendingConsents,
     sessionId,
     send,
     sendConsent,
+    changePermissionMode,
     abort,
     reset,
     loadConversation,

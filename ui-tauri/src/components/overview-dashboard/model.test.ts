@@ -40,6 +40,7 @@ import {
   powerLawXTicks,
   formatPowerLawTick,
   resolveAutoTimePeriod,
+  treasuryYears,
   serializeActivityMarkerMinimum,
   type TreasuryChartPoint,
 } from "./model";
@@ -809,7 +810,7 @@ describe("chart scale helpers", () => {
     conf: 1,
   });
 
-  it("recognizes auto period params and uses YTD as the minimum window", () => {
+  it("recognizes auto period params and uses twelve months as the minimum window", () => {
     expect(normalizeTimePeriodParam("auto")).toBe("auto");
     expect(normalizeTimePeriodParam("automatic")).toBe("auto");
 
@@ -832,15 +833,15 @@ describe("chart scale helpers", () => {
       ],
     };
 
-    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("ytd");
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("1year");
   });
 
   it("lets the URL period override a persisted fallback", () => {
     vi.stubGlobal("window", { location: { search: "" } });
-    expect(initialTimePeriodFromUrl("5years")).toBe("5years");
+    expect(initialTimePeriodFromUrl("4years")).toBe("4years");
 
     vi.stubGlobal("window", { location: { search: "?period=30d" } });
-    expect(initialTimePeriodFromUrl("5years")).toBe("30days");
+    expect(initialTimePeriodFromUrl("4years")).toBe("30days");
     vi.unstubAllGlobals();
   });
 
@@ -981,7 +982,7 @@ describe("chart scale helpers", () => {
     expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("10years");
   });
 
-  it("uses a 15-year internal auto window when 10 years is still too tight", () => {
+  it("shows the whole history when a decade is still too tight", () => {
     const snapshot: OverviewSnapshot = {
       ...MOCK_OVERVIEW,
       portfolioSeries: [
@@ -1008,16 +1009,32 @@ describe("chart scale helpers", () => {
       ],
     };
 
-    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("15years");
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("all");
   });
 
-  it("recognizes 6-month period params and windows", () => {
-    expect(normalizeTimePeriodParam("6m")).toBe("6months");
-    expect(normalizeTimePeriodParam("6months")).toBe("6months");
-    expect(normalizeTimePeriodParam("6MO")).toBe("6months");
+  it("windows a calendar year and names the years that hold activity", () => {
+    expect(normalizeTimePeriodParam("2025")).toBe("2025");
+    // A retired range lands on the closest one offered.
+    expect(normalizeTimePeriodParam("6m")).toBe("1year");
     const latest = new Date("2026-07-01T00:00:00Z");
-    expect(isPointInPeriod("2026-02-01", latest, "6months")).toBe(true);
-    expect(isPointInPeriod("2025-12-01", latest, "6months")).toBe(false);
+    expect(isPointInPeriod("2025-12-01", latest, "2025")).toBe(true);
+    expect(isPointInPeriod("2026-02-01", latest, "2025")).toBe(false);
+    expect(isPointInPeriod("2026-02-01", latest, "4years")).toBe(true);
+    expect(isPointInPeriod("2022-02-01", latest, "4years")).toBe(false);
+
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("a", "2024-03-01T12:00:00Z"),
+        autoPeriodTx("b", "2026-01-01T12:00:00Z"),
+        autoPeriodTx("c", "2026-05-01T12:00:00Z"),
+      ],
+    };
+    expect(treasuryYears(snapshot)).toEqual([
+      { year: 2026, count: 2 },
+      { year: 2024, count: 1 },
+    ]);
   });
 
   it("builds a positive multiplicative domain for log axes", () => {

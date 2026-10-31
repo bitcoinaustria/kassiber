@@ -747,6 +747,9 @@ def _apply_foreign_asset(
     if _same_asset(leg_asset, axis_asset):
         return False
     node["asset"] = _short_asset_label(leg_asset)
+    # `asset` may be a shortened display label for a 64-hex Liquid asset id;
+    # the full id travels separately so nothing passes the label on as an id.
+    node["assetId"] = leg_asset
     node["valueSats"] = None
     node["valueBtc"] = None
     node["valueState"] = "other_asset"

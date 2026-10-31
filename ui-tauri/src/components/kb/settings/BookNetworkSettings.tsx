@@ -3,15 +3,16 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 
 type WalletScope = { wallet_id: string; label: string; environments: string[]; transaction_count: number; unknown_count: number; conflict_count: number; requires_declaration: boolean };
 type Binding = { profile_id: string; state: "unbound" | "bound"; environment?: string; chain_instance_id?: string | null; domains: { chain: string; network: string }[] };
 type Inventory = { profile_id: string; state: string; wallets: WalletScope[]; inventory_digest: string; binding: Binding };
 type Plan = { plan_id: string; profile_id: string; inventory_digest: string; environment: string; chain_instance_id: string | null; declared_wallet_ids: string[]; can_apply: boolean; blockers: { code: string; wallet_id?: string }[] };
+const ENVIRONMENTS = ["main", "test", "signet", "regtest"] as const;
+type Environment = (typeof ENVIRONMENTS)[number];
 
 export function BookNetworkSettings({ children }: { children?: ReactNode } = {}) {
   const { t } = useTranslation(["settings", "common"]);
@@ -43,39 +44,58 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
       }
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
   };
-  return <section className="space-y-3 rounded-lg border bg-background p-4">
-    <h3 className="text-sm font-medium">{t("bookNetwork.title")}</h3>
-    {(bindingQuery.isLoading || needsInventory && query.isLoading) && <p>{t("common:state.loading")}</p>}
-    {bindingQuery.isError && <Button variant="outline" onClick={() => void bindingQuery.refetch()}>{t("common:actions.retry")}</Button>}
-    {needsInventory && query.isError && <Button variant="outline" onClick={() => void query.refetch()}>{t("common:actions.retry")}</Button>}
-    {bound ? <>
-      <p>{t(`bookNetwork.environments.${binding.environment as "main" | "test" | "signet" | "regtest"}`)}</p>
-      <p className="text-xs text-muted-foreground">{binding.domains.map(domain => `${domain.chain}: ${domain.network}`).join(" · ")}</p>
-      {binding.chain_instance_id && <p className="break-all font-mono text-xs">{binding.chain_instance_id}</p>}
-      <p className="text-xs text-muted-foreground">{t("bookNetwork.immutable")}</p>
-    </> : inventory && <>
-      <p className="text-xs text-muted-foreground">{t("bookNetwork.help")}</p>
-      <div className="flex max-w-sm flex-col gap-1.5"><Label htmlFor="book-network-environment">{t("bookNetwork.environment")}</Label>
-        <Select value={environment} onValueChange={setEnvironment}>
-          <SelectTrigger id="book-network-environment" className="w-full"><SelectValue /></SelectTrigger>
-          <SelectContent>{(["main", "test", "signet", "regtest"] as const).map(value => <SelectItem key={value} value={value}>{t(`bookNetwork.environments.${value}`)}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
-      {environment === "regtest" && <label className="flex flex-col gap-1 text-sm">{t("bookNetwork.instance")}
-        <div className="flex gap-2"><Input className="min-w-0 flex-1 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} /><Button variant="outline" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button></div>
-      </label>}
-      {inventory.wallets.map(wallet => <div key={wallet.wallet_id} className="text-sm">
-        <span>{wallet.label}</span><span className="ml-2 text-xs text-muted-foreground">{wallet.environments.join(", ") || t("bookNetwork.unknown")}</span>
-        {wallet.requires_declaration && <label className="mt-1 flex items-start gap-2 text-xs"><Checkbox checked={declared.includes(wallet.wallet_id)} onCheckedChange={checked => setDeclared(values => checked === true ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />{t("bookNetwork.declare")}</label>}
-      </div>)}
-      <Button variant="outline" disabled={preview.isPending || bind.isPending} onClick={() => void invoke(false)}>{t("bookNetwork.preview")}</Button>
-      {current && plan && <div className="space-y-2">
-        {plan.blockers.map((blocker, index) => <p className="text-sm text-destructive" key={index}>{t(`bookNetwork.blockers.${blocker.code as "already_bound" | "contradictory_evidence" | "different_environment" | "different_instance" | "scope_declaration_required" | "reference_domain_mismatch"}`)} {inventory.wallets.find(wallet => wallet.wallet_id === blocker.wallet_id)?.label}</p>)}
-        {plan.can_apply && <><p className="text-xs text-muted-foreground">{t("bookNetwork.confirmHelp")}</p><Button disabled={bind.isPending} onClick={() => void invoke(true)}>{t("bookNetwork.bind")}</Button></>}
-      </div>}
-    </>}
+  const retryRow = (retry: () => void) => (
+    <SettingsRow label={t("bookNetwork.loadError")}>
+      <Button type="button" variant="outline" size="sm" onClick={retry}>{t("common:actions.retry")}</Button>
+    </SettingsRow>
+  );
+  return <div className="space-y-3">
+    <SettingsGroup title={t("bookNetwork.title")} footer={bound ? t("bookNetwork.immutable") : inventory ? t("bookNetwork.help") : null}>
+      {(bindingQuery.isLoading || needsInventory && query.isLoading) && <p className="px-4 py-3 text-sm text-muted-foreground">{t("common:state.loading")}</p>}
+      {bindingQuery.isError && retryRow(() => void bindingQuery.refetch())}
+      {needsInventory && query.isError && retryRow(() => void query.refetch())}
+      {bound ? <SettingsRow
+        label={t("bookNetwork.environment")}
+        description={<>
+          <span className="block">{binding.domains.map(domain => `${domain.chain}: ${domain.network}`).join(" · ")}</span>
+          {binding.chain_instance_id && <span className="block break-all font-mono text-xs">{binding.chain_instance_id}</span>}
+        </>}
+      >
+        <span className="text-sm">{t(`bookNetwork.environments.${binding.environment as Environment}`)}</span>
+      </SettingsRow> : inventory && <>
+        <SettingsRow label={t("bookNetwork.environment")} htmlFor="book-network-environment">
+          <SettingsSelect<Environment>
+            value={environment as Environment}
+            onValueChange={setEnvironment}
+            options={ENVIRONMENTS.map(value => ({ value, label: t(`bookNetwork.environments.${value}`) }))}
+            triggerProps={{ id: "book-network-environment" }}
+          />
+        </SettingsRow>
+        {environment === "regtest" && <SettingsRow label={t("bookNetwork.instance")} htmlFor="book-network-instance">
+          <Input id="book-network-instance" className="h-8 w-72 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} />
+          <Button type="button" variant="outline" size="sm" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button>
+        </SettingsRow>}
+        {inventory.wallets.map(wallet => <SettingsRow
+          key={wallet.wallet_id}
+          label={wallet.label}
+          htmlFor={wallet.requires_declaration ? `book-network-declare-${wallet.wallet_id}` : undefined}
+          description={<>
+            <span className="block">{wallet.environments.join(", ") || t("bookNetwork.unknown")}</span>
+            {wallet.requires_declaration && <span className="block">{t("bookNetwork.declare")}</span>}
+          </>}
+        >
+          {wallet.requires_declaration && <Switch id={`book-network-declare-${wallet.wallet_id}`} checked={declared.includes(wallet.wallet_id)} onCheckedChange={checked => setDeclared(values => checked ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />}
+        </SettingsRow>)}
+        {current && plan && plan.blockers.map((blocker, index) => <p className="px-4 py-3 text-sm text-destructive" key={index}>{t(`bookNetwork.blockers.${blocker.code as "already_bound" | "contradictory_evidence" | "different_environment" | "different_instance" | "scope_declaration_required" | "reference_domain_mismatch"}`)} {inventory.wallets.find(wallet => wallet.wallet_id === blocker.wallet_id)?.label}</p>)}
+        {current && plan?.can_apply && <p className="px-4 py-3 text-sm text-amber-700 dark:text-amber-300">{t("bookNetwork.confirmHelp")}</p>}
+        <div className="flex flex-wrap justify-end gap-2 px-4 py-3">
+          <Button type="button" variant="outline" size="sm" disabled={preview.isPending || bind.isPending} onClick={() => void invoke(false)}>{t("bookNetwork.preview")}</Button>
+          {current && plan?.can_apply && <Button type="button" variant="outline" size="sm" disabled={bind.isPending} onClick={() => void invoke(true)}>{t("bookNetwork.bind")}</Button>}
+        </div>
+      </>}
+      {error && <p role="alert" className="px-4 py-3 text-sm text-destructive">{error}</p>}
+    </SettingsGroup>
     {inventory && !bound && <NetworkPartitionSettings key={inventory.profile_id} profileId={inventory.profile_id} inventoryDigest={inventory.inventory_digest} environment={environment} instance={instance} wallets={inventory.wallets} declared={declared} />}
     {inventory && !bound && children}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-  </section>;
+  </div>;
 }

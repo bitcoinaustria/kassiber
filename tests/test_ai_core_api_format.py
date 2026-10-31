@@ -8,6 +8,7 @@ Completions once when the server has no /responses.
 
 from __future__ import annotations
 
+import contextvars
 import io
 import json
 import queue
@@ -294,7 +295,10 @@ class ProviderFormatDaemonTest(unittest.TestCase):
             stream = io.StringIO()
             active = daemon_runtime.ActiveAiChats()
             key, chat = active.register("req-1")
-            daemon_runtime._run_ai_chat_stream(
+            # The stream is a thread target that sets the log request id; run
+            # it in its own context so the id does not leak into later tests.
+            contextvars.copy_context().run(
+                daemon_runtime._run_ai_chat_stream,
                 "req-1",
                 snapshot,
                 daemon_runtime._ai_chat_args(

@@ -39,7 +39,7 @@ export function nearestOfferedEffort(
 
 /**
  * Seed the session's reasoning effort from the selected provider's stored
- * default (Settings → AI providers, or `ai providers update --default-effort`).
+ * default (Settings → Assistant, or `ai providers update --default-effort`).
  *
  * Like `kassiber chat`, a default only fills an effort the user left open: it
  * applies when a provider becomes selected and the effort is "auto" or came

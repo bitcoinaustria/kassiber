@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { confirmAction } from "@/lib/confirmAction";
+import { confirmRevert } from "@/hooks/useActivityHistoryRevert";
 import { cn } from "@/lib/utils";
 import {
   formatHistoryDate,
@@ -36,22 +36,6 @@ function sourceIcon(source: string) {
 
 function hiddenClass(hideSensitive: boolean) {
   return hideSensitive ? "blur-sm select-none" : "";
-}
-
-async function confirmRevert(
-  target: HistoryRevertTarget,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-  onRevert?: (target: HistoryRevertTarget) => void,
-) {
-  if (!onRevert) return;
-  const fieldLabel = target.field
-    ? target.field.label
-    : t("history.confirmRevertAll");
-  const ok = await confirmAction(
-    t("history.confirmRevertField", { label: fieldLabel }),
-  );
-  if (!ok) return;
-  onRevert(target);
 }
 
 function FieldDiffRow({
