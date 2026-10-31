@@ -154,7 +154,7 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   [/\b(Authorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)/gi, "$1[redacted]"],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3`, "gi"),
+    new RegExp(String.raw`${SECRET_ASSIGNMENT}(["'])((?:\\[\s\S]|(?!\3)[^\\])*)\3(?:[^\s,;}\])][^\r\n]*)?`, "gi"),
     "$1$2$3[redacted]$3",
   ],
   [
