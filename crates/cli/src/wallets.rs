@@ -36,7 +36,8 @@ pub fn execute(
         | "import-21bitcoin"
         | "import-pocket"
         | "import-pocketbitcoin"
-        | "import-strike" => {
+        | "import-strike"
+        | "import-ledger-live" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
                 profile_id,
                 wallet,
@@ -51,6 +52,7 @@ pub fn execute(
                     Some("import-coinfinity") => kassiber_wallets::file_import::Format::Coinfinity,
                     Some("import-21bitcoin") => kassiber_wallets::file_import::Format::TwentyOne,
                     Some("import-strike") => kassiber_wallets::file_import::Format::Strike,
+                    Some("import-ledger-live") => kassiber_wallets::file_import::Format::LedgerLive,
                     Some("import-pocket" | "import-pocketbitcoin") => {
                         kassiber_wallets::file_import::Format::Pocket
                     }

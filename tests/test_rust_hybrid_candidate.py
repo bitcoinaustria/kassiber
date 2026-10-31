@@ -449,6 +449,55 @@ class HybridCandidateTest(unittest.TestCase):
         calls=[item for item in self.served() if item["command"]=="wallets.import-strike"]
         self.assertEqual(calls,[{"command":"wallets.import-strike","served_by":"rust"}]*6)
 
+    def test_ledgerlive_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Ledger workspace"))
+        self.ok(self.cli("profiles", "create", "Ledger book", "--workspace", "Ledger workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "Ledger workspace", "--profile", "Ledger book"))
+        self.ok(self.cli("wallets", "create", "--label", "Ledger source", "--kind", "ledgerlive"))
+        source = self.data_root.parent / "ledgerlive.csv"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_ledgerlive_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            for case in cases:
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-ledger-live", "--wallet", "Ledger source", "--file", str(source))
+                    self.assertIn(result.returncode, (0, 1), (result.stdout, result.stderr))
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-ledger-live"]
+        self.assertEqual(calls, [{"command": "wallets.import-ledger-live", "served_by": "rust"}] * len(cases))
+
+    def test_ledgerlive_reimport_rollback_and_refusals_match_complete_dump(self):
+        from tests.test_cli_smoke import _LEDGERLIVE_CSV
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Ledger workspace"))
+        self.ok(self.cli("profiles", "create", "Ledger book", "--workspace", "Ledger workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "Ledger workspace", "--profile", "Ledger book"))
+        self.ok(self.cli("wallets", "create", "--label", "Ledger source", "--kind", "ledgerlive"))
+        source = self.data_root.parent / "ledgerlive.csv"
+        source.write_text(_LEDGERLIVE_CSV)
+        args = ("wallets", "import-ledger-live", "--wallet", "Ledger source", "--file", str(source))
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE": "1"}):
+            result = self.ok(self.cli(*args))["data"]
+            self.assertEqual(result["imported"], 2)
+            repeated = self.ok(self.cli(*args))["data"]
+            self.assertEqual((repeated["imported"], repeated["unchanged"]), (0, 2))
+            database = next(self.data_root.rglob("kassiber.sqlite3"))
+            import sqlite3
+            with sqlite3.connect(database) as conn:
+                conn.execute("UPDATE transactions SET description=NULL")
+            enriched = self.ok(self.cli(*args))["data"]
+            self.assertEqual((enriched["imported"], len(enriched["updated_records"])), (0, 2))
+            self.assertTrue(enriched["journal_invalidated"])
+            self.ok(self.cli("imports", "rollback", "--batch", result["import_batch_id"], "--confirm"))
+            self.assertEqual(self.ok(self.cli(*args))["data"]["imported"], 2)
+            self.assertEqual(self.cli("wallets", "import-ledger-live", "--wallet", "missing", "--file", str(source)).returncode, 1)
+            self.assertEqual(self.cli("wallets", "import-ledger-live", "--wallet", "Ledger source", "--file", str(source.parent / "missing.csv")).returncode, 1)
+            source.write_text(_LEDGERLIVE_CSV + "invalid,BTC,IN,1,0,later,,,,\n")
+            self.assertEqual(self.cli(*args).returncode, 1)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-ledger-live"]
+        self.assertEqual(calls, [{"command": "wallets.import-ledger-live", "served_by": "rust"}] * 7)
+
     def test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump(self):
         import sqlite3
         from contextlib import closing

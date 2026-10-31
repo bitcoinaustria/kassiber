@@ -2635,8 +2635,8 @@
   {
     "id": "W-coinfinity-bom",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "csv::rows(&csv::read_sig(file)?)",
-    "replace": "csv::rows(&csv::read_text(file)?)",
+    "find": "Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),",
+    "replace": "Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_text(file)?)?),",
     "expect_failing": [
       "python_coinfinity_import_vectors"
     ],
@@ -4715,6 +4715,346 @@
       "python_strike_import_vectors"
     ],
     "rule": "Provider kinds use full Unicode casefold before alias mapping."
+  },
+  {
+    "id": "W-ledgerlive-headers",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "exchange::headers(&rows, REQUIRED, \"Ledger Live\")?;",
+    "replace": "let _ = REQUIRED;",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Require the Python Ledger Live header family before parsing rows."
+  },
+  {
+    "id": "W-ledgerlive-row-index",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "record(row, index + 1)",
+    "replace": "record(row, index)",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Include skipped rows in the one-based generated transaction identity."
+  },
+  {
+    "id": "W-ledgerlive-redact-account-xpub",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "[\"account xpub\", \"account xpub fingerprint\", \"xpub\"]",
+    "replace": "[\"unrecognized\", \"account xpub fingerprint\", \"xpub\"]",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Redact the account xpub column in stored source provenance."
+  },
+  {
+    "id": "W-ledgerlive-redact-account-xpub-fingerprint",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "[\"account xpub\", \"account xpub fingerprint\", \"xpub\"]",
+    "replace": "[\"account xpub\", \"unrecognized\", \"xpub\"]",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Redact the account xpub fingerprint column in stored source provenance."
+  },
+  {
+    "id": "W-ledgerlive-redact-xpub",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "[\"account xpub\", \"account xpub fingerprint\", \"xpub\"]",
+    "replace": "[\"account xpub\", \"account xpub fingerprint\", \"unrecognized\"]",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Redact the xpub column in stored source provenance."
+  },
+  {
+    "id": "W-ledgerlive-redaction-marker",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "json!(\"[redacted]\")",
+    "replace": "json!(\"hidden\")",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Preserve the reference redaction marker in raw JSON."
+  },
+  {
+    "id": "W-ledgerlive-bitcoin-scope",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "    ) else {\n        return Ok(None);\n    };",
+    "replace": "    ) else {\n        return Err(AppError::new(\"validation\", \"unsupported asset\"));\n    };",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Skip unrelated assets before validating their operation, amount, fee or timestamp."
+  },
+  {
+    "id": "W-ledgerlive-casefold",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "let tag = kassiber_pytext::casefold(",
+    "replace": "let tag = kassiber_pytext::lower(",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Use Python Unicode casefold for operation aliases."
+  },
+  {
+    "id": "W-ledgerlive-alias-in",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"in\" |",
+    "replace": "\"unsupported\" |",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Accept the documented in movement alias."
+  },
+  {
+    "id": "W-ledgerlive-alias-receive",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"receive\" |",
+    "replace": "\"unsupported\" |",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Accept the documented receive movement alias."
+  },
+  {
+    "id": "W-ledgerlive-alias-received",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "| \"received\" =>",
+    "replace": "| \"unsupported\" =>",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Accept the documented received movement alias."
+  },
+  {
+    "id": "W-ledgerlive-alias-out",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"out\" |",
+    "replace": "\"unsupported\" |",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Accept the documented out movement alias."
+  },
+  {
+    "id": "W-ledgerlive-alias-send",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"send\" |",
+    "replace": "\"unsupported\" |",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Accept the documented send movement alias."
+  },
+  {
+    "id": "W-ledgerlive-alias-sent",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "| \"sent\" =>",
+    "replace": "| \"unsupported\" =>",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Accept the documented sent movement alias."
+  },
+  {
+    "id": "W-ledgerlive-inbound",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "(\"inbound\", \"deposit\")",
+    "replace": "(\"outbound\", \"deposit\")",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Inbound Ledger Live operations remain deposits."
+  },
+  {
+    "id": "W-ledgerlive-outbound",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "(\"outbound\", \"withdrawal\")",
+    "replace": "(\"outbound\", \"send\")",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Outbound Ledger Live operations remain withdrawals."
+  },
+  {
+    "id": "W-ledgerlive-unsupported-code",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"validation\",\n                format!(",
+    "replace": "\"app_error\",\n                format!(",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Retain the validation refusal code for unsupported Bitcoin operation types."
+  },
+  {
+    "id": "W-ledgerlive-unsupported-hint",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "Ledger Live imports support IN/OUT wallet movement rows for BTC/LBTC only.",
+    "replace": "Review unsupported operation.",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Preserve the exact unsupported-operation hint."
+  },
+  {
+    "id": "W-ledgerlive-missing-operation",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "operation.as_deref().unwrap_or(\"None\")",
+    "replace": "operation.as_deref().unwrap_or(\"\")",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Render missing operation cells as Python None in refusal messages."
+  },
+  {
+    "id": "W-ledgerlive-empty-amount",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "if amount.as_ref().is_none_or(|n| !truth(n)) {",
+    "replace": "if amount.as_ref().is_none_or(|n| truth(n)) {",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Reject empty or zero Bitcoin amounts unless they are fee-only rows."
+  },
+  {
+    "id": "W-ledgerlive-fee-only",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "if positive(&fee)? {",
+    "replace": "if !positive(&fee)? {",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Skip a zero-principal fee-only row before validating its timestamp."
+  },
+  {
+    "id": "W-ledgerlive-empty-code",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"validation\",\n            \"Ledger Live CSV has a BTC row with an empty amount\"",
+    "replace": "\"app_error\",\n            \"Ledger Live CSV has a BTC row with an empty amount\"",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Retain the exact empty-amount refusal code."
+  },
+  {
+    "id": "W-ledgerlive-fee",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "    let fee = abs(number(c.get(&[\"Operation Fees\"]))?\n        .filter(truth)\n        .unwrap_or_else(zero))?;\n    let occurred",
+    "replace": "    let fee = zero();\n    let occurred",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Retain exact exported outgoing Bitcoin fees."
+  },
+  {
+    "id": "W-ledgerlive-absolute-id-amount",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "let amount = abs(amount.unwrap())?;",
+    "replace": "let amount = amount.unwrap();",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Generated identities use the context-rounded absolute Decimal amount."
+  },
+  {
+    "id": "W-ledgerlive-generated-id",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "ledgerlive:{}:{direction}:{asset}:{}:{index}",
+    "replace": "ledger:{}:{direction}:{asset}:{}:{index}",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Preserve the Ledger Live generated identity namespace and components."
+  },
+  {
+    "id": "W-ledgerlive-account",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "c.opt(&[\"Account Name\"])",
+    "replace": "c.opt(&[\"Unknown Account\"])",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Retain account names in movement descriptions."
+  },
+  {
+    "id": "W-ledgerlive-description",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "Ledger Live {kind} - {name}",
+    "replace": "Ledger {kind} - {name}",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Keep the exact reference movement description."
+  },
+  {
+    "id": "W-ledgerlive-inbound-fee",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "if direction == \"outbound\" { fee } else { zero() }",
+    "replace": "if direction == \"inbound\" { fee } else { zero() }",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Ignore inbound fees while preserving outbound fee msat."
+  },
+  {
+    "id": "W-ledgerlive-counterparty",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"counterparty\": \"Ledger Live\"",
+    "replace": "\"counterparty\": \"Ledger\"",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Preserve the provider counterparty."
+  },
+  {
+    "id": "W-ledgerlive-provenance",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "config::stored_json(&c.json())",
+    "replace": "\"{}\"",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Retain sanitized source rows independently of accounting normalization."
+  },
+  {
+    "id": "W-ledgerlive-informational-fiat",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "\"asset\": asset,",
+    "replace": "\"asset\": asset, \"fiat_value\": \"100\",",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Never promote informational countervalues into exact fiat prices."
+  },
+  {
+    "id": "W-ledgerlive-format",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Self::LedgerLive => \"ledgerlive_csv\",",
+    "replace": "Self::LedgerLive => \"csv\",",
+    "expect_failing": [
+      "ledgerlive_movement_dedupe_runs_updates_and_readiness"
+    ],
+    "rule": "Use the dedicated format for source, import runs and normalized output."
+  },
+  {
+    "id": "W-ledgerlive-bom",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Self::LedgerLive => ledgerlive::parse(csv::rows(&csv::read_sig(file)?)?),",
+    "replace": "Self::LedgerLive => ledgerlive::parse(csv::load(file)?),",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Decode a Ledger Live UTF-8 BOM before checking headers."
+  },
+  {
+    "id": "W-ledgerlive-signaling-nan-order",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "if amount\n        .as_ref()\n        .is_some_and(|n| matches!(n, PriceNumber::Special(v) if v.contains(\"sNaN\")))",
+    "replace": "if false",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors"
+    ],
+    "rule": "Reject signaling NaN amounts before parsing a later invalid fee cell."
   },
   {
     "id": "W-twentyone-readiness-native-invalidate",

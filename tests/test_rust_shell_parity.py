@@ -1037,7 +1037,7 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
-        response = self.call(True, ["wallets", "import-ledger-live", "--wallet", "unused", "--file", "unused.csv"], root=unrelated)
+        response = self.call(True, ["wallets", "import-wasabi", "--wallet", "unused", "--file", "unused.json"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
@@ -1429,6 +1429,18 @@ class RustRealStoreParityTest(_Roots):
         self._file_import_parity("import-strike", [_STRIKE_CSV,
             "bad,header\nx,y\n", "",
         ], fiat_currency="EUR")
+
+    def test_ledgerlive_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_cli_smoke import _LEDGERLIVE_CSV
+        self._file_import_parity("import-ledger-live", [
+            _LEDGERLIVE_CSV,
+            "\ufeff" + _LEDGERLIVE_CSV,
+            "Operation Date,Currency Ticker,Operation Type,Operation Amount,Operation Fees,Operation Hash,Account xpub\n"
+            "2025-01-02T01:02:03+01:00,L-BTC,SENT,-0.002,0.000000000015,,xpub-secret\n",
+            "Operation Date,Currency Ticker,Operation Type,Operation Amount,Operation Hash\n"
+            "2025-01-02,BTC,IN,1,repeat\ninvalid,BTC,OUT,1,later\n",
+            "bad,header\nx,y\n", "",
+        ])
 
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV

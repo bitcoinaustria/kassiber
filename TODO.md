@@ -351,6 +351,10 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port Strike active custodial history with separate Lightning/chain
   identities, complete book-dump/rollback parity and named mutation killers.
   Complete exchange-file batch 1; see the final checkpoint in plan 21.
+- [x] Port Ledger Live movement files with sanitized provenance, exact
+  amounts/fees, complete book-dump/rollback parity and named mutation killers.
+  See the partial batch-2a checkpoint in plan 21; CoinTracking, Blockpit,
+  Binance supplemental and BTCPay file imports remain.
 - [ ] Port the remaining wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.

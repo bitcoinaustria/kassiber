@@ -2243,6 +2243,85 @@ the run. Mutation runs set both to `target/mutation-build`, use
 `TMPDIR=target/task-tmp`, and remove the mutation source/build trees after
 recording their summaries.
 
+
+## Ledger Live file ingestion (R5 batch 2a, partial)
+
+Native `wallets import-ledger-live` reads the UTF-8/BOM movement CSV and reuses
+wallet-local normalization, persistence and import-run coordination. It accepts
+Python's inbound/outbound aliases and Bitcoin-family tickers, preserves exact
+Decimal context rounding and integer msat fees, and generates the same indexed
+fallback identities. Informational fiat countervalues remain source evidence;
+they do not create exact pricing. Account xpub, fingerprint and xpub columns are
+redacted before source rows are stored.
+
+The unchanged Python parser supplies 168 frozen edge files covering headers,
+casefolding, duplicate/short/extra columns, CSV and decoding failures, blank and
+zero amounts, fee-only rows, special Decimal values and error ordering, amount
+precision, missing hashes, timestamp/timezone forms and unrelated asset skips.
+Hybrid tests compare every schema object, row and SQLite storage class for each
+file and pin Rust routing with zero Python fallbacks. Coordinator scenarios add
+reimports, empty-metadata enrichment, import runs, journal invalidation, wallet
+and file refusals, and rollback. Wire-byte and full-dump comparisons exercise
+both plaintext and encrypted books; a native late import-run failure pins atomic
+rollback of observations, runs and journal readiness.
+
+The wallet mutation catalog adds 34 Ledger Live entries to the 470 entries in
+the exact requested base `92ec79939` (504 total). The inherited Coinfinity BOM
+mutation now anchors its provider dispatch arm because two formats use the same
+BOM reader. Each new rule names its required failing test:
+
+| Mutation | Named failing test |
+| --- | --- |
+| `W-ledgerlive-headers` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-row-index` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-redact-account-xpub` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-redact-account-xpub-fingerprint` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-redact-xpub` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-redaction-marker` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-bitcoin-scope` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-casefold` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-alias-in` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-alias-receive` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-alias-received` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-alias-out` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-alias-send` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-alias-sent` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-inbound` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-outbound` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-unsupported-code` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-unsupported-hint` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-missing-operation` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-empty-amount` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-fee-only` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-empty-code` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-fee` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-absolute-id-amount` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-generated-id` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-account` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-description` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-inbound-fee` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-counterparty` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-provenance` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-informational-fiat` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-format` | `ledgerlive_movement_dedupe_runs_updates_and_readiness` |
+| `W-ledgerlive-bom` | `python_ledgerlive_import_vectors` |
+| `W-ledgerlive-signaling-nan-order` | `python_ledgerlive_import_vectors` |
+
+Workspace and test-harness formatting and strict clippy pass, as do all
+1,526 workspace tests and 14 harness tests. The requested Python suites pass
+98 tests and 3,207 subtests; inventory/contracts, frozen-vector regeneration and
+the 57-check preflight (60 subtests) pass. All 504 mutations are killed after
+67 passing named baselines, with zero survivors and zero build errors.
+The hybrid Ledger Live scenarios record 175 Rust-served imports and zero
+Python fallbacks.
+
+This checkpoint completes only the first importer of batch 2a. CoinTracking,
+Blockpit, Binance supplemental and BTCPay file ingestion remain unported.
+Generic ledger, Wasabi, Samourai and document ingestion remain later work.
+Python remains the reference; the inherited unpriced legacy 21bitcoin
+reactivation readiness bug remains a separate reference correction. This slice
+adds no crates, egress, sync route or AI projection.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

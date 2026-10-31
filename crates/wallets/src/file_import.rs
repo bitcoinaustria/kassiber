@@ -4,6 +4,7 @@ mod coinfinity;
 mod csv;
 mod exchange;
 mod generic_json;
+mod ledgerlive;
 mod phoenix;
 mod pocket;
 mod river;
@@ -44,6 +45,7 @@ pub enum Format {
     TwentyOne,
     Strike,
     Pocket,
+    LedgerLive,
 }
 impl Format {
     fn name(self) -> &'static str {
@@ -57,6 +59,7 @@ impl Format {
             Self::TwentyOne => "21bitcoin_csv",
             Self::Strike => "strike_csv",
             Self::Pocket => "pocketbitcoin_csv",
+            Self::LedgerLive => "ledgerlive_csv",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
@@ -70,6 +73,7 @@ impl Format {
             Self::TwentyOne => twentyone::parse(csv::load(file)?),
             Self::Strike => strike::parse(csv::load(file)?),
             Self::Pocket => pocket::parse(csv::load(file)?),
+            Self::LedgerLive => ledgerlive::parse(csv::rows(&csv::read_sig(file)?)?),
         }
     }
     fn evidence(self) -> bool {

@@ -2102,6 +2102,33 @@ mutations. Their evidence-only projection preserves Python's behavior with
 stale journals and excluded sources; no daemon kind or saved marker is added.
 See the [commercial checkpoint](../reference/rust-shell.md#reviewed-commercial-subledger-r5-eleventh-continuation-partial).
 
+### R5 file-import batch 2a: Ledger Live checkpoint (partial)
+
+Native `wallets import-ledger-live` ports the first batch-2a importer, including
+its existing wallet-local coordinator paths. It retains movement-only
+BTC/LBTC mapping, Decimal/msat amounts and outgoing fees, indexed missing-hash
+identities, Python timestamps and refusals, sanitized provenance, dedupe,
+empty-metadata enrichment, import runs, journal invalidation and rollback.
+Informational countervalues do not establish exact pricing or tax authority.
+
+There are 168 frozen Python files for parser and complete normalized book-dump
+comparison, hybrid routing assertions, plaintext/encrypted wire-and-state
+comparisons and native coordinator/late-failure tests. The
+[Ledger Live checkpoint](../reference/rust-shell.md#ledger-live-file-ingestion-r5-batch-2a-partial)
+records verification and the 34 added named mutations. The exact requested base
+contains 470 wallet mutations, so this checkpoint's catalog has 504 entries.
+All 504 mutations are killed after 67 passing baselines; the hybrid Ledger Live
+scenarios record 175 Rust-served imports and zero Python fallbacks. Workspace
+and harness formatting/clippy, 1,526 workspace tests, 14 harness tests, the
+requested Python suites (98 tests and 3,207 subtests), inventory/contracts and
+57 preflight checks pass.
+
+CoinTracking, Blockpit, Binance supplemental and BTCPay file import remain in
+batch 2a. Generic ledger, Wasabi, Samourai and document ingestion stay deferred.
+The shared tax-platform normalization and dedicated migration-wallet
+reconciliation are prerequisites within the CoinTracking/Blockpit slices;
+prior tax reports remain evidence. No sync/API/AI path is enabled here.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

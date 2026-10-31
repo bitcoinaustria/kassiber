@@ -464,6 +464,7 @@ fn assert_import_vectors(cases: &Json) {
             "coinfinity_csv" => Format::Coinfinity,
             "21bitcoin_csv" => Format::TwentyOne,
             "strike_csv" => Format::Strike,
+            "ledgerlive_csv" => Format::LedgerLive,
             "pocketbitcoin_csv" => Format::Pocket,
             _ => Format::Csv,
         };
@@ -2177,6 +2178,132 @@ fn python_strike_import_vectors() {
     ))
     .unwrap();
     assert_import_vectors(&cases);
+}
+
+#[test]
+fn python_ledgerlive_import_vectors() {
+    let cases: Json = serde_json::from_str(include_str!(
+        "../../tests/vectors/python_ledgerlive_imports.json"
+    ))
+    .unwrap();
+    assert_import_vectors(&cases);
+}
+
+const LEDGERLIVE_HEADER: &str = "Operation Date,Currency Ticker,Operation Type,Operation Amount,Operation Fees,Operation Hash,Account Name,Account xpub,Countervalue Ticker,Countervalue at Operation Date\n";
+const LEDGERLIVE_OUT: &str = "2025-01-02T01:02:03+01:00,BTC,OUT,-0.00200000,0.00001000,ledger-out,Bitcoin,xpub-synthetic-secret,EUR,100\n";
+
+#[test]
+fn ledgerlive_movement_dedupe_runs_updates_and_readiness() {
+    let conn = fixture();
+    let first = format!("{LEDGERLIVE_HEADER}{LEDGERLIVE_OUT}");
+    let result = import_kind(&conn, &first, Format::LedgerLive).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "source"),
+        Some(&s("file:ledgerlive_csv"))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE external_id='ledger-out' AND direction='outbound' AND kind='withdrawal' AND amount=200000000 AND fee=1000000 AND occurred_at='2025-01-02T00:02:03Z' AND excluded=0 AND fiat_value IS NULL AND pricing_source_kind IS NULL"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE raw_json LIKE '%[redacted]%' AND raw_json NOT LIKE '%xpub-synthetic-secret%'"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches WHERE source_format='ledgerlive_csv' AND rows_inserted=1"), 1);
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
+        1
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        1
+    );
+    let repeated = import_kind(&conn, &first, Format::LedgerLive).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&repeated, "unchanged"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&repeated, "journal_invalidated"),
+        Some(&Py::Bool(false))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        1
+    );
+    conn.execute("UPDATE transactions SET description=NULL", [])
+        .unwrap();
+    import_kind(
+        &conn,
+        &first.replace(",Bitcoin,", ",Updated,"),
+        Format::LedgerLive,
+    )
+    .unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        2
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE description='Ledger Live withdrawal - Updated'"), 1);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 0);
+}
+
+#[test]
+fn ledgerlive_refusals_and_late_failure_leave_the_book_unchanged() {
+    let conn = fixture();
+    let error = execute(
+        &conn,
+        Request {
+            profile_id: "p".into(),
+            wallet: "missing".into(),
+            file: "missing-ledgerlive.csv".into(),
+            format: Format::LedgerLive,
+            mode: None,
+        },
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        (&*error.code, &*error.message),
+        ("not_found", "Wallet 'missing' not found")
+    );
+    let error = import_kind(
+        &conn,
+        &format!("{LEDGERLIVE_HEADER}{LEDGERLIVE_OUT}invalid,BTC,IN,1,0,later,,,,\n"),
+        Format::LedgerLive,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "validation");
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    conn.execute_batch("CREATE TRIGGER refuse_ledgerlive BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'ledgerlive denied');END;").unwrap();
+    assert!(import_kind(
+        &conn,
+        &format!("{LEDGERLIVE_HEADER}{LEDGERLIVE_OUT}"),
+        Format::LedgerLive
+    )
+    .is_err());
+    for table in [
+        "transactions",
+        "import_batches",
+        "import_batch_transactions",
+    ] {
+        assert_eq!(scalar(&conn, &format!("SELECT count(*) FROM {table}")), 0);
+    }
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        0
+    );
+    assert!(conn.is_autocommit());
 }
 
 const STRIKE_HEADER: &str = "Reference,Date & Time (UTC),Transaction Type,Amount EUR,Fee EUR,Amount BTC,Fee BTC,BTC Price,Cost Basis (EUR),Destination,Description,Transaction Hash,Note\n";
