@@ -679,11 +679,14 @@ Python.
   library, cursor freshness, waiting roots and pair evidence/fingerprints.
   Transfers-12 joins it directly to the native assembler on the live connection,
   preserving pending caller edits and complete assembler refusals, and pins
-  operation normalization/content digests against 216 Python vectors. Production counts
+  operation normalization/content digests against 216 Python vectors. Transfers-13
+  adds complete economic/policy effects on the live native build and portable
+  artifact construction/pre-transaction admission primitives; these do not
+  simulate ordered operations or validate/apply a plan. Production counts
   remain **26/29 CLI leaves and 25/28 daemon kinds**. Finish lossless/refusal
   admission with the loader-9 acceptance record and its explicit pending BLOB
-  decision, implement exact artifacts/economic effects,
-  ordered mixed operations and writer-locked apply/receipts before registering
+  decision, join artifact/effect primitives to isolated planning/validation,
+  implement ordered mixed operations and writer-locked apply/receipts before registering
   the three routes. Prove full DB/filed-impact parity, late rollback, idempotent retries,
   caller-owned transactions, CLI/daemon envelopes and AI once-only consent.
   Retain readiness barriers rather than reading stale journals; see the

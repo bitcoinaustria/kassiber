@@ -1,5 +1,5 @@
 //! Unregistered native review composition. Loader acceptance still gates routes.
-use crate::{review_cases, Scope};
+use crate::{review_cases, review_effects, sql, Scope};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_journals::{pipeline::Prepared, Refusal};
 use kassiber_pyjson::Value;
@@ -30,6 +30,33 @@ impl std::fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
+
+/// Build economic and policy effects on one live read snapshot. This is not a
+/// plan: ordered operations and their simulated effects are still required.
+pub fn inspect_effects(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operations: &Value,
+    as_of: &str,
+    ids: impl FnMut() -> String,
+) -> Result<Value, Error> {
+    let _read = if conn.is_autocommit() {
+        Some(conn.unchecked_transaction().map_err(sql::error)?)
+    } else {
+        None
+    };
+    let profile = sql::rows(
+        conn,
+        "SELECT * FROM profiles WHERE id=? AND workspace_id=?",
+        [scope.profile_id, scope.workspace_id],
+    )?
+    .into_iter()
+    .next()
+    .ok_or_else(|| AppError::new("not_found", "Review profile was not found"))?;
+    let prepared = Prepared::load(conn, profile, as_of)?;
+    let state = prepared.review_state(conn, ids)?;
+    Ok(review_effects::effects(&state, conn, scope, operations)?)
+}
 
 /// Resolve cursor, profile, canonical facts and freshness on one live snapshot.
 /// Clock and derived identities remain caller supplied; neither grants authority.

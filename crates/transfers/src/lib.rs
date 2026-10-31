@@ -17,8 +17,12 @@ mod pairing_commands;
 mod payout_create;
 mod payout_delete;
 mod records;
+#[cfg(feature = "test-harness")]
+pub mod review_artifact;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod review_cases;
+#[cfg(feature = "test-harness")]
+pub mod review_effects;
 #[cfg(feature = "test-harness")]
 pub mod review_operations;
 #[cfg(feature = "test-harness")]

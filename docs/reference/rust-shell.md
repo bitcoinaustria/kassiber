@@ -8911,6 +8911,93 @@ admission, policy/economic effects, ordered domain operations, planning and
 validation remain open, together with every apply/receipt and route-admission
 requirement listed above. This checkpoint does not implement those services.
 
+### Review economic effects and portable artifact primitives (R5 transfers-13, partial)
+
+`t3code/r5-transfers-13` starts at `f2092193a`. The unregistered
+`review_effects` module projects the typed canonical build's complete economic
+entries, unique quarantine pairs, wallet holdings, tax summary and report
+blockers. It sorts the same canonical JSON as Python, preserves decimal scale,
+omits derived row identities and hashes the complete output before limiting
+quarantine/holding previews to 100 rows. Quantity issues implement Python's
+`report_blocked` property; that property is absent from the serialized state.
+
+Only batches with `kind_override` add acquisition effects. Exact totals use
+the existing 32-digit decimal context; the database identity and every current
+tax/policy column are read on the supplied connection, including pending caller
+edits. Other operations do not require those database reads. The unregistered
+`review_workflow::inspect_effects` resolves profile, canonical assembly and
+policy reads inside one read snapshot, ending only a transaction it owns.
+
+`review_artifact::assemble` constructs the portable content and digest from
+already normalized operations and canonical effects. `admit` preserves Python's
+pre-transaction refusal order: exact fields, finite JSON and encoded size,
+schema/digest, scope, operation normalization/canonicality and the stripped
+1–200-code-point idempotency-key bound. It leaves the key itself unchanged.
+Python-compatible mapping/numeric equality retains sequence order and exact
+integers above `2**53`. Neither helper grants authority or replaces canonical
+planning, validation, historical idempotency or apply.
+
+The effect oracle covers 33 complete canonical build states and 80 synthetic
+cases: economic entry types, decimal scale/rounding, nullable/scalar fields,
+tax-summary float representations, explicit nonfinite refusals before serde's
+null conversion, duplicate quarantines, report blockers,
+policy/identity changes and output beyond the preview limit. Fourteen complete
+live books add 84 native effect comparisons across plaintext/SQLCipher and
+autocommit/caller-read/caller-writer modes. Tests pin complete JSON/digests,
+unchanged `total_changes`, transaction ownership and pending policy visibility.
+
+The portable-content oracle has ten construction cases and 103 admission
+cases, including ASCII/Unicode size recipes. It executes unchanged Python's
+`plan_review` with accounting work stubbed for content construction, and
+unchanged `apply_review` stopped before transaction ownership is read for
+admission. These are primitive comparisons, not plan/apply parity witnesses.
+Python product code, dependencies and route registration are unchanged.
+
+Reproduce with the pinned/offline environment from transfers-12, eight build
+jobs and scratch/build/cache roots under this worktree's `target/`. Use separate,
+initially empty `target/r5-mutation-build` and `target/r5-verify-build` directories
+for mutation and verification artifacts, with debug information and incremental
+compilation disabled. Do not reuse mutation build artifacts for verification:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo test --offline -p kassiber-transfers --features test-harness --test review_effects --test review_artifacts -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_review_cases.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/review_effects_mutation_check.py
+```
+
+Final verification passes all **56 native transfer tests**, five Python oracle
+tests (including the complete review-build replay), all-target clippy with
+`-D warnings`, documentation compilation with warnings denied and workspace
+formatting. All nine effect/artifact mutations are killed after their four
+unmutated witnesses pass. The required final inventory update records **5,780
+tests in 358 modules**, and the subsequent required CI preflight passes all
+**57 tests**. Logs and a machine-readable summary remain under
+`target/r5-evidence/`; the owned mutation and verification build trees are
+removed after recording their results. No background job remains at handoff.
+
+Continue in this order:
+
+1. Implement ordered domain operations, including mixed metadata/component
+   batches, prechecked fingerprints, sibling unpairs retaining their baseline
+   and rebuild/baseline refresh after intervening non-unpairs. Join native
+   in-memory SQLite/SQLCipher snapshots, effects and artifact construction into
+   plan and recomputing validation. The existing snapshot helper alone does not
+   implement planning.
+2. Implement writer-locked atomic apply: historical idempotency before freshness,
+   canonical journal storage and filed-report impacts, durable receipts,
+   caller-owned transaction/cache restoration and late-failure rollback on both
+   database bindings. Admission alone does none of these writes.
+3. Recheck `t3code/r4-9-loader-9` and `t3code/r4-9-loader-blob`; both still point
+   to `c5966c1ff` during this checkpoint. Integrate any newer acceptance record
+   and fixes. Preserve every inherited lossless/refusal barrier, pending BLOB
+   corruption decision and sixteen seed-dependent message exceptions.
+4. Prove full database/envelope/authorship parity, the AI's existing once-only
+   revalidated consent and zero-fallback routes; only then register all six
+   routes and update **26/29 CLI leaves and 25/28 daemon kinds**.
+
+The independent residual-fee pair-authoring Python repro remains unchanged;
+this checkpoint neither fixes nor works around its refusal.
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements

@@ -3132,6 +3132,31 @@ storage, loader admission and CLI/daemon/AI consent parity remain open. R4-9
 owns its acceptance record, including the pending BLOB corruption decision.
 Python product code and route registration are unchanged.
 
+### R5 transfers: economic effects and artifact primitives (partial)
+
+Transfers-12 subsequently joins cases directly to the live native assembler and
+pins 216 operation-normalization vectors. Transfers-13 starts at `f2092193a` and
+adds full economic digests and bounded previews over typed canonical journal
+rows. Acquisition effects bind exact accounting totals, the current profile's
+policy and the database instance identity. Fourteen live books exercise native
+assembly and effects in SQLite/SQLCipher and owned/caller transactions; 33
+complete build states and 80 synthetic cases cover the effect projection,
+including nonfinite tax-summary refusals before JSON serialization.
+
+Portable artifact construction and pre-transaction admission also match the
+Python content/refusal contract, including complete digests, scope, canonical
+operations, Unicode idempotency-key bounds and the exact encoded size limit.
+Their isolated oracle stubs accounting during construction and stops apply
+before transaction ownership is read. It does not prove planning or apply.
+See the [checkpoint and remaining handoff](../reference/rust-shell.md#review-economic-effects-and-portable-artifact-primitives-r5-transfers-13-partial).
+
+Ordered domain operations, isolated plan/validation, atomic apply/receipts,
+journal/filed-impact storage, caller cache/transaction restoration, final loader
+acceptance and CLI/daemon/AI consent parity remain required. Counts remain
+**26/29 CLI leaves and 25/28 daemon kinds**, with all six review routes still
+unregistered. Both loader refs remain at `c5966c1ff`; no inherited lossless,
+refusal or explicitly pending exception is closed by this checkpoint.
+
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 
 The unregistered `wallets::fetch::Fetch` captures the supported single-wallet
