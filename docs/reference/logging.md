@@ -107,6 +107,13 @@ is outside this textual backstop; emit structured secret fields instead.
 Credential matching starts only at full identifier boundaries, including
 leading dash/dot runs, to keep long diagnostic lines linear.
 
+URL credential detection stops at record, query and fragment boundaries after
+an explicit numeric port, so it cannot consume a later secret assignment's key.
+Bracketed IPv6 hosts have the same boundary with or without a port.
+Passwords with quotes, commas, `?` or `#` remain covered when those characters
+belong to userinfo rather than following a host and numeric port. Python and
+the webview share exact-output regression vectors for these boundaries.
+
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
 default with a time-bounded raw view; exports choose `high_signal`
