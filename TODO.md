@@ -415,8 +415,15 @@ registers them; exit-tax preserves its reference no-registration boundary.
   [read-path measurements](docs/reference/rust-read-performance.md).
 - [ ] Port individual snapshot lookup and amendment-review state when process
   callers exist and the stack includes phase 5; preserve append-only history.
+- [x] Port retained compact/legacy capital-gain explanations through the native
+  CLI and daemon, with exact reconciliation, custody bounds, full-table parity
+  and named mutation tests.
+- [ ] Finish desktop gains daemon journal-refresh parity and registration. Its
+  native core projection is verified; Python rebuilds stale journals before
+  serving the kind, so registration waits for the accepted native R4 producer.
+  See the [partial gain checkpoint](docs/reference/rust-shell.md#gain-explanation-checkpoint-r5-fifteenth-reports-continuation-partial).
 - [ ] Finish the remaining report read inventory and desktop kinds, including
-  explanation, privacy, Lightning and cross-check reads.
+  privacy, Lightning and cross-check reads.
   The reviewed commercial subledger CLI read and its CSV export now run
   natively, with reference vectors, killed mutations and hybrid routing proof.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved

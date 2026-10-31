@@ -144,6 +144,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.balance-sheet",
     "reports.portfolio-summary",
     "reports.capital-gains",
+    "reports.explain-capital-gain",
     "reports.filed-snapshots.list",
     "reports.filed-snapshots.create",
     "reports.tax-summary",

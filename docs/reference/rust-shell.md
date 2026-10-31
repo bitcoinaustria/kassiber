@@ -31,7 +31,7 @@ verification, including per-command Rust routing counts.
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
-| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian/full-report/exit-tax XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers |
+| `crates/reports` | stored-journal summaries, Austrian forms, exit-tax estimates, gains and retained explanations, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian/full-report/exit-tax XLSX artifacts with full-report verification, and append-only saved/filed snapshot markers |
 
 ## Command line
 
@@ -5463,6 +5463,134 @@ hygiene, mirror and PSBT reads. Individual snapshot/amendment reads retain the
 prior process-caller deferral. PDF rendering, PDF-containing source-funds bundles
 and audit packages, and AI projections stay Python. No dependency, lockfile,
 schema or Python product code changes are part of this continuation.
+
+## Gain explanation checkpoint (R5 fifteenth reports continuation, partial)
+
+`t3code/r5-reports-15` starts at `e5b555440`. Native
+`reports explain-capital-gain` and `ui.reports.explain_capital_gain` read the
+same version-bound stored result. The service admits the exact six-field
+reference before checking the book's accounting-network declaration, journal
+freshness and custody barriers.
+It decodes compact-v2 calculations with strict integer/source-index checks,
+retains legacy JSON and compact-column precedence, and reconciles every exact
+fragment total at precision 32 plus integer-msat quantities. It performs no
+journal rebuild, repricing, acquisition or authored mutation.
+
+Inherited basis follows only canonical eligible carrying-value relations and
+retains whole source-disposal calculations, with the reference depth-eight and
+100-record bounds. Chronological custody context retains direct source touches,
+incoming wallet/asset traversal, date bounds, deterministic ordering,
+deduplication and the 500-record budget. Missing, mismatched and truncated
+engine detail remain explicit; graph links establish no new tax facts.
+
+The native desktop gains **core projection** includes Vienna years, primary-year
+selection, the newest 200 rows, income, neutral swaps, Kennzahlen, stored method,
+references and stale status. `ui.reports.capital_gains` remains **unregistered**.
+Python's direct daemon dispatch invokes `_auto_maintain_for_read` before this
+kind: on the stale fixture it replaces journal rows, advances the processed
+version, and changes the selected report year. R4 has no accepted native
+producer at this base. Registering the stored projection would silently omit
+that observable mutation. This continuation therefore stops inside the first
+requested family and does not begin cross-check.
+
+The unchanged reference also labels `capital_gains_type='long_term'` as `ST`
+because the desktop checks the literal `long`, and malformed reconciled legacy
+lot pricing can raise an internal `AttributeError` rather than returning a
+detail-mismatch status. Native projections preserve both outcomes. Reproduce
+these and the journal-refresh dependency on disposable data under `target/`,
+without changing account `HOME`:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/repro_python_gain_reads.py
+```
+
+The repro reports `desktop_type: ST`, the retained-pricing `NoneType` error,
+`daemon_read_rebuilt_journals: true`, a current processed version, and a selected
+year changing from 2025 to 2024.
+
+| Parity boundary | Evidence |
+| --- | --- |
+| Frozen projections | 162 cases: 87 CLI explanation service cases, 12 daemon explanation service cases and 63 desktop gains core cases |
+| Real native service | Canonical response bytes and all 112 database tables compare with Python for every case |
+| CLI | Four ready/legacy/Austrian/stale scenarios, eight references and six output modes; literal stdout/stderr/exit status and every table after each call |
+| Explanation daemon | Five sessions, nine requests each; literal response bytes and every table, including invalid args, stale references and absent active context |
+| Desktop gains daemon | Zero native process calls; the kind remains absent from registration and the prepared argument mapping is tested separately |
+
+The final locked Python 3.11 regression passes all 670 tests without skips,
+including all 171 gain-family cases, inherited exit-tax/full/Austrian/transaction
+workbooks, CSV artifacts, report reads and original explanation/carry/snapshot
+contracts. Existing workbook exports retain their openpyxl content comparison.
+New explanation responses and database states require no normalization.
+
+| Explanation-family routing | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.explain-capital-gain` | 192 | 0 |
+| Native explanation daemon sessions (45 requests total) | 5 | 0 |
+
+The broader regression's distinct logs record 801 report/transaction CLI calls
+and 22 daemon sessions served by Rust, with zero in-scope fallback. Its 23
+Python `journals.process` calls are setup outside the report scope. Counts
+exclude pytest symlink aliases; per-command and per-log totals are retained in
+`target/r5-reports15/routing-summary.json`. The native inventory now contains
+152 CLI leaves, including 20 report commands, and 13 report daemon kinds plus
+the two transaction export kinds. The unregistered desktop gains kind does not
+contribute to those counts.
+
+The mutation catalog has 680 applicable entries. All 40 new `gain-*` entries
+are killed by these named tests:
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `gain_reads_pin_retained_calculations_custody_versions_and_desktop` | 37 |
+| `gain_cli_forwards_complete_reference_and_scope` | 1 |
+| `gain_daemon_arguments_preserve_reference_year_alias_and_context` | 2 |
+
+All three named selections pass unmutated against the final corpus. The first
+campaign killed 35 of 37 entries. Its freshness fixture refused an old reference
+before reaching freshness; a current-reference stale fixture now kills that
+entry. The method recipe initially failed to compile because its replacement
+had an ambiguous Rust type; an explicitly typed replacement is now killed.
+The second campaign kills those two corrected entries and three added legacy
+numeric-coercion entries. Build errors never count as kills. The 640 inherited
+entries retain their preceding checkpoint evidence and are not freshly rerun.
+`target/r5-reports15/mutation-summary.json` maps every new entry to its named
+killer and retains both campaign results. Mutation scratch trees are removed by
+the runner; owned mutation build output is removed after summarizing.
+
+Rust 1.99.1 offline/locked verification passes workspace formatting, production
+and test-harness workspace/all-target clippy with `-D warnings`, all 1,518
+workspace tests and all 14 guarded binary tests. Probes are rebuilt from the
+real worktree after mutation verification. Owned-loopback fixtures run with
+sandbox access. The gain oracle generator checks cleanly and the reference-bug
+repro passes. All 38 selected AI, capability, wire and desktop catalog checks
+plus four subtests pass.
+
+The required classifier update records 5,706 test definitions and reviews all
+three new Python tests as retained report oracles. The module is in the serial
+daemon CI lane. Required CI preflight passes all 57 tests.
+`target/r5-reports15/verification-summary.json` retains the gates, routing,
+mutation and reference-bug evidence. Verification preserves account `HOME` and
+isolates books, preferences, owner locks and scratch under `target/`. Owned
+verification build trees are removed after writing the summaries. Verification
+is Linux-only; the full Python/frontend quality gate, Docker regtest and
+packaged/platform checks are not run.
+
+The remaining ordered work is:
+
+1. Complete desktop gains daemon journal-refresh parity and registration;
+   finish the first family's process acceptance before starting another family.
+2. Cross-check reads and workbooks.
+3. Lightning reads and CSV.
+4. Non-PDF source-funds reads.
+5. Year-handoff XLSX.
+6. CoinTracking/Blockpit CSV and other permitted non-PDF artifacts.
+7. Privacy hygiene, mirror and PSBT reads.
+
+Individual snapshot/amendment reads retain the prior process-caller deferral.
+PDF rendering, PDF-containing bundles/audit packages and AI projections stay
+Python. No dependencies, lockfiles, schema, tax rules or Python product code
+change in this checkpoint.
 
 ## Not yet ported
 

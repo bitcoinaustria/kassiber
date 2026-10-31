@@ -23,7 +23,13 @@ fn main() {
             let command = request["command"]
                 .as_str()
                 .unwrap_or("reports.export-transactions-xlsx");
-            if command == "reports.exit-tax" {
+            if matches!(
+                command,
+                "reports.exit-tax"
+                    | "reports.explain-capital-gain"
+                    | "ui.reports.explain_capital_gain"
+                    | "ui.reports.capital_gains"
+            ) {
                 kassiber_reports::execute_with_sources(&conn, command, &args, &Fixed)
             } else {
                 kassiber_reports::export::export(

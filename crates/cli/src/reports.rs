@@ -10,6 +10,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.balance-sheet",
     "reports.portfolio-summary",
     "reports.capital-gains",
+    "reports.explain-capital-gain",
     "reports.filed-snapshots.list",
     "reports.filed-snapshots.create",
     "reports.tax-summary",
@@ -98,6 +99,10 @@ fn snapshot_request(args: &Namespace) -> Value {
 fn request(args: &Namespace) -> Value {
     dict([
         (
+            "reference",
+            args.get("reference").cloned().unwrap_or(Value::Null),
+        ),
+        (
             "departure_date",
             args.get("departure_date").cloned().unwrap_or(Value::Null),
         ),
@@ -141,6 +146,33 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn gain_cli_forwards_complete_reference_and_scope() {
+        let args = crate::argparse::parse_args(
+            &[
+                "reports",
+                "explain-capital-gain",
+                "--reference",
+                r#"{"entry_id":"z"}"#,
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ]
+            .map(String::from),
+            crate::argparse::Context {
+                width: 78,
+                version: "test",
+            },
+        )
+        .unwrap();
+        let payload = request(&args);
+        for key in ["reference", "workspace", "profile"] {
+            assert_eq!(get(&payload, key), args.get(key));
+        }
+        assert!(COMMANDS.contains(&"reports.explain-capital-gain"));
+        assert!(crate::describe::IMPLEMENTED.contains(&"reports.explain-capital-gain"));
+    }
     #[test]
     fn exit_tax_transport_forwards_departure_and_destination() {
         for command in ["exit-tax", "export-exit-tax-xlsx"] {

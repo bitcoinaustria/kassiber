@@ -19205,6 +19205,11 @@
         "tests": 1
       }
     },
+    "tests/test_rust_gain_reads.py": {
+      "test_gain_service_bytes_and_every_database_table": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "reports", "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered", "reviewed": true, "tests": 1},
+      "test_gain_cli_bytes_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered", "reviewed": true, "tests": 1},
+      "test_gain_daemon_bytes_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native retained gain explanations and desktop gains with Python, including canonical response bytes, all database tables, compact and legacy calculations, custody bounds and zero explanation CLI/daemon fallbacks; the desktop gains core projection is verified while its journal-refresh-dependent daemon kind stays unregistered", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_gap_services.py": {
       "RustGapServicesTest": {
         "disposition": "oracle",

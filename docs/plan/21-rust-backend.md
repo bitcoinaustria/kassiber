@@ -1190,6 +1190,27 @@ and desktop gains are next, followed by cross-check, Lightning, non-PDF
 source-funds, year-handoff, platform CSV/other artifacts, then privacy reads.
 PDF-containing exports and AI projections remain Python.
 
+### R5 gain explanation continuation (partial)
+
+The fifteenth reports continuation starts at `e5b555440` and ports retained
+capital-gain explanations through the native CLI and daemon. Compact-v2 and
+legacy calculations retain exact reconciliation, book/input-version binding,
+readiness barriers and bounded inherited-basis/custody context. Frozen vectors
+and service/process differentials compare response bytes and all database
+tables, with named mutation tests and zero explanation fallbacks.
+The native inventory is now 152 CLI leaves, including 20 report commands,
+and 13 report daemon kinds plus the two transaction export kinds.
+
+Desktop gains computation is ported as a core projection, but its daemon kind
+remains unregistered. Python automatically rebuilds stale journals before that
+read; the native R4 producer is not accepted at this base. This is a partial
+boundary within the first requested family, not completion of that family.
+Finish native refresh/registration before cross-check, Lightning, source funds,
+year-handoff, platform CSV or privacy reads. The
+[gain explanation checkpoint](../reference/rust-shell.md#gain-explanation-checkpoint-r5-fifteenth-reports-continuation-partial)
+records the exact boundary, reference repro and verification. Python product
+code, AI projections, tax rules, schema and dependencies are unchanged.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

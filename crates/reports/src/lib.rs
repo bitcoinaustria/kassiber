@@ -19,6 +19,8 @@ pub mod export_range;
 pub mod export_request;
 mod full_csv;
 mod full_xlsx;
+mod gain_explanation;
+mod gains_desktop;
 mod history;
 mod holdings;
 mod journal;
@@ -120,7 +122,26 @@ pub fn execute_with_sources(
         ) {
             history::validate_interval(args)?;
         }
+        if command == "ui.reports.capital_gains" {
+            return gains_desktop::report(conn, args, sources);
+        }
+        if command == "ui.reports.explain_capital_gain" {
+            let profile = gains_desktop::active_profile(conn)?.ok_or_else(|| {
+                AppError::new("not_found", "Select a book before explaining a report")
+            })?;
+            let args = get(args, "raw_args").unwrap_or(args);
+            if !matches!(args, Value::Null | Value::Dict(_)) {
+                return Err(AppError::new("validation", "daemon args must be an object")
+                    .with_details(dict([("type", s(kassiber_envelope::type_name(args)))])));
+            }
+            return gain_explanation::explain(conn, &profile, value(args, "reference"));
+        }
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+        if command == "reports.explain-capital-gain" {
+            let reference = kassiber_pytext::loads(&text(args, "reference"))
+                .map_err(|_| AppError::new("validation", "Result reference must be JSON"))?;
+            return gain_explanation::explain(conn, &profile, &reference);
+        }
         if command == "reports.commercial-subledger" {
             return commercial::report(conn, &profile);
         }

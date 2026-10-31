@@ -4,6 +4,7 @@ use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 pub const KINDS: &[&str] = &[
     "ui.reports.summary",
+    "ui.reports.explain_capital_gain",
     "ui.reports.balance_sheet",
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
@@ -19,6 +20,12 @@ pub const KINDS: &[&str] = &[
     "ui.transactions.export_xlsx",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if matches!(
+        kind,
+        "ui.reports.capital_gains" | "ui.reports.explain_capital_gain"
+    ) {
+        return book.reports(kind, &gain_args(kind, raw)?);
+    }
     if matches!(
         kind,
         "ui.reports.export_csv"
@@ -111,6 +118,25 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
         }
     };
     book.reports(kind, &dict([("wallet", wallet)]))
+}
+
+fn gain_args(kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
+    if kind == "ui.reports.explain_capital_gain" {
+        return Ok(dict([("raw_args", raw.cloned().unwrap_or(Value::Null))]));
+    }
+    let empty = dict::<&str>([]);
+    let args = raw.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
+    if !matches!(args, Value::Dict(_)) {
+        return Err(AppError::new("validation", "daemon args must be an object")
+            .with_details(dict([("type", s(type_name(args)))])));
+    }
+    Ok(dict([(
+        "year",
+        get(args, "year")
+            .or_else(|| get(args, "tax_year"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    )]))
 }
 
 fn history_args(raw: Option<&Value>) -> Result<Value, AppError> {
@@ -243,6 +269,47 @@ fn tax_summary_args(args: &Value) -> Result<Value, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gain_daemon_arguments_preserve_reference_year_alias_and_context() {
+        let args = kassiber_pytext::loads(
+            r#"{"year":null,"tax_year":2024,"workspace":"ignored","reference":{"entry_id":"z"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            gain_args("ui.reports.capital_gains", Some(&args)).unwrap(),
+            dict([("year", Value::Null)])
+        );
+        let alias = dict([("tax_year", s("2024"))]);
+        assert_eq!(
+            gain_args("ui.reports.capital_gains", Some(&alias)).unwrap(),
+            dict([("year", s("2024"))])
+        );
+        assert_eq!(
+            get(
+                &gain_args("ui.reports.explain_capital_gain", Some(&args)).unwrap(),
+                "raw_args"
+            ),
+            Some(&args)
+        );
+        for kind in [
+            "ui.reports.capital_gains",
+            "ui.reports.explain_capital_gain",
+        ] {
+            assert_eq!(
+                KINDS.contains(&kind),
+                kind == "ui.reports.explain_capital_gain"
+            );
+            if kind == "ui.reports.capital_gains" {
+                assert_eq!(
+                    gain_args(kind, Some(&Value::List(vec![])))
+                        .unwrap_err()
+                        .code,
+                    "validation"
+                );
+            }
+            assert!(gain_args(kind, None).is_ok());
+        }
+    }
     #[test]
     fn history_daemon_arguments() {
         for (raw, expected) in [

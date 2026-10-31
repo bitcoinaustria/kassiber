@@ -6409,5 +6409,405 @@
       "exit_tax_transport_forwards_departure_and_destination"
     ],
     "rule": "CLI exit-tax exports forward the destination selection."
+  },
+  {
+    "id": "gain-reference-fields",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "f.len()==6",
+    "replace": "f.len()==5",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Explanation references contain exactly six fields."
+  },
+  {
+    "id": "gain-reference-binding",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "required\n        .iter()\n        .any(|k| value(raw, k) != value(&expected, k))",
+    "replace": "required.iter().any(|k| value(raw, k) == value(&expected, k))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "References bind the database, book and journal version."
+  },
+  {
+    "id": "gain-freshness",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "if !fresh(conn, profile)?.0 {",
+    "replace": "if false && !fresh(conn, profile)?.0 {",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Stale journals cannot be explained."
+  },
+  {
+    "id": "gain-custody-block",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "if !components::blockers(conn, profile)?.is_empty()",
+    "replace": "if false && !components::blockers(conn, profile)?.is_empty()",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Custody barriers are consulted before retained detail."
+  },
+  {
+    "id": "gain-quantity-block",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "|| !quantity_issues(conn, &text(profile, \"id\"))?.is_empty()",
+    "replace": "|| false && !quantity_issues(conn, &text(profile, \"id\"))?.is_empty()",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Quantity issues block explanations."
+  },
+  {
+    "id": "gain-row-taxability",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "AND COALESCE(t.taxability_override,1)!=0",
+    "replace": "AND 1=1",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Non-taxable journal entries cannot be explained."
+  },
+  {
+    "id": "gain-row-swap",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "AND COALESCE(je.at_category,'')!='neu_swap'",
+    "replace": "AND 1=1",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Neutral swaps are outside capital-gains explanations."
+  },
+  {
+    "id": "gain-row-income",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "je.entry_type IN ('disposal','income')",
+    "replace": "je.entry_type IN ('disposal')",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Income remains explainable."
+  },
+  {
+    "id": "gain-quarantines",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "(\"quarantines\", Value::Int(quarantines.into()))",
+    "replace": "(\"quarantines\", Value::Int(0.into()))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Explanations disclose quarantine count."
+  },
+  {
+    "id": "gain-compact-version",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "n==&2.into()",
+    "replace": "n==&1.into()",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Compact decoding admits version two only."
+  },
+  {
+    "id": "gain-compact-source-width",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "row.len() != 19",
+    "replace": "row.len() != 18",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Compact sources retain the complete pricing tuple."
+  },
+  {
+    "id": "gain-compact-source-fee",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "!matches!(&row[6], Value::Int(_))",
+    "replace": "!matches!(&row[6], Value::Bool(_))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Compact source fee types are strict integers."
+  },
+  {
+    "id": "gain-compact-fragment-width",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "f.len() != 10",
+    "replace": "f.len() != 9",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Compact fragments retain all ten fields."
+  },
+  {
+    "id": "gain-compact-quantity",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "!matches!(&f[0], Value::Int(_))",
+    "replace": "!matches!(&f[0], Value::Bool(_))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Compact quantities reject booleans."
+  },
+  {
+    "id": "gain-compact-exact-msat",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "(\"quantity_msat_exact\", s(py_str(&f[0])))",
+    "replace": "(\"quantity_msat_exact\", s(\"0\"))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Expanded compact msat strings retain every digit."
+  },
+  {
+    "id": "gain-compact-priority",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "let calc = if truthy(value(row, \"calculation_compact\"))",
+    "replace": "let calc = if false && truthy(value(row, \"calculation_compact\"))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Compact data wins over legacy text even if malformed."
+  },
+  {
+    "id": "gain-missing-exacts",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "FIELDS.iter().any(|k| matches!(value(row, k), Value::Null))",
+    "replace": "FIELDS.iter().all(|k| matches!(value(row, k), Value::Null))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Every exact total is required before reconciliation."
+  },
+  {
+    "id": "gain-reconciliation",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "if sum != strict_decimal(value(row, field))? {",
+    "replace": "if false && sum != strict_decimal(value(row, field))? {",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Every fragment total must reconcile to its stored result."
+  },
+  {
+    "id": "gain-precision",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "sum.add(&strict_decimal(get(f, field)?)?, &DECIMAL)",
+    "replace": "sum.add(&strict_decimal(get(f, field)?)?, &Context::new(28,Rounding::HalfEven))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Retained fragment sums use precision 32."
+  },
+  {
+    "id": "gain-quantity-reconciliation",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "if quantity != int(row, \"quantity\").unsigned_abs().into() {",
+    "replace": "if false && quantity != int(row, \"quantity\").unsigned_abs().into() {",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Fragment quantities reconcile exactly in integer msat."
+  },
+  {
+    "id": "gain-inherited-record-budget",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "remaining: 100,",
+    "replace": "remaining: 1,",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Inherited basis traversal has the reference hundred-record budget."
+  },
+  {
+    "id": "gain-inherited-depth",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "depth >= 8",
+    "replace": "depth >= 1",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Inherited basis traverses up to eight levels."
+  },
+  {
+    "id": "gain-inherited-policy",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "AND policy='carrying-value' AND basis_state='eligible'",
+    "replace": "AND policy='taxable' AND basis_state='eligible'",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Only canonical carrying-value relations grant inherited detail."
+  },
+  {
+    "id": "gain-inherited-eligible",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "AND policy='carrying-value' AND basis_state='eligible'",
+    "replace": "AND policy='carrying-value'",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Blocked relations cannot establish inherited basis."
+  },
+  {
+    "id": "gain-custody-budget",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "let mut budget = 500usize;",
+    "replace": "let mut budget = 499usize;",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Chronological custody context retains the reference 500-record bound."
+  },
+  {
+    "id": "gain-custody-cutoff",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "AND julianday(COALESCE(d.target_occurred_at,d.occurred_at))<=julianday(?)",
+    "replace": "AND julianday(COALESCE(d.target_occurred_at,d.occurred_at))<julianday(?)",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Custody context includes edges at the result cutoff."
+  },
+  {
+    "id": "gain-custody-truncation",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "truncated || !pending.is_empty()",
+    "replace": "false",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Exhausted or pending custody context is disclosed."
+  },
+  {
+    "id": "gain-legacy-float-decimal",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "power - 1075",
+    "replace": "power - 1074",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Legacy float Decimal conversion retains its exact binary value."
+  },
+  {
+    "id": "gain-legacy-bool-decimal",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "Some(Decimal::from(i64::from(*n)))",
+    "replace": "Some(Decimal::from(0))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Legacy boolean Decimal values retain Python integer coercion."
+  },
+  {
+    "id": "gain-legacy-float-quantity",
+    "file": "crates/reports/src/gain_explanation.rs",
+    "find": "format!(\"{sum:.0}\")",
+    "replace": "format!(\"{:.0}\",sum+1.0)",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Legacy float quantity sums retain Python arithmetic before exact integer comparison."
+  },
+  {
+    "id": "gain-desktop-freshness",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "Value::Bool(gain_explanation::fresh(conn, &profile)?.1)",
+    "replace": "Value::Bool(false)",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Core desktop projections disclose stale journals."
+  },
+  {
+    "id": "gain-desktop-limit",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "selected.truncate(200);",
+    "replace": "selected.truncate(199);",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Core desktop gains retain the newest two hundred rows."
+  },
+  {
+    "id": "gain-desktop-order",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "selected.into_iter().rev()",
+    "replace": "selected.into_iter()",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Core desktop gains present retained rows chronologically."
+  },
+  {
+    "id": "gain-desktop-year",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "calendar::vienna(&raw)?.0",
+    "replace": "calendar::vienna(&raw)?.0 + 1",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Austrian year choices follow Vienna dates."
+  },
+  {
+    "id": "gain-desktop-method",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "text(&profile, \"gains_algorithm\").to_lowercase()",
+    "replace": "String::from(\"fifo\")",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Desktop method uses the stored method, including Austrian HIFO."
+  },
+  {
+    "id": "gain-desktop-long",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "text(&row, \"capital_gains_type\").to_lowercase() == \"long\"",
+    "replace": "text(&row, \"capital_gains_type\").to_lowercase() == \"long_term\"",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Desktop LT labels preserve the reference literal matching."
+  },
+  {
+    "id": "gain-desktop-neutral",
+    "file": "crates/reports/src/gains_desktop.rs",
+    "find": "(\"gainEur\", Value::Float(0.0))",
+    "replace": "(\"gainEur\", Value::Float(1.0))",
+    "expect_failing": [
+      "gain_reads_pin_retained_calculations_custody_versions_and_desktop"
+    ],
+    "rule": "Neutral swap detail does not present taxable gains."
+  },
+  {
+    "id": "gain-cli-reference",
+    "file": "crates/cli/src/reports.rs",
+    "find": "args.get(\"reference\").cloned().unwrap_or(Value::Null)",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "gain_cli_forwards_complete_reference_and_scope"
+    ],
+    "rule": "CLI forwards complete authored reference JSON."
+  },
+  {
+    "id": "gain-daemon-raw-reference",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "(\"raw_args\", raw.cloned().unwrap_or(Value::Null))",
+    "replace": "(\"raw_args\", Value::Null)",
+    "expect_failing": [
+      "gain_daemon_arguments_preserve_reference_year_alias_and_context"
+    ],
+    "rule": "Daemon preserves raw reference args so book selection precedes validation."
+  },
+  {
+    "id": "gain-daemon-year-precedence",
+    "file": "crates/daemon/src/reports.rs",
+    "find": ".or_else(|| get(args, \"tax_year\"))",
+    "replace": "",
+    "expect_failing": [
+      "gain_daemon_arguments_preserve_reference_year_alias_and_context"
+    ],
+    "rule": "Core desktop transport preserves the tax_year alias."
   }
 ]
