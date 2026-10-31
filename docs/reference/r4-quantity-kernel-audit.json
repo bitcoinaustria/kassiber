@@ -1,0 +1,2570 @@
+{
+  "negative_control": {
+    "observed_exit_code": 1,
+    "expected_failure": "AssertionError: vacuous quantity scenario",
+    "helper": "tests/test_custody_quantity_stage.py::assert_activity",
+    "helper_source_sha256": "19f802f4b44894b435128dead316e66d91096ee987c16a82414dffce57c21c71"
+  },
+  "baseline": "d2d3a66eb8b06799d0bdb4cc6554853f8afa6278",
+  "source_sha256": {
+    "crates/custody/src/quantity/arbitration.rs": "42a8beda9454bf90186399ee97880e00875b609911d12b749de692d5dc4c50ba",
+    "crates/custody/src/quantity/mod.rs": "ce2b74490dbff9d25d9912db1d520fa5ab52c6d5180ad568fe17d8870830f41d",
+    "crates/custody/src/quantity/native.rs": "edb5038257cfc74a8cc9f78ca641b7a0a94a9df72c2f9c59d03f5eddb09aa39f",
+    "crates/custody/src/quantity/runtime.rs": "2a6792bf073e08d677ca1362a59144546723554317f8297f4002ace16113b536"
+  },
+  "cargo_lock_sha256": "013c72d81f70c3772842bd445f7b63cf3a4a03350ae4101a15a80e4d118f5dd6",
+  "before_catalog": 2292,
+  "catalog": 2299,
+  "selected_catalog": 363,
+  "removed_ids": [],
+  "reanchored": [
+    {
+      "id": "quantity-admission-asset-exposure",
+      "before": {
+        "id": "quantity-admission-asset-exposure",
+        "file": "crates/custody/src/quantity/mod.rs",
+        "find": "matches!(asset.as_str(), \"BTC\" | \"LBTC\")",
+        "replace": "matches!(asset.as_str(), \"BTC\")",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "BTC and LBTC share Bitcoin exposure."
+      },
+      "after": {
+        "id": "quantity-admission-asset-exposure",
+        "file": "crates/custody/src/quantity/mod.rs",
+        "find": "matches!(asset.as_ref(), \"BTC\" | \"LBTC\")",
+        "replace": "matches!(asset.as_ref(), \"BTC\")",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "BTC and LBTC share Bitcoin exposure."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-state",
+      "before": {
+        "id": "quantity-arbitration-semantic-state",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.value[\"state\"],",
+        "replace": "Value::Null,",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes state."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-state",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": ".all(|key| self.value[key] == other.value[key])",
+        "replace": ".all(|key| *key == \"state\" || self.value[key] == other.value[key])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes state."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-destination_kind",
+      "before": {
+        "id": "quantity-arbitration-semantic-destination_kind",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.value[\"destination_kind\"],",
+        "replace": "Value::Null,",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes destination_kind."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-destination_kind",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": ".all(|key| self.value[key] == other.value[key])",
+        "replace": ".all(|key| *key == \"destination_kind\" || self.value[key] == other.value[key])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes destination_kind."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-external_economic_subtype",
+      "before": {
+        "id": "quantity-arbitration-semantic-external_economic_subtype",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.value[\"external_economic_subtype\"],",
+        "replace": "Value::Null,",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes external_economic_subtype."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-external_economic_subtype",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": ".all(|key| self.value[key] == other.value[key])",
+        "replace": ".all(|key| *key == \"external_economic_subtype\" || self.value[key] == other.value[key])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes external_economic_subtype."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-transfer_kind",
+      "before": {
+        "id": "quantity-arbitration-semantic-transfer_kind",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.value[\"transfer_kind\"],",
+        "replace": "Value::Null,",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes transfer_kind."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-transfer_kind",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": ".all(|key| self.value[key] == other.value[key])",
+        "replace": ".all(|key| *key == \"transfer_kind\" || self.value[key] == other.value[key])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes transfer_kind."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-transfer_policy",
+      "before": {
+        "id": "quantity-arbitration-semantic-transfer_policy",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.value[\"transfer_policy\"],",
+        "replace": "Value::Null,",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes transfer_policy."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-transfer_policy",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": ".all(|key| self.value[key] == other.value[key])",
+        "replace": ".all(|key| *key == \"transfer_policy\" || self.value[key] == other.value[key])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes transfer_policy."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-component_id",
+      "before": {
+        "id": "quantity-arbitration-semantic-component_id",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.value[\"component_id\"]\n        ])",
+        "replace": "Value::Null\n        ])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes component identity."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-component_id",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": ".all(|key| self.value[key] == other.value[key])",
+        "replace": ".all(|key| *key == \"component_id\" || self.value[key] == other.value[key])",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative semantic agreement includes component identity."
+      }
+    },
+    {
+      "id": "quantity-arbitration-semantic-target",
+      "before": {
+        "id": "quantity-arbitration-semantic-target",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.target_at(source).map(|s| s.value()),",
+        "replace": "Value::Null,",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative agreement includes the exact projected target slice."
+      },
+      "after": {
+        "id": "quantity-arbitration-semantic-target",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "self.target_at(source) == other.target_at(source)",
+        "replace": "true",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Authoritative agreement includes the exact projected target slice."
+      }
+    },
+    {
+      "id": "quantity-arbitration-authority-agreement",
+      "before": {
+        "id": "quantity-arbitration-authority-agreement",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "c.semantics(&source) != first.semantics(&source)",
+        "replace": "false",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Incompatible authoritative claims fail closed."
+      },
+      "after": {
+        "id": "quantity-arbitration-authority-agreement",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "!c.same_semantics(first, &source)",
+        "replace": "false",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Incompatible authoritative claims fail closed."
+      }
+    },
+    {
+      "id": "quantity-arbitration-atomic-hold",
+      "before": {
+        "id": "quantity-arbitration-atomic-hold",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "decision.conflict(\"atomic_bundle_incomplete\", ids);",
+        "replace": "decision.value[\"reason\"] = json!(\"unmatched_outbound_default\");",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Incomplete atomic bundles hold every selected sibling."
+      },
+      "after": {
+        "id": "quantity-arbitration-atomic-hold",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "decision.conflict(\"atomic_bundle_incomplete\", ids);",
+        "replace": "decision.value_mut()[\"reason\"] = json!(\"unmatched_outbound_default\");",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Incomplete atomic bundles hold every selected sibling."
+      }
+    },
+    {
+      "id": "quantity-arbitration-decision-order",
+      "before": {
+        "id": "quantity-arbitration-decision-order",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "decisions.sort_by_key(|d| d.source.clone());",
+        "replace": "decisions.sort_by_key(|d| std::cmp::Reverse(d.source.clone()));",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Output source slices use deterministic ascending hash and offsets."
+      },
+      "after": {
+        "id": "quantity-arbitration-decision-order",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "decisions.sort_by(|a, b| a.source.cmp(&b.source));",
+        "replace": "decisions.sort_by(|a, b| b.source.cmp(&a.source));",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Output source slices use deterministic ascending hash and offsets."
+      }
+    },
+    {
+      "id": "quantity-arbitration-posting-order",
+      "before": {
+        "id": "quantity-arbitration-posting-order",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "result.sort_by_key(|p| codec::text(&p[\"posting_id\"]));",
+        "replace": "result.sort_by_key(|p| std::cmp::Reverse(codec::text(&p[\"posting_id\"])));",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Output postings retain deterministic posting-id order."
+      },
+      "after": {
+        "id": "quantity-arbitration-posting-order",
+        "file": "crates/custody/src/quantity/arbitration.rs",
+        "find": "result.sort_by(|a, b| a.id.cmp(&b.id));",
+        "replace": "result.sort_by(|a, b| b.id.cmp(&a.id));",
+        "expect_failing": [
+          "quantity_arbitration_vectors"
+        ],
+        "rule": "Output postings retain deterministic posting-id order."
+      }
+    },
+    {
+      "id": "QN-001",
+      "before": {
+        "id": "QN-001",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "rde_json::{json, Value};\nuse std::collections::{BTreeMap, BTreeSet};\nfn text(v: &Value) -> String {\n    if codec::truth(v) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+        "replace": "rde_json::{json, Value};\nuse std::collections::{BTreeMap, BTreeSet};\nfn text(v: &Value) -> String {\n    if false && (codec::truth(v)) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native admission and composition preserve the reference branch: codec::truth(v)."
+      },
+      "after": {
+        "id": "QN-001",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "rde_json::{json, Value};\nuse std::borrow::Cow;\nuse std::collections::{BTreeMap, BTreeSet, HashMap};\nfn text(v: &Value) -> String {\n    if codec::truth(v) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+        "replace": "rde_json::{json, Value};\nuse std::borrow::Cow;\nuse std::collections::{BTreeMap, BTreeSet, HashMap};\nfn text(v: &Value) -> String {\n    if false && (codec::truth(v)) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native admission and composition preserve the reference branch: codec::truth(v)."
+      }
+    },
+    {
+      "id": "QN-133",
+      "before": {
+        "id": "QN-133",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "compilation.insert(\"canonical_input\".into(), Value::Object(input));",
+        "replace": "compilation.insert(\"canonical_input_mutated\".into(), Value::Object(input));",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the canonical_input field at this emission boundary."
+      },
+      "after": {
+        "id": "QN-133",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "\"canonical_input\":compilation.input()",
+        "replace": "\"canonical_input_mutated\":compilation.input()",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the canonical_input field at this emission boundary."
+      }
+    },
+    {
+      "id": "QN-134",
+      "before": {
+        "id": "QN-134",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "        \"events\".into(),\n        Value::Array(events.into_values().collect()),",
+        "replace": "        \"events_mutated\".into(),\n        Value::Array(events.into_values().collect()),",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the events field at this emission boundary."
+      },
+      "after": {
+        "id": "QN-134",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "\"events\":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>()",
+        "replace": "\"events_mutated\":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>()",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the events field at this emission boundary."
+      }
+    },
+    {
+      "id": "QN-135",
+      "before": {
+        "id": "QN-135",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "        \"rejected_events\".into(),\n        canonical[\"rejected_events\"].clone(),",
+        "replace": "        \"rejected_events_mutated\".into(),\n        canonical[\"rejected_events\"].clone(),",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the rejected_events field at this emission boundary."
+      },
+      "after": {
+        "id": "QN-135",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "\"rejected_events\":self.rejected",
+        "replace": "\"rejected_events_mutated\":self.rejected",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the rejected_events field at this emission boundary."
+      }
+    },
+    {
+      "id": "QN-136",
+      "before": {
+        "id": "QN-136",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "compilation.insert(\"claims\".into(), Value::Array(claims));",
+        "replace": "compilation.insert(\"claims_mutated\".into(), Value::Array(claims));",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the claims field at this emission boundary."
+      },
+      "after": {
+        "id": "QN-136",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "\"claims\":compilation.claims",
+        "replace": "\"claims_mutated\":compilation.claims",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the claims field at this emission boundary."
+      }
+    },
+    {
+      "id": "QN-137",
+      "before": {
+        "id": "QN-137",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "compilation.insert(\"issues\".into(), Value::Array(issues));",
+        "replace": "compilation.insert(\"issues_mutated\".into(), Value::Array(issues));",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the issues field at this emission boundary."
+      },
+      "after": {
+        "id": "QN-137",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "\"issues\":compilation.issues",
+        "replace": "\"issues_mutated\":compilation.issues",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native output preserves the issues field at this emission boundary."
+      }
+    },
+    {
+      "id": "QX-019",
+      "before": {
+        "id": "QX-019",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_key(|l| l.evidence.clone());\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
+        "replace": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_key(|l| l.evidence.clone()); members.reverse();\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native source and target allocation order follows evidence ids."
+      },
+      "after": {
+        "id": "QX-019",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_cached_key(|l| l.evidence.clone());\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
+        "replace": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_cached_key(|l| l.evidence.clone()); members.reverse();\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native source and target allocation order follows evidence ids."
+      }
+    },
+    {
+      "id": "QX-020",
+      "before": {
+        "id": "QX-020",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone());\n        let src = &members[0].source;\n        let received: BigInt = members.it",
+        "replace": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone()); members.reverse();\n        let src = &members[0].source;\n        let received: BigInt = members.it",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native source and target allocation order follows evidence ids."
+      },
+      "after": {
+        "id": "QX-020",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone());\n        let src = &members[0].source;\n        let received: BigInt = members.it",
+        "replace": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone()); members.reverse();\n        let src = &members[0].source;\n        let received: BigInt = members.it",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native source and target allocation order follows evidence ids."
+      }
+    },
+    {
+      "id": "QX-021",
+      "before": {
+        "id": "QX-021",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone());\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
+        "replace": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone()); members.reverse();\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native source and target allocation order follows evidence ids."
+      },
+      "after": {
+        "id": "QX-021",
+        "file": "crates/custody/src/quantity/native.rs",
+        "find": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone());\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
+        "replace": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone()); members.reverse();\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
+        "expect_failing": [
+          "quantity_native_augmentation_vectors"
+        ],
+        "rule": "Native source and target allocation order follows evidence ids."
+      }
+    },
+    {
+      "id": "QRT-071",
+      "before": {
+        "id": "QRT-071",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "claims.extend_from_slice(array(&gaps[0]));",
+        "replace": "claims.extend_from_slice(&[]);",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Gap source holds participate in arbitration."
+      },
+      "after": {
+        "id": "QRT-071",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "claims.extend(hold_claims);",
+        "replace": "let _ = hold_claims;",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Gap source holds participate in arbitration."
+      }
+    },
+    {
+      "id": "QRT-072",
+      "before": {
+        "id": "QRT-072",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "claims.extend_from_slice(array(&native[\"claims\"]));",
+        "replace": "claims.extend_from_slice(&[]);",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Native claims participate in arbitration."
+      },
+      "after": {
+        "id": "QRT-072",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "claims.append(&mut native.claims);",
+        "replace": "native.claims.clear();",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Native claims participate in arbitration."
+      }
+    },
+    {
+      "id": "QRT-074",
+      "before": {
+        "id": "QRT-074",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "issues.sort_by_key(|i| (text(&i[\"occurred_at\"]), text(&i[\"issue_id\"])));",
+        "replace": "issues.reverse();",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Whole-state issues sort by lexical timestamp and identity."
+      },
+      "after": {
+        "id": "QRT-074",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "issues.sort_by_cached_key(|i| (text(&i[\"occurred_at\"]), text(&i[\"issue_id\"])));",
+        "replace": "issues.reverse();",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Whole-state issues sort by lexical timestamp and identity."
+      }
+    },
+    {
+      "id": "QRT-102",
+      "before": {
+        "id": "QRT-102",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"canonical_input\":canonical",
+        "replace": "\"canonical_input\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: canonical_input."
+      },
+      "after": {
+        "id": "QRT-102",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "(\"canonical_input\", canonical),",
+        "replace": "(\"canonical_input\", Py::Null),",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: canonical_input."
+      }
+    },
+    {
+      "id": "QRT-103",
+      "before": {
+        "id": "QRT-103",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"projection\":projection",
+        "replace": "\"projection\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: projection."
+      },
+      "after": {
+        "id": "QRT-103",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "(\"projection\", self.projection),",
+        "replace": "(\"projection\", Py::Null),",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: projection."
+      }
+    },
+    {
+      "id": "QRT-104",
+      "before": {
+        "id": "QRT-104",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"issues\":issues",
+        "replace": "\"issues\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: issues."
+      },
+      "after": {
+        "id": "QRT-104",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "(\"issues\", super::into_py(self.issues)?),",
+        "replace": "(\"issues\", Py::Null),",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: issues."
+      }
+    },
+    {
+      "id": "QRT-105",
+      "before": {
+        "id": "QRT-105",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"tax_eligibility\":tax",
+        "replace": "\"tax_eligibility\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: tax_eligibility."
+      },
+      "after": {
+        "id": "QRT-105",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "(\"tax_eligibility\", self.tax),",
+        "replace": "(\"tax_eligibility\", Py::Null),",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: tax_eligibility."
+      }
+    },
+    {
+      "id": "QRT-106",
+      "before": {
+        "id": "QRT-106",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"gap_candidate_transaction_ids\":gaps[2]",
+        "replace": "\"gap_candidate_transaction_ids\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: gap_candidate_transaction_ids."
+      },
+      "after": {
+        "id": "QRT-106",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "super::into_py(gaps[2].take())?",
+        "replace": "Py::Null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: gap_candidate_transaction_ids."
+      }
+    },
+    {
+      "id": "QRT-107",
+      "before": {
+        "id": "QRT-107",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"gap_holds\":gaps[3]",
+        "replace": "\"gap_holds\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: gap_holds."
+      },
+      "after": {
+        "id": "QRT-107",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "super::into_py(gaps[3].take())?",
+        "replace": "Py::Null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: gap_holds."
+      }
+    },
+    {
+      "id": "QRT-108",
+      "before": {
+        "id": "QRT-108",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"reviewed_conversion_pairs\":comp[2]",
+        "replace": "\"reviewed_conversion_pairs\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: reviewed_conversion_pairs."
+      },
+      "after": {
+        "id": "QRT-108",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "super::into_py(comp[2].take())?",
+        "replace": "Py::Null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: reviewed_conversion_pairs."
+      }
+    },
+    {
+      "id": "QRT-109",
+      "before": {
+        "id": "QRT-109",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "\"reviewed_direct_payouts\":comp[3]",
+        "replace": "\"reviewed_direct_payouts\":null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: reviewed_direct_payouts."
+      },
+      "after": {
+        "id": "QRT-109",
+        "file": "crates/custody/src/quantity/runtime.rs",
+        "find": "super::into_py(comp[3].take())?",
+        "replace": "Py::Null",
+        "expect_failing": [
+          "quantity_whole_state_vectors"
+        ],
+        "rule": "Complete state composition retains its exact runtime field: reviewed_direct_payouts."
+      }
+    }
+  ],
+  "added": [
+    {
+      "id": "quantity-perf-issue-barrier",
+      "file": "crates/custody/src/quantity/runtime.rs",
+      "find": "let tax = if array(&issues).is_empty() {",
+      "replace": "let tax = if true {",
+      "expect_failing": [
+        "quantity_whole_state_vectors"
+      ],
+      "rule": "Only an issue-free projection can omit the scoped tax barrier kernel."
+    },
+    {
+      "id": "quantity-perf-ascii-hash",
+      "file": "crates/custody/src/quantity/mod.rs",
+      "find": ".all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))",
+      "replace": ".all(|c| c.is_ascii_hexdigit())",
+      "expect_failing": [
+        "quantity_arbitration_vectors"
+      ],
+      "rule": "The ASCII SHA-256 shortcut must reject uppercase hashes through the general constructor."
+    },
+    {
+      "id": "quantity-perf-native-event-order",
+      "file": "crates/custody/src/quantity/native.rs",
+      "find": "event_key(&pair[0]) < event_key(&pair[1])",
+      "replace": "true",
+      "expect_failing": [
+        "quantity_native_borrowed_event_order"
+      ],
+      "rule": "Borrowed native input must retain sorted event order and last-key-wins duplicate admission."
+    },
+    {
+      "id": "quantity-perf-default-decision-state",
+      "file": "crates/custody/src/quantity/arbitration.rs",
+      "find": "(\"state\", Py::Str(\"external_presumed\".into())),",
+      "replace": "(\"state\", Py::Str(\"external_confirmed\".into())),",
+      "expect_failing": [
+        "quantity_arbitration_vectors"
+      ],
+      "rule": "A directly serialized unmatched source stays presumed, never confirmed."
+    },
+    {
+      "id": "quantity-perf-default-decision-barrier",
+      "file": "crates/custody/src/quantity/runtime.rs",
+      "find": "            &projection.view(),",
+      "replace": "            &view,",
+      "expect_failing": [
+        "quantity_whole_state_vectors"
+      ],
+      "rule": "Scoped eligibility barriers must include unmatched source decisions omitted from issue-only views."
+    },
+    {
+      "id": "quantity-perf-unused-alias-validation",
+      "file": "crates/custody/src/quantity/runtime.rs",
+      "find": ".any(|leg| leg[\"quantity_hash\"].as_str() == Some(hash))",
+      "replace": ".any(|leg| leg[\"quantity_hash\"].as_str() == Some(hash) || hash == \"missing\")",
+      "expect_failing": [
+        "quantity_unused_alias_validation"
+      ],
+      "rule": "Skipping an unused alias index still refuses aliases absent from every observation."
+    },
+    {
+      "id": "quantity-perf-observation-order",
+      "file": "crates/custody/src/quantity/arbitration.rs",
+      "find": "self.by_hash\n                        .into_values()",
+      "replace": "self.by_hash\n                        .into_values().rev()",
+      "expect_failing": [
+        "quantity_arbitration_vectors"
+      ],
+      "rule": "Arbitration emits observations in ascending quantity-hash order."
+    }
+  ],
+  "mutations": {
+    "exit_code": 0,
+    "seconds": 1639.4826139270008,
+    "catalog": 2299,
+    "selected_catalog": 363,
+    "killed": [
+      "quantity-admission-included-principal",
+      "quantity-admission-inbound-delta",
+      "quantity-admission-inclusive-delta",
+      "quantity-admission-exclusive-delta",
+      "quantity-admission-network-liquidv1",
+      "quantity-admission-network-liquidtestnet",
+      "quantity-admission-network-elementsregtest",
+      "quantity-admission-asset-exposure",
+      "quantity-admission-identity",
+      "quantity-admission-hash-size",
+      "quantity-admission-hash-case",
+      "quantity-admission-hash-leading-underscore",
+      "quantity-admission-hash-hex",
+      "quantity-admission-hash-character",
+      "quantity-admission-hash-trailing-underscore",
+      "quantity-admission-direction",
+      "quantity-admission-asset-required",
+      "quantity-admission-negative-amount",
+      "quantity-admission-negative-fee",
+      "quantity-admission-inbound-included",
+      "quantity-admission-zero-principal",
+      "quantity-admission-included-capacity",
+      "quantity-arbitration-empty-hash",
+      "quantity-arbitration-negative-start",
+      "quantity-arbitration-empty-slice",
+      "quantity-arbitration-claim-id",
+      "quantity-arbitration-claim-reason",
+      "quantity-arbitration-priority-reviewed",
+      "quantity-arbitration-priority-native",
+      "quantity-arbitration-priority-convention",
+      "quantity-arbitration-state-native",
+      "quantity-arbitration-state-reviewed",
+      "quantity-arbitration-state-external",
+      "quantity-arbitration-state-unsupported",
+      "quantity-arbitration-target-required",
+      "quantity-arbitration-target-forbidden",
+      "quantity-arbitration-target-conservation",
+      "quantity-arbitration-bundle-nonempty",
+      "quantity-arbitration-destination-supported",
+      "quantity-arbitration-external-destination",
+      "quantity-arbitration-retained-review",
+      "quantity-arbitration-subtype-supported",
+      "quantity-arbitration-subtype-review",
+      "quantity-arbitration-cross-rail-target",
+      "quantity-arbitration-single-review-bundle",
+      "quantity-arbitration-target-offset",
+      "quantity-arbitration-semantic-state",
+      "quantity-arbitration-semantic-destination_kind",
+      "quantity-arbitration-semantic-external_economic_subtype",
+      "quantity-arbitration-semantic-transfer_kind",
+      "quantity-arbitration-semantic-transfer_policy",
+      "quantity-arbitration-semantic-component_id",
+      "quantity-arbitration-semantic-target",
+      "quantity-arbitration-duplicate-observation",
+      "quantity-arbitration-bundle-rank",
+      "quantity-arbitration-duplicate-claim",
+      "quantity-arbitration-source-direction",
+      "quantity-arbitration-source-capacity",
+      "quantity-arbitration-target-direction",
+      "quantity-arbitration-target-capacity",
+      "quantity-arbitration-domain-fields",
+      "quantity-arbitration-domain-rail",
+      "quantity-arbitration-invalid-priority",
+      "quantity-arbitration-malformed-hold",
+      "quantity-arbitration-residual-suspense",
+      "quantity-arbitration-claim-start",
+      "quantity-arbitration-claim-end",
+      "quantity-arbitration-authority-boundary",
+      "quantity-arbitration-authority-agreement",
+      "quantity-arbitration-strongest-rank",
+      "quantity-arbitration-equal-rank",
+      "quantity-arbitration-overlap-cluster",
+      "quantity-arbitration-touching-targets",
+      "quantity-arbitration-transitive-targets",
+      "quantity-arbitration-atomic-source",
+      "quantity-arbitration-atomic-target",
+      "quantity-arbitration-atomic-targetless",
+      "quantity-arbitration-fee-posting",
+      "quantity-arbitration-target-posting",
+      "quantity-arbitration-source-location",
+      "quantity-arbitration-conflict-location",
+      "quantity-arbitration-inbound-gap",
+      "quantity-arbitration-inbound-tail",
+      "quantity-arbitration-origin-sign",
+      "quantity-arbitration-decision-order",
+      "quantity-arbitration-posting-order",
+      "quantity-admission-hash-c0-separators",
+      "QN-001",
+      "QN-002",
+      "QN-003",
+      "QN-004",
+      "QN-005",
+      "QN-006",
+      "QN-007",
+      "QN-008",
+      "QN-009",
+      "QN-010",
+      "QN-011",
+      "QN-013",
+      "QN-014",
+      "QN-015",
+      "QN-016",
+      "QN-017",
+      "QN-018",
+      "QN-019",
+      "QN-020",
+      "QN-021",
+      "QN-022",
+      "QN-023",
+      "QN-024",
+      "QN-025",
+      "QN-026",
+      "QN-027",
+      "QN-028",
+      "QN-029",
+      "QN-030",
+      "QN-031",
+      "QN-032",
+      "QN-033",
+      "QN-034",
+      "QN-035",
+      "QN-036",
+      "QN-037",
+      "QN-038",
+      "QN-039",
+      "QN-040",
+      "QN-041",
+      "QN-042",
+      "QN-043",
+      "QN-044",
+      "QN-045",
+      "QN-047",
+      "QN-048",
+      "QN-049",
+      "QN-050",
+      "QN-051",
+      "QN-052",
+      "QN-053",
+      "QN-054",
+      "QN-055",
+      "QN-056",
+      "QN-057",
+      "QN-058",
+      "QN-059",
+      "QN-060",
+      "QN-061",
+      "QN-062",
+      "QN-063",
+      "QN-064",
+      "QN-065",
+      "QN-066",
+      "QN-067",
+      "QN-068",
+      "QN-069",
+      "QN-070",
+      "QN-071",
+      "QN-072",
+      "QN-073",
+      "QN-074",
+      "QN-075",
+      "QN-076",
+      "QN-077",
+      "QN-078",
+      "QN-079",
+      "QN-080",
+      "QN-081",
+      "QN-082",
+      "QN-083",
+      "QN-084",
+      "QN-085",
+      "QN-086",
+      "QN-087",
+      "QN-088",
+      "QN-089",
+      "QN-090",
+      "QN-091",
+      "QN-092",
+      "QN-093",
+      "QN-094",
+      "QN-095",
+      "QN-096",
+      "QN-097",
+      "QN-098",
+      "QN-101",
+      "QN-102",
+      "QN-103",
+      "QN-104",
+      "QN-105",
+      "QN-106",
+      "QN-107",
+      "QN-108",
+      "QN-109",
+      "QN-110",
+      "QN-111",
+      "QN-112",
+      "QN-113",
+      "QN-114",
+      "QN-115",
+      "QN-116",
+      "QN-117",
+      "QN-118",
+      "QN-119",
+      "QN-120",
+      "QN-121",
+      "QN-122",
+      "QN-123",
+      "QN-124",
+      "QN-125",
+      "QN-126",
+      "QN-127",
+      "QN-128",
+      "QN-129",
+      "QN-130",
+      "QN-131",
+      "QN-132",
+      "QN-133",
+      "QN-134",
+      "QN-135",
+      "QN-136",
+      "QN-137",
+      "QN-138",
+      "QN-139",
+      "QN-140",
+      "QN-141",
+      "QN-142",
+      "QN-143",
+      "QN-144",
+      "QN-145",
+      "QN-146",
+      "QN-147",
+      "QN-148",
+      "QN-149",
+      "QN-150",
+      "QN-151",
+      "QN-152",
+      "QN-153",
+      "QX-011",
+      "QX-012",
+      "QX-013",
+      "QX-014",
+      "QX-015",
+      "QX-016",
+      "QX-017",
+      "QX-018",
+      "QX-019",
+      "QX-020",
+      "QX-021",
+      "QX-source-inclusive",
+      "QX-target-fee",
+      "QX-target-inclusive",
+      "QX-proof-schema-0",
+      "QX-proof-schema-1",
+      "QX-proof-schema-2",
+      "QX-proof-schema-3",
+      "QRT-044",
+      "QRT-045",
+      "QRT-046",
+      "QRT-047",
+      "QRT-048",
+      "QRT-049",
+      "QRT-050",
+      "QRT-051",
+      "QRT-052",
+      "QRT-053",
+      "QRT-054",
+      "QRT-055",
+      "QRT-056",
+      "QRT-057",
+      "QRT-058",
+      "QRT-059",
+      "QRT-060",
+      "QRT-061",
+      "QRT-062",
+      "QRT-063",
+      "QRT-064",
+      "QRT-065",
+      "QRT-066",
+      "QRT-067",
+      "QRT-068",
+      "QRT-069",
+      "QRT-070",
+      "QRT-071",
+      "QRT-072",
+      "QRT-073",
+      "QRT-074",
+      "QRT-093",
+      "QRT-094",
+      "QRT-095",
+      "QRT-096",
+      "QRT-097",
+      "QRT-098",
+      "QRT-099",
+      "QRT-100",
+      "QRT-101",
+      "QRT-102",
+      "QRT-103",
+      "QRT-104",
+      "QRT-105",
+      "QRT-106",
+      "QRT-107",
+      "QRT-108",
+      "QRT-109",
+      "QRT-110",
+      "QRT-111",
+      "QRT-112",
+      "QRT-113",
+      "QRT-114",
+      "QRT-115",
+      "QRT-116",
+      "QRT-117",
+      "QRT-118",
+      "R2-review-rejected-min",
+      "R2-review-blocker-positive",
+      "R2-review-bundle-anchor",
+      "R2-review-reconciled-filter",
+      "R2-review-evidence-subject",
+      "R2-review-finalized-allowlist",
+      "R2-review-audit-runtime-88",
+      "R2-review-audit-runtime-126",
+      "R2-review-audit-runtime-132",
+      "R2-review-audit-runtime-156",
+      "R2-review-audit-runtime-258",
+      "R2-review-audit-runtime-349",
+      "R2-review-audit-runtime-350",
+      "R2-review-audit-runtime-353",
+      "R2-review-audit-runtime-360",
+      "R2-review-audit-runtime-366",
+      "R2-review-audit-runtime-626",
+      "R2-review-audit-runtime-667",
+      "R2-review-audit-runtime-785",
+      "R2-review-audit-native-119",
+      "R2-review-audit-native-131",
+      "R2-review-audit-native-132",
+      "R2-review-audit-native-133",
+      "R2-review-audit-native-165",
+      "R2-review-audit-native-167",
+      "R2-review-audit-native-169",
+      "R2-review-audit-native-170",
+      "R2-review-audit-native-368",
+      "R2-review-audit-native-389",
+      "R2-review-audit-native-450",
+      "R2-review-audit-arbitration-77",
+      "R2-review-audit-arbitration-80",
+      "R2-review-audit-arbitration-106",
+      "R2-review-audit-arbitration-109",
+      "R2-review-audit-arbitration-283",
+      "R2-review-audit-arbitration-314",
+      "R2-review-audit-arbitration-322",
+      "R2-review-audit-arbitration-378",
+      "R2-review-audit-arbitration-590",
+      "R2-review-audit-arbitration-638",
+      "R2-review-audit-mod-34",
+      "R2-review-audit-mod-43",
+      "R2-review-audit-mod-101",
+      "R2-review-bundle-min",
+      "quantity-perf-issue-barrier",
+      "quantity-perf-ascii-hash",
+      "quantity-perf-native-event-order",
+      "quantity-perf-default-decision-state",
+      "quantity-perf-default-decision-barrier",
+      "quantity-perf-unused-alias-validation",
+      "quantity-perf-observation-order",
+      "quantity-arbitration-atomic-hold"
+    ],
+    "kill_set_equals_catalog": true,
+    "baseline": [
+      "baseline: 17 tests pass unmutated",
+      "baseline: 1 tests pass unmutated"
+    ],
+    "problems": [],
+    "source_sha256": {
+      "crates/custody/src/quantity/arbitration.rs": "42a8beda9454bf90186399ee97880e00875b609911d12b749de692d5dc4c50ba",
+      "crates/custody/src/quantity/mod.rs": "ce2b74490dbff9d25d9912db1d520fa5ab52c6d5180ad568fe17d8870830f41d",
+      "crates/custody/src/quantity/native.rs": "edb5038257cfc74a8cc9f78ca641b7a0a94a9df72c2f9c59d03f5eddb09aa39f",
+      "crates/custody/src/quantity/runtime.rs": "2a6792bf073e08d677ca1362a59144546723554317f8297f4002ace16113b536"
+    },
+    "build_tree_deleted": true,
+    "initial_attempt": {
+      "exit_code": 1,
+      "seconds": 1611.7661932440096,
+      "catalog": 2299,
+      "selected_catalog": 363,
+      "killed": [
+        "quantity-admission-included-principal",
+        "quantity-admission-inbound-delta",
+        "quantity-admission-inclusive-delta",
+        "quantity-admission-exclusive-delta",
+        "quantity-admission-network-liquidv1",
+        "quantity-admission-network-liquidtestnet",
+        "quantity-admission-network-elementsregtest",
+        "quantity-admission-asset-exposure",
+        "quantity-admission-identity",
+        "quantity-admission-hash-size",
+        "quantity-admission-hash-case",
+        "quantity-admission-hash-leading-underscore",
+        "quantity-admission-hash-hex",
+        "quantity-admission-hash-character",
+        "quantity-admission-hash-trailing-underscore",
+        "quantity-admission-direction",
+        "quantity-admission-asset-required",
+        "quantity-admission-negative-amount",
+        "quantity-admission-negative-fee",
+        "quantity-admission-inbound-included",
+        "quantity-admission-zero-principal",
+        "quantity-admission-included-capacity",
+        "quantity-arbitration-empty-hash",
+        "quantity-arbitration-negative-start",
+        "quantity-arbitration-empty-slice",
+        "quantity-arbitration-claim-id",
+        "quantity-arbitration-claim-reason",
+        "quantity-arbitration-priority-reviewed",
+        "quantity-arbitration-priority-native",
+        "quantity-arbitration-priority-convention",
+        "quantity-arbitration-state-native",
+        "quantity-arbitration-state-reviewed",
+        "quantity-arbitration-state-external",
+        "quantity-arbitration-state-unsupported",
+        "quantity-arbitration-target-required",
+        "quantity-arbitration-target-forbidden",
+        "quantity-arbitration-target-conservation",
+        "quantity-arbitration-bundle-nonempty",
+        "quantity-arbitration-destination-supported",
+        "quantity-arbitration-external-destination",
+        "quantity-arbitration-retained-review",
+        "quantity-arbitration-subtype-supported",
+        "quantity-arbitration-subtype-review",
+        "quantity-arbitration-cross-rail-target",
+        "quantity-arbitration-single-review-bundle",
+        "quantity-arbitration-target-offset",
+        "quantity-arbitration-semantic-state",
+        "quantity-arbitration-semantic-destination_kind",
+        "quantity-arbitration-semantic-external_economic_subtype",
+        "quantity-arbitration-semantic-transfer_kind",
+        "quantity-arbitration-semantic-transfer_policy",
+        "quantity-arbitration-semantic-component_id",
+        "quantity-arbitration-semantic-target",
+        "quantity-arbitration-duplicate-observation",
+        "quantity-arbitration-bundle-rank",
+        "quantity-arbitration-duplicate-claim",
+        "quantity-arbitration-source-direction",
+        "quantity-arbitration-source-capacity",
+        "quantity-arbitration-target-direction",
+        "quantity-arbitration-target-capacity",
+        "quantity-arbitration-domain-fields",
+        "quantity-arbitration-domain-rail",
+        "quantity-arbitration-invalid-priority",
+        "quantity-arbitration-malformed-hold",
+        "quantity-arbitration-residual-suspense",
+        "quantity-arbitration-claim-start",
+        "quantity-arbitration-claim-end",
+        "quantity-arbitration-authority-boundary",
+        "quantity-arbitration-authority-agreement",
+        "quantity-arbitration-strongest-rank",
+        "quantity-arbitration-equal-rank",
+        "quantity-arbitration-overlap-cluster",
+        "quantity-arbitration-touching-targets",
+        "quantity-arbitration-transitive-targets",
+        "quantity-arbitration-atomic-source",
+        "quantity-arbitration-atomic-target",
+        "quantity-arbitration-atomic-targetless",
+        "quantity-arbitration-fee-posting",
+        "quantity-arbitration-target-posting",
+        "quantity-arbitration-source-location",
+        "quantity-arbitration-conflict-location",
+        "quantity-arbitration-inbound-gap",
+        "quantity-arbitration-inbound-tail",
+        "quantity-arbitration-origin-sign",
+        "quantity-arbitration-decision-order",
+        "quantity-arbitration-posting-order",
+        "quantity-admission-hash-c0-separators",
+        "QN-001",
+        "QN-002",
+        "QN-003",
+        "QN-004",
+        "QN-005",
+        "QN-006",
+        "QN-007",
+        "QN-008",
+        "QN-009",
+        "QN-010",
+        "QN-011",
+        "QN-013",
+        "QN-014",
+        "QN-015",
+        "QN-016",
+        "QN-017",
+        "QN-018",
+        "QN-019",
+        "QN-020",
+        "QN-021",
+        "QN-022",
+        "QN-023",
+        "QN-024",
+        "QN-025",
+        "QN-026",
+        "QN-027",
+        "QN-028",
+        "QN-029",
+        "QN-030",
+        "QN-031",
+        "QN-032",
+        "QN-033",
+        "QN-034",
+        "QN-035",
+        "QN-036",
+        "QN-037",
+        "QN-038",
+        "QN-039",
+        "QN-040",
+        "QN-041",
+        "QN-042",
+        "QN-043",
+        "QN-044",
+        "QN-045",
+        "QN-047",
+        "QN-048",
+        "QN-049",
+        "QN-050",
+        "QN-051",
+        "QN-052",
+        "QN-053",
+        "QN-054",
+        "QN-055",
+        "QN-056",
+        "QN-057",
+        "QN-058",
+        "QN-059",
+        "QN-060",
+        "QN-061",
+        "QN-062",
+        "QN-063",
+        "QN-064",
+        "QN-065",
+        "QN-066",
+        "QN-067",
+        "QN-068",
+        "QN-069",
+        "QN-070",
+        "QN-071",
+        "QN-072",
+        "QN-073",
+        "QN-074",
+        "QN-075",
+        "QN-076",
+        "QN-077",
+        "QN-078",
+        "QN-079",
+        "QN-080",
+        "QN-081",
+        "QN-082",
+        "QN-083",
+        "QN-084",
+        "QN-085",
+        "QN-086",
+        "QN-087",
+        "QN-088",
+        "QN-089",
+        "QN-090",
+        "QN-091",
+        "QN-092",
+        "QN-093",
+        "QN-094",
+        "QN-095",
+        "QN-096",
+        "QN-097",
+        "QN-098",
+        "QN-101",
+        "QN-102",
+        "QN-103",
+        "QN-104",
+        "QN-105",
+        "QN-106",
+        "QN-107",
+        "QN-108",
+        "QN-109",
+        "QN-110",
+        "QN-111",
+        "QN-112",
+        "QN-113",
+        "QN-114",
+        "QN-115",
+        "QN-116",
+        "QN-117",
+        "QN-118",
+        "QN-119",
+        "QN-120",
+        "QN-121",
+        "QN-122",
+        "QN-123",
+        "QN-124",
+        "QN-125",
+        "QN-126",
+        "QN-127",
+        "QN-128",
+        "QN-129",
+        "QN-130",
+        "QN-131",
+        "QN-132",
+        "QN-133",
+        "QN-134",
+        "QN-135",
+        "QN-136",
+        "QN-137",
+        "QN-138",
+        "QN-139",
+        "QN-140",
+        "QN-141",
+        "QN-142",
+        "QN-143",
+        "QN-144",
+        "QN-145",
+        "QN-146",
+        "QN-147",
+        "QN-148",
+        "QN-149",
+        "QN-150",
+        "QN-151",
+        "QN-152",
+        "QN-153",
+        "QX-011",
+        "QX-012",
+        "QX-013",
+        "QX-014",
+        "QX-015",
+        "QX-016",
+        "QX-017",
+        "QX-018",
+        "QX-019",
+        "QX-020",
+        "QX-021",
+        "QX-source-inclusive",
+        "QX-target-fee",
+        "QX-target-inclusive",
+        "QX-proof-schema-0",
+        "QX-proof-schema-1",
+        "QX-proof-schema-2",
+        "QX-proof-schema-3",
+        "QRT-044",
+        "QRT-045",
+        "QRT-046",
+        "QRT-047",
+        "QRT-048",
+        "QRT-049",
+        "QRT-050",
+        "QRT-051",
+        "QRT-052",
+        "QRT-053",
+        "QRT-054",
+        "QRT-055",
+        "QRT-056",
+        "QRT-057",
+        "QRT-058",
+        "QRT-059",
+        "QRT-060",
+        "QRT-061",
+        "QRT-062",
+        "QRT-063",
+        "QRT-064",
+        "QRT-065",
+        "QRT-066",
+        "QRT-067",
+        "QRT-068",
+        "QRT-069",
+        "QRT-070",
+        "QRT-071",
+        "QRT-072",
+        "QRT-073",
+        "QRT-074",
+        "QRT-093",
+        "QRT-094",
+        "QRT-095",
+        "QRT-096",
+        "QRT-097",
+        "QRT-098",
+        "QRT-099",
+        "QRT-100",
+        "QRT-101",
+        "QRT-102",
+        "QRT-103",
+        "QRT-104",
+        "QRT-105",
+        "QRT-106",
+        "QRT-107",
+        "QRT-108",
+        "QRT-109",
+        "QRT-110",
+        "QRT-111",
+        "QRT-112",
+        "QRT-113",
+        "QRT-114",
+        "QRT-115",
+        "QRT-116",
+        "QRT-117",
+        "QRT-118",
+        "R2-review-rejected-min",
+        "R2-review-blocker-positive",
+        "R2-review-bundle-anchor",
+        "R2-review-reconciled-filter",
+        "R2-review-evidence-subject",
+        "R2-review-finalized-allowlist",
+        "R2-review-audit-runtime-88",
+        "R2-review-audit-runtime-126",
+        "R2-review-audit-runtime-132",
+        "R2-review-audit-runtime-156",
+        "R2-review-audit-runtime-258",
+        "R2-review-audit-runtime-349",
+        "R2-review-audit-runtime-350",
+        "R2-review-audit-runtime-353",
+        "R2-review-audit-runtime-360",
+        "R2-review-audit-runtime-366",
+        "R2-review-audit-runtime-626",
+        "R2-review-audit-runtime-667",
+        "R2-review-audit-runtime-785",
+        "R2-review-audit-native-119",
+        "R2-review-audit-native-131",
+        "R2-review-audit-native-132",
+        "R2-review-audit-native-133",
+        "R2-review-audit-native-165",
+        "R2-review-audit-native-167",
+        "R2-review-audit-native-169",
+        "R2-review-audit-native-170",
+        "R2-review-audit-native-368",
+        "R2-review-audit-native-389",
+        "R2-review-audit-native-450",
+        "R2-review-audit-arbitration-77",
+        "R2-review-audit-arbitration-80",
+        "R2-review-audit-arbitration-106",
+        "R2-review-audit-arbitration-109",
+        "R2-review-audit-arbitration-283",
+        "R2-review-audit-arbitration-314",
+        "R2-review-audit-arbitration-322",
+        "R2-review-audit-arbitration-378",
+        "R2-review-audit-arbitration-590",
+        "R2-review-audit-arbitration-638",
+        "R2-review-audit-mod-34",
+        "R2-review-audit-mod-43",
+        "R2-review-audit-mod-101",
+        "R2-review-bundle-min",
+        "quantity-perf-issue-barrier",
+        "quantity-perf-ascii-hash",
+        "quantity-perf-native-event-order",
+        "quantity-perf-default-decision-state",
+        "quantity-perf-default-decision-barrier",
+        "quantity-perf-unused-alias-validation",
+        "quantity-perf-observation-order"
+      ],
+      "kill_set_equals_catalog": false,
+      "baseline": [
+        "baseline: 17 tests pass unmutated"
+      ],
+      "problems": [
+        "ERROR    quantity-arbitration-atomic-hold"
+      ],
+      "source_sha256": {
+        "crates/custody/src/quantity/arbitration.rs": "42a8beda9454bf90186399ee97880e00875b609911d12b749de692d5dc4c50ba",
+        "crates/custody/src/quantity/mod.rs": "ce2b74490dbff9d25d9912db1d520fa5ab52c6d5180ad568fe17d8870830f41d",
+        "crates/custody/src/quantity/native.rs": "edb5038257cfc74a8cc9f78ca641b7a0a94a9df72c2f9c59d03f5eddb09aa39f",
+        "crates/custody/src/quantity/runtime.rs": "2a6792bf073e08d677ca1362a59144546723554317f8297f4002ace16113b536"
+      },
+      "build_tree_deleted": true
+    },
+    "corrected_attempt": {
+      "exit_code": 0,
+      "seconds": 27.716420682991156,
+      "selected_catalog": 1,
+      "killed": [
+        "quantity-arbitration-atomic-hold"
+      ],
+      "baseline": [
+        "baseline: 1 tests pass unmutated"
+      ],
+      "problems": [],
+      "source_sha256": {
+        "crates/custody/src/quantity/arbitration.rs": "42a8beda9454bf90186399ee97880e00875b609911d12b749de692d5dc4c50ba",
+        "crates/custody/src/quantity/mod.rs": "ce2b74490dbff9d25d9912db1d520fa5ab52c6d5180ad568fe17d8870830f41d",
+        "crates/custody/src/quantity/native.rs": "edb5038257cfc74a8cc9f78ca641b7a0a94a9df72c2f9c59d03f5eddb09aa39f",
+        "crates/custody/src/quantity/runtime.rs": "2a6792bf073e08d677ca1362a59144546723554317f8297f4002ace16113b536"
+      },
+      "build_tree_deleted": true
+    },
+    "repaired_recipes": [
+      {
+        "id": "quantity-arbitration-atomic-hold",
+        "before": {
+          "id": "quantity-arbitration-atomic-hold",
+          "file": "crates/custody/src/quantity/arbitration.rs",
+          "find": "decision.conflict(\"atomic_bundle_incomplete\", ids);",
+          "replace": "decision.value[\"reason\"] = json!(\"unmatched_outbound_default\");",
+          "expect_failing": [
+            "quantity_arbitration_vectors"
+          ],
+          "rule": "Incomplete atomic bundles hold every selected sibling."
+        },
+        "after": {
+          "id": "quantity-arbitration-atomic-hold",
+          "file": "crates/custody/src/quantity/arbitration.rs",
+          "find": "decision.conflict(\"atomic_bundle_incomplete\", ids);",
+          "replace": "decision.value_mut()[\"reason\"] = json!(\"unmatched_outbound_default\");",
+          "expect_failing": [
+            "quantity_arbitration_vectors"
+          ],
+          "rule": "Incomplete atomic bundles hold every selected sibling."
+        }
+      }
+    ]
+  },
+  "verification": [
+    {
+      "check": "quantity-python-contracts",
+      "code": 0,
+      "seconds": 346.3605374280014
+    },
+    {
+      "check": "census-core-accounting",
+      "code": 0,
+      "seconds": 668.9429389880024
+    },
+    {
+      "check": "tax-shadow-scratch-path",
+      "code": 0,
+      "seconds": 6.264546374994097
+    },
+    {
+      "check": "cargo-private-build-dir",
+      "code": 0,
+      "seconds": 0.0710296949982876
+    },
+    {
+      "check": "quantity-port-private-build-dir",
+      "code": 0,
+      "seconds": 21.8683181469969
+    },
+    {
+      "check": "census-reports-contracts",
+      "code": 0,
+      "seconds": 749.5471946470061
+    },
+    {
+      "check": "shadow-core-accounting",
+      "code": 0,
+      "seconds": 110.93046287899779
+    },
+    {
+      "check": "shadow-reports-contracts",
+      "code": 0,
+      "seconds": 691.5924939810066
+    },
+    {
+      "check": "mutation-applicability",
+      "code": 0,
+      "seconds": 0.5320705109916162,
+      "after_catalog_repair": true
+    },
+    {
+      "check": "fmt",
+      "code": 0,
+      "seconds": 2.010064483009046
+    },
+    {
+      "check": "clippy",
+      "code": 0,
+      "seconds": 174.904156959994
+    },
+    {
+      "check": "workspace-tests",
+      "code": 0,
+      "seconds": 714.5578363709938
+    },
+    {
+      "check": "classify-tests",
+      "code": 0,
+      "seconds": 11.554867068000021
+    },
+    {
+      "check": "preflight",
+      "code": 0,
+      "seconds": 60.81754238699796
+    }
+  ],
+  "parity": {
+    "gen-channels": {
+      "requests": 2064,
+      "refusals": 0,
+      "quantity_outputs": 2064,
+      "decision_refusals": 0,
+      "seconds": 12.470135274998029
+    },
+    "gen-components": {
+      "requests": 2312,
+      "refusals": 0,
+      "quantity_outputs": 2312,
+      "decision_refusals": 0,
+      "seconds": 10.022064714998123
+    },
+    "gen-evidence": {
+      "requests": 2058,
+      "refusals": 0,
+      "quantity_outputs": 2058,
+      "decision_refusals": 0,
+      "seconds": 6.051004022992856
+    },
+    "gen-fanout": {
+      "requests": 2094,
+      "refusals": 178,
+      "quantity_outputs": 2094,
+      "decision_refusals": 0,
+      "seconds": 8.072625294000318
+    },
+    "gen-gaps": {
+      "requests": 2064,
+      "refusals": 0,
+      "quantity_outputs": 2064,
+      "decision_refusals": 0,
+      "seconds": 29.62848621399462
+    },
+    "gen-graph": {
+      "requests": 2016,
+      "refusals": 0,
+      "quantity_outputs": 2016,
+      "decision_refusals": 0,
+      "seconds": 9.060495215002447
+    },
+    "gen-native": {
+      "requests": 2110,
+      "refusals": 0,
+      "quantity_outputs": 2110,
+      "decision_refusals": 0,
+      "seconds": 7.370135327997559
+    },
+    "gen-pipeline": {
+      "requests": 2024,
+      "refusals": 0,
+      "quantity_outputs": 2024,
+      "decision_refusals": 0,
+      "seconds": 14.98317565400066
+    },
+    "gen-reconciliation": {
+      "requests": 2050,
+      "refusals": 0,
+      "quantity_outputs": 2050,
+      "decision_refusals": 0,
+      "seconds": 15.236063891999947
+    },
+    "gen-recorded": {
+      "requests": 2092,
+      "refusals": 0,
+      "quantity_outputs": 2092,
+      "decision_refusals": 0,
+      "seconds": 4.6086726560024545
+    },
+    "gen-safety": {
+      "requests": 2078,
+      "refusals": 0,
+      "quantity_outputs": 2078,
+      "decision_refusals": 0,
+      "seconds": 5.846928833001584
+    },
+    "gen-samourai": {
+      "requests": 2068,
+      "refusals": 0,
+      "quantity_outputs": 2068,
+      "decision_refusals": 0,
+      "seconds": 6.212223243004701
+    },
+    "replay": {
+      "requests": 318,
+      "refusals": 0,
+      "quantity_outputs": 318,
+      "decision_refusals": 0,
+      "seconds": 3.8102075920032803
+    }
+  },
+  "activity": {
+    "suites": {
+      "evidence": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 1333,
+        "scenario_counts": {
+          "ordinary": 69,
+          "transfer": 69,
+          "fanout": 69,
+          "shared_fee": 69,
+          "contradiction": 69,
+          "samourai": 69,
+          "channel": 69,
+          "loan": 69,
+          "liquid": 69,
+          "excluded_anchor": 69,
+          "missing_anchor": 69,
+          "gap": 69,
+          "receipt_overlap": 69,
+          "zero_delta": 23,
+          "duplicate_fee": 69,
+          "scope_conflict": 69,
+          "exact_integer": 69,
+          "surrogate": 69,
+          "receipt_success": 0,
+          "receipt_deprecated": 0,
+          "receipt_priority": 0,
+          "receipt_label": 0,
+          "receipt_id": 0,
+          "duplicate_slot": 0,
+          "tampered_graph": 0,
+          "tampered_quantity": 0,
+          "historical_overcount": 69,
+          "nonaddress_overcount": 0,
+          "duplicate_fee_keeper": 68
+        },
+        "zero_activity_controls": [
+          "receipt_success",
+          "receipt_deprecated",
+          "receipt_priority",
+          "receipt_label",
+          "receipt_id",
+          "duplicate_slot",
+          "tampered_graph",
+          "tampered_quantity",
+          "nonaddress_overcount"
+        ]
+      },
+      "components": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 2000,
+        "scenario_counts": {
+          "balanced": 13,
+          "no_legs": 13,
+          "missing_source": 13,
+          "missing_destination": 13,
+          "unknown_role": 13,
+          "unbalanced": 13,
+          "unit_mismatch": 13,
+          "missing_time": 13,
+          "invalid_time": 13,
+          "chronology": 13,
+          "location_continuity": 13,
+          "allocation_required": 13,
+          "multi_allocation": 13,
+          "allocation_invalid": 13,
+          "allocation_quantity": 13,
+          "allocation_source_coverage": 13,
+          "allocation_sink_coverage": 13,
+          "fee_asset": 13,
+          "fee_wallet": 13,
+          "fee_scope": 13,
+          "fee_orphan": 13,
+          "scope_invalid_chain": 13,
+          "scope_rail_chain": 13,
+          "scope_invalid_network": 13,
+          "scope_mismatch": 13,
+          "scope_laundering": 13,
+          "cross_scope_laundering": 13,
+          "cross_location_continuity": 13,
+          "conversion": 13,
+          "conversion_topology": 13,
+          "conversion_retained": 13,
+          "conversion_review": 13,
+          "conversion_policy": 13,
+          "conversion_missing_value": 13,
+          "conversion_no_values": 13,
+          "conversion_unbalanced": 13,
+          "conversion_fee_quantity": 13,
+          "conversion_fee_value": 13,
+          "value_only_loss": 13,
+          "suspense": 13,
+          "suspense_mode": 13,
+          "suspense_review": 13,
+          "suspense_no_allocations": 13,
+          "suspense_anchor": 13,
+          "suspense_missing_time": 13,
+          "suspense_source": 13,
+          "suspense_asset": 13,
+          "suspense_quantity": 13,
+          "suspense_network": 13,
+          "suspense_time": 13,
+          "suspense_fee": 13,
+          "content_missing": 13,
+          "leg_count": 13,
+          "allocation_count": 13,
+          "term_count": 13,
+          "commitment_header": 13,
+          "commitment_count": 13,
+          "commitment_ordinals": 13,
+          "commitment_zero": 13,
+          "commitment_no_anchors": 13,
+          "commitment_hash": 13,
+          "commitment_volatile": 13,
+          "commitment_rejected": 13,
+          "anchor_missing": 13,
+          "anchor_retracted": 13,
+          "anchor_identity": 13,
+          "anchor_excluded": 13,
+          "anchor_source_direction": 13,
+          "anchor_destination_direction": 13,
+          "anchor_loss_direction": 13,
+          "anchor_asset": 13,
+          "anchor_wallet": 13,
+          "anchor_time_invalid": 13,
+          "anchor_time_mismatch": 13,
+          "anchor_time_warning": 13,
+          "anchor_coverage": 13,
+          "anchor_partial": 13,
+          "anchor_partial_zero": 13,
+          "anchor_partial_excess": 13,
+          "anchor_rail": 13,
+          "anchor_chain": 13,
+          "anchor_network": 13,
+          "owned_wallet_missing": 13,
+          "retained_location": 13,
+          "transaction_anchor_missing": 13,
+          "lineage_conflict": 13,
+          "revision_missing": 13,
+          "revision_scope": 13,
+          "revision_lineage": 13,
+          "revision_order": 13,
+          "revision_forward": 13,
+          "revision_valid": 13,
+          "membership_conflict": 13,
+          "membership_empty_anchor": 13,
+          "component_order": 13,
+          "children_order": 13,
+          "native_supported": 13,
+          "native_partial": 13,
+          "native_contradicted": 13,
+          "native_exact_sink": 13,
+          "native_other_asset": 13,
+          "hash_kind": 13,
+          "hash_payment": 13,
+          "hash_payment_source": 13,
+          "hash_refund_txid": 13,
+          "hash_refund_vout": 13,
+          "hash_wallet": 13,
+          "hash_direction": 13,
+          "hash_asset": 13,
+          "hash_amount": 13,
+          "hash_fee": 13,
+          "hash_included": 13,
+          "hash_event": 13,
+          "integer_semantics": 13,
+          "time_semantics": 13,
+          "scope_enriched_mismatch": 13,
+          "lineage_ties": 13,
+          "location_ties": 13,
+          "transactionless_wallet_missing": 13,
+          "anchor_row_time_invalid": 13,
+          "revision_backward": 13,
+          "chronology_after_boundary": 13,
+          "asset_l_btc_alias": 13,
+          "lightning_chain_default": 13,
+          "lightning_kind_scope": 13,
+          "core_ln_kind_scope": 13,
+          "liquid_kind_conflict": 13,
+          "inactive_header": 13,
+          "peg_in": 12,
+          "peg_out": 12,
+          "lightning_receive_lnd": 12,
+          "lightning_receive_nwc": 12,
+          "lightning_receive_cln": 12,
+          "lightning_receive_core_ln": 12,
+          "swap_terms": 12,
+          "untracked_route": 12,
+          "liquid_wallet_omitted_scope": 12,
+          "wallet_scope_conflict": 12,
+          "conversion_inferred": 12,
+          "conversion_inferred_chronology": 12,
+          "conversion_ambiguous": 12,
+          "native_namespace_gate": 12,
+          "native_excluded_rows": 12,
+          "lineage_other_profile": 12,
+          "authored_source_default": 12,
+          "retained_reviewed_notes": 12,
+          "liquid_substring_kind": 12,
+          "generic_elements_domain": 12,
+          "fee_null_domain": 12,
+          "missing_time_empty": 12,
+          "transaction_id_empty": 12,
+          "zero_amount_chronology": 12,
+          "authoritative_chronology": 12,
+          "asset_upper_semantics": 12,
+          "asset_hash_upper_019b": 12,
+          "asset_hash_upper_0264": 12
+        },
+        "zero_activity_controls": []
+      },
+      "samourai": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 2000,
+        "scenario_counts": {
+          "tx0": 59,
+          "tx0_fee": 59,
+          "mixing": 59,
+          "remix": 59,
+          "fanout": 59,
+          "badbank": 59,
+          "untrusted_source": 59,
+          "untrusted_target": 59,
+          "unknown_fee": 59,
+          "implicit_delta": 59,
+          "oversize": 59,
+          "wrong_asset": 59,
+          "group_mismatch": 59,
+          "multiple_sources": 59,
+          "invalid_role": 59,
+          "empty_group": 59,
+          "empty_section": 59,
+          "bool_group": 59,
+          "dict_group": 59,
+          "list_group": 59,
+          "nonprintable_group": 59,
+          "numeric_group": 59,
+          "false_presence_gate": 59,
+          "decoded_config": 59,
+          "mixing_residual": 59,
+          "fee_inclusive": 59,
+          "tampered_hash": 59,
+          "sorted_targets": 59,
+          "duplicate_target": 58,
+          "reviewed_reservation": 58,
+          "multiple_groups": 58,
+          "post_unicode14_group": 58,
+          "implicit_mix_residual": 58,
+          "exact_msat": 58
+        },
+        "zero_activity_controls": []
+      },
+      "recorded": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 2000,
+        "scenario_counts": {
+          "bitcoin": 44,
+          "bitcoin_upper_txid": 44,
+          "bitcoin_typed_external": 44,
+          "bitcoin_timestamp_skew": 44,
+          "bitcoin_fee_inclusive": 44,
+          "bitcoin_implicit_residual": 44,
+          "bitcoin_partial": 44,
+          "exact_msat": 44,
+          "liquid_main": 44,
+          "liquid_test": 44,
+          "liquid_regtest": 44,
+          "liquid_asset_id": 44,
+          "lightning_lnd": 44,
+          "lightning_cln": 44,
+          "lightning_circular": 44,
+          "lightning_hash_case": 44,
+          "untrusted_source": 44,
+          "untrusted_target": 44,
+          "tampered_quantity": 44,
+          "lightning_chronology": 44,
+          "untrusted_both": 44,
+          "same_wallet": 44,
+          "zero_inbound": 43,
+          "negative_outbound": 43,
+          "multiple_sources": 43,
+          "multiple_targets": 43,
+          "different_txid": 43,
+          "network_separation": 43,
+          "lightning_shortfall": 43,
+          "lightning_forged_source": 43,
+          "lightning_forged_lnd": 43,
+          "lightning_bad_hash": 43,
+          "lightning_wrong_kind": 43,
+          "lightning_chain_hash": 43,
+          "lightning_duplicate": 43,
+          "lightning_no_network": 43,
+          "lightning_asset_case": 43,
+          "liquid_missing_identity": 43,
+          "liquid_asset_separation": 43,
+          "synthetic_id": 43,
+          "reviewed_reservation": 43,
+          "multiple_events": 43,
+          "nonpositive_placeholder": 43,
+          "nonfinite_graph_identity": 43,
+          "lightning_skew_boundary": 43,
+          "lightning_invalid_timestamp": 43
+        },
+        "zero_activity_controls": []
+      },
+      "fanout": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 1958,
+        "scenario_counts": {
+          "bitcoin": 43,
+          "liquid_main": 43,
+          "liquid_test": 43,
+          "liquid_regtest": 43,
+          "liquid_asset_id": 43,
+          "bitcoin_graph": 43,
+          "liquid_graph": 43,
+          "three_destinations": 43,
+          "equal_amount_ties": 43,
+          "amount_order": 43,
+          "provider_ids": 43,
+          "multiple_events": 43,
+          "exact_msat": 43,
+          "value_pricing": 43,
+          "exact_value_pricing": 43,
+          "existing_rate": 43,
+          "existing_exact_rate": 43,
+          "zero_value": 43,
+          "negative_value": 43,
+          "missing_value": 43,
+          "zero_exact_value_fallback": 43,
+          "zero_rate": 43,
+          "whitespace_value": 43,
+          "unicode_value": 43,
+          "nan_value": 43,
+          "nan_payload": 43,
+          "infinite_value": 42,
+          "negative_infinite_value": 42,
+          "untrusted_source": 42,
+          "untrusted_target": 42,
+          "tampered_quantity": 42,
+          "fee_inclusive": 42,
+          "partial_total": 42,
+          "over_total": 42,
+          "duplicate_wallet": 42,
+          "same_wallet": 42,
+          "one_destination": 42,
+          "multiple_sources": 42,
+          "zero_source": 0,
+          "zero_destination": 42,
+          "negative_destination": 42,
+          "unknown_direction": 42,
+          "asset_separation": 42,
+          "network_separation": 42,
+          "synthetic_source": 42,
+          "synthetic_destination": 42,
+          "reviewed_reservation": 42
+        },
+        "zero_activity_controls": [
+          "zero_source"
+        ]
+      },
+      "graph": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 2000,
+        "scenario_counts": {
+          "bitcoin_ownership": 250,
+          "liquid_ownership": 250,
+          "bitcoin_consolidation": 250,
+          "liquid_consolidation": 250,
+          "liquid_rawhex": 250,
+          "liquid_rawhex_short_locktime": 250,
+          "liquid_rawhex_flag": 250,
+          "liquid_rawhex_nonminimal": 250
+        },
+        "zero_activity_controls": []
+      },
+      "pipeline": {
+        "primary_books": 2000,
+        "distinct_inputs": 1841,
+        "active_distinct_inputs": 1841,
+        "scenario_counts": {
+          "bitcoin_consolidation": 167,
+          "liquid_consolidation": 167,
+          "bitcoin_fanout": 167,
+          "liquid_fanout": 167,
+          "bitcoin_ownership": 167,
+          "liquid_ownership": 167,
+          "bitcoin_mixed": 167,
+          "liquid_mixed": 167,
+          "bitcoin_normalized": 166,
+          "bitcoin_collaborative": 7,
+          "bitcoin_residual": 166,
+          "bitcoin_blocked": 166
+        },
+        "zero_activity_controls": []
+      },
+      "safety": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 1949,
+        "scenario_counts": {
+          "pending_pair": 52,
+          "pending_fanout": 52,
+          "pending_consolidation": 52,
+          "pending_ownership": 52,
+          "replaced_spend": 52,
+          "conflict_none_confirmed": 52,
+          "conflict_both_confirmed": 52,
+          "unscoped_provider": 52,
+          "blank_identity": 52,
+          "unresolved_fanout": 52,
+          "unresolved_consolidation": 52,
+          "unresolved_many_many": 51,
+          "privacy_coinjoin": 51,
+          "privacy_collaborative": 51,
+          "privacy_payjoin": 51,
+          "privacy_payment_in_coinjoin": 51,
+          "privacy_sweep": 51,
+          "privacy_exact_pair": 51,
+          "privacy_fanout": 51,
+          "privacy_consolidation": 51,
+          "privacy_untrusted_pair": 51,
+          "privacy_rowless": 51,
+          "confirmed_pair": 51,
+          "status_string": 51,
+          "legacy_missing_status": 51,
+          "privacy_unknown": 0,
+          "closed_newer_pending": 51,
+          "closed_newer_confirmed": 51,
+          "closed_equal_disagreement": 51,
+          "closed_invalid_timestamp": 51,
+          "liquid_pending": 51,
+          "liquid_privacy_pair": 51,
+          "samourai_unverified": 51,
+          "samourai_verified": 51,
+          "normalized_fee_only": 51,
+          "privacy_reviewed": 51,
+          "dependency_pending": 51,
+          "dependency_privacy": 51,
+          "lightning_chain_no_hash": 51
+        },
+        "zero_activity_controls": [
+          "privacy_unknown"
+        ]
+      },
+      "channels": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 1875,
+        "scenario_counts": {
+          "open_close": 63,
+          "strict_lnd": 63,
+          "strict_coreln": 63,
+          "batched": 63,
+          "force_trusted": 63,
+          "force_untrusted": 63,
+          "force_multiple": 63,
+          "force_duplicate": 63,
+          "peer_payment": 63,
+          "fee_tie": 63,
+          "missing_funding": 0,
+          "open_mismatch": 63,
+          "close_mismatch": 63,
+          "strict_zero": 63,
+          "owner_conflict": 63,
+          "network_conflict": 63,
+          "graph_conflict": 62,
+          "pending_open": 62,
+          "privacy_close": 62,
+          "splice_tag": 62,
+          "loan_collateral": 62,
+          "loan_principal": 62,
+          "loan_all": 62,
+          "loan_pending": 62,
+          "mixed_recorded": 62,
+          "mixed_pipeline": 62,
+          "mixed_samourai": 62,
+          "loan_wrong_direction": 62,
+          "loan_unknown_role": 0,
+          "loan_empty_ids": 62,
+          "strict_owner_conflict": 62,
+          "multiple_close_scopes": 62
+        },
+        "zero_activity_controls": [
+          "missing_funding",
+          "loan_unknown_role"
+        ]
+      },
+      "native": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 2000,
+        "scenario_counts": {
+          "lnd_settle": 37,
+          "cln_settle": 37,
+          "cln_alias_settle": 37,
+          "nwc_untrusted": 37,
+          "lnd_forged": 37,
+          "reverse_settle": 37,
+          "timeout_refund": 37,
+          "raw_refund": 37,
+          "raw_claim": 37,
+          "core_attestation": 37,
+          "fee_next_day": 37,
+          "fee_unknown_time": 37,
+          "zero_fee_next_day": 37,
+          "utc_same_day": 37,
+          "utc_different_day": 37,
+          "dismiss_active": 37,
+          "dismiss_expired": 37,
+          "dismiss_equal": 37,
+          "dismiss_invalid": 37,
+          "dismiss_future": 37,
+          "duplicate_ln": 36,
+          "duplicate_chain": 36,
+          "duplicate_occupied": 36,
+          "duplicate_dismissed": 36,
+          "network_mismatch": 36,
+          "network_unknown": 36,
+          "amount_increase": 36,
+          "amount_excess_fee": 36,
+          "canonical_mismatch": 36,
+          "source_untrusted": 36,
+          "target_stale": 36,
+          "observer_mismatch": 36,
+          "occupied_loan": 36,
+          "occupied_channel": 36,
+          "privacy_native": 36,
+          "pending_claim": 36,
+          "failed_payment": 36,
+          "timeout_missing_proof": 36,
+          "refund_wrong_outpoint": 36,
+          "refund_duplicate_funding": 36,
+          "refund_partial_output": 36,
+          "refund_batched": 36,
+          "provider_conflict": 36,
+          "provider_same_edge": 36,
+          "provider_only": 36,
+          "provider_different_network": 36,
+          "policy_taxable": 36,
+          "policy_austria": 36,
+          "alias_asset": 36,
+          "raw_reverse_prefix": 36,
+          "raw_wrong_hash": 36,
+          "mixed_recorded": 36,
+          "mixed_pipeline": 36,
+          "mixed_samourai": 36,
+          "mixed_channel": 36
+        },
+        "zero_activity_controls": []
+      },
+      "reconciliation": {
+        "primary_books": 2000,
+        "distinct_inputs": 100,
+        "active_distinct_inputs": 100,
+        "scenario_counts": {
+          "recovered": 4,
+          "same_time": 4,
+          "reverse_txid": 4,
+          "wallet_cycle": 4,
+          "source_fee": 4,
+          "intermediate_fee": 4,
+          "residual_suspense": 4,
+          "residual_fee": 4,
+          "extra_activity": 4,
+          "outside_activity": 4,
+          "zero_activity": 4,
+          "untrusted_source": 4,
+          "untrusted_middle": 4,
+          "inexact_fee": 4,
+          "partial_route": 4,
+          "direct_only": 4,
+          "blocked_middle": 4,
+          "protected_middle": 4,
+          "economic_terms": 4,
+          "draft_component": 4,
+          "two_sources": 4,
+          "fifo_mismatch": 4,
+          "two_targets": 4,
+          "liquid": 4,
+          "inclusive_fee": 4
+        },
+        "zero_activity_controls": []
+      },
+      "gaps": {
+        "primary_books": 2000,
+        "distinct_inputs": 2000,
+        "active_distinct_inputs": 1938,
+        "scenario_counts": {
+          "missing_wallet": 63,
+          "whirlpool_policy": 63,
+          "whirlpool_tx0": 63,
+          "untyped": 63,
+          "fee": 63,
+          "inclusive_fee": 63,
+          "excess": 63,
+          "split_sources": 63,
+          "split_returns": 63,
+          "postmix_fan_in": 63,
+          "multiple_wallets": 63,
+          "separate_eras": 63,
+          "long_horizon": 63,
+          "external_return": 63,
+          "external_source": 63,
+          "equal_competitors": 63,
+          "clear_margin": 62,
+          "cross_network": 62,
+          "cross_chain": 62,
+          "source_capacity": 62,
+          "return_capacity": 62,
+          "era_capacity": 62,
+          "large_structured": 62,
+          "large_untyped": 62,
+          "large_empty": 0,
+          "large_no_returns": 62,
+          "loan_ignored": 62,
+          "blocked_competitor": 62,
+          "excluded": 62,
+          "same_time": 62,
+          "unicode_labels": 62,
+          "missing_wallet_and_disposal": 62
+        },
+        "zero_activity_controls": [
+          "large_empty"
+        ]
+      }
+    },
+    "books": 24000,
+    "permutations": 1030,
+    "vacuous_failure": "vacuous scenario: the seed has no active distinct input"
+  },
+  "parity_stream_sha256": {
+    "after-gen-channels.jsonl": "de9e206e7b049e185b8ca3dbcd73058aa2105f8e619d5c2f987c358026a5daa1",
+    "after-gen-components.jsonl": "c91120027de6c785584caed31d7bc8fab7994c402343b0b6d3d18353ce0badef",
+    "after-gen-evidence.jsonl": "cd2a4a397006a1fbd80979570584b97f9bbb7a04524e2019c1be109850dae83d",
+    "after-gen-fanout.jsonl": "299ce1e86739b13693cec8d9a61513fb36411606020c65f4a8687525283dbbb7",
+    "after-gen-gaps.jsonl": "334a30a776da364ec2aead11c3c507e4921719c570a387c697b1f5f17a53c35e",
+    "after-gen-graph.jsonl": "41ebb40b9b555ec2cde0c44a0e1f360557e7b9f87e7086a9c45407c5306f5a67",
+    "after-gen-native.jsonl": "a87473765faf63a6094e9ff47fda44312258c40c0ce795469c46879eaa15c560",
+    "after-gen-pipeline.jsonl": "ecc11c1b9bc6b7f1a566b4f36597f0b48bd48330144d259d95d908b90590fe1c",
+    "after-gen-reconciliation.jsonl": "fe789b53e7660853c62815f5b457bdc72a580e6eee2c417195b5e96f8c0d9020",
+    "after-gen-recorded.jsonl": "66c82da80b30208050e7898dda8b5696705a7c7ec3f076e195aee25f225039c6",
+    "after-gen-safety.jsonl": "d7dc1a532a87715ba7be14296e5f3f48f3fad4a9eac25ece60a13a440552e576",
+    "after-gen-samourai.jsonl": "02c1c78fe3c623b736b823e4bd64549ea3c3ef31830091c94cc4ba48964ef520",
+    "after-replay.jsonl": "b710b77908eb34c9abc93a82701bc96c81105aae619c7477867caba6896846a1"
+  },
+  "selected_pairs": {
+    "generic-2000": {
+      "before": 2,
+      "after": 2
+    },
+    "multi-wallet-2000": {
+      "before": 1,
+      "after": 0
+    },
+    "generic-20000": {
+      "before": 1,
+      "after": 0
+    },
+    "multi-wallet-20000": {
+      "before": 3,
+      "after": 3
+    }
+  },
+  "measurement_pairs": {
+    "generic-2000": 5,
+    "multi-wallet-2000": 5,
+    "generic-20000": 5,
+    "multi-wallet-20000": 5
+  },
+  "one_minute_load_range": [
+    18.96533203125,
+    35.19189453125
+  ],
+  "verification_results": {
+    "quantity-python-contracts": "106 passed in 345.85s (0:05:45)",
+    "census-core-accounting": "2033 passed, 75 skipped, 460 subtests passed in 668.50s (0:11:08)",
+    "tax-shadow-scratch-path": "4 passed in 5.64s",
+    "cargo-private-build-dir": "Pass",
+    "quantity-port-private-build-dir": "16 passed in 21.46s",
+    "census-reports-contracts": "2475 passed, 10 skipped, 2824 subtests passed in 749.05s (0:12:29)",
+    "shadow-core-accounting": "681 passed, 40 skipped, 231 subtests passed in 109.04s (0:01:49)",
+    "shadow-reports-contracts": "1875 passed, 10 skipped, 146 subtests passed in 689.63s (0:11:29)",
+    "mutation-applicability": "Pass",
+    "fmt": "Pass",
+    "clippy": "Pass",
+    "workspace-tests": "1495 passed, 0 failed, 0 ignored",
+    "classify-tests": "Pass",
+    "preflight": "57 passed, 60 subtests passed in 55.88s"
+  },
+  "custody_comparison_summaries": {
+    "census-core-accounting": [
+      "custody snapshots: 260; frozen Python comparisons: 0",
+      "components: 256 compared, 4 skipped",
+      "evidence: 256 compared, 4 skipped",
+      "interpretation: 256 compared, 4 skipped",
+      "gaps: 256 compared, 4 skipped",
+      "quantity: 256 compared, 4 skipped",
+      "finalized_projection: 258 compared, 2 skipped",
+      "fusion: 254 compared, 6 skipped",
+      "injected builds: 2 (all stages skipped)",
+      "patched-policy builds: 2 (fusion skipped)",
+      "production calls: 548, from test modules: 18"
+    ],
+    "census-reports-contracts": [
+      "custody snapshots: 257; frozen Python comparisons: 0",
+      "components: 256 compared, 1 skipped",
+      "evidence: 255 compared, 2 skipped",
+      "interpretation: 255 compared, 2 skipped",
+      "gaps: 255 compared, 2 skipped",
+      "quantity: 255 compared, 2 skipped",
+      "finalized_projection: 225 compared, 32 skipped",
+      "fusion: 225 compared, 32 skipped",
+      "injected builds: 1 (all stages skipped)",
+      "patched-policy builds: 0 (fusion skipped)",
+      "production calls: 332, from test modules: 32"
+    ],
+    "shadow-core-accounting": [
+      "custody snapshots: 254; frozen Python comparisons: 252",
+      "components: 250 compared, 4 skipped",
+      "evidence: 250 compared, 4 skipped",
+      "interpretation: 250 compared, 4 skipped",
+      "gaps: 250 compared, 4 skipped",
+      "quantity: 250 compared, 4 skipped",
+      "finalized_projection: 252 compared, 2 skipped",
+      "fusion: 248 compared, 6 skipped",
+      "injected builds: 2 (all stages skipped)",
+      "patched-policy builds: 2 (fusion skipped)",
+      "production calls: 548, from test modules: 18"
+    ],
+    "shadow-reports-contracts": [
+      "custody snapshots: 203; frozen Python comparisons: 202",
+      "components: 203 compared, 0 skipped",
+      "evidence: 202 compared, 1 skipped",
+      "interpretation: 202 compared, 1 skipped",
+      "gaps: 202 compared, 1 skipped",
+      "quantity: 202 compared, 1 skipped",
+      "finalized_projection: 173 compared, 30 skipped",
+      "fusion: 173 compared, 30 skipped",
+      "injected builds: 0 (all stages skipped)",
+      "patched-policy builds: 0 (fusion skipped)",
+      "production calls: 332, from test modules: 32"
+    ]
+  },
+  "precommit_checks": [
+    {
+      "check": "precommit-classify",
+      "code": 0,
+      "seconds": 12.480146796995541
+    },
+    {
+      "check": "precommit-preflight",
+      "code": 0,
+      "seconds": 60.55814733701118
+    }
+  ]
+}

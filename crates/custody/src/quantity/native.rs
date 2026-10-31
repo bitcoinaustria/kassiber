@@ -7,7 +7,8 @@ use crate::{
 };
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 fn text(v: &Value) -> String {
     if codec::truth(v) {
         codec::pystr(v)
@@ -47,24 +48,28 @@ fn issue(
 }
 /// Observation per alias transaction id, borrowed; a later alias replaces an
 /// earlier one and an alias without its leg is a `KeyError`.
-fn observation_refs(
-    events: &BTreeMap<EventKey, Value>,
-) -> Result<BTreeMap<String, &Value>, String> {
-    let by_hash: BTreeMap<_, _> = events
+fn observation_refs<'a>(
+    events: &'a BTreeMap<EventKey, Cow<'_, Value>>,
+) -> Result<HashMap<String, &'a Value>, String> {
+    let by_hash: HashMap<_, _> = events
         .values()
         .flat_map(|e| array(&e["legs"]))
-        .map(|o| (text(&o["quantity_hash"]), o))
+        .map(|o| (super::text_key(&o["quantity_hash"]), o))
         .collect();
-    let mut by_tx = BTreeMap::new();
+    let mut by_tx = HashMap::new();
     for e in events.values() {
         for alias in array(&e["observation_aliases"]) {
-            let o = by_hash.get(&text(&alias[1])).ok_or("KeyError")?;
+            let o = by_hash
+                .get(super::text_key(&alias[1]).as_ref())
+                .ok_or("KeyError")?;
             by_tx.insert(text(&alias[0]), *o);
         }
     }
     Ok(by_tx)
 }
-fn observations(events: &BTreeMap<EventKey, Value>) -> Result<BTreeMap<String, Value>, String> {
+fn observations(
+    events: &BTreeMap<EventKey, Cow<'_, Value>>,
+) -> Result<BTreeMap<String, Value>, String> {
     Ok(observation_refs(events)?
         .into_iter()
         .map(|(id, o)| (id, o.clone()))
@@ -73,7 +78,7 @@ fn observations(events: &BTreeMap<EventKey, Value>) -> Result<BTreeMap<String, V
 fn add(event: &mut Value, o: Value, aliases: BTreeMap<String, Value>) {
     let mut legs = array(&event["legs"]).to_vec();
     legs.push(o.clone());
-    legs.sort_by_key(|o| {
+    legs.sort_by_cached_key(|o| {
         (
             text(&o["wallet_id"]),
             text(&o["direction"]),
@@ -83,7 +88,7 @@ fn add(event: &mut Value, o: Value, aliases: BTreeMap<String, Value>) {
     });
     let mut snapshots = array(&event["evidence_snapshots"]).to_vec();
     snapshots.push(json!({"$type":"EvidenceSnapshot","quantity_hash":o["quantity_hash"],"detail_hash":o["evidence_detail_hash"],"payload_json":o["evidence_payload_json"]}));
-    snapshots.sort_by_key(|s| (text(&s["detail_hash"]), text(&s["quantity_hash"])));
+    snapshots.sort_by_cached_key(|s| (text(&s["detail_hash"]), text(&s["quantity_hash"])));
     event["legs"] = json!(legs);
     event["evidence_snapshots"] = json!(snapshots);
     event["observation_aliases"] = json!(aliases.into_iter().collect::<Vec<_>>());
@@ -119,7 +124,7 @@ impl Leg {
     }
 }
 fn virtual_sources(
-    events: &mut BTreeMap<EventKey, Value>,
+    events: &mut BTreeMap<EventKey, Cow<'_, Value>>,
     audits: &[Value],
     issues: &mut Vec<Value>,
 ) -> Result<(), String> {
@@ -128,12 +133,10 @@ fn virtual_sources(
         .filter(|a| a["virtual_source"] == true && a["pairing_source"] == "channel_lifecycle")
         .collect();
     if audits.is_empty() {
-        // Only alias admission can refuse; no observation copy is needed.
-        observation_refs(events)?;
         return Ok(());
     }
     let mut by_tx = observations(events)?;
-    audits.sort_by_key(|a| (text(&a["occurred_at"]), text(&a["out_id"])));
+    audits.sort_by_cached_key(|a| (text(&a["occurred_at"]), text(&a["out_id"])));
     for a in audits {
         let out = text(&a["out_id"]);
         let target_id = text(&a["in_anchor_transaction_id"]);
@@ -172,7 +175,7 @@ fn virtual_sources(
         let r = received.unwrap();
         let f = fee.unwrap();
         let event_key = key(&t["event_key"]);
-        let event = events.get_mut(&event_key).ok_or("KeyError")?;
+        let event = events.get_mut(&event_key).ok_or("KeyError")?.to_mut();
         let mut aliases = aliases(event);
         if let Some(prior_hash) = aliases.get(&out) {
             let valid = array(&event["legs"])
@@ -210,12 +213,17 @@ fn virtual_sources(
     Ok(())
 }
 fn parse(
-    events: &BTreeMap<EventKey, Value>,
+    events: &BTreeMap<EventKey, Cow<'_, Value>>,
     audits: &[Value],
     excluded: &BTreeSet<String>,
     issues: &mut Vec<Value>,
+    shared: Option<&[(String, &Value)]>,
 ) -> Result<Vec<Leg>, String> {
-    let by_tx = observation_refs(events)?;
+    let by_tx = if let Some(aliases) = shared {
+        aliases.iter().map(|(id, o)| (id.clone(), *o)).collect()
+    } else {
+        observation_refs(events)?
+    };
     let mut legs = Vec::new();
     let mut audits: Vec<_> = audits
         .iter()
@@ -229,7 +237,7 @@ fn parse(
             )
         })
         .collect();
-    audits.sort_by_key(|a| {
+    audits.sort_by_cached_key(|a| {
         (
             text(&a["occurred_at"]),
             text(&a["out_id"]),
@@ -345,7 +353,7 @@ fn reserved(v: &Value, hash: &str) -> Result<BigInt, String> {
 
 type Slot = (EventKey, String, String);
 fn targets(
-    events: &mut BTreeMap<EventKey, Value>,
+    events: &mut BTreeMap<EventKey, Cow<'_, Value>>,
     legs: &[Leg],
     issues: &mut Vec<Value>,
 ) -> Result<(BTreeMap<String, String>, BTreeSet<String>), String> {
@@ -361,7 +369,7 @@ fn targets(
             .push(l.clone());
     }
     for members in slots.values_mut() {
-        members.sort_by_key(|l| l.evidence.clone());
+        members.sort_by_cached_key(|l| l.evidence.clone());
     }
     let mut invalid = BTreeSet::new();
     let mut owners: BTreeMap<EventKey, BTreeMap<String, Option<Slot>>> = events
@@ -457,7 +465,7 @@ fn targets(
             continue;
         }
         let (k, wallet, asset) = slot;
-        let event = events.get_mut(&k).ok_or("KeyError")?;
+        let event = events.get_mut(&k).ok_or("KeyError")?.to_mut();
         let amount: BigInt = members.iter().map(|l| &l.received).sum();
         let existing = array(&event["legs"])
             .iter()
@@ -507,9 +515,53 @@ pub fn compile(
     excluded: &[Value],
     reservation: &Value,
 ) -> Result<Value, String> {
+    let compilation = compile_borrowed(canonical, audits, excluded, reservation, None)?;
+    Ok(
+        json!({"$type":"NativeAuditCompilation","canonical_input":compilation.input(),"claims":compilation.claims,"issues":compilation.issues}),
+    )
+}
+
+pub(super) struct Compilation<'a> {
+    pub events: Vec<Cow<'a, Value>>,
+    pub rejected: &'a Value,
+    pub claims: Vec<Value>,
+    pub issues: Vec<Value>,
+}
+impl Compilation<'_> {
+    pub fn input(&self) -> Value {
+        json!({"$type":"CanonicalQuantityInput","events":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>(),"rejected_events":self.rejected})
+    }
+}
+
+pub(super) fn compile_borrowed<'a>(
+    canonical: &'a Value,
+    audits: &[Value],
+    excluded: &[Value],
+    reservation: &Value,
+    shared: Option<&[(String, &Value)]>,
+) -> Result<Compilation<'a>, String> {
+    let original = array(&canonical["events"]);
+    let event_key = |event: &'a Value| {
+        let key = &event["event_key"];
+        ["chain", "network", "native_namespace", "native_event_id"]
+            .map(|field| super::text_key(&key[field]))
+    };
+    if audits.is_empty()
+        && shared.is_some()
+        && original
+            .windows(2)
+            .all(|pair| event_key(&pair[0]) < event_key(&pair[1]))
+    {
+        return Ok(Compilation {
+            events: original.iter().map(Cow::Borrowed).collect(),
+            rejected: &canonical["rejected_events"],
+            claims: vec![],
+            issues: vec![],
+        });
+    }
     let mut events: BTreeMap<_, _> = array(&canonical["events"])
         .iter()
-        .map(|e| (key(&e["event_key"]), e.clone()))
+        .map(|e| (key(&e["event_key"]), Cow::Borrowed(e)))
         .collect();
     let mut issues = Vec::new();
     virtual_sources(&mut events, audits, &mut issues)?;
@@ -518,14 +570,22 @@ pub fn compile(
         .filter(|v| codec::truth(v))
         .map(codec::pystr)
         .collect();
-    let legs = parse(&events, audits, &excluded, &mut issues)?;
+    let original = array(&canonical["events"]);
+    let shared = shared.filter(|_| {
+        events.len() == original.len()
+            && events
+                .values()
+                .zip(original)
+                .all(|(event, prior)| matches!(event, Cow::Borrowed(e) if std::ptr::eq(*e, prior)))
+    });
+    let legs = parse(&events, audits, &excluded, &mut issues, shared)?;
     let mut groups: BTreeMap<String, Vec<Leg>> = BTreeMap::new();
     for l in legs {
         groups.entry(l.source_hash()).or_default().push(l);
     }
     let mut valid = Vec::new();
     for (hash, mut members) in groups {
-        members.sort_by_key(|l| l.evidence.clone());
+        members.sort_by_cached_key(|l| l.evidence.clone());
         let src = &members[0].source;
         let received: BigInt = members.iter().map(|l| &l.received).sum();
         let fee: BigInt = members.iter().map(|l| &l.fee).sum();
@@ -563,7 +623,7 @@ pub fn compile(
     let mut claims = Vec::new();
     let mut target_cursors: BTreeMap<String, BigInt> = BTreeMap::new();
     for (hash, mut members) in groups {
-        members.sort_by_key(|l| l.evidence.clone());
+        members.sort_by_cached_key(|l| l.evidence.clone());
         let source = members[0].source.clone();
         let bundle = format!("engine-native:{hash}");
         let mut cursor = BigInt::from(0);
@@ -595,23 +655,43 @@ pub fn compile(
             ));
         }
     }
-    claims.sort_by_key(|c| text(&c["claim_id"]));
-    issues.sort_by_key(|i| text(&i["issue_id"]));
-    // The objects json! would build, with the lists moved rather than copied.
-    let mut input = serde_json::Map::new();
-    input.insert("$type".into(), json!("CanonicalQuantityInput"));
-    input.insert(
-        "events".into(),
-        Value::Array(events.into_values().collect()),
-    );
-    input.insert(
-        "rejected_events".into(),
-        canonical["rejected_events"].clone(),
-    );
-    let mut compilation = serde_json::Map::new();
-    compilation.insert("$type".into(), json!("NativeAuditCompilation"));
-    compilation.insert("canonical_input".into(), Value::Object(input));
-    compilation.insert("claims".into(), Value::Array(claims));
-    compilation.insert("issues".into(), Value::Array(issues));
-    Ok(Value::Object(compilation))
+    claims.sort_by_cached_key(|c| text(&c["claim_id"]));
+    issues.sort_by_cached_key(|i| text(&i["issue_id"]));
+    Ok(Compilation {
+        events: events.into_values().collect(),
+        rejected: &canonical["rejected_events"],
+        claims,
+        issues,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn quantity_native_borrowed_event_order() {
+        let cases: Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/custody_quantity_composition.json"
+        ))
+        .unwrap();
+        let canonical = cases
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| &c["canonical"])
+            .find(|c| array(&c["events"]).len() > 1)
+            .unwrap();
+        let expected = compile(canonical, &[], &[], &json!({})).unwrap();
+        let mut reversed = canonical.clone();
+        reversed["events"].as_array_mut().unwrap().reverse();
+        let actual = compile_borrowed(&reversed, &[], &[], &json!({}), Some(&[])).unwrap();
+        assert_eq!(actual.input(), expected["canonical_input"]);
+        let mut duplicate = canonical.clone();
+        let mut last = duplicate["events"][0].clone();
+        last["evidence_snapshots"] = json!([]);
+        duplicate["events"].as_array_mut().unwrap().push(last);
+        let expected = compile(&duplicate, &[], &[], &json!({})).unwrap();
+        let actual = compile_borrowed(&duplicate, &[], &[], &json!({}), Some(&[])).unwrap();
+        assert_eq!(actual.input(), expected["canonical_input"]);
+    }
 }

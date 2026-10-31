@@ -13236,8 +13236,8 @@
   {
     "id": "quantity-admission-asset-exposure",
     "file": "crates/custody/src/quantity/mod.rs",
-    "find": "matches!(asset.as_str(), \"BTC\" | \"LBTC\")",
-    "replace": "matches!(asset.as_str(), \"BTC\")",
+    "find": "matches!(asset.as_ref(), \"BTC\" | \"LBTC\")",
+    "replace": "matches!(asset.as_ref(), \"BTC\")",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13626,8 +13626,8 @@
   {
     "id": "quantity-arbitration-semantic-state",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.value[\"state\"],",
-    "replace": "Value::Null,",
+    "find": ".all(|key| self.value[key] == other.value[key])",
+    "replace": ".all(|key| *key == \"state\" || self.value[key] == other.value[key])",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13636,8 +13636,8 @@
   {
     "id": "quantity-arbitration-semantic-destination_kind",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.value[\"destination_kind\"],",
-    "replace": "Value::Null,",
+    "find": ".all(|key| self.value[key] == other.value[key])",
+    "replace": ".all(|key| *key == \"destination_kind\" || self.value[key] == other.value[key])",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13646,8 +13646,8 @@
   {
     "id": "quantity-arbitration-semantic-external_economic_subtype",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.value[\"external_economic_subtype\"],",
-    "replace": "Value::Null,",
+    "find": ".all(|key| self.value[key] == other.value[key])",
+    "replace": ".all(|key| *key == \"external_economic_subtype\" || self.value[key] == other.value[key])",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13656,8 +13656,8 @@
   {
     "id": "quantity-arbitration-semantic-transfer_kind",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.value[\"transfer_kind\"],",
-    "replace": "Value::Null,",
+    "find": ".all(|key| self.value[key] == other.value[key])",
+    "replace": ".all(|key| *key == \"transfer_kind\" || self.value[key] == other.value[key])",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13666,8 +13666,8 @@
   {
     "id": "quantity-arbitration-semantic-transfer_policy",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.value[\"transfer_policy\"],",
-    "replace": "Value::Null,",
+    "find": ".all(|key| self.value[key] == other.value[key])",
+    "replace": ".all(|key| *key == \"transfer_policy\" || self.value[key] == other.value[key])",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13676,8 +13676,8 @@
   {
     "id": "quantity-arbitration-semantic-component_id",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.value[\"component_id\"]\n        ])",
-    "replace": "Value::Null\n        ])",
+    "find": ".all(|key| self.value[key] == other.value[key])",
+    "replace": ".all(|key| *key == \"component_id\" || self.value[key] == other.value[key])",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13686,8 +13686,8 @@
   {
     "id": "quantity-arbitration-semantic-target",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "self.target_at(source).map(|s| s.value()),",
-    "replace": "Value::Null,",
+    "find": "self.target_at(source) == other.target_at(source)",
+    "replace": "true",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -13846,7 +13846,7 @@
   {
     "id": "quantity-arbitration-authority-agreement",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "c.semantics(&source) != first.semantics(&source)",
+    "find": "!c.same_semantics(first, &source)",
     "replace": "false",
     "expect_failing": [
       "quantity_arbitration_vectors"
@@ -13937,7 +13937,7 @@
     "id": "quantity-arbitration-atomic-hold",
     "file": "crates/custody/src/quantity/arbitration.rs",
     "find": "decision.conflict(\"atomic_bundle_incomplete\", ids);",
-    "replace": "decision.value[\"reason\"] = json!(\"unmatched_outbound_default\");",
+    "replace": "decision.value_mut()[\"reason\"] = json!(\"unmatched_outbound_default\");",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -14016,8 +14016,8 @@
   {
     "id": "quantity-arbitration-decision-order",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "decisions.sort_by_key(|d| d.source.clone());",
-    "replace": "decisions.sort_by_key(|d| std::cmp::Reverse(d.source.clone()));",
+    "find": "decisions.sort_by(|a, b| a.source.cmp(&b.source));",
+    "replace": "decisions.sort_by(|a, b| b.source.cmp(&a.source));",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -14026,8 +14026,8 @@
   {
     "id": "quantity-arbitration-posting-order",
     "file": "crates/custody/src/quantity/arbitration.rs",
-    "find": "result.sort_by_key(|p| codec::text(&p[\"posting_id\"]));",
-    "replace": "result.sort_by_key(|p| std::cmp::Reverse(codec::text(&p[\"posting_id\"])));",
+    "find": "result.sort_by(|a, b| a.id.cmp(&b.id));",
+    "replace": "result.sort_by(|a, b| b.id.cmp(&a.id));",
     "expect_failing": [
       "quantity_arbitration_vectors"
     ],
@@ -16206,8 +16206,8 @@
   {
     "id": "QN-001",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "rde_json::{json, Value};\nuse std::collections::{BTreeMap, BTreeSet};\nfn text(v: &Value) -> String {\n    if codec::truth(v) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
-    "replace": "rde_json::{json, Value};\nuse std::collections::{BTreeMap, BTreeSet};\nfn text(v: &Value) -> String {\n    if false && (codec::truth(v)) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+    "find": "rde_json::{json, Value};\nuse std::borrow::Cow;\nuse std::collections::{BTreeMap, BTreeSet, HashMap};\nfn text(v: &Value) -> String {\n    if codec::truth(v) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
+    "replace": "rde_json::{json, Value};\nuse std::borrow::Cow;\nuse std::collections::{BTreeMap, BTreeSet, HashMap};\nfn text(v: &Value) -> String {\n    if false && (codec::truth(v)) {\n        codec::pystr(v)\n    } else {\n        String::new()\n    }\n}\nfn hash(v: &Value) -> Result<Str",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17486,8 +17486,8 @@
   {
     "id": "QN-133",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "compilation.insert(\"canonical_input\".into(), Value::Object(input));",
-    "replace": "compilation.insert(\"canonical_input_mutated\".into(), Value::Object(input));",
+    "find": "\"canonical_input\":compilation.input()",
+    "replace": "\"canonical_input_mutated\":compilation.input()",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17496,8 +17496,8 @@
   {
     "id": "QN-134",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        \"events\".into(),\n        Value::Array(events.into_values().collect()),",
-    "replace": "        \"events_mutated\".into(),\n        Value::Array(events.into_values().collect()),",
+    "find": "\"events\":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>()",
+    "replace": "\"events_mutated\":self.events.iter().map(|v|v.as_ref()).collect::<Vec<_>>()",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17506,8 +17506,8 @@
   {
     "id": "QN-135",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        \"rejected_events\".into(),\n        canonical[\"rejected_events\"].clone(),",
-    "replace": "        \"rejected_events_mutated\".into(),\n        canonical[\"rejected_events\"].clone(),",
+    "find": "\"rejected_events\":self.rejected",
+    "replace": "\"rejected_events_mutated\":self.rejected",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17516,8 +17516,8 @@
   {
     "id": "QN-136",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "compilation.insert(\"claims\".into(), Value::Array(claims));",
-    "replace": "compilation.insert(\"claims_mutated\".into(), Value::Array(claims));",
+    "find": "\"claims\":compilation.claims",
+    "replace": "\"claims_mutated\":compilation.claims",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17526,8 +17526,8 @@
   {
     "id": "QN-137",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "compilation.insert(\"issues\".into(), Value::Array(issues));",
-    "replace": "compilation.insert(\"issues_mutated\".into(), Value::Array(issues));",
+    "find": "\"issues\":compilation.issues",
+    "replace": "\"issues_mutated\":compilation.issues",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17876,8 +17876,8 @@
   {
     "id": "QX-019",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_key(|l| l.evidence.clone());\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
-    "replace": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_key(|l| l.evidence.clone()); members.reverse();\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
+    "find": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_cached_key(|l| l.evidence.clone());\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
+    "replace": "        .push(l.clone());\n    }\n    for members in slots.values_mut() {\n        members.sort_by_cached_key(|l| l.evidence.clone()); members.reverse();\n    }\n    let mut invalid = BTreeSet::new();\n    let mut owners: BTreeMap<Event",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17886,8 +17886,8 @@
   {
     "id": "QX-020",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone());\n        let src = &members[0].source;\n        let received: BigInt = members.it",
-    "replace": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone()); members.reverse();\n        let src = &members[0].source;\n        let received: BigInt = members.it",
+    "find": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone());\n        let src = &members[0].source;\n        let received: BigInt = members.it",
+    "replace": "    let mut valid = Vec::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone()); members.reverse();\n        let src = &members[0].source;\n        let received: BigInt = members.it",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -17896,8 +17896,8 @@
   {
     "id": "QX-021",
     "file": "crates/custody/src/quantity/native.rs",
-    "find": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone());\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
-    "replace": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_key(|l| l.evidence.clone()); members.reverse();\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
+    "find": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone());\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
+    "replace": "ing, BigInt> = BTreeMap::new();\n    for (hash, mut members) in groups {\n        members.sort_by_cached_key(|l| l.evidence.clone()); members.reverse();\n        let source = members[0].source.clone();\n        let bundle = format!(\"e",
     "expect_failing": [
       "quantity_native_augmentation_vectors"
     ],
@@ -18686,8 +18686,8 @@
   {
     "id": "QRT-071",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "claims.extend_from_slice(array(&gaps[0]));",
-    "replace": "claims.extend_from_slice(&[]);",
+    "find": "claims.extend(hold_claims);",
+    "replace": "let _ = hold_claims;",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -18696,8 +18696,8 @@
   {
     "id": "QRT-072",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "claims.extend_from_slice(array(&native[\"claims\"]));",
-    "replace": "claims.extend_from_slice(&[]);",
+    "find": "claims.append(&mut native.claims);",
+    "replace": "native.claims.clear();",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -18716,7 +18716,7 @@
   {
     "id": "QRT-074",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "issues.sort_by_key(|i| (text(&i[\"occurred_at\"]), text(&i[\"issue_id\"])));",
+    "find": "issues.sort_by_cached_key(|i| (text(&i[\"occurred_at\"]), text(&i[\"issue_id\"])));",
     "replace": "issues.reverse();",
     "expect_failing": [
       "quantity_whole_state_vectors"
@@ -18996,8 +18996,8 @@
   {
     "id": "QRT-102",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"canonical_input\":canonical",
-    "replace": "\"canonical_input\":null",
+    "find": "(\"canonical_input\", canonical),",
+    "replace": "(\"canonical_input\", Py::Null),",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19006,8 +19006,8 @@
   {
     "id": "QRT-103",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"projection\":projection",
-    "replace": "\"projection\":null",
+    "find": "(\"projection\", self.projection),",
+    "replace": "(\"projection\", Py::Null),",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19016,8 +19016,8 @@
   {
     "id": "QRT-104",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"issues\":issues",
-    "replace": "\"issues\":null",
+    "find": "(\"issues\", super::into_py(self.issues)?),",
+    "replace": "(\"issues\", Py::Null),",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19026,8 +19026,8 @@
   {
     "id": "QRT-105",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"tax_eligibility\":tax",
-    "replace": "\"tax_eligibility\":null",
+    "find": "(\"tax_eligibility\", self.tax),",
+    "replace": "(\"tax_eligibility\", Py::Null),",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19036,8 +19036,8 @@
   {
     "id": "QRT-106",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"gap_candidate_transaction_ids\":gaps[2]",
-    "replace": "\"gap_candidate_transaction_ids\":null",
+    "find": "super::into_py(gaps[2].take())?",
+    "replace": "Py::Null",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19046,8 +19046,8 @@
   {
     "id": "QRT-107",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"gap_holds\":gaps[3]",
-    "replace": "\"gap_holds\":null",
+    "find": "super::into_py(gaps[3].take())?",
+    "replace": "Py::Null",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19056,8 +19056,8 @@
   {
     "id": "QRT-108",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"reviewed_conversion_pairs\":comp[2]",
-    "replace": "\"reviewed_conversion_pairs\":null",
+    "find": "super::into_py(comp[2].take())?",
+    "replace": "Py::Null",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -19066,8 +19066,8 @@
   {
     "id": "QRT-109",
     "file": "crates/custody/src/quantity/runtime.rs",
-    "find": "\"reviewed_direct_payouts\":comp[3]",
-    "replace": "\"reviewed_direct_payouts\":null",
+    "find": "super::into_py(comp[3].take())?",
+    "replace": "Py::Null",
     "expect_failing": [
       "quantity_whole_state_vectors"
     ],
@@ -23192,5 +23192,75 @@
     "expect_failing": [
       "graphless_confirmation_facts_preserve_full_decoder"
     ]
+  },
+  {
+    "id": "quantity-perf-issue-barrier",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "let tax = if array(&issues).is_empty() {",
+    "replace": "let tax = if true {",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Only an issue-free projection can omit the scoped tax barrier kernel."
+  },
+  {
+    "id": "quantity-perf-ascii-hash",
+    "file": "crates/custody/src/quantity/mod.rs",
+    "find": ".all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))",
+    "replace": ".all(|c| c.is_ascii_hexdigit())",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "The ASCII SHA-256 shortcut must reject uppercase hashes through the general constructor."
+  },
+  {
+    "id": "quantity-perf-native-event-order",
+    "file": "crates/custody/src/quantity/native.rs",
+    "find": "event_key(&pair[0]) < event_key(&pair[1])",
+    "replace": "true",
+    "expect_failing": [
+      "quantity_native_borrowed_event_order"
+    ],
+    "rule": "Borrowed native input must retain sorted event order and last-key-wins duplicate admission."
+  },
+  {
+    "id": "quantity-perf-default-decision-state",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "(\"state\", Py::Str(\"external_presumed\".into())),",
+    "replace": "(\"state\", Py::Str(\"external_confirmed\".into())),",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "A directly serialized unmatched source stays presumed, never confirmed."
+  },
+  {
+    "id": "quantity-perf-default-decision-barrier",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "            &projection.view(),",
+    "replace": "            &view,",
+    "expect_failing": [
+      "quantity_whole_state_vectors"
+    ],
+    "rule": "Scoped eligibility barriers must include unmatched source decisions omitted from issue-only views."
+  },
+  {
+    "id": "quantity-perf-unused-alias-validation",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": ".any(|leg| leg[\"quantity_hash\"].as_str() == Some(hash))",
+    "replace": ".any(|leg| leg[\"quantity_hash\"].as_str() == Some(hash) || hash == \"missing\")",
+    "expect_failing": [
+      "quantity_unused_alias_validation"
+    ],
+    "rule": "Skipping an unused alias index still refuses aliases absent from every observation."
+  },
+  {
+    "id": "quantity-perf-observation-order",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "self.by_hash\n                        .into_values()",
+    "replace": "self.by_hash\n                        .into_values().rev()",
+    "expect_failing": [
+      "quantity_arbitration_vectors"
+    ],
+    "rule": "Arbitration emits observations in ascending quantity-hash order."
   }
 ]

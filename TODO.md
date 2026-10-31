@@ -356,6 +356,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   R4-6's partial quantity probe also stopped for re-planning: compute missed
   both targets and boundary conversion grew; no implementation was accepted
   ([measurements](docs/reference/r4-journal-pipeline.md#r4-6-partial-quantity-target-probe)).
+  Its [quantity kernel follow-up](docs/reference/r4-quantity-kernel-performance.md)
+  retains the existing stage boundary and reaches quarter-time process CPU
+  including output construction (4.3–4.8× faster); the earlier wall budget
+  and the complete typed pipeline remain open.
 - [ ] R4-9 to R4-12: native loader, pre-build repairs, rendering and joins,
   persistence, each with byte or database-dump parity.
 - [ ] Finish the [R4-11 rendering checkpoint](docs/reference/r4-journal-render-checkpoint.md):

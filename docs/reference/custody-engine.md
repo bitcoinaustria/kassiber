@@ -3318,6 +3318,9 @@ compare this stage together with the error code. No successful outputs are
 fabricated for an atomic refusal.
 ## Performance checkpoint (R2 perf)
 
+The later [R4 quantity kernel checkpoint](r4-quantity-kernel-performance.md)
+keeps the existing stage boundary and measures process CPU alongside wall time.
+
 Local branch `t3code/r2-custody-perf` starts at `1b62f405`. It makes the Rust
 custody engine faster without changing a response byte, and it changes no
 Python code. Snapshot v1, the response schema and every stage's semantics are

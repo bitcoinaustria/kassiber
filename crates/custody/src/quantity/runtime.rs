@@ -70,10 +70,23 @@ pub fn tax_eligibility(
     issues: &[Value],
     rows: &impl Rows,
 ) -> Result<Value, String> {
+    tax_eligibility_events(
+        &array(&canonical["events"]).iter().collect::<Vec<_>>(),
+        &super::arbitration::View::of(projection),
+        issues,
+        rows,
+    )
+}
+fn tax_eligibility_events(
+    events: &[&Value],
+    projection: &super::arbitration::View,
+    issues: &[Value],
+    rows: &impl Rows,
+) -> Result<Value, String> {
     let mut orders = BTreeMap::new();
     let mut pools = BTreeMap::new();
     let mut aliases = BTreeMap::new();
-    for event in array(&canonical["events"]) {
+    for event in events {
         let key = &event["event_key"];
         let order: Order = [
             array(&event["legs"])
@@ -167,7 +180,7 @@ pub fn tax_eligibility(
             .filter_map(row_pool)
             .collect();
         if rejected.is_empty() && codec::truth(&issue["asset"]) {
-            for o in array(&projection["observations"]) {
+            for o in &projection.observations {
                 if o["asset"] == issue["asset"] {
                     rejected.insert(
                         pools
@@ -191,7 +204,7 @@ pub fn tax_eligibility(
     }
     let barrier = barriers.values().min();
     let mut eligible = Vec::new();
-    for d in array(&projection["decisions"]) {
+    for d in &projection.decisions {
         if !matches!(
             d["state"].as_str(),
             Some(
@@ -214,13 +227,14 @@ pub fn tax_eligibility(
                 continue;
             }
         }
-        eligible.push(d.clone());
+        eligible.push((*d).clone());
     }
     // serde_json's encoding of a Value is injective, so text equality is
     // Value equality; this keeps the membership test linear.
     let eligible_sources: std::collections::HashSet<String> =
         eligible.iter().map(|e| e["source"].to_string()).collect();
-    let mut ineligible: Vec<_> = array(&projection["decisions"])
+    let mut ineligible: Vec<_> = projection
+        .decisions
         .iter()
         .filter(|d| !eligible_sources.contains(&d["source"].to_string()))
         .map(|d| d["source"].clone())
@@ -264,17 +278,39 @@ fn issue(
     json!({"$type":"QuantityIssue","issue_id":id,"issue_type":kind,"state":"conflicting","asset":asset,"amount_msat":null,"occurred_at":at,"transaction_ids":ids,"reason":reason,"details":details})
 }
 fn observations(c: &Value) -> Result<Vec<(String, &Value)>, String> {
-    let hashes: BTreeMap<_, _> = array(&c["events"])
+    observations_needed(c, true)
+}
+fn observations_needed(c: &Value, needed: bool) -> Result<Vec<(String, &Value)>, String> {
+    if !needed
+        && array(&c["events"]).iter().all(|event| {
+            array(&event["observation_aliases"]).iter().all(|alias| {
+                alias[1].as_str().is_some_and(|hash| {
+                    array(&event["legs"])
+                        .iter()
+                        .take(8)
+                        .any(|leg| leg["quantity_hash"].as_str() == Some(hash))
+                })
+            })
+        })
+    {
+        return Ok(Vec::new());
+    }
+    let hashes: HashMap<_, _> = array(&c["events"])
         .iter()
         .flat_map(|e| array(&e["legs"]))
-        .map(|o| (text(&o["quantity_hash"]), o))
+        .map(|o| (super::text_key(&o["quantity_hash"]), o))
         .collect();
     let mut result: Vec<(String, &Value)> = Vec::new();
     let mut positions: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for event in array(&c["events"]) {
         for a in array(&event["observation_aliases"]) {
+            let o = *hashes
+                .get(super::text_key(&a[1]).as_ref())
+                .ok_or("KeyError")?;
+            if !needed {
+                continue;
+            }
             let id = text(&a[0]);
-            let o = *hashes.get(&text(&a[1])).ok_or("KeyError")?;
             // Insertion order is the first occurrence; a later alias replaces it.
             if let Some(&at) = positions.get(&id) {
                 result[at].1 = o;
@@ -300,12 +336,22 @@ pub fn component_claims(
     components: &[Value],
     evidence: &Value,
 ) -> Result<Value, String> {
-    let obs = observations(canonical)?;
+    component_claims_observed(canonical, components, evidence, &observations(canonical)?)
+}
+fn component_claims_observed(
+    canonical: &Value,
+    components: &[Value],
+    evidence: &Value,
+    obs: &[(String, &Value)],
+) -> Result<Value, String> {
+    if components.is_empty() {
+        return Ok(json!([[], [], [], []]));
+    }
     let observed =
         super::reviewed::Observations::new(obs.iter().map(|(k, v)| (k.clone(), *v)).collect());
     let mut first_observation: HashMap<&str, &Value> = HashMap::new();
     let mut hashes_by_tx: HashMap<&str, Vec<String>> = HashMap::new();
-    for (tx, o) in &obs {
+    for (tx, o) in obs {
         first_observation.entry(tx.as_str()).or_insert(o);
         hashes_by_tx
             .entry(tx.as_str())
@@ -318,7 +364,7 @@ pub fn component_claims(
         .map(|s| text(&s["quantity_hash"]))
         .collect();
     let mut components = components.to_vec();
-    components.sort_by_key(|c| text(&c["id"]));
+    components.sort_by_cached_key(|c| text(&c["id"]));
     let mut claims = Vec::new();
     let mut issues = Vec::new();
     let mut conversions = Vec::new();
@@ -344,9 +390,9 @@ pub fn component_claims(
                 .flatten()
                 .cloned()
                 .collect();
-            let current: BTreeSet<_> = snapshot_hashes
+            let current: BTreeSet<_> = relevant
                 .iter()
-                .filter(|h| relevant.contains(*h))
+                .filter(|h| snapshot_hashes.contains(*h))
                 .cloned()
                 .collect();
             let expected: BTreeSet<_> = array(&evidence[&id])
@@ -463,8 +509,27 @@ pub fn whole_issues(
     native: &[Value],
     blockers: &[Value],
 ) -> Result<Value, String> {
+    whole_issues_rejected(
+        &canonical["rejected_events"],
+        &super::arbitration::View::of(projection),
+        rows,
+        component,
+        gaps,
+        native,
+        blockers,
+    )
+}
+fn whole_issues_rejected(
+    rejected: &Value,
+    projection: &super::arbitration::View,
+    rows: &impl Rows,
+    component: &[Value],
+    gaps: &[Value],
+    native: &[Value],
+    blockers: &[Value],
+) -> Result<Value, String> {
     let mut issues = Vec::new();
-    for rejected in array(&canonical["rejected_events"]) {
+    for rejected in array(rejected) {
         let key = &rejected["event_key"];
         let mut details = json!({"message":rejected["message"],"event_scope":{"chain":key["chain"],"network":key["network"],"namespace":key["native_namespace"]}});
         if let Some(d) = rejected["details"].as_object() {
@@ -494,14 +559,26 @@ pub fn whole_issues(
         n["state"] = json!("conflicting");
         issues.push(n);
     }
-    let by_hash: BTreeMap<_, _> = array(&projection["observations"])
-        .iter()
-        .map(|o| (text(&o["quantity_hash"]), o))
-        .collect();
-    for e in array(&projection["claim_errors"]) {
+    let needs_observations = !projection.errors.is_empty()
+        || projection.decisions.iter().any(|d| {
+            matches!(
+                d["state"].as_str(),
+                Some("custody_suspense" | "conflicting")
+            )
+        });
+    let by_hash: HashMap<_, _> = if needs_observations {
+        projection
+            .observations
+            .iter()
+            .map(|o| (super::text_key(&o["quantity_hash"]), o))
+            .collect()
+    } else {
+        HashMap::new()
+    };
+    for e in projection.errors {
         let involved: Vec<_> = array(&e["involved_observation_hashes"])
             .iter()
-            .filter_map(|h| by_hash.get(&text(h)))
+            .filter_map(|h| by_hash.get(super::text_key(h).as_ref()))
             .collect();
         let assets: BTreeSet<_> = involved.iter().map(|o| text(&o["asset"])).collect();
         issues.push(issue(issue_id(&[json!("claim_bundle_invalid"),e["bundle_id"].clone()])?,"quantity_claim_bundle_invalid",if assets.len()==1 {json!(assets.first().unwrap())} else {Value::Null},involved.iter().map(|o|text(&o["occurred_at"])).min().unwrap_or_default(),json!(involved.iter().map(|o|text(&o["anchor_transaction_id"])).collect::<BTreeSet<_>>()),"malformed_claim_bundle",json!({"bundle_id":e["bundle_id"],"claim_ids":e["claim_ids"],"validation_reasons":e["reasons"]})));
@@ -569,14 +646,14 @@ pub fn whole_issues(
         }
         issues.push(i);
     }
-    for d in array(&projection["decisions"]) {
+    for d in &projection.decisions {
         if matches!(
             d["state"].as_str(),
             Some("custody_suspense" | "conflicting")
         ) {
             let s = &d["source"];
             let o = by_hash
-                .get(&text(&s["observation_hash"]))
+                .get(super::text_key(&s["observation_hash"]).as_ref())
                 .ok_or("KeyError")?;
             let mut i = issue(
                 issue_id(&[
@@ -599,7 +676,7 @@ pub fn whole_issues(
             issues.push(i);
         }
     }
-    issues.sort_by_key(|i| (text(&i["occurred_at"]), text(&i["issue_id"])));
+    issues.sort_by_cached_key(|i| (text(&i["occurred_at"]), text(&i["issue_id"])));
     Ok(json!(issues))
 }
 /// Private typed runtime operands by reference, indexed by their operand
@@ -652,58 +729,79 @@ impl std::ops::Index<&str> for Operands<'_> {
     }
 }
 /// The computed parts of a `CanonicalQuantityState`.
-struct State {
-    native: Value,
-    projection: Value,
+struct State<'a> {
+    native: super::native::Compilation<'a>,
+    projection: kassiber_pyjson::Value,
     issues: Value,
-    tax: Value,
+    tax: kassiber_pyjson::Value,
     gaps: Value,
     comp: Value,
 }
-impl State {
-    fn json(&self) -> Value {
-        let canonical = &self.native["canonical_input"];
-        let (projection, issues, tax, gaps, comp) = (
-            &self.projection,
-            &self.issues,
-            &self.tax,
-            &self.gaps,
-            &self.comp,
-        );
-        json!({"$type":"CanonicalQuantityState","canonical_input":canonical,"projection":projection,"issues":issues,"tax_eligibility":tax,"gap_candidate_transaction_ids":gaps[2],"gap_holds":gaps[3],"reviewed_conversion_pairs":comp[2],"reviewed_direct_payouts":comp[3]})
-    }
+impl State<'_> {
     /// `codec::from_json(&self.json())`, converting each part in place:
     /// the JSON object holds its keys in sorted order.
-    fn py(&self) -> Result<kassiber_pyjson::Value, String> {
+    fn py(self) -> Result<kassiber_pyjson::Value, String> {
         use kassiber_pyjson::{Key, Value as Py};
+        let canonical = Py::Dict(vec![
+            (
+                Key::Str("$type".into()),
+                Py::Str("CanonicalQuantityInput".into()),
+            ),
+            (
+                Key::Str("events".into()),
+                Py::List(
+                    self.native
+                        .events
+                        .into_iter()
+                        .map(|e| match e {
+                            std::borrow::Cow::Borrowed(e) => super::borrowed_py(e),
+                            std::borrow::Cow::Owned(e) => super::into_py(e),
+                        })
+                        .collect::<Result<_, _>>()?,
+                ),
+            ),
+            (
+                Key::Str("rejected_events".into()),
+                super::borrowed_py(self.native.rejected)?,
+            ),
+        ]);
+        let mut gaps = self.gaps;
+        let mut comp = self.comp;
         let parts = [
-            ("$type", &json!("CanonicalQuantityState")),
-            ("canonical_input", &self.native["canonical_input"]),
-            ("gap_candidate_transaction_ids", &self.gaps[2]),
-            ("gap_holds", &self.gaps[3]),
-            ("issues", &self.issues),
-            ("projection", &self.projection),
-            ("reviewed_conversion_pairs", &self.comp[2]),
-            ("reviewed_direct_payouts", &self.comp[3]),
-            ("tax_eligibility", &self.tax),
+            ("$type", Py::Str("CanonicalQuantityState".into())),
+            ("canonical_input", canonical),
+            (
+                "gap_candidate_transaction_ids",
+                super::into_py(gaps[2].take())?,
+            ),
+            ("gap_holds", super::into_py(gaps[3].take())?),
+            ("issues", super::into_py(self.issues)?),
+            ("projection", self.projection),
+            ("reviewed_conversion_pairs", super::into_py(comp[2].take())?),
+            ("reviewed_direct_payouts", super::into_py(comp[3].take())?),
+            ("tax_eligibility", self.tax),
         ];
         Ok(Py::Dict(
             parts
                 .into_iter()
-                .map(|(key, value)| Ok((Key::Str(key.into()), codec::from_json(value)?)))
-                .collect::<Result<_, String>>()?,
+                .map(|(key, value)| (Key::Str(key.into()), value))
+                .collect(),
         ))
     }
 }
 /// Private typed runtime operands; raw snapshot v1 never contains these values.
 pub fn build(v: &Value) -> Result<Value, String> {
-    compose(&Operands::of(v)).map(|state| state.json())
+    compose(&Operands::of(v))?.py().map(|v| codec::to_json(&v))
 }
-fn compose(v: &Operands) -> Result<State, String> {
-    let canonical = &v["canonical"];
+fn compose<'a>(v: &Operands<'a>) -> Result<State<'a>, String> {
+    let canonical = v.canonical;
     let components = array(&v["components"]);
     let span = crate::timing::span("quantity.components");
-    let comp = component_claims(canonical, components, &v["evidence"])?;
+    let aliases = observations_needed(
+        canonical,
+        !components.is_empty() || !array(&v["native"]).is_empty(),
+    )?;
+    let mut comp = component_claims_observed(canonical, components, &v["evidence"], &aliases)?;
     drop(span);
     let component_ids: BTreeSet<_> = components
         .iter()
@@ -718,20 +816,24 @@ fn compose(v: &Operands) -> Result<State, String> {
             .filter(|v| codec::truth(v))
             .map(codec::pystr),
     );
-    let by_hash: BTreeMap<_, _> = array(&canonical["events"])
-        .iter()
-        .flat_map(|e| array(&e["legs"]))
-        .map(|o| (text(&o["quantity_hash"]), o))
-        .collect();
+    let by_hash: HashMap<_, _> = if array(&v["claims"]).is_empty() {
+        HashMap::new()
+    } else {
+        array(&canonical["events"])
+            .iter()
+            .flat_map(|e| array(&e["legs"]))
+            .map(|o| (super::text_key(&o["quantity_hash"]), o))
+            .collect()
+    };
     for c in array(&v["claims"]) {
         for field in ["source", "target"] {
-            if let Some(o) = by_hash.get(&text(&c[field]["observation_hash"])) {
+            if let Some(o) = by_hash.get(super::text_key(&c[field]["observation_hash"]).as_ref()) {
                 ignored.insert(text(&o["transaction_id"]));
             }
         }
     }
     let span = crate::timing::span("quantity.holds");
-    let gaps = super::holds::compose(
+    let mut gaps = super::holds::compose(
         canonical,
         &ignored.into_iter().map(|s| json!(s)).collect::<Vec<_>>(),
         &v["dismissed"],
@@ -739,7 +841,7 @@ fn compose(v: &Operands) -> Result<State, String> {
     )?;
     drop(span);
     let span = crate::timing::span("quantity.native");
-    let native = super::native::compile(
+    let mut native = super::native::compile_borrowed(
         canonical,
         array(&v["native"]),
         &component_ids
@@ -747,37 +849,51 @@ fn compose(v: &Operands) -> Result<State, String> {
             .map(|s| json!(s))
             .collect::<Vec<_>>(),
         &json!({}),
+        Some(&aliases),
     )?;
-    let canonical = &native["canonical_input"];
-    let mut claims = array(&comp[0]).to_vec();
-    claims.extend_from_slice(array(&gaps[0]));
-    claims.extend_from_slice(array(&native["claims"]));
+    let mut claims = match comp[0].take() {
+        Value::Array(claims) => claims,
+        _ => vec![],
+    };
+    if let Value::Array(hold_claims) = gaps[0].take() {
+        claims.extend(hold_claims);
+    }
+    claims.append(&mut native.claims);
     claims.extend_from_slice(array(&v["claims"]));
-    let observations: Vec<&Value> = array(&canonical["events"])
-        .iter()
-        .flat_map(|e| array(&e["legs"]))
-        .collect();
+    let events: Vec<&Value> = native.events.iter().map(|e| e.as_ref()).collect();
+    let observations: Vec<&Value> = events.iter().flat_map(|e| array(&e["legs"])).collect();
     drop(span);
     let span = crate::timing::span("quantity.project");
-    let projection = super::arbitration::project_refs(&observations, &claims)?;
+    let projection = super::arbitration::arbitrate(&observations, &claims)?;
+    let view = projection.issues_view();
     drop(span);
     let _span = crate::timing::span("quantity.issues");
     // Rows by id, as the JSON object of copies would hold them.
-    let rows: BTreeMap<String, &Value> = array(&v["rows"])
-        .iter()
-        .filter(|r| !r["id"].is_null() && r["id"] != "")
-        .map(|r| (text(&r["id"]), r))
-        .collect();
-    let issues = whole_issues(
-        canonical,
-        &projection,
+    let rows = IndexedRows {
+        rows: array(&v["rows"]),
+        index: std::cell::OnceCell::new(),
+    };
+    let issues = whole_issues_rejected(
+        native.rejected,
+        &view,
         &rows,
         array(&comp[1]),
         array(&gaps[1]),
-        array(&native["issues"]),
+        &native.issues,
         array(&v["blockers"]),
     )?;
-    let tax = tax_eligibility(canonical, &projection, array(&issues), &rows)?;
+    let tax = if array(&issues).is_empty() {
+        None
+    } else {
+        Some(super::into_py(tax_eligibility_events(
+            &events,
+            &projection.view(),
+            array(&issues),
+            &rows,
+        )?)?)
+    };
+    let projection = projection.py()?;
+    let tax = tax.unwrap_or_else(|| unblocked_eligibility(&projection));
     Ok(State {
         native,
         projection,
@@ -963,7 +1079,7 @@ pub fn stage(
         stored::put(q, "reason", reason);
         stored::put(q, "details", detail);
     }
-    issues.sort_by_key(|q| {
+    issues.sort_by_cached_key(|q| {
         let field = |key| {
             if let Py::Str(s) = stored::get(q, key) {
                 s.clone()
@@ -975,4 +1091,74 @@ pub fn stage(
     });
     stored::put(&mut value, "issues", Py::List(issues));
     Ok(value)
+}
+
+fn unblocked_eligibility(projection: &kassiber_pyjson::Value) -> kassiber_pyjson::Value {
+    use crate::graph::stored;
+    use kassiber_pyjson::Value as Py;
+    let mut eligible = Vec::new();
+    let mut ineligible = Vec::new();
+    for decision in stored::list(stored::get(projection, "decisions")) {
+        let state = stored::get(decision, "state");
+        if matches!(state, Py::Str(s) if s.is("internal_verified") || s.is("internal_reviewed") || s.is("external_confirmed") || s.is("external_presumed"))
+        {
+            eligible.push(decision.clone());
+        } else {
+            ineligible.push(stored::get(decision, "source").clone());
+        }
+    }
+    super::py_dict([
+        ("$type", Py::Str("QuantityTaxEligibility".into())),
+        ("barrier_event_key", Py::Null),
+        ("blocked_from", Py::Null),
+        ("eligible_decisions", Py::List(eligible)),
+        ("ineligible_slices", Py::List(ineligible)),
+        ("pool_barrier_roots", Py::List(vec![])),
+        ("pool_barriers", Py::List(vec![])),
+    ])
+}
+
+struct IndexedRows<'a> {
+    rows: &'a [Value],
+    index: std::cell::OnceCell<BTreeMap<String, &'a Value>>,
+}
+impl Rows for IndexedRows<'_> {
+    fn get(&self, id: String) -> Option<&Value> {
+        self.index
+            .get_or_init(|| {
+                self.rows
+                    .iter()
+                    .filter(|r| !r["id"].is_null() && r["id"] != "")
+                    .map(|r| (text(&r["id"]), r))
+                    .collect()
+            })
+            .get(&id)
+            .copied()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quantity_unused_alias_validation() {
+        let mut canonical = json!({"events":[
+            {"legs":[{"quantity_hash":"a"}],"observation_aliases":[["tx-a","a"]]},
+            {"legs":[{"quantity_hash":"b"}],"observation_aliases":[["tx-b","b"]]}
+        ]});
+        assert!(observations_needed(&canonical, false).unwrap().is_empty());
+        canonical["events"][0]["observation_aliases"][0][1] = json!("b");
+        assert!(observations_needed(&canonical, false).unwrap().is_empty());
+        let indexed = observations_needed(&canonical, true).unwrap();
+        assert_eq!(indexed[0].1["quantity_hash"], "b");
+        canonical["events"][0]["observation_aliases"][0][1] = json!("missing");
+        assert_eq!(
+            observations_needed(&canonical, false).unwrap_err(),
+            "KeyError"
+        );
+        canonical["events"][0]["legs"][0]["quantity_hash"] = json!(0);
+        canonical["events"][0]["observation_aliases"][0][1] = json!("");
+        assert!(observations_needed(&canonical, false).unwrap().is_empty());
+    }
 }

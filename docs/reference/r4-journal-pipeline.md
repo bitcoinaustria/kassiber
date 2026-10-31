@@ -914,6 +914,18 @@ witnesses for new branches and kill the full catalog. Core-accounting and
 reports-contracts still need census and custody-shadow with tax census;
 Clippy `-D warnings` and workspace tests also remain. R4-6 remains open.
 
+### R4-6 quantity kernel follow-up
+
+The [quantity kernel checkpoint](r4-quantity-kernel-performance.md) replaces
+the partial typing approach with borrowed native events, shared observation
+indexes, typed arbitration kernels and direct construction of the existing
+Python-model output. Stage inputs and outputs remain unchanged. Total quantity
+CPU falls by 4.3–4.8× across the generic and multi-wallet books at 2k and 20k,
+including output construction. The new run uses process CPU as its primary
+acceptance measure under load; wall time improves by 2.5–2.9×, so the earlier
+quarter-time wall budget remains open. This does not complete the full typed
+pipeline migration or establish whole-custody performance at 10× Python.
+
 ## Authority switch (R4-16)
 
 ### Before the switch

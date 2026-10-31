@@ -20,9 +20,21 @@ pub(super) fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 pub(super) fn number(n: &BigInt) -> Value {
+    if let Ok(n) = i64::try_from(n) {
+        return Value::from(n);
+    }
+    if let Ok(n) = u64::try_from(n) {
+        return Value::from(n);
+    }
     serde_json::from_str(&n.to_string()).expect("computed integer")
 }
 pub(super) fn exact(v: &Value) -> Result<BigInt, String> {
+    if let Some(n) = v.as_i64() {
+        return Ok(BigInt::from(n));
+    }
+    if let Some(n) = v.as_u64() {
+        return Ok(BigInt::from(n));
+    }
     if !v.is_number() || v.to_string().contains(['.', 'e', 'E']) {
         return Err("ValueError".into());
     }
@@ -48,21 +60,46 @@ pub(super) fn delta(v: &Value) -> Result<BigInt, String> {
         -amount - exact(&v["fee_msat"])?
     })
 }
+pub(super) struct Domain {
+    pub network: String,
+    pub exposure: String,
+    pub rail: Value,
+}
+impl Domain {
+    pub fn of(v: &Value) -> Self {
+        let network = text_key(&v["event_key"]["network"]);
+        let network = match network.as_ref() {
+            "liquidv1" => "main",
+            "liquidtestnet" => "test",
+            "elementsregtest" => "regtest",
+            _ => &network,
+        };
+        let asset = text_key(&v["asset"]);
+        let exposure = if matches!(asset.as_ref(), "BTC" | "LBTC") {
+            "bitcoin".into()
+        } else {
+            format!("asset:{asset}")
+        };
+        Self {
+            network: network.into(),
+            exposure,
+            rail: v["event_key"]["chain"].clone(),
+        }
+    }
+    pub fn py(self) -> Result<kassiber_pyjson::Value, String> {
+        use kassiber_pyjson::Value as Py;
+        Ok(py_dict([
+            ("$type", Py::Str("QuantityDomain".into())),
+            ("exposure", Py::Str(self.exposure.into())),
+            ("network", Py::Str(self.network.into())),
+            ("rail", into_py(self.rail)?),
+            ("unit", Py::Str("msat".into())),
+        ]))
+    }
+}
 pub(super) fn domain(v: &Value) -> Value {
-    let network = codec::text(&v["event_key"]["network"]);
-    let network = match network.as_str() {
-        "liquidv1" => "main",
-        "liquidtestnet" => "test",
-        "elementsregtest" => "regtest",
-        _ => &network,
-    };
-    let asset = codec::text(&v["asset"]);
-    let exposure = if matches!(asset.as_str(), "BTC" | "LBTC") {
-        "bitcoin".into()
-    } else {
-        format!("asset:{asset}")
-    };
-    json!({"$type":"QuantityDomain","network":network,"exposure":exposure,"unit":"msat","rail":v["event_key"]["chain"]})
+    let d = Domain::of(v);
+    json!({"$type":"QuantityDomain","network":d.network,"exposure":d.exposure,"unit":"msat","rail":d.rail})
 }
 pub(super) fn validate_observation(v: &Value) -> Result<(), String> {
     let fail = || Err("ValueError".into());
@@ -72,6 +109,14 @@ pub(super) fn validate_observation(v: &Value) -> Result<(), String> {
         }
     }
     for key in ["quantity_hash", "evidence_detail_hash"] {
+        if let Some(s) = v[key].as_str() {
+            if s.len() == 64
+                && s.bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            {
+                continue;
+            }
+        }
         let s = codec::pystr(&v[key]);
         if s.chars().count() != 64 || s != s.py_lower() {
             return fail();
@@ -131,4 +176,80 @@ pub(super) fn validate_observation(v: &Value) -> Result<(), String> {
         return fail();
     }
     Ok(())
+}
+
+pub(super) fn into_py(value: Value) -> Result<kassiber_pyjson::Value, String> {
+    use kassiber_pyjson::{Key, Value as Py};
+    Ok(match value {
+        Value::Null => Py::Null,
+        Value::Bool(v) => Py::Bool(v),
+        Value::String(s) => Py::Str(s.into()),
+        Value::Number(n) => {
+            if let Some(n) = n.as_i64() {
+                Py::Int(n.into())
+            } else if let Some(n) = n.as_u64() {
+                Py::Int(n.into())
+            } else {
+                codec::from_json(&Value::Number(n))?
+            }
+        }
+        Value::Array(v) => {
+            let mut items = Vec::with_capacity(v.len());
+            for value in v {
+                items.push(into_py(value)?);
+            }
+            Py::List(items)
+        }
+        Value::Object(v) => {
+            let mut items = Vec::with_capacity(v.len());
+            for (key, value) in v {
+                items.push((Key::Str(key.into()), into_py(value)?));
+            }
+            Py::Dict(items)
+        }
+    })
+}
+
+pub(super) fn borrowed_py(value: &Value) -> Result<kassiber_pyjson::Value, String> {
+    use kassiber_pyjson::{Key, Value as Py};
+    Ok(match value {
+        Value::Number(n) if n.as_i64().is_some() => Py::Int(n.as_i64().unwrap().into()),
+        Value::Number(n) if n.as_u64().is_some() => Py::Int(n.as_u64().unwrap().into()),
+        Value::Array(v) => {
+            let mut items = Vec::with_capacity(v.len());
+            for value in v {
+                items.push(borrowed_py(value)?);
+            }
+            Py::List(items)
+        }
+        Value::Object(v) => {
+            let mut items = Vec::with_capacity(v.len());
+            for (key, value) in v {
+                items.push((Key::Str(key.as_str().into()), borrowed_py(value)?));
+            }
+            Py::Dict(items)
+        }
+        _ => codec::from_json(value)?,
+    })
+}
+
+pub(super) fn text_key(v: &Value) -> std::borrow::Cow<'_, str> {
+    if let Some(s) = v.as_str() {
+        std::borrow::Cow::Borrowed(s)
+    } else if codec::truth(v) {
+        std::borrow::Cow::Owned(codec::pystr(v))
+    } else {
+        std::borrow::Cow::Borrowed("")
+    }
+}
+
+pub(super) fn py_dict<const N: usize>(
+    parts: [(&str, kassiber_pyjson::Value); N],
+) -> kassiber_pyjson::Value {
+    kassiber_pyjson::Value::Dict(
+        parts
+            .into_iter()
+            .map(|(k, v)| (kassiber_pyjson::Key::Str(k.into()), v))
+            .collect(),
+    )
 }
