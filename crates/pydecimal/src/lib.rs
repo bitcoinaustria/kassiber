@@ -885,6 +885,10 @@ impl Decimal {
         self.coeff.big().into_owned()
     }
 
+    pub fn coefficient_u64(&self) -> Option<u64> {
+        self.coeff.small().and_then(|n| n.try_into().ok())
+    }
+
     /// The exponent: the value is `coefficient * 10^exponent`.
     pub fn exponent(&self) -> i64 {
         self.exp

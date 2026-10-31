@@ -353,3 +353,116 @@ Mutation and verification build trees are removed after their summaries.
 
 No push, pull request or external comment is performed. Python retains production
 accounting authority.
+
+## Fifth continuation: native fragment quantities and allocation checkpoint
+
+This local continuation starts at `bd3690fa3` on `t3code/r4-11-render-5`.
+**R4-11 remains unaccepted.** The work below is a verified allocation checkpoint,
+not completion of the speed, fidelity, mutation or integrated campaign gates.
+
+Fragment and source msat quantities now retain ordinary signed machine integers
+until serialization. Wide values keep the arbitrary-precision JSON path and
+serialize identically. Decimal coefficient reads avoid constructing a discarded
+BigUint. Integral zero fixed-point text shares literals while preserving its
+sign; negative exponents retain every trailing decimal place. Source cache keys
+borrow immutable engine Decimals and still compare their exact representations.
+
+Entry heads cache validated metadata by immutable wallet reference, rather than
+wallet id, and preserve the first validation and UUID-consumption order. The
+calculation method is cached after its first use. Balance comparisons skip an
+empty observation index, and no-card ownership review avoids allocating a
+discarded BigInt for ordinary integer amounts. Malformed inbound amounts retain
+their fallible conversion. `render_ledger` and `boundary::finish` keep their
+signatures. No dependency or Python product source changes.
+
+### Controlled CPU comparisons
+
+`scripts/compare-journal-render.py` checks complete canonical state bytes before
+timing identical captured operands. It records operand/probe SHA-256 digests,
+five alternating samples, CPU affinity and each trial's load, with incremental
+JSONL output. Decoding, canonical serialization, persistence and destruction of
+the completed state stay outside the measured build span.
+
+The exploratory checkpoint comparison pins all four probes to CPU 0. The full
+historical `1e331d6f8` source is reconstructed with only the process CPU timer
+adapter and its existing locked dev dependency added. Best of five CPU seconds:
+
+| Checkpoint | Generic 20k | Multi-wallet 20k |
+| --- | ---: | ---: |
+| Historical `1e331d6f8` | 0.152400 | 0.172835 |
+| Boundary repairs | 0.158094 | 0.175164 |
+| Committed source reuse | 0.148833 | 0.181941 |
+| Intermediate native fragment quantities | 0.137009 | 0.174918 |
+
+The ranges overlap and do not isolate the reported regression. The historical
+wall-clock result does not establish a passing CPU baseline; the reconstructed
+historical multi-wallet renderer already exceeds 0.15 s CPU. These exploratory
+probes do not replace a final comparison with matching build flags.
+
+The immediate baseline and final candidate are therefore rebuilt separately
+with Rust 1.99.1, offline Cargo, `--release --features timing` and eight build
+jobs. They use independent build directories. Both books match complete state
+bytes. Each table entry below is the best of five alternating pairs:
+
+| Affinity | Book | Baseline CPU (s) | Candidate CPU (s) | Load 1m range |
+| --- | --- | ---: | ---: | ---: |
+| Unpinned | Generic 20k | 0.160988 | 0.169458 | 50.33–50.78 |
+| Unpinned | Multi-wallet 20k | 0.296345 | 0.369133 | 44.92–50.89 |
+| CPU 0 | Generic 20k | 0.193970 | 0.151179 | 33.69–35.88 |
+| CPU 0 | Multi-wallet 20k | 0.193626 | 0.179153 | 32.70–34.39 |
+
+Both final books still **fail the 0.15 s CPU budget**, including the pinned
+generic result by 0.001179 s. The final unpinned comparison does not demonstrate
+an improvement. Shared-host variability is recorded, not used to waive the
+budget. Entry rendering remains the largest recorded stage.
+
+### Verification and remaining gates
+
+All original 379 frozen records are unchanged. Four new cases exercise wallets
+sharing an id with different account metadata, a missing second-wallet account
+after a valid entry, and integral negative-zero fees in both event and lot
+sources. The corpus has **383 cases: 222 states and 161 refusals**. Deterministic
+regeneration, all six Rust oracle tests and all six Python oracle/capture tests
+pass with exact UUID tapes. The all-feature release journal suite passes all
+34 tests, including the existing SQLite/SQLCipher dump and rollback fixtures.
+All 28 pydecimal tests, workspace formatting and all-target/all-feature Clippy
+with denied warnings pass.
+
+All 144 journal mutation recipes apply: 93 renderer and 51 persistence. The
+source-bound focused shard kills eleven recipes after four passing named
+baselines: six affected inherited guards and five new guards. Named results,
+source digests and incremental logs are retained; its build tree is deleted.
+These eleven kills are not a full mutation campaign.
+
+The fresh boundary repro still fails actual surrogate decoding and malformed
+canonical-decimal error fidelity (`00E-1` yields native `EngineContractError`
+instead of Python `ValueError`). Nonfinite detail and malformed payout integer
+repros match. No Python reference bug is identified or changed.
+
+Acceptance still requires, in order:
+
+1. Isolate the remaining regression and meet 0.15 s CPU for both books on the
+   final integrated renderer with exact bytes and five alternating pairs.
+2. Repair actual surrogate scalars, raw nonfinite/carry/audit values, malformed
+   inputs and lazy refusal order, including both failing repros above.
+3. Finish the exhaustive branch audit, including component exclusions,
+   ambiguous script owners, scope/txid filtering, amount tolerance and graph
+   refusal propagation. Rerun the outstanding 78 inherited renderer recipes,
+   revalidate the affected/new recipes on final source (current renderer catalog:
+   93), all 51 persistence recipes and all 2,327 custody recipes in resumable
+   shards with named kills and build-tree deletion.
+4. Run the full 25,030 generated inputs, complete census/shadow lanes and fresh
+   recordings against final source. Earlier campaigns do not certify this change.
+5. Run the complete integrated SQLite/SQLCipher campaigns and repository quality
+   gate, then write production acceptance. The passing persistence fixtures above
+   do not certify that campaign.
+
+Raw operands, probes, all trials, repros and logs remain under
+`target/r4-render-5/`; `verification-index.json` binds their digests. The required
+classifier update leaves the checked-in inventory unchanged; CI preflight
+passes all **57 tests** before the local checkpoint commit. Manual second review
+checks integer widths, zero representations, wallet identity, immutable source
+references, serialization and refusal order against the frozen witnesses.
+Mutation and verification build trees are removed after summarizing their logs.
+No push, pull request or external comment is performed. Python retains
+production accounting authority.

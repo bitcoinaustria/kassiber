@@ -391,9 +391,9 @@
   },
   {
     "id": "JR-machine-coefficient",
-    "file": "crates/journals/src/render.rs",
-    "find": "d.coefficient().bits() <= 64",
-    "replace": "d.coefficient().bits() <= 65",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": "self.coeff.small().and_then(|n| n.try_into().ok())",
+    "replace": "self.coeff.small().map(|n| n as u64)",
     "expect_failing": [
       "msat_conversion_matches_python_at_rounding_and_width_boundaries"
     ],
@@ -412,8 +412,8 @@
   {
     "id": "JR-machine-sign",
     "file": "crates/journals/src/render.rs",
-    "find": "if d.is_sign_negative() { -n } else { n }",
-    "replace": "if d.is_sign_negative() { n } else { n }",
+    "find": "if d.is_sign_negative() {\n                -n\n            } else {\n                n\n            }",
+    "replace": "if d.is_sign_negative() {\n                n\n            } else {\n                n\n            }",
     "expect_failing": [
       "msat_conversion_matches_python_at_rounding_and_width_boundaries"
     ],
@@ -1282,8 +1282,8 @@
   {
     "id": "JR-ownership-inbound-refusal",
     "file": "crates/journals/src/boundary/joins.rs",
-    "find": "let _ = int(&row[\"amount\"])?;",
-    "replace": "let _ = int(&row[\"amount\"]);",
+    "find": "amount.as_i64().is_none() && amount.as_u64().is_none()",
+    "replace": "false",
     "expect_failing": [
       "legacy_boundary_values_and_refusal_order_match_python"
     ],
@@ -1302,8 +1302,8 @@
   {
     "id": "JR-entry-key-hash",
     "file": "crates/journals/src/render.rs",
-    "find": "ensure_hashable(&wallet_id)?;",
-    "replace": "let _ = ensure_hashable(&wallet_id);",
+    "find": "ensure_hashable(wallet_id)?;",
+    "replace": "let _ = ensure_hashable(wallet_id);",
     "expect_failing": [
       "legacy_boundary_values_and_refusal_order_match_python"
     ],
@@ -1332,8 +1332,8 @@
   {
     "id": "JR-entry-refusal-uuid",
     "file": "crates/journals/src/render.rs",
-    "find": "let id = ids();\n        Ok(JournalEntryRow {\n            id,\n            workspace_id: required(self.inputs.profile, \"workspace_id\")?.clone(),",
-    "replace": "let workspace_id = required(self.inputs.profile, \"workspace_id\")?.clone();\n        let id = ids();\n        Ok(JournalEntryRow {\n            id,\n            workspace_id,",
+    "find": "let id = ids();\n                let workspace_id = required(self.inputs.profile, \"workspace_id\")?;",
+    "replace": "let workspace_id = required(self.inputs.profile, \"workspace_id\")?;\n                let id = ids();",
     "expect_failing": [
       "legacy_boundary_values_and_refusal_order_match_python"
     ],
@@ -1388,5 +1388,55 @@
       "ledger_rendering_matches_python"
     ],
     "rule": "A numerically equal fee with a different sign or exponent keeps its exact text."
+  },
+  {
+    "id": "JR-head-wallet-identity",
+    "file": "crates/journals/src/render.rs",
+    "find": "let key = wallet as *const Value as usize;",
+    "replace": "let key = 0usize;",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Entry metadata caches distinguish immutable wallet references."
+  },
+  {
+    "id": "JR-fixed-zero-exponent",
+    "file": "crates/journals/src/render.rs",
+    "find": "d.is_zero() && d.exponent() >= 0",
+    "replace": "d.is_zero()",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Static zero text must retain negative exponents and trailing decimal places."
+  },
+  {
+    "id": "JR-fixed-zero-sign",
+    "file": "crates/journals/src/render.rs",
+    "find": "if d.is_sign_negative() { \"-0\" } else { \"0\" }",
+    "replace": "\"0\"",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Static zero text preserves the Decimal sign."
+  },
+  {
+    "id": "JR-fragment-msat-wire",
+    "file": "crates/journals/src/model.rs",
+    "find": "#[serde(untagged)]\npub enum JournalMsat",
+    "replace": "#[serde(tag = \"$type\", content = \"value\")]\npub enum JournalMsat",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Native fragment msat serializes as integers without enum metadata."
+  },
+  {
+    "id": "JR-balance-reason-lookup",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "(!observations.is_empty())",
+    "replace": "observations.is_empty()",
+    "expect_failing": [
+      "balance_join_matches_existing_comparator_and_promotes_before_overflow"
+    ],
+    "rule": "Nonempty observation indexes still join named balance reasons."
   }
 ]

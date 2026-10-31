@@ -444,9 +444,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   repairs integer refusals, holding keys and nonfinite detail/summary values;
   actual surrogate scalars, the 0.15 s CPU budget and the remaining acceptance
   gates are open.
-  The [source-reuse continuation](docs/reference/r4-journal-render-boundary-checkpoint.md#fourth-continuation-exact-source-reuse)
-  preserves all 379 frozen cases and records fresh focused/replay evidence;
-  final 20k CPU remains 0.208215 s generic and 0.201380 s multi-wallet.
+  The [allocation continuation](docs/reference/r4-journal-render-boundary-checkpoint.md#fifth-continuation-native-fragment-quantities-and-allocation-checkpoint)
+  preserves all 379 prior records and expands the corpus to 383 cases. Eleven
+  focused mutations are killed; the full campaigns remain open. Five alternating
+  pinned pairs give 0.151179 s generic and 0.179153 s multi-wallet CPU at 20k;
+  both still miss 0.15 s, and checkpoint comparisons do not isolate the regression.
   Python retains production authority.
 - [x] R4-14: expose the native automatic-pairing journal stage by reusing
   transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and

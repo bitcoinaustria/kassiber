@@ -81,7 +81,10 @@ pub(super) fn differences(c: &Value, holdings: &Holdings) -> Result<Value, Refus
             .entry(key.clone())
             .or_default()
             .add(&posting["amount_msat"])?;
-        if let Some(observation) = observations.get(&text(&posting["observation_hash"])) {
+        if let Some(observation) = (!observations.is_empty())
+            .then(|| observations.get(&text(&posting["observation_hash"])))
+            .flatten()
+        {
             let reason = &reasons[text(&observation["transaction_id"]).as_ref()];
             if truth(reason) {
                 named.entry(key).or_default().insert(string(reason));
@@ -195,7 +198,10 @@ pub(super) fn ownership_review(c: &Value, qs: &[QuarantineRow]) -> Result<(Value
         // Retain those conversions even when no quarantine can produce a card.
         for row in rows {
             if row["direction"] == "inbound" {
-                let _ = int(&row["amount"])?;
+                let amount = &row["amount"];
+                if amount.as_i64().is_none() && amount.as_u64().is_none() {
+                    let _ = int(amount)?;
+                }
             }
         }
         return Ok((json!({"total":0,"by_reason":{}}), json!([])));

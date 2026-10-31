@@ -2,6 +2,7 @@
 use kassiber_pydecimal::Decimal;
 use serde::{Serialize, Serializer};
 use serde_json::Value;
+use std::borrow::Cow;
 
 #[derive(Clone, Debug)]
 pub struct JournalDecimal(pub Decimal);
@@ -49,16 +50,44 @@ pub struct Calculation {
     pub fragments: Vec<Fragment>,
 }
 #[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum JournalMsat {
+    Small(i64),
+    Wide(Box<Value>),
+}
+impl JournalMsat {
+    pub(crate) fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Small(n) => Some(*n),
+            Self::Wide(n) => n.as_i64(),
+        }
+    }
+    pub(crate) fn into_value(self) -> Value {
+        match self {
+            Self::Small(n) => Value::from(n),
+            Self::Wide(n) => *n,
+        }
+    }
+}
+impl std::fmt::Display for JournalMsat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Small(n) => n.fmt(f),
+            Self::Wide(n) => n.fmt(f),
+        }
+    }
+}
+#[derive(Clone, Debug, Serialize)]
 pub struct Fragment {
-    pub quantity_msat: Value,
+    pub quantity_msat: JournalMsat,
     pub quantity_msat_exact: String,
-    pub cost_basis_exact: String,
-    pub proceeds_exact: String,
-    pub gain_loss_exact: String,
-    pub unit_basis_override_exact: Option<String>,
+    pub cost_basis_exact: Cow<'static, str>,
+    pub proceeds_exact: Cow<'static, str>,
+    pub gain_loss_exact: Cow<'static, str>,
+    pub unit_basis_override_exact: Option<Cow<'static, str>>,
     pub basis_authority: &'static str,
-    pub acquisition_basis_exact: Option<String>,
-    pub acquisition_quantity_msat: Option<Value>,
+    pub acquisition_basis_exact: Option<Cow<'static, str>>,
+    pub acquisition_quantity_msat: Option<JournalMsat>,
     pub acquisition_quantity_msat_exact: Option<String>,
     #[serde(serialize_with = "serialize_source")]
     pub event: std::sync::Arc<Source>,
@@ -82,10 +111,10 @@ pub struct Source {
     #[serde(flatten, serialize_with = "serialize_provenance")]
     pub provenance: std::sync::Arc<SourceProvenance>,
     pub asset: String,
-    pub spot_price_exact: String,
-    pub fiat_fee_exact: String,
-    pub crypto_fee_msat: Value,
-    pub crypto_fee_msat_exact: String,
+    pub spot_price_exact: Cow<'static, str>,
+    pub fiat_fee_exact: Cow<'static, str>,
+    pub crypto_fee_msat: JournalMsat,
+    pub crypto_fee_msat_exact: Cow<'static, str>,
 }
 fn serialize_provenance<S: Serializer>(
     provenance: &std::sync::Arc<SourceProvenance>,

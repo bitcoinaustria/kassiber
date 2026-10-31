@@ -119,11 +119,24 @@ def vectors():
         replace(base, wallet_refs_by_id=wallets), response, group='ledger')
 
     normal_response = capture_projection(snapshot(0)['profile'], base)['response']
+    for name, missing_account in [('same-id', False), ('missing-account', True)]:
+        wallets = {key: dict(value) for key, value in base.wallet_refs_by_id.items()}
+        wallets['wallet-b']['id'] = wallets['wallet-a']['id']
+        wallets['wallet-b']['wallet_account_id'] = 'other-account'
+        if missing_account:
+            wallets['wallet-b'].pop('wallet_account_id')
+        response = deepcopy(normal_response)
+        other_entry = deepcopy(response['entries'][0])
+        other_entry['wallet'] = wallets['wallet-b']['label']
+        response['entries'].append(other_entry)
+        add(f'head-cache-{name}', snapshot(0)['profile'],
+            replace(base, wallet_refs_by_id=wallets), response)
     realized = next(e for e in normal_response['entries'] if e.get('fragments'))
     fragment = realized['fragments'][0]
     for source in ('event', 'lot'):
         values = [(field, value, field) for field, value in
                   [('spot_price', '123E1'), ('fiat_fee', '-0E-2'), ('crypto_fee', '1E-8')]]
+        values.append(('fiat_fee', '-0E0', 'fiat_fee-integral-negative-zero'))
         for field in ('spot_price', 'fiat_fee', 'crypto_fee'):
             coefficient, exponent = fragment[source][field].split('E')
             shifted = coefficient if coefficient in ('0', '-0') else coefficient + '0'
