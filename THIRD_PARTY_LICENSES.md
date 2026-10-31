@@ -42,6 +42,7 @@ for filed-impact UUIDv5 identities, the store's bundled SQLCipher driver,
 and the internal rates timestamp parser. No package version changes.
 The unregistered transfer review harness links the existing internal journal
 assembler directly to the case reader. This adds no external package or license.
+Review operation digests reuse the same locked `bitcoin_hashes` SHA-256 primitive.
 The Rust setup services reuse the internal store, envelope, and Python-compatible
 JSON/text crates for existing book formats. Network partitions add `age` for
 the existing passphrase-encrypted backup format and `tar` for its archive;

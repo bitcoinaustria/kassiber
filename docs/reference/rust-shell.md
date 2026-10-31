@@ -8860,7 +8860,7 @@ catalogue adds `RVC-native-live-connection` and `RVC-native-refusal-fields`.
 All 48 native transfer tests pass. Both new mutations are killed after their
 two unmutated witnesses pass; the inherited eleven kills are not rerun here.
 
-This closes live case-reader composition only. Operation normalization,
+This first boundary closes live case-reader composition only. Operation normalization,
 artifacts/digests, policy effects, ordered planning/validation, writer-locked
 apply, historical idempotency, canonical journal persistence, filed impacts and
 receipts remain open. Full envelope/authorship parity, caller transaction/cache
@@ -8870,6 +8870,46 @@ daemon kinds**. Both loader-9 and loader-blob refs still point at `c5966c1ff` at
 this checkpoint; their final acceptance records/fixes remain dependencies, with
 the inherited lossless/refusal barriers and explicit pending exceptions intact.
 The separate-fee pair-authoring Python repro remains unchanged.
+
+#### Review operation normalization and digests
+
+The next transfers-12 boundary adds `review_operations`, also behind
+`test-harness`. It reproduces Python's ordered operation normalization for
+price overrides, exclusions, inbound kind declarations, unpairs and typed
+component requests. It preserves exact decimal scale and integer values,
+CPython Unicode stripping, supported-field validation and refusal precedence.
+Canonical finite JSON and SHA-256 reuse the existing internal JSON/decimal
+services and locked hash crate; content digests grant no authority.
+
+The checked-in oracle has **216 operation cases** from unchanged Python,
+including malformed/nonfinite/out-of-range decimal refusals, surrogate strings
+and keys, exact prices above `2**53`, operation order, the 50-operation limit
+and ASCII/Unicode recipes on either side of the one-million-byte encoded limit.
+Native comparisons pin the complete canonical JSON and digest, each refusal's
+code, message, hint and details, input preservation and normalization idempotence.
+The Python regeneration test
+keeps that corpus tied to the reference implementation.
+The four normalization mutations are killed after their baseline passes,
+covering finite JSON, the exact byte limit, operation order and decimal scale.
+Formatting, all-target clippy with `-D warnings`, documentation compilation,
+the native normalization test and both Python regeneration tests pass.
+The required final inventory update records 5,778 tests in 358 modules, and
+the subsequent required CI preflight passes all 57 tests. The owned mutation
+and verification build trees are removed after recording their results under
+`target/r5-evidence/`; no background job remains at handoff.
+
+Reproduce with the same pinned/offline environment:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo test --offline -p kassiber-transfers --features test-harness --test review_operations -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/export_review_operations.py --check
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/review_cases_mutation_check.py --mutations crates/transfers/scripts/review_operations_mutations.json
+```
+
+This supplies normalization and digest primitives. Artifact construction and
+admission, policy/economic effects, ordered domain operations, planning and
+validation remain open, together with every apply/receipt and route-admission
+requirement listed above. This checkpoint does not implement those services.
 
 ### Bitcoin native fetch assembly (R5)
 
