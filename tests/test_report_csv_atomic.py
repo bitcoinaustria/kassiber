@@ -353,3 +353,53 @@ def test_cli_staging_error_is_typed_and_hides_private_stage(tmp_path, monkeypatc
     assert str(target) in error['message']
     assert error['details'] == {'destination': str(target), 'errno': error_number}
     assert '.kassiber-' not in output
+
+
+@pytest.mark.parametrize('command', ['transactions', 'report', 'austrian'])
+@pytest.mark.parametrize('failure', ['parent-file', 'read-only'])
+def test_cli_csv_parent_creation_errors_are_typed(tmp_path, monkeypatch, capsys, command, failure):
+    from pathlib import Path
+    from kassiber.cli.main import main
+    from kassiber.cli.handlers import process_journals
+    from kassiber.db import open_db
+    from tests.test_custody_authored_migration import _scope, _tx, NOW
+
+    root = tmp_path / 'book'
+    conn = open_db(root)
+    try:
+        _scope(conn)
+        if command == 'austrian':
+            conn.execute("UPDATE profiles SET tax_country='at'")
+        _tx(conn, 'buy', 'btc', 'inbound', 'BTC', 100000, NOW)
+        conn.execute("UPDATE transactions SET fiat_rate=50000, fiat_rate_exact='50000'")
+        conn.commit()
+        process_journals(conn, 'Books', 'Book')
+    finally:
+        conn.close()
+    parent = tmp_path / 'parent'
+    target = parent / 'missing' / 'report.csv'
+    error_number = errno.ENOTDIR if failure == 'parent-file' else errno.EACCES
+    if failure == 'parent-file':
+        parent.write_text('file')
+    else:
+        parent.mkdir()
+        real_mkdir = Path.mkdir
+        def refuse(path, *args, **kwargs):
+            if path == parent or parent in path.parents:
+                raise PermissionError(errno.EACCES, 'private errno text', str(path))
+            return real_mkdir(path, *args, **kwargs)
+        monkeypatch.setattr(Path, 'mkdir', refuse)
+    commands = {
+        'transactions': ['transactions', 'export', '--export-format', 'csv', '--file', str(target)],
+        'report': ['reports', 'export-csv', '--file', str(target)],
+        'austrian': ['reports', 'export-austrian-e1kv-csv', '--year', '2026', '--dir', str(target)],
+    }
+    assert main(['--machine', '--data-root', str(root), *commands[command],
+                 '--workspace', 'Books', '--profile', 'Book']) == 1
+    output = capsys.readouterr().out
+    error = json.loads(output)['error']
+    assert error['code'] == 'export_write_failed'
+    destination = str(target / '00_uebersicht.csv') if command == 'austrian' else str(target)
+    assert error['details'] == {'destination': destination, 'errno': error_number}
+    assert 'private errno text' not in output
+    assert '.kassiber-' not in output
