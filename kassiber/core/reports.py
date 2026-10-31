@@ -5570,6 +5570,19 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
     return result
 
 
+def _export_csv_rows(path, rows):
+    """Translate storage failures at every CSV export boundary."""
+    try:
+        _write_csv_rows(path, rows)
+    except OSError as exc:
+        reason = os.strerror(exc.errno) if exc.errno is not None else "I/O error"
+        raise AppError(
+            f"Could not write CSV export '{path}': {reason}",
+            code="export_write_failed",
+            details={"destination": os.fspath(path), "errno": exc.errno},
+        ) from None
+
+
 def _write_csv_rows(path, rows):
     """Stage ordinary files; preserve open("w") behavior for special targets.
 
@@ -5597,7 +5610,7 @@ def _write_csv_rows(path, rows):
         if target_stat is None or exc.errno not in {
             errno.EACCES, errno.EPERM, errno.EROFS,
         }:
-            raise
+            raise OSError(exc.errno, exc.strerror, os.fspath(path)) from None
         with open(target, "w", encoding="utf-8", newline="") as handle:
             csv.writer(handle).writerows(rows)
         return
@@ -5742,7 +5755,7 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
 
     def write_file(sheet_name, filename, rows):
         path = directory / filename
-        _write_csv_rows(path, rows)
+        _export_csv_rows(path, rows)
         files.append(
             {
                 "sheet": sheet_name,
@@ -6458,7 +6471,7 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     rows = _generic_report_csv_rows(context, sections)
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_csv_rows(path, rows)
+    _export_csv_rows(path, rows)
     result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
@@ -7008,7 +7021,7 @@ def export_transactions_csv_report(
     spec = context["spec"]
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    _write_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
+    _export_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
     result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
