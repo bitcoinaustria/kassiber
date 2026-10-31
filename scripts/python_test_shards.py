@@ -103,6 +103,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_freshness_admission",
         "test_rust_freshness_execution",
         "test_rust_freshness_native",
+        "test_rust_freshness_lifecycle",
     }
 )
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})

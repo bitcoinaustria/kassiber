@@ -189,6 +189,13 @@ through the shared setup crate.
   prefetch/workspace event ordering; check persisted cancellation, book and
   wallet/backend inputs between batches. The guarded daemon streams these
   events; product lifecycle controls and the graph worker remain open.
+- [x] Add the guarded daemon request runner with a dedicated connection,
+  early/active cancellation, source controls, offline/revocation/replay fences
+  and switch/lock/shutdown/EOF quiescence. Keep product registration gated on
+  graph handoff, product validation/selection and full served-shape parity.
+- [ ] Redact private checkpoints from Python freshness pause/resume results.
+  The disposable `test_reference_source_control_checkpoint_repro_and_native_parity`
+  repro pins the disclosure; Rust already applies the shared UI projection.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.

@@ -309,6 +309,9 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "freshness execution"))
     }
+    fn freshness_control(&mut self, _action: &str, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "freshness control"))
+    }
     fn wallet_sync(
         &mut self,
         _profile_id: &str,

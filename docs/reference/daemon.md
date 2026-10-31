@@ -798,10 +798,12 @@ itself. Persistent state lives in SQLite under `freshness_jobs` and
 The Rust port has an internal admitted-book executor for supported Bitcoin
 jobs with an explicit journal opt-out. It covers execution state, retries,
 checkpoints, terminal aggregation, fetch progress and authority checks between
-fetch batches. Its guarded daemon test kind streams request-bound envelopes;
-product request lifecycle controls and graph handoff remain pending. All three
-product sync/freshness routes still use Python. See the latest
-[Rust checkpoint](rust-shell.md#bitcoin-wallet-sync-fetch-progress-and-batch-controls-r5-partial).
+fetch batches. Its guarded daemon request runner owns a separate connection,
+streams progress, services request/source cancellation and offline changes,
+and joins before book switching, locking or shutdown. Graph handoff and product
+validation/selection remain pending. All three product sync/freshness routes
+still use Python. See the latest
+[Rust checkpoint](rust-shell.md#bitcoin-wallet-sync-request-loop-lifecycle-r5-partial).
 
 Within the daemon, refresh execution is serialized across recovery, queueing,
 batch fetch and apply. A background tick skips an occupied execution slot; an

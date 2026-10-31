@@ -15,13 +15,18 @@ use crate::input::Input;
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Failure, Handled};
 
-pub const KINDS: [&str; 6] = [
+pub const KINDS: [&str; 11] = [
     "test.stream",
     "test.emit_event",
     "test.late",
     "test.secret_store",
     "test.freshness.plan",
     "test.freshness.execute",
+    "test.freshness.cancel",
+    "test.freshness.pause",
+    "test.freshness.resume",
+    "test.freshness.request.cancel",
+    "test.freshness.request.revoke",
 ];
 
 fn arg_text(args: Option<&Value>, key: &str) -> String {
@@ -56,6 +61,12 @@ pub(crate) fn handle(
             if let Some(locked) = daemon.open_lazily(request_id)? {
                 return Ok((Some(locked), false));
             }
+            if let Some(locked) = daemon.check_expected_scope(
+                args.filter(|v| get(v, "expected_scope").is_some()),
+                request_id,
+            )? {
+                return Ok((Some(locked), false));
+            }
             let workspace = arg_text(args, "workspace_id");
             let wallet = arg_text(args, "wallet");
             let flag = |key| {
@@ -64,7 +75,7 @@ pub(crate) fn handle(
                     _ => None,
                 })
             };
-            let plan = daemon.book_mut()?.freshness_plan(&Request {
+            let selection = Request {
                 scope: if workspace.is_empty() {
                     Scope::ActiveProfile
                 } else {
@@ -74,38 +85,59 @@ pub(crate) fn handle(
                 rates: flag("rates"),
                 journals: flag("journals"),
                 force_full: flag("force_full").unwrap_or(false),
-            })?;
-            let payload = if kind == "test.freshness.execute" {
-                let proof = kassiber_wallets::freshness::native::Consent::explicit_trigger(&plan);
-                if flag("revoke") == Some(true) {
-                    proof.revoke();
-                }
-                let cancel = kassiber_wallets::scan::Cancellation::default();
-                if flag("cancel") == Some(true) {
-                    cancel.cancel();
-                }
-                let output = daemon.output.clone();
-                let progress_id = request_id.clone();
-                daemon.book_mut()?.freshness_execute(
-                    plan,
-                    &kassiber_wallets::freshness::execution::Options {
+            };
+            if kind == "test.freshness.execute" {
+                daemon.start_freshness(
+                    request_id,
+                    &selection,
+                    kassiber_wallets::freshness::execution::Options {
                         run: flag("run").unwrap_or(true),
                         limit: None,
                     },
-                    (flag("consent") != Some(false)).then_some(&proof),
-                    &cancel,
-                    &mut |event| {
-                        output
-                            .write(&with_request_id(
-                                success("test.freshness.execute.progress", event.clone()),
-                                &progress_id,
-                            ))
-                            .map_err(|_| AppError::new("cancelled", "Freshness output closed"))
-                    },
-                )?
-            } else {
-                plan.specifications()
-            };
+                    args.unwrap_or(&dict::<&str>([])),
+                )?;
+                return Ok((None, false));
+            }
+            daemon.freshness_before_request(kind)?;
+            let payload = daemon
+                .book_mut()?
+                .freshness_plan(&selection)?
+                .specifications();
+            Ok((
+                Some(with_request_id(success(kind, payload), request_id)),
+                false,
+            ))
+        })(),
+        "test.freshness.request.cancel" | "test.freshness.request.revoke" => (|| {
+            if let Some(locked) = daemon.check_expected_scope(
+                args.filter(|v| get(v, "expected_scope").is_some()),
+                request_id,
+            )? {
+                return Ok((Some(locked), false));
+            }
+            daemon.reap_freshness(false)?;
+            let payload = daemon
+                .freshness_requests
+                .control(args.unwrap_or(&dict::<&str>([])), kind.ends_with("revoke"))?;
+            Ok((
+                Some(with_request_id(success(kind, payload), request_id)),
+                false,
+            ))
+        })(),
+        "test.freshness.cancel" | "test.freshness.pause" | "test.freshness.resume" => (|| {
+            if let Some(locked) = daemon.open_lazily(request_id)? {
+                return Ok((Some(locked), false));
+            }
+            if let Some(locked) = daemon.check_expected_scope(
+                args.filter(|v| get(v, "expected_scope").is_some()),
+                request_id,
+            )? {
+                return Ok((Some(locked), false));
+            }
+            let action = kind.rsplit('.').next().unwrap_or("");
+            let payload = daemon
+                .book_mut()?
+                .freshness_control(action, args.unwrap_or(&dict::<&str>([])))?;
             Ok((
                 Some(with_request_id(success(kind, payload), request_id)),
                 false,

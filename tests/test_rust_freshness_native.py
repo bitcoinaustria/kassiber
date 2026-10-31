@@ -157,13 +157,12 @@ def test_native_freshness_admitted_book_execution_is_inert_without_run(tmp_path)
     env = {**child_env(tmp_path), "KASSIBER_RUST_TEST_OWNER_ROOT": str(owners),
         "KASSIBER_BACKEND_FIXTURE_KIND": "esplora", "KASSIBER_BACKEND_FIXTURE_URL": "http://127.0.0.1:1",
         "KASSIBER_DEFAULT_BACKEND": "fixture", "KASSIBER_TEST_NO_EGRESS": "1", "KASSIBER_NO_EGRESS": "1"}
-    requests = [{"request_id": "execute", "kind": "test.freshness.execute",
-                 "args": {"rates": False, "journals": False, "run": False}},
-                {"request_id": "stop", "kind": "daemon.shutdown"}]
-    result = subprocess.run([str(Path(os.environ["KASSIBER_RUST_BIN"]).resolve()), "--data-root", str(tmp_path), "daemon"],
-        input="".join(json.dumps(row) + "\n" for row in requests), text=True, capture_output=True, timeout=30, env=env)
-    assert result.returncode == 0 and result.stderr == "", result.stderr
-    rows = [json.loads(row) for row in result.stdout.splitlines()]
+    from tests.rust_freshness_session import Session
+    with Session(tmp_path, env) as session:
+        session.send("test.freshness.execute", "execute", {"rates": False, "journals": False, "run": False})
+        session.until("execute", "test.freshness.execute")
+        session.finish()
+        rows = session.rows
     assert [row["kind"] for row in rows] == ["daemon.ready", "test.freshness.execute", "daemon.shutdown"]
     assert len(rows[1]["data"]["enqueued"]) == 1
     assert rows[1]["data"]["completed"] == []
@@ -266,12 +265,12 @@ def test_native_freshness_live_stream_matches_python(tmp_path, protocol):
         with chain.lock:
             chain.__dict__.update(before)
         env = _environment(tmp_path, protocol, url)
-        requests = [{"request_id": "sync", "kind": "test.freshness.execute", "args": {"rates": False, "journals": False}},
-                    {"request_id": "stop", "kind": "daemon.shutdown"}]
-        result = subprocess.run([str(Path(os.environ["KASSIBER_RUST_BIN"]).resolve()), "--data-root", str(roots[1]), "daemon"],
-            input="".join(json.dumps(row) + "\n" for row in requests), capture_output=True, text=True, timeout=90, env=env)
-    assert result.returncode == 0 and result.stderr == "", result.stderr
-    rows = [json.loads(line) for line in result.stdout.splitlines()]
+        from tests.rust_freshness_session import Session
+        with Session(roots[1], env) as session:
+            session.send("test.freshness.execute", "sync", {"rates": False, "journals": False})
+            session.until("sync", "test.freshness.execute")
+            session.finish()
+            rows = session.rows
     assert rows[0]["kind"] == "daemon.ready"
     assert rows[-1]["kind"] == "daemon.shutdown"
     assert rows[1:-2] == [{**build_envelope("test.freshness.execute.progress", event), "request_id": "sync"}

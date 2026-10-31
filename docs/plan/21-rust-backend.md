@@ -2983,3 +2983,27 @@ stoppable, connection-owning worker remain outstanding. Step 3 validation,
 inert no-refresh hybrid selection and product registration have not started.
 The explicit no-refresh admission choice remains; default journal processing
 continues through Python. All three product daemon routes remain unregistered.
+
+### R5 Bitcoin sync: request-loop lifecycle (partial)
+
+The guarded native daemon now executes an admitted freshness request on a
+dedicated connection while its request loop services cancellation, source
+pause/resume/cancel and offline changes. Request grants remain once-only and
+bound to the admitted plan; request-ID replay cannot create a new grant.
+Early cancellation is bounded and expires. Book switching, lock, shutdown and
+EOF cancel/revoke and join the runner before changing context or releasing
+ownership. Terminal responses are written by the request loop after the runner
+has closed its connection. An output failure also stops and joins the request.
+Encrypted execution uses the unlocked session to open the dedicated connection
+without putting a passphrase in a request or retaining another worker copy.
+
+Python pause/resume currently returns a private checkpoint in its result
+container. A new repro pins that reference bug; Rust keeps the UI redaction,
+and all other control fields and complete logical books are compared. Python
+is unchanged. The earlier cancelled-prefetch privacy deviation also remains.
+
+The next boundary is after-response graph grants and the bounded, stoppable
+graph worker. Step 3 keeps the explicit no-refresh choice: implement product
+validation and inert whole-shape selection while defaults remain on Python.
+Full product daemon parity and zero served-shape fallbacks must precede route
+registration. This checkpoint registers none of the three product routes.

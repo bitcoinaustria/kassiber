@@ -47,6 +47,10 @@ REVIEWS = {
             "reason": "Direct coordinator regression against seeded legacy flags; native replacement is twentyone_legacy_reactivation_invalidates_ready_journals_once in crates/wallets/src/file_import/tests.rs, with full-book CLI parity in test_twentyone_unpriced_legacy_reactivation_matches_readiness_dump.",
         },
     },
+    "tests/test_rust_freshness_lifecycle.py": {
+        "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded native request loop against blocked disposable backends to pin cancellation, source controls, quiescence and exact-request authority; retains subprocess and complete-book witnesses until product registration"},
+        "test_reference_source_control_checkpoint_repro_and_native_parity": {"disposition": "oracle", "group": "daemon-runtime", "reason": "reproduces Python pause/resume checkpoint disclosure; compares complete source-control envelopes after explicitly removing that private result container, and every unchanged logical table"},
+    },
     "tests/test_backend_configuration.py": {
         "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "calls Python backend redactors directly; Rust replacement is malformed_backend_locations_never_echo_embedded_credentials in crates/setup/tests/backends.rs"},
         "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "pins the Python bare-host disclosure rule; Rust replacement is bare_backend_location_fullmatch_preserves_only_the_python_allowlist in crates/setup/src/backend_output.rs"},

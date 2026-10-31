@@ -121,7 +121,7 @@
   },
   {
     "id": "freshness-progress-daemon-stream",
-    "file": "crates/daemon/src/test_kinds.rs",
+    "file": "crates/daemon/src/freshness.rs",
     "find": "success(\"test.freshness.execute.progress\", event.clone()),",
     "replace": "success(\"test.freshness.execute.wrong\", event.clone()),",
     "expect_failing": [

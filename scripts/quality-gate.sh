@@ -80,6 +80,7 @@ run py crates/wallets/scripts/freshness_mutation_check.py --check
 run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_admission_mutations.json --check
 run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_execution_mutations.json --check
 run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_progress_mutations.json --check
+run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_lifecycle_mutations.json --check
 export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate

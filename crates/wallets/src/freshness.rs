@@ -31,6 +31,65 @@ const DUE: &str = "status IN ('queued','rate_limited')
 fn empty() -> Value {
     dict::<&str>([])
 }
+
+pub fn control(
+    conn: &Connection,
+    sources: &mut dyn Sources,
+    action: &str,
+    args: &Value,
+) -> Result<Value> {
+    let context = kassiber_setup::context::snapshot(conn)?;
+    let profile_id = or_text(field(&context, "profile_id"));
+    let profile =
+        first(conn, "SELECT * FROM profiles WHERE id=?", [&profile_id])?.ok_or_else(|| {
+            AppError::new(
+                "validation",
+                format!("ui.freshness.{action} requires an active profile"),
+            )
+        })?;
+    let key = if action == "cancel" {
+        "job_id"
+    } else {
+        "source_key"
+    };
+    let value = get(args, key)
+        .and_then(|v| match v {
+            Value::Str(v) => v.as_str(),
+            _ => None,
+        })
+        .map(kassiber_pytext::strip)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            AppError::new(
+                "validation",
+                format!("ui.freshness.{action} requires args.{key}"),
+            )
+        })?;
+    execution::begin(conn)?;
+    let mut queue = Queue::new(conn, sources);
+    let result = match action {
+        "cancel" => queue.cancel(value)?,
+        "pause" | "resume" => queue.pause(&profile_id, value, action == "pause")?,
+        _ => {
+            return Err(AppError::new(
+                "validation",
+                format!("Unsupported freshness control action '{action}'"),
+            ))
+        }
+    };
+    execution::commit(conn)?;
+    let mut status = queue.snapshot(&profile_id)?;
+    put(&mut status, "result", result);
+    put(
+        &mut status,
+        "profile",
+        dict([
+            ("id", field(&profile, "id").clone()),
+            ("label", field(&profile, "label").clone()),
+        ]),
+    );
+    Ok(ui::payload(&status))
+}
 fn put(value: &mut Value, key: &str, item: Value) {
     if let Value::Dict(pairs) = value {
         if let Some((_, old)) = pairs.iter_mut().find(|(k, _)| k == &Key::from(key)) {

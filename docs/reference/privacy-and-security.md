@@ -153,11 +153,17 @@ missing, foreign, revoked or cancelled requests refuse before queue writes.
 Enqueue-only execution creates no client. Explicit execution uses the existing
 `kassiber-net` gate for every transport and rechecks scope, cancellation,
 revocation and offline permission around fetch and atomic publication. An
-offline/no-egress refusal records a failed, report-blocking job. Progress
-streams, cancellation between fetch batches and the graph-grant handoff remain
-unfinished. Execution test kinds exist only in guarded builds, with no new
-renderer or AI allowlist entry. Disposable-loopback regressions verify empty
-attempt and egress buffers before consent and under pretransport fences.
+offline/no-egress refusal records a failed, report-blocking job. The guarded
+request runner services early/active cancellation, source controls and offline
+changes while fetching; switch, lock, shutdown and EOF cancel/revoke and join
+its connection owner before releasing the book. Used request identities cannot
+create another grant. Source-control results redact private checkpoints,
+including the result container that Python pause/resume currently returns unredacted.
+That reference bug has a disposable repro; Python is unchanged here.
+The graph-grant handoff remains unfinished. Execution test kinds exist only in
+guarded builds, with no new renderer or AI allowlist entry. Disposable-loopback
+regressions verify empty attempt and egress buffers before consent and under
+pretransport fences.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview

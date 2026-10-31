@@ -1320,6 +1320,10 @@ impl Book for RealBook {
             |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
         )
     }
+    fn freshness_control(&mut self, action: &str, args: &Value) -> Result<Value, AppError> {
+        let (mut sources, _) = sync_sources();
+        kassiber_wallets::freshness::control(self.conn()?, sources.as_mut(), action, args)
+    }
     fn wallet_sync(
         &mut self,
         profile_id: &str,

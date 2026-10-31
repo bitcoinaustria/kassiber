@@ -7914,3 +7914,99 @@ preserved, and no background job is left running. The full quality gate,
 tax/custody shadow overlays, Docker regtest and packaged/platform gates were
 not run. This partial checkpoint does not establish product daemon route
 acceptance or complete step 2 or step 3.
+
+### Bitcoin wallet-sync request-loop lifecycle (R5, partial)
+
+Local branch `t3code/r5-sync-19` starts at `2a84706c5`. The guarded
+`test.freshness.execute` route now runs asynchronously on a dedicated admitted
+connection. The main loop continues to service status, the offline switch,
+request cancellation/revocation and source pause/resume/cancel. Competing
+refreshes and unrelated book mutations refuse while the runner owns the
+execution slot. No product route, desktop/AI allowlist or dependency is added.
+
+The runner receives its own exact-plan consent and atomic cancellation flag.
+Early request cancellations are held for 60 seconds, with at most 128 pending
+identities. Up to 4,096 used request identities are retained for the daemon
+session; reaching that bound refuses further requests until restart rather
+than forgetting replay fences. Guarded execution requires a nonempty UTF-8
+string request ID; product selection must account for other protocol ID shapes
+before registration. Missing/foreign/revoked consent, offline and
+no-egress continue to use the inherited service and `kassiber-net` checks.
+Saved/recovered jobs remain insufficient transport authority.
+
+Book switching, lock, shutdown and EOF cancel and revoke the active request,
+join the runner and close its connection before changing context or releasing
+ownership. In-flight traffic retains its existing timeout. The main loop
+writes the terminal response after joining, so a completed request has released
+its execution slot before another request starts. Closed output stops and joins
+the request. The SQLCipher connection opens from the existing unlocked session;
+the worker receives no passphrase copy, and lock removes the session secret.
+
+`Book::freshness_control` uses the shared queue and UI projection. New live
+tests hold a disposable Electrum/Esplora response while submitting controls,
+then check terminal state, subsequent traffic and publication. Source-control
+oracles compare complete typed envelopes and every logical table. Their
+explicit projection exception reproduces another Python reference bug:
+`test_reference_source_control_checkpoint_repro_and_native_parity` shows that
+pause/resume returns private checkpoints under `result`. Rust removes that
+container; Python is unchanged. The inherited active-prefetch cancellation
+repro and its deliberate privacy deviation are retained.
+
+The exact remaining handoff is:
+
+1. Add after-response graph-grant publication and the bounded, stoppable
+   connection-owning graph worker, including SQLCipher handoff/cleanup,
+   request/book/configuration revocation and unsolicited event envelopes.
+   Carry private successful-job grants out of execution separately from the
+   sanitized response, then publish only after the main loop's successful
+   terminal write in `Daemon::reap_freshness`. The present `Finished` handoff
+   carries only that response and connection-close failure state.
+   Persisted/recovered jobs must never authorize graph traffic. Complete the
+   lifecycle/graph parity and named graph mutations before closing step 2.
+2. Implement step 3 product argument validation and inert whole-invocation
+   hybrid selection for explicit no-refresh variants. This remains the chosen
+   journal boundary; defaults stay on Python. No Python journal bridge or
+   native refresh is introduced; native refresh still requires R4-13.
+3. Prove full product daemon envelopes/events/books on the broader fixture,
+   restart and reviewed-book corpus over both protocols, zero served-shape
+   fallbacks and the remaining mutations. Register only passing shapes.
+
+All three product routes remain on Python, including no-refresh variants;
+native product successes added here are zero for `ui.wallets.sync`,
+`ui.freshness.run` and `ui.workspace.freshness.run`. This is a request-loop
+prerequisite, not product route acceptance or completion of step 2 or step 3.
+
+Verification passes the 282-case freshness suite and a final 49-case
+lifecycle/protocol/desktop run (37 cases overlap), with two subtests. The final
+run includes both live protocol streams and encrypted lock cleanup. All 206
+affected Rust tests pass, including 179 wallet tests, encrypted rollback, the
+inherited 102-round corpus and the two early-cancellation registry tests.
+Formatting and affected production, binary-harness and daemon-harness clippy
+pass with warnings denied. These runs skip no tests.
+
+All 12 lifecycle mutations are killed after 11 unmutated named selections
+pass. They pin early/active cancellation, request revocation and identity,
+replay, quiescence, switch and offline barriers, persisted source controls,
+checkpoint redaction and closed-output handling. The inherited
+`freshness-progress-daemon-stream` recipe now targets the dedicated runner;
+its unmutated baseline passes and the mutation is killed. Build failures,
+skips and empty selections do not count as kills. Queue, admission, execution,
+progress and lifecycle catalogues pass static checks (29, 12, 19, 16 and 12
+entries), as do combined sync and routing (547 and 14). Other inherited
+mutation campaigns were not rerun.
+
+The required `classify_tests update` records 5,781 definitions, and
+`python_test_shards.py run preflight --ci` passes all 57 tests. A manual second
+pass reviewed request identity and authority, join/output ordering, connection
+ownership and encrypted cleanup, source-control transactions and redaction,
+guarded routing, classification and documentation. No verification remains
+sandbox-blocked.
+
+Command logs, scripts and the summary remain under
+`target/r5-sync-19-artifacts/`. Mutation and verification build trees and
+disposable books are removed after summarizing their results. Account HOME is
+preserved, and no background job is left running. The full quality gate,
+tax/custody shadow overlays, Docker regtest and packaged/platform gates were
+not run. This run stops at the verified request-loop boundary; the graph
+worker, product validation/selection and full product daemon acceptance remain
+open as listed above.
