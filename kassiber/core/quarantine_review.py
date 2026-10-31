@@ -20,6 +20,7 @@ from typing import Any, Mapping, Sequence
 
 from ..errors import AppError
 from ..redaction import redact_operational_text
+from ..time_utils import parse_iso_datetime_or_none
 from . import custody_journal
 from . import freshness as core_freshness
 from . import quarantine_catalog as catalog
@@ -277,7 +278,12 @@ def _journal_freshness(conn: sqlite3.Connection, profile: Mapping[str, Any]) -> 
         error_at = str(source["last_error_at"])
         success_at = str(source.get("last_success_at") or "")
         processed_at = str(state.get("last_processed_at") or "")
-        if error_at > success_at and error_at > processed_at:
+        error_time = parse_iso_datetime_or_none(error_at)
+        success_time = parse_iso_datetime_or_none(success_at)
+        processed_time = parse_iso_datetime_or_none(processed_at)
+        if (error_time is not None
+                and (success_time is None or error_time > success_time)
+                and (processed_time is None or error_time > processed_time)):
             last_error = {
                 "code": str(source.get("last_error_code") or "journal_refresh_failed"),
                 "message": redact_operational_text(

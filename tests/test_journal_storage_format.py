@@ -1,4 +1,4 @@
-"""Journal storage format: compact retained calculations.
+"""Compact retained calculations, stable identities and changed-row writes.
 
 See docs/reference/r4-journal-pipeline.md#storage-format-speedups.
 """
@@ -328,5 +328,399 @@ def test_corrupt_compact_detail_does_not_claim_reconciliation(tmp_path):
         conn.execute("UPDATE journal_entries SET calculation_compact = '[2' WHERE id = ?", (row["id"],))
         conn.commit()
         assert explain_capital_gain(conn, profile, reference)["status"] == "engine_detail_mismatch"
+    finally:
+        conn.close()
+
+
+def _stored_rows(conn, table="journal_entries", key="id"):
+    return {row[key]: tuple(row) for row in conn.execute(f"SELECT rowid, * FROM {table}")}
+
+
+def _store_at(conn, state, stamp, *, fresh=False):
+    if fresh:
+        conn.execute("DELETE FROM journal_entries WHERE profile_id='p'")
+        conn.execute("DELETE FROM journal_quantity_postings WHERE profile_id='p'")
+    custody_journal.store_ledger_state(conn, _profile(conn), state, created_at=stamp)
+    conn.commit()
+
+
+def _large_table_writes(conn):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def capture():
+        statements = []
+        def record(sql):
+            sql = sql.strip()
+            if any(sql.startswith(prefix + table) for prefix in ("INSERT INTO ", "DELETE FROM ")
+                   for table in ("journal_entries", "journal_quantity_postings")):
+                statements.append(sql)
+        conn.set_trace_callback(record)
+        try:
+            yield statements
+        finally:
+            conn.set_trace_callback(None)
+    return capture()
+
+
+def test_entry_ids_are_stable_uuid8_in_engine_order(tmp_path):
+    from collections import defaultdict
+    from uuid import UUID
+    from kassiber.core.journal_storage import journal_entry_id
+
+    conn = _book(tmp_path / "data")
+    try:
+        first = custody_journal.build_ledger_state(conn, _profile(conn))
+        second = custody_journal.build_ledger_state(conn, _profile(conn))
+        assert [e["id"] for e in first["entries"]] == [e["id"] for e in second["entries"]]
+        ordinals = defaultdict(int)
+        for entry in first["entries"]:
+            key = tuple(entry[field] for field in ("transaction_id", "wallet_id", "entry_type", "asset"))
+            assert entry["id"] == journal_entry_id("p", *key, ordinals[key])
+            assert UUID(entry["id"]).version == 8
+            ordinals[key] += 1
+        assert journal_entry_id("p", "a", "wallet", "acquisition", "BTC", 0) != journal_entry_id("other", "a", "wallet", "acquisition", "BTC", 0)
+    finally:
+        conn.close()
+
+
+def test_unchanged_build_writes_no_entries_or_postings_and_preserves_creation_times(tmp_path):
+    from kassiber.core.ui_snapshot import build_audit_changes_since_last_answer_snapshot
+    from kassiber.db import set_setting
+
+    conn = _book(tmp_path / "data")
+    try:
+        state = custody_journal.build_ledger_state(conn, _profile(conn))
+        _store_at(conn, state, "2030-01-01T00:00:00Z", fresh=True)
+        entries = _stored_rows(conn)
+        postings = _stored_rows(conn, "journal_quantity_postings", "posting_id")
+        rebuilt = custody_journal.build_ledger_state(conn, _profile(conn))
+        with _large_table_writes(conn) as writes:
+            _store_at(conn, rebuilt, "2030-01-02T00:00:00Z")
+        assert writes == []
+        assert _stored_rows(conn) == entries
+        assert _stored_rows(conn, "journal_quantity_postings", "posting_id") == postings
+        assert _profile(conn)["last_processed_at"] == "2030-01-02T00:00:00Z"
+        set_setting(conn, "context_workspace", "w")
+        set_setting(conn, "context_profile", "p")
+        audit = build_audit_changes_since_last_answer_snapshot(conn, {"since": "2030-01-01T12:00:00Z"})
+        assert audit["counts_since"]["journal_entries"] == 0
+        assert audit["changed"] is False
+        assert audit["latest"]["journal_entries"] == "2030-01-01T00:00:00Z"
+        assert audit["latest"]["journals_processed_at"] == "2030-01-02T00:00:00Z"
+    finally:
+        conn.close()
+
+
+def test_changed_entry_rewrites_its_whole_timestamp_group_in_engine_order(tmp_path):
+    conn = _book(tmp_path / "data")
+    try:
+        state = custody_journal.build_ledger_state(conn, _profile(conn))
+        entries = state["entries"]
+        entries[1]["occurred_at"] = entries[0]["occurred_at"]
+        tie = entries[0]["occurred_at"]
+        group = [entry["id"] for entry in entries if entry["occurred_at"] == tie]
+        _store_at(conn, state, "2030-01-01T00:00:00Z", fresh=True)
+        old = _stored_rows(conn)
+        entries[1]["description"] += " reviewed"
+        with _large_table_writes(conn) as writes:
+            _store_at(conn, state, "2030-01-02T00:00:00Z")
+        assert sum(sql.startswith("INSERT INTO journal_entries") for sql in writes) == len(group)
+        assert sum(sql.startswith("DELETE FROM journal_entries") for sql in writes) == len(group)
+        assert not any("journal_quantity_postings" in sql for sql in writes)
+        assert [row[0] for row in conn.execute("SELECT id FROM journal_entries WHERE occurred_at=? ORDER BY rowid", (tie,))] == group
+        assert {row[0] for row in conn.execute("SELECT created_at FROM journal_entries WHERE occurred_at=?", (tie,))} == {"2030-01-02T00:00:00Z"}
+        current = _stored_rows(conn)
+        assert {key: value for key, value in current.items() if key not in group} == {key: value for key, value in old.items() if key not in group}
+        ordered = conn.execute("SELECT id FROM journal_entries WHERE occurred_at=? ORDER BY occurred_at,created_at,id", (tie,)).fetchall()
+        assert [row[0] for row in ordered] == sorted(group)
+    finally:
+        conn.close()
+
+
+def test_inconsistent_kept_creation_times_are_repaired_as_one_group(tmp_path):
+    conn = _book(tmp_path / "data")
+    try:
+        state = custody_journal.build_ledger_state(conn, _profile(conn))
+        for entry in state["entries"]:
+            entry["occurred_at"] = "2024-01-01T00:00:00Z"
+        _store_at(conn, state, "2030-01-01T00:00:00Z", fresh=True)
+        conn.execute("UPDATE journal_entries SET created_at='external' WHERE id=?", (state["entries"][0]["id"],))
+        conn.commit()
+        _store_at(conn, state, "2030-01-02T00:00:00Z")
+        assert {row[0] for row in conn.execute("SELECT created_at FROM journal_entries")} == {"2030-01-02T00:00:00Z"}
+    finally:
+        conn.close()
+
+
+def test_removed_entries_are_deleted_without_rewriting_their_kept_peers(tmp_path):
+    conn = _book(tmp_path / "data")
+    try:
+        state = custody_journal.build_ledger_state(conn, _profile(conn))
+        for entry in state["entries"]:
+            entry["occurred_at"] = "2024-01-01T00:00:00Z"
+        _store_at(conn, state, "2030-01-01T00:00:00Z", fresh=True)
+        old = _stored_rows(conn)
+        removed = state["entries"].pop()["id"]
+        with _large_table_writes(conn) as writes:
+            _store_at(conn, state, "2030-01-02T00:00:00Z")
+        assert len(writes) == 1 and writes[0].startswith("DELETE FROM journal_entries")
+        assert _stored_rows(conn) == {key: value for key, value in old.items() if key != removed}
+        state["entries"] = []
+        _store_at(conn, state, "2030-01-03T00:00:00Z")
+        assert not _stored_rows(conn)
+    finally:
+        conn.close()
+
+
+def test_quantity_postings_write_only_changed_and_removed_rows(tmp_path):
+    from kassiber.core.journal_storage import POSTING_COLUMNS, replace_quantity_postings
+
+    conn = _book(tmp_path / "data")
+    try:
+        columns = ','.join(POSTING_COLUMNS)
+        rows = [tuple(row) for row in conn.execute(f"SELECT {columns} FROM journal_quantity_postings ORDER BY posting_id")]
+        old = _stored_rows(conn, "journal_quantity_postings", "posting_id")
+        first = list(rows[0]); first[9] += 1; first[-1] = "2030-01-02T00:00:00Z"
+        removed = rows[-1][0]
+        with _large_table_writes(conn) as writes:
+            replace_quantity_postings(conn, 'p', [tuple(first), *rows[1:-1]])
+        assert sum(sql.startswith('INSERT') for sql in writes) == 1
+        assert sum(sql.startswith('DELETE') for sql in writes) == 2
+        actual = _stored_rows(conn, 'journal_quantity_postings', 'posting_id')
+        assert removed not in actual
+        assert all(actual[row[0]] == old[row[0]] for row in rows[1:-1])
+        assert actual[first[0]][-1] == first[-1]
+        # A duplicate matching a retained row must still fail closed.
+        import sqlite3
+        with pytest.raises(sqlite3.IntegrityError, match='duplicate journal_quantity_postings identifier'):
+            replace_quantity_postings(conn, 'p', [tuple(first),tuple(first)])
+    finally:
+        conn.close()
+
+
+def test_stored_real_comparison_preserves_signed_zero():
+    from kassiber.core.journal_storage import _same_values
+
+    assert _same_values((1, 0.0, 'old'), (1, 0.0, 'new'), (1,))
+    assert _same_values((1, None, 'old'), (1, None, 'new'), (1,))
+    assert not _same_values((1, -0.0, 'old'), (1, 0.0, 'new'), (1,))
+    assert not _same_values((1, 0.0, 'old'), (1, -0.0, 'new'), (1,))
+    assert not _same_values((1, 1.0, 'old'), (1, 2.0, 'new'), (1,))
+
+
+@pytest.mark.parametrize("entries", [False, True])
+def test_duplicate_retained_identifiers_still_fail_closed(tmp_path, entries):
+    import sqlite3
+    from kassiber.core.journal_storage import (
+        ENTRY_COLUMNS, POSTING_COLUMNS, replace_journal_entries, replace_quantity_postings,
+    )
+
+    conn = _book(tmp_path / "data")
+    try:
+        table, columns, key, writer = (
+            ("journal_entries", ENTRY_COLUMNS, "id", replace_journal_entries) if entries else
+            ("journal_quantity_postings", POSTING_COLUMNS, "posting_id", replace_quantity_postings)
+        )
+        row = tuple(conn.execute(f"SELECT {','.join(columns)} FROM {table} LIMIT 1").fetchone())
+        before = _stored_rows(conn, table, key)
+        with pytest.raises(sqlite3.IntegrityError):
+            writer(conn, "p", [row, row])
+        assert _stored_rows(conn, table, key) == before
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("parts,expected", [
+    (("p", "a", "wallet", "acquisition", "BTC", 0), "7094e0de-d003-89b8-a630-14241e5a99a9"),
+    (("p", "a", "wallet", "acquisition", "BTC", 1), "2623e539-b44c-8a46-ab54-239e227974fe"),
+    (("profilé", "tx😀", 'w"\\\n', "income", "LBTC", 0), "912c938f-4716-829f-86ca-5637f570d6d0"),
+])
+def test_entry_id_frozen_cross_runtime_vectors(parts, expected):
+    from kassiber.core.journal_storage import journal_entry_id
+
+    assert journal_entry_id(*parts) == expected
+
+
+def test_reader_counts_repeated_entry_identities_in_engine_order():
+    from kassiber.core.engines.ledger_response import _EntryReader
+    from kassiber.core.journal_storage import journal_entry_id
+
+    reader = _EntryReader(
+        {"id": "p", "workspace_id": "w", "gains_algorithm": "fifo"},
+        {"a": {"id": "a", "occurred_at": "2024-01-01T00:00:00Z"}},
+        {"Wallet": {"id": "wallet", "wallet_account_id": None}}, [], [],
+    )
+    item = {"row": "a", "wallet": "Wallet", "asset": "BTC", "fiat_value": "1E0",
+            "quantity": "1E0", "unit_cost": "1E0", "description": "Synthetic lot"}
+    first = reader.acquisition(item)
+    other = reader.acquisition({**item, "asset": "LBTC"})
+    second = reader.acquisition(item)
+    assert first["id"] == journal_entry_id("p", "a", "wallet", "acquisition", "BTC", 0)
+    assert second["id"] == journal_entry_id("p", "a", "wallet", "acquisition", "BTC", 1)
+    assert other["id"] == journal_entry_id("p", "a", "wallet", "acquisition", "LBTC", 0)
+
+
+def test_noop_rebuild_preserves_list_cursors_but_expires_explanation_references(tmp_path):
+    from kassiber.cli.handlers import list_journal_entries, list_journal_events
+    from kassiber.errors import AppError
+
+    conn = _book(tmp_path / "data")
+    try:
+        state = custody_journal.build_ledger_state(conn, _profile(conn))
+        _store_at(conn, state, "2030-01-01T00:00:00Z", fresh=True)
+        first = list_journal_events(conn, "W", "P", limit=2)
+        next_events = list_journal_events(conn, "W", "P", limit=2, cursor=first["next_cursor"])
+        _, meta = list_journal_entries(conn, "W", "P", limit=2, return_meta=True)
+        next_entries = list_journal_entries(conn, "W", "P", limit=2, cursor=meta["next_cursor"])
+        entry_id = conn.execute("SELECT id FROM journal_entries WHERE entry_type='disposal'").fetchone()[0]
+        reference = result_reference(conn, _profile(conn), entry_id)
+        _store_at(conn, custody_journal.build_ledger_state(conn, _profile(conn)), "2030-01-02T00:00:00Z")
+        assert list_journal_events(conn, "W", "P", limit=2, cursor=first["next_cursor"]) == next_events
+        assert list_journal_entries(conn, "W", "P", limit=2, cursor=meta["next_cursor"]) == next_entries
+        with pytest.raises(AppError) as stale:
+            explain_capital_gain(conn, _profile(conn), reference)
+        assert stale.value.code == "report_explanation_stale"
+        assert explain_capital_gain(conn, _profile(conn), result_reference(conn, _profile(conn), entry_id))["status"] == "available"
+    finally:
+        conn.close()
+
+
+def test_global_id_collision_rolls_back_the_rebuild_and_leaves_freshness_stale(tmp_path, monkeypatch):
+    import sqlite3
+    from kassiber.core.engines import ledger_response
+    from kassiber.core.journal_storage import ENTRY_COLUMNS, journal_entry_id
+
+    conn = _book(tmp_path / "data")
+    try:
+        conn.execute("INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('q','w','Other','2020')")
+        conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('qwallet','w','q','Other','manual','2020')")
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,kind,raw_json,created_at) VALUES('qtx','w','q','qwallet','qtx','2024-01-01T00:00:00Z','inbound','BTC',1,'buy','{}','2020')")
+        columns = ','.join(ENTRY_COLUMNS)
+        foreign = list(conn.execute(f"SELECT {columns} FROM journal_entries LIMIT 1").fetchone())
+        foreign[:6] = ['foreign-id', 'w', 'q', 'qtx', 'qwallet', None]
+        conn.execute(f"INSERT INTO journal_entries({columns}) VALUES({','.join('?' for _ in ENTRY_COLUMNS)})", foreign)
+        conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id='p'")
+        conn.commit()
+        entries = _stored_rows(conn)
+        postings = _stored_rows(conn, 'journal_quantity_postings', 'posting_id')
+        markers = tuple(_profile(conn))
+        def collide(*parts):
+            return 'foreign-id' if parts[1:] == ('a','wallet','acquisition','BTC',0) else journal_entry_id(*parts)
+        monkeypatch.setattr(ledger_response, 'journal_entry_id', collide)
+        with pytest.raises(sqlite3.IntegrityError):
+            custody_journal.process_journals(
+                conn, 'W', 'P', repair_source_overlaps=lambda *_: None,
+                source_overlap_warning=lambda *_: None, auto_price=lambda *_: 0,
+            )
+        assert _stored_rows(conn) == entries
+        assert _stored_rows(conn, 'journal_quantity_postings', 'posting_id') == postings
+        assert tuple(_profile(conn)) == markers
+        assert not custody_journal.projection_freshness(conn, _profile(conn))['is_current']
+        assert not conn.in_transaction
+    finally:
+        conn.close()
+
+
+def test_posting_changed_rows_are_scoped_by_the_composite_primary_key(tmp_path):
+    from kassiber.core.journal_storage import POSTING_COLUMNS, replace_quantity_postings
+
+    conn = _book(tmp_path / "data")
+    try:
+        conn.execute("INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('q','w','Other','2020')")
+        columns = ','.join(POSTING_COLUMNS)
+        row = list(conn.execute(f"SELECT {columns} FROM journal_quantity_postings LIMIT 1").fetchone())
+        row[2] = 'q'
+        conn.execute(f"INSERT INTO journal_quantity_postings({columns}) VALUES({','.join('?' for _ in POSTING_COLUMNS)})", row)
+        expected = conn.execute(f"SELECT rowid,{columns} FROM journal_quantity_postings WHERE profile_id='q'").fetchone()
+        replace_quantity_postings(conn, 'p', [])
+        assert conn.execute(f"SELECT rowid,{columns} FROM journal_quantity_postings WHERE profile_id='q'").fetchone() == expected
+        assert conn.execute("SELECT count(*) FROM journal_quantity_postings WHERE profile_id='p'").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_same_second_rebuilds_expire_every_explanation_reference(tmp_path, monkeypatch):
+    from kassiber.errors import AppError
+
+    stamp = "2030-01-01T00:00:00Z"
+    monkeypatch.setattr(custody_journal, 'now_iso', lambda: stamp)
+    conn = _book(tmp_path / 'data')
+    try:
+        entry_id = conn.execute("SELECT id FROM journal_entries WHERE entry_type='disposal'").fetchone()[0]
+        references = []
+        for _ in range(3):
+            reference = result_reference(conn, _profile(conn), entry_id)
+            references.append(reference)
+            _process(conn)
+            assert explain_capital_gain(conn, _profile(conn), result_reference(conn, _profile(conn), entry_id))['status'] == 'available'
+            for previous in references:
+                with pytest.raises(AppError) as stale:
+                    explain_capital_gain(conn, _profile(conn), previous)
+                assert stale.value.code == 'report_explanation_stale'
+        assert len({reference['processed_at'] for reference in references}) == len(references)
+        assert {row[0] for row in conn.execute("SELECT created_at FROM journal_entries")} == {stamp}
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("second_clock", ["2030-01-01T00:00:00Z", "2029-01-01T00:00:00Z"])
+def test_rebuild_marker_uses_persisted_state_with_a_stale_profile(tmp_path, second_clock):
+    conn = _book(tmp_path / "data")
+    try:
+        profile = _profile(conn)
+        state = custody_journal.build_ledger_state(conn, profile)
+        custody_journal.store_ledger_state(conn, profile, state, created_at="2030-01-01T00:00:00Z")
+        result = custody_journal.store_ledger_state(conn, profile, state, created_at=second_clock)
+        assert result["processed_at"] == "2030-01-01T00:00:00.000001Z"
+        assert _profile(conn)["last_processed_at"] == result["processed_at"]
+    finally:
+        conn.close()
+
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_yearly_realized_sum_has_explicit_order_independent_of_scan_direction(tmp_path, encrypted):
+    from kassiber.core.ui_snapshot import _fiat_snapshot
+
+    conn = _book(tmp_path / "data", passphrase="synthetic YTD test" if encrypted else None)
+    try:
+        # Even SQLite's compensated SUM can depend on row order. Use future
+        # dates so this covers the real SQLite clock, not only a patched Python
+        # clock. The result must use journal order for every physical scan.
+        conn.execute("UPDATE journal_entries SET gain_loss=NULL")
+        ids = [row[0] for row in conn.execute("SELECT id FROM journal_entries ORDER BY id LIMIT 5")]
+        assert len(ids) == 5
+        for day, (entry_id, gain) in enumerate(zip(ids, (1e16, 1e-16, 1., -1e16, -1.)), 1):
+            conn.execute("UPDATE journal_entries SET occurred_at=?,gain_loss=? WHERE id=?",
+                         (f"2099-01-{day:02d}T00:00:00Z", gain, entry_id))
+        conn.execute("PRAGMA reverse_unordered_selects=OFF")
+        forward = _fiat_snapshot(conn, "p", "EUR", 0, {})["eurRealizedYTD"]
+        conn.execute("PRAGMA reverse_unordered_selects=ON")
+        assert _fiat_snapshot(conn, "p", "EUR", 0, {})["eurRealizedYTD"] == forward
+    finally:
+        conn.close()
+
+
+
+def test_quarantine_freshness_compares_fractional_processing_markers_as_instants(tmp_path):
+    from kassiber.core import freshness, quarantine_review
+
+    conn = _book(tmp_path / "data")
+    try:
+        state = custody_journal.build_ledger_state(conn, _profile(conn))
+        for _ in range(2):
+            _store_at(conn, state, "2030-01-01T00:00:00Z")
+        assert _profile(conn)["last_processed_at"] == "2030-01-01T00:00:00.000001Z"
+        for stamp, expected in (("2030-01-01T00:00:00Z", None),
+                                ("2030-01-01T00:00:01Z", "synthetic_failure")):
+            freshness.upsert_source_state(
+                conn, profile_id="p", source_key=freshness.journal_source_key("p"),
+                source_type="journals", source_label="Journals", status="error",
+                last_success_at="2029-01-01T00:00:00Z", last_error_at=stamp,
+                last_error_code="synthetic_failure", last_error_message="Synthetic failure",
+            )
+            error = quarantine_review._journal_freshness(conn, _profile(conn))["last_error"]
+            assert (error["code"] if error else None) == expected
     finally:
         conn.close()

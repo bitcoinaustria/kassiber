@@ -530,7 +530,10 @@ def test_the_reader_renders_entries_as_the_adapter_wrote_them() -> None:
     assert list(disposal) == [*keys, "at_category", "at_kennzahl", "capital_gains_type", "calculation"]
     assert list(sent) == keys and list(received) == keys
     assert len({entry["id"] for entry in result.entries}) == 4
-    assert all(uuid.UUID(entry["id"]).version == 4 for entry in result.entries)
+    assert all(uuid.UUID(entry["id"]).version == 8 for entry in result.entries)
+    assert [entry["id"] for entry in ledger_response.read_ledger(book_profile, inputs, response).entries] == [
+        entry["id"] for entry in result.entries
+    ]
     assert (acquisition["transaction_id"], acquisition["wallet_id"], acquisition["occurred_at"]) == ("buy", "A", "2024-01-01T00:00:00+01:00")
     assert (acquisition["workspace_id"], acquisition["profile_id"], acquisition["account_id"]) == ("ws-1", "profile-1", "acct-1")
     assert acquisition["cost_basis"] is acquisition["proceeds"] is acquisition["gain_loss"] is None

@@ -45,6 +45,15 @@ compact rows' engine detail as unavailable until it rebuilds the journal
 itself. An older Rust build refuses the newer schema. See
 [storage-format speedups](r4-journal-pipeline.md#storage-format-speedups).
 
+Journal entry identities now use the deterministic UUIDv8 construction in that
+contract. Opening a book never rekeys it; its next rebuild replaces old uuid4
+entries. Later rebuilds retain unchanged entries and quantity postings, including
+their creation times, and rewrite a changed entry's whole timestamp group.
+No new schema or migration audit is needed. The Rust store manifest and ordered
+pass remain identical; both runtimes accept these opaque text ids. Older Python
+can rebuild with uuid4 ids and legacy calculations, causing one full entry
+rewrite the next time current Python rebuilds. Backups preserve both formats.
+
 ## Intentionally not inferred during upgrade
 
 - A registered wallet or descriptor does not prove that the user imported the

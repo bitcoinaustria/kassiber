@@ -748,11 +748,17 @@ def store_ledger_state(
     *,
     created_at: str | None = None,
 ) -> dict[str, Any]:
-    """Replace every stored projection inside the caller's transaction."""
+    """Store the projection, retaining unchanged entries and quantity postings."""
 
     profile_id = str(profile["id"])
     workspace_id = str(profile["workspace_id"])
+    from .journal_storage import journal_processed_at, replace_journal_entries
+
     stored_at = created_at or now_iso()
+    previous = conn.execute(
+        "SELECT last_processed_at FROM profiles WHERE id = ?", (profile_id,),
+    ).fetchone()[0]
+    processed_at = journal_processed_at(stored_at, previous)
     if "custody_gap_ignored_transaction_ids" in state:
         conn.execute(
             """
@@ -786,7 +792,6 @@ def store_ledger_state(
                 stored_at,
             ),
         )
-    conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile_id,))
     conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile_id,))
     conn.execute("DELETE FROM journal_tax_summary WHERE profile_id = ?", (profile_id,))
     conn.execute(
@@ -861,19 +866,7 @@ def store_ledger_state(
                 stored_at,
             )
         )
-    conn.executemany(
-        """
-        INSERT INTO journal_entries(
-            id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
-            occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
-            cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
-            cost_basis_exact, proceeds_exact, gain_loss_exact, calculation_json,
-            calculation_compact, pricing_source_kind, pricing_quality, description,
-            at_category, at_kennzahl, capital_gains_type, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        journal_entry_rows,
-    )
+    replace_journal_entries(conn, profile_id, journal_entry_rows)
 
     deduped_quarantines = tax_events.dedupe_quarantines(state["quarantines"])
     live_transaction_ids = {
@@ -1005,7 +998,7 @@ def store_ledger_state(
         WHERE id = ?
         """,
         (
-            stored_at,
+            processed_at,
             tx_count,
             json.dumps(state["ownership_review_counts"], sort_keys=True),
             profile_id,
@@ -1027,7 +1020,7 @@ def store_ledger_state(
         from .filed_report_chain import resolve_pending_chain_impacts
         chain_impact_resolution_count = resolve_pending_chain_impacts(conn, profile_id, stored_at)
     return {
-        "processed_at": stored_at,
+        "processed_at": processed_at,
         "processed_transactions": tx_count,
         "quarantines": deduped_quarantines,
         "custody_quantity": custody_quantity,

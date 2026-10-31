@@ -1655,6 +1655,12 @@ matter across tool additions:
   access is enabled; a rate rebuild can complete while journal processing fails,
   and must report those outcomes separately. [Tax and journals](tax.md) owns
   report semantics and readiness.
+- `ui.audit.changes_since_last_answer` counts journal entries rewritten since
+  the supplied time. A no-op journal rebuild preserves entry creation times
+  and contributes no entry change; counts for other rewritten tables, such as
+  quarantines, still apply. `latest.journals_processed_at` identifies the
+  rebuild. Stable entry ids and storage comparisons add no fields or authority
+  to AI projections.
 - Transaction review combines independently degradable evidence sections.
   Attachment lists omit paths and URL targets, merchant reads omit raw provider
   payloads/document bytes, and egress summaries omit destination identities and

@@ -66,6 +66,11 @@ kassiber journals events get --event-id <event-id>
 
 When scripting, use `--machine` and follow `next_cursor`.
 
+Entry ids remain stable across rebuilds. A row's creation time records its last
+write; unchanged rows retain it. A no-op rebuild still updates the processed
+marker and expires explanation references, but does not by itself count as an
+entry change in `ui.audit.changes_since_last_answer`.
+
 ## Quarantine
 
 Prefer the portable review workflow for an investigation spanning several cases:

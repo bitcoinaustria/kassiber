@@ -701,7 +701,6 @@ def _replace_canonical_quantity_state(
     """Replace derived rows inside the caller's active savepoint."""
 
     for table in (
-        "journal_quantity_postings",
         "journal_quantity_issues",
         "journal_quantity_balances",
         "journal_custody_decisions",
@@ -738,16 +737,9 @@ def _replace_canonical_quantity_state(
         )
         key = (posting.location_kind, posting.location_id, posting.asset)
         balances[key] = balances.get(key, 0) + posting.amount_msat
-    conn.executemany(
-        """
-        INSERT INTO journal_quantity_postings(
-            posting_id, workspace_id, profile_id, transaction_id,
-            observation_hash, occurred_at, asset, location_kind, location_id,
-            amount_msat, state, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        posting_rows,
-    )
+    from .journal_storage import replace_quantity_postings
+
+    replace_quantity_postings(conn, profile_id, posting_rows)
     conn.executemany(
         """
         INSERT INTO journal_quantity_issues(
