@@ -7513,3 +7513,98 @@ slice. The daemon coordinator/progress/journal work listed above remains
 unimplemented. The full Python/frontend quality gate, all inherited mutation
 reruns, tax/custody shadow overlays, Docker regtest and packaged/platform gates
 were not run.
+
+
+### Bitcoin wallet-sync pre-dispatch freshness queue (R5, partial)
+
+Local branch `t3code/r5-sync-15` starts at `0b8e25564`. The new
+`crates/wallets::freshness` helper ports the local queue prerequisite for the
+daemon continuation. It has no route registration, transport, consent grant,
+background worker or journal execution. The caller must supply an admitted
+connection, serialize execution and own commits/rollback.
+
+Implemented operations cover policy reads/writes and legacy opt-ins; source
+upserts and status precedence; checkpoint preservation/reset; single-flight
+enqueue and forced replacement; paused-source refusal; waiting journal-job
+intent merging; pause/resume/cancel controls; interrupted-job recovery; due
+selection; exact selected-job reads and dispatch eligibility; terminal-first
+selection ordering; snapshots; source deletion; and workspace profile ordering
+without changing active context. Foreground recovery excludes graph jobs.
+Dispatch rechecks profile, pause, run-after, cooldown and current status; a
+running row cannot stand in for a completed result. None of these operations
+authorizes network traffic.
+
+Private checkpoints retain their original JSON in source state. Queue payloads
+and progress remove private checkpoints/membership and redact credential-shaped
+fields, matching `core.freshness`. The helper's raw snapshot still requires
+`daemon_freshness`'s separate UI free-text URL/host and operational redaction
+before display. It is not wired to a display or AI path.
+
+The guarded `freshness_fixture` example consumes disposable SQLite books and a
+sequence of queue operations. The Python oracle compares complete envelopes
+and every logical table after each scenario, including single-flight/force,
+journal intent, recovery, pause/cooldown/cancel, parameter batches, checkpoint
+privacy, policy defaults and updates, selection order and workspace ordering.
+Python's actual requested-dispatch loop is observed for ordering; its actual
+workspace route supplies the workspace/profile-order projection. No native
+daemon execution or event-stream parity is inferred from these queue tests.
+
+All three daemon routes remain on Python, including explicit no-refresh
+variants. Native successful product calls added by this checkpoint are zero
+for `ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.
+The journal choice at this boundary is to preserve the whole Python request;
+no new Python subprocess bridge or native journal claim is introduced.
+R4-13 remains outstanding, but does not by itself block no-refresh variants.
+
+The exact implementation handoff is:
+
+1. Build source specs and validate supported wallet/backend/profile shapes
+   before queue mutation or network consent. Connect the helper to the admitted
+   runtime `Book` seam and preserve the foreground execution slot. Unsupported
+   whole shapes need an inert selection mechanism; started native failures
+   must never retry through Python.
+2. Implement job execution: running/progress/success/error transitions,
+   retry-after/backoff/database-busy behavior, source checkpoints, result
+   aggregation and final UI snapshots. Queue ordering and eligibility are
+   implemented here; execution and handler dispatch are not.
+3. Add wallet-fetch progress callbacks and live daemon stream envelopes,
+   early cancellation, job/source controls, book-switch and consent-revocation
+   wiring, and after-response graph-grant handoff. Persisted jobs never grant
+   transport permission; all egress must remain behind `kassiber-net`.
+4. Either provide the narrow existing-Python local journal refresh operation,
+   preserving auto-pair/current/disabled/deferred/error behavior, or admit only
+   explicit no-refresh variants and keep defaults on Python. Native journal
+   processing still requires R4-13. Rates and non-Bitcoin/unported sources also
+   need an explicit supported-shape decision.
+5. Prove live daemon envelope, event-stream and complete normalized-book parity
+   on disposable Electrum and Esplora backends, including restarts/reviewed
+   books, zero served-shape fallbacks and named execution/control mutation
+   kills, before registering any of the three entries.
+
+Queue verification results and local artifact cleanup are recorded below.
+
+The final queue oracle passes all 39 cases without skips, comparing canonical
+envelopes with scalar types preserved and complete logical tables. All 29 new
+queue mutations are killed after 16 named baseline selections pass; build
+errors and empty selections cannot count as kills. The final catalogue applies
+to the tree. Its read-only `--check` path does not create or clean execution
+scratch directories. The required serial Rust-enabled CI lane and local
+quality gate now build the guarded fixture and include its oracle suite.
+
+Formatting passes, and clippy passes with warnings denied for the production
+library and every harness target. All 179 wallet-library Rust tests are
+verified: 157 pass inside the sandbox,
+and the 22 cases initially refused loopback socket creation with
+`PermissionDenied` pass when rerun with loopback access. No sandbox-blocked
+check remains. The required final `classify_tests update` records 5,731
+definitions, and `python_test_shards.py run preflight --ci` passes all 57 tests.
+No Python reference bug was found. Commands and summaries remain under
+`target/r5-sync-15-artifacts/`; mutation and verification build trees and
+disposable books are removed after recording results. New harnesses preserve
+account HOME. No background job is left running.
+
+This checkpoint completes the queue prerequisite, not the daemon-route goal.
+Live daemon stream/book parity, supported-shape fallback counts and execution
+mutation acceptance remain unrun because those routes are unimplemented.
+The full quality gate, inherited mutation reruns, tax/custody shadow overlays,
+Docker regtest and packaged/platform gates were not run.

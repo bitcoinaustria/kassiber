@@ -72,7 +72,7 @@ the classifier's `summary` output and is checked by preflight.
 | transactions/metadata/transfers/reviews | 46 | 102 | 540 | 27 | 0 | 715 |
 | source-funds | 51 | 50 | 139 | 0 | 0 | 240 |
 | secrets/backup | 7 | 18 | 81 | 53 | 0 | 159 |
-| daemon runtime | 8 | 25 | 189 | 0 | 1 | 223 |
+| daemon runtime | 8 | 25 | 189 | 18 | 1 | 241 |
 | AI/MCP/operator | 64 | 134 | 604 | 0 | 0 | 802 |
 | CLI shell | 20 | 0 | 30 | 116 | 0 | 166 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |

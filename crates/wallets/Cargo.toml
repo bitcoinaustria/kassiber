@@ -13,6 +13,10 @@ publish.workspace = true
 test-harness = ["kassiber-net/test-observer"]
 
 [[example]]
+name = "freshness_fixture"
+required-features = ["test-harness"]
+
+[[example]]
 name = "discovery_fixture"
 required-features = ["test-harness"]
 

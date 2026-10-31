@@ -258,6 +258,7 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIn("python-tests", workflow["jobs"]["required"]["needs"])
         self.assertEqual(shard_for(Path("tests/test_rust_shell_parity.py")), "serial-daemon")
         self.assertEqual(shard_for(Path("tests/test_rust_reports.py")), "serial-daemon")
+        self.assertEqual(shard_for(Path("tests/test_rust_freshness_queue.py")), "serial-daemon")
         steps = job["steps"]
         build_index = next((index for index, step in enumerate(steps)
                             if "cargo build -p kassiber --features test-harness --locked"
@@ -277,6 +278,8 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIn(records_build, steps[build_index]["run"])
         publication_build = "cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked"
         self.assertIn(publication_build, steps[build_index]["run"])
+        freshness_build = "cargo build -p kassiber-wallets --example freshness_fixture --features test-harness --offline --locked"
+        self.assertIn(freshness_build, steps[build_index]["run"])
         setup_index = next(index for index, step in enumerate(steps)
                            if step.get("uses") == "./.github/actions/setup-rust")
         run_index = next(index for index, step in enumerate(steps)
@@ -299,6 +302,8 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertLess(gate.index("run " + bdk_build), gate.index(select))
         self.assertLess(gate.index("run " + records_build), gate.index(select))
         self.assertLess(gate.index("run " + publication_build), gate.index(select))
+        self.assertLess(gate.index("run " + freshness_build), gate.index(select))
+        self.assertIn("run py crates/wallets/scripts/freshness_mutation_check.py --check", gate)
         self.assertIn("run py crates/wallets/scripts/bdk_mutation_check.py --check", gate)
         self.assertIn("run py crates/wallets/scripts/record_mutation_check.py --check", gate)
         self.assertIn("run py crates/wallets/scripts/observer_mutation_check.py --check", gate)

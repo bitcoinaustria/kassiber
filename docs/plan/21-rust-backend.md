@@ -2889,3 +2889,25 @@ cancellation/book-switch/revocation wiring; and either a narrow existing-Python
 journal-refresh handoff or explicitly restricted no-refresh variants. Require
 full live daemon envelope/event/book parity on both protocols, zero in-scope
 fallbacks and named mutation kills before enabling any of those entries.
+
+### R5 Bitcoin sync: pre-dispatch freshness queue checkpoint (partial)
+
+`crates/wallets::freshness` now implements the local SQLite queue prerequisite:
+policy reads/writes and legacy defaults, source-state transitions, checkpoint
+preservation/reset, single-flight and forced replacement, journal payload
+merging, pause/resume/cancel, interrupted-job recovery, due and exact selected
+job eligibility, selection ordering, snapshots and workspace profile ordering.
+Checkpoint/result redaction stays distinct from private checkpoint storage.
+The caller owns connection admission, execution serialization and commits.
+The helper has no network client, consent grant, worker or product registration.
+
+This does not implement job execution or finish a daemon route. Success/error
+and backoff transitions, handler/source-spec construction, UI text redaction,
+live progress and request controls, graph handoff, and journal refresh remain.
+All three daemon sync/freshness routes continue on Python, including explicit
+no-journal variants. R4-13 blocks native default journal processing but is not
+the only outstanding prerequisite. A future registration must either provide
+the narrow existing-Python journal operation or explicitly admit only no-refresh
+shapes, and prove live daemon envelope/event/book parity with zero fallbacks.
+See the queue checkpoint in `docs/reference/rust-shell.md` for verification and
+the exact handoff.
