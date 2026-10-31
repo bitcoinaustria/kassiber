@@ -14,7 +14,7 @@ from decimal import Decimal
 from kassiber.core import exit_tax
 
 
-def _conn_with_rate(rate=None, *, timestamp="2026-06-15T12:00:00Z", source="manual"):
+def _conn_with_rate(rate=None, *, timestamp="2026-06-16T12:00:00Z", source="manual"):
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     # Mirror the columns get_cached_rate_at_or_before selects.
@@ -171,10 +171,12 @@ class ExitTaxComputeTests(unittest.TestCase):
     def test_destination_drives_collection_timing_only(self):
         conn = _conn_with_rate(Decimal("60000"))
         eu = exit_tax.compute_deemed_disposal(
-            conn, _profile("at"), _state(), destination="eu_eea"
+            conn, _profile("at"), _state(), destination="eu_eea",
+            departure_date="2026-06-16",
         )
         third = exit_tax.compute_deemed_disposal(
-            conn, _profile("at"), _state(), destination="third-country"
+            conn, _profile("at"), _state(), destination="third-country",
+            departure_date="2026-06-16",
         )
         self.assertEqual(eu["totals"]["collectionTiming"], "deferred")
         self.assertEqual(third["totals"]["collectionTiming"], "immediate")
@@ -184,7 +186,7 @@ class ExitTaxComputeTests(unittest.TestCase):
     def test_transfers_do_not_touch_the_pool(self):
         # Holdings after the self-transfer are unchanged: 1.4 BTC total.
         conn = _conn_with_rate(Decimal("60000"))
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state(), departure_date="2026-06-16")
         total_sats = report["totals"]["neuQuantitySats"] + report["totals"]["altQuantitySats"]
         self.assertEqual(total_sats, 140_000_000)
 
@@ -208,7 +210,7 @@ class ExitTaxComputeTests(unittest.TestCase):
             "latest_rates": {"BTC": Decimal("60000")},
         }
 
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         totals = report["totals"]
 
         self.assertEqual(totals["altQuantitySats"], 100_000_000)
@@ -242,7 +244,7 @@ class ExitTaxComputeTests(unittest.TestCase):
             "latest_rates": {"BTC": Decimal("60000")},
         }
 
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         totals = report["totals"]
 
         self.assertEqual(totals["altQuantitySats"], 99_900_000)
@@ -250,7 +252,7 @@ class ExitTaxComputeTests(unittest.TestCase):
 
     def test_wallet_holdings_listed_without_regime(self):
         conn = _conn_with_rate(Decimal("60000"))
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state(), departure_date="2026-06-16")
         self.assertEqual(len(report["walletHoldings"]), 1)
         holding = report["walletHoldings"][0]
         self.assertEqual(holding["wallet"], "Cold")
@@ -287,7 +289,7 @@ class ExitTaxComputeTests(unittest.TestCase):
             "quarantines": [],
             "latest_rates": {"BTC": Decimal("40000")},
         }
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         totals = report["totals"]
         self.assertEqual(totals["neuGain"], -20000.0)
         self.assertEqual(totals["taxableGain"], 0.0)
@@ -299,7 +301,7 @@ class ExitTaxComputeTests(unittest.TestCase):
     def test_missing_rate_leaves_lots_unpriced_and_flags_it(self):
         conn = _conn_with_rate(None)  # empty cache
         state = {**_state(), "latest_rates": {}}  # and no transaction fallback
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         neu = next(lot for lot in report["lots"] if lot["regime"] == "neu")
         self.assertIsNone(neu["marketValue"])
         self.assertIsNone(neu["gain"])
@@ -310,7 +312,7 @@ class ExitTaxComputeTests(unittest.TestCase):
         self.assertIsNone(totals["estimatedTax"])
         self.assertTrue(any(source["source"] == "missing" for source in report["fmvSource"]))
         self.assertTrue(any("incomplete" in note for note in report["assumptions"]))
-        self.assertTrue(any("No cached rate" in note for note in report["assumptions"]))
+        self.assertTrue(any("No usable cached or transaction quote" in note for note in report["assumptions"]))
 
     def test_income_surfaces_derived_tokens_assumption(self):
         conn = _conn_with_rate(Decimal("60000"))
@@ -328,10 +330,10 @@ class ExitTaxComputeTests(unittest.TestCase):
                 },
             ],
         }
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         self.assertTrue(any("EXIT-004" in note for note in report["assumptions"]))
         # Income alone must not inflate inventory (no matching acquisition lot).
-        baseline = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
+        baseline = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state(), departure_date="2026-06-16")
         self.assertEqual(
             report["totals"]["neuQuantitySats"],
             baseline["totals"]["neuQuantitySats"],
@@ -382,7 +384,7 @@ class ExitTaxComputeTests(unittest.TestCase):
             "quarantines": [],
             "latest_rates": {"BTC": Decimal("60000")},
         }
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         totals = report["totals"]
         self.assertEqual(totals["neuQuantitySats"], 200_000)
         self.assertEqual(totals["neuCostBasis"], 90.0)
@@ -394,7 +396,7 @@ class ExitTaxComputeTests(unittest.TestCase):
     def test_historical_departure_ignores_future_cache_rate(self):
         # P1 guard: the cache only has a rate AFTER the departure date; the FMV
         # lookup must NOT use it (no transaction fallback => unpriced).
-        conn = _conn_with_rate(Decimal("99999"), timestamp="2026-06-15T12:00:00Z")
+        conn = _conn_with_rate(Decimal("99999"), timestamp="2026-06-16T12:00:00Z")
         state = {
             "entries": [
                 {
@@ -424,7 +426,7 @@ class ExitTaxComputeTests(unittest.TestCase):
         # P2 guard: a reviewed manual override must beat a later-fetched provider
         # row at the same timestamp.
         conn = _conn_with_rate(None)
-        ts = "2026-06-15T00:00:00Z"
+        ts = "2026-06-16T00:00:00Z"
         conn.execute(
             "INSERT INTO rates_cache(pair,timestamp,rate,rate_exact,source,fetched_at) "
             "VALUES('BTC-EUR',?,50000,'50000','manual',?)",
@@ -444,7 +446,7 @@ class ExitTaxComputeTests(unittest.TestCase):
 
     def test_generic_profile_has_no_special_rate(self):
         conn = _conn_with_rate(Decimal("60000"))
-        report = exit_tax.compute_deemed_disposal(conn, _profile("generic"), _state())
+        report = exit_tax.compute_deemed_disposal(conn, _profile("generic"), _state(), departure_date="2026-06-16")
         self.assertEqual(report["jurisdictionCode"], "generic")
         self.assertIsNone(report["totals"]["estimatedTaxRate"])
         self.assertIsNone(report["totals"]["estimatedTax"])
@@ -456,14 +458,14 @@ class ExitTaxComputeTests(unittest.TestCase):
         conn = _conn_with_rate(Decimal("60000"))
         state = _state()
         before = len(state["entries"])
-        exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        exit_tax.compute_deemed_disposal(conn, _profile("at"), state, departure_date="2026-06-16")
         self.assertEqual(len(state["entries"]), before)
 
     def test_payload_matches_frozen_contract_keys(self):
         # Pins the camelCase contract shared by the daemon, the GUI, and the TS
         # mock fixture. Adding a field here means updating ui-tauri/src/mocks/exitTax.ts.
         conn = _conn_with_rate(Decimal("60000"))
-        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state(), departure_date="2026-06-16")
         self.assertEqual(
             set(report.keys()),
             {
@@ -564,7 +566,7 @@ class ExitTaxEngineIntegrationTests(unittest.TestCase):
         tx("neu-buy", "2022-01-01T00:00:00Z", 50_000_000_000, 40000)  # 0.5 BTC @ 40000 (Neu)
         conn.execute(
             "INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at) "
-            "VALUES('BTC-EUR', '2026-06-15T00:00:00Z', 60000.0, 'manual', '2026-06-15T00:00:00Z')"
+            "VALUES('BTC-EUR', '2026-06-16T00:00:00Z', 60000.0, 'manual', '2026-06-16T00:00:00Z')"
         )
         conn.commit()
         return conn, profile

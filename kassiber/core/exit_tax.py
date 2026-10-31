@@ -60,9 +60,9 @@ from ..msat import dec
 # in TaxPolicy, because it is presentation/estimate logic, not engine tax math.
 AT_SONDERSTEUERSATZ = Decimal("0.275")
 
-# No shared historical quote-age policy exists. This conservative fallback
-# bound is measured from the exclusive departure cutoff, not from wall time.
-TRANSACTION_FMV_MAX_AGE_SECONDS = 24 * 60 * 60
+# Owner-selected historical FMV policy, measured from the exclusive cutoff
+# rather than wall time, and shared by cached and transaction quotes.
+FMV_MAX_AGE_SECONDS = 24 * 60 * 60
 
 DESTINATION_EU_EEA = "eu_eea"
 DESTINATION_THIRD_COUNTRY = "third_country"
@@ -133,10 +133,10 @@ _ASSUMPTION_DEFERRAL_THIRD = (
     "on departure."
 )
 _ASSUMPTION_FMV = (
-    "EXIT-005: Fair market value uses the best available cached rate at or before "
-    "the departure date, falling back to a transaction price within the 24 hours "
-    "before the exclusive departure cutoff; older transaction prices leave the "
-    "asset unpriced. It does not imply intraday coverage."
+    "EXIT-005: Fair market value uses the closest cached or transaction quote "
+    "strictly before the exclusive departure cutoff, at most 24 hours old. "
+    "Older, future or undated quotes leave the asset unpriced. "
+    "It does not imply intraday coverage."
 )
 _ASSUMPTION_FUTURE_TIGHTENING = (
     "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains "
@@ -224,16 +224,14 @@ def _fmv_at(
     target_iso: str,
     fallback_quotes: Mapping[str, Mapping[str, Any]],
 ) -> tuple[Optional[Decimal], dict[str, Any]]:
-    """Fair market value of one unit of ``asset`` at/just before ``target_iso``.
+    """Choose the closest valid quote before cutoff, from either local source.
 
-    Uses the canonical cache lookup ``get_cached_rate_at_or_before`` so the FMV is
-    always bounded by the departure date (a historical departure never picks up a
-    later/future rate) and a reviewed manual override wins over a provider row at
-    the same timestamp. If no rate at-or-before the date exists, fall back to the
-    profile's date-bounded transaction price, else mark the asset unpriced.
+    Both sources share the 24-hour age limit. At equal instants the cache wins;
+    its canonical lookup preserves reviewed manual priority over providers.
     """
 
     pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+    candidates = []
     if pair is not None:
         try:
             cached = core_rates.get_cached_rate_at_or_before(conn, pair, target_iso, exclusive=True)
@@ -241,38 +239,29 @@ def _fmv_at(
             cached = None
         if cached is not None:
             rate = pricing.decimal_from_exact(cached.get("rate_exact"), cached.get("rate"))
-            if rate is not None and rate > 0:
-                return rate, {
-                    "asset": asset,
-                    "rate": float(rate),
-                    "pair": pair,
-                    "asOf": cached.get("timestamp"),
-                    "source": "cache",
-                }
+            candidates.append((rate, cached.get("timestamp"), "cache"))
     fallback = fallback_quotes.get(asset)
     if fallback is not None:
-        fallback_dec = dec(fallback["rate"])
-        quote_instant = timestamp_microseconds(fallback["timestamp"])
-        cutoff_instant = timestamp_microseconds(target_iso)
-        if (
-            fallback_dec > 0
-            and quote_instant is not None
-            and cutoff_instant is not None
-            and 0 < cutoff_instant - quote_instant <= TRANSACTION_FMV_MAX_AGE_SECONDS * 1_000_000
-        ):
-            return fallback_dec, {
-                "asset": asset,
-                "rate": float(fallback_dec),
-                "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-                "asOf": fallback["timestamp"],
-                "source": "transaction",
-            }
+        candidates.append((dec(fallback["rate"]), fallback.get("timestamp"), "transaction"))
+    cutoff_instant = timestamp_microseconds(target_iso)
+    usable = []
+    for rate, timestamp, source in candidates:
+        instant = timestamp_microseconds(timestamp)
+        if (rate is not None and rate > 0 and instant is not None
+                and cutoff_instant is not None
+                and 0 < cutoff_instant - instant <= FMV_MAX_AGE_SECONDS * 1_000_000):
+            usable.append((instant, rate, timestamp, source))
+    if usable:
+        _, rate, timestamp, source = max(usable, key=lambda quote: quote[0])
+        return rate, {
+            "asset": asset, "rate": float(rate),
+            "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
+            "asOf": timestamp, "source": source,
+        }
     return None, {
-        "asset": asset,
-        "rate": None,
+        "asset": asset, "rate": None,
         "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-        "asOf": None,
-        "source": "missing",
+        "asOf": None, "source": "missing",
     }
 
 
@@ -544,7 +533,7 @@ def compute_deemed_disposal(
         assumptions.append(_ASSUMPTION_FMV)
     if any(source["source"] == "missing" for source in fmv_source):
         assumptions.append(
-            "EXIT-005: No cached rate found for one or more assets — run "
+            "EXIT-005: No usable cached or transaction quote found for one or more assets — run "
             "`kassiber rates sync`; market value, gain, and estimated tax stay "
             "incomplete (null) until those holdings are priced."
         )

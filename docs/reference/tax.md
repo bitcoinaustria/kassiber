@@ -335,12 +335,13 @@ entries before the next day's `00:00:00Z` (exclusive), including fractional
 seconds at the end of the departure day and comparing UTC instants even
 for legacy offset timestamps. Internal transfers move wallet context without
 changing global inventory; income recognition is not counted twice.
-FMV uses a cached quote strictly before that same cutoff, then a transaction
-price within the 24 hours before it. The source and actual quote timestamp are
-shown in the PDF, XLSX and desktop FMV card. No existing historical staleness
-policy covers transaction quotes; the 24-hour fallback bound awaits owner review.
-Older, future or undated transaction prices cannot fill a valuation. Cached
-rates retain the existing at-or-before lookup policy. Missing FMV is a readiness
+FMV chooses the closest cached or transaction quote strictly before that same
+cutoff. Either source must be at most 24 hours old relative to the cutoff;
+exactly 24 hours is allowed. At equal instants the cache wins, retaining manual
+priority over provider rows. This is the current owner-selected policy, open to
+owner revision. Older, future or undated quotes cannot fill a valuation.
+The source and actual quote timestamp are shown in the PDF, XLSX and desktop
+FMV card. Missing FMV is a readiness
 barrier (`status.missingFmvAssets`); affected values remain null and handoffs are
 explicitly incomplete drafts. Wallet-context assets use the same lookup,
 and the XLSX assumptions sheet discloses quarantines and incomplete estimates.

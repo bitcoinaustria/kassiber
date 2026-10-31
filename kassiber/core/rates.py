@@ -413,7 +413,7 @@ def get_cached_rate_at_or_before(conn, pair, occurred_at, *, exclusive=False):
         SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
         WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", "<" if exclusive else "<=")}
-        ORDER BY timestamp DESC,
+        ORDER BY kassiber_timestamp_us(timestamp) DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
                  fetched_at DESC
         LIMIT 1

@@ -227,8 +227,8 @@ The method is the book's selected algorithm. Inventory and wallet quantities
 include the entire UTC departure day, strictly before the next UTC midnight;
 FMV uses only cached or transaction prices strictly before that same cutoff
 and discloses their actual source timestamps. Quarantines and missing
-prices leave an incomplete estimate. Transaction-price fallback is limited to
-the 24 hours before the cutoff; older prices are missing FMV, never zero tax.
+prices leave an incomplete estimate. The closest cached or transaction quote wins; both sources must be within
+24 hours before the cutoff. Older prices are missing FMV, never zero tax.
 `status.missingFmvAssets` identifies that readiness barrier. PDF/XLSX and the
 desktop FMV card disclose quote source and `asOf`. Exit-tax exports intentionally create no
 ordinary realized-report snapshot. PDF/XLSX stamp `journalInputVersion` and FMV
