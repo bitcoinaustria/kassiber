@@ -60,7 +60,7 @@ _URL_CREDENTIALS_RE = re.compile(
 )
 _AUTHORIZATION_RE = re.compile(r"(\bAuthorization\s*[:=]\s*)(?:(?:Basic|Bearer|Token)\s+[A-Za-z0-9._~+/-]+=*|Digest[ \t]+[^\r\n]+)", re.IGNORECASE)
 _SECRET_KEY_NAME = (
-    r"(?:[A-Za-z0-9]*[_.-])*(?:api[_-]?key|auth[_-]?header|authorization|"
+    r"(?:[A-Za-z0-9]*[_.-])*[0-9]*(?:api[_-]?key|auth[_-]?header|authorization|"
     r"blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|"
     r"rpc[_-]?(?:password|auth)|macaroon(?:[_-]?hex)?|recovery[_-]?phrase|"
     r"rune|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|"
@@ -73,10 +73,18 @@ _AMBIGUOUS_QUOTED_TAIL = r'''(?:[^\s,;}\])][^\r\n]*)?'''
 _QUOTED_SECRET_VALUE = r'''(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')'''
 # A truncated quoted value may contain spaces. Fail closed through end of line.
 _UNTERMINATED_SECRET_VALUE = r'''["'][^\r\n]*'''
+_ASSIGNED_SECRET_VALUE = (
+    rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE}{_AMBIGUOUS_QUOTED_TAIL})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))"
+)
 _ASSIGNED_SECRET_RE = re.compile(
     rf"(?<![A-Za-z0-9_.-])(?P<key>['\"]?{_SECRET_KEY_NAME}\b['\"]?)"
-    r"(?P<sep>\s*[:=]\s*)"
-    rf"(?:(?P<quoted>{_QUOTED_SECRET_VALUE}{_AMBIGUOUS_QUOTED_TAIL})|(?P<unterminated>{_UNTERMINATED_SECRET_VALUE})|(?P<value>[^'\"\s,;}}{{]+))",
+    r"(?P<sep>\s*[:=]\s*)" + _ASSIGNED_SECRET_VALUE,
+    re.IGNORECASE,
+)
+_FLAG_SECRET_RE = re.compile(
+    rf"(?<![A-Za-z0-9_.-])(?P<key>-{{1,2}}{_SECRET_KEY_NAME}\b)"
+    # Preserve assignment separators already handled by the preceding pass.
+    r"(?P<sep>[ \t]+)(?![:=])" + _ASSIGNED_SECRET_VALUE,
     re.IGNORECASE,
 )
 
@@ -95,7 +103,7 @@ def _escaped_secret_pattern(depth: int) -> re.Pattern[str]:
 _ESCAPED_ASSIGNED_SECRET_RES = [(depth, _escaped_secret_pattern(depth)) for depth in (2, 1)]
 
 _RECOVERY_ASSIGNMENT_RE = re.compile(
-    r"(?<![A-Za-z0-9_.-])(?P<key>(?:[A-Za-z0-9]*[_.-])*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
+    r"(?<![A-Za-z0-9_.-])(?P<key>(?:[A-Za-z0-9]*[_.-])*[0-9]*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)\b)"
     r"(?P<sep>\s*[:=]\s*)"
     # Quoted values belong to the escape-aware assignment parser below.
     r"(?=[^'\"\s])(?P<value>[^,;}{\r\n]*?)"
@@ -252,9 +260,12 @@ def redact_secret_text(value: str) -> str:
     text = _SP_ADDRESS_RE.sub("[redacted-silent-payment-address]", text)
     text = _DESCRIPTOR_RE.sub("[redacted-descriptor]", text)
     text = _BEARER_RE.sub("Bearer [redacted]", text)
-    text = _ASSIGNED_SECRET_RE.sub(
-        lambda match: f"{match['key']}{match['sep']}{(match['quoted'] or match['unterminated'] or '')[:1]}[redacted]{(match['quoted'] or '')[:1]}", text
-    )
+
+    def redact_assignment(match: re.Match[str]) -> str:
+        return f"{match['key']}{match['sep']}{(match['quoted'] or match['unterminated'] or '')[:1]}[redacted]{(match['quoted'] or '')[:1]}"
+
+    text = _ASSIGNED_SECRET_RE.sub(redact_assignment, text)
+    text = _FLAG_SECRET_RE.sub(redact_assignment, text)
     text = _SK_SECRET_RE.sub("[redacted-secret]", text)
     return text
 

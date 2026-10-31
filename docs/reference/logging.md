@@ -105,7 +105,10 @@ two enclosing JSON strings (triple encoding)
 retain their representation while redacting assigned values. Deeper encoding
 is outside this textual backstop; emit structured secret fields instead.
 Credential matching starts only at full identifier boundaries, including
-leading dash/dot runs, to keep long diagnostic lines linear.
+leading dash/dot runs and digit prefixes, to keep long diagnostic lines linear.
+Explicit CLI flags also scrub space-separated values (`--rpcpassword VALUE`),
+including quoted or truncated values. Ordinary prose about password settings
+is left readable.
 
 URL credential detection stops at record, query and fragment boundaries after
 an explicit numeric port, so it cannot consume a later secret assignment's key.
