@@ -1422,6 +1422,7 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertIn("stored-error-credentials-v1", migration_names)
         self.assertIn("custody-fail-closed-holds-v1", migration_names)
         self.assertIn("custody-partial-payout-pricing-v1", migration_names)
+        self.assertIn("journal-calculation-semantics-adoption-v1", migration_names)
         valuation_migration_audit = next(
             audit
             for audit in summary["schema_migration_audits"]

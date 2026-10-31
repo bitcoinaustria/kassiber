@@ -5507,19 +5507,14 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "cost_basis_pool_scope", "TEXT NOT NULL DEFAULT 'global'")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
-    semantics_added = _ensure_column_no_commit(
+    _ensure_column_no_commit(
         conn, "profiles", "required_journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
     )
     _ensure_column_no_commit(
         conn, "profiles", "journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
     )
-    if semantics_added:
-        # Historical builds did not stamp their calculation semantics. The
-        # custody-hold correction applies to every previously processed book.
-        conn.execute("""UPDATE profiles SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
-            WHERE last_processed_at IS NOT NULL OR EXISTS (
-                SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
-            )""")
+    if _migrate_journal_semantics_adoption(conn):
+        conn.commit()
     # Older binaries update these markers but know nothing about semantics.
     # Invalidate the stamp even if they rebuild twice at the same timestamp.
     # Current builders stamp separately, after publishing the input markers.
