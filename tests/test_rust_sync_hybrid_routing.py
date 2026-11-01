@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests import cli_runner
 from tests.rust_port import hybrid_cli
 
 
@@ -64,5 +65,5 @@ def test_sync_hybrid_requires_an_empty_explicit_handoff(monkeypatch, tmp_path, s
     else:
         assert error.value.code == 23
         assert calls == [(hybrid_cli.sys.executable,
-                          [hybrid_cli.sys.executable, "-m", "kassiber", "wallets", "sync"])]
+                          cli_runner.argv(["wallets", "sync"], reference=True))]
         assert json.loads((tmp_path / "served").read_text())["served_by"] == "python"
