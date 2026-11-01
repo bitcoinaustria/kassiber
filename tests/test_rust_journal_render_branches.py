@@ -18,7 +18,8 @@ def test_renderer_branch_witnesses_rebuild_from_python():
 
 def test_renderer_branch_mutations_apply_and_name_existing_tests():
     root = PATH.parents[2]
-    mutations = checker.load(root / 'scripts/branch_mutations.json')
+    mutations = (checker.load(root / 'scripts/branch_mutations.json')
+                 + checker.load(root / 'scripts/builder_mutations.json'))
     assert mutations
     assert checker.problems(mutations) == []
     names = {mutation.id for mutation in checker.load(root / 'scripts/mutations.json')}

@@ -201,7 +201,7 @@ fn graph_refusal(error: String, script: &Value) -> Refusal {
         _ => Refusal::from(error),
     }
 }
-pub(super) fn ownership_review(
+pub(crate) fn ownership_review(
     c: &super::RenderOperands<'_>,
     qs: &[QuarantineRow],
 ) -> Result<(Value, Value), Refusal> {

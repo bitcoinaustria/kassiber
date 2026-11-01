@@ -8,7 +8,7 @@ use kassiber_tax_core::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
-mod joins;
+pub(crate) mod joins;
 
 /// Wallets in original mapping insertion order. The JSON adapter uses an explicit
 /// list because duplicate-label selection is last-wins, never sorted by id.

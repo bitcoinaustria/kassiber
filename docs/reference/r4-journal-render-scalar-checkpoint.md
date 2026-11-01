@@ -214,3 +214,95 @@ regression. No second timing campaign or speed optimization is performed.
 mutation kills, passing logs, probes, copied operands and all CPU samples.
 Verification build trees are removed after summarizing. The probes, operands,
 logs and summaries remain local. No push, PR or external comment is performed.
+
+
+## Native builder assembly continuation (partial)
+
+This local continuation starts at `8225d58c1` on
+`t3code/r4-11-render-fidelity-3`, with the three branch-audit commits from
+`de05eaa90..71307a23f` cherry-picked first. **R4-11 remains unaccepted.**
+This is a builder assembly checkpoint, not completion of the requested scalar
+fidelity or acceptance campaigns.
+
+`native::build` now returns a complete comparison state, and `native::finish`
+accepts the owned native ledger for the diagnostic joins. The state borrows the
+custody facts and assembles its canonical oracle snapshot outside the build
+span. Pass-through rates, blockers, transfers, quantity facts, warnings and
+ignored identities keep their native scalars. Reconciliations use the existing
+oracle dataclass projection convention. Native balance diagnostics retain
+surrogate identities and exact wide integer totals, loan/channel/suspense reason
+precedence, sorted differences and the unique-reason rule.
+
+Finite transfer quantities now remain native Decimals through this state,
+without serializing through serde. Nonfinite transfer quantities retain the
+existing explicit decimal carrier. Native audit-pair indexing now preserves
+the finalized projection's `tuple index out of range` refusal, as the merged
+branch-audit witnesses require.
+
+The immutable `render-native-builder.json` corpus adds **30** production Python
+`build()` captures with deterministic UUID tapes. It includes actual and literal
+surrogate workspace values, entry descriptions, source provenance and
+pass-through rates; raw NaN and both infinities in those fields; opaque list,
+mapping and null descriptions; mapping insertion order in methods and anchors;
+ignored malformed/surrogate/NaN unknown-wallet holding decimals; and a surrogate
+wallet identity in the balance join. Raw custody float operands are restored
+in the captured input after the oracle snapshot adapter runs, so they reach
+the native decoder as float tokens rather than literal `$float` objects.
+
+The native builder test compares complete state bytes or every refusal
+attribute and cause, plus exact UUID consumption, across **1,254** cases:
+383 original cases, 39 audit/carry cases, 550 response refusals, 18 scalar
+coercions, all 234 merged branch witnesses and the 30 new builder captures.
+The prior corpora are unchanged. Python product behavior is unchanged; no
+Python reference bug was identified.
+
+### Explicit remaining boundaries
+
+The ownership review join still calls the existing serde graph helpers.
+Its comparison adapter canonicalizes mapping order and refuses native scalars
+that serde cannot represent. Those admission refusals are an implementation
+limit, not a claim of Python-equivalent refusals. The no-quarantine path uses
+native values directly. Arbitrary graph scalars, graph mapping-order coercion
+and ignored malformed graph operands still need a native consumption path.
+Consequently requested item 1 is only partially complete.
+
+The diagnostic `journal-render` probe is unchanged and still uses serde for
+raw input and the typed builder. The native builder's surrogate witnesses do
+not close the four end-to-end surrogate repros. The probe decoder/handoff,
+raw nonfinite consumed/ignored-stage campaign, complete successful lazy
+response campaign, arbitrary shape/wallet-map/arithmetic/refusal-order/UUID
+campaign and final typed loader/custody integration remain open.
+
+No full renderer/persistence/custody mutation campaign, 25,030-input run,
+census/shadow or fresh recording campaign, integrated SQLite/SQLCipher
+campaign, repository quality gate, final CPU comparison against `8a9492199`
+or acceptance record is claimed by this continuation. Existing SQLCipher
+fixture tests are narrower than the required integrated campaign. No timing
+campaign is run against this partial implementation.
+
+
+### Verification at this boundary
+
+All eight recipes in `crates/journals/scripts/builder_mutations.json` are
+killed by `native_builder_matches_python_states_refusals_and_uuid_tapes`, after
+a passing unmutated baseline. They cover pass-through rates, canonical sums,
+wallet key coercion, suspense precedence, ambiguous reasons, reconciliation
+projection, native finite transfer quantities and tuple refusal text. There
+are no survivors or compiler failures. All 324 current journal, persistence,
+branch, scalar, native-ledger and builder recipes apply; only the eight new
+builder recipes were executed in this continuation. The local source-bound summary checks
+original-worktree hashes after execution and binds each named kill to its
+recipe, fixtures and log. Mutation source and build trees are deleted after
+the summary is saved.
+
+All **47** all-feature release journal tests and all **eight** Python
+oracle/capture tests pass, including deterministic rebuilding of the new
+captures. Workspace formatting and scoped all-target/all-feature release
+clippy for custody and journals pass with `-D warnings`. The required classifier
+update leaves the inventory unchanged, and the required CI preflight passes
+all **57 tests**. These checks do not replace the repository quality gate.
+
+The local evidence is under `target/r4-fidelity-3/`. The verification index
+binds the changed source, fixtures, catalog and check logs; the verification
+build tree is removed after summarizing. No push, PR or external comment is
+performed.

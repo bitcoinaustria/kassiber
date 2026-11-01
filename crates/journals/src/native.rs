@@ -3,6 +3,9 @@ use crate::{render, Refusal};
 use kassiber_pydecimal::{Context, Decimal};
 use std::collections::HashMap;
 
+mod builder;
+pub use builder::{build, finish, State};
+
 #[derive(Clone, Debug)]
 pub struct Error(pub Value);
 
@@ -452,9 +455,17 @@ impl Reader<'_> {
                 },
             )?)?;
             let quantity = crate::JournalQuantity::from_audit(amount, outbound)?;
-            let quantity =
-                kassiber_custody::codec::from_json(&serde_json::to_value(quantity).unwrap())
-                    .unwrap();
+            let quantity = match quantity {
+                crate::JournalQuantity::Finite(value) => Value::Decimal(value.0),
+                crate::JournalQuantity::NonFinite { text } => dict([(
+                    "$decimal",
+                    Value::from(match text {
+                        crate::NonFiniteDecimal::PositiveInfinity => "Infinity",
+                        crate::NonFiniteDecimal::NegativeInfinity => "-Infinity",
+                        crate::NonFiniteDecimal::NaN => "NaN",
+                    }),
+                )]),
+            };
             let mut entry = self.head(
                 wallet,
                 row,
@@ -713,7 +724,18 @@ pub fn read_ledger(
 
 fn audit(projection: &Value, wallets: &[Value], value: &Value) -> Result<Value> {
     let pairs = iterable(required(projection, "intra_pairs")?)?;
-    let pair = at(&pairs, required(value, "pair")?)?;
+    let pair = at(&pairs, required(value, "pair")?).map_err(|mut err| {
+        if is(field(&err.0, "family"), "IndexError")
+            && is(field(&err.0, "message"), "list index out of range")
+        {
+            set(
+                &mut err.0,
+                "message",
+                Value::from("tuple index out of range"),
+            );
+        }
+        err
+    })?;
     let out = required(pair, "out")?;
     let inbound = required(pair, "in")?;
     let wallet = |leg: &Value| -> Result<&Value> {

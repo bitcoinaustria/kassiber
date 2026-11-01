@@ -683,7 +683,9 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   surrogate scalars, successful lazy decoding and the complete gates remain open.
   The [native ledger continuation](docs/reference/r4-journal-render-scalar-checkpoint.md#native-ledger-continuation)
   matches 990 Python ledger states/refusals with exact identity consumption.
-  Native builder joins and the probe handoff remain open.
+  The [partial native builder assembly](docs/reference/r4-journal-render-scalar-checkpoint.md#native-builder-assembly-continuation-partial)
+  matches 1,254 complete states/refusals with exact UUID consumption. Native
+  ownership graph consumption, the probe handoff and final acceptance remain open.
   Python retains production authority.
 - [x] R4-14: expose the native automatic-pairing journal stage by reusing
   transfer suggestions, rules and bulk exact pairing. Pin repeated-pass and
