@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import socketserver
+import socket
 import sqlite3
 import threading
 
@@ -309,3 +310,240 @@ def test_pooled_cancellation_keeps_other_wallet_results(monkeypatch, cancel_duri
             assert error.value.code == refusal_code
     # Cancellation during a batch permits its one transmitted member only.
     assert all("cancelled" not in batch for batch in wire_batches[int(cancel_during_batch):])
+
+
+# Native clients speak newline-delimited JSON-RPC, sometimes as a JSON batch.
+BITCOIN_HEADER = ("01000000" + "00" * 32
+                  + "3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a"
+                  + "29ab5f49ffff001d1dac2b7c")
+LIQUID_HEADER = "01000000" + "00" * 64 + "00000000" * 2 + "0000"
+
+
+@contextmanager
+def native_electrum_backend(book, hits, *, liquid=False):
+    header = LIQUID_HEADER if liquid else BITCOIN_HEADER
+    sockets = []
+
+    class Handler(socketserver.StreamRequestHandler):
+        def handle(self):
+            with hits["lock"]:
+                hits["connections"] += 1
+                connection = hits["connections"]
+                sockets.append(self.request)
+            for line in self.rfile:
+                payload = json.loads(line)
+                batch = isinstance(payload, list)
+                responses = []
+                for request in payload if batch else [payload]:
+                    method = request["method"]
+                    with hits["lock"]:
+                        hits["requests"].append((connection, method))
+                        if method == "blockchain.scripthash.get_history" and hits["cancelled_at"] is None:
+                            with sqlite3.connect(book) as control:
+                                control.execute("UPDATE freshness_jobs SET cancel_requested=1 WHERE status IN ('queued','running')")
+                            hits["cancelled_at"] = len(hits["requests"])
+                    result = {
+                        "server.version": ["fixture", "1.4"],
+                        "server.ping": None,
+                        "blockchain.headers.subscribe": {"height": 0, "hex": header},
+                        "blockchain.block.header": header,
+                        "blockchain.block.headers": {"count": 1, "hex": header, "max": 2016},
+                        "blockchain.scripthash.subscribe": None,
+                        "blockchain.scripthash.get_history": [],
+                        "blockchain.scripthash.listunspent": [],
+                    }[method]
+                    responses.append({"jsonrpc": "2.0", "id": request["id"], "result": result})
+                self.wfile.write(json.dumps(responses if batch else responses[0]).encode() + b"\n")
+                self.wfile.flush()
+
+    with socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            yield f"tcp://127.0.0.1:{server.server_address[1]}"
+        finally:
+            server.shutdown()
+            # An SDK client can stay referenced by a cancellation traceback.
+            # Close our server sockets before joining its handler threads.
+            for connection in sockets:
+                try:
+                    connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+            thread.join()
+
+
+def descriptor_config(observer):
+    if observer == "bdk":
+        # Two identities prove a cancelled scan cannot open the next client.
+        root = bip32.HDKey.from_seed(b"native cancellation fixture")
+        return {"chain": "bitcoin", "network": "main", "xpub": root.to_public().to_base58(),
+                "script_types": ["p2wpkh", "p2tr"], "gap_limit": 2, "backend": "fixture"}
+    from tests.test_lwk_observer import descriptor
+    return {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor(),
+            "gap_limit": 2, "backend": "fixture"}
+
+
+@pytest.mark.parametrize("observer,protocol", [("bdk", "electrum"), ("lwk", "electrum"), ("lwk", "esplora")])
+@pytest.mark.parametrize("cancel", [False, True])
+def test_descriptor_route_fences_native_steps(tmp_path, monkeypatch, observer, protocol, cancel):
+    from kassiber.core.chain_observer.bdk import BdkObserver
+    from kassiber.core.chain_observer.lwk import LwkObserver
+
+    with cancellation_book(tmp_path / "data") as conn:
+        config = descriptor_config(observer)
+        conn.execute("UPDATE wallets SET kind='descriptor', config_json=?", (json.dumps(config),))
+        conn.commit()
+        before_wallet = dict(conn.execute("SELECT * FROM wallets").fetchone())
+        facts_calls = []
+        observer_type = BdkObserver if observer == "bdk" else LwkObserver
+        original_facts = observer_type._facts
+        tip_calls = []
+        if observer == "lwk":
+            original_client = LwkObserver._client
+
+            class TrackedClient:
+                def __init__(self, client):
+                    self.client = client
+
+                def __getattr__(self, name):
+                    return getattr(self.client, name)
+
+                def tip(self):
+                    tip_calls.append(True)
+                    return self.client.tip()
+
+            monkeypatch.setattr(LwkObserver, "_client", lambda self, network: TrackedClient(original_client(self, network)))
+
+        def facts(self, *args, **kwargs):
+            facts_calls.append(self.identity.id)
+            return original_facts(self, *args, **kwargs)
+
+        monkeypatch.setattr(observer_type, "_facts", facts)
+        hits = {"requests": [], "cancelled_at": None if cancel else -1,
+                "connections": 0, "lock": threading.Lock()}
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        server = cancellation_backend(protocol, book, hits) if protocol == "esplora" else native_electrum_backend(book, hits, liquid=observer == "lwk")
+        with server as url:
+            result = daemon_freshness._freshness_run_payload(conn, backend_runtime(protocol, url), {"rates": False, "journals": False})
+        assert result["completed"][0]["status"] == ("cancelled" if cancel else "done")
+        assert hits["requests"]
+        if cancel:
+            assert hits["cancelled_at"] is not None
+            assert facts_calls == []
+            assert dict(conn.execute("SELECT * FROM wallets").fetchone()) == before_wallet
+            for table in ("transactions", "chain_observer_instances", "chain_observer_values", "wallet_utxo_refreshes"):
+                assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
+            if protocol == "electrum":
+                assert hits["connections"] == 1
+                # Requests internal to the active SDK full scan may finish.
+                # No post-scan tip query or second identity may start.
+                if observer == "lwk":
+                    # full_scan_to_index itself also reads the tip internally.
+                    assert tip_calls == []
+        elif protocol == "electrum":
+            assert len(facts_calls) == (2 if observer == "bdk" else 1)
+        else:
+            assert facts_calls == []  # Esplora is the named compatibility route.
+
+
+@pytest.mark.parametrize("observer,protocol", [("bdk", "electrum"), ("lwk", "electrum"), ("lwk", "esplora")])
+def test_native_cancellation_prevents_connection(tmp_path, observer, protocol):
+    from kassiber.core.chain_observer.bdk import BdkObserver, bdk_branches_for_identity
+    from kassiber.core.chain_observer.identity import identities_for_wallet
+    from kassiber.core.chain_observer.lwk import LwkObserver, lwk_network
+    from kassiber.wallet_descriptors import load_descriptor_plan, default_policy_asset_id
+
+    config = descriptor_config(observer)
+    wallet = {"id": "a", "workspace_id": "w", "profile_id": "p", "config_json": json.dumps(config)}
+    identity = identities_for_wallet(wallet, observer_kind=observer)[0]
+    plan = load_descriptor_plan(config)
+    hits = {"requests": [], "cancelled_at": -1, "connections": 0, "lock": threading.Lock()}
+    server = cancellation_backend(protocol, None, hits) if protocol == "esplora" else native_electrum_backend(None, hits, liquid=observer == "lwk")
+    with server as url:
+        backend = backend_runtime(protocol, url)["backends"]["fixture"]
+        if observer == "bdk":
+            instance = BdkObserver(identity=identity, backend=backend, branches=bdk_branches_for_identity(plan, identity), gap_limit=2)
+            client = instance._client
+        else:
+            asset = default_policy_asset_id("elementsregtest")
+            instance = LwkObserver(identity=identity, backend=backend, descriptor_plan=plan, policy_asset_id=asset, stored_values={})
+            client = lambda: instance._client(lwk_network(identity.network, asset))
+
+        def cancelled():
+            raise AppError("Saved cancellation", code="cancelled", retryable=False)
+
+        token = sync_transport_check.set(cancelled)
+        try:
+            with pytest.raises(AppError) as error:
+                client()
+            assert error.value.code == "cancelled"
+        finally:
+            sync_transport_check.reset(token)
+    assert hits["requests"] == []
+    assert hits["connections"] == 0
+
+
+def test_bdk_cancellation_between_header_reads(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from tests.test_bdk_observer import BdkDependencyContractTest
+
+    observer = BdkDependencyContractTest()._observer()
+    observer.backend_kind = "electrum"
+    stopped = threading.Event()
+    client = Mock()
+
+    def tip():
+        stopped.set()
+        return SimpleNamespace(height=0)
+
+    client.block_headers_subscribe.side_effect = tip
+    client.block_header.return_value = BITCOIN_HEADER
+
+    def check():
+        if stopped.is_set():
+            raise AppError("Saved cancellation", code="cancelled")
+
+    token = sync_transport_check.set(check)
+    try:
+        with pytest.raises(AppError) as error:
+            observer._remote_block_hash(client, 0)
+        assert error.value.code == "cancelled"
+    finally:
+        sync_transport_check.reset(token)
+    client.block_header.assert_not_called()
+
+
+def test_bdk_cancellation_stops_incremental_widening(monkeypatch):
+    from unittest.mock import Mock
+    from tests.test_bdk_observer import BdkDependencyContractTest
+
+    observer = BdkDependencyContractTest()._observer()
+    stopped = threading.Event()
+    client = Mock()
+    wallet = Mock()
+    horizons = []
+
+    def horizon(_wallet):
+        horizons.append(True)
+        return True
+
+    def sync(_client, _wallet):
+        stopped.set()
+        return object()
+
+    def check():
+        if stopped.is_set():
+            raise AppError("Saved cancellation", code="cancelled")
+
+    monkeypatch.setattr(observer, "_reveal_scan_horizon", horizon)
+    monkeypatch.setattr(observer, "_incremental_sync", sync)
+    token = sync_transport_check.set(check)
+    try:
+        with pytest.raises(AppError) as error:
+            observer._sync_revealed_horizon(client, wallet)
+        assert error.value.code == "cancelled"
+    finally:
+        sync_transport_check.reset(token)
+    assert len(horizons) == 1

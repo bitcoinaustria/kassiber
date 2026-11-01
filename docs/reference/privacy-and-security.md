@@ -133,6 +133,13 @@ An already transmitted request cannot be recalled.
 Saved freshness cancellation is rechecked before each subsequent compatibility
 HTTP request or Electrum batch, including active-book prefetch. Network workers
 wait for that check on the thread owning the book's SQLite connection.
+Native BDK/LWK Electrum observers check before opening connections, between
+SDK calls (including tip/header reads and repeated scans), and between observer
+identities. A BDK `full_scan` or `sync`, or LWK `full_scan_to_index`, already in
+progress cannot be interrupted through the pinned Python bindings: all requests
+inside that call may finish after cancellation, but no later SDK call or identity
+starts and its result is not applied. Esplora uses the compatibility transport
+on both chains and retains its per-request checks.
 Graph follow-ups use an in-memory grant tied to the successful sync, active book,
 wallet configuration and backend. They recheck cancellation, the no-egress switch,
 and any automatic-sync permission before transport and cache writes. Locking or

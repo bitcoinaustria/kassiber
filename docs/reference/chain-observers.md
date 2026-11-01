@@ -54,6 +54,13 @@ caches while preserving these observation candidates. The configured backend
 remains the source of this evidence; counter checks are not a cryptographic or
 atomic snapshot guarantee against a malicious server.
 
+Cancellation fences native observer connection creation, each exposed SDK
+network step, repeated incremental BDK scans, and transitions between source
+identities. The pinned bindings cannot interrupt one BDK `full_scan`/`sync` or
+LWK `full_scan_to_index`; its internal requests may finish before cancellation
+is observed. The next SDK step is refused and no observer result is applied.
+Esplora remains on the compatibility route with per-request cancellation checks.
+
 Compatibility Esplora and Electrum history caches are bound to the observed
 chain tip, including block identity rather than height alone. An identical tip
 permits the existing counter/status cache checks. A changed, missing or invalid

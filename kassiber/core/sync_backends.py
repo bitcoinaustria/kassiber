@@ -1618,6 +1618,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
     prepared = []
     try:
         for identity in identities:
+            check_sync_transport()
             if dependency_kind == "lwk":
                 # A full refresh reconstructs the wollet in memory. Existing
                 # encrypted values remain durable until successful apply, but
@@ -1668,6 +1669,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                     ),
                 )
             )
+        check_sync_transport()
         discovered_targets = _observer_discovered_targets(prepared)
         newly_discovered = [
             target
