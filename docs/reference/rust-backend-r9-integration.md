@@ -138,7 +138,7 @@ at a time. Task-owned build trees must be summarized and removed at completion.
 | Test classification and preflight | Updated 6,022 definitions; classifier check passes, and preflight passes all 57 checks |
 | Custody generated/replay/focused lanes | Refreshed after the owned-converter fix: 24,000 books + 1,030 permutations yield 24,852 complete stage matches and 178 matching refusals; 159 archived requests + 159 permutations match. Focused census and shadow each pass 300 tests and 32 subtests, with 75 native-loader byte matches and one explained panic-hook skip |
 | Complete renderer campaign | Refreshed after the owned-converter fix: 24,705 / 24,705 generated admitted cases and 318 / 318 archived cases match |
-| Slice/hybrid parity and no-fallback assertions | In progress: 2,864 exact collected nodes have completed passing receipts, through native freshness and 51 product cases. Product resumption and later modules continue serially; the 274-case loader/BLOB rerun includes all four corrected cases |
+| Slice/hybrid parity and no-fallback assertions | In progress: 3,409 exact collected nodes have passing receipts, through the complete hybrid candidate module and journal persistence. The hybrid module passes all 35 tests and 4,741 subtests, including importer complete-dump and no-fallback assertions. Journal process and later modules continue serially; the 274-case loader/BLOB rerun includes all four corrected cases |
 | Full mutation kills in resumable shards | Pending fresh run |
 | Combined journals process / custody CPU | All four books complete five alternating pairs, with exact payload, phase and persisted scalar comparisons. Process CPU improves 1.65–2.26×; integrated finalized custody compute CPU improves 1.36–2.19×. The diagnostic binding round trip uses more CPU on three books; scope and load are detailed below |
 
@@ -188,9 +188,9 @@ output boundaries; both measurements are retained.
 
 Finish every slice's hybrid parity with no fallback for registered shapes and
 all mutation recipes in resumable serial shards, then summarize cleanup and the
-final manual review. The saved partial parity reconciliation contains 197
-uncovered product nodes and 47 later modules awaiting collection; the active
-resumer continues from those receipts. Update this audit at each verified
+final manual review. The saved partial parity reconciliation contains 43
+uncovered journal-process nodes and 39 later modules awaiting collection; the
+active resumer continues from those receipts. Update this audit at each verified
 boundary rather than treating an interrupted run as a full pass.
 
 ## Original-to-integrated replay map
