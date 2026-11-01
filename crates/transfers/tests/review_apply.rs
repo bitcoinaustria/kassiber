@@ -97,7 +97,13 @@ fn snapshot(conn: &Connection) -> Value {
                         ValueRef::Integer(n) => n.into(),
                         ValueRef::Real(n) => Value::Float(n),
                         ValueRef::Text(raw) => s(std::str::from_utf8(raw).unwrap()),
-                        ValueRef::Blob(raw) => Value::Bytes(raw.to_vec()),
+                        ValueRef::Blob(raw) => dict([(
+                            "$sqlite_blob",
+                            s(raw
+                                .iter()
+                                .map(|byte| format!("{byte:02x}"))
+                                .collect::<String>()),
+                        )]),
                     };
                     (name.as_str(), value)
                 })))
@@ -164,9 +170,11 @@ fn settings(conn: &Connection) {
         );
     }
 }
-#[test]
-fn review_apply_matches_python_receipts_authorship_and_complete_database_rows() {
-    for case in cases(fixtures()) {
+fn check_complete_rows(raw: bool) {
+    for case in cases(fixtures())
+        .iter()
+        .filter(|case| py_str(field(case, "name")).starts_with("raw-") == raw)
+    {
         for encrypted in [false, true] {
             let conn = seed(case, encrypted);
             let actual = outcome(apply(
@@ -176,6 +184,14 @@ fn review_apply_matches_python_receipts_authorship_and_complete_database_rows() 
                 "review-apply",
                 true,
             ));
+            assert_eq!(
+                get(&actual, "error").is_some(),
+                get(case, "error").is_some(),
+                "{} source={} encrypted={encrypted}: {}",
+                py_str(field(case, "name")),
+                py_str(field(case, "source")),
+                review_operations::canonical(&actual).unwrap()
+            );
             let rows = snapshot(&conn);
             let mut mapping = BTreeMap::new();
             for identity in list(field(case, "identities")) {
@@ -219,6 +235,47 @@ fn review_apply_matches_python_receipts_authorship_and_complete_database_rows() 
             assert!(conn.is_autocommit());
             settings(&conn);
         }
+    }
+}
+
+#[test]
+fn review_apply_matches_python_receipts_authorship_and_complete_database_rows() {
+    check_complete_rows(false);
+}
+
+#[test]
+fn review_apply_preserves_raw_loader_storage_classes_and_receipts() {
+    check_complete_rows(true);
+}
+
+#[test]
+fn review_apply_rejects_unsupported_metadata_authors_even_for_noops() {
+    let fixture = fixtures();
+    let case = cases(fixture)
+        .iter()
+        .find(|case| {
+            field(case, "name") == &s("noop-author-surrogate")
+                && field(case, "source") == &s("desktop")
+        })
+        .unwrap();
+    for encrypted in [false, true] {
+        let conn = seed(case, encrypted);
+        let before = snapshot(&conn);
+        let error = apply(
+            &conn,
+            case,
+            field(case, "artifact"),
+            "invalid-noop-author",
+            true,
+        )
+        .unwrap_err();
+        let Error::Service(error) = error else {
+            panic!("metadata source refusal")
+        };
+        assert_eq!(error.code, "validation");
+        assert_eq!(error.message, "transaction edit source is not supported");
+        assert_eq!(snapshot(&conn), before);
+        assert!(conn.is_autocommit());
     }
 }
 #[test]

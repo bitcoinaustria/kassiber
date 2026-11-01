@@ -161,6 +161,16 @@ fn review_plans_match_complete_python_mixed_metadata_effects_and_refusals() {
 }
 
 #[test]
+fn review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals() {
+    check_group("raw");
+}
+
+#[test]
+fn review_plans_preserve_authoring_refusals_and_metadata_noop_ordering() {
+    check_group("authoring");
+}
+
+#[test]
 fn review_plans_match_python_component_and_metadata_order() {
     check_group("components");
 }

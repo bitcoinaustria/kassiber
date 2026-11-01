@@ -36,9 +36,7 @@ pub fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Val
                 ValueRef::Real(n) => Value::Float(n),
                 ValueRef::Text(t) => s(std::str::from_utf8(t)
                     .map_err(|_| AppError::new("validation", "stored text is not valid UTF-8"))?),
-                ValueRef::Blob(_) => {
-                    return Err(AppError::new("validation", "unexpected binary field"))
-                }
+                ValueRef::Blob(raw) => Value::Bytes(raw.to_vec()),
             };
             pairs.push((name.as_str(), value));
         }

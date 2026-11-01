@@ -123,6 +123,33 @@ def export():
     record("surrogate-transaction-id", "empty", [price("a\ud800")], basic)
     record("surrogate-run-transaction-id", "empty", [price("a\ud800\ud801")], basic)
     record("surrogate-operation-type", "empty", [{**price(), "type":"price_override\ud800"}], basic)
+    for name, setup in (
+        ("fractional-amount", "UPDATE transactions SET amount=1.5 WHERE id='a'"),
+        ("bytes-amount", "UPDATE transactions SET amount=X'3737' WHERE id='a'"),
+        ("bytes-fee", "UPDATE transactions SET fee=X'30' WHERE id='a'"),
+        ("bytes-raw-json", "UPDATE transactions SET raw_json=X'7b7d' WHERE id='a'"),
+        ("bytes-note", "UPDATE transactions SET note=X'ff00' WHERE id='a'"),
+        ("bytes-label", "UPDATE wallets SET label=X'3737' WHERE id='source'"),
+        ("bytes-currency", "UPDATE transactions SET fiat_currency=X'455552' WHERE id='a'"),
+        ("bytes-profile-currency", "UPDATE profiles SET fiat_currency=X'455552' WHERE id='p'"),
+        ("text-fee", "UPDATE transactions SET fee='unavailable' WHERE id='a'"),
+        ("negative-amount", "UPDATE transactions SET amount=-1 WHERE id='a'"),
+    ):
+        record("raw-" + name, "empty", [price()], [*basic, setup], group="raw")
+        if name in {"fractional-amount", "bytes-amount", "negative-amount"}:
+            record("raw-value-" + name, "empty", [dict(type="price_override", transaction_id="a", fiat_value="20000.00", reason="Invoice reviewed")], [*basic, setup], group="raw")
+    for name, reason in (
+        ("surrogate", "Reviewed \ud800"),
+        ("surrogate-run", "Reviewed \ud800\ud801"),
+        ("astral-surrogate", "🚀 \ud800"),
+        ("long", "x" * 1001),
+        ("blank", " \u2003 "),
+    ):
+        record("author-" + name, "empty", [{**kind(), "reason": reason}], basic, group="authoring")
+        record("noop-author-" + name, "empty", [{**kind(value=None), "reason": reason}], basic, group="authoring")
+    for name, value in (("surrogate", "income\ud800"), ("surrogate-run", "income\ud800\ud801"),
+                        ("long-surrogate", "x" * 64 + "\ud800")):
+        record("kind-author-" + name, "empty", [kind(value=value)], basic, group="authoring")
     component_setup = [*basic,
         "UPDATE transactions SET direction='outbound',kind='send',occurred_at='2021-01-01T00:00:00Z',fiat_rate=30000,fiat_rate_exact='30000',raw_json='{\"privacy_boundary\":\"coinjoin\"}' WHERE id='b'",
         "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,kind,fiat_rate,fiat_rate_exact,raw_json,created_at) VALUES('c','w','p','target','c','2022-01-01T00:00:00Z','inbound','BTC',100000000000,0,'receive',40000,'40000','{\"privacy_boundary\":\"coinjoin\"}','2020')"]
@@ -130,6 +157,16 @@ def export():
         component_type="manual_bridge", evidence_kind="manual_claim", evidence_grade="reviewed",
         change_reason="Both custody endpoints reviewed", legs=[dict(role="source", transaction="b", amount_msat=100000000000),
         dict(role="destination", transaction="c", amount_msat=100000000000)])]))
+    for field in ("change_reason", "evidence_kind", "evidence_ref"):
+        for suffix in ("\ud800", "\ud800\ud801"):
+            authored = deepcopy(component)
+            authored["request"]["components"][0][field] = "🚀 reviewed " + suffix
+            record("component-author-" + field + str(len(suffix)), "empty", [authored], component_setup, group="authoring")
+    for suffix in ("\ud800", "\ud800\ud801"):
+        authored = deepcopy(component)
+        authored["request"]["components"][0]["legs"][1] = dict(role="destination", untracked_wallet="🚀 missing " + suffix,
+            occurred_at="2022-01-01T00:00:00Z", amount_msat=100000000000)
+        record("component-author-wallet" + str(len(suffix)), "empty", [authored], component_setup, group="authoring")
     record("price-component", "empty", [price(), component], component_setup, group="components")
     record("component-price", "empty", [component, price()], component_setup, group="components")
     record("component-guards-acquisition", "empty", [component, kind("c")], component_setup, group="components")
@@ -138,6 +175,14 @@ def export():
     def unpairs(conn):
         return [dict(type="unpair", pair_id=id, expected_fingerprint=quarantine_review.pair_fingerprint(conn, pair), reason="Owner reviewed custody")
                 for id, pair in quarantine_review.pairs_by_id(conn, "p").items()]
+
+    for suffix in ("\ud800", "\ud800\ud801"):
+        record("revision-author-reason" + str(len(suffix)), "pair", lambda conn, suffix=suffix: [dict(
+            type="custody_component", request=dict(action="revise", component_id=next(iter(
+                quarantine_review.pairs_by_id(conn, "p").values()))["component_id"],
+                spec={}, activate=False, reason="🚀 reviewed " + suffix))], group="authoring")
+        record("unpair-unused-reason" + str(len(suffix)), "pair", lambda conn, suffix=suffix: [
+            {**operation, "reason": "🚀 reviewed " + suffix} for operation in unpairs(conn)], group="authoring")
 
     for base in ("pair", "pair-note", "pair-allocation", "pair-same-txid", "sibling-pairs"):
         record(base, base, unpairs, group="unpairs")

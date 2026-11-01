@@ -51,6 +51,17 @@ pub fn clear_memos() {
     crate::codec::clear_memos();
 }
 
+pub fn exact_operand(value: &kassiber_pyjson::Value) -> Result<Value, String> {
+    use crate::codec;
+    let converted = codec::to_json(value);
+    if !codec::lossless(value)
+        && codec::dumps(value, true)? != codec::dumps(&codec::from_json(&converted)?, true)?
+    {
+        return Err("journal operands cannot represent custody facts losslessly".into());
+    }
+    Ok(converted)
+}
+
 pub fn journal_operands(
     snapshot: &crate::snapshot::Snapshot,
     stages: &crate::Stages,
@@ -58,15 +69,7 @@ pub fn journal_operands(
     use crate::{codec, interpretation};
     use serde_json::json;
     let raw = snapshot;
-    let exact = |value: &kassiber_pyjson::Value| -> Result<Value, String> {
-        let converted = codec::to_json(value);
-        if !codec::lossless(value)
-            && codec::dumps(value, true)? != codec::dumps(&codec::from_json(&converted)?, true)?
-        {
-            return Err("journal operands cannot represent custody facts losslessly".into());
-        }
-        Ok(converted)
-    };
+    let exact = exact_operand;
     let interpretation = exact(&stages.interpretation)?;
     let quantity = exact(&stages.quantity)?;
     let finalized = exact(

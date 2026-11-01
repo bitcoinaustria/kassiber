@@ -19,7 +19,7 @@ pub struct GroupedUpdate {
     pub at_category: Option<Value>,
     pub kind: Option<Value>,
     pub source: String,
-    pub reason: Option<String>,
+    pub reason: Option<kassiber_pyjson::PyStr>,
 }
 
 pub struct PricingUpdate {
@@ -180,7 +180,7 @@ fn pricing(
     let quality = optional(&input.quality, "pricing_quality", 64)?;
     let source = supported(source, "pricing_source_kind", SOURCES)?;
     let mut quality = supported(quality, "pricing_quality", QUALITIES)?;
-    let fallback = if !text(tx, "fiat_currency").is_empty() {
+    let fallback = if kassiber_envelope::truthy(&value(tx, "fiat_currency")) {
         value(tx, "fiat_currency")
     } else {
         let profile = rows(
@@ -237,7 +237,7 @@ fn pricing(
     }
     let mut rate = decimal(&input.fiat_rate, "fiat_rate")?;
     let mut total = decimal(&input.fiat_value, "fiat_value")?;
-    let amount = Decimal::from(int(tx, "amount"))
+    let amount = msat(&value(tx, "amount"))?
         .div(&Decimal::from(100_000_000_000i64), &CONTEXT)
         .map_err(arithmetic)?
         .abs(&CONTEXT)
@@ -424,7 +424,20 @@ pub(super) fn update(conn: &Connection, scope: &Scope<'_>, input: &GroupedUpdate
         updates.extend(pricing(conn, scope, &tx, input)?);
     }
     let source = history::source(&input.source)?;
-    let reason = clean_reason(input.reason.as_deref())?;
+    let reason = input
+        .reason
+        .as_ref()
+        .map(kassiber_pytext::strip_py)
+        .filter(|reason| reason.code_points().next().is_some());
+    if reason
+        .as_ref()
+        .is_some_and(|reason| reason.code_points().count() > 1000)
+    {
+        return Err(AppError::new(
+            "validation",
+            "reason cannot exceed 1000 characters",
+        ));
+    }
     let mut changes = Vec::new();
     // Audit field order is independent of input JSON and SQL column order.
     for &(field, _, _) in history::FIELDS {
@@ -494,6 +507,17 @@ pub(super) fn update(conn: &Connection, scope: &Scope<'_>, input: &GroupedUpdate
                 )
                 .map_err(error)?;
             }
+            let reason = reason
+                .as_ref()
+                .map(|reason| {
+                    reason.as_str().ok_or_else(|| {
+                        AppError::new(
+                            "internal_error",
+                            kassiber_pytext::utf8_error(reason).unwrap(),
+                        )
+                    })
+                })
+                .transpose()?;
             append_fields(conn, scope, &tx, &changes, &source, reason)
         })?)
     } else {

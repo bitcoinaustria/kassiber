@@ -103,9 +103,7 @@ pub fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Val
                 ValueRef::Real(n) => Value::Float(n),
                 ValueRef::Text(t) => s(std::str::from_utf8(t)
                     .map_err(|_| AppError::new("validation", "stored text is not valid UTF-8"))?),
-                ValueRef::Blob(_) => {
-                    return Err(AppError::new("validation", "unexpected binary field"))
-                }
+                ValueRef::Blob(raw) => Value::Bytes(raw.to_vec()),
             };
             pairs.push((name.as_str(), value));
         }
@@ -219,7 +217,7 @@ pub fn bind(value: &Value, index: usize) -> Result<kassiber_store::rusqlite::typ
         }),
         Value::Float(v) => Ok(Sql::Real(*v)),
         Value::Str(v) => v.as_str().map(|s| Sql::Text(s.into())).ok_or_else(|| {
-            AppError::new("internal_error", "surrogates not allowed in SQLite text")
+            AppError::new("internal_error", kassiber_pytext::utf8_error(v).unwrap())
         }),
         _ => Err(AppError::new(
             "internal_error",

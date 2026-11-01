@@ -68,6 +68,42 @@ fn grouped() -> kassiber_transactions::metadata::GroupedUpdate {
 }
 
 #[test]
+fn grouped_raw_quantities_return_python_integers_without_rewriting_observations() {
+    use kassiber_store::rusqlite::types::Value as Sql;
+    let (_tmp, book) = book();
+    for (amount, fee, amount_msat, fee_msat) in [
+        (Sql::Real(1.75), Sql::Real(-2.75), 1, -2),
+        (Sql::Blob(b"77".to_vec()), Sql::Blob(b"0".to_vec()), 77, 0),
+        (
+            Sql::Blob(b" 7_7 ".to_vec()),
+            Sql::Blob(b"-3".to_vec()),
+            77,
+            -3,
+        ),
+    ] {
+        book.connection()
+            .execute(
+                "UPDATE transactions SET amount=?,fee=? WHERE id='tx'",
+                params![amount, fee],
+            )
+            .unwrap();
+        let result = run(&book, Command::Update(Box::new(grouped())));
+        assert_eq!(get(&result, "amount_msat"), Some(&Value::from(amount_msat)));
+        assert_eq!(get(&result, "fee_msat"), Some(&Value::from(fee_msat)));
+        kassiber_pyjson::dumps(&result, &kassiber_pyjson::Options::new()).unwrap();
+        let stored: (Sql, Sql) = book
+            .connection()
+            .query_row(
+                "SELECT amount,fee FROM transactions WHERE id='tx'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(stored, (amount, fee));
+    }
+}
+
+#[test]
 fn grouped_save_merges_only_present_fields_and_appends_one_ordered_event() {
     use kassiber_transactions::metadata::PricingUpdate;
     let (_tmp, book) = book();
@@ -372,7 +408,7 @@ fn grouped_validation_and_failed_invalidation_preserve_all_rows() {
             ..request()
         },
         GroupedUpdate {
-            reason: Some("x".repeat(1001)),
+            reason: Some("x".repeat(1001).into()),
             ..request()
         },
         GroupedUpdate {

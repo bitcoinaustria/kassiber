@@ -1672,12 +1672,12 @@
   {
     "id": "JL-integer-string",
     "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Value::Str(value) => value\n            .as_str()\n            .and_then(|value| kassiber_pytext::parse_int(value).ok()),",
     "replace": "Value::Str(_) => None,",
     "expect_failing": [
       "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
     ],
-    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope.",
-    "find": "Value::Str(value) => value\n            .as_str()\n            .and_then(|value| kassiber_pytext::parse_int(value).ok()),"
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
   },
   {
     "id": "JL-script-space",
@@ -3118,5 +3118,25 @@
       "review_assembler_retains_strict_admission_and_refusal_ownership"
     ],
     "rule": "Strict review admission keeps its inherited bounded refusal instead of exposing typed parsing details."
+  },
+  {
+    "id": "JL-review-raw-admission",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
+    "replace": "let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?; typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?; Self::from_snapshot(typed)",
+    "expect_failing": [
+      "review_assembler_preserves_raw_admission_and_refusal_ownership"
+    ],
+    "rule": "Preserve raw loader scalars until the consuming custody stage."
+  },
+  {
+    "id": "JL-review-raw-refusal",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
+    "replace": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?)",
+    "expect_failing": [
+      "review_assembler_preserves_raw_admission_and_refusal_ownership"
+    ],
+    "rule": "Preserve consuming-stage refusal families, codes and messages."
   }
 ]

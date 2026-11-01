@@ -9275,6 +9275,94 @@ The remaining order is:
 
 No route, AI authority or third-party dependency changes occur at this boundary.
 
+### Raw review composition and authoring refusals (R5 transfers-17, partial)
+
+Branch `t3code/r5-transfers-17` starts at `66d41ec59`. `Prepared::load` now passes
+the accepted raw loader snapshot to `kassiber_custody::run_loaded`, then the same
+fusion, journal operands and rendering used by the review workflow. It no longer
+reapplies the JSON request's `.typed()` and `.validate()` contracts to SQLite
+facts. Typed JSON callers retain their existing admission.
+
+Fusion uses the shared lossless operand adapter and propagates conversion
+refusals. It does not serialize the entire finalized projection before the
+request builder consumes it: unused byte-valued observations can be valid even
+when JSON serialization of those raw facts would fail. A named unit witness
+checks byte preservation and refusal of lossy surrogate/nonfinite conversions
+without panicking. The original fusion harness and complete review-build corpus
+continue to pin ordinary request bytes and rendered states.
+
+Shared transfer/metadata row readers retain byte scalars. Metadata pricing and
+record output use Python-compatible integer conversion instead of substituting
+zero or returning raw non-integer storage shapes. A named metadata witness checks
+serializable integer msat output while the original REAL/BLOB observations stay
+unchanged. A truthy invalid stored currency
+refuses before selecting a fallback. Review metadata reasons retain original
+code points through the shared writer. Source and reason-length validation
+precede no-op detection, while UTF-8 encoding admission belongs to the actual
+write. The expanded corpus also pins unsupported acquisition-kind admission.
+Component reason binding, placeholder-wallet lookup and revision digest
+preimages preserve exact Unicode character positions and surrogate runs.
+
+The expanded Python plan exporter freezes 75 complete raw scalar, byte-consumer
+and authoring/no-op outcomes, plus 297 validations on the unchanged reference.
+The apply exporter extends the complete-row/authorship corpus to 140 outcomes
+with successful authoring no-ops, unused authoring reasons and every successful
+raw-storage plan. Test snapshots encode BLOB storage explicitly as hexadecimal
+objects, retaining byte identity without changing product serialization. The
+new raw-apply witness exposed a journal writer refusal on byte-valued wallet
+labels; canonical persistence now binds those private byte operands as BLOBs,
+matching Python. Planning regressions preserve source rows, transaction
+ownership and total changes on plaintext and SQLCipher. The existing
+residual-fee refusal and repro are unchanged.
+
+The new named mutations live in
+[`review_closure_mutations.json`](../../crates/transfers/scripts/review_closure_mutations.json).
+The two inherited loader recipes that enforced the former strict review seam
+now enforce raw composition and consuming-stage refusal ownership instead.
+The mutation runner uses an isolated offline workspace copy, one test job and
+worktree-local temporary/build directories.
+
+All **19 closure mutation entries are killed** after their eight named witnesses
+pass unmutated in a fresh build tree. These include both raw row readers,
+canonical BLOB persistence and serializable metadata quantities, as well as the
+composition, authoring and no-op guards. All **1,110 entries** across the
+journals, transactions and transfers catalogues remain applicable; inherited
+catalogues are not claimed as fresh kill campaigns.
+
+Final focused verification passes **50 native tests**: 22 metadata, nine journal
+persistence, eleven review apply and eight planning/validation tests. All seven
+current Python oracle checks pass, including the six review exporters and the
+complete review-build corpus. All-target clippy and rustdoc for pytext, custody,
+journals, transactions, transfers and the daemon pass with warnings denied;
+workspace formatting and whitespace checks pass. The required classifier update
+retains 5,811 tests in 359 modules, and the required CI preflight passes all
+57 tests. The full quality gate is not rerun for this local checkpoint.
+Logs and `transfers-17-library-summary.json` remain in `target/r5-evidence/`.
+The normal and mutation build trees are removed after summarizing; the temporary
+root is empty and no background job remains.
+
+Reproduce using the pinned toolchain, eight build jobs, disabled
+debug/incremental output, offline Cargo and worktree-local target, intermediate
+and temporary directories. Start each mutation campaign with a fresh build and
+intermediate tree: isolated copies retain source timestamps, so reusing an older
+campaign's artifacts can leave a stale baseline binary.
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo test --locked --offline -p kassiber-transactions --test metadata -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- cargo test --locked --offline -p kassiber-journals --features test-harness --test persistence -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- cargo test --locked --offline -p kassiber-transfers --features test-harness --test review_apply --test review_plans -- --test-threads=1
+mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest tests/test_rust_review_cases.py tests/test_rust_review_builds.py -q
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/transfers/scripts/review_closure_mutation_check.py
+```
+
+This is a library verification boundary. The next required work is product
+CLI/daemon database, envelope and authorship parity, the Python AI loop's
+once-only revalidated consent while executing transfer calls through native
+routes, and zero-fallback workloads. Only after those named mutation proofs
+should the six review routes be registered. Counts remain **26/29 CLI leaves
+and 25/28 daemon kinds**. No route, AI authority, third-party dependency or
+Python product code changes occur here.
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements

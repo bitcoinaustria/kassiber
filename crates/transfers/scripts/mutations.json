@@ -1594,8 +1594,8 @@
   {
     "id": "component-revision-id",
     "file": "crates/transfers/src/component_review.rs",
-    "find": ":{source}:{}:{reason_text}:{canonical}\",",
-    "replace": ":{source}:{}::{canonical}\",",
+    "find": ".chain(raw_reason.code_points())",
+    "replace": ".chain(std::iter::empty())",
     "expect_failing": [
       "component_reviews_match_python_complete_database_rows_and_refusals"
     ],

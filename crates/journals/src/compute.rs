@@ -53,7 +53,7 @@ pub fn compute_loaded(snapshot: Snapshot, finalized: bool) -> Result<Computed, R
 
 fn finish(snapshot: Snapshot, stages: Stages) -> Result<Computed, Refusal> {
     let fusion = match &stages.finalized_projection {
-        Some(projection) => fuse(&snapshot, projection),
+        Some(projection) => fuse(&snapshot, projection)?,
         None => Fusion::Skipped,
     };
     Ok(Computed {
@@ -63,32 +63,43 @@ fn finish(snapshot: Snapshot, stages: Stages) -> Result<Computed, Refusal> {
     })
 }
 
-/// The comparison harness's fusion: the projection through its stage text,
-/// the profile and wallets through the request's Python model.
-fn fuse(snapshot: &Snapshot, projection: &kassiber_pyjson::Value) -> Fusion {
+fn fuse(snapshot: &Snapshot, projection: &kassiber_pyjson::Value) -> Result<Fusion, Refusal> {
     let span = timing::span("fusion.input");
-    let text = kassiber_pyjson::dumps(projection, &kassiber_pyjson::Options::new())
-        .expect("computed finalized projection");
-    let projection = codec::to_json(&codec::loads(&text).expect("finalized projection text"));
+    let projection =
+        kassiber_custody::journal_support::exact_operand(projection).map_err(|message| {
+            Refusal {
+                stage: "fusion",
+                code: "ValueError".into(),
+                message,
+                hint: None,
+                details: Value::Null,
+            }
+        })?;
     let python = |record: &kassiber_custody::snapshot::Record| {
-        codec::to_json(
-            &codec::from_json(&Value::Object(record.clone().into_map())).expect("admitted record"),
-        )
+        codec::from_json(&Value::Object(record.clone().into_map()))
+            .map(|value| codec::to_json(&value))
+            .map_err(|message| Refusal {
+                stage: "fusion",
+                code: "ValueError".into(),
+                message,
+                hint: None,
+                details: Value::Null,
+            })
     };
-    let profile = python(&snapshot.profile);
+    let profile = python(&snapshot.profile)?;
     let wallets = snapshot
         .wallets
         .iter()
         .map(|wallet| {
-            let wallet = python(wallet);
-            (wallet["id"].clone(), wallet)
+            let wallet = python(wallet)?;
+            Ok((wallet["id"].clone(), wallet))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, Refusal>>()?;
     drop(span);
     let span = timing::span("fusion.request");
     let outcome = ledger_request::build_request(&profile, &projection, &wallets, "ledger");
     drop(span);
-    match outcome {
+    Ok(match outcome {
         Ok(ledger_request::Outcome::Empty) => Fusion::Empty,
         Err(error) => Fusion::Refused(error.document()),
         Ok(ledger_request::Outcome::Request(request)) => {
@@ -98,6 +109,32 @@ fn fuse(snapshot: &Snapshot, projection: &kassiber_pyjson::Value) -> Fusion {
             let _span = timing::span("engine");
             let response = kassiber_tax_core::ledger(&request);
             Fusion::Ledger { request, response }
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kassiber_envelope::dict;
+    use kassiber_pyjson::Value as Py;
+
+    #[test]
+    fn fusion_preserves_unused_bytes_and_refuses_lossy_scalars_without_panicking() {
+        let snapshot = Snapshot::default();
+        let projection = |value| dict([("rows", Py::List(vec![])), ("diagnostic", value)]);
+        assert_eq!(
+            fuse(&snapshot, &projection(Py::Bytes(vec![255, 0]))).unwrap(),
+            Fusion::Empty
+        );
+        for raw in ["\"\\ud800\"", "NaN", "Infinity"] {
+            let error =
+                fuse(&snapshot, &projection(kassiber_pytext::loads(raw).unwrap())).unwrap_err();
+            assert_eq!(error.code, "ValueError");
+            assert_eq!(
+                error.message,
+                "journal operands cannot represent custody facts losslessly"
+            );
         }
     }
 }

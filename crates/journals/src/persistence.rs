@@ -53,16 +53,14 @@ pub(super) fn borrowed(v: &Value) -> Result<rusqlite::types::ValueRef<'_>, Refus
                 )
             }
         }
-        _ => {
-            return Err(Refusal::new(
-                "ProgrammingError",
-                "unsupported SQLite binding",
-            ))
-        }
+        _ => return Err(Refusal::new("ProgrammingError", "unsupported SQLite binding")),
     })
 }
 pub(super) fn bind(v: &Value) -> Result<Sql, Refusal> {
     use rusqlite::types::ValueRef;
+    if let Some(bytes) = kassiber_custody::codec::raw_bytes(v) {
+        return Ok(Sql::Blob(bytes));
+    }
     Ok(match borrowed(v)? {
         ValueRef::Null => Sql::Null,
         ValueRef::Integer(n) => Sql::Integer(n),

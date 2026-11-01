@@ -870,10 +870,12 @@ Python.
   apply, historical retries, canonical journals, filed-impact resolutions and
   receipts, with complete logical-row/authorship comparisons and late rollback
   on SQLite/SQLCipher. The caller's commit choice and connection cache are
-  preserved. Finish the assembler's lossless/refusal closure and product
+  preserved. Transfers-17 composes the accepted raw loader directly through
+  custody, fusion and rendering, preserving downstream byte/scalar handling,
+  authoring-string refusals and metadata no-op ordering. Finish product
   CLI/daemon envelopes, AI once-only consent and zero-fallback proofs before
   registering all six routes. See the
-  [atomic checkpoint](docs/reference/rust-shell.md#atomic-review-apply-r5-transfers-16-partial).
+  [raw-composition checkpoint](docs/reference/rust-shell.md#raw-review-composition-and-authoring-refusals-r5-transfers-17-partial).
   Retain readiness barriers rather than reading stale journals; see the
   [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the

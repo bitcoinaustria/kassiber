@@ -28,7 +28,8 @@ def snapshot(conn):
             rows = conn.execute(query + ' ORDER BY rowid')
         except sqlite3.OperationalError:
             rows = conn.execute(query)
-        result[table] = [dict(row) for row in rows]
+        result[table] = [{key: {"$sqlite_blob": value.hex()} if isinstance(value, bytes) else value
+                          for key, value in dict(row).items()} for row in rows]
     return result
 
 

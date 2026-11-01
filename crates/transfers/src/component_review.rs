@@ -324,6 +324,12 @@ fn prepare_legs(
             }
         }
         if has_untracked {
+            if let Value::Str(label) = &untracked {
+                super::component_reads::reference_bind(
+                    &Value::Str(kassiber_pytext::strip_py(label)),
+                    1,
+                )?;
+            }
             let label = match &untracked {
                 Value::Str(_) if !kassiber_pytext::strip(&py_str(&untracked)).is_empty() => {
                     kassiber_pytext::strip(&py_str(&untracked)).to_owned()
@@ -1299,14 +1305,29 @@ fn plan_revision(
     } else {
         String::new()
     };
-    let new_id = uuid5(&utf8(
-        &format!(
-            "kassiber:custody-revision:{}:{component_id}:{action}:{next}:{source}:{}:{reason_text}:{canonical}",
-            scope.profile_id,
-            u8::from(activate)
-        ),
-        reason,
-    )?);
+    let prefix = format!(
+        "kassiber:custody-revision:{}:{component_id}:{action}:{next}:{source}:{}:",
+        scope.profile_id,
+        u8::from(activate)
+    );
+    let raw_reason = match reason {
+        Value::Str(raw) => raw.clone(),
+        _ => reason_text.as_str().into(),
+    };
+    let suffix = format!(":{canonical}");
+    let preimage = kassiber_pyjson::PyStr::from_code_points(
+        prefix
+            .chars()
+            .map(u32::from)
+            .chain(raw_reason.code_points())
+            .chain(suffix.chars().map(u32::from)),
+    )
+    .unwrap();
+    let new_id = uuid5(
+        preimage
+            .as_str()
+            .ok_or_else(|| internal(kassiber_pytext::utf8_error(&preimage).unwrap()))?,
+    );
     if !rows(c, "SELECT 1 FROM custody_components WHERE id=?", [&new_id])?.is_empty() {
         return Err(refuse(
             "Planned custody component revision already exists",

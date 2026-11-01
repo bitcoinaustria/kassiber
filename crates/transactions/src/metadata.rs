@@ -75,6 +75,63 @@ fn int(row: &Value, key: &str) -> i64 {
         _ => 0,
     }
 }
+fn integer(value: &Value) -> Result<kassiber_pyjson::BigInt> {
+    use kassiber_pyjson::BigInt;
+    let invalid = || {
+        AppError::new(
+            "internal_error",
+            format!(
+                "invalid literal for int() with base 10: {}",
+                kassiber_envelope::py_repr(value)
+            ),
+        )
+    };
+    let integer: BigInt = match value {
+        Value::Int(n) => n.clone(),
+        Value::Bool(n) => u8::from(*n).into(),
+        Value::Float(n) if n.is_finite() => {
+            format!("{:.0}", n.trunc()).parse().map_err(|_| invalid())?
+        }
+        Value::Str(raw) => {
+            kassiber_pytext::parse_int(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?
+        }
+        Value::Bytes(raw) => kassiber_pytext::parse_int(
+            std::str::from_utf8(raw)
+                .ok()
+                .filter(|text| text.is_ascii())
+                .ok_or_else(invalid)?,
+        )
+        .map_err(|_| invalid())?,
+        Value::Float(n) => {
+            return Err(AppError::new(
+                "internal_error",
+                if n.is_nan() {
+                    "cannot convert float NaN to integer"
+                } else {
+                    "cannot convert float infinity to integer"
+                },
+            ))
+        }
+        _ => {
+            return Err(AppError::new(
+                "internal_error",
+                format!(
+                "int() argument must be a string, a bytes-like object or a real number, not '{}'",
+                kassiber_envelope::type_name(value)
+            ),
+            ))
+        }
+    };
+    Ok(integer)
+}
+fn msat(value: &Value) -> Result<kassiber_pydecimal::Decimal> {
+    integer(value)?
+        .to_string()
+        .parse()
+        .map_err(|error: kassiber_pydecimal::DecimalError| {
+            AppError::new("internal_error", error.to_string())
+        })
+}
 fn code(label: &str) -> Result<String> {
     let code = lower(strip(label)).replace(' ', "-");
     if code.is_empty() {
@@ -276,7 +333,7 @@ fn record(conn: &Connection, tx: &Value) -> Result<Value> {
     .unwrap_or(Value::Null);
     let btc = |key| -> Result<Value> {
         Ok(Value::Float(
-            format!("{}e-11", int(tx, key))
+            format!("{}e-11", msat(&value(tx, key))?)
                 .parse()
                 .map_err(|_| AppError::new("validation", "invalid msat amount"))?,
         ))
@@ -288,9 +345,9 @@ fn record(conn: &Connection, tx: &Value) -> Result<Value> {
         ("direction", value(tx, "direction")),
         ("asset", value(tx, "asset")),
         ("amount", btc("amount")?),
-        ("amount_msat", value(tx, "amount")),
+        ("amount_msat", Value::Int(integer(&value(tx, "amount"))?)),
         ("fee", btc("fee")?),
-        ("fee_msat", value(tx, "fee")),
+        ("fee_msat", Value::Int(integer(&value(tx, "fee"))?)),
         ("counterparty", s(text(tx, "counterparty"))),
         ("wallet_id", s(text(&wallet, "id"))),
         ("wallet_label", s(text(&wallet, "label"))),

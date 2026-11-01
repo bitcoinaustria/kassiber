@@ -3262,12 +3262,40 @@ records the verification and remaining work. The metadata writer now uses one
 grouped UPDATE, matching Python's chain-index trigger effects, and sibling-pair
 revisions validate their author source.
 
-Assembler lossless/refusal closure, product envelope/AI once-only consent parity
+Product envelope/AI once-only consent parity
 and zero-fallback registration proofs remain required. All six review routes
 remain unregistered; counts stay **26/29 CLI leaves and 25/28 daemon kinds**.
 There are no retained seed-message exceptions. Python's residual-fee refusal and
 its existing repro remain unchanged. No dependencies or Python product behavior
 are changed beyond the explicitly requested deterministic loader fix.
+
+### R5 transfers: raw review composition and authoring refusals (partial)
+
+Transfers-17 starts at `66d41ec59`. The accepted native raw loader now feeds
+`kassiber_custody::run_loaded` directly through journal fusion and rendering.
+The JSON snapshot API retains its separate typed admission. Fusion shares the
+lossless operand adapter and returns explicit refusals instead of assuming that
+every finalized fact can be serialized. Byte facts unused by the request builder
+remain available to their actual consumers.
+
+Shared transfer and transaction row readers and canonical journal storage retain
+SQLite BLOB identity. The apply corpus includes all successful raw-storage plans
+and records byte storage explicitly in its complete-row oracle.
+Delegated metadata pricing uses Python-compatible integer conversion, and a
+truthy invalid stored currency refuses before fallback or metadata comparison.
+Authoring reasons retain their exact code points; unsupported kind admission
+remains unchanged.
+Metadata validates source and reason length before detecting no-ops; SQLite
+encoding applies only to writes. Component reasons, placeholder-wallet lookup
+and revision preimages retain exact UTF-8 refusal positions.
+
+The [checkpoint](../reference/rust-shell.md#raw-review-composition-and-authoring-refusals-r5-transfers-17-partial)
+records reference corpora, named mutation witnesses and verification. Product
+CLI/daemon envelope and authorship proofs, AI once-only revalidated consent,
+zero-fallback workloads and all six registrations remain pending. Counts remain
+**26/29 CLI leaves and 25/28 daemon kinds**. The AI chat loop and Python's
+residual-fee refusal remain unchanged. No dependencies or Python product code
+change at this boundary.
 
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 

@@ -28,6 +28,23 @@ mod unicode;
 #[rustfmt::skip]
 mod unicode_tables;
 
+pub fn utf8_error(text: &kassiber_pyjson::PyStr) -> Option<String> {
+    let points: Vec<_> = text.code_points().collect();
+    let start = points.iter().position(|p| (0xd800..=0xdfff).contains(p))?;
+    let count = points[start..]
+        .iter()
+        .take_while(|p| (0xd800..=0xdfff).contains(*p))
+        .count();
+    Some(if count == 1 {
+        format!("'utf-8' codec can't encode character '\\u{:04x}' in position {start}: surrogates not allowed", points[start])
+    } else {
+        format!(
+            "'utf-8' codec can't encode characters in position {start}-{}: surrogates not allowed",
+            start + count - 1
+        )
+    })
+}
+
 pub use case::{lower, upper};
 pub use json::{loads, loads_py, JsonError, JsonErrorKind, MAX_NESTING};
 pub use number::{parse_float, parse_int, NumberError};

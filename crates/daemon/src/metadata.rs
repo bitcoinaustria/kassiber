@@ -271,7 +271,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
             Command::Update(Box::new(GroupedUpdate {
                 transaction: required(args, "transaction", "transaction id")?,
                 source: optional(args, "source")?.unwrap_or_else(|| "gui".into()),
-                reason: optional(args, "reason")?,
+                reason: optional(args, "reason")?.map(Into::into),
                 note: get(args, "note").cloned(),
                 tags: get(args, "tags").cloned(),
                 excluded: get(args, "excluded").cloned(),

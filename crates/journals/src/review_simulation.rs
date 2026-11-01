@@ -124,7 +124,10 @@ fn metadata_operation(
     let kind = text(operation, "type");
     let mut update = GroupedUpdate {
         transaction: id.clone(),
-        reason: Some(text(operation, "reason")),
+        reason: match get(operation, "reason") {
+            Some(Value::Str(reason)) => Some(reason.clone()),
+            _ => None,
+        },
         source: if source == "user" { "gui" } else { source }.into(),
         ..Default::default()
     };

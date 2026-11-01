@@ -476,7 +476,7 @@ fn native_loader_legacy_scalars_keep_downstream_admission() {
 }
 
 #[test]
-fn review_assembler_retains_strict_admission_and_refusal_ownership() {
+fn review_assembler_preserves_raw_admission_and_refusal_ownership() {
     let Value::List(cases) =
         kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
     else {
@@ -512,15 +512,19 @@ fn review_assembler_retains_strict_admission_and_refusal_ownership() {
                 .iter()
                 .all(|row| row["amount"] == serde_json::json!(1.5)));
             let state = conn.transaction_state(Some("main")).unwrap();
+            let reference = kassiber_custody::run_loaded(&loaded, true).err().unwrap();
             let Err(error) = crate::pipeline::Prepared::load(
                 &conn,
                 get(case, "profile").clone(),
                 &text(get(case, "as_of")),
             ) else {
-                panic!("review assembler must retain its strict admission")
+                panic!("review assembler must preserve the consuming stage refusal")
             };
-            assert_eq!(error.family, "RuntimeError");
-            assert_eq!(error.message, "custody snapshot contains unsupported facts");
+            assert_eq!(error.message, reference.message);
+            assert_eq!(
+                error.code.as_deref().unwrap_or(&error.family),
+                reference.code
+            );
             assert_eq!(conn.total_changes(), changes);
             assert_eq!(conn.transaction_state(Some("main")).unwrap(), state);
             assert!(!conn.is_autocommit());
