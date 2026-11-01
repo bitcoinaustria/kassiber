@@ -14,14 +14,14 @@ from tests.test_custody_authored_migration import NOW, _scope, _tx
 def test_nonfinite_tool_amount_or_cash_is_a_reviewable_refusal(tmp_path, value, field):
     path = tmp_path / "tool.csv"
     path.write_text("Type,Buy Amount,Buy Currency,Sell Amount,Sell Currency,Fee,Fee Currency,Exchange,Date,Buy Value\n" +
-                    f"Deposit,{value if field == 'amount' else '1'},BTC,,,,,Tool,2025-01-01,{value if field == 'value' else '1'}\n")
-    if field == "amount":
-        row, = _tool_rows("cointracking", path, "EUR")[0]
-        assert row.error
-        assert not row.comparable
-    else:
-        with pytest.raises(AppError, match="finite"):
-            _tool_rows("cointracking", path, "EUR")
+                    f"Deposit,{value if field == 'amount' else '1'},BTC,,,,,Tool,2025-01-01,{value if field == 'value' else '1'}\n"
+                    "Deposit,2,BTC,,,,,Tool,2025-01-02,200\n")
+    row, healthy = _tool_rows("cointracking", path, "EUR")[0]
+    assert row.error
+    assert not row.comparable
+    assert row.index == 1
+    assert healthy.comparable and healthy.index == 2
+    assert healthy.value == 200
 
 
 def test_nonfinite_stored_journal_cash_cannot_reach_comparison_totals(tmp_path):

@@ -249,14 +249,18 @@ def _tool_rows(tool: str, file_path, book_currency: str) -> tuple[list[_ToolRow]
         asset = describe_asset(normalized["asset"])
         value = None
         currency = ""
+        error = ""
         fiat_value = normalized.get("fiat_value")
         fiat_currency = str(normalized.get("fiat_currency") or "").upper()
         if fiat_value is not None and fiat_currency in {"", book_currency}:
             value, currency = dec(fiat_value), book_currency
         else:
-            column_value = _decimal_cell(_cell(record, *_VALUE_COLUMNS[direction]))
-            if column_value is not None:
-                value, currency = column_value, book_currency
+            try:
+                column_value = _decimal_cell(_cell(record, *_VALUE_COLUMNS[direction]))
+                if column_value is not None:
+                    value, currency = column_value, book_currency
+            except AppError as exc:
+                error = str(exc)
         rows.append(
             _ToolRow(
                 index=item["index"],
@@ -271,6 +275,7 @@ def _tool_rows(tool: str, file_path, book_currency: str) -> tuple[list[_ToolRow]
                 kind=normalized.get("kind"),
                 value=value,
                 value_currency=currency,
+                error=error,
             )
         )
     return rows, other_assets

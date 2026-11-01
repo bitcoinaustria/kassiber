@@ -380,6 +380,8 @@ compares a tool's own transaction CSV with the book without importing it. The
 file is read with the same parser as `wallets import-cointracking` /
 `import-blockpit`, but one unreadable row does not stop the rest: it is listed
 as unreadable with the importer's message.
+Non-finite tool value cells also mark only their own row unreadable; healthy
+rows continue through matching and totals.
 
 Rows are paired by transaction id and direction first (Kassiber's own tool
 exports carry the txid, or the Kassiber row id for rows without one), then by
