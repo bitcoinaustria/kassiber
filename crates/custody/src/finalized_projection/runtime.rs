@@ -163,6 +163,21 @@ pub fn typed_confirmations(snapshot: &crate::snapshot::BookSnapshot) -> Result<V
     captured.into_iter().map(crate::par::unwrap).collect()
 }
 
+/// `typed_confirmations` over loaded records: only rows carrying the version
+/// marker are read as typed rows.
+pub fn loaded_confirmations(snapshot: &Snapshot) -> Result<Vec<Value>, String> {
+    snapshot
+        .transactions
+        .iter()
+        .map(|record| match record.get("observation_authority_version") {
+            None | Some(Value::Null) => Ok(Value::Null),
+            Some(_) => interpretation::capture_confirmation(
+                &record.typed::<crate::snapshot::TxRow>()?.json(),
+            ),
+        })
+        .collect()
+}
+
 /// Full row copies belong to the finalized stage's boundary, after admission.
 pub fn stage_with_confirmations(
     snapshot: &Snapshot,

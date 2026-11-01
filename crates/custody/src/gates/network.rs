@@ -1,7 +1,9 @@
 //! Network inventory admission over typed observation columns. Unknown payload
 //! keys are skipped; the complete input remains available at the oracle seam.
 use crate::python_text::PythonText;
-use crate::snapshot::{BookSnapshot, NetworkArray, NetworkObject, NetworkRow, SqlValue};
+#[cfg(test)]
+use crate::snapshot::BookSnapshot;
+use crate::snapshot::{NetworkArray, NetworkFacts, NetworkObject, NetworkRow, SqlValue, WalletRef};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -148,9 +150,12 @@ pub(super) fn evidence(row: &NetworkRow) -> Evidence {
         valid && instances.len() <= 1,
     )
 }
-pub(super) fn require(snapshot: &BookSnapshot) -> Result<(), crate::Refusal> {
-    let Some(NetworkObject::Object(facts)) = &*snapshot.book_network else {
-        return if snapshot.book_network.is_none() {
+pub(super) fn require(
+    book_network: &Option<NetworkObject<NetworkFacts>>,
+    wallets: &[WalletRef],
+) -> Result<(), crate::Refusal> {
+    let Some(NetworkObject::Object(facts)) = book_network else {
+        return if book_network.is_none() {
             Ok(())
         } else {
             Err(crate::Refusal::new(
@@ -190,7 +195,7 @@ pub(super) fn require(snapshot: &BookSnapshot) -> Result<(), crate::Refusal> {
             }
         }
     };
-    for wallet in &snapshot.wallets {
+    for wallet in wallets {
         let wallet_id = wallet.id.json();
         let mut found = false;
         let empty_row = NetworkRow::default();
@@ -329,6 +334,9 @@ mod inventory_tests {
         input["wallets"] = json!([{"id":"wallet","kind":"custom","config_json":"{}"}]);
         input["book_network"] = facts;
         crate::parse(&input.to_string()).unwrap()
+    }
+    fn require(snapshot: &BookSnapshot) -> Result<(), crate::Refusal> {
+        super::require(&snapshot.book_network, &snapshot.wallets)
     }
     #[test]
     fn typed_network_inventory_admission() {

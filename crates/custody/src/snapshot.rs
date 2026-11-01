@@ -9,6 +9,13 @@ mod rows;
 pub use book::BookSnapshot;
 pub use network::{NetworkArray, NetworkFacts, NetworkObject};
 pub use rows::{Column, NetworkRow, RateRow, SqlValue, TxRow, WalletRef, WorklistRow};
+/// Typed admission inputs of a loaded snapshot.
+pub(crate) struct AdmissionFacts {
+    pub book_network: Option<NetworkObject<NetworkFacts>>,
+    pub wallets: Vec<WalletRef>,
+    pub rate_rows: Vec<RateRow>,
+}
+
 /// Compatibility model for stages and native callers awaiting their typed slice.
 /// Text parsing and admission use `BookSnapshot` directly.
 pub type Snapshot = StageSnapshot;
@@ -125,6 +132,34 @@ impl StageSnapshot {
     pub fn typed(&self) -> Result<BookSnapshot, String> {
         let text = serde_json::to_string(self).map_err(|e| e.to_string())?;
         serde_json::from_str::<BookSnapshot>(&text).map_err(|e| e.to_string())
+    }
+
+    /// The typed facts loaded admission reads, exactly as `typed` would read
+    /// them, without serializing the transactions.
+    pub(crate) fn admission_facts(&self) -> Result<AdmissionFacts, String> {
+        use serde::de::IntoDeserializer;
+        let book_network = Option::<NetworkObject<NetworkFacts>>::deserialize(
+            self.book_network
+                .as_ref()
+                .unwrap_or(&Value::Null)
+                .into_deserializer(),
+        )
+        .map_err(|e| e.to_string())?;
+        let wallets = self
+            .wallets
+            .iter()
+            .map(Record::typed)
+            .collect::<Result<_, _>>()?;
+        let rate_rows = self
+            .rate_rows
+            .iter()
+            .map(Record::typed)
+            .collect::<Result<_, _>>()?;
+        Ok(AdmissionFacts {
+            book_network,
+            wallets,
+            rate_rows,
+        })
     }
 
     /// Database loading retains legacy SQLite scalars until their consuming
@@ -273,6 +308,60 @@ mod tests {
                 kassiber_pyjson::Value::from("ff00")
             )])
         );
+    }
+
+    #[test]
+    fn loaded_admission_facts_match_the_text_round_trip() {
+        let mut snapshot = admitted();
+        let values = [
+            json!(null),
+            json!(1),
+            json!(-0),
+            json!(1.5),
+            serde_json::from_str("1e999").unwrap(),
+            serde_json::from_str("1E5").unwrap(),
+            serde_json::from_str("18446744073709551616").unwrap(),
+            serde_json::from_str("-9223372036854775809").unwrap(),
+            json!("text"),
+            json!(true),
+            json!([1, {"a": 2.0}]),
+            json!({"z": 1, "a": [null]}),
+        ];
+        for value in &values {
+            let row = json!({"id": "w", "asset": value, "fiat_rate": value, "config_json": value, "extra": value});
+            snapshot
+                .wallets
+                .push(serde_json::from_value(row.clone()).unwrap());
+            snapshot
+                .rate_rows
+                .push(serde_json::from_value(row.clone()).unwrap());
+            snapshot
+                .transactions
+                .push(serde_json::from_value(row).unwrap());
+        }
+        let typed = snapshot.typed().unwrap();
+        for (record, row) in snapshot.transactions.iter().zip(&typed.transactions) {
+            assert_eq!(record.typed::<TxRow>().unwrap().json(), row.json());
+        }
+        for book_network in [
+            None,
+            Some(json!(null)),
+            Some(json!(3)),
+            Some(
+                json!({"observations": [{"wallet_id": "w", "asset": 1e5}, 4], "references": [], "binding": null}),
+            ),
+            Some(json!({"observations": 5})),
+        ] {
+            snapshot.book_network = book_network;
+            let typed = snapshot.typed().unwrap();
+            let facts = snapshot.admission_facts().unwrap();
+            fn text<T: serde::Serialize + ?Sized>(value: &T) -> String {
+                serde_json::to_string(value).unwrap()
+            }
+            assert_eq!(text(&facts.book_network), text(&*typed.book_network));
+            assert_eq!(text(&facts.wallets), text(&typed.wallets));
+            assert_eq!(text(&facts.rate_rows), text(&typed.rate_rows));
+        }
     }
 
     #[test]

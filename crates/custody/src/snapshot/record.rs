@@ -48,6 +48,13 @@ impl Record {
         self.columns.0.iter().zip(&self.values)
     }
 
+    /// This record read as a typed row, as its JSON text would deserialize.
+    pub fn typed<'a, T: Deserialize<'a>>(&'a self) -> Result<T, String> {
+        let fields = self.iter().map(|(key, value)| (key.as_str(), value));
+        T::deserialize(serde::de::value::MapDeserializer::<_, serde_json::Error>::new(fields))
+            .map_err(|e| e.to_string())
+    }
+
     pub fn into_map(self) -> Map<String, Value> {
         self.columns.0.iter().cloned().zip(self.values).collect()
     }

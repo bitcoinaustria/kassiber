@@ -708,6 +708,10 @@ fn context(records: &[Value], rows: &[Value], wallets: &Wallets) -> Result<Value
     Ok(json!({"roles":roles,"pairs":pairs}))
 }
 pub(crate) fn compute(snapshot: &Snapshot) -> Result<Value, String> {
+    // An empty channel population reads no row; see `context`.
+    if snapshot.channel_records.is_empty() {
+        return Ok(json!({"roles":{},"pairs":[]}));
+    }
     context(
         &snapshot
             .channel_records

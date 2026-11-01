@@ -201,13 +201,15 @@ pub fn run_loaded(snapshot: &snapshot::Snapshot, finalized: bool) -> Result<Stag
     snapshot
         .validate_loaded()
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
-    let typed = snapshot
-        .typed()
+    // The accounting gates read the typed wallet, network and rate rows the
+    // v1 text round trip would produce; transactions stay records.
+    let facts = snapshot
+        .admission_facts()
         .map_err(|message| Refusal::new("snapshot", "custody_snapshot_invalid", message))?;
-    gates::require_accounting(&typed)?;
-    let projection_rows = finalized_projection::runtime::typed_confirmations(&typed)
+    gates::require_accounting_facts(&facts.book_network, &facts.wallets, &snapshot.profile)?;
+    let projection_rows = finalized_projection::runtime::loaded_confirmations(snapshot)
         .map_err(|code| Refusal::code("components", code))?;
-    gates::require_rates(&typed)
+    gates::require_rate_rows(&facts.rate_rows)
         .map_err(|(code, message)| Refusal::new("components", code, message))?;
     interpretation::admit_channels(snapshot).map_err(|code| Refusal::code("components", code))?;
     drop(admission);

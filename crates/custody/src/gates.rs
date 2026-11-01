@@ -113,8 +113,18 @@ fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
     )
 }
 pub fn require_accounting(snapshot: &Snapshot) -> Result<(), crate::Refusal> {
-    network::require(snapshot)?;
-    let original = snapshot.profile.get("tax_country").unwrap_or(&Value::Null);
+    require_accounting_facts(&snapshot.book_network, &snapshot.wallets, &snapshot.profile)
+}
+
+/// The accounting gate over its three inputs, shared by the v1 text adapter
+/// and loaded snapshots, which keep their transactions as records.
+pub(crate) fn require_accounting_facts(
+    book_network: &Option<crate::snapshot::NetworkObject<crate::snapshot::NetworkFacts>>,
+    wallets: &[crate::snapshot::WalletRef],
+    profile: &crate::snapshot::Record,
+) -> Result<(), crate::Refusal> {
+    network::require(book_network, wallets)?;
+    let original = profile.get("tax_country").unwrap_or(&Value::Null);
     require_tax_country(original)
         .map_err(|(code, message)| crate::Refusal::new("components", code, message))
 }
@@ -138,10 +148,14 @@ pub(crate) fn require_tax_country(original: &Value) -> Result<(), Error> {
 /// candidate columns even when a rate already exists on this row, while
 /// retaining the loader's first-successful-row precedence per asset.
 pub(crate) fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
+    require_rate_rows(&snapshot.rate_rows)
+}
+
+pub(crate) fn require_rate_rows(rows: &[crate::snapshot::RateRow]) -> Result<(), Error> {
     use kassiber_pydecimal::{Decimal, DecimalError};
     use std::str::FromStr;
     let mut seen = BTreeSet::new();
-    for row in &snapshot.rate_rows {
+    for row in rows {
         let asset = row.asset.present().ok_or(("KeyError", "'asset'".into()))?;
         if seen.contains(&asset.json().to_string()) {
             continue;
