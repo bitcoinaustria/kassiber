@@ -1207,8 +1207,8 @@ Behavior:
 
 - `gethistory` rows become wallet transactions using Wasabi's signed net wallet
   effect, timestamp/block height, label, txid, and `islikelycoinjoin` evidence
-- JSON numeric amounts must be integral satoshis (including `1.0` as one sat).
-  Fractional numeric amounts are refused rather than guessed to be BTC. Legacy
+- JSON numeric amounts must be integer tokens in satoshis. Decimal or exponent
+  tokens, including `1.0` and `1e0`, are refused rather than guessed to be BTC or sats. Legacy
   decimal strings explicitly retain BTC units, while integer strings are sats.
 - `listcoins` / `listunspentcoins` refresh the durable Coins/UTXO inventory,
   including amount, confirmations, address label, safe receive/change branch
