@@ -36,6 +36,7 @@ import {
   type QuarantineSheetTab,
 } from "./explain";
 import { FixWithAssistant } from "./FixWithAssistant";
+import { AcceptCoarsePricesDialog } from "./QuarantineAcceptPrices";
 import { QuarantineFixDialog, type QuarantineFixRequest } from "./QuarantineFix";
 import type {
   QuarantineAction,
@@ -50,6 +51,8 @@ import type {
 const SHOWN_ROWS = 3;
 /** Cause cards shown before the rest fold away. */
 const SHOWN_CAUSES = 4;
+/** The hold a coarse price gets while the book requires reviewing it. */
+const COARSE_PRICE_REASON = "pricing_review_required";
 
 type OpenTransaction = (
   transactionId: string,
@@ -142,6 +145,8 @@ export function QuarantineCausePanel({
   const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
   const [allCauses, setAllCauses] = React.useState(false);
   const [ownFixing, setOwnFixing] = React.useState<QuarantineFixRequest | null>(null);
+  // The book the approximate prices are accepted in, while that step is open.
+  const [accepting, setAccepting] = React.useState<QuarantineBookScope | null>(null);
   const fixing = fixingProp !== undefined ? fixingProp : ownFixing;
   const setFixing = onFixingChange ?? setOwnFixing;
   const syncWallet = useDaemonStreamMutation<
@@ -375,6 +380,11 @@ export function QuarantineCausePanel({
                 rootItems={rootItems}
                 more={attentionMore}
                 onUnpair={(picked) => setFixing({ items: picked, scope: quarantineBookScope(snapshot) })}
+                onAcceptPrices={
+                  group.reason === COARSE_PRICE_REASON && quarantineBookScope(snapshot)
+                    ? () => setAccepting(quarantineBookScope(snapshot))
+                    : undefined
+                }
                 onAskAssistant={askAboutCause(group)}
               />
             ))}
@@ -405,6 +415,7 @@ export function QuarantineCausePanel({
           </NotLoadedYet>
         </div>
       ) : null}
+      <AcceptCoarsePricesDialog scope={accepting} onClose={() => setAccepting(null)} />
       <QuarantineFixDialog
         request={fixing}
         onClose={() => setFixing(null)}
@@ -425,6 +436,7 @@ function QuarantineCauseCard({
   rootItems,
   more,
   onUnpair,
+  onAcceptPrices,
   onAskAssistant,
 }: {
   group: QuarantineGroup;
@@ -436,6 +448,8 @@ function QuarantineCauseCard({
   rootItems: Map<string, QuarantineItem>;
   more?: AttentionMore;
   onUnpair: (items: QuarantineItem[]) => void;
+  /** Accepts every approximate price this cause holds, in one reviewed step. */
+  onAcceptPrices?: () => void;
   onAskAssistant?: () => void;
 }) {
   const { t } = useTranslation("journals");
@@ -535,14 +549,19 @@ function QuarantineCauseCard({
           onOpen={onOpenRoot}
         />
       ) : null}
-      {actions.length || (!members.length && rootIds.length) || onAskAssistant ? (
+      {actions.length || (!members.length && rootIds.length) || onAskAssistant || onAcceptPrices ? (
         <div className="mt-3 flex flex-wrap gap-2">
+          {onAcceptPrices ? (
+            <Button type="button" size="sm" onClick={onAcceptPrices}>
+              {t("quarantine.accept.action", { count: rootCount })}
+            </Button>
+          ) : null}
           {actions.map((action, index) => (
             <Button
               key={`${action.kind}:${action.wallet_id ?? action.transaction_id ?? index}`}
               type="button"
               size="sm"
-              variant={index === 0 ? "default" : "outline"}
+              variant={index === 0 && !onAcceptPrices ? "default" : "outline"}
               disabled={
                 action.kind === "wait_for_confirmation" ||
                 (action.kind === "sync_wallet" && syncPending)

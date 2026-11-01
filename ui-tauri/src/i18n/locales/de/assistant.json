@@ -515,7 +515,12 @@
       "kind_override": "Zugang einordnen",
       "kindCleared": "importierte Einordnung",
       "expiresDays_one": "für {{count}} Tag",
-      "expiresDays_other": "für {{count}} Tage"
+      "expiresDays_other": "für {{count}} Tage",
+      "undismiss_pair": "Paar-Vorschlag wiederherstellen",
+      "accept_coarse_prices": "Ungefähre Kurse übernehmen",
+      "transactions_one": "{{count}} Transaktion",
+      "transactions_other": "{{count}} Transaktionen",
+      "allCoarse": "jede Transaktion, die auf ihren ungefähren Kurs wartet"
     },
     "tax": {
       "title": "Steuerliche Änderung je Jahr",
