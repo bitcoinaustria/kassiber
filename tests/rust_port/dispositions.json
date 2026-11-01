@@ -21223,6 +21223,10 @@
         "tests": 7
       }
     },
+    "tests/test_rust_source_funds_batch.py": {
+      "test_batch_mutation_bytes_managed_files_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares deterministic native batch review with unchanged Python on SQLite and SQLCipher using exact helper and process envelopes, all 112 tables, managed attachment hashes, dry-run identity, partial rollback and zero CLI/daemon fallbacks; structural lineage independently pins current authority, wallet isolation, change chains and exact msat; provenance grants no ownership or tax facts", "reviewed": true, "tests": 1},
+      "test_batch_process_bytes_files_all_112_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares deterministic native batch review with unchanged Python on SQLite and SQLCipher using exact helper and process envelopes, all 112 tables, managed attachment hashes, dry-run identity, partial rollback and zero CLI/daemon fallbacks; structural lineage independently pins current authority, wallet isolation, change chains and exact msat; provenance grants no ownership or tax facts", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_source_funds_case_writes.py": {
       "test_frozen_case_persistence_bytes_and_all_112_tables": {
         "disposition": "oracle",

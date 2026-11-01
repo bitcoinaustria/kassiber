@@ -29,6 +29,7 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.links.list",
     "ui.source_funds.links.create",
     "ui.source_funds.links.review",
+    "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.evidence.list",
     "ui.source_funds.recipients.list",
@@ -408,6 +409,32 @@ mod tests {
             .contains("planted-secret-value"));
     }
 
+    #[test]
+    fn source_funds_batch_daemon_preserves_bounded_selection() {
+        let kind = "ui.source_funds.links.bulk_review";
+        assert!(KINDS.contains(&kind));
+        let args = dict([
+            ("target_transaction_ref", s(" out ")),
+            ("link_ids", Value::List(vec![s(" l-z ")])),
+        ]);
+        let result = execute(&mut SourceFundsCapture, kind, Some(&args)).unwrap();
+        assert_eq!(get(&result, "command"), Some(&s(kind)));
+        assert_eq!(get(&result, "args"), Some(&args));
+        let empty = dict::<&str>([]);
+        assert_eq!(
+            get(
+                &execute(&mut SourceFundsCapture, kind, None).unwrap(),
+                "args"
+            ),
+            Some(&empty)
+        );
+        assert_eq!(
+            execute(&mut SourceFundsCapture, kind, Some(&Value::List(vec![])))
+                .unwrap_err()
+                .code,
+            "validation"
+        );
+    }
     #[test]
     fn source_funds_link_daemon_preserves_arguments_and_registers_mutations() {
         let args = dict([

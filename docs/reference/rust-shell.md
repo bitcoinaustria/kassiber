@@ -6694,6 +6694,88 @@ The report worker branch has no new commits available at this checkpoint.
 PDF rendering and PDF-containing bundles remain Python. No dependencies,
 lockfiles, schema or tax rules change.
 
+## Source-funds batch-review checkpoint (R5 partial)
+
+`t3code/r5-sof-mutations-4` starts at `5d64884e8`. The native batch service
+registers `source-funds.links.bulk-review` and
+`ui.source_funds.links.bulk_review`, bringing the inventory to 166 CLI leaves
+and fourteen source-funds daemon kinds. It traverses the target's non-rejected
+authored frontier, bounds explicit selection to 500 IDs, and revalidates the
+selected suggestions against current stored custody allocations or freshly
+derived authoritative intra-wallet structural lineage. An empty selection
+approves nothing. Rejected pairs, stale journal inputs, excluded endpoints,
+privacy boundaries, ambiguous inventory and inexact amounts remain manual.
+Approval sets an explicit allocation policy without changing custody, ownership,
+basis or tax facts. CLI dry runs preserve their response marker and restore
+every table, including pending work owned by an enclosing transaction.
+
+The structural deriver carries integer-msat contributions through change
+transactions, scopes ancestry and memoization to one wallet/chain/network,
+requires current observer graph and quantity commitments, and uses inventory
+only as corroboration or veto. The synthetic corpus contains 131 batch cases
+and 21 independent structural vectors. The service oracle compares helper
+response bytes, all 112 tables and unchanged managed attachment bytes/hashes on
+SQLite and SQLCipher. Real process checks cover sixteen CLI calls and thirty
+daemon batch requests, with matching response bytes and zero fallbacks.
+Injected trigger/deferred-constraint failures are service tests: arbitrary
+extra schema is refused by native process startup and is not counted as
+process parity. Partial statement failures, busy/deferred commits and late
+response-projection failures roll back the entire native batch on both stores.
+
+The [batch reproduction](../../crates/reports/scripts/repro_python_source_funds_batch_projection_commit.py)
+records Python's post-commit response-projection failure on SQLite and SQLCipher.
+Both links remain reviewed after Python fails to render a corrupt stored amount.
+Native admission deliberately keeps projection before commit and rolls back
+this path, following the earlier documented source/link parity exception.
+Python product behavior is unchanged.
+
+The 31 new entries in `crates/reports/scripts/mutations.json` have six named
+unmutated baselines. Their verification and kill results are retained under
+`target/r5-sof-mutations-4/`; inherited mutation evidence remains separate.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_batch_pins_eligibility_envelopes_and_all_112_tables` | 21 |
+| `source_funds_structural_lineage_pins_authority_wallets_change_chains_and_exact_msat` | 4 |
+| `source_funds_batch_preserves_outer_work_and_rolls_back_partial_writes` | 2 |
+| `source_funds_batch_rolls_back_busy_deferred_and_projection_failures_on_both_stores` | 1 |
+| `source_funds_batch_cli_forwards_target_scope_and_dry_run` | 2 |
+| `source_funds_batch_daemon_preserves_bounded_selection` | 1 |
+
+Two entries initially survived because other validation guards masked them.
+The added unchanged-Python witnesses use a non-self-transfer custody link with
+the wrong target asset and a structural gross that differs while remaining
+within the parent's amount. The expanded baseline and isolated rerun exercise
+the intended guards; the original survivors do not count as kills.
+
+All 31 new mutations are killed without build errors or empty selections; all
+914 catalog entries apply. The expanded native batch test passes all 131 cases,
+and 262 logical helper comparisons retain both-store byte/table/hash parity:
+258 original comparisons plus eight focused checks replace the four earlier
+dry-run response comparisons and add the four new guard witnesses. All twenty
+source-funds Rust tests and 43 CLI/daemon library tests pass. Rust 1.99.1
+locked/offline workspace formatting and reports/CLI/daemon all-target clippy
+with warnings denied pass. The classifier records 5,724 definitions, including
+the two reviewed batch oracles in the serial daemon lane.
+Required final CI preflight passes all 57 tests.
+
+All disposable data, preferences, owner roots, scratch and both Cargo output
+directories remain under the worktree's `target/`, with account `HOME`
+unchanged, eight Cargo jobs and serial verification. Build/data trees are
+removed after summarizing. This is Linux verification without a full workspace,
+frontend, live-regtest or platform/package acceptance claim. There are no new
+dependencies, schema changes or tax rules.
+
+The complete report producer is available at `6e63d400a` on
+`t3code/r5-sof-reads-4` for the next cherry-pick. Its disclosure/projection
+prerequisite `b4df5a9c8` is also absent from this mutation branch and must be
+integrated first. Persisted suggest/assemble,
+source-funds native AI consent/once-only admission and complete case saving
+remain pending at this batch boundary. The Rust shell still has no AI execution
+loop. Case saving needs report/SVG production, fingerprint revalidation and
+writer admission across its callers. PDF rendering and PDF-containing bundles
+remain Python.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

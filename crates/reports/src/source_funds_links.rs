@@ -119,7 +119,7 @@ fn exceeds(amount: &Value, row: &Value) -> Result<bool> {
     Ok(!matches!(amount, Value::Null) && decimal(amount)? > decimal(value(row, "amount"))?)
 }
 
-fn validate(candidate: &Value, from: &Value, source: &Value, to: &Value) -> Result<()> {
+pub(super) fn validate(candidate: &Value, from: &Value, source: &Value, to: &Value) -> Result<()> {
     let fail = |message| Err(AppError::new("validation", message));
     if exceeds(value(candidate, "allocation_amount"), to)? {
         return fail("A source-funds link allocation cannot exceed the target transaction amount.");

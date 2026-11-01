@@ -10329,5 +10329,315 @@
       "source_funds_projection_failures_roll_back_all_112_tables_on_both_stores"
     ],
     "rule": "Response projection failures roll back evidence associations on SQLite and SQLCipher."
+  },
+  {
+    "id": "sof-batch-selected-ids",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": ".is_none_or(|ids| ids.contains(&text(row, \"id\")))",
+    "replace": ".is_none_or(|_ids| true)",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "An explicit preview selection cannot review any additional link, including when empty."
+  },
+  {
+    "id": "sof-batch-selection-bound",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "ids.len() > 500",
+    "replace": "ids.len() > 501",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Batch admission refuses more than 500 supplied link ids before updates."
+  },
+  {
+    "id": "sof-batch-population-denominator",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "population.len()-reviewable.len()",
+    "replace": "considered.len()-reviewable.len()",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Skipped counts retain the entire target population, including unselected suggestions."
+  },
+  {
+    "id": "sof-batch-explicit-policy",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "SET state='reviewed',allocation_policy='explicit',updated_at=?",
+    "replace": "SET state='reviewed',allocation_policy='heuristic',updated_at=?",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Accepting a deterministic batch records an explicit provenance allocation policy."
+  },
+  {
+    "id": "sof-batch-current-count",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "amount(&profile_row, \"last_processed_tx_count\")? != amount(&profile_row, \"active_count\")?",
+    "replace": "false",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Stored custody evidence must match the current active transaction count."
+  },
+  {
+    "id": "sof-batch-current-version",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "amount(&profile_row, \"journal_input_version\")?\n            != amount(&profile_row, \"last_processed_input_version\")?",
+    "replace": "false",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Input-version drift prevents accepting a stale stored custody allocation."
+  },
+  {
+    "id": "sof-batch-processed-marker",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "!truthy(value(&profile_row, \"last_processed_at\"))",
+    "replace": "false",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Missing journal processing cannot establish a current custody projection."
+  },
+  {
+    "id": "sof-batch-rejected-pair",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "AND state='rejected' LIMIT 1",
+    "replace": "AND state='reviewed' LIMIT 1",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "A previously rejected pair remains manual even if re-suggested deterministically."
+  },
+  {
+    "id": "sof-batch-chain-observation",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "|| truthy(value(row, \"uses_chain_observation\"))",
+    "replace": "|| false",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Chain-observation suggestions cannot enter automatic batch review."
+  },
+  {
+    "id": "sof-batch-confidence",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "|| ![\"exact\", \"strong\"].contains(&text(row, \"confidence\").as_str())",
+    "replace": "|| false",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Weak or unknown provenance confidence cannot authorize batch review."
+  },
+  {
+    "id": "sof-batch-allocation",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "*allocation == amount(row, \"allocation_amount\")?",
+    "replace": "true",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Reviewed target msat must equal the current stored custody allocation exactly."
+  },
+  {
+    "id": "sof-batch-gross",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "*gross == amount(row, \"from_allocation_amount\")?",
+    "replace": "true",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Reviewed source msat must equal the current stored custody allocation exactly."
+  },
+  {
+    "id": "sof-batch-asset",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "&& asset(value(row, \"asset\")) == asset(value(to_tx, \"asset\"))",
+    "replace": "&& true",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "A stored custody suggestion must retain the target asset identity."
+  },
+  {
+    "id": "sof-batch-from-asset",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "&& asset(value(row, \"from_asset\")) == asset(value(from_tx, \"asset\"))",
+    "replace": "&& true",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "A stored custody suggestion must retain the upstream asset identity."
+  },
+  {
+    "id": "sof-batch-structural-gross",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "&& pair.gross == amount(row, \"from_allocation_amount\")?",
+    "replace": "&& true",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Structural review re-derives and matches the gross upstream msat."
+  },
+  {
+    "id": "sof-batch-structural-confidence",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "&& text(row, \"confidence\") == \"exact\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Structural input/output lineage requires exact confidence at apply."
+  },
+  {
+    "id": "sof-batch-validation",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "deterministic && source_funds_links::validate(row, from_tx, &Value::Null, to_tx).is_ok()",
+    "replace": "deterministic",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Fresh deterministic evidence still obeys chronology, bounds and same-asset link validation."
+  },
+  {
+    "id": "sof-batch-rejected-frontier",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "AND state!='rejected' ORDER BY created_at ASC,id ASC",
+    "replace": "ORDER BY created_at ASC,id ASC",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Rejected links cannot extend the target-scoped review frontier."
+  },
+  {
+    "id": "sof-batch-excluded-parent",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "WHERE t.profile_id=? AND t.excluded=0 ORDER BY",
+    "replace": "WHERE t.profile_id=? AND t.excluded IN (0,1) ORDER BY",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Excluded observations cannot found a current deterministic review."
+  },
+  {
+    "id": "sof-batch-reconciled-revision",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "AND component.revision=proof.component_revision",
+    "replace": "AND 1=1",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "A retained compressed disclosure needs the current component revision."
+  },
+  {
+    "id": "sof-batch-dry-run",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "ROLLBACK TO source_funds_dry_run; RELEASE source_funds_dry_run",
+    "replace": "RELEASE source_funds_dry_run",
+    "expect_failing": [
+      "source_funds_batch_preserves_outer_work_and_rolls_back_partial_writes"
+    ],
+    "rule": "Dry-run batch responses must leave all tables and caller pending work unchanged."
+  },
+  {
+    "id": "sof-batch-early-commit",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "let mut links = Vec::new();",
+    "replace": "conn.execute_batch(\"COMMIT\").map_err(sql_error)?;\n            let mut links = Vec::new();",
+    "expect_failing": [
+      "source_funds_batch_rolls_back_busy_deferred_and_projection_failures_on_both_stores"
+    ],
+    "rule": "All batch updates roll back when later response projection fails."
+  },
+  {
+    "id": "sof-batch-partial-refusal",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "conn.execute(\"UPDATE source_funds_links SET state='reviewed',allocation_policy='explicit',updated_at=? WHERE id=?\",params![now,text(row,\"id\")]).map_err(sql_error)?;",
+    "replace": "let _ = conn.execute(\"UPDATE source_funds_links SET state='reviewed',allocation_policy='explicit',updated_at=? WHERE id=?\",params![now,text(row,\"id\")]);",
+    "expect_failing": [
+      "source_funds_batch_preserves_outer_work_and_rolls_back_partial_writes"
+    ],
+    "rule": "A statement refusal after an earlier batch update must roll back the complete batch."
+  },
+  {
+    "id": "sof-batch-authority",
+    "file": "crates/reports/src/source_funds_assembly.rs",
+    "find": ".and_then(|v| v[\"authoritative\"].as_bool())",
+    "replace": ".map(|_v| true)",
+    "expect_failing": [
+      "source_funds_batch_pins_eligibility_envelopes_and_all_112_tables"
+    ],
+    "rule": "Only a closed authoritative observation may establish structural lineage."
+  },
+  {
+    "id": "sof-batch-wallet-isolation",
+    "file": "crates/reports/src/source_funds_assembly.rs",
+    "find": "text(&self.rows[i], \"wallet_id\") == current.0",
+    "replace": "true",
+    "expect_failing": [
+      "source_funds_structural_lineage_pins_authority_wallets_change_chains_and_exact_msat"
+    ],
+    "rule": "Ancestor memoization and lookup remain scoped to the requesting wallet."
+  },
+  {
+    "id": "sof-batch-privacy",
+    "file": "crates/reports/src/source_funds_assembly.rs",
+    "find": "if blocked(&rows[i]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_structural_lineage_pins_authority_wallets_change_chains_and_exact_msat"
+    ],
+    "rule": "One privacy-boundary leg blocks every leg of its physical transaction."
+  },
+  {
+    "id": "sof-batch-inventory-veto",
+    "file": "crates/reports/src/source_funds_assembly.rs",
+    "find": "let (wallet, identity) = info.as_ref()?;",
+    "replace": "let fallback = (text(row, \"wallet_id\"), asset(value(row, \"asset\")));\n            let (wallet, identity) = info.as_ref().unwrap_or(&fallback);",
+    "expect_failing": [
+      "source_funds_structural_lineage_pins_authority_wallets_change_chains_and_exact_msat"
+    ],
+    "rule": "Ambiguous inventory is a veto rather than permission to assert provenance."
+  },
+  {
+    "id": "sof-batch-msat-remainder",
+    "file": "crates/reports/src/source_funds_assembly.rs",
+    "find": "result[i] += 1",
+    "replace": "result[i] += 0",
+    "expect_failing": [
+      "source_funds_structural_lineage_pins_authority_wallets_change_chains_and_exact_msat"
+    ],
+    "rule": "Weighted attribution distributes exact integer remainders without losing a millisatoshi."
+  },
+  {
+    "id": "sof-batch-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"source-funds.links.bulk-review\",",
+    "replace": "",
+    "expect_failing": [
+      "source_funds_batch_cli_forwards_target_scope_and_dry_run"
+    ],
+    "rule": "The batch CLI leaf is routed natively rather than falling back."
+  },
+  {
+    "id": "sof-batch-cli-dry-run",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"dry_run\",",
+    "replace": "            \"batch_unused_dry_run\",",
+    "expect_failing": [
+      "source_funds_batch_cli_forwards_target_scope_and_dry_run"
+    ],
+    "rule": "The CLI forwards dry-run authority to the shared batch service."
+  },
+  {
+    "id": "sof-batch-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.links.bulk_review\",",
+    "replace": "",
+    "expect_failing": [
+      "source_funds_batch_daemon_preserves_bounded_selection"
+    ],
+    "rule": "The batch daemon kind is registered through the shared native report adapter."
   }
 ]

@@ -151,7 +151,12 @@ available through the CLI and daemon. They retain the provenance boundary and
 roll back failed writes; native AI consent/once-only
 admission remains pending. The bounded traversal planner is implemented, while
 report production, review/input handoffs, coverage, suggest/assemble dry runs
-and batch review/case saving remain pending. PDF rendering and PDF-containing
+and case saving remain pending. Native batch review revalidates the target's
+suggested links against current stored custody or authoritative, wallet-scoped
+structural lineage under the same write lock as approval. An explicit empty
+selection approves nothing; CLI dry runs return the proposed result and roll
+back every write. Neither path establishes ownership or tax facts.
+PDF rendering and PDF-containing
 bundles remain in Python by the owner's decision; their routes are not
 registered natively.
 
@@ -181,3 +186,9 @@ transaction and rolls that failure back. The synthetic
 records this discrepancy and the reference CLI's unredacted error message;
 Python product behavior is unchanged. This corrupt-record path is excluded
 from process parity acceptance and is tested separately for native rollback.
+
+Batch review has the same Python post-commit response-projection discrepancy.
+The synthetic [batch reproduction](../../crates/reports/scripts/repro_python_source_funds_batch_projection_commit.py)
+records it on both database bindings. Native batch admission retains all updates
+and response projection in one transaction and rolls back the entire batch on
+failure; Python product behavior is unchanged.

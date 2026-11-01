@@ -40,6 +40,7 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.links.create",
     "source-funds.links.review",
     "source-funds.links.attach",
+    "source-funds.links.bulk-review",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -109,6 +110,7 @@ fn source_funds_request(args: &Namespace) -> Value {
             "uses_chain_observation",
             "chain_data_confirmed",
             "link",
+            "dry_run",
         ]
         .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null)))
         .into_iter()
@@ -508,6 +510,46 @@ mod tests {
         }
         fn close(&mut self) -> Result<(), AppError> {
             unreachable!()
+        }
+    }
+    #[test]
+    fn source_funds_batch_cli_forwards_target_scope_and_dry_run() {
+        let command = "source-funds.links.bulk-review";
+        assert!(COMMANDS.contains(&command));
+        assert!(crate::describe::IMPLEMENTED.contains(&command));
+        for dry_run in [false, true] {
+            let mut argv = vec![
+                "source-funds",
+                "links",
+                "bulk-review",
+                "--target-transaction",
+                "out",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ];
+            if dry_run {
+                argv.push("--dry-run")
+            }
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let result = execute(&mut SourceFundsCapture, command, &args).unwrap();
+            let payload = get(&result, "args").unwrap();
+            for (key, expected) in [
+                ("target_transaction", "out"),
+                ("workspace", "Main"),
+                ("profile", "Book"),
+            ] {
+                assert_eq!(get(payload, key), Some(&kassiber_envelope::s(expected)));
+            }
+            assert_eq!(get(payload, "dry_run"), Some(&Value::Bool(dry_run)));
         }
     }
     #[test]

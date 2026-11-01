@@ -1422,6 +1422,28 @@ and complete case saving remain pending. The native AI execution loop and
 report/diagram/fingerprint producer are still unavailable at this checkpoint.
 There are no new routes, dependencies, lockfiles, schemas or tax rules.
 
+### R5 source-funds batch-review continuation (partial)
+
+The native CLI and daemon now approve bounded, target-scoped deterministic
+suggestions under writer admission. Eligibility rechecks current custody
+projections or authoritative wallet-scoped structural lineage; empty selections,
+rejected pairs, privacy boundaries, stale versions and ambiguous quantities
+grant no approval. CLI dry runs restore all state and retain their response
+marker. Provenance never grants ownership or tax authority.
+
+The 131-case batch oracle and 21 structural vectors pin exact responses, all
+112 tables, unchanged evidence hashes and late rollback on SQLite and SQLCipher.
+Transport checks require zero fallbacks, and 31 named mutations cover admission,
+eligibility, exact-msat lineage and adapters. Python's batch post-commit
+projection bug has a separate reproduction and stronger native rollback test.
+See the [batch checkpoint](../reference/rust-shell.md#source-funds-batch-review-checkpoint-r5-partial).
+
+The inventory becomes 166 CLI leaves and fourteen source-funds daemon kinds.
+Persisted suggest/assemble, native AI consent/once-only execution and complete
+case saving remain pending. The report producer is now available on the reads
+branch for the next cherry-pick. PDF rendering and PDF-containing bundles remain
+Python; dependencies, schema and tax rules are unchanged.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

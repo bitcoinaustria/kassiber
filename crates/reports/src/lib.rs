@@ -35,6 +35,8 @@ mod platform_csv;
 mod privacy_hygiene;
 mod snapshot_write;
 mod snapshots;
+mod source_funds_assembly;
+pub mod source_funds_batch;
 pub mod source_funds_cases;
 pub mod source_funds_links;
 pub mod source_funds_mutations;
@@ -126,6 +128,9 @@ pub fn execute_with_sources(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    if source_funds_batch::handles(command) {
+        return source_funds_batch::execute(conn, command, args, sources);
+    }
     if source_funds_recipients::handles(command) {
         return source_funds_recipients::execute(conn, command, args, sources);
     }

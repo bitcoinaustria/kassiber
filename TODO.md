@@ -514,9 +514,13 @@ registers them; exit-tax preserves its reference no-registration boundary.
   Compare all 112 tables and attachment hashes on SQLite and SQLCipher, prove
   late rollback and zero transport fallback, and kill named mutations. See the
   [link checkpoint](docs/reference/rust-shell.md#source-funds-link-mutation-checkpoint-r5-partial).
-- [ ] Complete source-funds case saving and batch review
-  (including persisted suggest/assemble) in separate verified
-  commits on `t3code/r5-sof-mutations-3`. Preserve consent, once-only execution
+- [x] Port deterministic source-funds batch review through CLI and daemon.
+  Revalidate scoped selections under write admission, preserve CLI dry runs,
+  compare all 112 tables and attachment hashes on SQLite/SQLCipher, prove late
+  rollback and zero transport fallback, and kill named mutations. Native AI
+  admission remains separate.
+- [ ] Complete source-funds case saving and persisted suggest/assemble in separate
+  verified commits on `t3code/r5-sof-mutations-4`. Preserve consent, once-only execution
   and SQLite/SQLCipher rollback.
   A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
   now prepares the two-row case/snapshot write; full case saving still needs the
