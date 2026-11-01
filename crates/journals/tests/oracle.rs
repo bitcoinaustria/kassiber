@@ -11,15 +11,16 @@ fn corpus(group: &str) {
             boundary::ledger_response(&c["response"])
         };
         let mut ids = c["entry_ids"].as_array().unwrap().iter();
-        let state = response.and_then(|r| {
-            boundary::build(
+        let state = match &response {
+            Ok(r) => boundary::build(
                 &c["profile"],
                 &c["custody"],
                 c["wallets"].as_array().unwrap(),
-                &r,
+                r,
                 || ids.next().unwrap().as_str().unwrap().to_owned(),
-            )
-        });
+            ),
+            Err(error) => Err(error.clone()),
+        };
         match state {
             Ok(state) => {
                 assert_eq!(

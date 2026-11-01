@@ -3011,8 +3011,10 @@ meets the earlier wall-clock render budgets. The
 [boundary continuation](../reference/r4-journal-render-boundary-checkpoint.md)
 repairs integer refusals, holding keys and nonfinite detail/summary values.
 R4-11 remains incomplete: lossless native scalar fidelity, exhaustive
-rendering/join mutations, full inherited campaign gates and the final CPU
-targets still need completion.
+rendering/join mutations and full inherited campaign gates still need completion.
+The [borrowed-pricing continuation](../reference/r4-journal-render-boundary-checkpoint.md#sixth-continuation-borrowed-pricing-and-entry-identities)
+meets the isolated 0.15 s render-and-join CPU budget on both 20k books; final
+fidelity and integration changes require a fresh measurement.
 
 ### R5 pairing command checkpoint
 

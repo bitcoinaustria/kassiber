@@ -27,6 +27,38 @@ fn fixed(d: &Decimal) -> Result<Cow<'static, str>, Refusal> {
     if d.is_zero() && d.exponent() >= 0 {
         return Ok(Cow::Borrowed(if d.is_sign_negative() { "-0" } else { "0" }));
     }
+    if let Some(coefficient) = d
+        .coefficient_u128()
+        .filter(|_| (-64..=64).contains(&d.exponent()))
+    {
+        use std::fmt::Write;
+        let exponent = d.exponent();
+        let digits = d.adjusted() - exponent + 1;
+        let integer_digits = digits + exponent;
+        let padding = if exponent >= 0 {
+            exponent
+        } else {
+            (-integer_digits).max(0)
+        };
+        let mut text = String::with_capacity((digits + padding + 3) as usize);
+        if d.is_sign_negative() {
+            text.push('-');
+        }
+        if exponent < 0 && integer_digits <= 0 {
+            text.push_str("0.");
+            text.extend(std::iter::repeat_n('0', padding as usize));
+        }
+        write!(&mut text, "{coefficient}").expect("String formatting");
+        if exponent >= 0 {
+            text.extend(std::iter::repeat_n('0', padding as usize));
+        } else if integer_digits > 0 {
+            text.insert(
+                usize::from(d.is_sign_negative()) + integer_digits as usize,
+                '.',
+            );
+        }
+        return Ok(Cow::Owned(text));
+    }
     Ok(Cow::Owned(d.to_fixed_string()?))
 }
 fn float(d: &Decimal) -> f64 {
@@ -113,7 +145,8 @@ fn required<'a>(row: &'a Value, key: &str) -> Result<&'a Value, Refusal> {
         };
         return Err(Refusal::new("TypeError", message));
     }
-    row.get(key)
+    row.as_object()
+        .and_then(|fields| fields.get(key))
         .ok_or_else(|| Refusal::new("KeyError", format!("'{key}'")))
 }
 fn row_key(value: &Value) -> Cow<'_, str> {
@@ -127,12 +160,23 @@ fn lookup<'a>(map: &HashMap<Cow<'_, str>, &'a Value>, id: &str) -> Result<&'a Va
         .copied()
         .ok_or_else(|| Refusal::new("KeyError", format!("'{id}'")))
 }
+fn pricing_fields(row: &Value) -> [&Value; 12] {
+    row.as_object()
+        .map(|fields| {
+            std::array::from_fn(|i| {
+                fields
+                    .get(FRAGMENT_PRICING_FIELDS[i])
+                    .unwrap_or(&Value::Null)
+            })
+        })
+        .unwrap_or([&Value::Null; 12])
+}
 fn decimal_text(s: &str) -> Result<Decimal, Refusal> {
     s.parse::<Decimal>().map_err(Refusal::from)
 }
 
-pub struct LedgerState {
-    pub entries: Vec<JournalEntryRow>,
+pub struct LedgerState<'i> {
+    pub entries: Vec<JournalEntryRow<'i>>,
     pub quarantines: Vec<QuarantineRow>,
     pub intra_audit: Vec<Value>,
     pub tax_summary: Vec<TaxSummaryRow>,
@@ -147,17 +191,18 @@ pub struct LedgerInputs<'a> {
     pub wallets: &'a [Value],
     pub direct_payout_records: &'a [Value],
 }
-struct Reader<'a, 'r> {
-    inputs: &'a LedgerInputs<'a>,
+struct Reader<'a, 'i> {
+    inputs: &'a LedgerInputs<'i>,
+    original_rows: &'i [Value],
     rows: HashMap<Cow<'a, str>, usize>,
     row_values: Vec<&'a Value>,
-    labels: HashMap<Cow<'a, str>, &'a Value>,
+    labels: HashMap<Cow<'i, str>, &'i Value>,
     iso: HashMap<String, String>,
     utc_dates: HashMap<String, bool>,
-    sources: Vec<Option<std::sync::Arc<SourceProvenance>>>,
-    source_values: Vec<Option<SourceValue<'r>>>,
-    heads: HashMap<usize, HeadValues<'a>>,
-    method: Option<String>,
+    sources: Vec<Option<std::sync::Arc<SourceProvenance<'i>>>>,
+    source_values: Vec<Option<SourceValue<'i>>>,
+    heads: HashMap<usize, HeadValues<'i>>,
+    method: Option<Cow<'i, str>>,
 }
 struct HeadValues<'a> {
     wallet_id: &'a Value,
@@ -165,13 +210,13 @@ struct HeadValues<'a> {
     workspace_id: &'a Value,
     account_id: &'a Value,
 }
-struct SourceValue<'r> {
-    spot: &'r Decimal,
-    fee: &'r Decimal,
-    crypto: &'r Decimal,
-    source: std::sync::Arc<Source>,
+struct SourceValue<'i> {
+    spot: &'i Decimal,
+    fee: &'i Decimal,
+    crypto: &'i Decimal,
+    source: std::sync::Arc<Source<'i>>,
 }
-impl<'a, 'r> Reader<'a, 'r> {
+impl<'a, 'i> Reader<'a, 'i> {
     fn iso(&mut self, raw: &Value) -> Result<String, Refusal> {
         if raw.is_array() || raw.is_object() {
             let kind = if raw.is_array() { "list" } else { "dict" };
@@ -199,13 +244,16 @@ impl<'a, 'r> Reader<'a, 'r> {
                 && &s[14..16] < "60"
                 && &s[17..19] < "60"
             {
-                let valid = *self.utc_dates.entry(s[..10].into()).or_insert_with(|| {
-                    kassiber_custody::ledger_request::timestamp_fields(&json!(format!(
-                        "{}T00:00:00Z",
-                        &s[..10]
-                    )))["iso"]
-                        .is_string()
-                });
+                let valid = if let Some(valid) = self.utc_dates.get(&s[..10]) {
+                    *valid
+                } else {
+                    let valid = kassiber_custody::ledger_request::timestamp_fields(&json!(
+                        format!("{}T00:00:00Z", &s[..10])
+                    ))["iso"]
+                        .is_string();
+                    self.utc_dates.insert(s[..10].into(), valid);
+                    valid
+                };
                 if valid {
                     return Ok(format!("{}+00:00", &s[..19]));
                 }
@@ -225,12 +273,12 @@ impl<'a, 'r> Reader<'a, 'r> {
     }
     fn source(
         &mut self,
-        asset: &str,
-        id: &str,
-        spot: &'r Decimal,
-        fee: &'r Decimal,
-        crypto: &'r Decimal,
-    ) -> Result<std::sync::Arc<Source>, Refusal> {
+        asset: &'i str,
+        id: &'i str,
+        spot: &'i Decimal,
+        fee: &'i Decimal,
+        crypto: &'i Decimal,
+    ) -> Result<std::sync::Arc<Source<'i>>, Refusal> {
         let slot = self.rows.get(id).copied();
         if let Some(cached) = slot.and_then(|slot| self.source_values[slot].as_ref()) {
             if cached.source.asset == asset
@@ -247,22 +295,21 @@ impl<'a, 'r> Reader<'a, 'r> {
             let row = slot
                 .map(|slot| self.row_values[slot])
                 .unwrap_or(&Value::Null);
-            let iso = self.iso(&row["occurred_at"])?;
-            let pricing = if let Some(fields) = row.as_object() {
-                std::array::from_fn(|i| {
-                    fields
-                        .get(FRAGMENT_PRICING_FIELDS[i])
-                        .unwrap_or(&Value::Null)
-                        .clone()
-                })
+            let iso = self.iso(field(row, "occurred_at"))?;
+            let pricing = if let Some(original) = slot
+                .and_then(|slot| self.original_rows.get(slot))
+                .filter(|original| std::ptr::eq(*original, row))
+            {
+                PricingFacts::Borrowed(pricing_fields(original))
             } else {
-                std::array::from_fn(|_| Value::Null)
+                PricingFacts::Owned(Box::new(pricing_fields(row).map(Clone::clone)))
             };
             let provenance = std::sync::Arc::new(SourceProvenance {
-                transaction_id: fallback(&row["journal_transaction_id"], &row["id"]).clone(),
-                engine_event_id: id.into(),
+                transaction_id: fallback(field(row, "journal_transaction_id"), field(row, "id"))
+                    .clone(),
+                engine_event_id: Cow::Borrowed(id),
                 occurred_at: iso,
-                pricing: PricingFacts(pricing),
+                pricing,
             });
             if let Some(slot) = slot {
                 self.sources[slot] = Some(provenance.clone());
@@ -272,7 +319,7 @@ impl<'a, 'r> Reader<'a, 'r> {
         let amount = fragment_msat(crypto)?;
         let source = std::sync::Arc::new(Source {
             provenance,
-            asset: asset.into(),
+            asset: Cow::Borrowed(asset),
             spot_price_exact: fixed(spot)?,
             fiat_fee_exact: fixed(fee)?,
             crypto_fee_msat_exact: if amount.as_i64() == Some(0) {
@@ -292,7 +339,7 @@ impl<'a, 'r> Reader<'a, 'r> {
         }
         Ok(source)
     }
-    fn fragment(&mut self, asset: &str, f: &'r FragmentOut) -> Result<Fragment, Refusal> {
+    fn fragment(&mut self, asset: &'i str, f: &'i FragmentOut) -> Result<Fragment<'i>, Refusal> {
         let amount = fragment_msat(&f.crypto_amount.0)?;
         let acquired = f
             .lot
@@ -344,12 +391,12 @@ impl<'a, 'r> Reader<'a, 'r> {
     }
     fn head(
         &mut self,
-        wallet: &'a Value,
+        wallet: &'i Value,
         row: &Value,
         fallback_id: &str,
         occurred_at: Value,
         ids: &mut impl FnMut() -> String,
-    ) -> Result<JournalEntryRow, Refusal> {
+    ) -> Result<JournalEntryRow<'i>, Refusal> {
         let key = wallet as *const Value as usize;
         let (head, id) = match self.heads.entry(key) {
             std::collections::hash_map::Entry::Occupied(head) => (head.into_mut(), ids()),
@@ -374,32 +421,34 @@ impl<'a, 'r> Reader<'a, 'r> {
         Ok(Self::entry_head(head, row, fallback_id, occurred_at, id))
     }
     fn entry_head(
-        head: &HeadValues<'_>,
+        head: &HeadValues<'i>,
         row: &Value,
         fallback_id: &str,
         occurred_at: Value,
         id: String,
-    ) -> JournalEntryRow {
+    ) -> JournalEntryRow<'i> {
         JournalEntryRow {
             id,
-            workspace_id: head.workspace_id.clone(),
-            profile_id: head.profile_id.clone(),
-            transaction_id: json!(row
-                .get("journal_transaction_id")
-                .map(string)
-                .unwrap_or_else(|| fallback_id.into())),
-            wallet_id: head.wallet_id.clone(),
-            account_id: head.account_id.clone(),
+            workspace_id: head.workspace_id,
+            profile_id: head.profile_id,
+            transaction_id: Value::String(
+                row.as_object()
+                    .and_then(|fields| fields.get("journal_transaction_id"))
+                    .map(string)
+                    .unwrap_or_else(|| fallback_id.into()),
+            ),
+            wallet_id: head.wallet_id,
+            account_id: head.account_id,
             occurred_at,
             entry_type: "acquisition",
-            asset: String::new(),
+            asset: Cow::Borrowed(""),
             quantity: zero(),
             fiat_value: zero(),
             unit_cost: zero(),
             cost_basis: None,
             proceeds: None,
             gain_loss: None,
-            description: String::new(),
+            description: Cow::Borrowed(""),
             at_category: None,
             at_kennzahl: None,
             capital_gains_type: None,
@@ -413,7 +462,7 @@ impl<'a, 'r> Reader<'a, 'r> {
         self.row(id)
             .ok_or_else(|| Refusal::new("KeyError", format!("'{id}'")))
     }
-    fn wallet(&self, label: &str) -> Result<&'a Value, Refusal> {
+    fn wallet(&self, label: &str) -> Result<&'i Value, Refusal> {
         self.labels.get(label).copied().ok_or_else(|| {
             let mut e = Refusal::new(
                 "AppError",
@@ -425,11 +474,11 @@ impl<'a, 'r> Reader<'a, 'r> {
     }
     fn entry(
         &mut self,
-        item: &'r EntryOut,
+        item: &'i EntryOut,
         audits: &[Value],
-        response: &LedgerResponse,
+        response: &'i LedgerResponse,
         ids: &mut impl FnMut() -> String,
-    ) -> Result<JournalEntryRow, Refusal> {
+    ) -> Result<JournalEntryRow<'i>, Refusal> {
         match item {
             EntryOut::Acquisition(a) => {
                 let row = self.row(&a.row).unwrap_or(&Value::Null);
@@ -440,11 +489,11 @@ impl<'a, 'r> Reader<'a, 'r> {
                     required(row, "occurred_at")?.clone(),
                     ids,
                 )?;
-                e.asset = a.asset.clone();
+                e.asset = Cow::Borrowed(&a.asset);
                 e.quantity = jd(&a.quantity);
                 e.fiat_value = jd(&a.fiat_value);
                 e.unit_cost = jd(&a.unit_cost);
-                e.description = a.description.clone();
+                e.description = Cow::Borrowed(&a.description);
                 Ok(e)
             }
             EntryOut::Realized(a) => {
@@ -457,13 +506,13 @@ impl<'a, 'r> Reader<'a, 'r> {
                     ids,
                 )?;
                 e.entry_type = a.entry_type.as_str();
-                e.asset = a.asset.clone();
+                e.asset = Cow::Borrowed(&a.asset);
                 e.quantity = jd(&a.quantity);
                 e.fiat_value = jd(&a.proceeds);
                 e.cost_basis = Some(jd(&a.cost_basis));
                 e.proceeds = Some(jd(&a.proceeds));
                 e.gain_loss = Some(jd(&a.gain_loss));
-                e.description = a.description.clone();
+                e.description = Cow::Borrowed(&a.description);
                 e.at_category = a.at_category.clone();
                 e.at_kennzahl = a.at_category.as_ref().map(|c| match c.as_str() {
                     "income_general" | "income_capital_yield" => Some(172),
@@ -478,9 +527,11 @@ impl<'a, 'r> Reader<'a, 'r> {
                     .get_or_insert_with(|| {
                         let method = &self.inputs.profile["gains_algorithm"];
                         if method.is_null() {
-                            String::new()
+                            Cow::Borrowed("")
+                        } else if let Some(method) = method.as_str() {
+                            Cow::Borrowed(kassiber_pytext::strip(method))
                         } else {
-                            kassiber_pytext::strip(&string(method)).into()
+                            Cow::Owned(kassiber_pytext::strip(&string(method)).into())
                         }
                     })
                     .clone();
@@ -488,11 +539,13 @@ impl<'a, 'r> Reader<'a, 'r> {
                     schema_version: 1,
                     engine: "kassiber_tax",
                     method,
-                    fragments: a
-                        .fragments
-                        .iter()
-                        .map(|f| self.fragment(&a.asset, f))
-                        .collect::<Result<_, _>>()?,
+                    fragments: {
+                        let mut fragments = Vec::with_capacity(a.fragments.len());
+                        for fragment in &a.fragments {
+                            fragments.push(self.fragment(&a.asset, fragment)?);
+                        }
+                        fragments
+                    },
                 });
                 Ok(e)
             }
@@ -522,9 +575,9 @@ impl<'a, 'r> Reader<'a, 'r> {
                     .expect("audit float"),
                 ))?;
                 e.entry_type = a.entry_type.as_str();
-                e.asset = string(&audit["asset"]);
+                e.asset = Cow::Owned(string(&audit["asset"]));
                 e.quantity = JournalDecimal(if outbound { qty.neg(&CTX)? } else { qty });
-                e.description = response.intra_audit[a.audit].description.clone();
+                e.description = Cow::Borrowed(&response.intra_audit[a.audit].description);
                 Ok(e)
             }
         }
@@ -532,19 +585,18 @@ impl<'a, 'r> Reader<'a, 'r> {
 }
 
 /// Render the typed engine result; no JSON serialization on the per-entry path.
-pub fn render_ledger(
-    inputs: &LedgerInputs<'_>,
-    response: &LedgerResponse,
+pub fn render_ledger<'i>(
+    inputs: &LedgerInputs<'i>,
+    response: &'i LedgerResponse,
     mut ids: impl FnMut() -> String,
-) -> Result<LedgerState, Refusal> {
+) -> Result<LedgerState<'i>, Refusal> {
     let span = kassiber_custody::timing::span("render.inputs");
     let mut carried = HashMap::new();
     let mut row_values: Vec<_> = array(&inputs.projection["rows"]).iter().collect();
-    let rows: HashMap<_, _> = row_values
-        .iter()
-        .enumerate()
-        .map(|(slot, row)| Ok((row_key(required(row, "id")?), slot)))
-        .collect::<Result<_, Refusal>>()?;
+    let mut rows = HashMap::with_capacity(row_values.len());
+    for (slot, row) in row_values.iter().enumerate() {
+        rows.insert(row_key(required(row, "id")?), slot);
+    }
     for carry in &response.carried_rows {
         let row = carried.entry(carry.row.clone()).or_insert_with(|| {
             rows.get(carry.row.as_str())
@@ -592,6 +644,7 @@ pub fn render_ledger(
         .collect();
     let mut reader = Reader {
         inputs,
+        original_rows: array(&inputs.projection["rows"]),
         rows,
         row_values,
         labels,
@@ -611,11 +664,10 @@ pub fn render_ledger(
         .collect::<Result<Vec<_>, _>>()?;
     drop(span);
     let span = kassiber_custody::timing::span("render.entries");
-    let entries = response
-        .entries
-        .iter()
-        .map(|e| reader.entry(e, &audits, response, &mut ids))
-        .collect::<Result<_, _>>()?;
+    let mut entries = Vec::with_capacity(response.entries.len());
+    for entry in &response.entries {
+        entries.push(reader.entry(entry, &audits, response, &mut ids)?);
+    }
     drop(span);
     let span = kassiber_custody::timing::span("render.quarantine_holdings");
     let (account_holdings, wallet_holdings) = holdings(&response.holdings, &reader.labels)?;
@@ -1021,6 +1073,49 @@ mod tests {
                 expected,
                 "{input}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod fixed_tests {
+    use super::*;
+
+    #[test]
+    fn fixed_point_text_matches_decimal_formatting() {
+        let mut coefficient = 0u128;
+        for index in 0..200 {
+            for exponent in [-65, -64, -39, -20, -2, -1, 0, 1, 20, 64, 65] {
+                for sign in ["", "-"] {
+                    let value = Decimal::from_canonical(&format!("{sign}{coefficient}E{exponent}"))
+                        .unwrap();
+                    assert_eq!(
+                        fixed(&value).unwrap(),
+                        value.to_fixed_string().unwrap(),
+                        "{value}"
+                    );
+                }
+            }
+            coefficient = if index == 0 {
+                u128::MAX
+            } else {
+                coefficient
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407)
+            };
+        }
+        for operand in [
+            "10000000000000000000000000000000000000000E-39",
+            "-0E-100",
+            "0E100",
+            "1E-100000002",
+            "1E100000001",
+        ] {
+            let value = Decimal::from_canonical(operand).unwrap();
+            match value.to_fixed_string() {
+                Ok(expected) => assert_eq!(fixed(&value).unwrap(), expected),
+                Err(expected) => assert_eq!(fixed(&value).unwrap_err().family, expected.name()),
+            }
         }
     }
 }

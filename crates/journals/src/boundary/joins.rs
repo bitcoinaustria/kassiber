@@ -76,16 +76,19 @@ pub(super) fn differences(
     let mut canonical = BTreeMap::<_, BalanceSum>::new();
     let mut named = BTreeMap::<_, BTreeSet<String>>::new();
     for posting in array(&projection["postings"]) {
-        if posting["location_kind"] != "wallet" {
+        if *field(posting, "location_kind") != "wallet" {
             continue;
         }
-        let key = (text(&posting["location_id"]), text(&posting["asset"]));
+        let key = (
+            text(field(posting, "location_id")),
+            text(field(posting, "asset")),
+        );
         canonical
             .entry(key.clone())
             .or_default()
-            .add(&posting["amount_msat"])?;
+            .add(field(posting, "amount_msat"))?;
         if let Some(observation) = (!observations.is_empty())
-            .then(|| observations.get(&text(&posting["observation_hash"])))
+            .then(|| observations.get(&text(field(posting, "observation_hash"))))
             .flatten()
         {
             let reason = &reasons[text(&observation["transaction_id"]).as_ref()];
@@ -203,8 +206,8 @@ pub(super) fn ownership_review(
         // Python still converts every inbound amount before selecting sources.
         // Retain those conversions even when no quarantine can produce a card.
         for row in rows {
-            if row["direction"] == "inbound" {
-                let amount = &row["amount"];
+            if *field(row, "direction") == "inbound" {
+                let amount = field(row, "amount");
                 if amount.as_i64().is_none() && amount.as_u64().is_none() {
                     let _ = int(amount)?;
                 }

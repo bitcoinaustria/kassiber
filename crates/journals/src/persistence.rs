@@ -262,7 +262,7 @@ fn store<O: storage::WriteObserver>(
             quantity::key(&e.transaction_id),
             quantity::key(&e.wallet_id),
             e.entry_type,
-            e.asset.as_str(),
+            e.asset.as_ref(),
         );
         let ordinal = ordinals.entry(key.clone()).or_insert(0usize);
         let id = storage::journal_entry_id(&pid, &key.0, &key.1, key.2, key.3, *ordinal)?;

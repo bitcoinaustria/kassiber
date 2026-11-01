@@ -15,23 +15,23 @@ impl Serialize for JournalDecimal {
     }
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct JournalEntryRow {
+pub struct JournalEntryRow<'a> {
     pub id: String,
-    pub workspace_id: Value,
-    pub profile_id: Value,
+    pub workspace_id: &'a Value,
+    pub profile_id: &'a Value,
     pub transaction_id: Value,
-    pub wallet_id: Value,
-    pub account_id: Value,
+    pub wallet_id: &'a Value,
+    pub account_id: &'a Value,
     pub occurred_at: Value,
     pub entry_type: &'static str,
-    pub asset: String,
+    pub asset: Cow<'a, str>,
     pub quantity: JournalDecimal,
     pub fiat_value: JournalDecimal,
     pub unit_cost: JournalDecimal,
     pub cost_basis: Option<JournalDecimal>,
     pub proceeds: Option<JournalDecimal>,
     pub gain_loss: Option<JournalDecimal>,
-    pub description: String,
+    pub description: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at_category: Option<String>,
     // Some(None) preserves the explicit null written for unmapped categories.
@@ -40,14 +40,14 @@ pub struct JournalEntryRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capital_gains_type: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub calculation: Option<Calculation>,
+    pub calculation: Option<Calculation<'a>>,
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct Calculation {
+pub struct Calculation<'a> {
     pub schema_version: u32,
     pub engine: &'static str,
-    pub method: String,
-    pub fragments: Vec<Fragment>,
+    pub method: Cow<'a, str>,
+    pub fragments: Vec<Fragment<'a>>,
 }
 #[derive(Clone, Debug, Serialize, PartialEq, Eq, Hash)]
 #[serde(untagged)]
@@ -90,7 +90,7 @@ impl std::fmt::Display for JournalMsat {
     }
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct Fragment {
+pub struct Fragment<'a> {
     pub quantity_msat: JournalMsat,
     pub quantity_msat_exact: String,
     pub cost_basis_exact: Cow<'static, str>,
@@ -102,44 +102,44 @@ pub struct Fragment {
     pub acquisition_quantity_msat: Option<JournalMsat>,
     pub acquisition_quantity_msat_exact: Option<String>,
     #[serde(serialize_with = "serialize_source")]
-    pub event: std::sync::Arc<Source>,
+    pub event: std::sync::Arc<Source<'a>>,
     #[serde(serialize_with = "serialize_optional_source")]
-    pub lot: Option<std::sync::Arc<Source>>,
+    pub lot: Option<std::sync::Arc<Source<'a>>>,
 }
 fn serialize_source<S: Serializer>(
-    source: &std::sync::Arc<Source>,
+    source: &std::sync::Arc<Source<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     source.as_ref().serialize(serializer)
 }
 fn serialize_optional_source<S: Serializer>(
-    source: &Option<std::sync::Arc<Source>>,
+    source: &Option<std::sync::Arc<Source<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     source.as_deref().serialize(serializer)
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct Source {
+pub struct Source<'a> {
     #[serde(flatten, serialize_with = "serialize_provenance")]
-    pub provenance: std::sync::Arc<SourceProvenance>,
-    pub asset: String,
+    pub provenance: std::sync::Arc<SourceProvenance<'a>>,
+    pub asset: Cow<'a, str>,
     pub spot_price_exact: Cow<'static, str>,
     pub fiat_fee_exact: Cow<'static, str>,
     pub crypto_fee_msat: JournalMsat,
     pub crypto_fee_msat_exact: Cow<'static, str>,
 }
 fn serialize_provenance<S: Serializer>(
-    provenance: &std::sync::Arc<SourceProvenance>,
+    provenance: &std::sync::Arc<SourceProvenance<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     provenance.as_ref().serialize(serializer)
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct SourceProvenance {
+pub struct SourceProvenance<'a> {
     pub transaction_id: Value,
-    pub engine_event_id: String,
+    pub engine_event_id: Cow<'a, str>,
     pub occurred_at: String,
-    pub pricing: PricingFacts,
+    pub pricing: PricingFacts<'a>,
 }
 pub const FRAGMENT_PRICING_FIELDS: [&str; 12] = [
     "fiat_currency",
@@ -156,13 +156,25 @@ pub const FRAGMENT_PRICING_FIELDS: [&str; 12] = [
     "pricing_method",
 ];
 #[derive(Clone, Debug)]
-pub struct PricingFacts(pub [Value; 12]);
-impl Serialize for PricingFacts {
+pub enum PricingFacts<'a> {
+    Borrowed([&'a Value; 12]),
+    Owned(Box<[Value; 12]>),
+}
+impl Serialize for PricingFacts<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
         let mut map = serializer.serialize_map(Some(12))?;
-        for (key, value) in FRAGMENT_PRICING_FIELDS.iter().zip(&self.0) {
-            map.serialize_entry(key, value)?;
+        match self {
+            Self::Borrowed(values) => {
+                for (key, value) in FRAGMENT_PRICING_FIELDS.iter().zip(values) {
+                    map.serialize_entry(key, *value)?;
+                }
+            }
+            Self::Owned(values) => {
+                for (key, value) in FRAGMENT_PRICING_FIELDS.iter().zip(values.iter()) {
+                    map.serialize_entry(key, value)?;
+                }
+            }
         }
         map.end()
     }
@@ -214,7 +226,7 @@ pub struct Holdings {
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct JournalState<'a> {
-    pub entries: Vec<JournalEntryRow>,
+    pub entries: Vec<JournalEntryRow<'a>>,
     pub quarantines: Vec<QuarantineRow>,
     pub cross_asset_pairs: &'a Value,
     pub direct_swap_payouts: Value,

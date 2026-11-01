@@ -88,6 +88,13 @@ impl From<kassiber_pydecimal::DecimalError> for Refusal {
 pub(crate) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
+#[inline]
+pub(crate) fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
+    match value {
+        Value::Object(fields) => fields.get(key).unwrap_or(&Value::Null),
+        _ => &Value::Null,
+    }
+}
 pub(crate) fn string(value: &Value) -> String {
     kassiber_custody::codec::pystr(value)
 }

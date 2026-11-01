@@ -466,3 +466,121 @@ references, serialization and refusal order against the frozen witnesses.
 Mutation and verification build trees are removed after summarizing their logs.
 No push, pull request or external comment is performed. Python retains
 production accounting authority.
+
+## Sixth continuation: borrowed pricing and entry identities
+
+This local continuation starts at `4656ef30e` on `t3code/r4-11-render-6`.
+**R4-11 remains unaccepted.** This verified speed boundary meets the isolated
+render-and-join CPU budget. Scalar fidelity, exhaustive branch mutations and
+integrated acceptance campaigns remain open.
+
+### Requirement and implementation
+
+The renderer must preserve complete state bytes, Decimal representations,
+fallible conversions and UUID consumption while meeting 0.15 s process CPU on
+both 20k books. The inherited evidence index and captured operands were recovered
+from `/home/tg/.t3/worktrees/kassiber/t3-6d875b3a/target/r4-render-5/` and copied
+into this worktree's `target/r4-render-6/` before measuring the inherited probes.
+
+Ordinary source pricing retains twelve references selected during rendering.
+Carried rows retain owned pricing values; pointer identity prevents substituting
+pre-carry facts. Serialization only encodes those selected values. Entry identity
+fields borrow validated profile and wallet records. Entry/source strings borrow
+the immutable engine response; calculation methods borrow stripped profile
+strings, preserving Python stringification for other values. The returned
+`LedgerState`, entry/source models and `JournalState` retain the input and engine
+response lifetime through serialization and persistence. `render_ledger` and
+`boundary::finish` keep their call shapes; the temporary `LedgerInputs` wrapper
+need not outlive the result. The oracle caller now keeps its decoded response
+alive rather than moving it into a closure.
+
+Row indexes, entries and fragments reserve their known sizes before ordered
+construction. Date-cache hits borrow their keys. A machine-width fixed-point
+formatter writes directly into its final string, using a read-only u128 Decimal
+coefficient accessor. It preserves negative zero, every fractional place and
+wide/exotic fallback behavior. A differential test compares 4,405 signed,
+full-width, exponent and refusal operands with the established Decimal formatter.
+No arithmetic, rounding, input validation or tax decision changes.
+
+A 500-sample profile contains 327 samples within `boundary::build`; 171 of those
+include JSON string-key indexing. Hot reads now use direct map access, preserving
+null on missing/non-object optional fields and the existing required-field
+refusals. Entry transaction ids construct their JSON string directly rather than
+serializing a temporary String. No dependency, lockfile, Python product source,
+command registration or external I/O changes.
+
+### Controlled CPU verification
+
+The first five-pair measurement pins the inherited probes to CPU 0 and verifies
+complete state bytes. The inherited final renderer gives 0.131090 s generic and
+0.173923 s multi-wallet CPU; the latter still fails. One-minute load ranges from
+6.77 to 10.26 during those samples.
+
+The final candidate uses Rust 1.99.1, offline Cargo, eight build jobs and
+`--release --features timing`, matching the inherited final probe's flags. Both
+probes match complete canonical state bytes before five alternating pairs on
+CPU 0. Decoding, serialization, persistence and destruction of the completed
+state remain outside both build spans; all field selection remains inside.
+
+| Book | Inherited CPU (s), best of five | Candidate CPU (s), best of five | Load 1m range |
+| --- | ---: | ---: | ---: |
+| Generic 20k | 0.147481 | 0.125116 | 31.86–33.65 |
+| Multi-wallet 20k | 0.177463 | 0.145054 | 31.15–32.12 |
+
+Both candidate books pass **0.15 s process CPU**. Probe and operand SHA-256
+bindings, every sample and load live in `target/r4-render-6/fields-paired/`.
+Earlier variants and measurements are retained as exploratory evidence; they do
+not certify the final source. In particular, selecting fields only at
+serialization was rejected, and its passing timing is not acceptance evidence.
+Final fidelity or integration changes require another CPU measurement.
+
+### Verification and remaining work
+
+All **383** frozen cases remain unchanged: **222 states and 161 refusals**, with
+exact UUID tapes. Deterministic regeneration and all six Python oracle/capture
+tests pass. The all-feature release journal suite passes **35** tests, including
+its existing complete SQLite/SQLCipher dump and rollback fixtures. All **28**
+pydecimal tests, workspace formatting and scoped all-target/all-feature Clippy
+with denied warnings pass.
+
+The 144 inherited mutation ids and rules remain. Seven new recipes cover
+borrowed/owned pricing, carry-row identity, coefficient width, sign, decimal
+placement and leading fractional zero. The catalog now has **100 renderer and
+51 persistence** recipes. Three inherited anchors move to the same operations:
+engine-event id rendering, Python whitespace stripping and wallet-posting
+selection. All **151** recipes apply. A source-bound resumable shard kills the
+seven new and three reanchored recipes after three passing named baselines;
+its incremental calls and summary are retained and its build tree is deleted.
+These ten kills do not certify the complete mutation campaigns.
+
+The fresh boundary repro still differs on actual surrogate scalar decoding and
+malformed canonical-decimal errors. Nonfinite quarantine detail and malformed
+payout integer repros match. No Python reference bug is identified or changed.
+
+Acceptance still requires, in order:
+
+1. Repair surrogate and malformed-decimal repros, raw nonfinite scalars,
+   carry/audit projection and consumption, malformed shapes and lazy refusal
+   order; finish the lossless typed consumer boundary.
+2. Complete the branch audit, including component exclusions, ambiguous script
+   ownership, scope/txid filtering, amount tolerance and graph refusal
+   propagation. Run all 100 renderer recipes (the original 93 plus seven new),
+   all 51 persistence recipes and all 2,327 custody recipes in resumable shards,
+   retaining named kills and deleting build trees after each shard.
+3. Run all 25,030 generated inputs, census and shadow lanes and fresh
+   recordings against the final source. Earlier campaigns do not certify this
+   source.
+4. Run the complete integrated SQLite/SQLCipher campaigns and repository quality
+   gate, repeat final integrated CPU measurements and write production
+   acceptance. The passing persistence fixtures above do not replace those
+   campaigns.
+
+`target/r4-render-6/verification-index.json` binds the source, probes, operands,
+logs, mutation summary and remaining gates. The required classifier update
+leaves the checked-in inventory unchanged; CI preflight passes all **57 tests**
+before the local commit. Manual second review checks input and engine-response
+lifetimes, null/scalar field access, Decimal widths and zero representations,
+UUID/refusal order and persistence callers. Mutation and verification build
+trees are removed after their summaries are saved. No background job, push,
+pull request or external comment is left; Python retains production accounting
+authority.

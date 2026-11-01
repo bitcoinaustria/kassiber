@@ -42,8 +42,8 @@
   {
     "id": "JR-source-id",
     "file": "crates/journals/src/render.rs",
-    "find": "engine_event_id: id.into(),",
-    "replace": "engine_event_id: String::new(),",
+    "find": "engine_event_id: Cow::Borrowed(id),",
+    "replace": "engine_event_id: Cow::Borrowed(\"\"),",
     "expect_failing": [
       "ledger_rendering_matches_python"
     ],
@@ -532,8 +532,8 @@
   {
     "id": "JR-balance-wallet-kind",
     "file": "crates/journals/src/boundary/joins.rs",
-    "find": "if posting[\"location_kind\"] != \"wallet\" {",
-    "replace": "if posting[\"location_kind\"] == \"wallet\" {",
+    "find": "if *field(posting, \"location_kind\") != \"wallet\" {",
+    "replace": "if *field(posting, \"location_kind\") == \"wallet\" {",
     "expect_failing": [
       "balance_join_matches_existing_comparator_and_promotes_before_overflow"
     ],
@@ -1312,8 +1312,8 @@
   {
     "id": "JR-method-python-strip",
     "file": "crates/journals/src/render.rs",
-    "find": "kassiber_pytext::strip(&string(method)).into()",
-    "replace": "string(method).trim().into()",
+    "find": "kassiber_pytext::strip(method)",
+    "replace": "method.trim()",
     "expect_failing": [
       "ledger_rendering_matches_python"
     ],
@@ -2248,5 +2248,75 @@
       "process_complete_dumps_match_python_from_raw_books"
     ],
     "rule": "Borrowed renderer operands must retain the finalized projection metadata."
+  },
+  {
+    "id": "JR-pricing-original-identity",
+    "file": "crates/journals/src/render.rs",
+    "find": ".filter(|original| std::ptr::eq(*original, row))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Carried pricing facts must use the overlaid row instead of borrowing the original."
+  },
+  {
+    "id": "JR-pricing-borrowed-values",
+    "file": "crates/journals/src/model.rs",
+    "find": "map.serialize_entry(key, *value)?;",
+    "replace": "map.serialize_entry(key, &Value::Null)?;",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Borrowed source pricing retains every original field value."
+  },
+  {
+    "id": "JR-pricing-owned-values",
+    "file": "crates/journals/src/model.rs",
+    "find": "map.serialize_entry(key, value)?;",
+    "replace": "map.serialize_entry(key, &Value::Null)?;",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Owned source pricing retains the carried field values after rendering."
+  },
+  {
+    "id": "JR-fixed-coefficient-width",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": "pub fn coefficient_u128(&self) -> Option<u128> {\n        self.coeff.small()",
+    "replace": "pub fn coefficient_u128(&self) -> Option<u128> {\n        self.coeff.small().map(|n| u128::from(n as u64))",
+    "expect_failing": [
+      "fixed_point_text_matches_decimal_formatting"
+    ],
+    "rule": "Fixed-point rendering preserves all 128 coefficient bits."
+  },
+  {
+    "id": "JR-fixed-fraction-sign",
+    "file": "crates/journals/src/render.rs",
+    "find": "if d.is_sign_negative() {\n            text.push('-');",
+    "replace": "if false && d.is_sign_negative() {\n            text.push('-');",
+    "expect_failing": [
+      "fixed_point_text_matches_decimal_formatting"
+    ],
+    "rule": "Nonzero fixed-point text retains the sign before the coefficient."
+  },
+  {
+    "id": "JR-fixed-integer-boundary",
+    "file": "crates/journals/src/render.rs",
+    "find": "let integer_digits = digits + exponent;",
+    "replace": "let integer_digits = digits - exponent;",
+    "expect_failing": [
+      "fixed_point_text_matches_decimal_formatting"
+    ],
+    "rule": "Fixed-point placement uses the coefficient length plus its exponent."
+  },
+  {
+    "id": "JR-fixed-leading-fraction",
+    "file": "crates/journals/src/render.rs",
+    "find": "text.push_str(\"0.\");",
+    "replace": "text.push_str(\"1.\");",
+    "expect_failing": [
+      "fixed_point_text_matches_decimal_formatting"
+    ],
+    "rule": "Sub-unit fixed-point text starts with zero and preserves leading fractional zeros."
   }
 ]
