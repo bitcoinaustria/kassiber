@@ -607,6 +607,14 @@ private spend leaves, including leaves nested in spend-key expressions.
 
 ## Atomic chain refresh boundary
 
+Every Electrum raw transaction is checked against its requested txid before
+use, including wallet histories, batched and lazy parent fetches, Liquid output
+inventory, and on-chain ownership verification. Bitcoin txids exclude witness
+data; Liquid uses its native transaction identity. A mismatch refuses with
+`invalid_observation`. Bitcoin stored graph version 2 rebuilds earlier graphs
+on the next explicitly requested sync, so an unverified old cache cannot bypass
+this check. Opening a book or reading status does not initiate that refresh.
+
 Bitcoin compatibility Electrum treats the coinbase null outpoint (all-zero txid
 and output index `0xffffffff`) as issuance, with no previous transaction to
 fetch or attach. It still imports the observed receipt; this adds no custody or

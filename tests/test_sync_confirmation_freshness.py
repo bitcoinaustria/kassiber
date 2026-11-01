@@ -35,9 +35,16 @@ def test_configured_backend_target_resolution_does_not_probe_chain_tips(kind):
 
 @pytest.mark.parametrize("tip_change", ["reorg", "advance", "missing", "invalid", "legacy"])
 def test_electrum_refreshes_cached_confirmation_when_chain_anchor_changes(tip_change):
+    from embit.script import Script
+    from embit.transaction import Transaction, TransactionInput, TransactionOutput
+
     script = _script(ADDR_A)
     target = {"script_pubkey": script}
-    txid = "aa" * 32
+    transaction = Transaction(
+        vin=[TransactionInput(b"\0" * 32, 0xffffffff, Script(b"\x01\x01"))],
+        vout=[TransactionOutput(1000, Script(bytes.fromhex(script)))],
+    )
+    txid = transaction.txid().hex()
     timestamp = 1767225600
     tip = {"height": 100, "hex": "00" * 80}
     history = [{"tx_hash": txid, "height": 100}]
@@ -53,7 +60,7 @@ def test_electrum_refreshes_cached_confirmation_when_chain_anchor_changes(tip_ch
             if method == "blockchain.scripthash.get_history":
                 return history
             if method == "blockchain.transaction.get":
-                return "synthetic-transaction"
+                return transaction.serialize().hex()
             assert method == "blockchain.block.header"
             return (b"\x00" * 68 + timestamp.to_bytes(4, "little") + b"\x00" * 8).hex()
 

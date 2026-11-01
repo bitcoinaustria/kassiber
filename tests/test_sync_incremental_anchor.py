@@ -89,6 +89,7 @@ def test_normal_tip_advance_reuses_history_but_reorg_refreshes_it(monkeypatch, p
     monkeypatch.setattr(sb, 'http_get_text', route)
     monkeypatch.setattr(sb, '_electrum_client_context', lambda _: nullcontext(Client()))
     monkeypatch.setattr(sb, 'decode_raw_transaction', decode)
+    monkeypatch.setattr(sb, 'verify_electrum_transaction_id', lambda *args: None)
     monkeypatch.setattr(sb, 'decode_liquid_transaction', lambda raw: SimpleNamespace(
         vin=[SimpleNamespace(txid=txid(1000+tx_indices[raw]))] if raw in tx_indices else [], vout=[]))
     monkeypatch.setattr(sb, 'liquid_input_txid', lambda vin: vin.txid)

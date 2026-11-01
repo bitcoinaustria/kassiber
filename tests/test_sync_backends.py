@@ -1766,6 +1766,8 @@ class SyncBackendsTest(unittest.TestCase):
                 raise AssertionError(f"Unexpected Electrum call: {key!r}")
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ):
@@ -1850,6 +1852,8 @@ class SyncBackendsTest(unittest.TestCase):
                 return responses
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ):
@@ -1859,7 +1863,7 @@ class SyncBackendsTest(unittest.TestCase):
             )
 
         self.assertEqual(meta["scripts_changed"], 1)
-        self.assertEqual(meta["freshness_checkpoint"]["electrum_stored_graph_version"], 1)
+        self.assertEqual(meta["freshness_checkpoint"]["electrum_stored_graph_version"], sb.ELECTRUM_STORED_GRAPH_VERSION)
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["direction"], "outbound")
         raw = json.loads(records[0]["raw_json"])
@@ -1874,7 +1878,7 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(raw["vout"][0]["script_hex"], "0014" + "aa" * 20)
         self.assertEqual(
             raw["_kassiber_electrum_graph"],
-            {"kind": "bitcoin_electrum", "version": 1},
+            {"kind": "bitcoin_electrum", "version": sb.ELECTRUM_STORED_GRAPH_VERSION},
         )
 
     def test_electrum_checkpoint_skips_unchanged_history_on_second_sync(self):
@@ -1918,6 +1922,8 @@ class SyncBackendsTest(unittest.TestCase):
                 return responses
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
@@ -2007,7 +2013,7 @@ class SyncBackendsTest(unittest.TestCase):
             "txid": old_txid,
             "_kassiber_electrum_graph": {
                 "kind": "bitcoin_electrum",
-                "version": 1,
+                "version": sb.ELECTRUM_STORED_GRAPH_VERSION,
             },
             "vin": [],
             "vout": [
@@ -2037,7 +2043,7 @@ class SyncBackendsTest(unittest.TestCase):
             history_cache={old_txid: old_graph},
             checkpoint={
                 "compatibility_history_anchor_version": 3,
-                "electrum_stored_graph_version": 1,
+                "electrum_stored_graph_version": sb.ELECTRUM_STORED_GRAPH_VERSION,
                 "electrum_history_entries": {scripthash: {old_txid: old_history}},
                 "electrum_tip_fingerprint": "ab" * 32,
                 "electrum_scripthash_statuses": {scripthash: "status-1"},
@@ -2046,6 +2052,8 @@ class SyncBackendsTest(unittest.TestCase):
         )
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_raw_transaction",
             return_value=new_graph,
         ):
@@ -2111,12 +2119,14 @@ class SyncBackendsTest(unittest.TestCase):
             tracked_scripts={target["script_pubkey"]: target},
             history_cache={txid: {}},
             checkpoint={
-                "electrum_stored_graph_version": 1,
+                "electrum_stored_graph_version": sb.ELECTRUM_STORED_GRAPH_VERSION,
                 "electrum_scripthash_statuses": {scripthash: "status-1"},
             },
         )
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_raw_transaction",
             return_value=raw_graph,
         ):

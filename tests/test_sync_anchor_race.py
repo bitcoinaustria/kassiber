@@ -135,6 +135,7 @@ def matrix(monkeypatch):
         ('http_get_json', route), ('http_get_text', route),
         ('_electrum_client_context', lambda _: nullcontext(Client())),
         ('decode_raw_transaction', decode),
+        ('verify_electrum_transaction_id', lambda *args: None),
         ('decode_liquid_transaction', lambda raw: SimpleNamespace(
             vin=[SimpleNamespace(txid=txid(1000 + tx_indices[raw]))] if raw in tx_indices else [], vout=[])),
         ('liquid_input_txid', lambda vin: vin.txid),

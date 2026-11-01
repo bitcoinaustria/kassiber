@@ -81,7 +81,7 @@ from .wallets import (
 )
 
 
-ELECTRUM_STORED_GRAPH_VERSION = 1
+ELECTRUM_STORED_GRAPH_VERSION = 2
 ELECTRUM_STORED_GRAPH_MARKER = "_kassiber_electrum_graph"
 
 
@@ -1954,6 +1954,7 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
         else:
             with _electrum_client_context(backend) as owned_client:
                 raw_hex = owned_client.call("blockchain.transaction.get", [txid])
+        verify_electrum_transaction_id(raw_hex, txid, normalized_chain)
         if normalized_chain == "liquid":
             return _legs_from_liquid_tx(decode_liquid_transaction(raw_hex))
         return _legs_from_bitcoin_tx(decode_raw_transaction(raw_hex))
@@ -4592,6 +4593,21 @@ def read_varint(payload, offset):
     return int.from_bytes(payload[offset : offset + 8], "little"), offset + 8
 
 
+def verify_electrum_transaction_id(raw_hex, txid, chain):
+    """Bind every fetched raw transaction to its requested identity before use."""
+    try:
+        if chain == "liquid":
+            transaction = decode_liquid_transaction(raw_hex)
+        else:
+            from embit.transaction import Transaction
+            transaction = Transaction.parse(bytes.fromhex(raw_hex))
+        actual = transaction.txid().hex()
+    except (ValueError, TypeError, IndexError, EOFError) as exc:
+        raise AppError("Electrum returned invalid transaction bytes", code="invalid_observation") from exc
+    if actual.lower() != str(txid).lower():
+        raise AppError("Electrum returned different transaction bytes", code="invalid_observation")
+
+
 def decode_raw_transaction(raw_hex):
     payload = bytes.fromhex(raw_hex)
     offset = 0
@@ -4936,6 +4952,7 @@ def compatibility_electrum_utxos_for_wallet(backend, sync_state: WalletSyncState
         def liquid_tx(txid):
             if txid not in liquid_tx_cache:
                 raw_tx = client.call("blockchain.transaction.get", [txid])
+                verify_electrum_transaction_id(raw_tx, txid, "liquid")
                 liquid_tx_cache[txid] = decode_liquid_transaction(raw_tx)
             return liquid_tx_cache[txid]
 
@@ -5184,6 +5201,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions[txid] = cached
                 else:
                     raw_tx = client.call("blockchain.transaction.get", [txid])
+                    verify_electrum_transaction_id(raw_tx, txid, sync_state.chain)
                     if sync_state.chain == "liquid":
                         transactions[txid] = {
                             "raw_hex": raw_tx,
@@ -5224,6 +5242,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 batch_size=batch_size,
             )
             for txid, raw_tx in zip(missing_ordered_txids, raw_transactions):
+                verify_electrum_transaction_id(raw_tx, txid, sync_state.chain)
                 if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
@@ -5257,6 +5276,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 batch_size=batch_size,
             )
             for txid, raw_tx in zip(prev_txids, raw_prev_transactions):
+                verify_electrum_transaction_id(raw_tx, txid, sync_state.chain)
                 if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,

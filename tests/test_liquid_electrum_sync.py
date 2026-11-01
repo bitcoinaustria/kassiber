@@ -236,6 +236,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 return responses[key]
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
@@ -321,6 +323,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 return responses[key]
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
@@ -409,6 +413,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 return responses
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
