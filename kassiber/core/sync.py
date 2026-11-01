@@ -19,7 +19,7 @@ from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
-from .sync_control import checked_parallel_map, run_sync_network, sync_transport_check
+from .sync_control import checked_parallel_map, run_sync_network, sync_progress_emitter, sync_transport_check
 from .esplora_history import full_scan_checkpoint
 from .onchain import stored_tx_mapping
 from .chain_observer import (
@@ -316,13 +316,6 @@ WALLET_FETCH_FANOUT = 4
 # common high-index receive/change gaps without permanently mutating the wallet.
 NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT = 500
 
-
-# Contextvar threaded by the daemon when it wants long-running source refreshes
-# to emit progress over the JSONL stream. The CLI leaves this empty so terminal
-# sync behavior stays unchanged.
-sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
-    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
-)
 
 # Serializes progress-callback invocation so concurrent fetch workers (within a
 # wallet and, for cross-wallet parallel fetch, across wallets) cannot interleave
