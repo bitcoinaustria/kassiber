@@ -112,6 +112,28 @@ fn entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids() {
     );
 }
 #[test]
+fn removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time() {
+    for (survivor, removed) in [("a", "z"), ("z", "a")] {
+        let c = Connection::open_in_memory().unwrap();
+        table(&c, "journal_entries", &ENTRY_COLUMNS);
+        let a = entry(survivor, "same", "later-old-clock");
+        let b = entry(removed, "same", "earlier-old-clock");
+        replace_journal_entries(&c, "p", &[a.clone(), b], &mut ()).unwrap();
+        let before = snapshot::<29>(&c, "journal_entries");
+        let mut rebuilt = a.clone();
+        rebuilt[28] = Sql::Text("new-build-clock".into());
+        replace_journal_entries(&c, "p", &[rebuilt], &mut ()).unwrap();
+        assert_eq!(
+            snapshot::<29>(&c, "journal_entries"),
+            before
+                .into_iter()
+                .filter(|(_, row)| row[0] == a[0])
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
 fn mixed_timestamps_and_signed_zero_force_entry_rewrites() {
     let c = Connection::open_in_memory().unwrap();
     table(&c, "journal_entries", &ENTRY_COLUMNS);

@@ -35,6 +35,90 @@ This profile locates work and does not establish five-pair acceptance.
 binds every floor trial, load average, book manifest, source and binary hash,
 complete-dump hash and the separate baseline profile. No acceptance is claimed.
 
+## Direct comparison continuation (withdrawn)
+
+**R4-12 remains unaccepted.** Four generic SQLite comparison variants matched
+all **96 timed complete dumps**, but neither required cell passed its CPU
+budget. Their archived sources and binaries remain under worktree `target/`,
+with SHA-256 manifests, every timing sample and phase profile in
+[the continuation record](r4-journal-persistence-direct-comparison-measurements.json).
+Production persistence sources are restored to `51bd20498`; the accepted
+budget decision and a mixed-clock removal regression remain.
+
+Ordinary decimal comparisons parsed retained digits into a `u128` coefficient,
+checked sign and scale, and compared REAL values including negative zero.
+Compact calculations with up to eight fragments compared directly with retained
+bytes; larger dictionaries used the earlier validated shape path. Final decimal
+bindings were prepared only for changed rows. A wide coefficient still used the
+canonical formatter, so this probe does not satisfy a universal no-formatting
+contract for unchanged decimals. Existing chronological and posting-id indexes
+fed an ordered comparison view, with renderer order retained for inserts.
+The stream's unmatched rows used identity lookup so removing an earlier-created
+sibling could not accidentally rewrite a surviving row.
+
+The first scan ordered entries by timestamp and id. SQLite added a temporary
+sort; following the existing timestamp/creation/id index removed it. Posting
+reads followed the existing id index. Further probes reduced the changed-binding
+buffer, removed the per-timestamp map and borrowed metadata/calculation text.
+These were experiments, not accepted production changes. No schema, persisted
+digest, Python reference, dependency or command registration changed.
+
+The closest five-pair variant measured **0.290347 CPU seconds unchanged** against
+0.098731 + 0.15 = **0.248731**, missing by **0.041616**. Fresh measured
+**0.847164** against its 0.645101 + 0.15 write-floor allowance, missing by
+**0.052063**. Independent minima are used throughout. That run's one-minute
+load was 20.277–22.452. Later variants ran at load 31.431–57.866 and did not
+establish a controlled improvement. No other 20k, appended/changed or 2k cell
+was run after these required cells failed.
+
+A second five-connection read-floor repeat ran after compilation. Across both
+repeats the independent minima are generic **0.098731 / 0.208712 seconds** and
+multi-wallet **0.103358 / 0.225609**, SQLite / SQLCipher respectively. All complete
+dumps, integrity and foreign-key checks pass. Read-floor load spans
+37.93–45.72; no quiet-host acceptance is claimed. A later CPU-window sample
+also found both threads of every physical core busy. The raw loads and CPU
+window remain in the record; a genuinely quiet repeat remains outstanding.
+
+The new regression requires a removed sibling with an earlier creation clock
+to leave the surviving entry's rowid, every content column and creation time
+unchanged, in both identity orders. This pins the fallback needed when retained
+creation order differs from identity order. Final verification and the targeted
+mutation result are recorded below; the full mutation and inherited campaign
+gates remain open.
+
+The last prototype passes 61 journal tests, including complete dumps, refusal
+and unwind rollback and physical crash recovery; 59 Python storage/oracle tests
+and release all-target clippy with warnings denied pass. The retained removal
+regression kills `JP-removed-mixed-clock-identity` at runtime against the restored
+writer, and the restored source passes again. The catalog now has 182 recipes;
+only this new targeted kill was run here. No exhaustive branch audit or full
+mutation campaign is claimed.
+
+Restored-source verification passes 58 journal tests, the read-floor example's
+test, 59 Python storage/oracle tests, release all-target clippy with warnings
+denied, workspace formatting and applicability checks for all 182 recipes. The
+required classifier update produces no generated diff; preflight `--ci` passes
+57 tests. Manual second review confirms production-source identity, archive
+hashes and the limited evidence scope. Verification build trees are removed;
+archives, logs and disposable books remain under `target/`. All launched test
+and benchmark jobs have completed. These results do not close any acceptance
+gate listed below.
+
+Remaining work, in order:
+
+1. Meet the accepted budgets in all eight 20k cells over five alternating pairs;
+   verify appended/changed and 2k comparisons on both shapes and drivers, with
+   exact dumps and the signed-zero rewrite rule. Remove the remaining wide
+   coefficient formatting from any future no-formatting comparison.
+2. Complete the exhaustive persistence branch-to-mutation audit and rerun final
+   kills. A targeted regression kill does not replace that campaign.
+3. Run resumable 24,000-book and 1,030-permutation campaigns, all retained
+   recordings and permutations plus fresh recordings, full census/shadow with
+   the known Python shadow read-budget repro, and 2,285 custody mutations.
+4. Verify the integrated R4-13 transaction, rollback, settings, visibility,
+   response/checkpoint, dropped-handle and post-COMMIT error contracts on both
+   physical drivers, then write acceptance.
+
 ## Typed comparison probe from `a06bc004f` (withdrawn)
 
 This attempt leaves **R4-12 unaccepted**. The typed comparison prototype was

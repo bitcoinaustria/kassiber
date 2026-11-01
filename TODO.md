@@ -667,6 +667,20 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   pairs and was withdrawn; its measurements and an integrated negative-zero
   rewrite witness remain, with a targeted `JP-signed-zero` kill. Corrected
   appended benchmark inputs carry distinct raw identities and assert actual writes.
+
+<!-- inherited from persist-accept@9730f9e4b; pending r10 verification -->
+  close the accepted CPU budgets (read floor + 0.15 s unchanged; write floor +
+  0.15 s fresh), exhaustive persistence mutations and inherited campaign gates
+  before wiring production in R4-13. The unregistered service, complete dump
+  oracle and caller-owned storage scopes are implemented. Independent borrowed
+  read floors were repeated over five connections per driver and shape, with
+  exact dumps and load averages; a quiet-host repeat remains open. The latest
+  direct comparison probes matched 96 timed dumps but missed both generic SQLite
+  budgets; they were withdrawn. Their sources, measurements and a retained
+  mixed-clock removal regression are recorded in the checkpoint. Historical
+  negative-zero and retained-column witnesses remain. Corrected appended inputs
+  carry distinct raw identities and assert actual writes. A cheap unchanged
+  comparison and the full eight-cell budget gate remain open.
   R4-9's test-only loader now constructs the current custody records directly;
   generic 20k still takes 0.505 s CPU / 0.509 s wall against 0.30 s. It remains
   unaccepted pending the typed consumer boundary, full legacy fidelity and

@@ -2424,7 +2424,9 @@
     "file": "crates/journals/src/render/response.rs",
     "find": "not a canonical engine decimal: {}",
     "replace": "invalid engine decimal: {}",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "Malformed response decimals retain Python's ValueError message at consumption."
   },
   {
@@ -2432,7 +2434,9 @@
     "file": "crates/journals/src/render/response.rs",
     "find": "head(inputs, wallet, entry_type, asset, &mut ids)?;\n        dec_field(&value, \"quantity\")?;",
     "replace": "dec_field(&value, \"quantity\")?;\n        head(inputs, wallet, entry_type, asset, &mut ids)?;",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "Entry quantity decoding follows head UUID consumption."
   },
   {
@@ -2440,7 +2444,9 @@
     "file": "crates/journals/src/render/response.rs",
     "find": "ensure_hashable(required(wallet, \"id\")?)?;\n    ensure_hashable(entry_type)?;",
     "replace": "ids();\n    ensure_hashable(required(wallet, \"id\")?)?;\n    ensure_hashable(entry_type)?;",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "The UUID tape consumes exactly one identity for each successfully admitted entry head."
   },
   {
@@ -2448,7 +2454,9 @@
     "file": "crates/journals/src/render/response.rs",
     "find": "let crypto_in = truth(lot)\n        .then(|| dec_field(lot, \"crypto_in\"))\n        .transpose()?;",
     "replace": "let crypto_in: Option<Decimal> = None;",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "A fragment prepares its acquisition quantity before formatting basis and source fields."
   },
   {
@@ -2456,7 +2464,9 @@
     "file": "crates/journals/src/render/response.rs",
     "find": "let basis = dec_field(&value, \"cost_basis\")?;",
     "replace": "let basis = Decimal::zero();",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "Known-wallet holding basis is decoded after quantity and before quarantines."
   },
   {
@@ -2464,7 +2474,9 @@
     "file": "crates/journals/src/boundary.rs",
     "find": ".and_then(Value::as_array)\n        .map(Vec::as_slice)",
     "replace": ".map(|value| value.as_array().map(Vec::as_slice).unwrap_or(&[]))",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "Malformed response sequences reach the ordered refusal path instead of becoming empty."
   },
   {
@@ -2472,7 +2484,19 @@
     "file": "crates/journals/src/render.rs",
     "find": "let label = response::get(wallet, \"label\")?;",
     "replace": "let label = &wallet[\"label\"];",
-    "expect_failing": ["malformed_response_refusals_consume_exact_uuid_tapes"],
+    "expect_failing": [
+      "malformed_response_refusals_consume_exact_uuid_tapes"
+    ],
     "rule": "Malformed wallet mappings refuse while constructing labels before any entry UUID is consumed."
+  },
+  {
+    "id": "JP-removed-mixed-clock-identity",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if let Some(&index) = wanted.get(id) {",
+    "replace": "if let Some(&index) = wanted.get(id).or_else(|| wanted.values().next()) {",
+    "expect_failing": [
+      "removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time"
+    ],
+    "rule": "A removed sibling never inherits a surviving identity or dirties its creation-clock group."
   }
 ]
