@@ -397,6 +397,8 @@ calendar are a tax-relevant difference however close they are. Types compare
 by tax meaning: a tool's deposit next to Kassiber's acquisition from an unknown
 sender agrees, a tool's withdrawal next to Kassiber's disposal does not. Stale
 journals switch the type comparison off with a notice instead of blocking.
+Malformed stored book timestamps refuse the comparison with `validation`;
+they cannot become year-1 dates or silently disappear from a year filter.
 
 The result lists every row as `different`, `only_tool`, `only_kassiber`,
 `excluded_in_kassiber`, `matched` or `not_comparable`, with per-asset totals.

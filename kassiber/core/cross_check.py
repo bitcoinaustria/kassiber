@@ -331,13 +331,20 @@ def _book_rows(conn, profile, wallet_ids: set[str] | None, book_currency: str):
             value = None
         if value is not None and not value.is_finite():
             raise AppError("Stored comparison values must be finite", code="validation", retryable=False)
+        occurred_at = _utc(row["occurred_at"])
+        if occurred_at is None:
+            raise AppError(
+                "Stored comparison dates must be valid timestamps",
+                code="validation",
+                retryable=False,
+            )
         rows.append(
             _BookRow(
                 id=row["id"],
                 wallet=row["wallet"],
                 wallet_id=row["wallet_id"],
                 txid=row["external_id"],
-                occurred_at=_utc(row["occurred_at"]) or datetime.min.replace(tzinfo=timezone.utc),
+                occurred_at=occurred_at,
                 direction=amounts.direction,
                 asset_id=asset.asset_id,
                 principal_msat=int(amounts.principal_msat or 0),
