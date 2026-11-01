@@ -47,10 +47,16 @@ fn scalar(v: &Value) -> Sql {
         _ => panic!("dump scalar {v}"),
     }
 }
+#[allow(dead_code)] // The capture probe supplies its observed schema instead.
 pub fn load(c: &Connection, dump: &Value) {
+    load_schema(c, dump, &Value::Null);
+}
+pub fn load_schema(c: &Connection, dump: &Value, schema: &Value) {
     let manifest: Value =
         serde_json::from_str(include_str!("../../../store/fixtures/current-schema.json")).unwrap();
-    let objects = manifest["objects"].as_array().unwrap();
+    let objects = schema
+        .as_array()
+        .unwrap_or_else(|| manifest["objects"].as_array().unwrap());
     c.execute_batch("PRAGMA foreign_keys=OFF;BEGIN").unwrap();
     for o in objects.iter().filter(|o| o[0] == "table") {
         c.execute_batch(o[3].as_str().unwrap()).unwrap();

@@ -27,6 +27,8 @@ verification, including per-command Rust routing counts.
 | `crates/wallets` | watch-only wallet lifecycle, local descriptors and file ingestion |
 | `crates/journals` | unregistered custody/fusion, R4-9 loader, R4-11 rendering and R4-12 persistence checkpoints; production acceptance remains open |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history and CLI/desktop transaction pages shared by both transports |
+| `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
+| `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 | `crates/transfers` | pair/payout authoring, shared automatic pairing, component/gap reads and plans, matching rules, advisory dismissals and historical receipts |
 | `crates/reports` | stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, CSV and transaction/Austrian XLSX artifacts, and append-only saved/filed snapshot markers |
 

@@ -28,10 +28,21 @@ fn native_loader_matches_python_database_bytes() {
         // The same in-memory structure as the text adapter, with no wire text.
         let adapter = snapshot.into_custody();
         let reference = kassiber_custody::parse(&text(get(&case, "expected")));
+        // Typed rows serialize REALs from f64; the native compatibility rows
+        // retain Python's exponent spelling. Compare the exact Python scalar
+        // model (including integer/float distinctions and signed zero), while
+        // the assertion above independently keeps the raw v1 byte contract.
+        let scalar_text = |value| {
+            kassiber_pyjson::dumps(
+                &kassiber_custody::codec::from_json(&value).unwrap(),
+                &Options::new(),
+            )
+            .unwrap()
+        };
         match (adapter, reference) {
             (Ok(adapter), Ok(reference)) => assert_eq!(
-                serde_json::to_value(adapter).unwrap(),
-                serde_json::to_value(reference).unwrap()
+                scalar_text(serde_json::to_value(adapter).unwrap()),
+                scalar_text(serde_json::to_value(reference).unwrap())
             ),
             (Err(_), Err(_)) => (),
             _ => panic!("native/text admission differ"),

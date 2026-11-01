@@ -59,7 +59,7 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
         c.pragma_update(None, "mmap_size", 268435456)?;
     }
     if v["database"].is_null() {
-        support::load(&c, &v["before"]);
+        support::load_schema(&c, &v["before"], &v["schema"]);
     }
     let checkpoint = storage::DeferredCheckpoint::enter(&c)?;
     let cache = storage::RebuildCache::enter(&c)?;
@@ -81,13 +81,40 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         boundary::ledger_response(&r["response"])?
     };
-    let state = boundary::build(
+    let mut entry_ids = r["entry_ids"].as_array().into_iter().flatten();
+    let mut state = boundary::build(
         &r["profile"],
         &r["custody"],
         r["wallets"].as_array().ok_or("wallets")?,
         &response,
-        String::new,
+        || {
+            entry_ids
+                .next()
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into()
+        },
     )?;
+    // Reproduce explicit test edits at the persistence boundary. The separate
+    // rendering campaign still compares the complete, unedited build state.
+    if let Some(inputs) = v["entry_inputs"].as_array() {
+        let mut rendered = std::mem::take(&mut state.entries)
+            .into_iter()
+            .map(|entry| (entry.id.clone(), entry))
+            .collect::<std::collections::HashMap<_, _>>();
+        for input in inputs {
+            let mut entry = rendered
+                .remove(input["id"].as_str().ok_or("entry id")?)
+                .ok_or("entry missing from rendered state")?;
+            if let Some(occurred_at) = input.get("occurred_at") {
+                entry.occurred_at = occurred_at.clone();
+            }
+            if let Some(description) = input.get("description") {
+                entry.description = description.as_str().ok_or("description")?.into();
+            }
+            state.entries.push(entry);
+        }
+    }
     let mut ids = v["ids"].as_array().ok_or("ids")?.iter();
     let mut identity = || {
         ids.next()

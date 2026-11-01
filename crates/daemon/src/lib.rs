@@ -74,7 +74,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         reports::KINDS
             .iter()
             .copied()
-            .filter(|k| *k == "ui.transactions.export_csv"),
+            .filter(|k| k.starts_with("ui.transactions.export_")),
     );
     kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
         [
@@ -116,7 +116,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
         reports::KINDS
             .iter()
             .copied()
-            .filter(|k| *k != "ui.transactions.export_csv"),
+            .filter(|k| !k.starts_with("ui.transactions.export_")),
     );
     kinds.extend(documents::KINDS);
     kinds.extend(transfers::KINDS);

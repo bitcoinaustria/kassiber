@@ -357,7 +357,7 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     snapshot.profile = profile;
     snapshot.book_network = network;
     snapshot.wallets = wallets;
-    snapshot.transactions = transactions;
+    snapshot.transactions = transactions.into_iter().map(J::Object).collect();
     snapshot.rate_rows = rate_rows;
     snapshot.owned_index = (!owned_index.is_null()).then_some(owned_index);
     snapshot.ownership_warnings = warnings.iter().map(text).collect();
@@ -384,7 +384,14 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
         false,
     )?;
     snapshot.gap_worklist = gap_worklist;
-    let sources = match receipts::load(conn, &profile_id, &snapshot.transactions) {
+    let sources = match receipts::load(
+        conn,
+        &profile_id,
+        snapshot
+            .transactions
+            .iter()
+            .map(|row| row.as_object().expect("native transaction row")),
+    ) {
         Ok(sources) => sources,
         Err(error) => {
             if let Err(prior) = kassiber_custody::receipt_source_error_precedence(&snapshot) {

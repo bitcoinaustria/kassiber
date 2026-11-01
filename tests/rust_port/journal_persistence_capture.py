@@ -6,6 +6,7 @@ It never changes product registration or touches non-test books.
 """
 from contextlib import ExitStack
 from contextvars import ContextVar
+import copy
 import itertools
 import json
 import os
@@ -37,15 +38,30 @@ def pytest_configure(config):
         with capture_build(self) as (record,_):
             state=original_build(self)
         record.pop('_custody',None)
-        _LAST.set((id(state),record))
+        _LAST.set((state,record,copy.deepcopy(state['entries'])))
         return state
 
     def store(conn,profile,state,**kwargs):
         last=_LAST.get()
-        if last is None or last[0]!=id(state): return original_store(conn,profile,state,**kwargs)
-        _LAST.set(None)
+        if last is None or last[0] is not state: return original_store(conn,profile,state,**kwargs)
         clock=kwargs.get('created_at') or custody_journal.now_iso()
         before=dump(conn)
+        schema=[list(row) for row in conn.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL ORDER BY type,name").fetchall()]
+        # Storage tests may edit the built entries before passing them to the
+        # writer. Retain those exact inputs, independently of render parity.
+        fields=('id','occurred_at','description')
+        original_entries={entry['id']:entry for entry in last[2]}
+        for entry in state['entries']:
+            original=original_entries[entry['id']]
+            assert {k:v for k,v in original.items() if k not in fields} == {
+                k:v for k,v in entry.items() if k not in fields
+            }, 'unsupported persistence-only entry edit'
+        entry_inputs=[dict(id=entry['id'], **{
+            key:entry[key] for key in fields[1:]
+            if entry[key] != original_entries[entry['id']][key]
+        }) for entry in state['entries']]
         ids=[]
         def identity():
             ident=original_uuid();ids.append(str(ident));return ident
@@ -56,6 +72,7 @@ def pytest_configure(config):
             result=original_store(conn,profile,state,created_at=clock)
         record=last[1]
         payload=dict(name=os.environ.get('PYTEST_CURRENT_TEST','unknown'),record=record,before=before,
+                     schema=schema,entry_inputs=entry_inputs,
                      expected=dump(conn),created_at=clock,ids=ids)
         path=directory/f'{os.getpid()}-{next(_SEQUENCE):06}.json'
         path.write_text(json.dumps(payload,ensure_ascii=True,separators=(',',':'))+'\n')

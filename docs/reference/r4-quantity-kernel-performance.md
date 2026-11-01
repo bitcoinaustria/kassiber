@@ -200,7 +200,7 @@ committed.
 
 All checks run serially with Rust 1.99.1, locked Python 3.11, offline cargo,
 `MATURIN_NO_INSTALL_RUST=1` and disposable data roots. The retained binding is
-rebuilt with `uv sync --offline --locked --python 3.11`. Both census and custody
+rebuilt with `uv sync --locked --offline --python 3.11`. Both census and custody
 shadow use `KASSIBER_TEST_TAX_ENGINE=census`.
 
 | Check | Result |

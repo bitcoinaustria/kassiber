@@ -10,8 +10,8 @@ pub const KINDS: &[&str] = &[
     "ui.reports.balance_history",
     "ui.reports.export_csv",
     "ui.reports.export_capital_gains_csv",
-    "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_austrian_e1kv_xlsx",
+    "ui.reports.export_austrian_e1kv_csv",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
 ];

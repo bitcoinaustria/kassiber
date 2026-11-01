@@ -542,7 +542,7 @@
   {
     "id": "JL-receipt-accounting-precedence",
     "file": "crates/custody/src/lib.rs",
-    "find": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {\n    gates::require_accounting(snapshot)\n        .map_err(|(code, message)| Refusal::new(\"components\", code, message))?;",
+    "find": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {\n    let typed = snapshot\n        .typed()\n        .map_err(|message| Refusal::new(\"snapshot\", \"custody_snapshot_invalid\", message))?;\n    gates::require_accounting(&typed)\n        .map_err(|(code, message)| Refusal::new(\"components\", code, message))?;",
     "replace": "pub fn receipt_source_error_precedence(snapshot: &snapshot::Snapshot) -> Result<(), Refusal> {",
     "expect_failing": [
       "native_loader_preserves_receipt_error_precedence"

@@ -292,6 +292,9 @@ def test_quantity_refusal_compared_after_gaps(tmp_path, monkeypatch, mode, rust_
         raise ValueError('simulated Python quantity-stage refusal')
     monkeypatch.setattr(custody_quantity_runtime if stage == 'quantity' else custody_tax_projection,
                         'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
+    # This control compares Rust with the deliberately patched Python oracle.
+    # Scope its baseline even when the enclosing session installed this mode.
+    monkeypatch.setattr(compare, '_COMPUTE_FUNCTIONS', compare._capture_compute_functions())
     if rust_refuses:
         monkeypatch.setattr(kassiber_tax, 'custody', lambda _, **kwargs: json.dumps({'error': {'code': 'TypeError' if rust_refuses == 'wrong_code' else 'ValueError', 'stage': 'gaps' if rust_refuses == 'wrong_stage' else stage}}))
     previous = compare._INSTALLED_MODE
@@ -360,6 +363,7 @@ def test_injected_failure_requires_exact_stage_and_exception(tmp_path, monkeypat
     else:
         monkeypatch.setattr(custody_quantity_runtime if stage == 'quantity' else custody_tax_projection,
                             'build_canonical_quantity_state' if stage == 'quantity' else 'compile_finalized_tax_projection', refuse)
+    monkeypatch.setattr(compare, '_COMPUTE_FUNCTIONS', compare._capture_compute_functions())
     monkeypatch.setattr(CustodyJournalBuilder, 'load_snapshot', lambda _: book)
     monkeypatch.setenv(compare.RECORDS_ENV, str(tmp_path / 'records'))
     previous = compare._INSTALLED_MODE

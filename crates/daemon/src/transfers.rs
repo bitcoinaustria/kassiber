@@ -3,6 +3,7 @@ use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 
 pub const KINDS: &[&str] = &[
+    "ui.transfers.suggest",
     "ui.transfers.list",
     "ui.transfers.payouts.list",
     "ui.transfers.payouts.create",
@@ -10,9 +11,14 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.pair",
     "ui.transfers.unpair",
     "ui.transfers.update",
+    "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.components.list",
+    "ui.transfers.components.get",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
     "ui.custody.review.plan",
     "ui.custody.review.apply",
@@ -20,13 +26,7 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
     "ui.transfers.rules.set_enabled",
-    "ui.transfers.suggest",
-    "ui.transfers.bulk_pair",
     "ui.transfers.rules.apply",
-    "ui.transfers.components.list",
-    "ui.transfers.components.get",
-    "ui.custody.gaps.list",
-    "ui.custody.gaps.review_context",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
@@ -854,8 +854,9 @@ mod tests {
     #[test]
     fn desktop_pair_aliases_defaults_and_absent_notes_match_python() {
         assert_eq!(
-            &KINDS[..7],
+            &KINDS[..8],
             &[
+                "ui.transfers.suggest",
                 "ui.transfers.list",
                 "ui.transfers.payouts.list",
                 "ui.transfers.payouts.create",

@@ -17,10 +17,15 @@ refusal, including a pending canary write.
 
 SQL rows now populate today's custody `Snapshot` records directly, using
 prepared statements, typed SQLite `ValueRef` matches, preallocated row vectors
-and a column layout sorted once per statement. There is no second conversion
-of the complete snapshot. `into_custody()` validates and returns that same
-structure. The current consumer owns `serde_json::Map<String, Value>` records;
-it cannot borrow or intern their keys. Normalized configs use borrowed SQLite
+and a column layout sorted once per statement. Construction avoids a second
+conversion of the complete snapshot. `into_custody()` validates and returns that
+same structure. With the typed-row checkpoint integrated on R8, this admission
+check currently serializes the compatibility snapshot and parses a
+`BookSnapshot`; it is not yet a direct typed admission path. The independent
+complete-v1 byte gate remains exact. See the [R8 integration audit](rust-backend-r8-integration.md#combined-performance)
+for combined load/admission timings. The compatibility consumer owns
+`serde_json::Map<String, Value>` records; it cannot borrow or intern their keys.
+Normalized configs use borrowed SQLite
 TEXT for memo lookup. Owned-index descriptor derivation batches and caches
 targets per canonical descriptor fingerprint and scan horizon within one load.
 

@@ -330,13 +330,11 @@ permutations, plus fresh recordings), census and custody-shadow, the frozen
 vectors and the mutation catalog. A typed rewrite moves mutation anchors.
 Each step therefore re-anchors every recipe in the code it rewrites to an
 equivalent mutant, as the performance checkpoint did, reruns the **whole**
-catalog (currently 2,309 recipes), and reports kill set equals catalog. The catalog may
+catalog (currently 2,327 recipes), and reports kill set equals catalog. The catalog may
 not shrink without a reviewed equivalence note. The separate kernel branch ran its
 391 touched-file recipes from a 2,301-recipe catalog; untouched recipes are
 not claimed as freshly killed there. This integration reruns the whole catalog.
-Each step also records
-
-before and after timings from the bench books, back to back.
+Each step also records before and after timings from the bench books, back to back.
 
 "Measured cost replaced" is what the code a step rewrites costs today, at
 generic / multi-wallet 20,000 transactions. It bounds the step's gain; it is

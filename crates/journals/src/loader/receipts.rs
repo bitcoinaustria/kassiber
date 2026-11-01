@@ -72,10 +72,10 @@ fn source(
         ("address_index", Value::Null),
     ]))
 }
-pub(super) fn load(
+pub(super) fn load<'a>(
     conn: &Connection,
     profile_id: &str,
-    rows: &[kassiber_custody::snapshot::Record],
+    rows: impl IntoIterator<Item = &'a kassiber_custody::snapshot::Record>,
 ) -> Result<Vec<Value>> {
     let mut groups =
         std::collections::BTreeMap::<_, (BTreeSet<String>, Vec<serde_json::Value>)>::new();
