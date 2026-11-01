@@ -136,3 +136,81 @@ pub fn enrich_quarantine_detail(
     }
     dump(&Py::Dict(detail), true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quarantine_list_coercion_and_parse_fallbacks_match_python() {
+        for value in [
+            Py::Null,
+            Py::Bool(false),
+            Py::Int(0.into()),
+            Py::Float(0.0),
+            Py::Float(-0.0),
+        ] {
+            assert!(list(value).unwrap().is_empty());
+        }
+        assert_eq!(
+            list(Py::List(vec![Py::from("value")])).unwrap(),
+            vec![Py::from("value")]
+        );
+        assert_eq!(
+            list(Py::Dict(vec![(key("z"), Py::Null), (key("a"), Py::Null)])).unwrap(),
+            vec![Py::from("z"), Py::from("a")]
+        );
+        assert_eq!(
+            list(codec::loads("\"🔥\\ud800\"").unwrap()).unwrap(),
+            vec![
+                codec::loads("\"🔥\"").unwrap(),
+                codec::loads("\"\\ud800\"").unwrap()
+            ]
+        );
+        for (value, typename) in [
+            (Py::Bool(true), "bool"),
+            (Py::Int(1.into()), "int"),
+            (Py::Float(1.5), "float"),
+        ] {
+            let refusal = list(value).unwrap_err();
+            assert_eq!(refusal.family, "TypeError");
+            assert_eq!(
+                refusal.message,
+                format!("'{typename}' object is not iterable")
+            );
+        }
+        let mut object = vec![(key("first"), Py::from("value")), (key("last"), Py::Null)];
+        assert_eq!(pop(&mut object, "missing"), Py::Null);
+        assert_eq!(object.len(), 2);
+        assert_eq!(pop(&mut object, "first"), Py::from("value"));
+        assert_eq!(object, vec![(key("last"), Py::Null)]);
+        assert_eq!(parsed("bad json"), Py::from("bad json"));
+        assert_eq!(parsed("[1]"), Py::List(vec![Py::Int(1.into())]));
+        let value = Py::Dict(vec![
+            (key("b"), Py::Int(2.into())),
+            (key("a"), Py::Int(1.into())),
+        ]);
+        assert_eq!(dump(&value, true).unwrap(), "{\"a\":1,\"b\":2}");
+        assert_eq!(dump(&value, false).unwrap(), "{\"a\": 1, \"b\": 2}");
+    }
+
+    #[test]
+    fn quarantine_internal_only_values_keep_refusals_and_key_invariants() {
+        let decimal = Py::Decimal("1.00".parse().unwrap());
+        let refusal = list(decimal.clone()).unwrap_err();
+        assert_eq!(refusal.family, "TypeError");
+        assert_eq!(refusal.message, "'decimal.Decimal' object is not iterable");
+        let refusal = dump(&decimal, false).unwrap_err();
+        assert_eq!(refusal.family, "ValueError");
+        assert_eq!(
+            refusal.message,
+            "object of type Decimal is not JSON serializable"
+        );
+        // JSON decoding cannot produce Decimal values or non-string keys.
+        // Construct them here to pin the defensive helper-only paths.
+        assert!(
+            std::panic::catch_unwind(|| list(Py::Dict(vec![(Key::Int(1.into()), Py::Null)])))
+                .is_err()
+        );
+    }
+}

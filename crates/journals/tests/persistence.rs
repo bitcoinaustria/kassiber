@@ -522,7 +522,7 @@ fn missing_inactive_or_changed_components_never_persist_reconciliations() {
         .into_iter()
         .find(|v| v["name"] == "reconciliation-snapshot:recovered")
         .unwrap();
-    for mode in 0..5 {
+    for mode in 0..10 {
         let mut v = original.clone();
         let proof =
             &v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0];
@@ -537,6 +537,34 @@ fn missing_inactive_or_changed_components_never_persist_reconciliations() {
         if mode == 4 {
             v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
                 ["component_revision"] = Value::Null;
+        }
+        if mode == 5 {
+            for decision in v["record"]["custody"]["quantity_state"]["projection"]["decisions"]
+                .as_array_mut()
+                .unwrap()
+            {
+                decision["target"] = Value::Null;
+            }
+        }
+        if mode == 6 || mode == 7 {
+            let claim = if mode == 6 { Value::Null } else { json!("") };
+            for decision in v["record"]["custody"]["quantity_state"]["projection"]["decisions"]
+                .as_array_mut()
+                .unwrap()
+            {
+                decision["selected_claim_id"] = claim.clone();
+            }
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["native_claim_amounts"] = json!([[claim, 2_000_000]]);
+        }
+        if mode == 8 {
+            v["record"]["custody"]["quantity_state"] = Value::Null;
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["native_claim_amounts"] = json!([["missing", 0]]);
+        }
+        if mode == 9 {
+            v["record"]["custody"]["interpretation"]["native_component_reconciliations"][0]
+                ["native_claim_amounts"] = json!([["missing", null]]);
         }
         let c = Connection::open_in_memory().unwrap();
         load(&c, &v["before"]);
@@ -1052,4 +1080,365 @@ fn physical_savepoint_driver_failures_require_whole_caller_rollback() {
             &before
         ));
     }
+}
+
+struct PragmaFault<'a> {
+    conn: &'a Connection,
+}
+impl<'a> PragmaFault<'a> {
+    fn once(conn: &'a Connection, pragma: &'static str, deny: usize) -> Self {
+        use kassiber_store::rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+        let mut call = 0;
+        conn.authorizer(Some(move |context: AuthContext<'_>| {
+            if let AuthAction::Pragma { pragma_name, .. } = context.action {
+                if pragma_name == pragma {
+                    call += 1;
+                    if call == deny {
+                        return Authorization::Deny;
+                    }
+                }
+            }
+            Authorization::Allow
+        }))
+        .unwrap();
+        Self { conn }
+    }
+}
+impl Drop for PragmaFault<'_> {
+    fn drop(&mut self) {
+        use kassiber_store::rusqlite::hooks::{AuthContext, Authorization};
+        self.conn
+            .authorizer(None::<fn(AuthContext<'_>) -> Authorization>)
+            .unwrap();
+    }
+}
+
+#[test]
+fn physical_setting_driver_errors_propagate_and_retry_cache_restoration() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    for cipher in [false, true] {
+        let root = Scratch::new(if cipher {
+            "cipher-pragma"
+        } else {
+            "sqlite-pragma"
+        });
+        let conn = physical_connection(&root.0.join("book.sqlite3"), cipher);
+        conn.pragma_update(None, "cache_size", 321).unwrap();
+        let before = connection_settings(&conn);
+        for deny in [1, 2] {
+            let fault = PragmaFault::once(&conn, "cache_size", deny);
+            assert!(
+                RebuildCache::enter(&conn).is_err(),
+                "cache enter call {deny}"
+            );
+            drop(fault);
+            assert_eq!(connection_settings(&conn), before);
+        }
+        let cache = RebuildCache::enter(&conn).unwrap();
+        let fault = PragmaFault::once(&conn, "cache_size", 1);
+        assert!(cache.restore().is_err());
+        drop(fault);
+        assert_eq!(
+            connection_settings(&conn),
+            before,
+            "Drop retries a refused explicit restore"
+        );
+        for pragma in ["journal_mode", "wal_autocheckpoint"] {
+            let fault = PragmaFault::once(&conn, pragma, 1);
+            assert!(
+                DeferredCheckpoint::enter(&conn).is_err(),
+                "checkpoint enter {pragma}"
+            );
+            drop(fault);
+            assert_eq!(connection_settings(&conn), before);
+        }
+        if !cipher {
+            let fault = PragmaFault::once(&conn, "wal_autocheckpoint", 2);
+            assert!(DeferredCheckpoint::enter(&conn).is_err());
+            drop(fault);
+            assert_eq!(connection_settings(&conn), before);
+            let checkpoint = DeferredCheckpoint::enter(&conn).unwrap();
+            let fault = PragmaFault::once(&conn, "wal_checkpoint", 1);
+            assert!(checkpoint.after_reply().is_err());
+            drop(fault);
+            assert_eq!(connection_settings(&conn), before);
+        }
+    }
+}
+
+#[test]
+fn malformed_quantity_refusals_roll_back_before_freshness_on_both_drivers() {
+    use kassiber_journals::{boundary, persistence};
+    use serde_json::json;
+    let v = &cases()[0];
+    let root = Scratch::new("quantity-refusal");
+    for cipher in [false, true] {
+        for mode in ["posting", "balance", "eligible", "source", "target"] {
+            let mut quantity = json!({"projection":{"observations":[],"postings":[],"decisions":[]},"tax_eligibility":{"eligible_decisions":[]}});
+            if matches!(mode, "posting" | "balance") {
+                let posting = json!({"posting_id":"a","asset":"BTC","location_kind":"wallet","location_id":"synthetic","amount_msat":i64::MAX,"state":"observed"});
+                if mode == "posting" {
+                    let mut invalid = posting.clone();
+                    invalid["amount_msat"] = json!(true);
+                    quantity["projection"]["postings"] = json!([invalid]);
+                } else {
+                    let mut second = posting.clone();
+                    second["posting_id"] = json!("b");
+                    quantity["projection"]["postings"] = json!([posting, second]);
+                }
+            } else {
+                let decision = json!({"state":"internal_verified","source":{"observation_hash":"source","start_msat":0,"end_msat":1},"target":{"observation_hash":"target","start_msat":0,"end_msat":1}});
+                if mode == "eligible" {
+                    quantity["tax_eligibility"]["eligible_decisions"] = json!([decision]);
+                } else {
+                    quantity["projection"]["decisions"] = json!([decision]);
+                    if mode == "target" {
+                        quantity["projection"]["observations"] =
+                            json!([{"quantity_hash":"source"}]);
+                    }
+                }
+            }
+            let conn =
+                physical_connection(&root.0.join(format!("{cipher}-{mode}.sqlite3")), cipher);
+            load(&conn, &v["before"]);
+            let r = &v["record"];
+            let response = if r["response"].is_null() {
+                boundary::empty_response()
+            } else {
+                boundary::ledger_response(&r["response"]).unwrap()
+            };
+            let mut state = boundary::build(
+                &r["profile"],
+                &r["custody"],
+                r["wallets"].as_array().unwrap(),
+                &response,
+                String::new,
+            )
+            .unwrap();
+            state.custody_quantity = &quantity;
+            state.custody_native_reconciliations = json!([]);
+            conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+            let mut writes = Writes::default();
+            let error = persistence::store_ledger_state(
+                &conn,
+                &r["profile"],
+                &state,
+                v["created_at"].as_str().unwrap(),
+                &mut || Ok("unused".into()),
+                &mut writes,
+            )
+            .unwrap_err();
+            assert!(writes.count > 0);
+            let (family, message) = match mode {
+                "posting" => (
+                    "OverflowError",
+                    "quantity posting does not fit SQLite INTEGER",
+                ),
+                "balance" => (
+                    "OverflowError",
+                    "quantity balance does not fit SQLite INTEGER",
+                ),
+                "eligible" => ("KeyError", "eligible source observation"),
+                "source" => ("KeyError", "decision source observation"),
+                "target" => ("KeyError", "decision target observation"),
+                _ => unreachable!(),
+            };
+            assert_eq!(error.family, family, "{cipher} {mode}: {error}");
+            assert_eq!(error.message, message, "{cipher} {mode}");
+            equal(&conn, &v["before"], &v["name"]);
+            conn.execute_batch("ROLLBACK").unwrap();
+        }
+    }
+}
+
+#[test]
+fn quantity_projection_filters_and_zero_balances_preserve_basis_barriers() {
+    use serde_json::json;
+    for (status, target, eligible) in [
+        ("internal_verified", true, true),
+        ("internal_reviewed", true, true),
+        ("internal_verified", true, false),
+        ("external_presumed", true, false),
+        ("unknown", true, false),
+        ("internal_verified", false, false),
+    ] {
+        let mut v = cases()[0].clone();
+        let q = &mut v["record"]["custody"]["quantity_state"];
+        let observations = q["projection"]["observations"].as_array().unwrap();
+        let source = observations[0].clone();
+        let destination = observations[1].clone();
+        let mut decision = json!({"state":status,"reason":"accepted quantity fixture","source":{"observation_hash":source["quantity_hash"],"start_msat":0,"end_msat":1},"target":{"observation_hash":destination["quantity_hash"],"start_msat":0,"end_msat":1}});
+        if !target {
+            decision["target"] = Value::Null;
+        }
+        q["projection"]["decisions"] = json!([decision]);
+        q["tax_eligibility"]["eligible_decisions"] = if eligible {
+            json!([decision])
+        } else {
+            json!([])
+        };
+        let mut posting = json!({"posting_id":"first","observation_hash":source["quantity_hash"],"asset":"BTC","location_kind":"wallet","location_id":source["wallet_id"],"amount_msat":1,"state":"observed"});
+        q["projection"]["postings"] = json!([posting]);
+        posting["posting_id"] = json!("second");
+        posting["amount_msat"] = json!(-1);
+        q["projection"]["postings"]
+            .as_array_mut()
+            .unwrap()
+            .push(posting);
+        q["issues"] = json!([]);
+        q["reviewed_conversion_pairs"] = json!([]);
+        q["reviewed_direct_payouts"] = json!([]);
+        v["record"]["custody"]["interpretation"]["native_component_reconciliations"] = json!([]);
+        let c = Connection::open_in_memory().unwrap();
+        load(&c, &v["before"]);
+        c.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let stored = store(&c, &v, &mut Writes::default()).unwrap();
+        assert_eq!(stored.quantity_counts["postings"], 2);
+        assert_eq!(stored.quantity_counts["balances"], 0);
+        let expected =
+            usize::from(target && matches!(status, "internal_verified" | "internal_reviewed"));
+        assert_eq!(
+            stored.quantity_counts["decisions"], expected,
+            "{status} target={target}"
+        );
+        let rows = c
+            .prepare("SELECT basis_state FROM journal_custody_decisions")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<kassiber_store::rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            if expected == 0 {
+                vec![]
+            } else {
+                vec![if eligible {
+                    "eligible"
+                } else {
+                    "blocked_by_prior_custody_basis"
+                }
+                .to_owned()]
+            }
+        );
+        assert_eq!(
+            c.query_row(
+                "SELECT COUNT(*) FROM journal_quantity_balances",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        c.execute_batch("ROLLBACK").unwrap();
+        equal(&c, &v["before"], &v["name"]);
+    }
+}
+
+#[test]
+fn physical_automatic_outer_rollback_keeps_original_refusal_and_stale_dump() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    let root = Scratch::new("automatic-rollback");
+    let v = &cases()[0];
+    for cipher in [false, true] {
+        let path = root.0.join(format!("{cipher}.sqlite3"));
+        let c = physical_connection(&path, cipher);
+        load(&c, &v["before"]);
+        c.execute_batch("CREATE TEMP TRIGGER refuse_entry BEFORE INSERT ON journal_entries BEGIN SELECT RAISE(ROLLBACK, 'driver rolled back caller'); END").unwrap();
+        let settings = connection_settings(&c);
+        {
+            let _checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+            let _cache = RebuildCache::enter(&c).unwrap();
+            c.execute_batch("BEGIN IMMEDIATE;SAVEPOINT journals_process;UPDATE profiles SET last_processed_tx_count=-1").unwrap();
+            let mut writes = Writes::default();
+            let refusal = store(&c, v, &mut writes).unwrap_err();
+            assert_eq!(refusal.family, "DatabaseError");
+            assert!(refusal.message.contains("driver rolled back caller"));
+            assert!(writes.count > 0);
+            assert!(c.is_autocommit());
+        }
+        equal(&c, &v["before"], &v["name"]);
+        assert_eq!(connection_settings(&c), settings);
+        drop(c);
+        equal(
+            &physical_connection(&path, cipher),
+            &v["before"],
+            &v["name"],
+        );
+    }
+}
+
+#[test]
+fn physical_drop_restoration_errors_remain_best_effort_after_commit() {
+    use kassiber_journals::storage::{DeferredCheckpoint, RebuildCache};
+    let root = Scratch::new("drop-restore");
+    for cipher in [false, true] {
+        let path = root.0.join(format!("{cipher}.sqlite3"));
+        let c = physical_connection(&path, cipher);
+        c.execute_batch("CREATE TABLE witness(value); INSERT INTO witness VALUES('durable')")
+            .unwrap();
+        let before = connection_settings(&c);
+        let cache = RebuildCache::enter(&c).unwrap();
+        let fault = PragmaFault::once(&c, "cache_size", 1);
+        drop(cache);
+        drop(fault);
+        assert_eq!(
+            c.pragma_query_value(None, "cache_size", |row| row.get::<_, i64>(0))
+                .unwrap(),
+            -131072
+        );
+        c.pragma_update(None, "cache_size", -321).unwrap();
+        let checkpoint = DeferredCheckpoint::enter(&c).unwrap();
+        let fault = PragmaFault::once(&c, "wal_autocheckpoint", 1);
+        drop(checkpoint);
+        drop(fault);
+        assert_eq!(
+            c.pragma_query_value(None, "wal_autocheckpoint", |row| row.get::<_, i64>(0))
+                .unwrap(),
+            if cipher { 73 } else { 0 }
+        );
+        c.pragma_update(None, "wal_autocheckpoint", 73).unwrap();
+        assert_eq!(connection_settings(&c), before);
+        drop(c);
+        assert_eq!(
+            physical_connection(&path, cipher)
+                .query_row("SELECT value FROM witness", [], |row| row
+                    .get::<_, String>(0))
+                .unwrap(),
+            "durable"
+        );
+    }
+}
+
+#[test]
+fn quantity_issues_keep_filed_impacts_pending_without_other_barriers() {
+    use serde_json::json;
+    let mut v = cases()
+        .into_iter()
+        .find(|v| v["name"] == "filed-change")
+        .unwrap();
+    v["record"]["custody"]["component_blockers"] = json!([]);
+    v["record"]["custody"]["quantity_state"]["issues"] = json!([{
+        "issue_id":"unresolved", "issue_type":"quantity_gap", "state":"custody_suspense",
+        "asset":"BTC", "amount_msat":1, "occurred_at":null, "transaction_ids":[],
+        "reason":"unresolved quantity", "details":{}
+    }]);
+    let c = Connection::open_in_memory().unwrap();
+    load(&c, &v["before"]);
+    c.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let stored = store(&c, &v, &mut Writes::default()).unwrap();
+    assert!(stored.quarantines.is_empty());
+    assert_eq!(stored.quantity_counts["issues"], 1);
+    assert_eq!(stored.filed_report_impacts_resolved, 0);
+    assert_eq!(
+        c.query_row(
+            "SELECT COUNT(*) FROM custody_filed_report_impact_resolutions",
+            [],
+            |row| row.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    c.execute_batch("ROLLBACK").unwrap();
+    equal(&c, &v["before"], &v["name"]);
 }

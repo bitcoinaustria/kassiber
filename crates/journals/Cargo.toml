@@ -28,6 +28,9 @@ bitcoin_hashes = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
 
+[dev-dependencies]
+kassiber-store = { path = "../store", features = ["test-hooks"] }
+
 [lints.rust]
 unsafe_code = "forbid"
 

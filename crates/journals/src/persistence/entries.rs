@@ -343,6 +343,82 @@ mod tests {
     }
 
     #[test]
+    fn typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values() {
+        use storage::BindingRow;
+        let cases: Value =
+            serde_json::from_str(include_str!("../../tests/data/render.json")).unwrap();
+        let entry = array(&cases)
+            .iter()
+            .find_map(|case| {
+                let response = crate::boundary::ledger_response(&case["response"]).ok()?;
+                let state = crate::boundary::build(
+                    &case["profile"],
+                    &case["custody"],
+                    array(&case["wallets"]),
+                    &response,
+                    String::new,
+                )
+                .ok()?;
+                state.entries.into_iter().find(|e| e.calculation.is_some())
+            })
+            .expect("typed calculation fixture");
+        let conn = Connection::open_in_memory().unwrap();
+        let query = format!("SELECT {}", vec!["?"; 29].join(","));
+        for optional in [false, true] {
+            let mut entry = entry.clone();
+            entry.fiat_value = JournalDecimal("1.25".parse().unwrap());
+            entry.unit_cost = JournalDecimal("2.50".parse().unwrap());
+            entry.cost_basis = optional.then(|| JournalDecimal("3.75".parse().unwrap()));
+            entry.proceeds = optional.then(|| JournalDecimal("4.00".parse().unwrap()));
+            entry.gain_loss = optional.then(|| JournalDecimal("5.25".parse().unwrap()));
+            let mut sources = Sources::default();
+            let encoder = RefCell::new(storage::CalculationEncoder::default());
+            let binding = row(&entry, &mut sources, &encoder, b"clock");
+            binding.prepare().unwrap();
+            let original: [Sql; 29] =
+                std::array::from_fn(|index| Sql::try_from(binding.cell(index)).unwrap());
+            let matches = |cells: &[Sql; 29]| {
+                conn.query_row(&query, params_from_iter(cells), |old| {
+                    Ok(binding.matches(old, &[]).unwrap())
+                })
+                .unwrap()
+            };
+            assert!(matches(&original));
+            for column in 0..29 {
+                let mut replacements = vec![
+                    Sql::Null,
+                    Sql::Integer(7),
+                    Sql::Real(98765.5),
+                    t("different"),
+                    Sql::Blob(b"different".to_vec()),
+                ];
+                if let Sql::Text(text) = &original[column] {
+                    replacements.push(Sql::Blob(text.as_bytes().to_vec()));
+                }
+                if let Sql::Real(real) = &original[column] {
+                    replacements.push(t(real.to_string()));
+                    if real.fract() == 0.0 {
+                        replacements.push(Sql::Integer(*real as i64));
+                    }
+                }
+                for replacement in replacements {
+                    if replacement == original[column] {
+                        continue;
+                    }
+                    let mut cells = original.clone();
+                    cells[column] = replacement;
+                    assert_eq!(
+                        matches(&cells),
+                        column == 28,
+                        "optional={optional} column={column}: {:?}",
+                        cells[column]
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn decimal_padding_validation_preserves_limits_without_formatting() {
         let limit = i128::from(kassiber_pydecimal::MAX_FIXED_PADDING);
         for coefficient in [

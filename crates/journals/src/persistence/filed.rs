@@ -246,5 +246,26 @@ mod tests {
         assert_eq!(values, [json!({"n":null,"i":1,"f":1.5,"s":"é"})]);
         assert!(rows(&c, "SELECT x'00' AS blob", []).is_err());
         assert!(summaries(&c, "p", &Value::Null, &json!(2024), &json!({})).is_err());
+        for (start, end) in [(Value::Null, json!(2024)), (json!(2024), Value::Null)] {
+            let refusal = summaries(&c, "p", &start, &end, &json!({})).unwrap_err();
+            assert_eq!(refusal.family, "RuntimeError");
+            assert_eq!(refusal.message, "invalid report year");
+        }
+        for query in [
+            "SELECT x'00' AS blob",
+            "SELECT CAST(x'ff' AS TEXT) AS invalid",
+            "SELECT absent FROM missing",
+        ] {
+            assert_eq!(rows(&c, query, []).unwrap_err().family, "DatabaseError");
+        }
+        assert_eq!(
+            rows(&c, "SELECT ? AS absent", []).unwrap_err().family,
+            "DatabaseError"
+        );
+        // Valid years reach the delegated summary service: its driver refusal
+        // remains distinct from malformed-year validation above.
+        let refusal = summaries(&c, "p", &json!(2024), &json!(2024), &json!({})).unwrap_err();
+        assert_eq!(refusal.family, "RuntimeError");
+        assert_ne!(refusal.message, "invalid report year");
     }
 }

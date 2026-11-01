@@ -572,6 +572,120 @@ pub(super) fn reconciliations<O: storage::WriteObserver>(
 mod tests {
     use super::*;
     #[test]
+    fn quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices() {
+        assert!(matches!(key(&json!("id")), Cow::Borrowed("id")));
+        for (value, expected) in [
+            (Value::Null, "None"),
+            (json!(1), "1"),
+            (json!(false), "False"),
+        ] {
+            assert_eq!(key(&value), expected);
+        }
+        for value in [
+            Value::Null,
+            json!(false),
+            json!(0),
+            json!(0.0),
+            json!(""),
+            json!([]),
+            json!({}),
+        ] {
+            assert_eq!(nullable(&value).unwrap(), Sql::Null);
+        }
+        assert_eq!(nullable(&json!("id")).unwrap(), t("id"));
+        assert_eq!(nullable(&json!(true)).unwrap(), Sql::Integer(1));
+        assert_eq!(
+            nullable(&json!([1])).unwrap_err().family,
+            "ProgrammingError"
+        );
+        assert_eq!(
+            hash(&json!({"b":2,"a":1})).unwrap(),
+            t("43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777")
+        );
+        for (input, expected) in [
+            ("liquidv1", "main"),
+            ("liquidtestnet", "test"),
+            ("elementsregtest", "regtest"),
+            ("signet", "signet"),
+        ] {
+            assert_eq!(
+                network(&json!({"event_key":{"network":input}})),
+                json!(expected)
+            );
+        }
+        assert_eq!(network(&json!({})), Value::Null);
+        assert_eq!(network(&json!({"event_key":{"network":7}})), json!(7));
+        for (asset, expected) in [
+            ("BTC", "bitcoin"),
+            ("LBTC", "bitcoin"),
+            ("EUR", "asset:EUR"),
+        ] {
+            assert_eq!(exposure(&json!({"asset":asset})), expected);
+        }
+        assert_eq!(exposure(&json!({})), "asset:None");
+        for (start, end) in [(0, 1), (7, -3), (i64::MIN, i64::MAX)] {
+            assert_eq!(
+                slice_amount(&json!({"start_msat":start,"end_msat":end})).unwrap(),
+                i128::from(end) - i128::from(start)
+            );
+        }
+        for field in ["start_msat", "end_msat"] {
+            for invalid in [
+                Value::Null,
+                json!(true),
+                json!(1.5),
+                json!("1"),
+                json!(u64::MAX),
+            ] {
+                let mut slice = json!({"start_msat":0,"end_msat":1});
+                slice[field] = invalid;
+                let error = slice_amount(&slice).unwrap_err();
+                assert_eq!(error.family, "OverflowError");
+                assert_eq!(
+                    error.message,
+                    format!(
+                        "slice {} does not fit SQLite INTEGER",
+                        if field == "start_msat" {
+                            "start"
+                        } else {
+                            "end"
+                        }
+                    )
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pool_barriers_require_every_scope_field_and_keep_first_reason() {
+        let observation =
+            json!({"profile_id":"p","event_key":{"network":"liquidv1"},"asset":"LBTC"});
+        let scope = json!({"profile_id":"p","network":"main","exposure":"bitcoin","unit":"msat"});
+        let matching = json!([scope, ["first", "second"]]);
+        assert_eq!(barrier(&json!({}), &observation), Value::Null);
+        assert_eq!(
+            barrier(
+                &json!({"tax_eligibility":{"pool_barriers":[matching]}}),
+                &observation
+            ),
+            json!("first")
+        );
+        for field in ["profile_id", "network", "exposure", "unit"] {
+            let mut wrong = scope.clone();
+            wrong[field] = json!("wrong");
+            let q = json!({"tax_eligibility":{"pool_barriers":[[wrong,["unrelated"]], matching]}});
+            assert_eq!(barrier(&q, &observation), json!("first"), "{field}");
+        }
+        assert_eq!(
+            barrier(
+                &json!({"tax_eligibility":{"pool_barriers":[[scope,[]],matching]}}),
+                &observation
+            ),
+            Value::Null
+        );
+    }
+
+    #[test]
     fn economic_relation_source_ids_use_first_truthy_id_or_empty_string() {
         for (relation, expected) in [
             (json!({}), ""),

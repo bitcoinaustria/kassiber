@@ -220,6 +220,21 @@ fn comparison_source_dictionary_retains_every_field_and_cache_identity() {
 
 #[test]
 fn comparison_scalars_refuse_noncanonical_tokens() {
+    for scalar in [Scalar::Null, Scalar::quoted("x"), Scalar::Integer("7")] {
+        let token = match scalar {
+            Scalar::Null => b"null".as_slice(),
+            Scalar::Text(..) => b"\"x\"",
+            Scalar::Integer(_) => b"7",
+        };
+        let mut cursor = Cursor(token);
+        assert!(scalar.consume(&mut cursor).is_some());
+        assert!(cursor.0.is_empty());
+        assert!(scalar.consume(&mut Cursor(b"wrong")).is_none());
+    }
+    let mut cursor = Cursor(b"value tail");
+    assert!(cursor.write_str("value").is_ok());
+    assert_eq!(cursor.0, b" tail");
+    assert!(cursor.write_str("wrong").is_err());
     assert!(Scalar::text(&json!(0)).is_none());
     assert!(Cursor(b"").scalar(&json!(true)).is_none());
     let zero = Value::Number(serde_json::Number::from_string_unchecked("-0".into()));

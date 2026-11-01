@@ -748,3 +748,43 @@ fn every_entry_real_column_preserves_the_negative_zero_rewrite_rule() {
         }
     }
 }
+
+#[test]
+fn compact_key_sets_and_scalar_guards_preserve_exact_shapes() {
+    assert!(keys(&json!({}), &[]));
+    assert!(keys(&json!({"required":null}), &["required"]));
+    assert!(!keys(&json!({"required":null,"future":1}), &["required"]));
+    assert!(!keys(&json!({"future":1}), &["required"]));
+    assert!(!keys(&json!({}), &["required"]));
+    for value in [Value::Null, json!(false), json!(0), json!(""), json!([])] {
+        assert!(!keys(&value, &[]));
+    }
+    assert!(text(&Value::Null));
+    assert!(text(&json!("")));
+    for value in [json!(true), json!(0), json!(1.0), json!([]), json!({})] {
+        assert!(!text(&value));
+    }
+    for spelling in [
+        "0",
+        "-1",
+        "18446744073709551616",
+        "999999999999999999999999999999999999999999999999",
+    ] {
+        let value = serde_json::from_str(spelling).unwrap();
+        assert!(integer(&value));
+        assert!(exact_integer_text(&value, Some(spelling)));
+        assert!(!exact_integer_text(&value, Some("different")));
+        assert!(!exact_integer_text(&value, None));
+    }
+    for spelling in ["1.0", "1e0", "1E0", "-0.0"] {
+        let value = Value::Number(serde_json::Number::from_string_unchecked(spelling.into()));
+        assert!(!integer(&value));
+        assert!(!exact_integer_text(&value, Some(spelling)));
+    }
+    for value in [Value::Null, json!(true), json!("1"), json!([]), json!({})] {
+        assert!(!integer(&value));
+        assert!(!exact_integer_text(&value, Some("1")));
+    }
+    let zero = Value::Number(serde_json::Number::from_string_unchecked("-0".into()));
+    assert_eq!(compact_tuple(&zero).as_deref(), Some("0"));
+}

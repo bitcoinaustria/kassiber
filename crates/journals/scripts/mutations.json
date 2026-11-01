@@ -3528,5 +3528,1255 @@
       "comparison_scalars_refuse_noncanonical_tokens"
     ],
     "rule": "Source equality canonicalizes raw negative integer zero before deduplication."
+  },
+  {
+    "id": "JP-quantity-key-fallback",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": ".unwrap_or_else(|| Cow::Owned(string(v)))",
+    "replace": ".unwrap_or_else(|| Cow::Owned(String::new()))",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Non-string quantity identities retain Python string conversion."
+  },
+  {
+    "id": "JP-quantity-nullable-falsey",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if truth(v) {\n        bind(v)",
+    "replace": "if !truth(v) {\n        bind(v)",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Falsey quantity references bind NULL; truthy scalars use the exact SQLite binder."
+  },
+  {
+    "id": "JP-quantity-hash-canonical",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "codec::sha256(&pyjson(v, true)?)",
+    "replace": "codec::sha256(&pyjson(v, false)?)",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Quantity hashes use compact canonical Python JSON."
+  },
+  {
+    "id": "JP-quantity-network-main",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Some(\"liquidv1\") => json!(\"main\")",
+    "replace": "Some(\"liquidv1\") => json!(\"wrong\")",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Liquid network aliases retain their exact accounting network."
+  },
+  {
+    "id": "JP-quantity-network-test",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Some(\"liquidtestnet\") => json!(\"test\")",
+    "replace": "Some(\"liquidtestnet\") => json!(\"wrong\")",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Liquid network aliases retain their exact accounting network."
+  },
+  {
+    "id": "JP-quantity-network-regtest",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Some(\"elementsregtest\") => json!(\"regtest\")",
+    "replace": "Some(\"elementsregtest\") => json!(\"wrong\")",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Liquid network aliases retain their exact accounting network."
+  },
+  {
+    "id": "JP-quantity-network-fallback",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "_ => o[\"event_key\"][\"network\"].clone(),",
+    "replace": "_ => Value::Null,",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Unknown quantity networks retain their original value."
+  },
+  {
+    "id": "JP-quantity-exposure-btc",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Some(\"BTC\" | \"LBTC\")",
+    "replace": "Some(\"LBTC\")",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Both BTC and LBTC belong to the Bitcoin exposure pool."
+  },
+  {
+    "id": "JP-quantity-exposure-lbtc",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Some(\"BTC\" | \"LBTC\")",
+    "replace": "Some(\"BTC\")",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Both BTC and LBTC belong to the Bitcoin exposure pool."
+  },
+  {
+    "id": "JP-quantity-exposure-fallback",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "format!(\"asset:{}\", string(&o[\"asset\"]))",
+    "replace": "String::new()",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Other quantity assets retain their distinct exposure names."
+  },
+  {
+    "id": "JP-slice-start-refusal",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "let start = slice[\"start_msat\"]\n        .as_i64()\n        .ok_or_else(|| Refusal::new(\"OverflowError\", \"slice start does not fit SQLite INTEGER\"))?;",
+    "replace": "let start = slice[\"start_msat\"].as_i64().unwrap_or(0);",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Invalid or wide slice endpoints refuse rather than silently defaulting."
+  },
+  {
+    "id": "JP-slice-end-refusal",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "let end = slice[\"end_msat\"]\n        .as_i64()\n        .ok_or_else(|| Refusal::new(\"OverflowError\", \"slice end does not fit SQLite INTEGER\"))?;",
+    "replace": "let end = slice[\"end_msat\"].as_i64().unwrap_or(0);",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Invalid or wide slice endpoints refuse rather than silently defaulting."
+  },
+  {
+    "id": "JP-slice-difference",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Ok(i128::from(end) - i128::from(start))",
+    "replace": "Ok(i128::from(start) - i128::from(end))",
+    "expect_failing": [
+      "quantity_scalar_helpers_preserve_fallbacks_and_refuse_invalid_slices"
+    ],
+    "rule": "Slice quantity is the exact wide end-minus-start difference."
+  },
+  {
+    "id": "JP-pool-scope-profile_id",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "p[0][\"profile_id\"] == o[\"profile_id\"]",
+    "replace": "true",
+    "expect_failing": [
+      "pool_barriers_require_every_scope_field_and_keep_first_reason"
+    ],
+    "rule": "Pool barriers require every profile, network, exposure and unit scope field."
+  },
+  {
+    "id": "JP-pool-scope-network",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "p[0][\"network\"] == network(o)",
+    "replace": "{ let _ = network(o); true }",
+    "expect_failing": [
+      "pool_barriers_require_every_scope_field_and_keep_first_reason"
+    ],
+    "rule": "Pool barriers require every profile, network, exposure and unit scope field."
+  },
+  {
+    "id": "JP-pool-scope-exposure",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "p[0][\"exposure\"] == exposure(o)",
+    "replace": "{ let _ = exposure(o); true }",
+    "expect_failing": [
+      "pool_barriers_require_every_scope_field_and_keep_first_reason"
+    ],
+    "rule": "Pool barriers require every profile, network, exposure and unit scope field."
+  },
+  {
+    "id": "JP-pool-scope-unit",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "p[0][\"unit\"] == \"msat\"",
+    "replace": "{ let _ = \"msat\"; true }",
+    "expect_failing": [
+      "pool_barriers_require_every_scope_field_and_keep_first_reason"
+    ],
+    "rule": "Pool barriers require every profile, network, exposure and unit scope field."
+  },
+  {
+    "id": "JP-pool-first-reason",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": ".map(|p| p[1][0].clone())",
+    "replace": ".map(|p| p[1][1].clone())",
+    "expect_failing": [
+      "pool_barriers_require_every_scope_field_and_keep_first_reason"
+    ],
+    "rule": "The first matching pool supplies its first reason, including an empty reason list."
+  },
+  {
+    "id": "JP-filed-row-null",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "ValueRef::Null => Value::Null,",
+    "replace": "ValueRef::Null => json!(0),",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Filed snapshot rows preserve each SQLite scalar type."
+  },
+  {
+    "id": "JP-filed-row-integer",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "ValueRef::Integer(n) => json!(n),",
+    "replace": "ValueRef::Integer(n) => json!(n.to_string()),",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Filed snapshot rows preserve each SQLite scalar type."
+  },
+  {
+    "id": "JP-filed-row-real",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "ValueRef::Real(f) => json!(f),",
+    "replace": "ValueRef::Real(f) => json!(f.to_string()),",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Filed snapshot rows preserve each SQLite scalar type."
+  },
+  {
+    "id": "JP-filed-blob-refusal",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),",
+    "replace": "ValueRef::Blob(_) => Value::Null,",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Filed snapshot BLOB fields refuse rather than silently disappearing."
+  },
+  {
+    "id": "JP-filed-utf8-refusal",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "std::str::from_utf8(s).map_err(|_| rusqlite::Error::InvalidQuery)?",
+    "replace": "std::str::from_utf8(s).unwrap_or(\"\")",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Malformed UTF-8 snapshot TEXT refuses rather than becoming empty text."
+  },
+  {
+    "id": "JP-filed-start-year",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "start.as_i64().ok_or_else(|| error(\"invalid report year\"))?",
+    "replace": "start.as_i64().unwrap_or(2024)",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Each filed summary year must validate before delegated computation."
+  },
+  {
+    "id": "JP-filed-end-year",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "end.as_i64().ok_or_else(|| error(\"invalid report year\"))?",
+    "replace": "end.as_i64().unwrap_or(2024)",
+    "expect_failing": [
+      "filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals"
+    ],
+    "rule": "Each filed summary year must validate before delegated computation."
+  },
+  {
+    "id": "JP-quarantine-coerce-null",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Py::Null | Py::Bool(false) => vec![],",
+    "replace": "Py::Null | Py::Bool(false) => vec![Py::Null],",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine list coercion preserves Python falsey, list, dictionary and code-point semantics."
+  },
+  {
+    "id": "JP-quarantine-coerce-int-zero",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Py::Int(n) if n == 0.into() => vec![],",
+    "replace": "Py::Int(n) if n == 0.into() => vec![Py::Null],",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine list coercion preserves Python falsey, list, dictionary and code-point semantics."
+  },
+  {
+    "id": "JP-quarantine-coerce-float-zero",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Py::Float(0.0) => vec![],",
+    "replace": "Py::Float(0.0) => vec![Py::Null],",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine list coercion preserves Python falsey, list, dictionary and code-point semantics."
+  },
+  {
+    "id": "JP-quarantine-coerce-list",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Py::List(v) => v,",
+    "replace": "Py::List(_) => vec![],",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine list coercion preserves Python falsey, list, dictionary and code-point semantics."
+  },
+  {
+    "id": "JP-quarantine-coerce-dict",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Key::Str(s) => Py::Str(s),",
+    "replace": "Key::Str(_) => Py::Null,",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine list coercion preserves Python falsey, list, dictionary and code-point semantics."
+  },
+  {
+    "id": "JP-quarantine-coerce-string",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Py::Str(\n                    kassiber_pyjson::PyStr::from_code_points([p]).expect(\"valid Python code point\"),\n                )",
+    "replace": "{ let _ = p; Py::Null }",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine list coercion preserves Python falsey, list, dictionary and code-point semantics."
+  },
+  {
+    "id": "JP-quarantine-refuse-bool",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"'bool' object is not iterable\"",
+    "replace": "\"wrong type\"",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Noniterable quarantine reasons preserve their exact Python refusal."
+  },
+  {
+    "id": "JP-quarantine-refuse-int",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"'int' object is not iterable\"",
+    "replace": "\"wrong type\"",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Noniterable quarantine reasons preserve their exact Python refusal."
+  },
+  {
+    "id": "JP-quarantine-refuse-float",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"'float' object is not iterable\"",
+    "replace": "\"wrong type\"",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Noniterable quarantine reasons preserve their exact Python refusal."
+  },
+  {
+    "id": "JP-quarantine-pop-absent",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": ".unwrap_or(Py::Null)",
+    "replace": ".unwrap_or(Py::Bool(false))",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Missing additional reasons use Python None without removing other keys."
+  },
+  {
+    "id": "JP-quarantine-pop-value",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": ".map(|i| v.remove(i).1)",
+    "replace": ".map(|i| { v.remove(i); Py::Null })",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Removing a quarantine key retains its value."
+  },
+  {
+    "id": "JP-quarantine-parse-fallback",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "codec::loads(s).unwrap_or_else(|_| Py::from(s))",
+    "replace": "codec::loads(s).unwrap_or(Py::Null)",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Unparseable quarantine detail remains the literal original string."
+  },
+  {
+    "id": "JP-quarantine-dump-sort",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Options::new().sort_keys(true)",
+    "replace": "Options::new().sort_keys(false)",
+    "expect_failing": [
+      "quarantine_list_coercion_and_parse_fallbacks_match_python"
+    ],
+    "rule": "Quarantine JSON sorting preserves deterministic Python bytes."
+  },
+  {
+    "id": "JP-compare-optional-null",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "None => self.take(b\"null\"),",
+    "replace": "None => self.take(b\"[]\"),",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Absent optional comparison scalars require the null token."
+  },
+  {
+    "id": "JP-cache-read-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let previous = conn.pragma_query_value(None, \"cache_size\", |r| r.get(0))?;",
+    "replace": "let previous = conn.pragma_query_value(None, \"cache_size\", |r| r.get(0)).unwrap_or(0);",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-cache-write-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "conn.pragma_update(None, \"cache_size\", -131072)?;",
+    "replace": "conn.pragma_update(None, \"cache_size\", -131072).unwrap_or(());",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-cache-restore-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "self.previous.expect(\"active cache scope\"),\n        )?;",
+    "replace": "self.previous.expect(\"active cache scope\"),\n        ).unwrap_or(());",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-checkpoint-mode-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let mode: String = conn.pragma_query_value(None, \"journal_mode\", |r| r.get(0))?;",
+    "replace": "let mode: String = conn.pragma_query_value(None, \"journal_mode\", |r| r.get(0)).unwrap_or_default();",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-checkpoint-read-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let previous = conn.pragma_query_value(None, \"wal_autocheckpoint\", |r| r.get(0))?;",
+    "replace": "let previous = conn.pragma_query_value(None, \"wal_autocheckpoint\", |r| r.get(0)).unwrap_or(0);",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-checkpoint-write-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "conn.pragma_update(None, \"wal_autocheckpoint\", 0)?;",
+    "replace": "conn.pragma_update(None, \"wal_autocheckpoint\", 0).unwrap_or(());",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-checkpoint-passive-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": ".query_row(\"PRAGMA wal_checkpoint(PASSIVE)\", [], |_| Ok(()))?;",
+    "replace": ".query_row(\"PRAGMA wal_checkpoint(PASSIVE)\", [], |_| Ok(())).unwrap_or(());",
+    "expect_failing": [
+      "physical_setting_driver_errors_propagate_and_retry_cache_restoration"
+    ],
+    "rule": "Connection setting and checkpoint driver errors propagate; explicit cache restoration retries through Drop."
+  },
+  {
+    "id": "JP-typed-scalar-null",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "Value::Null => out.push_str(\"null\"),",
+    "replace": "Value::Null => out.push_str(\"[]\"),",
+    "expect_failing": [
+      "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-typed-scalar-string",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "Value::String(s) => dumps_str_into(s, options, out),",
+    "replace": "Value::String(s) => out.push_str(s),",
+    "expect_failing": [
+      "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-typed-scalar-zero",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "if n == \"-0\" { \"0\" } else { n }",
+    "replace": "n",
+    "expect_failing": [
+      "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-typed-scalar-refusal",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "_ => return None,\n    }\n    Some(())",
+    "replace": "_ => return Some(()),\n    }\n    Some(())",
+    "expect_failing": [
+      "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-typed-optional-some",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "dumps_str_into(value, options, out);",
+    "replace": "out.push_str(value);",
+    "expect_failing": [
+      "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-typed-optional-none",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "out.push_str(\"null\");",
+    "replace": "out.push_str(\"[]\");",
+    "expect_failing": [
+      "typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-consume-null",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Self::Null => cursor.take(b\"null\"),",
+    "replace": "Self::Null => cursor.take(b\"[]\"),",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-consume-text",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Self::Text(s, plain) => cursor.quoted_known(s, plain),",
+    "replace": "Self::Text(s, plain) => { let _ = plain; cursor.take(s.as_bytes()) },",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-consume-integer",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Self::Integer(s) => cursor.take(s.as_bytes()),",
+    "replace": "Self::Integer(s) => { let _ = s; cursor.take(b\"0\") },",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-optional-some",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Some(value) => self.quoted(value),",
+    "replace": "Some(value) => self.take(value.as_bytes()),",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-known-plain-quotes",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "fn quoted_known(&mut self, value: &str, plain: bool) -> Option<()> {\n        if plain {\n            self.take(b\"\\\"\")?;\n            self.take(value.as_bytes())?;\n            self.take(b\"\\\"\")\n        } else {\n            self.quoted(value)\n        }\n    }",
+    "replace": "fn quoted_known(&mut self, value: &str, plain: bool) -> Option<()> {\n        if plain {\n            self.take(b\"\\\"\")?;\n            self.take(value.as_bytes())?;\n            Some(())\n        } else {\n            self.quoted(value)\n        }\n    }",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-known-escaped",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "fn quoted_known(&mut self, value: &str, plain: bool) -> Option<()> {\n        if plain {\n            self.take(b\"\\\"\")?;\n            self.take(value.as_bytes())?;\n            self.take(b\"\\\"\")\n        } else {\n            self.quoted(value)\n        }\n    }",
+    "replace": "fn quoted_known(&mut self, value: &str, plain: bool) -> Option<()> {\n        if plain {\n            self.take(b\"\\\"\")?;\n            self.take(value.as_bytes())?;\n            self.take(b\"\\\"\")\n        } else {\n            self.take(value.as_bytes())\n        }\n    }",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-compare-cursor-format-error",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "self.take(value.as_bytes()).ok_or(std::fmt::Error)",
+    "replace": "self.take(value.as_bytes()).or(Some(())).ok_or(std::fmt::Error)",
+    "expect_failing": [
+      "comparison_scalars_refuse_noncanonical_tokens"
+    ],
+    "rule": "Typed compact scalars and comparison cursors preserve exact tokens and propagate refusals."
+  },
+  {
+    "id": "JP-quantity-refusal-posting",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Refusal::new(\n                \"OverflowError\",\n                \"quantity posting does not fit SQLite INTEGER\",\n            )",
+    "replace": "Refusal::new(\n                \"ValueError\",\n                \"quantity posting does not fit SQLite INTEGER\",\n            )",
+    "expect_failing": [
+      "malformed_quantity_refusals_roll_back_before_freshness_on_both_drivers"
+    ],
+    "rule": "Malformed quantity inputs preserve their exact refusal family and whole-savepoint rollback on both physical drivers."
+  },
+  {
+    "id": "JP-quantity-refusal-balance",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Refusal::new(\n                    \"OverflowError\",\n                    \"quantity balance does not fit SQLite INTEGER\",\n                )",
+    "replace": "Refusal::new(\n                    \"ValueError\",\n                    \"quantity balance does not fit SQLite INTEGER\",\n                )",
+    "expect_failing": [
+      "malformed_quantity_refusals_roll_back_before_freshness_on_both_drivers"
+    ],
+    "rule": "Malformed quantity inputs preserve their exact refusal family and whole-savepoint rollback on both physical drivers."
+  },
+  {
+    "id": "JP-quantity-refusal-eligible",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Refusal::new(\"KeyError\", \"eligible source observation\")",
+    "replace": "Refusal::new(\"RuntimeError\", \"eligible source observation\")",
+    "expect_failing": [
+      "malformed_quantity_refusals_roll_back_before_freshness_on_both_drivers"
+    ],
+    "rule": "Malformed quantity inputs preserve their exact refusal family and whole-savepoint rollback on both physical drivers."
+  },
+  {
+    "id": "JP-quantity-refusal-source",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Refusal::new(\"KeyError\", \"decision source observation\")",
+    "replace": "Refusal::new(\"RuntimeError\", \"decision source observation\")",
+    "expect_failing": [
+      "malformed_quantity_refusals_roll_back_before_freshness_on_both_drivers"
+    ],
+    "rule": "Malformed quantity inputs preserve their exact refusal family and whole-savepoint rollback on both physical drivers."
+  },
+  {
+    "id": "JP-quantity-refusal-target",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "Refusal::new(\"KeyError\", \"decision target observation\")",
+    "replace": "Refusal::new(\"RuntimeError\", \"decision target observation\")",
+    "expect_failing": [
+      "malformed_quantity_refusals_roll_back_before_freshness_on_both_drivers"
+    ],
+    "rule": "Malformed quantity inputs preserve their exact refusal family and whole-savepoint rollback on both physical drivers."
+  },
+  {
+    "id": "JP-quarantine-refuse-decimal",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"'decimal.Decimal' object is not iterable\",",
+    "replace": "\"wrong type\",",
+    "expect_failing": [
+      "quarantine_internal_only_values_keep_refusals_and_key_invariants"
+    ],
+    "rule": "Internal-only quarantine helper inputs preserve explicit refusals and the JSON string-key invariant."
+  },
+  {
+    "id": "JP-quarantine-dump-refusal",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "Refusal::new(\"ValueError\", e.to_string())",
+    "replace": "Refusal::new(\"TypeError\", e.to_string())",
+    "expect_failing": [
+      "quarantine_internal_only_values_keep_refusals_and_key_invariants"
+    ],
+    "rule": "Internal-only quarantine helper inputs preserve explicit refusals and the JSON string-key invariant."
+  },
+  {
+    "id": "JP-quarantine-key-invariant",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "_ => unreachable!(\"JSON object keys are strings\"),",
+    "replace": "_ => Py::Null,",
+    "expect_failing": [
+      "quarantine_internal_only_values_keep_refusals_and_key_invariants"
+    ],
+    "rule": "Internal-only quarantine helper inputs preserve explicit refusals and the JSON string-key invariant."
+  },
+  {
+    "id": "JP-entry-match-metadata",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if old.get_ref(index)? != self.cell(index) {",
+    "replace": "if false && old.get_ref(index)? != self.cell(index) {",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-null-real",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if real != ValueRef::Null || exact != ValueRef::Null {",
+    "replace": "if exact != ValueRef::Null {",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-null-exact",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if real != ValueRef::Null || exact != ValueRef::Null {",
+    "replace": "if real != ValueRef::Null {",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-exact-type",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "let ValueRef::Text(bytes) = exact else {\n                return Ok(false);\n            };",
+    "replace": "let bytes = match exact { ValueRef::Text(bytes) | ValueRef::Blob(bytes) => bytes, _ => return Ok(false) };",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-exact-value",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if !fixed_equal(decimal, bytes) {",
+    "replace": "if false && !fixed_equal(decimal, bytes) {",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-real-type",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "let ValueRef::Real(prior) = real else {\n                return Ok(false);\n            };",
+    "replace": "let prior = match real { ValueRef::Real(n) => n, ValueRef::Integer(n) => n as f64, _ => return Ok(false) };",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-real-value",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if prior != value\n                || (prior == 0.0",
+    "replace": "if false\n                || (prior == 0.0",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-entry-match-calculation",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "Ok(self\n            .plan\n            .calculation\n            .matches(self.sources, old.get_ref(20)?, old.get_ref(21)?))",
+    "replace": "Ok(true)",
+    "expect_failing": [
+      "typed_retained_comparison_checks_scalar_types_optional_pairs_and_real_values"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-option-bind-absent",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "s.map_or(Sql::Null, t)",
+    "replace": "s.map_or_else(|| t(\"\"), t)",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-option-bind-present",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "s.map_or(Sql::Null, t)",
+    "replace": "{ let _ = s; Sql::Null }",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Retained typed entries compare every scalar type, optional cell pair and REAL value exactly."
+  },
+  {
+    "id": "JP-clear-prepare-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": ".prepare(&format!(\"DELETE FROM {table} WHERE profile_id = ?\"))?",
+    "replace": ".prepare(&format!(\"DELETE FROM {table} WHERE profile_id = ?\")).map_err(|e| Refusal::new(\"RuntimeError\", e.to_string()))?",
+    "expect_failing": [
+      "table_writers_preserve_driver_and_observer_refusals_until_caller_rollback"
+    ],
+    "rule": "Table writers preserve driver and observer errors, leaving whole rollback to their caller."
+  },
+  {
+    "id": "JP-clear-execute-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": ".execute([profile])?;",
+    "replace": ".execute([profile]).unwrap_or(0);",
+    "expect_failing": [
+      "table_writers_preserve_driver_and_observer_refusals_until_caller_rollback"
+    ],
+    "rule": "Table writers preserve driver and observer errors, leaving whole rollback to their caller."
+  },
+  {
+    "id": "JP-clear-observer-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "        self.observer.wrote(table)?;\n        Ok(())",
+    "replace": "        self.observer.wrote(table).unwrap_or(());\n        Ok(())",
+    "expect_failing": [
+      "table_writers_preserve_driver_and_observer_refusals_until_caller_rollback"
+    ],
+    "rule": "Table writers preserve driver and observer errors, leaving whole rollback to their caller."
+  },
+  {
+    "id": "JP-insert-prepare-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "let mut statement = self.conn.prepare(&query)?;",
+    "replace": "let mut statement = self.conn.prepare(&query).map_err(|e| Refusal::new(\"RuntimeError\", e.to_string()))?;",
+    "expect_failing": [
+      "table_writers_preserve_driver_and_observer_refusals_until_caller_rollback"
+    ],
+    "rule": "Table writers preserve driver and observer errors, leaving whole rollback to their caller."
+  },
+  {
+    "id": "JP-insert-execute-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "statement.execute(params_from_iter(row))?;",
+    "replace": "statement.execute(params_from_iter(row)).unwrap_or(0);",
+    "expect_failing": [
+      "table_writers_preserve_driver_and_observer_refusals_until_caller_rollback"
+    ],
+    "rule": "Table writers preserve driver and observer errors, leaving whole rollback to their caller."
+  },
+  {
+    "id": "JP-insert-observer-error",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "            self.observer.wrote(table)?;",
+    "replace": "            self.observer.wrote(table).unwrap_or(());",
+    "expect_failing": [
+      "table_writers_preserve_driver_and_observer_refusals_until_caller_rollback"
+    ],
+    "rule": "Table writers preserve driver and observer errors, leaving whole rollback to their caller."
+  },
+  {
+    "id": "JP-reconciliation-target",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "            && !d[\"target\"].is_null()",
+    "replace": "            && true",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only selected nonempty native claims with a destination, quantity evidence and the current authored component can establish a reconciliation."
+  },
+  {
+    "id": "JP-reconciliation-claim",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "&& truth(&d[\"selected_claim_id\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only selected nonempty native claims with a destination, quantity evidence and the current authored component can establish a reconciliation."
+  },
+  {
+    "id": "JP-reconciliation-quantity",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if state.custody_quantity.is_null() {",
+    "replace": "if false && state.custody_quantity.is_null() {",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only selected nonempty native claims with a destination, quantity evidence and the current authored component can establish a reconciliation."
+  },
+  {
+    "id": "JP-reconciliation-missing-component",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "let Some(component) = found.next()? else {\n            continue;\n        };",
+    "replace": "let component = found.next()?.ok_or_else(|| Refusal::new(\"KeyError\", \"missing component\"))?;",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Only selected nonempty native claims with a destination, quantity evidence and the current authored component can establish a reconciliation."
+  },
+  {
+    "id": "JP-clock-overflow-refusal",
+    "file": "crates/journals/src/storage.rs",
+    "find": "Refusal::new(\"OverflowError\", \"date value out of range\")",
+    "replace": "Refusal::new(\"RuntimeError\", \"date value out of range\")",
+    "expect_failing": [
+      "processing_marker_refuses_datetime_overflow"
+    ],
+    "rule": "A repeated maximum timestamp refuses with the Python datetime overflow family."
+  },
+  {
+    "id": "JP-clock-fraction-shape",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if next.contains('.') {",
+    "replace": "if !next.contains('.') {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Successor markers retain exactly six fractional digits across second boundaries."
+  },
+  {
+    "id": "JP-compact-absent-value",
+    "file": "crates/journals/src/storage.rs",
+    "find": "if !crate::truth(value) {",
+    "replace": "if false && !crate::truth(value) {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Falsey calculations leave both retained columns NULL."
+  },
+  {
+    "id": "JP-compact-acquisition-exact",
+    "file": "crates/journals/src/storage.rs",
+    "find": "} else if !exact_integer(\n            &f[\"acquisition_quantity_msat\"],\n            &f[\"acquisition_quantity_msat_exact\"],\n        ) {",
+    "replace": "} else if false && !exact_integer(\n            &f[\"acquisition_quantity_msat\"],\n            &f[\"acquisition_quantity_msat_exact\"],\n        ) {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "A non-null acquisition quantity must match its exact integer spelling."
+  },
+  {
+    "id": "JP-compact-fragments-array",
+    "file": "crates/journals/src/storage.rs",
+    "find": "for f in v[\"fragments\"].as_array()? {",
+    "replace": "for f in v[\"fragments\"].as_array().map(Vec::as_slice).unwrap_or(&[]) {",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "A non-array fragment container keeps its original legacy shape."
+  },
+  {
+    "id": "JP-compact-tuple-refusal",
+    "file": "crates/journals/src/storage.rs",
+    "find": "            _ => return None,\n        }\n        Some(())",
+    "replace": "            _ => return Some(()),\n        }\n        Some(())",
+    "expect_failing": [
+      "compact_tuple_refuses_nonintegral_or_structured_scalars"
+    ],
+    "rule": "The private tuple writer rejects noncompact scalar types."
+  },
+  {
+    "id": "JP-typed-acquisition-pair",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "            _ => return None,\n        }\n        if index > 0 {",
+    "replace": "            _ => {},\n        }\n        if index > 0 {",
+    "expect_failing": [
+      "typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks"
+    ],
+    "rule": "Typed compaction retains mismatched acquisition option pairs through the legacy fallback."
+  },
+  {
+    "id": "JP-typed-source-fee-exact",
+    "file": "crates/journals/src/storage/calculation.rs",
+    "find": "|| !exact_integer_text(&source.crypto_fee_msat, Some(&source.crypto_fee_msat_exact))",
+    "replace": "|| false && !exact_integer_text(&source.crypto_fee_msat, Some(&source.crypto_fee_msat_exact))",
+    "expect_failing": [
+      "shared_calculation_encoder_keeps_every_source_operand_and_refusal"
+    ],
+    "rule": "A typed source fee must retain its exact spelling when compaction would lose it."
+  },
+  {
+    "id": "JP-entry-match-signed-zero",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "(prior == 0.0 && prior.is_sign_negative() != value.is_sign_negative())",
+    "replace": "false",
+    "expect_failing": [
+      "typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns"
+    ],
+    "rule": "Every REAL decimal comparison keeps the sign of zero."
+  },
+  {
+    "id": "JP-delta-new-rows",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let mut changed = vec![true; rows.len()];",
+    "replace": "let mut changed = vec![false; rows.len()];",
+    "expect_failing": [
+      "entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids"
+    ],
+    "rule": "Rows absent from the retained scan remain scheduled for insertion."
+  },
+  {
+    "id": "JP-delta-prepare-unchanged",
+    "file": "crates/journals/src/storage.rs",
+    "find": "        if changed[index] {\n            row.prepare()?;\n        }",
+    "replace": "        if true {\n            row.prepare()?;\n        }",
+    "expect_failing": [
+      "typed_retained_columns_force_real_delta_writes_and_unchanged_rows_prepare_no_bindings"
+    ],
+    "rule": "Unchanged retained entries never prepare replacement bindings."
+  },
+  {
+    "id": "JP-delta-insert-changed",
+    "file": "crates/journals/src/storage.rs",
+    "find": "        if changed[index] {\n            insert.execute(params_from_iter(",
+    "replace": "        if true {\n            insert.execute(params_from_iter(",
+    "expect_failing": [
+      "posting_deltas_reject_duplicates_and_keep_unchanged_rows"
+    ],
+    "rule": "Only changed or new rows execute inserts."
+  },
+  {
+    "id": "JP-relation-missing-source",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "let Some(source) = by_tx.get(&source_id) else {\n                continue;\n            };",
+    "replace": "let source = by_tx.get(&source_id).ok_or_else(|| Refusal::new(\"KeyError\", \"missing source\"))?;",
+    "expect_failing": [
+      "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
+    ],
+    "rule": "Relations with no observed source are skipped without inventing a source."
+  },
+  {
+    "id": "JP-filed-snapshot-refusal",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "error(\"filed report snapshot not found\")",
+    "replace": "error(\"wrong snapshot refusal\")",
+    "expect_failing": [
+      "corrupt_filed_snapshot_refuses_and_rolls_back_freshness"
+    ],
+    "rule": "A missing filed snapshot refuses and rolls back freshness with its exact message."
+  },
+  {
+    "id": "JP-filed-classification-change",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "let cc = before_class != after_class;",
+    "replace": "let cc = false;",
+    "expect_failing": [
+      "journal_persistence_matches_complete_python_dumps"
+    ],
+    "rule": "Filed impact resolutions record classification changes separately from gain changes."
+  },
+  {
+    "id": "JP-quarantine-downstream-custody-basis-barrier",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"custody_basis_barrier\"",
+    "replace": "\"wrong_downstream_reason\"",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Every downstream custody reason yields precedence to an independently observed root reason."
+  },
+  {
+    "id": "JP-quarantine-downstream-transfer-pair-dependency-blocked",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"transfer_pair_dependency_blocked\"",
+    "replace": "\"wrong_downstream_reason\"",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Every downstream custody reason yields precedence to an independently observed root reason."
+  },
+  {
+    "id": "JP-quarantine-downstream-basis-provenance-incomplete",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"basis_provenance_incomplete\"",
+    "replace": "\"wrong_downstream_reason\"",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Every downstream custody reason yields precedence to an independently observed root reason."
+  },
+  {
+    "id": "JP-quarantine-downstream-derived-transfer-group-blocked",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"derived_transfer_group_blocked\"",
+    "replace": "\"wrong_downstream_reason\"",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Every downstream custody reason yields precedence to an independently observed root reason."
+  },
+  {
+    "id": "JP-quarantine-downstream-at-swap-basis-carry-unresolved",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"at_swap_basis_carry_unresolved\"",
+    "replace": "\"wrong_downstream_reason\"",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Every downstream custody reason yields precedence to an independently observed root reason."
+  },
+  {
+    "id": "JP-quarantine-downstream-bitcoin-rail-carry-basis-unresolved",
+    "file": "crates/journals/src/persistence/quarantine.rs",
+    "find": "\"bitcoin_rail_carry_basis_unresolved\"",
+    "replace": "\"wrong_downstream_reason\"",
+    "expect_failing": [
+      "quarantine_deduplication_and_enrichment_match_lossless_python_json"
+    ],
+    "rule": "Every downstream custody reason yields precedence to an independently observed root reason."
+  },
+  {
+    "id": "JP-compact-key-count",
+    "file": "crates/journals/src/storage.rs",
+    "find": "m.len() == expected.len()",
+    "replace": "true",
+    "expect_failing": [
+      "compact_key_sets_and_scalar_guards_preserve_exact_shapes"
+    ],
+    "rule": "Compaction retains unknown fields instead of dropping them."
+  },
+  {
+    "id": "JP-compact-key-membership",
+    "file": "crates/journals/src/storage.rs",
+    "find": "expected.iter().all(|k| m.contains_key(*k))",
+    "replace": "true",
+    "expect_failing": [
+      "compact_key_sets_and_scalar_guards_preserve_exact_shapes"
+    ],
+    "rule": "Compaction retains missing-field shapes instead of filling omitted fields with null."
+  },
+  {
+    "id": "JP-compact-text-null",
+    "file": "crates/journals/src/storage.rs",
+    "find": "v.is_null() || v.is_string()",
+    "replace": "v.is_string()",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "Nullable compact string cells keep the canonical compact layout."
+  },
+  {
+    "id": "JP-compact-text-string",
+    "file": "crates/journals/src/storage.rs",
+    "find": "v.is_null() || v.is_string()",
+    "replace": "v.is_null()",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "String cells retain the compact layout without losing their bytes."
+  },
+  {
+    "id": "JP-compare-provenance-identity",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "Arc::ptr_eq(&a.provenance, &b.provenance)",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Distinct provenance owners require structural equality before source deduplication."
+  },
+  {
+    "id": "JP-compare-quoted-plain-classification",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "s.bytes()\n                .all(|b| matches!(b, 0x20..=0x7e) && !matches!(b, b'\"' | b'\\\\'))",
+    "replace": "true",
+    "expect_failing": [
+      "comparison_source_dictionary_retains_every_field_and_cache_identity"
+    ],
+    "rule": "Cached scalar classification preserves escaping for non-plain strings."
+  },
+  {
+    "id": "JP-compare-quoted-ascii-run",
+    "file": "crates/journals/src/storage/calculation/compare.rs",
+    "find": "if (' '..='~').contains(&c) && c != '\"' && c != '\\\\' {",
+    "replace": "if false {",
+    "expect_failing": [
+      "canonical_string_comparison_preserves_escaping_and_byte_boundaries"
+    ],
+    "rule": "Printable runs within an escaped string retain their literal canonical bytes."
+  },
+  {
+    "id": "JP-quantity-zero-balance",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": ".filter(|(_, n)| *n != 0)",
+    "replace": ".filter(|(_, _)| true)",
+    "expect_failing": [
+      "quantity_projection_filters_and_zero_balances_preserve_basis_barriers"
+    ],
+    "rule": "Cancelling postings retain no zero balance row."
+  },
+  {
+    "id": "JP-projection-internal-verified",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"internal_verified\" | \"internal_reviewed\")\n        )",
+    "replace": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"internal_verified\")\n        )",
+    "expect_failing": [
+      "quantity_projection_filters_and_zero_balances_preserve_basis_barriers"
+    ],
+    "rule": "Both accepted internal states persist independently of basis eligibility."
+  },
+  {
+    "id": "JP-projection-internal-reviewed",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"internal_verified\" | \"internal_reviewed\")\n        )",
+    "replace": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"internal_reviewed\")\n        )",
+    "expect_failing": [
+      "quantity_projection_filters_and_zero_balances_preserve_basis_barriers"
+    ],
+    "rule": "Both accepted internal states persist independently of basis eligibility."
+  },
+  {
+    "id": "JP-projection-state-filter",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "if !matches!(\n            d[\"state\"].as_str(),\n            Some(\"internal_verified\" | \"internal_reviewed\")\n        ) || d[\"target\"].is_null()",
+    "replace": "if false || d[\"target\"].is_null()",
+    "expect_failing": [
+      "quantity_projection_filters_and_zero_balances_preserve_basis_barriers"
+    ],
+    "rule": "Unaccepted states cannot become custody decisions even with a target."
+  },
+  {
+    "id": "JP-projection-target-filter",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "        ) || d[\"target\"].is_null()",
+    "replace": "        ) || false",
+    "expect_failing": [
+      "quantity_projection_filters_and_zero_balances_preserve_basis_barriers"
+    ],
+    "rule": "A target is required before looking up target observation authority."
+  },
+  {
+    "id": "JP-reconciliation-expected-integer",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "i128::from(pair[1].as_i64().unwrap_or(-1))",
+    "replace": "i128::from(pair[1].as_i64().unwrap_or(0))",
+    "expect_failing": [
+      "missing_inactive_or_changed_components_never_persist_reconciliations"
+    ],
+    "rule": "Malformed expected amounts cannot match an absent claim through zero fallback."
+  },
+  {
+    "id": "JP-rollback-cleanup-best-effort",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "let _ = conn.execute_batch(\"ROLLBACK TO r4_journal_store; RELEASE r4_journal_store\");",
+    "replace": "conn.execute_batch(\"ROLLBACK TO r4_journal_store; RELEASE r4_journal_store\").unwrap();",
+    "expect_failing": [
+      "physical_automatic_outer_rollback_keeps_original_refusal_and_stale_dump"
+    ],
+    "rule": "An automatic SQLite outer rollback leaves no savepoint; cleanup must preserve the original driver refusal."
+  },
+  {
+    "id": "JP-cache-drop-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let _ = self.conn.pragma_update(None, \"cache_size\", previous);",
+    "replace": "self.conn.pragma_update(None, \"cache_size\", previous).unwrap();",
+    "expect_failing": [
+      "physical_drop_restoration_errors_remain_best_effort_after_commit"
+    ],
+    "rule": "A refused best-effort cache destructor must not panic or invalidate a durable commit."
+  },
+  {
+    "id": "JP-checkpoint-drop-driver-error",
+    "file": "crates/journals/src/storage.rs",
+    "find": "let _ = self\n                .conn\n                .pragma_update(None, \"wal_autocheckpoint\", self.previous);",
+    "replace": "self\n                .conn\n                .pragma_update(None, \"wal_autocheckpoint\", self.previous).unwrap();",
+    "expect_failing": [
+      "physical_drop_restoration_errors_remain_best_effort_after_commit"
+    ],
+    "rule": "A refused best-effort checkpoint destructor must not turn a durable commit into a panic."
+  },
+  {
+    "id": "JP-impact-quantity-barrier",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "&& array(&state.custody_quantity[\"issues\"]).is_empty()",
+    "replace": "&& true",
+    "expect_failing": [
+      "quantity_issues_keep_filed_impacts_pending_without_other_barriers"
+    ],
+    "rule": "Quantity issues alone block filed-impact resolution even when no component blocker or live quarantine remains."
   }
 ]

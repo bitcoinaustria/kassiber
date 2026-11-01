@@ -510,6 +510,99 @@ fn store<O: storage::WriteObserver>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn table_writers_preserve_driver_and_observer_refusals_until_caller_rollback() {
+        struct Observer {
+            fail: bool,
+            calls: usize,
+        }
+        impl storage::WriteObserver for Observer {
+            fn wrote(&mut self, _: &'static str) -> rusqlite::Result<()> {
+                self.calls += 1;
+                if self.fail {
+                    Err(rusqlite::Error::InvalidQuery)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+        for mode in [
+            "clear_prepare",
+            "clear_execute",
+            "clear_observer",
+            "insert_prepare",
+            "insert_execute",
+            "insert_observer",
+            "insert_width",
+        ] {
+            let conn = Connection::open_in_memory().unwrap();
+            conn.execute_batch("CREATE TABLE projection(profile_id TEXT, value TEXT UNIQUE); INSERT INTO projection VALUES('p','before')").unwrap();
+            if mode == "clear_execute" {
+                conn.execute_batch("CREATE TEMP TRIGGER refuse_clear BEFORE DELETE ON projection BEGIN SELECT RAISE(ABORT,'clear refused'); END").unwrap();
+            }
+            conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+            let mut observer = Observer {
+                fail: mode.ends_with("observer"),
+                calls: 0,
+            };
+            let mut writer = Writer {
+                conn: &conn,
+                observer: &mut observer,
+            };
+            let result = if mode.starts_with("clear") {
+                writer.clear(
+                    if mode == "clear_prepare" {
+                        "missing"
+                    } else {
+                        "projection"
+                    },
+                    "p",
+                )
+            } else {
+                let mut rows = vec![vec![t("p"), t("after")]];
+                if mode == "insert_execute" {
+                    rows.push(vec![t("p"), t("before")]);
+                }
+                if mode == "insert_width" {
+                    rows[0].pop();
+                }
+                writer.insert(
+                    "projection",
+                    if mode == "insert_prepare" {
+                        &["profile_id", "missing"]
+                    } else {
+                        &["profile_id", "value"]
+                    },
+                    rows,
+                )
+            };
+            let refusal = result.unwrap_err();
+            assert_eq!(refusal.family, "DatabaseError", "{mode}: {refusal}");
+            assert_eq!(
+                observer.calls,
+                usize::from(mode.ends_with("observer") || mode == "insert_execute"),
+                "{mode}"
+            );
+            if mode == "clear_execute" {
+                assert!(refusal.message.contains("clear refused"));
+            }
+            if mode.ends_with("observer") {
+                assert_eq!(refusal.message, rusqlite::Error::InvalidQuery.to_string());
+            }
+            assert!(!conn.is_autocommit(), "{mode}");
+            conn.execute_batch("ROLLBACK").unwrap();
+            let rows: Vec<String> = conn
+                .prepare("SELECT value FROM projection")
+                .unwrap()
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            assert_eq!(rows, ["before"], "{mode}");
+        }
+    }
+
     #[test]
     fn amount_bindings_match_python_rounding_fallbacks_and_sqlite_overflow() {
         let vectors: Value =

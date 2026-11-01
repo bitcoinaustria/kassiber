@@ -199,3 +199,37 @@ pub(crate) fn encode(
 ) -> Result<(Option<String>, Option<String>), Refusal> {
     Encoder::default().encode(calculation)
 }
+
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn typed_scalar_encoding_preserves_tokens_and_refuses_noncompact_values() {
+        let options = Options::new().compact();
+        for (value, expected) in [
+            (Value::Null, "null"),
+            (json!("\"\n🔥"), "\"\\\"\\n\\ud83d\\udd25\""),
+            (json!(i64::MIN), "-9223372036854775808"),
+            (json!(u64::MAX), "18446744073709551615"),
+            (
+                Value::Number(serde_json::Number::from_string_unchecked("-0".into())),
+                "0",
+            ),
+        ] {
+            let mut out = String::from("prefix");
+            assert_eq!(scalar(&value, &mut out, &options), Some(()));
+            assert_eq!(out, format!("prefix{expected}"));
+        }
+        for value in [json!(true), json!(1.0), json!([]), json!({})] {
+            let mut out = String::from("prefix");
+            assert_eq!(scalar(&value, &mut out, &options), None);
+            assert_eq!(out, "prefix");
+        }
+        let mut out = String::new();
+        optional(&None, &mut out, &options);
+        optional(&Some("\n\"".into()), &mut out, &options);
+        assert_eq!(out, "null\"\\n\\\"\"");
+    }
+}

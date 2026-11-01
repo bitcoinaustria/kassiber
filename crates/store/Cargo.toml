@@ -10,7 +10,7 @@ description = "Kassiber SQLite/SQLCipher storage and durable book creation"
 
 [features]
 # Explicitly enabled only for the development probe and parity tests.
-test-hooks = []
+test-hooks = ["rusqlite/hooks"]
 
 [dependencies]
 kassiber-paths = { path = "../paths" }
