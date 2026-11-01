@@ -1,0 +1,915 @@
+{
+  "base_commit": "175c144a9",
+  "accepted": false,
+  "budget": {
+    "unchanged": "borrowed read floor + 0.15 process CPU seconds",
+    "fresh": "prepared DML write floor + 0.15 process CPU seconds"
+  },
+  "read_floor_repeat": {
+    "probe_sha256": "ca0f0b12ab5c6a09d9a95123976ade79be5d6b0cbd8aa635f4f223f62f796ea9",
+    "sources": {
+      "/home/tg/.t3/worktrees/kassiber/t3-03f0ab1a/scripts/benchmark-journal-read-floor.py": "e21f18f7038ed52e0ce2ec6f8e43c12e6be226a13ba293731ad1a5081e4f1231",
+      "crates/journals/examples/journal-read-floor.rs": "baa58d6380a351ed68bd7bd160713b76eddf7705c9f413455c08bc319b77f63e"
+    },
+    "method": "Five scans on independent newly opened connections, matching native benchmark cache state; independent CPU minimum. Prepared SELECTs, borrowed ValueRef for every retained column, one black_box touch per scalar, no hashing, conversion, allocation or byte comparison. SELECT iteration and COMMIT timed. Complete dumps verified outside timing.",
+    "cells": [
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-03f0ab1a/target/read-floor-repeat/generic-20000-sqlite/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.124507,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "43.89 38.26 35.73 39/2368 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.127255921
+          },
+          {
+            "cpu_seconds": 0.14065099999999997,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "43.89 38.26 35.73 36/2371 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.147150733
+          },
+          {
+            "cpu_seconds": 0.13215300000000002,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "43.89 38.26 35.73 38/2379 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.13436294
+          },
+          {
+            "cpu_seconds": 0.12785400000000002,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "43.89 38.26 35.73 37/2410 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.129046186
+          },
+          {
+            "cpu_seconds": 0.11860099999999996,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "43.89 38.26 35.73 45/2370 47",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.119753341
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "wal",
+          "synchronous": 1
+        },
+        "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+        "best_cpu": 0.11860099999999996
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-03f0ab1a/target/read-floor-repeat/generic-20000-cipher/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.242159,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.27 38.40 35.89 21/2302 48",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.244516778
+          },
+          {
+            "cpu_seconds": 0.213804,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.27 38.40 35.89 22/2262 48",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.215558179
+          },
+          {
+            "cpu_seconds": 0.21661699999999995,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.27 38.40 35.89 21/2267 48",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.218897012
+          },
+          {
+            "cpu_seconds": 0.2538960000000001,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.27 38.40 35.89 28/2297 48",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.25614874
+          },
+          {
+            "cpu_seconds": 0.2181439999999999,
+            "entries": {
+              "bytes": 17490451,
+              "cells": 580000,
+              "rows": 20000,
+              "types": [
+                155728,
+                20000,
+                64102,
+                340170,
+                0
+              ]
+            },
+            "loadavg": "41.27 38.40 35.89 22/2271 48",
+            "postings": {
+              "bytes": 13796732,
+              "cells": 480000,
+              "rows": 40000,
+              "types": [
+                0,
+                40000,
+                0,
+                440000,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.220632336
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "generic",
+          "transactions": 20000,
+          "seed": 1,
+          "csv_sha256": {
+            "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+          },
+          "pegs": 0,
+          "pegs_paired": 0,
+          "journals": {
+            "entries_created": 20000,
+            "quarantined": 0,
+            "cross_asset_pairs": 0,
+            "processed_transactions": 20000
+          },
+          "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+          "build_seconds": 37.0,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "logical_dump_sha256": "e84cbbb69099b92264a01781662330470de13d8f335c95034a61979070335e47",
+        "best_cpu": 0.213804
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-03f0ab1a/target/read-floor-repeat/multi-wallet-20000-sqlite/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.11445999999999999,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "42.10 38.69 36.01 35/2326 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.115535669
+          },
+          {
+            "cpu_seconds": 0.103358,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "42.10 38.69 36.01 31/2315 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.104180112
+          },
+          {
+            "cpu_seconds": 0.11296599999999998,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "42.10 38.69 36.01 39/2334 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.113939388
+          },
+          {
+            "cpu_seconds": 0.10886500000000005,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "42.10 38.69 36.01 45/2337 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.109922767
+          },
+          {
+            "cpu_seconds": 0.11078799999999994,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "42.10 38.69 36.01 26/2316 49",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.112393319
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "wal",
+          "synchronous": 1
+        },
+        "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+        "best_cpu": 0.103358
+      },
+      {
+        "database": "/home/tg/.t3/worktrees/kassiber/t3-03f0ab1a/target/read-floor-repeat/multi-wallet-20000-cipher/kassiber.sqlite3",
+        "fresh_connection_per_trial": true,
+        "trials": [
+          {
+            "cpu_seconds": 0.240243,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "45.72 39.86 36.50 25/2289 50",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 0,
+            "seconds": 0.242204756
+          },
+          {
+            "cpu_seconds": 0.261712,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "45.72 39.86 36.50 24/2290 50",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 1,
+            "seconds": 0.264383883
+          },
+          {
+            "cpu_seconds": 0.24501600000000012,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "45.72 39.86 36.50 26/2356 50",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 2,
+            "seconds": 0.248595386
+          },
+          {
+            "cpu_seconds": 0.27302099999999996,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "44.78 39.76 36.48 29/2371 50",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 3,
+            "seconds": 0.301890345
+          },
+          {
+            "cpu_seconds": 0.2411270000000001,
+            "entries": {
+              "bytes": 18327488,
+              "cells": 579507,
+              "rows": 19983,
+              "types": [
+                147517,
+                19983,
+                67077,
+                344930,
+                0
+              ]
+            },
+            "loadavg": "44.78 39.76 36.48 23/2361 50",
+            "postings": {
+              "bytes": 15470911,
+              "cells": 542592,
+              "rows": 45216,
+              "types": [
+                0,
+                45216,
+                0,
+                497376,
+                0
+              ]
+            },
+            "run": 4,
+            "seconds": 0.243298102
+          }
+        ],
+        "book": {
+          "schema": "kassiber.journals-bench-book.v1",
+          "kind": "multi-wallet",
+          "transactions": 20000,
+          "seed": 7,
+          "csv_sha256": {
+            "Hot.csv": "8d3852c3bcdb36bdd425b76fb3a8e5f64bf462e57c6b61294ed774681ac81146",
+            "Cold.csv": "ed3a0928e98404316be9b9fa7e3b603f4d4e0d7577633bec06e441d8d0e8ff5f",
+            "LHot.csv": "0cdeee02cfd30c7a1bc950bb013c3bbe793b4f1c7f19bc7ab4a4569100117b7a",
+            "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+          },
+          "pegs": 3306,
+          "pegs_paired": 300,
+          "journals": {
+            "entries_created": 19983,
+            "quarantined": 17,
+            "cross_asset_pairs": 300,
+            "processed_transactions": 20000
+          },
+          "built_by": "b5eb38ea8cb764675322e61e9b957a57deb947c6",
+          "build_seconds": 1239.1,
+          "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+          "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+        },
+        "policy": {
+          "journal_mode": "delete",
+          "synchronous": 2
+        },
+        "logical_dump_sha256": "bbb6ef650d07e302354e377486f79289385e659cc19854c4f4023d29541dd218",
+        "best_cpu": 0.240243
+      }
+    ]
+  },
+  "baseline": {
+    "environment": {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "32767d331e7be68c1efba00f9811f501d8a5f76f",
+        "build_seconds": 37.0,
+        "source": "copied historical synthetic book; CSV digests checked against the continuation record",
+        "normalized_by": "51bd20498 Python capture with fixed persistence clock"
+      },
+      "runs": 1,
+      "python": "3.11.17 (main, Oct 21 2026, 17:46:53) [Clang 23.1.3 ]",
+      "cpus": 48,
+      "probe_sha256": "f43dd2d6a001e0a7d3e3b792cea6ef583803776b673fa55b2e004ed426b63448",
+      "harness_sha256": "b9cb682b6e652362756528a4cedf38713774d70833ce1c1c5300a14a3c3a6bbc",
+      "sources": {
+        "crates/journals/src/boundary/joins.rs": "58b06db41921c470886b1cd1e190f506d6fd9175645c58321340fc6dd464c68e",
+        "crates/journals/src/boundary.rs": "2ddc678761e48f07a4277b2c20622a94a631f2c7c3725eefa32370a71abd878d",
+        "crates/journals/src/compute.rs": "b50c57224fc536c3df0fdff7d4d465d396aed6f717c158fb668f0fee0d507102",
+        "crates/journals/src/lib.rs": "f3d8fc2ab7257405c56545dda5d0bf7b3c24d90be78b8ccdc219feda380a576d",
+        "crates/journals/src/loader/direct.rs": "6f4ff944e2dd1a053ae54807ad510094ffa7c6c72c7c97b25cb5b2a4b876b999",
+        "crates/journals/src/loader/ownership.rs": "e9fd153c3ddbc0b7ad836c280e2219d8c0285e46e80f457fb5039003d250c2c8",
+        "crates/journals/src/loader/receipts.rs": "08b0978e2fed949d12af142596d9c91f1e39436d6dd2665e62e374af69bb4453",
+        "crates/journals/src/loader/tests.rs": "c32901ad80222bb09c20979247c37cebc1801dfd26dfc5cddc430c7bc034b804",
+        "crates/journals/src/loader/worklist.rs": "64670923212f75666cf0496da7e4ff7a9073e85e382d715bdebf05776a5d3516",
+        "crates/journals/src/loader.rs": "42698dcb84c9f0aba04eef10a14ecdb2e8b0497960f8bdd4d48dd7a17c762465",
+        "crates/journals/src/model.rs": "68f10bb6e44e1283ccf887606562fd908ad764848e7a4f3fdbe5e2f196239f8b",
+        "crates/journals/src/persistence/filed.rs": "24206d69912e8b067199a1f42a3ba1ba257ed40ff99e1569d0dc9d4d3ff94432",
+        "crates/journals/src/persistence/quantity.rs": "947e1c3927fc943f0eb187604e82e06a37ded17ccbf617d51358abbdd0a4a094",
+        "crates/journals/src/persistence/quarantine.rs": "c9cb06f5e0b8ab54fc47c20d9b4f7dc63a54379444e864fb450d0ef2f8235c0d",
+        "crates/journals/src/persistence.rs": "8d97d978da4911d18f662b9ef780a802b601cd5c7faa9bd28f62bc31d388c5e0",
+        "crates/journals/src/render.rs": "afac4610917b0ed8ef320385b7f80ca5cb28bd69187e9c00b5dac5b998550d45",
+        "crates/journals/src/storage/calculation.rs": "a637aca0d07926d54671a0b2bffdf988574adae711cc2a8db5a413dd9d55f2ba",
+        "crates/journals/src/storage/tests.rs": "199c5229846b89ef177d8941dd2a223975511b97cbac4576e551803b02989104",
+        "crates/journals/src/storage.rs": "d659568b07eb32327c08615b1d94e9f80e1594f6c5c16597f81c28262d49f243"
+      }
+    },
+    "measurements": [
+      {
+        "mode": "unchanged",
+        "transactions": 20000,
+        "appended_transactions": 0,
+        "activity": {
+          "journal_entries": {
+            "insert": 0,
+            "delete": 0
+          },
+          "journal_quantity_postings": {
+            "insert": 0,
+            "delete": 0
+          }
+        },
+        "entries": 20000,
+        "postings": 40000,
+        "best": {
+          "python": 1.221392164000001,
+          "rust": 0.5258039999999999,
+          "floor": 0.05553299999999961
+        },
+        "best_wall": {
+          "python": 1.2328083679894917,
+          "rust": 0.699020569,
+          "floor": 0.421052927
+        },
+        "trials": [
+          {
+            "python": {
+              "seconds": 1.2328083679894917,
+              "cpu_seconds": 1.221392164000001,
+              "load1": 42.09033203125
+            },
+            "rust": {
+              "seconds": 0.699020569,
+              "cpu_seconds": 0.5258039999999999,
+              "phases": {
+                "begin": {
+                  "cpu": 2.2999999999884224e-05,
+                  "wall": 2.4361e-05
+                },
+                "commit": {
+                  "cpu": 0.0008070000000000022,
+                  "wall": 0.167714492
+                },
+                "complete": {
+                  "cpu": 0.019498000000000015,
+                  "wall": 0.019666417
+                },
+                "entries_prepare": {
+                  "cpu": 0.13215399999999988,
+                  "wall": 0.134456661
+                },
+                "entries_write": {
+                  "cpu": 0.11003799999999986,
+                  "wall": 0.111192312
+                },
+                "filed": {
+                  "cpu": 0.00018699999999993722,
+                  "wall": 0.000177834
+                },
+                "pricing": {
+                  "cpu": 0.026956000000000202,
+                  "wall": 0.027220048
+                },
+                "quantity": {
+                  "cpu": 0.0032129999999999104,
+                  "wall": 0.003245372
+                },
+                "quantity_other": {
+                  "cpu": 0.020605999999999902,
+                  "wall": 0.020814137
+                },
+                "quantity_postings_bind": {
+                  "cpu": 0.04297100000000009,
+                  "wall": 0.043364727
+                },
+                "quantity_postings_prepare": {
+                  "cpu": 0.017595999999999945,
+                  "wall": 0.017776509
+                },
+                "quantity_postings_write": {
+                  "cpu": 0.14158800000000005,
+                  "wall": 0.142949715
+                },
+                "setup": {
+                  "cpu": 0.00037100000000012123,
+                  "wall": 0.00037857
+                },
+                "small_tables": {
+                  "cpu": 0.009774000000000171,
+                  "wall": 0.009945311
+                }
+              },
+              "load1": 40.7216796875
+            },
+            "floor": {
+              "seconds": 0.421052927,
+              "cpu_seconds": 0.05553299999999961,
+              "phases": null,
+              "load1": 40.50341796875
+            }
+          }
+        ],
+        "over_floor": 0.4702710000000003
+      }
+    ]
+  }
+}

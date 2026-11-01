@@ -6,6 +6,35 @@ persistence-branch mutation coverage and inherited full R4 campaigns must close
 before this becomes production authority. Python remains the reference. No CLI
 or daemon registration changes are included.
 
+## Accepted CPU budget for the next continuation
+
+The owner accepts **borrowed read floor + 0.15 process CPU seconds for unchanged
+cells**, and **prepared DML write floor + 0.15 for fresh cells**. This supersedes
+the proposed-budget language in the historical probes below. Repeat the read
+floor over at least five independent connections with load averages and use its
+minimum. The implementation and all acceptance gates remain open.
+
+## Read-floor repeat on the requested continuation
+
+Five independent newly opened connections per cell visited every retained
+column, with unmasked complete dumps, integrity and foreign keys checked before
+and after. Independent process-CPU minima are **0.118601 / 0.213804 seconds**
+for generic SQLite / SQLCipher and **0.103358 / 0.240243 seconds** for
+multi-wallet SQLite / SQLCipher. The accepted unchanged allowances are therefore
+0.268601 / 0.363804 and 0.253358 / 0.390243 seconds for this repeat.
+
+The host remained busy, with one-minute load 41.27–45.72 during these scans;
+these are contention-qualified measurements. A quieter window should replace
+this repeat if one becomes available during the continuation. The baseline
+unchanged generic SQLite writer took 0.525804 CPU seconds in one profiling pair:
+entry preparation 0.132154, entry comparison 0.110038, posting preparation
+0.060567 and posting comparison 0.141588. Its complete timed dumps match.
+This profile locates work and does not establish five-pair acceptance.
+
+[The continuation record](r4-journal-persistence-direct-comparison-measurements.json)
+binds every floor trial, load average, book manifest, source and binary hash,
+complete-dump hash and the separate baseline profile. No acceptance is claimed.
+
 ## Typed comparison probe from `a06bc004f` (withdrawn)
 
 This attempt leaves **R4-12 unaccepted**. The typed comparison prototype was

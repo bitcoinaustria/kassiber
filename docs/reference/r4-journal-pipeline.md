@@ -66,6 +66,17 @@ implementation approach:
   reach 10× at 20,000 transactions. The compute pipeline can, and this design
   sets 10× there.
 
+## R4-12 persistence CPU budgets
+
+Owner decision for this continuation: unchanged cells must complete within the
+borrowed retained-row read floor plus **0.15 process CPU seconds**. Fresh cells
+must complete within the prepared DML write floor plus **0.15 process CPU
+seconds**. Use independent minima from at least five runs with recorded host
+load. Repeat the independent-connection read floor in the quietest available
+host window; a busy-host minimum must retain that qualification. Complete dumps,
+signed-zero handling and the remaining mutation, campaign and caller-contract
+gates remain required; a budget decision alone does not grant acceptance.
+
 ## Measured phase profile
 
 This profile describes the pipeline before the storage-format speedups. The
