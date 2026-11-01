@@ -28,6 +28,25 @@ pub fn script_owners(
 ) -> Result<std::collections::BTreeSet<String>, String> {
     Index(Some(index)).script_owners(script, scope)
 }
+pub fn scope_error_operand<'a>(parsed: &'a Value, index: &Value) -> &'a Value {
+    let index = Index(Some(index));
+    let entries = |key| parsed[key].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    for entry in entries("inputs") {
+        let script = &entry["script"];
+        if (!crate::codec::truth(&entry["outpoint"])
+            || index.outpoint(&entry["outpoint"], None).is_empty())
+            && crate::codec::truth(script)
+            && !script.is_string()
+        {
+            return script;
+        }
+    }
+    entries("outputs")
+        .iter()
+        .map(|entry| &entry["script"])
+        .find(|script| crate::codec::truth(script) && !script.is_string())
+        .unwrap_or(&Value::Null)
+}
 pub fn clear_memos() {
     crate::codec::clear_memos();
 }

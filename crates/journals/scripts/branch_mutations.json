@@ -238,5 +238,295 @@
       "component_exclusions_and_reason_precedence_match_python"
     ],
     "rule": "An active pair is never offered again."
+  },
+  {
+    "id": "JRB-strict-graph-values",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".all(|output| !output[\"value_sats\"].is_null())",
+    "replace": ".all(|_| true)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Unknown output values decline the strict graph and permit only the recorded-fanout fallback."
+  },
+  {
+    "id": "JRB-graph-parse-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".map_err(|error| graph_refusal(error, &Value::Null))?",
+    "replace": ".unwrap_or(None)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Stored graph parsing errors propagate before any review evidence is emitted."
+  },
+  {
+    "id": "JRB-graph-scope-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "graph_refusal(error, graph::scope_error_operand(parsed, &c[\"owned_index\"]))",
+    "replace": "Refusal::from(error)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Scope inference retains the exact graph lookup refusal."
+  },
+  {
+    "id": "JRB-graph-output-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".map_err(|error| graph_refusal(error, &output[\"script\"]))?",
+    "replace": ".unwrap_or_default()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Script owner lookup failures cannot become an unowned output."
+  },
+  {
+    "id": "JRB-graph-overflow-family",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "Refusal::new(\"OverflowError\", \"cannot convert float infinity to integer\")",
+    "replace": "Refusal::new(\"RuntimeError\", \"cannot convert float infinity to integer\")",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Graph index overflow retains its Python exception class."
+  },
+  {
+    "id": "JRB-graph-overflow-message",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"cannot convert float infinity to integer\"",
+    "replace": "\"invalid graph index\"",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Graph index overflow retains its Python exception message."
+  },
+  {
+    "id": "JRB-graph-attribute-family",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"AttributeError\",\n                format!",
+    "replace": "\"RuntimeError\",\n                format!",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Invalid script lookup retains AttributeError."
+  },
+  {
+    "id": "JRB-graph-error-outpoint-precedence",
+    "file": "crates/custody/src/journal_support.rs",
+    "find": "|| index.outpoint(&entry[\"outpoint\"], None).is_empty()",
+    "replace": "|| true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Known input outpoints suppress unused malformed script lookups during scope refusal recovery."
+  },
+  {
+    "id": "JRB-owner-self-before-ambiguity",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if owners.contains(&string(&source[\"wallet_id\"]))",
+    "replace": "if false && owners.contains(&string(&source[\"wallet_id\"]))",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Source-owned change is ignored before testing owner ambiguity."
+  },
+  {
+    "id": "JRB-owner-ambiguity",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if owners.len() > 1 {",
+    "replace": "if owners.len() > 2 {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Two destination owners invalidate the whole ownership proof."
+  },
+  {
+    "id": "JRB-owner-output-sum",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "*destinations.entry(owner.clone()).or_default() +=",
+    "replace": "*destinations.entry(owner.clone()).or_default() =",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Every uniquely owned destination output contributes its exact amount."
+  },
+  {
+    "id": "JRB-fallback-reason",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "} else if reason == \"owned_fanout_unresolved\" {",
+    "replace": "} else {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Recorded grouping is reserved for fanout quarantine when no valued graph exists."
+  },
+  {
+    "id": "JRB-fallback-source-count",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if outs.len() != 1 || outs[0][\"id\"] != source[\"id\"] {",
+    "replace": "if outs.is_empty() {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A recorded group with several sources cannot produce a one-to-one review card."
+  },
+  {
+    "id": "JRB-fallback-other-wallet",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& string(&inbound[\"wallet_id\"]) != string(&source[\"wallet_id\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A recorded fallback destination must be another wallet."
+  },
+  {
+    "id": "JRB-fallback-positive-inbound",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if inbound[\"direction\"] == \"inbound\"\n                    && int(&inbound[\"amount\"])? > BigInt::from(0)",
+    "replace": "if inbound[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Nonpositive recorded inbound rows cannot establish a destination."
+  },
+  {
+    "id": "JRB-inbound-positive-index",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if r[\"direction\"] == \"inbound\" && int(&r[\"amount\"])? > BigInt::from(0)",
+    "replace": "if r[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Only positive receipts enter the destination population."
+  },
+  {
+    "id": "JRB-destination-asset",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if string(&inbound[\"asset\"]).to_uppercase()\n                    != string(&source[\"asset\"]).to_uppercase()",
+    "replace": "if false && string(&inbound[\"asset\"]).to_uppercase()\n                    != string(&source[\"asset\"]).to_uppercase()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A destination review card never crosses display assets."
+  },
+  {
+    "id": "JRB-tolerance-inclusive",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if abs > tolerance {",
+    "replace": "if abs >= tolerance {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "The exact tolerance boundary is inclusive in both directions."
+  },
+  {
+    "id": "JRB-tolerance-floor",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "BigInt::from(2_500_000)",
+    "replace": "BigInt::from(2_499_999)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Small transfers use the exact 2500-sat floor."
+  },
+  {
+    "id": "JRB-tolerance-relative",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "magnitude / 100,",
+    "replace": "magnitude / 101,",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Large transfers use one percent of owned output amount."
+  },
+  {
+    "id": "JRB-scope-equality",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if scope.is_some() && iscope.is_some() && scope != iscope {",
+    "replace": "if false && scope.is_some() && iscope.is_some() && scope != iscope {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Known physical chain/network/txid/asset contradictions exclude receipts."
+  },
+  {
+    "id": "JRB-txid-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& iscope.as_ref().is_some_and(|s| s.2 != txid)",
+    "replace": "&& false && iscope.as_ref().is_some_and(|s| s.2 != txid)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A canonical source txid excludes a provably different receipt even without a source scope."
+  },
+  {
+    "id": "JRB-txid-python-strip",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "kassiber_pytext::strip(&string(txid)).to_lowercase()",
+    "replace": "string(txid).trim().to_lowercase()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Canonical txid exclusion uses Python whitespace stripping."
+  },
+  {
+    "id": "JRB-source-ambiguity-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& reason != \"ownership_transfer_source_ambiguous\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "An ambiguous source can offer only strong review evidence."
+  },
+  {
+    "id": "JRB-whole-source-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& int(&source[\"amount\"])? == amount",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Exact confidence requires the entire source amount."
+  },
+  {
+    "id": "JRB-whole-inbound-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& received == amount",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Exact confidence requires the entire destination amount."
+  },
+  {
+    "id": "JRB-scoped-inbound-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& iscope == scope",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "An unscoped receipt cannot receive exact confidence."
+  },
+  {
+    "id": "JRB-exact-precedence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "let (selected, confidence) = if exact.is_empty()",
+    "replace": "let (selected, confidence) = if !compatible.is_empty()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Whole-row exact receipts supersede amount-compatible receipts."
+  },
+  {
+    "id": "JRB-conflict-size",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "let size = selected.len();",
+    "replace": "let size = 1;",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Every candidate in a conflict set reports the complete selected population."
   }
 ]

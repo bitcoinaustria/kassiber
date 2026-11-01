@@ -178,6 +178,29 @@ fn pairable(reason: &str) -> bool {
             | "ownership_transfer_source_ambiguous"
     )
 }
+fn graph_refusal(error: String, script: &Value) -> Refusal {
+    match error.as_str() {
+        "OverflowError" => {
+            Refusal::new("OverflowError", "cannot convert float infinity to integer")
+        }
+        "AttributeError" => {
+            let kind = match script {
+                Value::Null => "NoneType",
+                Value::Bool(_) => "bool",
+                Value::Array(_) => "list",
+                Value::Object(_) => "dict",
+                Value::Number(n) if n.to_string().contains(['.', 'e', 'E']) => "float",
+                Value::Number(_) => "int",
+                Value::String(_) => "str",
+            };
+            Refusal::new(
+                "AttributeError",
+                format!("'{kind}' object has no attribute 'lower'"),
+            )
+        }
+        _ => Refusal::from(error),
+    }
+}
 pub(super) fn ownership_review(
     c: &super::RenderOperands<'_>,
     qs: &[QuarantineRow],
@@ -305,11 +328,19 @@ pub(super) fn ownership_review(
         {
             continue;
         }
-        let parsed = graph::parsed(source)?;
+        let parsed = graph::parsed(source)
+            .map_err(|error| graph_refusal(error, &Value::Null))?
+            .filter(|parsed| {
+                array(&parsed["outputs"])
+                    .iter()
+                    .all(|output| !output["value_sats"].is_null())
+            });
         let mut scope = None;
         let mut destinations = BTreeMap::<String, BigInt>::new();
         if let Some(parsed) = &parsed {
-            scope = graph::ownership_scope(source, parsed, c.owned_index)?;
+            scope = graph::ownership_scope(source, parsed, c.owned_index).map_err(|error| {
+                graph_refusal(error, graph::scope_error_operand(parsed, c.owned_index))
+            })?;
             let Some(s) = &scope else {
                 continue;
             };
@@ -319,7 +350,8 @@ pub(super) fn ownership_review(
                     &output["script"],
                     &(s.0.clone(), s.1.clone()),
                     c.owned_index,
-                )?;
+                )
+                .map_err(|error| graph_refusal(error, &output["script"]))?;
                 if owners.contains(&string(&source["wallet_id"])) {
                     continue;
                 }
@@ -401,7 +433,7 @@ pub(super) fn ownership_review(
             .as_ref()
             .map(|p| fallback(&p["txid"], &source["external_id"]))
             .unwrap_or(&source["external_id"]);
-        let txid = string(txid).trim().to_lowercase();
+        let txid = kassiber_pytext::strip(&string(txid)).to_lowercase();
         let scope = scope.or_else(|| row_scope(&mut scopes, source));
         for (wallet, amount) in destinations {
             let mut exact = vec![];

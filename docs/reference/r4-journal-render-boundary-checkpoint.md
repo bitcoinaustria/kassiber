@@ -915,3 +915,68 @@ source/test/fixture digests, mutation results and check logs are retained under
 `target/r4-render-audit/`; disposable mutation source trees are deleted by the
 runner. Scope, graph, tolerance, balance and remaining renderer decisions follow
 in the next audit boundary.
+
+## Branch audit: graphs, scopes, tolerances and confidence
+
+The second boundary expands the branch corpus to **95 witnesses** and the
+separate catalog to **53 recipes**. The 29 additions below are killed by
+`graph_scopes_owners_and_tolerances_match_python`; the 24 exclusion recipes are
+rerun as well. No survivor or compiler failure counts as a kill.
+
+Three renderer mismatches are repaired:
+
+- Python uses the strict valued-graph view for review proofs. Native rendering
+  now rejects a partial graph before owner lookup, retaining the recorded
+  fanout fallback only for `owned_fanout_unresolved`.
+- Graph parser overflow and script lookup failures preserve Python's exception
+  family and exact message. Scope refusal recovery follows input-outpoint
+  precedence so an unused malformed script cannot replace the actual failing
+  operand. This cold diagnostic adapter changes no custody decision.
+- Canonical txid exclusion uses Python whitespace stripping, including U+001C
+  and U+001F, while opaque legacy grouping remains literal.
+
+| Branch | Python witness | Killed mutation (`JRB-` prefix) |
+| --- | --- | --- |
+| All graph outputs must be valued | `unknown-output-value-fallback`, `unknown-output-value-no-fallback` | `strict-graph-values` |
+| Parser refusal propagation | `graph-index-refusal-n`, `graph-index-refusal-vout` | `graph-parse-refusal`, `graph-overflow-family`, `graph-overflow-message` |
+| Scope lookup refusal propagation | `input-script-refusal-{int,bool,list,dict}`, `scope-output-script-refusal` | `graph-scope-refusal`, `graph-attribute-family` |
+| Owned outpoints suppress unused script lookup | `scope-skips-owned-outpoint-script` | `graph-error-outpoint-precedence` |
+| Output owner lookup refusal propagation | `output-script-refusal-{int,bool,list,dict}` | `graph-output-refusal` |
+| Source-owned output precedes ambiguity | `self-owner-before-ambiguity` | `owner-self-before-ambiguity` |
+| Ambiguous owners decline the proof | `ambiguous-output` | `owner-ambiguity` |
+| Repeated outputs aggregate by owner | `outputs-aggregate` | `owner-output-sum` |
+| Only fanout reason permits graphless fallback | `no-graph-no-fallback` | `fallback-reason` |
+| Exactly one recorded positive source | `multiple-outbounds` | `fallback-source-count` |
+| Recorded destination must be another wallet | `same-wallet-fallback` | `fallback-other-wallet` |
+| Recorded destination amount must be positive | `nonpositive-group-cannot-offer-offgroup` | `fallback-positive-inbound` |
+| Destination index excludes zero receipts | `graph-zero-receipt` | `inbound-positive-index` |
+| Destination asset equality | `destination-asset-filter` | `destination-asset` |
+| Inclusive absolute tolerance | `tolerance-100000000-{±2500000,±2500001}` | `tolerance-inclusive`, `tolerance-floor` |
+| Inclusive relative tolerance | `tolerance-400001000-{±4000010,±4000011}` | `tolerance-relative` |
+| Known physical scopes must agree | `network-filter` | `scope-equality` |
+| Different canonical txid excludes unscoped-source receipt | `txid-filter-without-source-scope` | `txid-exclusion` |
+| Txid normalization uses Python whitespace | `txid-python-whitespace` | `txid-python-strip` |
+| Source ambiguity cannot be exact | `ambiguous-source-is-strong` | `source-ambiguity-confidence` |
+| Exact confidence covers the whole source | `partial-source-is-strong` | `whole-source-confidence` |
+| Exact confidence covers the whole receipt | `exact-preferred-to-compatible` | `whole-inbound-confidence` |
+| Exact confidence requires a scoped receipt | `unscoped-destination-is-strong` | `scoped-inbound-confidence` |
+| Exact candidates supersede compatible population | `exact-preferred-to-compatible` | `exact-precedence` |
+| Conflicts preserve input order and full population size | `exact-conflicts-keep-order`, `compatible-conflicts-keep-order` | `conflict-size` |
+
+Complementary witnesses cover physical/literal fallback, case and whitespace
+in opaque identifiers, missing identities, duplicate same-owner evidence,
+unowned outputs, source change, owner network mismatch, absent/empty graphs,
+invalid source scope, nonpositive receipts, and the early paths that skip graph
+refusals for absent, nonpairable or occupied sources. Assertions on intended
+Python exception families ensure scope-error witnesses actually reach scope
+inference; synthetic allocation ids force the ordinary scope predicate to
+return `None` before that inference.
+
+The full all-feature release journal suite passes **40 tests**, including all
+383 original, 39 carry/float and 550 response-refusal cases. Mutation evidence
+is `target/r4-render-audit/graph-mutations.{json,log}`. A discarded scratch-cache
+baseline reused a stale mutation artifact; the accepted rerun starts with an
+empty mutation build tree and freshens copied source timestamps. The runner
+checks the original source/test/fixture digests again after its run. These
+local results do not certify the separate scalar-fidelity branch or integrated
+R4-11 acceptance campaigns.

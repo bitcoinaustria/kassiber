@@ -66,7 +66,7 @@ def vectors():
     cases = []
 
     def add(name, *, group='exclusions', rows=None, components=(), reasons=None, index=None,
-            expected_candidates=None, **changes):
+            expected_candidates=None, expected_error=None, **changes):
         rows = deepcopy(rows if rows is not None else [
             row('source', 'wallet-a', 'outbound', raw=graph()),
             row('target', 'wallet-b', 'inbound')])
@@ -90,6 +90,8 @@ def vectors():
         with patch('tests.rust_port.journal_render_oracle.encode_owned_index', return_value=facts):
             record = clean_record(capture_projection(book['profile'], custody, response_override=response))
         assert 'custody' in record, (name, record)
+        if expected_error is not None:
+            assert record['expected'].get('error', {}).get('family') == expected_error, (name, record['expected'])
         if expected_candidates is not None:
             state = json.loads(record['expected']['state'])
             assert len(state['ownership_review_candidates']) == expected_candidates, (name, state)
@@ -146,6 +148,156 @@ def vectors():
                                     ('source-negative', 'outbound', -1)]:
         add(name, rows=[row('source', 'wallet-a', direction, amount, raw=graph()),
                         row('target', 'wallet-b', 'inbound')], expected_candidates=0)
+    def add_graph(name, **kwargs):
+        add(name, group='graph', **kwargs)
+
+    for name, outputs in [
+        ('outputs-aggregate', [dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=40_000),
+                               dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=60_000)]),
+        ('self-change', [dict(scriptpubkey=SCRIPTS['wallet-a'], value_sats=30_000),
+                         dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=100_000)]),
+        ('unowned-output', [dict(scriptpubkey='unowned', value_sats=30_000),
+                            dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=100_000)]),
+    ]:
+        add_graph(name, rows=[row('source', 'wallet-a', 'outbound', raw=graph(outputs=outputs)),
+                              row('target', 'wallet-b', 'inbound')], expected_candidates=1)
+    for name, script, owners, expected in [
+        ('ambiguous-output', 'wallet-b', ['wallet-b', 'wallet-c'], 0),
+        ('self-owner-before-ambiguity', 'wallet-a', ['wallet-a', 'wallet-c'], 1),
+        ('duplicate-owner-evidence', 'wallet-b', ['wallet-b', 'wallet-b'], 1),
+    ]:
+        index = OwnedIndex()
+        for wallet in owners:
+            index.add_script(SCRIPTS[script], OwnedMatch(wallet, wallet, 'treasury',
+                'bitcoin', 'main', '', None, None, 'inventory', 'descriptor'))
+        if script == 'wallet-a':
+            index.add_script(SCRIPTS['wallet-b'], OwnedMatch('wallet-b', 'Hot', 'treasury',
+                'bitcoin', 'main', '', None, None, 'inventory', 'descriptor'))
+        add_graph(name, index=index,
+            rows=[row('source', 'wallet-a', 'outbound', raw=graph(outputs=[
+                dict(scriptpubkey=SCRIPTS[script], value_sats=30_000 if script == 'wallet-a' else 0),
+                dict(scriptpubkey=SCRIPTS['wallet-b'], value_sats=100_000)])),
+                row('target', 'wallet-b', 'inbound')], expected_candidates=expected)
+    index = OwnedIndex()
+    index.add_script(SCRIPTS['wallet-b'], OwnedMatch('wallet-b', 'Hot', 'treasury',
+        'bitcoin', 'test', '', None, None, 'inventory', 'descriptor'))
+    add_graph('owner-network-mismatch', index=index, expected_candidates=0)
+    for name, raw, reason, expected in [
+        ('unknown-output-value-fallback', graph(outputs=[dict(scriptpubkey=SCRIPTS['wallet-b'])]), REASON, 1),
+        ('unknown-output-value-no-fallback', graph(outputs=[dict(scriptpubkey=SCRIPTS['wallet-b'])]),
+            'ownership_transfer_destination_ambiguous', 0),
+        ('no-graph-no-fallback', {}, 'ownership_transfer_destination_ambiguous', 0),
+        ('empty-outputs-no-destination', graph(outputs=[]), REASON, 0),
+        ('missing-graph-scope', dict(graph(), chain='unknown'), REASON, 0),
+    ]:
+        add_graph(name, rows=[row('source', 'wallet-a', 'outbound', raw=raw),
+                              row('target', 'wallet-b', 'inbound')],
+                  reasons=[('source', reason)], expected_candidates=expected)
+    for name, source, inbound, expected in [
+        ('physical-fallback', row('source', 'wallet-a', 'outbound'), row('target', 'wallet-b', 'inbound'), 1),
+        ('legacy-fallback', row('source', 'wallet-a', 'outbound', scoped=False), row('target', 'wallet-b', 'inbound', scoped=False), 1),
+        ('legacy-no-identity', dict(row('source', 'wallet-a', 'outbound', scoped=False), external_id=''), row('target', 'wallet-b', 'inbound', scoped=False), 0),
+        ('legacy-identity-case', row('source', 'wallet-a', 'outbound', scoped=False), dict(row('target', 'wallet-b', 'inbound', scoped=False), external_id='PROVIDER-ID'), 0),
+        ('legacy-identity-space', row('source', 'wallet-a', 'outbound', scoped=False), dict(row('target', 'wallet-b', 'inbound', scoped=False), external_id=' provider-id'), 0),
+        ('legacy-hex-case', dict(row('source', 'wallet-a', 'outbound', scoped=False), external_id='A'*64), dict(row('target', 'wallet-b', 'inbound', scoped=False), external_id='a'*64), 1),
+        ('legacy-asset-filter', row('source', 'wallet-a', 'outbound', scoped=False), dict(row('target', 'wallet-b', 'inbound', scoped=False), asset='LBTC'), 0),
+        ('same-wallet-fallback', row('source', 'wallet-a', 'outbound'), row('target', 'wallet-a', 'inbound'), 0),
+        ('zero-inbound', row('source', 'wallet-a', 'outbound'), row('target', 'wallet-b', 'inbound', 0), 0),
+        ('negative-inbound', row('source', 'wallet-a', 'outbound'), row('target', 'wallet-b', 'inbound', -1), 0),
+    ]:
+        add_graph(name, rows=[source, inbound], expected_candidates=expected)
+    add_graph('multiple-outbounds', rows=[row('source', 'wallet-a', 'outbound'),
+        row('other', 'wallet-c', 'outbound'), row('target', 'wallet-b', 'inbound')], expected_candidates=0)
+    add_graph('destination-asset-filter', rows=[row('source', 'wallet-a', 'outbound', raw=graph()),
+        dict(row('target', 'wallet-b', 'inbound'), asset='LBTC')], expected_candidates=0)
+    add_graph('nonpositive-group-cannot-offer-offgroup', rows=[
+        row('source', 'wallet-a', 'outbound', scoped=False),
+        row('target', 'wallet-b', 'inbound', 0, scoped=False),
+        dict(row('other', 'wallet-b', 'inbound', 1, scoped=False), external_id='other')],
+        expected_candidates=0)
+    add_graph('graph-zero-receipt', rows=[
+        row('source', 'wallet-a', 'outbound', raw=graph(0)),
+        row('target', 'wallet-b', 'inbound', 0)], expected_candidates=0)
+    for name, inbound in [
+        ('network-filter', dict(row('target', 'wallet-b', 'inbound'), config_json='{"chain":"bitcoin","network":"test"}')),
+        ('txid-filter', dict(row('target', 'wallet-b', 'inbound'), external_id='c'*64)),
+    ]:
+        add_graph(name, rows=[row('source', 'wallet-a', 'outbound', raw=graph()), inbound], expected_candidates=0)
+    add_graph('txid-filter-without-source-scope', rows=[
+        dict(row('source', 'wallet-a', 'outbound', scoped=False), external_id=TXID),
+        dict(row('target', 'wallet-b', 'inbound', scoped=False), external_id=TXID),
+        dict(row('other', 'wallet-b', 'inbound'), external_id='c'*64)], expected_candidates=1)
+    for amount in (100_000_000, 400_001_000):
+        tolerance = max(amount // 100, 2_500_000)
+        for delta in (-tolerance-1, -tolerance, 0, tolerance, tolerance+1):
+            add_graph(f'tolerance-{amount}-{delta}', rows=[
+                row('source', 'wallet-a', 'outbound', amount, raw=graph(amount)),
+                row('target', 'wallet-b', 'inbound', amount+delta)],
+                expected_candidates=int(abs(delta) <= tolerance))
+    add_graph('exact-preferred-to-compatible', rows=[
+        row('source', 'wallet-a', 'outbound', raw=graph()), row('target', 'wallet-b', 'inbound'),
+        row('other', 'wallet-b', 'inbound', 100_000_001)], expected_candidates=1)
+    add_graph('exact-conflicts-keep-order', rows=[
+        row('source', 'wallet-a', 'outbound', raw=graph()), row('target-z', 'wallet-b', 'inbound'),
+        row('target-a', 'wallet-b', 'inbound')], expected_candidates=2)
+    add_graph('compatible-conflicts-keep-order', rows=[
+        row('source', 'wallet-a', 'outbound', raw=graph()), row('target-z', 'wallet-b', 'inbound', 100_000_001),
+        row('target-a', 'wallet-b', 'inbound', 99_999_999)], expected_candidates=2)
+    add_graph('partial-source-is-strong', rows=[
+        row('source', 'wallet-a', 'outbound', 200_000_000, raw=graph()),
+        row('target', 'wallet-b', 'inbound')], expected_candidates=1)
+    add_graph('unscoped-destination-is-strong', rows=[
+        row('source', 'wallet-a', 'outbound', raw=graph()), row('target', 'wallet-b', 'inbound', scoped=False)], expected_candidates=1)
+    add_graph('ambiguous-source-is-strong', reasons=[('source', 'ownership_transfer_source_ambiguous')],
+              expected_candidates=1)
+    for script in (1, True, [1], {'a': 1}):
+        add_graph(f'output-script-refusal-{type(script).__name__}', rows=[
+            row('source', 'wallet-a', 'outbound', raw=graph(outputs=[
+                dict(scriptpubkey=script, value_sats=100_000)])), row('target', 'wallet-b', 'inbound')])
+    for field in ('n', 'vout'):
+        raw = graph()
+        (raw['vout'][0] if field == 'n' else raw['vin'][0])[field] = float('inf')
+        add_graph(f'graph-index-refusal-{field}', rows=[row('source', 'wallet-a', 'outbound', raw=raw),
+            row('target', 'wallet-b', 'inbound')])
+    add_graph('txid-python-whitespace', rows=[
+        dict(row('source', 'wallet-a', 'outbound', scoped=False), external_id='\x1c'+TXID+'\x1f'),
+        dict(row('target', 'wallet-b', 'inbound', scoped=False), external_id='\x1c'+TXID+'\x1f'),
+        dict(row('other', 'wallet-b', 'inbound'), external_id='c'*64)], expected_candidates=1)
+    for script in (1, True, [1], {'a': 1}):
+        raw = graph()
+        raw['vin'][0]['prevout']['scriptpubkey'] = script
+        add_graph(f'input-script-refusal-{type(script).__name__}', rows=[
+            row('custody-tax:source', 'wallet-a', 'outbound', raw=raw),
+            row('target', 'wallet-b', 'inbound')], reasons=[('custody-tax:source', REASON)],
+            expected_error='AttributeError')
+    raw = graph()
+    raw['vin'] = []
+    raw['vout'][0]['scriptpubkey'] = [1]
+    add_graph('scope-output-script-refusal', rows=[
+        row('custody-tax:source', 'wallet-a', 'outbound', raw=raw),
+        row('target', 'wallet-b', 'inbound')], reasons=[('custody-tax:source', REASON)],
+        expected_error='AttributeError')
+    index = OwnedIndex()
+    match = OwnedMatch('wallet-a', 'Cold', 'treasury', 'bitcoin', 'main', '', None, None,
+                       'inventory', 'descriptor')
+    index.add_outpoint('b'*64, 0, match)
+    raw = graph()
+    raw['vin'][0]['prevout']['scriptpubkey'] = [1]
+    raw['vin'].append(dict(txid='c'*64, vout=1, prevout=dict(scriptpubkey={'bad': 1})))
+    add_graph('scope-skips-owned-outpoint-script', index=index, rows=[
+        row('custody-tax:source', 'wallet-a', 'outbound', raw=raw),
+        row('target', 'wallet-b', 'inbound')], reasons=[('custody-tax:source', REASON)],
+        expected_error='AttributeError')
+    raw = graph()
+    raw['vout'][0]['n'] = float('inf')
+    for name, reasons, components in [
+        ('no-quarantines-skips-graph-refusal', [], []),
+        ('nonpairable-skips-graph-refusal', [('source', 'missing_spot_price')], []),
+        ('occupied-source-skips-graph-refusal', [('source', REASON)], [component(inbound=None)]),
+    ]:
+        add_graph(name, rows=[row('source', 'wallet-a', 'outbound', raw=raw),
+                             row('target', 'wallet-b', 'inbound')],
+                  reasons=reasons, components=components, expected_candidates=0)
     return cases
 
 

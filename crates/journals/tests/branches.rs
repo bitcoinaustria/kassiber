@@ -22,21 +22,24 @@ fn check(group: &str) {
                 id.into()
             },
         );
-        let matches = match actual {
+        match actual {
             Ok(state) => {
                 let actual = boundary::canonical(&state).unwrap();
                 let expected = case["expected"]["state"].as_str().unwrap_or("");
                 if actual != expected {
                     let actual: Value = serde_json::from_str(&actual).unwrap();
                     let expected: Value = serde_json::from_str(expected).unwrap_or(Value::Null);
-                    failures.push(format!(
-                        "{}: actual review {}, expected {}",
-                        case["name"],
-                        actual["ownership_review_candidates"],
-                        expected["ownership_review_candidates"]
-                    ));
+                    let changed: Vec<_> = actual
+                        .as_object()
+                        .unwrap()
+                        .iter()
+                        .filter(|(key, value)| expected.get(*key) != Some(*value))
+                        .map(|(key, value)| {
+                            format!("{key}: actual {value}, expected {}", expected[key])
+                        })
+                        .collect();
+                    failures.push(format!("{}: {}", case["name"], changed.join("; ")));
                 }
-                actual == expected
             }
             Err(error) => {
                 let actual = serde_json::to_value(error).unwrap();
@@ -46,13 +49,11 @@ fn check(group: &str) {
                         case["name"], case["expected"]
                     ));
                 }
-                actual == case["expected"]["error"]
             }
-        };
+        }
         if consumed != ids.len() {
             failures.push(format!("{}: UUIDs {consumed}/{}", case["name"], ids.len()));
         }
-        assert!(matches || !failures.is_empty());
     }
     assert!(count > 0);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
@@ -61,4 +62,9 @@ fn check(group: &str) {
 #[test]
 fn component_exclusions_and_reason_precedence_match_python() {
     check("exclusions");
+}
+
+#[test]
+fn graph_scopes_owners_and_tolerances_match_python() {
+    check("graph");
 }
