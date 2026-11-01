@@ -288,11 +288,9 @@ export function redactUrlCredentials(text: string): string {
     const end = Math.min(tokenEnd, matches[index + 1]?.index ?? view.length);
     const relativeAt = view.slice(start, end).lastIndexOf("@");
     if (relativeAt < 0) {
+      // An empty/numeric password before a nested scheme is still ambiguous.
       const prefix = view.slice(start, end).split("/", 1)[0];
-      if (prefix.includes(":")) {
-        const password = prefix.slice(prefix.indexOf(":") + 1);
-        if (password && !/^[0-9]+$/.test(password) && pending < 0) pending = start;
-      }
+      if (prefix.includes(":") && pending < 0) pending = start;
       continue;
     }
     const lastAt = start + relativeAt;
