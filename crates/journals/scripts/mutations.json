@@ -2498,5 +2498,55 @@
       "removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time"
     ],
     "rule": "A removed sibling never inherits a surviving identity or dirties its creation-clock group."
+  },
+  {
+    "id": "JP-coefficient-small",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": "seen && actual == expected.get()",
+    "replace": "seen && actual != expected.get()",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Retained machine-width coefficients compare every digit without formatting."
+  },
+  {
+    "id": "JP-coefficient-wide",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": ".is_some_and(|actual| actual == *expected)",
+    "replace": ".is_some_and(|actual| actual != *expected)",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Retained arbitrary-width coefficients compare every digit without formatting."
+  },
+  {
+    "id": "JP-coefficient-ascii",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": "                    if !digit.is_ascii_digit() {\n                        return false;\n                    }\n                    let Some(next)",
+    "replace": "                    if false {\n                        return false;\n                    }\n                    let Some(next)",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Malformed retained coefficient digits never compare equal to a numeric coefficient."
+  },
+  {
+    "id": "JP-coefficient-256",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": ".all(|limb| limb == expected.next().unwrap_or(0))",
+    "replace": ".all(|limb| limb != expected.next().unwrap_or(0))",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Retained four-limb coefficients compare all 256 bits without formatting."
+  },
+  {
+    "id": "JP-coefficient-overflow",
+    "file": "crates/pydecimal/src/lib.rs",
+    "find": "carry == 0",
+    "replace": "true",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Overflowing retained digits cannot wrap into the expected 256-bit coefficient."
   }
 ]

@@ -893,6 +893,77 @@ impl Decimal {
         self.coeff.small()
     }
 
+    pub fn coefficient_matches_ascii(&self, left: &[u8], right: &[u8]) -> bool {
+        let mut digits = left.iter().chain(right).copied();
+        match &self.coeff {
+            Coeff::Small(expected) => {
+                let mut actual = 0u128;
+                let mut seen = false;
+                for digit in digits {
+                    if !digit.is_ascii_digit() {
+                        return false;
+                    }
+                    let Some(next) = actual
+                        .checked_mul(10)
+                        .and_then(|n| n.checked_add(u128::from(digit - b'0')))
+                    else {
+                        return false;
+                    };
+                    actual = next;
+                    seen = true;
+                }
+                seen && actual == expected.get()
+            }
+            Coeff::Big(expected) => {
+                if expected.bits() <= 256 {
+                    fn append(limbs: &mut [u64; 4], chunk: u64, scale: u64) -> bool {
+                        let mut carry = u128::from(chunk);
+                        for limb in limbs {
+                            let value = u128::from(*limb) * u128::from(scale) + carry;
+                            *limb = value as u64;
+                            carry = value >> 64;
+                        }
+                        carry == 0
+                    }
+                    let Some(length) = left.len().checked_add(right.len()).filter(|&n| n <= 78)
+                    else {
+                        return false;
+                    };
+                    let mut raw = [0u8; 78];
+                    raw[..left.len()].copy_from_slice(left);
+                    raw[left.len()..length].copy_from_slice(right);
+                    let mut actual = [0u64; 4];
+                    for digits in raw[..length].chunks(19) {
+                        let Some(chunk) = std::str::from_utf8(digits)
+                            .ok()
+                            .and_then(|s| s.parse::<u64>().ok())
+                        else {
+                            return false;
+                        };
+                        if digits.first() == Some(&b'+')
+                            || !append(&mut actual, chunk, 10u64.pow(digits.len() as u32))
+                        {
+                            return false;
+                        }
+                    }
+                    let mut expected = expected.iter_u64_digits();
+                    actual
+                        .into_iter()
+                        .all(|limb| limb == expected.next().unwrap_or(0))
+                } else {
+                    let mut parsed = Vec::with_capacity(digits.size_hint().0);
+                    for digit in &mut digits {
+                        if !digit.is_ascii_digit() {
+                            return false;
+                        }
+                        parsed.push(digit - b'0');
+                    }
+                    BigUint::from_radix_be(&parsed, 10).is_some_and(|actual| actual == *expected)
+                }
+            }
+        }
+    }
+
     /// The exponent: the value is `coefficient * 10^exponent`.
     pub fn exponent(&self) -> i64 {
         self.exp
@@ -1552,6 +1623,40 @@ impl Ord for Decimal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coefficient_ascii_comparison_preserves_wide_digits_and_rejects_invalid_input() {
+        for text in [
+            "0".to_owned(),
+            u128::MAX.to_string(),
+            (BigUint::from(u128::MAX) + BigUint::from(1u8)).to_string(),
+            ((BigUint::from(1u8) << 256u32) - BigUint::from(1u8)).to_string(),
+            (BigUint::from(1u8) << 256u32).to_string(),
+            "1234567890".repeat(100),
+        ] {
+            let decimal: Decimal = format!("-{text}E-32").parse().unwrap();
+            for split in 0..=text.len() {
+                assert!(decimal.coefficient_matches_ascii(
+                    &text.as_bytes()[..split],
+                    &text.as_bytes()[split..]
+                ));
+            }
+            for end in [0, text.len() / 2, text.len() - 1] {
+                assert!(!decimal.coefficient_matches_ascii(&text.as_bytes()[..end], &[]));
+                let mut changed = text.as_bytes().to_vec();
+                changed[end] = if changed[end] == b'9' { b'8' } else { b'9' };
+                assert!(!decimal.coefficient_matches_ascii(&changed, &[]));
+            }
+            for invalid in [
+                format!("+{text}"),
+                format!("-{text}"),
+                format!("{text}.0"),
+                format!("{text}x"),
+            ] {
+                assert!(!decimal.coefficient_matches_ascii(invalid.as_bytes(), &[]));
+            }
+        }
+    }
 
     const RP2: Context = Context::RP2;
 

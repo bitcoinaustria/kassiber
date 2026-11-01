@@ -1,0 +1,557 @@
+{
+  "base_commit": "bbe6e0694",
+  "accepted": false,
+  "scope": "Exact wide coefficient comparison; complete R4-12 comparison matrix and acceptance gates remain open.",
+  "method": {
+    "scope": "Coefficient comparison only; excludes fixed-layout checks, database reads and the complete persistence timer. Parent measures total child process CPU; five alternating pairs.",
+    "sources": {
+      "target/release/libkassiber_pydecimal.rlib": "37c5575f9efb7cf30f7365323d6aca49d3efebdcfbdb77ae015d7dbc8a59b6ca",
+      "target/benchmark-wide.py": "c2917ced3df1e2da7bc5e9448c3a594fa393331122b3e953d99aa9d09da26908",
+      "target/benchmark-wide.rs": "9acfea0ef16e4b6c65dd694f584c17f98d754ac34250b2b1986da869f62145e8",
+      "target/benchmark-wide": "000b587bf202adc1f8ae16ec863f06c81108a1c3b5220eaf4efcdab833bbd569",
+      "crates/pydecimal/src/lib.rs": "4d5dc4afb744ffcfecff30bddcf1b97f0251007e3c7e78c161b73aefe9f2bd33",
+      "crates/journals/src/persistence/entries.rs": "264bb2bd7e88f96b452b36d51fe1b8326654043f1808ded47503a190296cb341"
+    },
+    "results": [
+      {
+        "width": 40,
+        "iterations": 500000,
+        "trials": [
+          {
+            "formatter": {
+              "cpu_seconds": 0.10792300000000005,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.06037499999999979,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.0598160000000002,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.10599999999999987,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.10467400000000016,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.059320999999999735,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.06073600000000029,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.10687099999999977,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.10486200000000001,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.06211100000000008,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          }
+        ],
+        "best": {
+          "formatter": 0.10467400000000016,
+          "coefficient": 0.059320999999999735
+        }
+      },
+      {
+        "width": 60,
+        "iterations": 333333,
+        "trials": [
+          {
+            "formatter": {
+              "cpu_seconds": 0.09593199999999985,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.053584000000000354,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.05366799999999988,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.0966619999999998,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.09827099999999994,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.05416600000000038,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.05468299999999959,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.09751400000000027,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.09462299999999979,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.05402400000000007,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          }
+        ],
+        "best": {
+          "formatter": 0.09462299999999979,
+          "coefficient": 0.053584000000000354
+        }
+      },
+      {
+        "width": 130,
+        "iterations": 153846,
+        "trials": [
+          {
+            "formatter": {
+              "cpu_seconds": 0.10151900000000036,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.07018799999999958,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.06886300000000029,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.10132400000000008,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.10246999999999962,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.0711520000000001,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.07000400000000001,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.10557699999999964,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.10452900000000032,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.07058600000000048,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            }
+          }
+        ],
+        "best": {
+          "formatter": 0.10132400000000008,
+          "coefficient": 0.06886300000000029
+        }
+      },
+      {
+        "width": 1000,
+        "iterations": 20000,
+        "trials": [
+          {
+            "formatter": {
+              "cpu_seconds": 0.3142549999999991,
+              "loadavg": [
+                65.48193359375,
+                62.40869140625,
+                57.60693359375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.08284700000000034,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.08242800000000045,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.31800800000000007,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.3170389999999995,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.08243199999999978,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.0816710000000005,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.3147059999999996,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.31304000000000004,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.08063800000000015,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          }
+        ],
+        "best": {
+          "formatter": 0.31304000000000004,
+          "coefficient": 0.08063800000000015
+        }
+      },
+      {
+        "width": 4096,
+        "iterations": 4882,
+        "trials": [
+          {
+            "formatter": {
+              "cpu_seconds": 0.4358320000000003,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.16289200000000015,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.16375399999999996,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.43510600000000005,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.432492,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.16530299999999887,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "coefficient": {
+              "cpu_seconds": 0.16948000000000008,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            },
+            "formatter": {
+              "cpu_seconds": 0.4387210000000003,
+              "loadavg": [
+                65.20263671875,
+                62.40185546875,
+                57.630859375
+              ]
+            }
+          },
+          {
+            "formatter": {
+              "cpu_seconds": 0.4381369999999998,
+              "loadavg": [
+                65.2666015625,
+                62.4619140625,
+                57.67626953125
+              ]
+            },
+            "coefficient": {
+              "cpu_seconds": 0.16419400000000145,
+              "loadavg": [
+                65.2666015625,
+                62.4619140625,
+                57.67626953125
+              ]
+            }
+          }
+        ],
+        "best": {
+          "formatter": 0.432492,
+          "coefficient": 0.16289200000000015
+        }
+      }
+    ]
+  },
+  "reproduction_sources": {
+    "target/benchmark-wide.py": "from pathlib import Path\nimport hashlib,json,os,resource,subprocess\nsubprocess.run(['cargo','build','--offline','--release','-p','kassiber-pydecimal'],check=True)\nlibrary=Path('target/release/libkassiber_pydecimal.rlib')\nsubprocess.run(['rustc','--edition=2021','-O','-L','dependency=target/build/release/deps','--extern',f'kassiber_pydecimal={library}','target/benchmark-wide.rs','-o','target/benchmark-wide'],check=True)\nresults=[]\nfor width in (40,60,130,1000,4096):\n trials=[]\n for run in range(5):\n  pair={}\n  for mode in (['formatter','coefficient'] if run%2==0 else ['coefficient','formatter']):\n   load=os.getloadavg();before=resource.getrusage(resource.RUSAGE_CHILDREN)\n   subprocess.run(['target/benchmark-wide',mode,str(width)],check=True)\n   after=resource.getrusage(resource.RUSAGE_CHILDREN)\n   pair[mode]={'cpu_seconds':(after.ru_utime-before.ru_utime)+(after.ru_stime-before.ru_stime),'loadavg':load}\n  trials.append(pair)\n result={'width':width,'iterations':20_000_000//width,'trials':trials,'best':{mode:min(t[mode]['cpu_seconds'] for t in trials) for mode in ('formatter','coefficient')}}\n print(width,result['best'],flush=True);results.append(result)\n Path('target/wide-comparison.json').write_text(json.dumps({'scope':'Coefficient comparison only; excludes fixed-layout checks, database reads and the complete persistence timer. Parent measures total child process CPU; five alternating pairs.','sources':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [library,Path('target/benchmark-wide.py'),Path('target/benchmark-wide.rs'),Path('target/benchmark-wide'),Path('crates/pydecimal/src/lib.rs'),Path('crates/journals/src/persistence/entries.rs')]},'results':results},indent=2)+'\\n')\n",
+    "target/benchmark-wide.rs": "use kassiber_pydecimal::Decimal;\nuse std::hint::black_box;\nstruct Coefficient<'a> {\n    left: &'a [u8],\n    right: &'a [u8],\n    sign: bool,\n    exponent: bool,\n}\nimpl std::fmt::Write for Coefficient<'_> {\n    fn write_str(&mut self, value: &str) -> std::fmt::Result {\n        if self.exponent {\n            return Ok(());\n        }\n        let value = if self.sign {\n            self.sign = false;\n            value.strip_prefix('-').ok_or(std::fmt::Error)?\n        } else {\n            value\n        };\n        let value = if let Some((digits, _)) = value.split_once('E') {\n            self.exponent = true;\n            digits\n        } else {\n            value\n        };\n        if value.len() <= self.left.len() {\n            self.left = self\n                .left\n                .strip_prefix(value.as_bytes())\n                .ok_or(std::fmt::Error)?;\n        } else {\n            let (left, right) = value.as_bytes().split_at(self.left.len());\n            if self.left != left {\n                return Err(std::fmt::Error);\n            }\n            self.left = &[];\n            self.right = self.right.strip_prefix(right).ok_or(std::fmt::Error)?;\n        }\n        Ok(())\n    }\n}\n\n\nfn main() {\n    let mode = std::env::args().nth(1).unwrap();\n    let length: usize = std::env::args().nth(2).unwrap().parse().unwrap();\n    let raw: String = \"1234567890\".repeat(length.div_ceil(10)).chars().take(length).collect();\n    let decimal: Decimal = format!(\"{raw}E-32\").parse().unwrap();\n    let iterations = 20_000_000 / length;\n    for _ in 0..iterations {\n        let decimal = black_box(&decimal);\n        let raw = black_box(raw.as_bytes());\n        let equal = if mode == \"formatter\" {\n            let mut matcher = Coefficient { left: raw, right: &[], sign: false, exponent: false };\n            decimal.write_canonical(&mut matcher).is_ok() && matcher.left.is_empty() && matcher.right.is_empty()\n        } else {\n            decimal.coefficient_matches_ascii(raw, &[])\n        };\n        assert!(black_box(equal));\n    }\n}\n"
+  },
+  "verification": {
+    "target/evidence/wide-final-unit-tests.log": {
+      "sha256": "124231c7df7f36259f4b0b3139cc6b390fb7615f6f5c2b904e08b440cc5751f3",
+      "output": "   Compiling kassiber-pydecimal v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pydecimal)\n   Compiling kassiber-pyjson v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pyjson)\n   Compiling kassiber-tax-core v0.2.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/tax-engine/core)\n   Compiling kassiber-pytext v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pytext)\n   Compiling kassiber-store v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/store)\n   Compiling kassiber-custody v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/custody)\n   Compiling kassiber-envelope v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/envelope)\n   Compiling kassiber-net v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/net)\n   Compiling kassiber-chain v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/chain)\n   Compiling kassiber-diagnostics v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/diagnostics)\n   Compiling kassiber-rates v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/rates)\n   Compiling kassiber-setup v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/setup)\n   Compiling kassiber-wallets v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/wallets)\n   Compiling kassiber-reports v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/reports)\n   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/journals)\n    Finished `release` profile [optimized] target(s) in 1m 08s\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_journals-ca160839e3966d7c)\n\nrunning 35 tests\ntest boundary::joins::tests::balance_current_keys_preserve_python_stringification ... ok\ntest boundary::joins::tests::balance_join_matches_existing_comparator_and_promotes_before_overflow ... ok\ntest loader::direct::tests::native_loader_reads_direct_columns_without_conversion ... ok\ntest loader::receipts::tests::native_loader_receipt_filter_never_rejects_possible_identities ... ok\ntest loader::tests::native_loader_bounds_gap_worklist ... ok\ntest loader::tests::native_loader_keeps_sql_values_and_refuses_blob_coercion ... ok\ntest loader::tests::native_loader_matches_python_database_bytes ... ok\ntest loader::tests::native_loader_preserves_receipt_error_precedence ... ok\ntest loader::tests::native_loader_requires_caller_write_transaction ... ok\ntest loader::tests::native_loader_selects_bounded_worklist_from_active_count ... ok\ntest persistence::entries::tests::typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale ... ok\ntest persistence::entries::tests::typed_retained_columns_force_real_delta_writes_and_unchanged_rows_prepare_no_bindings ... ok\ntest persistence::filed::tests::filed_chain_resolution_requires_authoritative_retraction_or_confirmed_observation ... ok\ntest persistence::filed::tests::filed_summary_parsing_preserves_safe_fallbacks_and_scalar_refusals ... ok\ntest persistence::quantity::tests::economic_relation_source_ids_use_first_truthy_id_or_empty_string ... ok\ntest persistence::tests::scalar_bindings_preserve_types_signs_and_refuse_wide_or_structured_values ... ok\ntest persistence::tests::shared_decimal_spelling_preserves_float_bits_and_exact_text ... ok\ntest render::tests::msat_conversion_matches_python_at_rounding_and_width_boundaries ... ok\ntest storage::calculation::compare::tests::canonical_string_comparison_preserves_escaping_and_byte_boundaries ... ok\ntest storage::tests::compact_tuple_refuses_nonintegral_or_structured_scalars ... ok\ntest storage::tests::entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids ... ok\ntest storage::tests::every_entry_real_column_preserves_the_negative_zero_rewrite_rule ... ok\ntest storage::tests::every_retained_content_column_forces_writes_but_the_build_clock_does_not ... ok\ntest storage::tests::malformed_storage_id_and_tie_shapes_refuse_without_writes ... ok\ntest storage::tests::mixed_timestamps_and_signed_zero_force_entry_rewrites ... ok\ntest storage::tests::posting_deltas_reject_duplicates_and_keep_unchanged_rows ... ok\ntest storage::tests::processing_marker_refuses_datetime_overflow ... ok\ntest storage::tests::quarantine_deduplication_and_enrichment_match_lossless_python_json ... ok\ntest storage::tests::removing_a_mixed_clock_sibling_keeps_the_survivors_rowid_and_creation_time ... ok\ntest storage::tests::retained_comparisons_distinguish_cell_boundaries_blob_text_and_null_text ... ok\ntest storage::tests::scoped_cache_and_checkpoint_restore_exact_settings ... ok\ntest storage::tests::shared_calculation_encoder_keeps_every_source_operand_and_refusal ... ok\ntest storage::tests::storage_encodings_and_markers_match_python ... ok\ntest storage::tests::typed_calculation_source_dictionary_preserves_order_and_deduplicates_large_inputs ... ok\ntest storage::tests::typed_calculations_preserve_compact_bytes_and_all_dynamic_fallbacks ... ok\n\ntest result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.10s\n\n     Running unittests src/lib.rs (target/build/release/deps/kassiber_pydecimal-4f107499b0b23a40)\n\nrunning 28 tests\ntest differential_tests::fast_paths_match_the_bignum_paths ... ok\ntest price::tests::bounded_price_matches_python_precision_and_legacy_float_limits ... ok\ntest tests::a_decimal_is_as_large_as_with_bignum_coefficients_only ... ok\ntest tests::adds_and_subtracts_with_cpython_rounding_and_zero_signs ... ok\ntest tests::canonical_form_round_trips_and_is_strict ... ok\ntest tests::coefficient_ascii_comparison_preserves_wide_digits_and_rejects_invalid_input ... ok\ntest tests::compares_values_exactly ... ok\ntest tests::counts_digits_around_powers_of_ten ... ok\ntest tests::divides_with_ideal_exponents_and_errors ... ok\ntest tests::formats_fixed_places_like_cpython ... ok\ntest tests::from_parts_enforces_cpython_range ... ok\ntest tests::huge_exponent_gaps_stay_cheap_and_correct ... ok\ntest tests::integers_convert_exactly ... ok\ntest tests::invalid_context_is_an_error ... ok\ntest tests::multiplies_with_exact_exponents_and_subnormals ... ok\ntest tests::normalizes_like_cpython ... ok\ntest tests::parses_every_finite_python_form ... ok\ntest tests::precision_one_and_long_inputs_round_correctly ... ok\ntest tests::quantizes_like_cpython ... ok\ntest tests::reads_unicode_decimal_digits_as_cpython_does ... ok\ntest tests::rejects_malformed_and_out_of_range_strings ... ok\ntest tests::rejects_surrounding_whitespace_that_cpython_strips ... ok\ntest tests::renders_str_and_fixed_forms ... ok\ntest tests::rp2_comparisons_quantize_the_difference ... ok\ntest tests::unary_operations_round_and_normalize_zero_signs ... ok\ntest tests::unicode_digit_table_is_sorted_runs_of_ten ... ok\ntest wide::tests::powers_and_digit_counts_match_bignum ... ok\ntest wide::tests::products_and_divisions_match_bignum ... ok\n\ntest result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s\n\n"
+    },
+    "target/evidence/wide-persistence-tests.log": {
+      "sha256": "d1266e2a7c1269dcc27d94dd7111d5a4355daeddfb55e55a4c9e5f9a46290ae3",
+      "output": "   Compiling kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/journals)\n    Finished `release` profile [optimized] target(s) in 6.78s\n     Running tests/persistence.rs (target/build/release/deps/persistence-0ccafc1f6bba6ea8)\n\nrunning 18 tests\ntest absent_quantity_preserves_quantity_rows_and_clears_reconciliations ... ok\ntest binding_refusals_precede_decimal_formatting_and_roll_back_every_write ... ok\ntest component_blockers_keep_filed_impacts_pending_without_quarantines ... ok\ntest corrupt_filed_snapshot_refuses_and_rolls_back_freshness ... ok\ntest dump_comparison_preserves_scalar_types_and_every_real_bit ... ok\ntest economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal ... ok\ntest every_write_failure_and_panic_rolls_back_the_journal ... ok\ntest journal_persistence_matches_complete_python_dumps ... ok\ntest malformed_entry_and_holding_bindings_roll_back_before_freshness ... ok\ntest missing_inactive_or_changed_components_never_persist_reconciliations ... ok\ntest nested_cache_and_checkpoint_refusals_restore_signed_settings ... ok\ntest pending_chain_impacts_stay_open_without_dependencies_or_current_authority ... ok\ntest persistence_refuses_without_a_caller_transaction ... ok\ntest repeated_rebuilds_replace_small_tables_and_keep_sealed_resolutions ... ok\ntest sqlcipher_delete_full_preserves_complete_dumps_and_cache_settings ... ok\ntest synthetic_quarantines_are_filtered_before_readiness ... ok\ntest typed_entry_negative_zero_forces_rewrites_in_all_five_real_columns ... ok\ntest wal_checkpoint_waits_for_commit_and_retains_active_readers ... ok\n\ntest result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.17s\n\n"
+    },
+    "target/evidence/wide-clippy-final.log": {
+      "sha256": "149b2bbda6250a7746e5e6b180aa1a5eafd099c23b59d8dbb9710057d8016af6",
+      "output": "    Checking kassiber-pydecimal v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pydecimal)\n    Checking miniscript v12.3.8\n    Checking age-core v0.12.0\n    Checking bdk_core v0.6.3\n    Checking elements v0.25.3\n    Checking rust_xlsxwriter v0.102.0\n    Checking age v0.12.1\n    Checking kassiber-pyjson v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pyjson)\n    Checking kassiber-tax-core v0.2.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/tax-engine/core)\n    Checking kassiber-pytext v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pytext)\n    Checking kassiber-store v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/store)\n    Checking kassiber-custody v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/custody)\n    Checking kassiber-envelope v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/envelope)\n    Checking kassiber-net v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/net)\n    Checking kassiber-chain v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/chain)\n    Checking kassiber-diagnostics v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/diagnostics)\n    Checking kassiber-rates v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/rates)\n    Checking kassiber-setup v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/setup)\n    Checking bdk_chain v0.23.3\n    Checking elements-miniscript v0.4.0\n    Checking kassiber-xlsx v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/xlsx)\n    Checking bdk_wallet v3.0.0\n    Checking kassiber-wallets v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/wallets)\n    Checking kassiber-reports v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/reports)\n    Checking kassiber-journals v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/journals)\n    Finished `release` profile [optimized] target(s) in 15.37s\n"
+    },
+    "target/evidence/wide-classifier.log": {
+      "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896",
+      "output": "wrote tests/rust_port/dispositions.json\n"
+    },
+    "target/evidence/wide-preflight.log": {
+      "sha256": "7181e51339eb821aeac553e22733ab978962be8a57d4f27959c054bb228520db",
+      "output": "> /home/tg/.t3/worktrees/kassiber/t3-33346149/.venv/bin/python -m pytest /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/rust_port/test_contracts.py /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/rust_port/test_inventory.py /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/test_ci_shards.py /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/test_connection_catalog_drift.py /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/test_dependency_drift.py /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/test_report_contract_drift.py /home/tg/.t3/worktrees/kassiber/t3-33346149/tests/test_workflow_pins.py\n============================= test session starts ==============================\nplatform linux -- Python 3.11.17, pytest-9.1.1, pluggy-1.6.0\nrootdir: /home/tg/.t3/worktrees/kassiber/t3-33346149\nconfigfile: pyproject.toml\nplugins: xdist-3.8.0\ncollected 57 items\n\ntests/rust_port/test_contracts.py ..                                     [  3%]\ntests/rust_port/test_inventory.py ........                               [ 17%]\ntests/test_ci_shards.py ..................                               [ 49%]\ntests/test_connection_catalog_drift.py ..................                [ 80%]\ntests/test_dependency_drift.py ....                                      [ 87%]\ntests/test_report_contract_drift.py .                                    [ 89%]\ntests/test_workflow_pins.py ......                                       [100%]\n\n======================== 57 passed in 162.10s (0:02:42) ========================\n"
+    },
+    "target/evidence/wide-mutation-applicability.log": {
+      "sha256": "da0531bef153e5b9fc200b9f988a01b95da2a983e1e88f9180a341d5ba2c6f07",
+      "output": "187 entries apply\n"
+    },
+    "target/evidence/wide-benchmark-final.log": {
+      "sha256": "48f818e6fe5e9f9508d69bc7f38f40cde202120f2d86ffbad6735c3b6e6d0e58",
+      "output": "   Compiling kassiber-pydecimal v0.1.0 (/home/tg/.t3/worktrees/kassiber/t3-33346149/crates/pydecimal)\n    Finished `release` profile [optimized] target(s) in 2.08s\n40 {'formatter': 0.10467400000000016, 'coefficient': 0.059320999999999735}\n60 {'formatter': 0.09462299999999979, 'coefficient': 0.053584000000000354}\n130 {'formatter': 0.10132400000000008, 'coefficient': 0.06886300000000029}\n1000 {'formatter': 0.31304000000000004, 'coefficient': 0.08063800000000015}\n4096 {'formatter': 0.432492, 'coefficient': 0.16289200000000015}\n"
+    }
+  },
+  "excluded_experiments": {
+    "wide-vector-comparison.json": "Correct first prototype, withdrawn because 40/60 digit comparisons were slower.",
+    "wide-chunk-comparison.json": "Invalid timing: linked a stale normal rlib after cargo test rebuilt only test artifacts.",
+    "wide-limb-comparison.json": "Invalid timing: linked a stale normal rlib after cargo test rebuilt only test artifacts."
+  }
+}

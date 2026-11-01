@@ -35,6 +35,44 @@ This profile locates work and does not establish five-pair acceptance.
 binds every floor trial, load average, book manifest, source and binary hash,
 complete-dump hash and the separate baseline profile. No acceptance is claimed.
 
+## Exact wide coefficient comparison from `bbe6e0694`
+
+Unchanged decimals now compare retained ASCII digits against the exact
+coefficient at every supported width without canonical formatting. Checked
+u128 accumulation handles small coefficients; a checked four-limb accumulator
+handles coefficients through 256 bits; larger coefficients use the existing
+arbitrary-precision radix parser. Sign, fixed layout, exponent, trailing zeros
+and all five REAL columns retain their separate exact comparisons.
+No dependency, persisted representation or production registration changes.
+
+Five alternating pairs measure total child process CPU for coefficient
+comparison alone. Independent minima, in seconds:
+
+| Coefficient digits | Prior formatter | Exact coefficient |
+| --- | ---: | ---: |
+| 40 | 0.104674 | 0.059321 |
+| 60 | 0.094623 | 0.053584 |
+| 130 | 0.101324 | 0.068863 |
+| 1,000 | 0.313040 | 0.080638 |
+| 4,096 | 0.432492 | 0.162892 |
+
+These are focused comparison measurements, excluding fixed-layout checks,
+database reads and complete persistence. They establish a measured improvement
+at each width, not the eight-cell budget gate. The
+[wide comparison record](r4-journal-persistence-wide-comparison-measurements.json)
+contains every sample and load, source/library/binary hashes and the complete
+scratch benchmark sources. It excludes two stale-library scratch runs caught
+before this record: the final harness explicitly builds and links the normal
+release rlib instead of guessing a dependency artifact by modification time.
+
+All 35 journal and 28 decimal library tests pass, as do all 18 persistence
+tests, including complete Python dumps, both-driver storage checks, every-write
+error/unwind rollback and signed-zero rewrites. Boundary tests compare every
+digit and split position through 1,000 digits, u128/256-bit overflow and malformed
+ASCII. Release all-target clippy passes with warnings denied. Classifier update
+and all 57 preflight checks pass. All 187 mutation recipes apply; the five new
+coefficient recipes await the final kill campaign. **R4-12 remains unaccepted.**
+
 ## Retained comparison continuation from `9730f9e4b`
 
 The owner now requires byte-exact measured improvements to remain committed

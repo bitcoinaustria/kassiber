@@ -177,71 +177,9 @@ fn fixed_equal(decimal: &JournalDecimal, raw: &[u8]) -> bool {
             }
             (&rest[padding..], &b""[..])
         };
-        if let Some(expected) = d.coefficient_u128() {
-            let mut coefficient = 0u128;
-            for &digit in left.iter().chain(right) {
-                if !digit.is_ascii_digit() {
-                    return Some(false);
-                }
-                coefficient = coefficient
-                    .checked_mul(10)?
-                    .checked_add(u128::from(digit - b'0'))?;
-            }
-            return Some(coefficient == expected);
-        }
-        let mut matcher = Coefficient {
-            left,
-            right,
-            sign: d.is_sign_negative(),
-            exponent: false,
-        };
-        Some(
-            d.write_canonical(&mut matcher).is_ok()
-                && matcher.left.is_empty()
-                && matcher.right.is_empty(),
-        )
+        Some(d.coefficient_matches_ascii(left, right))
     }
     compare(decimal, raw).unwrap_or(false)
-}
-
-struct Coefficient<'a> {
-    left: &'a [u8],
-    right: &'a [u8],
-    sign: bool,
-    exponent: bool,
-}
-impl std::fmt::Write for Coefficient<'_> {
-    fn write_str(&mut self, value: &str) -> std::fmt::Result {
-        if self.exponent {
-            return Ok(());
-        }
-        let value = if self.sign {
-            self.sign = false;
-            value.strip_prefix('-').ok_or(std::fmt::Error)?
-        } else {
-            value
-        };
-        let value = if let Some((digits, _)) = value.split_once('E') {
-            self.exponent = true;
-            digits
-        } else {
-            value
-        };
-        if value.len() <= self.left.len() {
-            self.left = self
-                .left
-                .strip_prefix(value.as_bytes())
-                .ok_or(std::fmt::Error)?;
-        } else {
-            let (left, right) = value.as_bytes().split_at(self.left.len());
-            if self.left != left {
-                return Err(std::fmt::Error);
-            }
-            self.left = &[];
-            self.right = self.right.strip_prefix(right).ok_or(std::fmt::Error)?;
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -316,6 +254,13 @@ mod tests {
             }) else {
                 continue;
             };
+            let mut entry = entry.clone();
+            entry.fiat_value = JournalDecimal(
+                "123456789012345678901234567890123456789012345678901234567890E-32"
+                    .parse()
+                    .unwrap(),
+            );
+            let entry = &entry;
             for column in 0..29 {
                 let conn = Connection::open_in_memory().unwrap();
                 let columns = storage::ENTRY_COLUMNS
@@ -395,6 +340,8 @@ mod tests {
             "340282366920938463463374607431768211455",
             "340282366920938463463374607431768211456",
             "123456789012345678901234567890123456789012345678901234567890",
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+            "115792089237316195423570985008687907853269984665640564039457584007913129639936",
         ] {
             for exponent in [-100, -40, -32, -12, -9, -6, -1, 0, 1, 32, 65, 1000] {
                 let decimal = JournalDecimal(format!("{coefficient}E{exponent}").parse().unwrap());
@@ -417,8 +364,33 @@ mod tests {
                         "{coefficient}E{exponent}: {altered}"
                     );
                 }
-                let mut changed = fixed.into_bytes();
-                let index = changed.iter().rposition(u8::is_ascii_digit).unwrap();
+                for index in fixed
+                    .bytes()
+                    .enumerate()
+                    .filter_map(|(index, byte)| byte.is_ascii_digit().then_some(index))
+                {
+                    let mut changed = fixed.as_bytes().to_vec();
+                    changed[index] = if changed[index] == b'9' { b'8' } else { b'9' };
+                    assert!(!fixed_equal(&decimal, &changed));
+                }
+            }
+        }
+        assert!(!fixed_equal(&JournalDecimal("21".parse().unwrap()), b"1;"));
+        assert!(!fixed_equal(
+            &JournalDecimal(
+                "100000000000000000000000000000000000000000000000000000000000000000000000000000"
+                    .parse()
+                    .unwrap()
+            ),
+            b"215792089237316195423570985008687907853269984665640564039457584007913129639936"
+        ));
+        let coefficient = "1234567890".repeat(100);
+        for exponent in [-1100, -1000, -500, -1, 0, 10] {
+            let decimal = JournalDecimal(format!("{coefficient}E{exponent}").parse().unwrap());
+            let fixed = decimal.0.to_fixed_string().unwrap();
+            assert!(fixed_equal(&decimal, fixed.as_bytes()));
+            for index in [0, fixed.len() / 2, fixed.len() - 1] {
+                let mut changed = fixed.as_bytes().to_vec();
                 changed[index] = if changed[index] == b'9' { b'8' } else { b'9' };
                 assert!(!fixed_equal(&decimal, &changed));
             }
