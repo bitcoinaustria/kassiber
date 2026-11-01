@@ -767,7 +767,8 @@ remains dependent on native R4-13 journal processing; no Python journal bridge,
 new AI allowlist entry or disk logging is introduced.
 ## CLN profitability subprocess acquisition (R5 preparation)
 
-`kassiber_chain::lightning::ClnReportClient` is an unregistered report helper.
+`kassiber_chain::lightning::ClnReportClient` serves the profitability read/CSV
+routes through the shared book service described below.
 Its `kassiber-net` request binds the book, profile, connection, window, export
 path and backend configuration, including the executable and every CLN option.
 Construction is inert. The gate checks current consent, offline/unavailable

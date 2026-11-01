@@ -196,6 +196,34 @@ fn fake_cli(body: &str) -> (tempfile::TempDir, PathBuf) {
 
 #[test]
 #[cfg(unix)]
+fn cln_checked_report_refuses_between_resources_and_before_return() {
+    for stop in [1, 2, 6, 10] {
+        let (_root, program) = fake_cli("print('{}')");
+        let gate =
+            Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
+        let client = ClnReportClient::new(
+            &json!({"kind":"coreln", "lightning_cli":program}),
+            gate.clone(),
+            action(),
+        )
+        .unwrap();
+        let proof = Consent::explicit_trigger(client.request());
+        let mut checks = 0;
+        let result = client.fetch_checked(Some(&proof), deadline(), || {
+            checks += 1;
+            if checks == stop {
+                Err(AppError::new("interaction_required", "scope changed"))
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result.unwrap_err().code, "interaction_required");
+        assert_eq!(gate.attempts().records.len(), stop - 1);
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn cln_report_loopback_transport_pins_commands_optional_errors_and_discard() {
     use kassiber_net::test_support::FakeProvider;
     let Value::List(cases) =

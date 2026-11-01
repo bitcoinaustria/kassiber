@@ -1040,6 +1040,15 @@ booleans such as `nodeSnapshot` and `routingProfitability`; they never include
 peer pubkeys, channel funding outpoints, short channel ids, descriptors,
 backend URLs/tokens, raw wallet config, or other identity graph data.
 
+The native R5 backend now serves `ui.reports.lightning_profitability` through
+its shared book service, with the same aliases, scoped lookup, window coercion
+and capability projection. Only that explicit request grants node acquisition;
+book open, status and configuration reads remain inert. Scope/config changes
+between resources refuse before another read or publication. This registration
+adds no AI tool or node-snapshot/backend-test implementation. Native transport
+errors retain the documented raw-response redactions. See the
+[Lightning product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).
+
 ## Encrypted database
 
 When the active project's `kassiber.sqlite3` is SQLCipher-encrypted, the daemon

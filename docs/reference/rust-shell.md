@@ -13270,3 +13270,64 @@ recorded native privacy differences: raw node bodies, malformed JSON previews,
 offending ancillary values and CLN process details are omitted, and native
 transport/TLS messages identify the native stack. Recorded report/CSV rounding,
 window, ancillary and publication quirks remain reference behavior.
+
+## Lightning report service verification (R5 completion)
+
+The final `t3code/r5-reports-lightning-5` boundary completes verification of the
+three registered product actions above. The disjoint product selections pass
+43 cases: ten core CLI/daemon/display scenarios, eight acquisition-time scope
+changes, ten LND TLS/proxy configurations and fifteen error/backend/scope
+refusals. Every selection uses owned loopback fake nodes, exact Python wire/CSV
+comparisons where the reference contract is retained, and complete 112-table
+state comparisons. No product case is skipped. The core acceptance counts
+remain 36 successful CLI reads, 36 successful CSV exports and 20 successful
+daemon report requests, all Rust-served with zero in-scope Python fallback;
+the transport matrix adds sixteen successful CLI actions and four TLS refusals.
+
+The product error matrix compares code, retryability and safe details. Only the
+recorded transport/body-disclosure differences are exempt from byte equality.
+The malformed-JSON case asserts Python's exact `response_preview` field and
+its complete omission in Rust; it does not broadly discard arbitrary details.
+Backend/capability/scope refusals compare exact wire bytes. Configuration,
+status and display reads, missing connection, offline and product no-egress
+refusals have zero node traffic. CLN cancellation, deadline and process cleanup
+remain covered by the inherited net/client tests.
+
+The new `crates/kassiber/scripts/lightning_mutation_check.py` campaign uses an
+isolated worktree copy and separate offline build directories. All nine named
+unmutated selections pass first; all 21 mutants build and are killed, with no
+survivors or test-selection errors:
+
+| Mutations | Named killing tests |
+| --- | --- |
+| `lightning-service-authority`, `lightning-service-book-state`, `lightning-service-context-state`, `lightning-service-wallet-state`, `lightning-service-backend-state`, `lightning-operation-binding` | `lightning_service_requires_exact_grant_and_current_book_config_without_traffic` |
+| `lightning-service-revoke`, `lightning-service-capabilities`, `lightning-service-unavailable` | `lightning_service_capability_backend_and_grant_lifetime` |
+| `lightning-service-backend-merge` | `lightning_backend_resolution_preserves_db_config_and_environment_precedence` |
+| `lightning-lnd-resource-authority`, `lightning-lnd-return-authority` | `lnd_checked_report_refuses_between_reads_and_before_return` |
+| `lightning-cln-resource-authority`, `lightning-cln-return-authority` | `cln_checked_report_refuses_between_resources_and_before_return` |
+| `lightning-cli-connection`, `lightning-cli-export-file`, `lightning-cli-registration`, `lightning-cli-export-probe` | `lightning_cli_preserves_action_scope_window_file_and_registration` |
+| `lightning-daemon-registration` | `lightning_daemon_preserves_alias_scope_window_and_registration` |
+| `chain-lnd-report-binding` | `lnd_report_consent_binds_book_profile_connection_window_export_and_credentials` |
+| `chain-cln-report-action-binding` | `cln_report_consent_binds_action_and_every_process_option_before_launch` |
+
+Native verification passes the three service tests, sixteen Lightning client
+checks (including the 535 LND and 348 CLN reference cases), four report-kernel
+checks and the two CLI/daemon transport checks. The earlier complete chain/net
+run passes 104 checks including its documentation example. Seven Python oracle
+and mutation-catalog checks pass. Formatting, test-feature all-target clippy
+and production-binary clippy pass with warnings denied. The required classifier
+update records 5,731 definitions and required CI preflight passes all 57 checks. The
+new product module belongs to the serial-network lane.
+
+`target/r5-lightning-5/verification-summary.json`, `mutation-summary.json` and
+logs retain the local evidence. The verified test-harness binary is retained
+at `target/r5-lightning-5/kassiber`; its hash is in the verification summary.
+Both mutation and verification build trees were deleted after summarizing;
+mutation outputs never share a build directory with this product binary.
+Account `HOME` was preserved, explicit scratch stayed under this worktree's
+`target/`, Cargo was locked/offline with eight jobs, and no job remains running.
+The loopback tests needed sandbox permission to bind fake nodes and then passed.
+No dependency, lockfile, schema, Python product or AI exposure change is included.
+Verification is Linux-only. The full Python/frontend gate, live-node/regtest
+acceptance and packaged-platform tests were not run; this checkpoint completes
+Lightning profitability reads/CSV, not those separately scoped products.

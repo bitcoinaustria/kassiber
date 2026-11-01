@@ -193,3 +193,123 @@ def test_lightning_product_rechecks_scope_during_acquisition_before_csv(tmp_path
         assert len(hits) == 1
         assert not target.exists()
         assert state(root) == expected
+
+
+@pytest.mark.parametrize("tls,proxy,trust,success", [
+    (False, None, None, True),
+    (True, None, "path", True), (True, None, "inline", True),
+    (True, None, "insecure", True), (True, None, None, False),
+    (False, "http", None, True), (False, "socks5h", None, True),
+    (True, "http", "path", True), (True, "socks5h", "path", True),
+    (True, "socks5h", "wrong-name", False),
+])
+def test_lightning_product_lnd_tls_proxy_wire_csv_and_all_tables(tmp_path, monkeypatch, tls, proxy, trust, success):
+    from tests.rust_port.lightning_transport import transport
+    with transport([{"response": {}}] * 9, tls=tls, proxy=proxy, wrong_name=trust == "wrong-name") as (raw, hits, routes):
+        if trust in {"path", "wrong-name"}:
+            raw["certificate"] = str(ROOT / "crates/net/tests/fixtures/ca.pem")
+        elif trust == "inline":
+            raw["certificate"] = (ROOT / "crates/net/tests/fixtures/ca.pem").read_text()
+        elif trust == "insecure":
+            raw["insecure"] = True
+        root, database, env, call = book(tmp_path, monkeypatch, "lnd", raw)
+        before = database.read_bytes()
+        initial = state(root)
+        target = tmp_path / "profitability.csv"
+
+        def sequence(reference):
+            database.write_bytes(before)
+            outcomes = []
+            for command in ["lightning-profitability", "export-lightning-profitability-csv"]:
+                hits.clear()
+                routes.clear()
+                target.unlink(missing_ok=True)
+                args = ["--machine", "reports", command, "--connection", "cold"]
+                if command.startswith("export"):
+                    args += ["--file", str(target)]
+                result = call(*args, reference=reference)
+                payload = json.loads(result.stdout)
+                if success:
+                    assert result.returncode == 0, result.stdout
+                    assert len(hits) == 9
+                    assert all("grpc-metadata-macaroon: aabb" in h["request"].lower() for h in hits)
+                    outcomes.append((result.stdout, target.read_bytes() if target.exists() else None))
+                else:
+                    assert payload["error"]["code"] == "backend_error"
+                    assert hits == []
+                    assert not target.exists()
+                    error = payload["error"]
+                    outcomes.append((error["code"], error["retryable"], error.get("hint"), error.get("details")))
+                assert state(root) == initial
+            return outcomes
+
+        assert sequence(False) == sequence(True)
+        served = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
+        assert len(served) == 2
+        assert all(row["served_by"] == "rust" for row in served)
+
+
+@pytest.mark.parametrize("status,raw,code", [
+    (401, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (403, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (503, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (200, b"SYNTHETIC_RESPONSE_SECRET", "backend_error"),
+    (200, b"[]", "backend_error"), (200, b"\xff", "internal_error"),
+])
+def test_lightning_product_errors_preserve_category_and_discard_node_bodies(tmp_path, monkeypatch, status, raw, code):
+    from tests.rust_port.lightning_transport import transport
+    with transport([{"response": {}}], status=status, raw=raw) as (raw_backend, hits, _):
+        root, database, env, call = book(tmp_path, monkeypatch, "lnd", raw_backend)
+        before = database.read_bytes()
+        initial = state(root)
+        outcomes = []
+        for reference in [False, True]:
+            database.write_bytes(before)
+            hits.clear()
+            result = call("--machine", "reports", "lightning-profitability", "--connection", "cold", reference=reference)
+            error = json.loads(result.stdout)["error"]
+            assert error["code"] == code
+            assert len(hits) == 1
+            if not reference:
+                assert b"SYNTHETIC_RESPONSE_SECRET" not in result.stdout
+            details = error.get("details")
+            if reference and status == 200 and raw == b"SYNTHETIC_RESPONSE_SECRET":
+                assert details == {"response_preview": "SYNTHETIC_RESPONSE_SECRET"}
+                details = None
+            outcomes.append((error["code"], error["retryable"], details))
+            assert state(root) == initial
+        assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize("change", [
+    "UPDATE wallets SET kind='nwc' WHERE id='cold'",
+    "UPDATE wallets SET kind='custom' WHERE id='cold'",
+    "UPDATE wallets SET config_json='{}' WHERE id='cold'",
+    "UPDATE wallets SET config_json='malformed' WHERE id='cold'",
+    "UPDATE wallets SET config_json='{\"backend\":\"absent\"}' WHERE id='cold'",
+    "UPDATE backends SET token='' WHERE name='fake'",
+    "UPDATE backends SET token='bad' WHERE name='fake'",
+    "UPDATE backends SET kind='coreln' WHERE name='fake'",
+    "DELETE FROM settings WHERE key='context_profile'",
+])
+def test_lightning_product_backend_capability_and_scope_refusals_match_python(tmp_path, monkeypatch, change):
+    import sqlite3
+    case = cases("lnd")[0]
+    with fake_node(tmp_path, "lnd", case) as (url, hits):
+        root, database, env, call = book(tmp_path, monkeypatch, "lnd", backend(tmp_path, "lnd", url))
+        conn = sqlite3.connect(database)
+        conn.execute(change)
+        conn.commit()
+        conn.close()
+        before = database.read_bytes()
+        initial = state(root)
+        outcomes = []
+        for reference in [False, True]:
+            database.write_bytes(before)
+            result = call("--machine", "reports", "lightning-profitability", "--connection", "cold", reference=reference)
+            assert result.returncode == 1, result.stdout
+            assert json.loads(result.stdout)["kind"] == "error"
+            outcomes.append((result.stdout, result.stderr))
+            assert hits == []
+            assert state(root) == initial
+        assert outcomes[0] == outcomes[1]

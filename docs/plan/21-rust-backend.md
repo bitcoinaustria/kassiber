@@ -4035,3 +4035,26 @@ records evidence and explicit privacy differences. Shared backend/capability
 and grant services, CLI/daemon registration and zero-fallback product
 wire/CSV/all-table acceptance remain required; product served-by counts stay
 zero.
+
+### R5 Lightning profitability service completion
+
+`t3code/r5-reports-lightning-5`, based on `d1178136a`, completes the live
+profitability read/CSV family. Shared backend resolution, explicit adapter
+capabilities and request-local grants now feed the native CLI read, CLI CSV
+export and desktop profitability kind. Grants bind the exact operation and
+book/profile/connection/window/export/backend configuration; the service checks
+current book, context and configuration before each resource and publication,
+and revokes grants on completion or failure. Configuration and display reads
+remain inert, and offline/no-egress apply to loopback and CLN subprocesses.
+
+The [product checkpoint](../reference/rust-shell.md#lightning-profitability-product-wiring-r5)
+records exact Python wire/CSV comparisons, all 112 unchanged tables, zero
+in-scope hybrid fallbacks and 36 successful native CLI reads, 36 CSV exports and
+20 desktop profitability requests in its core acceptance workload. The final
+verification continuation records service/transport mutation kills and the
+product TLS/proxy/error matrix. Native inventory is 155 CLI leaves (23 report
+commands), 16 report daemon kinds and two transaction export kinds.
+
+This completes Lightning report reads/CSV only. Full node-snapshot and backend
+probe routes, Lightning wallet sync and AI projections retain their separate
+porting work. Non-PDF source-funds and reports-b ownership remain unchanged.

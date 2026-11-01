@@ -383,15 +383,19 @@ REVIEWS["tests/test_rust_diagnostics.py"] = {"*": {
 }}
 REVIEWS["tests/test_rust_lightning_reports.py"] = {"*": {
     "disposition": "oracle", "group": "reports",
-    "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus and reproduces retained reference quirks; native Rust tests compare wire/artifact bytes and every table, while live CLN/LND and process registration remain deferred",
+    "reason": "regenerates the unchanged Python profitability/CSV, scoped-lookup and window-coercion corpus, reproduces retained reference quirks and validates the service mutation catalog; native tests and process comparisons cover the served CLN/LND report family",
 }}
 REVIEWS["tests/test_rust_lightning_acquisition.py"] = {"*": {
     "disposition": "oracle", "group": "reports",
-    "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals; public CLI/daemon routes remain unregistered",
+    "reason": "regenerates LND report acquisition and ancillary-refusal projections from unchanged Python; compares real native/Python processes over disposable loopback HTTP, TLS and explicit proxies, pins error categories and privacy differences, and verifies consent/offline/no-egress zero-hit refusals",
 }}
 REVIEWS["tests/test_rust_cln_acquisition.py"] = {"*": {
     "disposition": "oracle", "group": "reports",
-    "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks; public CLI/daemon routes remain unregistered",
+    "reason": "regenerates CLN report projections and ancillary refusals from unchanged Python, compares real native/Python subprocess acquisition on disposable loopback nodes, verifies consent/offline/no-egress zero-hit refusals and reproduces reference quirks",
+}}
+REVIEWS["tests/test_rust_lightning_service.py"] = {"*": {
+    "disposition": "oracle", "group": "reports",
+    "reason": "compares real native CLI/daemon report bytes, CSV artifacts, request order and all 112 database tables with unchanged Python on owned loopback nodes; proves zero hybrid fallbacks, inert configuration/display reads, mid-acquisition scope refusals, TLS/proxy parity and explicit privacy differences",
 }}
 REVIEWS["tests/test_review_regressions.py"] = {
     "ReviewRegressionTest::test_river_parser_accepts_xbt_amount_suffix": {

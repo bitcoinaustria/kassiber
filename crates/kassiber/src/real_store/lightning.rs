@@ -102,7 +102,7 @@ fn backend(conn: &Connection, config: &Config, connection: &ConnectionRef) -> Re
 
 fn state(conn: &Connection, connection: &ConnectionRef) -> Result<Vec<Option<String>>> {
     let id = py_str(&connection.id);
-    let wallet = conn
+    let wallet: Option<String> = conn
         .query_row("SELECT config_json FROM wallets WHERE id=?", [id], |r| {
             r.get(0)
         })
@@ -297,7 +297,15 @@ mod tests {
         .unwrap();
         conn.execute("INSERT INTO backends(name,kind,url,token,timeout,created_at,updated_at) VALUES('fake','lnd',?,'aabb',2,'fixed','fixed')", [url]).unwrap();
         let config = Config::load_with_env(&root.join("absent.env"), &Default::default()).unwrap();
-        (book, config, dict([("connection", s("cold"))]))
+        (
+            book,
+            config,
+            dict([
+                ("connection", s("cold")),
+                ("workspace", s("ws")),
+                ("profile", s("p")),
+            ]),
+        )
     }
 
     fn gate() -> Gate {
@@ -375,7 +383,7 @@ mod tests {
                 "UPDATE settings SET value='p' WHERE key='context_profile'",
             ),
             (
-                "UPDATE wallets SET config_json='{}' WHERE id='cold'",
+                "UPDATE wallets SET config_json='{\"backend\":\"fake\",\"display\":\"changed\"}' WHERE id='cold'",
                 "UPDATE wallets SET config_json='{\"backend\":\"fake\"}' WHERE id='cold'",
             ),
             (
@@ -430,6 +438,23 @@ mod tests {
                 ),
                 Some(&capabilities("lnd", false).unwrap())
             );
+            let declared = get(
+                get(&payload, "connection").unwrap(),
+                "lightningCapabilities",
+            )
+            .unwrap();
+            for key in [
+                "nodeSnapshot",
+                "routingProfitability",
+                "channelBalances",
+                "channelLifecycle",
+                "forwardEvents",
+                "invoiceActivity",
+                "paymentActivity",
+                "onchainBalance",
+            ] {
+                assert_eq!(get(declared, key), Some(&Value::Bool(true)));
+            }
             assert_eq!(get(&payload, "windowLabel"), Some(&s("Last 30 days")));
         }
         assert!(gate
@@ -457,5 +482,43 @@ mod tests {
             .unwrap();
         assert_eq!(error.code, "not_found");
         assert_eq!(node.requests().len(), 9);
+    }
+
+    #[test]
+    fn lightning_backend_resolution_preserves_db_config_and_environment_precedence() {
+        let root = tempfile::tempdir().unwrap();
+        let (book, _, _) = fixture(root.path(), "http://must-not-resolve.invalid");
+        let conn = book.connection();
+        conn.execute("UPDATE backends SET config_json='{\"lightning_cli\":\"private-wrapper\",\"custom\":\"preserved\"}' WHERE name='fake'", []).unwrap();
+        let config = Config::load_with_env(
+            &root.path().join("absent.env"),
+            &[
+                ("KASSIBER_BACKEND_FAKE_KIND".into(), "lnd".into()),
+                (
+                    "KASSIBER_BACKEND_FAKE_URL".into(),
+                    "http://must-not-resolve.invalid".into(),
+                ),
+                ("KASSIBER_BACKEND_FAKE_TOKEN".into(), "ccdd".into()),
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+        let raw = config.resolve_lightning(conn, " FAKE ").unwrap();
+        assert_eq!(get(&raw, "token"), Some(&s("ccdd")));
+        assert_eq!(get(&raw, "lightning_cli"), Some(&s("private-wrapper")));
+        assert_eq!(get(&raw, "custom"), Some(&s("preserved")));
+        conn.execute(
+            "UPDATE backends SET config_json='malformed' WHERE name='fake'",
+            [],
+        )
+        .unwrap();
+        let raw = config.resolve_lightning(conn, "fake").unwrap();
+        assert_eq!(get(&raw, "token"), Some(&s("ccdd")));
+        assert!(get(&raw, "lightning_cli").is_none());
+        assert_eq!(
+            config.resolve_lightning(conn, "missing").unwrap_err().code,
+            "not_found"
+        );
     }
 }

@@ -1122,14 +1122,15 @@ book, profile, connection, report window, optional export destination and
 immutable backend configuration, in addition to the endpoint, proxy and TLS
 trust. Construction performs local configuration/certificate reads and no
 probe. The gate checks offline mode, the product no-egress switch and shared
-consent revocation during transport. The shared book service rechecks scope/configuration between resources and
-before publication, and revokes its request-local grant on completion or failure. It reads the same fixed
+consent revocation during transport. The shared book service rechecks scope and
+configuration between resources and before publication, and revokes its
+request-local grant on completion or failure. It reads the same fixed
 1000-event/payment/invoice pages as Python, including private-peer alias
 lookups, and never follows redirects or retries directly around a proxy.
 Only report channels and routing totals leave the helper; errors omit raw
-node bodies. Only exact CLI profitability read/CSV and desktop profitability requests use it;
-background and AI routes remain unported. See the
-[LND preparation checkpoint](rust-shell.md#lnd-profitability-acquisition-checkpoint-r5-incomplete).
+node bodies. Only exact CLI profitability read/CSV and desktop profitability
+requests use it; background and AI routes remain unported. See the
+[Lightning product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).
 
 The native CLN profitability client gates `lightning-cli` launch
 through `kassiber-net`, including local IPC and commando calls. Exact-action
@@ -1139,6 +1140,7 @@ the report scope. Missing or revoked consent, offline/unavailable policy and
 and reap an in-flight child. Only fixed read-only resource methods can be
 called. The child owns its transport; the parent records a redacted process
 marker rather than claiming visibility into child sockets. Raw output and
-command details are excluded from errors. It serves the same exact profitability actions through the shared book service;
-background and AI routes remain unported. See the
+command details are excluded from errors. It serves the same exact profitability
+actions through the shared book service; background and AI routes remain
+unported. See the
 [CLN subprocess boundary](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).

@@ -444,18 +444,16 @@ registers them; exit-tax preserves its reference no-registration boundary.
   retaining diagnostic stale-journal behavior and Python reference quirks.
   Compare openpyxl content, response bytes and all 112 tables with zero hybrid
   fallbacks and named mutation kills; cross-check creates no saved snapshot.
+- [x] Port live Lightning profitability reads and CSV through the shared native
+  CLI/daemon service, with exact-action consent, current book/config checks,
+  reference quirks, product wire/CSV/all-112-table comparisons and zero fallbacks.
+  The [product checkpoint](docs/reference/rust-shell.md#lightning-profitability-product-wiring-r5)
+  records non-zero served-by counts; node-snapshot/backend-test routes and AI
+  projections remain separately scoped.
 - [ ] Finish the remaining report read inventory and desktop kinds, including
-  Lightning reads/CSV, non-PDF source funds, Privacy Mirror and PSBT.
-  The reviewed commercial subledger CLI read and its CSV export now run
-  natively, with reference vectors, killed mutations and hybrid routing proof.
-  Lightning profitability/CSV preparation is now native and verified separately;
-  LND and CLN report acquisition have consent-bound native preparation and
-  loopback reference comparisons. CLN subprocess launch, cancellation and
-  ancillary refusals are gated and tested; product served-by counts remain zero.
-  LND ancillary refusals and request ordering now have 535 reference cases and
-  a process TLS/proxy/error matrix. Capability/authority services, CLI/daemon
-  cutover and product zero-fallback wire/CSV/all-table proof remain open. See the
-  [LND continuation](docs/reference/rust-shell.md#lnd-ancillary-and-transport-continuation-r5-incomplete).
+  remaining non-PDF source funds and Privacy Mirror/PSBT. The reviewed commercial
+  subledger CLI read and its CSV export run natively, with reference vectors,
+  killed mutations and hybrid routing proof.
 - [x] Port configuration privacy hygiene through the native service, CLI and
   daemon, retaining count-only disclosure, local header inspection, stored
   freshness and Python endpoint/provider classification. The accepted corpus

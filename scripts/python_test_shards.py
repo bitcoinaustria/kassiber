@@ -75,6 +75,7 @@ _NETWORK_SERIAL_MODULES = frozenset(
         "test_regtest_backend_stack",
         "test_rust_cln_acquisition",
         "test_rust_lightning_acquisition",
+        "test_rust_lightning_service",
         "test_sync_backends",
         "test_freshness_prefetch_cancellation",
     }
