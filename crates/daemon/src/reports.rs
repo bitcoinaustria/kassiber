@@ -525,8 +525,6 @@ mod tests {
             assert_eq!(get(&actual, "args"), Some(&args));
         }
         for kind in [
-            "ui.source_funds.request_input",
-            "ui.source_funds.coverage",
             "ui.source_funds.export_pdf",
             "ui.source_funds.export_bundle",
             "ui.source_funds.suggest",

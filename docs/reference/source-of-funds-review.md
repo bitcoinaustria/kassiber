@@ -163,8 +163,8 @@ and target external reference. Report generation and both snapshot rows share
 writer admission. The native daemon
 `ui.source_funds.review_context` supplies the fingerprint used by reviewed saves;
 those saves reject stale or truncated inspections under the same write lock.
-CLI review-context, input handoffs, coverage and suggest/assemble remain pending.
-Native AI execution, consent and once-only admission remain pending too; see the
+CLI review-context, input handoffs and coverage share this producer.
+Persisted suggest/assemble remain pending; see the
 [save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
 Native batch review revalidates the target's
 suggested links against current stored custody or authoritative, wallet-scoped

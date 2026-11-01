@@ -150,3 +150,13 @@ def test_source_funds_diagnostics_pin_wire_types_redaction_rollback_and_all_112_
             unchanged()
         _compare(*results,True,debug)
         assert [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()] == [dict(command='daemon',served_by='rust')]
+
+
+def test_source_funds_debug_comparison_preserves_message_bytes():
+    from types import SimpleNamespace
+    envelope = dict(kind='error', error=dict(code='internal_error', message='reference message', debug='reference stack'))
+    reference = SimpleNamespace(returncode=1, stdout=json.dumps(envelope, indent=2).encode()+b'\n', stderr=b'Traceback (most recent call last):')
+    envelope['error'].update(message='changed message', debug='')
+    native = SimpleNamespace(returncode=1, stdout=json.dumps(envelope, indent=2).encode()+b'\n', stderr=b'')
+    with pytest.raises(AssertionError):
+        _compare(native, reference, daemon=False, debug=True)

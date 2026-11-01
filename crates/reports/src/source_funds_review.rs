@@ -1,7 +1,7 @@
 use super::source_funds_report as report;
 use super::*;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashSet};
 
 const RECIPE_KEYS: &[&str] = &[
     "target_amount",
@@ -284,7 +284,8 @@ pub fn context(
     ]);
     let fingerprint = s(digest(&packet)?);
     replace(&mut packet, "review_fingerprint", fingerprint);
-    let eligible = eligible(conn, &current, &text(&target, "id"))?;
+    let eligible =
+        super::source_funds_batch::eligible_ids(conn, &profile_id, &text(&target, "id"))?;
     let inspected: HashSet<_> = link_rows.iter().map(|r| text(r, "id")).collect();
     let beyond = eligible
         .iter()
@@ -302,119 +303,6 @@ pub fn context(
         ]),
     );
     Ok(packet)
-}
-
-fn eligible(conn: &Connection, profile: &Value, target: &str) -> Result<Vec<String>> {
-    let profile_id = text(profile, "id");
-    let mut queue = VecDeque::from([target.to_owned()]);
-    let mut visited = HashSet::new();
-    let mut candidates = Vec::new();
-    while let Some(id) = queue.pop_front() {
-        if !visited.insert(id.clone()) {
-            continue;
-        }
-        for row in rows(conn,"SELECT * FROM source_funds_links WHERE profile_id=? AND to_transaction_id=? AND state!='rejected' ORDER BY created_at ASC,id ASC",[&profile_id,&id])? {
-            if truthy(value(&row,"from_transaction_id")) { queue.push_back(text(&row,"from_transaction_id")); }
-            if text(&row,"state")=="suggested" { candidates.push(row); }
-        }
-    }
-    if candidates.is_empty() {
-        return Ok(vec![]);
-    }
-    let inputs = report::load_inputs(conn, profile)?;
-    let active: std::collections::HashMap<_, _> =
-        inputs.active.iter().map(|r| (text(r, "id"), r)).collect();
-    let structural = if candidates.iter().any(|r| text(r, "method") == "utxo_spend") {
-        let owned = rows(
-            conn,
-            "SELECT * FROM wallet_utxos WHERE profile_id=?",
-            [&profile_id],
-        )?;
-        kassiber_custody::source_funds::structural_pairs(
-            &inputs
-                .active
-                .iter()
-                .map(kassiber_custody::codec::to_json)
-                .collect::<Vec<_>>(),
-            &owned
-                .iter()
-                .map(kassiber_custody::codec::to_json)
-                .collect::<Vec<_>>(),
-        )
-    } else {
-        Default::default()
-    };
-    let mut result = Vec::new();
-    for row in candidates {
-        let method = text(&row, "method");
-        if !matches!(method.as_str(), "custody_component" | "utxo_spend")
-            || !matches!(text(&row, "confidence").as_str(), "exact" | "strong")
-            || value(&row, "allocation_amount") == &Value::Null
-            || truthy(value(&row, "uses_chain_observation"))
-        {
-            continue;
-        }
-        let from = text(&row, "from_transaction_id");
-        let to = text(&row, "to_transaction_id");
-        if !rows(conn,"SELECT 1 FROM source_funds_links WHERE profile_id=? AND from_transaction_id=? AND to_transaction_id=? AND state='rejected' LIMIT 1",[&profile_id,&from,&to])?.is_empty() { continue }
-        let (Some(parent), Some(child)) = (active.get(&from), active.get(&to)) else {
-            continue;
-        };
-        let amount = super::source_funds_projection::integer(value(&row, "allocation_amount"))?;
-        let gross = if truthy(value(&row, "from_allocation_amount")) {
-            super::source_funds_projection::integer(value(&row, "from_allocation_amount"))?
-        } else {
-            0.into()
-        };
-        let asset = super::source_funds_projection::normalized_asset;
-        let deterministic = if method == "custody_component" {
-            inputs
-                .allocations
-                .get(&(from.clone(), to.clone(), text(&row, "link_type")))
-                .is_some_and(|(a, b)| *a == amount && *b == gross)
-                && asset(value(&row, "asset")) == asset(value(child, "asset"))
-                && asset(value(&row, "from_asset")) == asset(value(parent, "asset"))
-        } else {
-            structural
-                .get(&(from.clone(), to.clone()))
-                .is_some_and(|(a, b)| {
-                    kassiber_pyjson::BigInt::from(*a) == amount
-                        && kassiber_pyjson::BigInt::from(*b) == gross
-                })
-                && text(&row, "confidence") == "exact"
-        };
-        if !deterministic
-            || from == to
-            || report::timestamp_after(value(parent, "occurred_at"), value(child, "occurred_at"))
-            || decimal(value(&row, "allocation_amount"))?
-                > decimal(&Value::Int(super::source_funds_projection::integer(
-                    value(child, "amount"),
-                )?))?
-        {
-            continue;
-        }
-        let required = if value(&row, "from_allocation_amount") == &Value::Null {
-            value(&row, "allocation_amount")
-        } else {
-            value(&row, "from_allocation_amount")
-        };
-        if decimal(required)?
-            > decimal(&Value::Int(super::source_funds_projection::integer(
-                value(parent, "amount"),
-            )?))?
-        {
-            continue;
-        }
-        if text(&row, "link_type") == "self_transfer"
-            && (asset(value(parent, "asset")) != asset(value(child, "asset"))
-                || asset(value(&row, "asset")) != asset(value(child, "asset"))
-                || asset(value(&row, "from_asset")) != asset(value(parent, "asset")))
-        {
-            continue;
-        }
-        result.push(text(&row, "id"));
-    }
-    Ok(result)
 }
 
 fn request(conn: &Connection, workspace: &Value, profile: &Value, args: &Value) -> Result<Value> {

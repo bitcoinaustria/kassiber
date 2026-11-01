@@ -10623,8 +10623,8 @@
   {
     "id": "sof-batch-cli-dry-run",
     "file": "crates/cli/src/reports.rs",
-    "find": "            \"dry_run\",",
-    "replace": "            \"batch_unused_dry_run\",",
+    "find": "            \"link\",\n            \"dry_run\",",
+    "replace": "            \"link\",\n            \"batch_unused_dry_run\",",
     "expect_failing": [
       "source_funds_batch_cli_forwards_target_scope_and_dry_run"
     ],
@@ -11423,8 +11423,8 @@
   {
     "id": "sof-save-fingerprint-shape",
     "file": "crates/reports/src/source_funds_review.rs",
-    "find": "if !matches!(fingerprint,",
-    "replace": "if false && !matches!(fingerprint,",
+    "find": "if !matches!(fingerprint, Value::Str(raw)",
+    "replace": "if false && !matches!(fingerprint, Value::Str(raw)",
     "expect_failing": [
       "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
     ],
@@ -11453,8 +11453,8 @@
   {
     "id": "sof-save-truncated",
     "file": "crates/reports/src/source_funds_review.rs",
-    "find": "if truthy(value(&context, \"scope_truncated\")) {",
-    "replace": "if false && truthy(value(&context, \"scope_truncated\")) {",
+    "find": "if truthy(value(&context, \"scope_truncated\")) {\n            return Err(validation(",
+    "replace": "if false && truthy(value(&context, \"scope_truncated\")) {\n            return Err(validation(",
     "expect_failing": [
       "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
     ],
@@ -11483,8 +11483,8 @@
   {
     "id": "sof-save-cli-registration",
     "file": "crates/cli/src/run.rs",
-    "find": "IMPLEMENTED.contains(&command)\n        && (command != \"transactions.export\"",
-    "replace": "IMPLEMENTED.contains(&command)\n        && (command != \"reports.source-funds\" || !args.flag(\"save_case\"))\n        && (command != \"transactions.export\"",
+    "find": "        && (command != \"transactions.export\"",
+    "replace": "        && (command != \"reports.source-funds\" || !args.flag(\"save_case\"))\n        && (command != \"transactions.export\"",
     "expect_failing": [
       "source_funds_report_cli_forwards_recipe_and_keeps_mutation_boundary"
     ],
@@ -11493,8 +11493,8 @@
   {
     "id": "sof-save-daemon-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n];",
-    "replace": "    \"ui.source_funds.review_context\",\n];",
+    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
+    "replace": "    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
     "expect_failing": [
       "source_funds_case_save_daemon_preserves_recipe_fingerprint_and_registration"
     ],
@@ -11503,8 +11503,8 @@
   {
     "id": "sof-save-context-registration",
     "file": "crates/daemon/src/reports.rs",
-    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n];",
-    "replace": "    \"ui.source_funds.cases.save\",\n];",
+    "find": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.review_context\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
+    "replace": "    \"ui.source_funds.cases.save\",\n    \"ui.source_funds.request_input\",\n    \"ui.source_funds.coverage\",\n];",
     "expect_failing": [
       "source_funds_stored_daemon_preserves_arguments_and_registers_only_lists"
     ],
@@ -11513,8 +11513,8 @@
   {
     "id": "sof-save-context-fields",
     "file": "crates/reports/src/source_funds_review.rs",
-    "find": "if fields.iter().any(|(key,_)| !matches!(key,kassiber_pyjson::Key::Str(raw) if raw.as_str().is_some_and(|key|key==\"target_transaction\" || RECIPE_KEYS.contains(&key))))",
-    "replace": "if false && fields.iter().any(|(key,_)| !matches!(key,kassiber_pyjson::Key::Str(raw) if raw.as_str().is_some_and(|key|key==\"target_transaction\" || RECIPE_KEYS.contains(&key))))",
+    "find": "            .any(|(k, _)| !allowed.iter().any(|a| k == &kassiber_pyjson::Key::from(*a)))",
+    "replace": "            .any(|(k, _)| false && !allowed.iter().any(|a| k == &kassiber_pyjson::Key::from(*a)))",
     "expect_failing": [
       "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
     ],
@@ -11562,19 +11562,19 @@
   },
   {
     "id": "sof-debug-normalization-scope",
-    "file": "tests/test_rust_source_funds_reads.py",
-    "find": "return line.replace(field, b'\"debug\":\"<native-stack>\"', 1)",
-    "replace": "return json.dumps({**envelope, \"error\": {**envelope[\"error\"], \"message\": \"<native-message>\", \"debug\": \"<native-stack>\"}}, separators=(\",\", \":\")).encode()",
+    "file": "tests/test_rust_source_funds_diagnostics.py",
+    "find": "        assert native_line == encode(e), (a, e)",
+    "replace": "        assert native_line == native_line, (a, e)",
     "expect_failing": [
-      "tests/test_rust_source_funds_reads.py::test_source_funds_internal_debug_normalization_preserves_other_wire_bytes"
+      "tests/test_rust_source_funds_diagnostics.py::test_source_funds_debug_comparison_preserves_message_bytes"
     ],
     "rule": "The approved native-stack difference permits normalization of error.debug only; message changes remain byte differences."
   },
   {
     "id": "sof-review-digest-order",
     "file": "crates/reports/src/source_funds_review.rs",
-    "find": "sort_keys: true,",
-    "replace": "sort_keys: false,",
+    "find": ".sort_keys(true)",
+    "replace": ".sort_keys(false)",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11593,8 +11593,8 @@
   {
     "id": "sof-review-depth",
     "file": "crates/reports/src/source_funds_review.rs",
-    "find": "*n <= 32.into()",
-    "replace": "*n <= 64.into()",
+    "find": "*n<=32.into()",
+    "replace": "*n<=33.into()",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11702,9 +11702,9 @@
   },
   {
     "id": "sof-review-eligibility-method",
-    "file": "crates/reports/src/source_funds_review.rs",
-    "find": "\"custody_component\" | \"utxo_spend\"",
-    "replace": "\"custody_component\"",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "if ![\"custody_component\", \"utxo_spend\"].contains(&method.as_str())",
+    "replace": "if ![\"custody_component\", \"utxo_spend\", \"manual\"].contains(&method.as_str())",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11712,9 +11712,9 @@
   },
   {
     "id": "sof-review-eligibility-chain",
-    "file": "crates/reports/src/source_funds_review.rs",
-    "find": "|| truthy(value(&row, \"uses_chain_observation\"))",
-    "replace": "|| false && truthy(value(&row, \"uses_chain_observation\"))",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "|| truthy(value(row, \"uses_chain_observation\"))",
+    "replace": "|| false && truthy(value(row, \"uses_chain_observation\"))",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11722,9 +11722,9 @@
   },
   {
     "id": "sof-review-eligibility-gross",
-    "file": "crates/reports/src/source_funds_review.rs",
-    "find": "*a == amount && *b == gross",
-    "replace": "*a == amount && (*b == gross || true)",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "&& *gross == amount(row, \"from_allocation_amount\")?",
+    "replace": "&& true",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11732,9 +11732,9 @@
   },
   {
     "id": "sof-review-eligibility-confidence",
-    "file": "crates/reports/src/source_funds_review.rs",
-    "find": "&& text(&row, \"confidence\") == \"exact\"",
-    "replace": "&& (text(&row, \"confidence\") == \"exact\" || true)",
+    "file": "crates/reports/src/source_funds_batch.rs",
+    "find": "&& text(row, \"confidence\") == \"exact\"",
+    "replace": "&& true",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11783,8 +11783,8 @@
   {
     "id": "sof-review-truncated",
     "file": "crates/reports/src/source_funds_review.rs",
-    "find": "if truthy(value(&context, \"scope_truncated\")) {",
-    "replace": "if false && truthy(value(&context, \"scope_truncated\")) {",
+    "find": "if truthy(value(&context, \"scope_truncated\")) {\n        return Err(validation(",
+    "replace": "if false && truthy(value(&context, \"scope_truncated\")) {\n        return Err(validation(",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11872,9 +11872,9 @@
   },
   {
     "id": "sof-review-fractional-allocation",
-    "file": "crates/reports/src/source_funds_review.rs",
-    "find": "decimal(value(&row, \"allocation_amount\"))?",
-    "replace": "decimal(&Value::Int(amount.clone()))?",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if exceeds(value(candidate, \"allocation_amount\"), to)? {",
+    "replace": "if false && exceeds(value(candidate, \"allocation_amount\"), to)? {",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],
@@ -11882,9 +11882,9 @@
   },
   {
     "id": "sof-review-fractional-from",
-    "file": "crates/reports/src/source_funds_review.rs",
-    "find": "decimal(required)?",
-    "replace": "decimal(&Value::Int(super::source_funds_projection::integer(required)?))?",
+    "file": "crates/reports/src/source_funds_links.rs",
+    "find": "if exceeds(parent_amount, from)? {",
+    "replace": "if false && exceeds(parent_amount, from)? {",
     "expect_failing": [
       "source_funds_review_mutation_witnesses"
     ],

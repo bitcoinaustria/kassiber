@@ -13104,3 +13104,30 @@ integration remain pending. The native shell has no AI execution loop; Python
 AI execution and isolated helpers do not establish native AI acceptance. CLI
 review-context, request-input and coverage remain with the read port. PDF and
 PDF-containing bundles remain Python by the owner's decision.
+
+## Source-funds reads and mutations integration (R5 continuation 5)
+
+`t3code/r5-sof-mutations-5` starts at `9224cc0ff` and incorporates the three
+read commits ending at `eb01f7677`. Review context and reviewed case saving use
+one fingerprint producer; review context delegates bulk eligibility to the
+same native validator as batch writes. The CLI and daemon retain all existing
+mutation routes while adding the accepted review/input and coverage reads and
+CLI suggestion preview. PDF-containing routes remain Python.
+
+The combined review, coverage, suggestion-preview and case-save corpora pass
+all eleven Rust tests. After eligibility consolidation, all six review/save
+tests pass again, including all 112 tables, ciphertext books and late rollback.
+The CLI and daemon libraries pass 22 and 23 tests respectively. An unintended
+full report-library expansion was stopped; it is not claimed as verification.
+The diagnostic byte-comparison regression passes. All 1,101 mutation entries
+apply after retargeting shared validators and restoring an obsolete diagnostic
+witness; their historical kill evidence remains in the earlier checkpoints,
+and the changed entries require a fresh campaign before final acceptance.
+
+Logs are under `target/r5-sof-mutations-5/`. Cargo's account-level build-dir
+setting initially redirected this worktree's artifacts to the archive. Subsequent
+verification explicitly overrides it into this worktree's `target/`; the initial
+archive tree is owned scratch and is removed during cleanup. Account HOME and
+stashes remain untouched. Persisted suggestion and per-pass assembly are the
+next implementation boundary. No Python product, dependency, schema or lockfile
+changes are introduced by this integration.
