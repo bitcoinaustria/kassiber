@@ -917,6 +917,9 @@ a local acceptance commit, with no push, PR, external comment or routing change.
 
 ## BLOB storage-class continuation (historical)
 
+> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+## BLOB storage-class continuation (original branch evidence)
+
 At the BLOB checkpoint, SQLite BLOBs entered both native readers as `kassiber_pyjson::Value::Bytes`.
 The transitional JSON-shaped custody records carry a private, lossless hex
 adapter that restores typed bytes at consumers. Literal mappings with private
@@ -1088,6 +1091,29 @@ results and logs remain. A manual second review covers guard precedence,
 scalar identity, exact boundary pairing, all forty case identities, named kills,
 zero writes and authority. No background job remains at handoff. This is local
 only: no push, PR, external comment or production authority switch.
+
+> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+## Integrated continuation
+
+Transfers-14 integrates loader-9 and the BLOB continuation, including loader-3
+through loader-8 prerequisites missing from its transfer base. The loader-9
+branch map, all 308 original loader recipes and the 47 original BLOB recipes
+are retained. Two review-assembler admission/refusal guards bring the loader
+catalogue to 310. A shared-snapshot cache invalidation guard and two
+finalized-output identity guards bring the BLOB catalogue to 50. The two
+original branches' mutation, audit, timing and campaign records above remain
+historical evidence; they are not fresh campaign results for the merged tree.
+The accepted loader's only storage-audit exception is the **40 measured
+seed-dependent messages, pending Python determinism fix**.
+
+The integrated native loader retains database scalars through its raw admission
+path and shares downstream stages with the existing typed assembler. The latter
+still has its strict typed conversion boundary; closing review-workflow
+lossless/refusal gaps remains separate work before routing. See the
+[transfers-14 handoff](rust-shell.md#accepted-loader-integration-r5-transfers-14)
+for fresh verification and remaining ordered work. Python retains product
+authority. Integrated campaign/timing acceptance and the R4 authority switch
+are not established by importing the original branches' evidence.
 
 ## R4-13 integration contract
 

@@ -1,5 +1,5 @@
 use kassiber_custody::{codec, finalized_projection::runtime, snapshot::Snapshot};
-use kassiber_pyjson::{Key, Value as Py};
+use kassiber_pyjson::{Key, Options, Value as Py};
 
 fn get<'a>(v: &'a Py, name: &str) -> &'a Py {
     match v {
@@ -47,6 +47,65 @@ fn projection_raw_adapter_vectors() {
                 case["case"]
             );
         }
+    }
+}
+
+#[test]
+fn projection_loaded_rows_keep_bytes_until_serialization() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_stage.json"
+    ))
+    .unwrap();
+    for bytes in [vec![], vec![255, 0], b"77".to_vec()] {
+        let mut input = cases[0]["input"].clone();
+        for row in input["transactions"].as_array_mut().unwrap() {
+            row["note"] = codec::to_json(&Py::Bytes(bytes.clone()));
+        }
+        let snapshot: Snapshot = serde_json::from_value(input).unwrap();
+        let stages = kassiber_custody::run_loaded(&snapshot, true).unwrap();
+        let projection = stages.finalized_projection.unwrap();
+        let Py::List(rows) = get(&projection, "rows") else {
+            panic!("projection rows")
+        };
+        assert_eq!(rows.len(), 2);
+        for row in rows {
+            assert_eq!(get(row, "note"), &Py::Bytes(bytes.clone()));
+        }
+        assert_eq!(
+            kassiber_pyjson::dumps(&projection, &Options::new())
+                .unwrap_err()
+                .to_string(),
+            "Object of type bytes is not JSON serializable"
+        );
+    }
+}
+
+#[test]
+fn projection_json_rows_keep_literal_private_tag_maps() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_projection_stage.json"
+    ))
+    .unwrap();
+    for note in [
+        serde_json::json!({"$kassiber_bytes":"ff00"}),
+        serde_json::json!({"$kassiber_dict":{"nested":{"$kassiber_bytes":"ff00"}}}),
+    ] {
+        let mut input = cases[0]["input"].clone();
+        for row in input["transactions"].as_array_mut().unwrap() {
+            row["note"] = note.clone();
+        }
+        let snapshot = kassiber_custody::parse(&input.to_string()).unwrap();
+        let stages = kassiber_custody::run(&snapshot, true).unwrap();
+        let projection = stages.finalized_projection.unwrap();
+        let Py::List(rows) = get(&projection, "rows") else {
+            panic!("projection rows")
+        };
+        assert_eq!(rows.len(), 2);
+        let expected = codec::loads(&note.to_string()).unwrap();
+        for row in rows {
+            assert_eq!(get(row, "note"), &expected);
+        }
+        assert!(codec::dumps(&projection, true).is_ok());
     }
 }
 

@@ -91,10 +91,10 @@ impl Prepared {
 
     pub fn load(conn: &Connection, profile: Py, as_of: &str) -> Result<Self, Refusal> {
         let loaded = loader::load_read_snapshot(conn, profile, as_of).map_err(load_error)?;
-        Self::from_computed(
-            crate::compute::compute_loaded(loaded.into_custody().map_err(load_error)?, true)
-                .map_err(stage_error)?,
-        )
+        let strict_error = |message| load_error(loader::Error::Invalid(message));
+        let snapshot = loaded.into_custody().map_err(load_error)?.typed().map_err(strict_error)?;
+        snapshot.validate().map_err(strict_error)?;
+        Self::from_snapshot(snapshot)
     }
 
     pub fn render(&self, ids: impl FnMut() -> String) -> Result<JournalState<'_>, Refusal> {

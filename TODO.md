@@ -859,9 +859,11 @@ Python.
   adds complete economic/policy effects on the live native build and portable
   artifact construction/pre-transaction admission primitives; these do not
   simulate ordered operations or validate/apply a plan. Production counts
-  remain **26/29 CLI leaves and 25/28 daemon kinds**. Finish lossless/refusal
-  admission with the loader-9 acceptance record and its explicit pending BLOB
-  decision, join artifact/effect primitives to isolated planning/validation,
+  remain **26/29 CLI leaves and 25/28 daemon kinds**. Transfers-14 integrates
+  accepted loader-9 and BLOB work, including their missing prerequisites;
+  only forty measured seed-dependent loader messages remain pending Python.
+  Finish the review assembler's lossless/refusal boundary, join artifact/effect
+  primitives to isolated planning/validation,
   implement ordered mixed operations and writer-locked apply/receipts before registering
   the three routes. Prove full DB/filed-impact parity, late rollback, idempotent retries,
   caller-owned transactions, CLI/daemon envelopes and AI once-only consent.

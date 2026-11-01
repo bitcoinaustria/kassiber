@@ -2657,6 +2657,13 @@ above belong to loader-9. The BLOB continuation closes the 4,446 storage
 gaps and extends the pending message set to forty; merged verification is
 recorded in the R4-13 checkpoint.
 
+> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+16,384-case non-BLOB audit are inherited unchanged; the loader-9 campaign results
+above belong to that branch. The BLOB continuation closes the storage-class
+gaps and expands the measured seed-dependent message set to forty. Combined
+transfer-branch verification is recorded in the
+[transfers-14 handoff](../reference/rust-shell.md#accepted-loader-integration-r5-transfers-14).
+
 ### R4-0 integrated stack
 
 The local `t3code/rust-backend-r6` stack integrates the R2 custody, projection
@@ -3173,7 +3180,8 @@ seams; live callback integration remains pending. Counts stay **26/29 CLI
 leaves and 25/28 daemon kinds**. Normalized operations, artifacts and policy
 effects, planning/validation, atomic apply/receipts, journal and filed-impact
 storage, loader admission and CLI/daemon/AI consent parity remain open. R4-9
-owns its acceptance record, including the pending BLOB corruption decision.
+owns its acceptance record; the integrated BLOB continuation leaves forty measured
+seed-dependent messages pending the Python fix.
 Python product code and route registration are unchanged.
 
 ### R5 transfers: economic effects and artifact primitives (partial)
@@ -3198,8 +3206,18 @@ Ordered domain operations, isolated plan/validation, atomic apply/receipts,
 journal/filed-impact storage, caller cache/transaction restoration, final loader
 acceptance and CLI/daemon/AI consent parity remain required. Counts remain
 **26/29 CLI leaves and 25/28 daemon kinds**, with all six review routes still
-unregistered. Both loader refs remain at `c5966c1ff`; no inherited lossless,
-refusal or explicitly pending exception is closed by this checkpoint.
+unregistered. At transfers-13, both loader refs remained at `c5966c1ff`; that
+checkpoint closed no inherited lossless, refusal or explicitly pending exception.
+
+Transfers-14 integrates accepted loader-9 and BLOB work with their missing
+prerequisites, retaining raw database admission alongside typed assembly and
+sharing their downstream stages. The BLOB gap is closed; forty measured
+seed-dependent loader messages remain pending Python. The review assembler's
+strict typed conversion still needs its own lossless/refusal closure. The
+[integration handoff](../reference/rust-shell.md#accepted-loader-integration-r5-transfers-14)
+records fresh verification separately from inherited campaign evidence. Ordered
+planning, atomic apply and all six route registrations remain pending; counts
+are unchanged.
 
 ### R5 Bitcoin sync: native fetch assembly checkpoint
 

@@ -14,6 +14,16 @@ fn review_builds_match_complete_python_states() {
             kassiber_custody::parse(&case["snapshot"].to_string()).unwrap(),
         )
         .unwrap();
+        let mut loaded: kassiber_custody::snapshot::Snapshot =
+            serde_json::from_value(case["snapshot"].clone()).unwrap();
+        loaded.escape_wire_tags();
+        let native = kassiber_custody::run_loaded(&loaded, true).unwrap();
+        assert_eq!(
+            kassiber_custody::response(&native, false),
+            kassiber_custody::response(&prepared.computed.stages, false),
+            "typed/native admission and stages {}",
+            case["name"]
+        );
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("CREATE TABLE transactions(id TEXT, profile_id TEXT)")
             .unwrap();

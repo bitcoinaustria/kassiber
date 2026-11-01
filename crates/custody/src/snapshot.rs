@@ -67,7 +67,8 @@ pub struct StageSnapshot {
 }
 
 impl StageSnapshot {
-    pub(crate) fn escape_wire_tags(&mut self) {
+    pub fn escape_wire_tags(&mut self) {
+        self.rows.take();
         self.profile.escape_wire_tags();
         for rows in [
             &mut self.wallets,
@@ -253,6 +254,25 @@ mod tests {
         snapshot.wallets = [valid.clone(), valid, json!({"config_json": null}), json!({"wallet_config_json": {"samourai": {"role": "postmix", "group_id": "g", "section": "s"}}})]
             .into_iter().map(|v| serde_json::from_value(v).unwrap()).collect();
         assert!(snapshot.validate().is_ok());
+    }
+
+    #[test]
+    fn shared_snapshot_wire_tags_reset_cached_rows() {
+        let mut snapshot = admitted();
+        snapshot.transactions = vec![serde_json::from_value(json!({
+            "note": {"$kassiber_bytes": "ff00"}
+        }))
+        .unwrap()];
+        let cached = snapshot.rows()[0].clone();
+        snapshot.escape_wire_tags();
+        assert_ne!(snapshot.rows()[0], cached);
+        assert_eq!(
+            crate::codec::from_json(&snapshot.rows()[0]["note"]).unwrap(),
+            kassiber_pyjson::Value::Dict(vec![(
+                kassiber_pyjson::Key::from("$kassiber_bytes"),
+                kassiber_pyjson::Value::from("ff00")
+            )])
+        );
     }
 
     #[test]

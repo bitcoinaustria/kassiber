@@ -157,7 +157,7 @@
     "expect_failing": [
       "component_bytes_sort_and_integer_semantics_match_python"
     ],
-    "rule": "Invalid byte integers retain Python’s exact ValueError and byte repr."
+    "rule": "Invalid byte integers retain Python\u2019s exact ValueError and byte repr."
   },
   {
     "id": "JB-component-byte-sort",
@@ -387,7 +387,7 @@
     "expect_failing": [
       "bytes_json_policy_and_repr_match_python"
     ],
-    "rule": "Byte repr chooses Python’s deterministic quote style."
+    "rule": "Byte repr chooses Python\u2019s deterministic quote style."
   },
   {
     "id": "JB-query-bytes-truth",
@@ -397,7 +397,7 @@
     "expect_failing": [
       "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
     ],
-    "rule": "Auxiliary byte truth retains Python’s false empty bytes case."
+    "rule": "Auxiliary byte truth retains Python\u2019s false empty bytes case."
   },
   {
     "id": "JB-outpoint-bytes-ascii",
@@ -468,5 +468,35 @@
       "json_parser_preserves_raw_surrogate_identity"
     ],
     "rule": "JSON from decoded bytes retains raw surrogate code points separately from escaped pairs."
+  },
+  {
+    "id": "JB-shared-snapshot-tag-cache",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": "self.rows.take();",
+    "replace": "();",
+    "expect_failing": [
+      "shared_snapshot_wire_tags_reset_cached_rows"
+    ],
+    "rule": "Escaping private scalar tags must invalidate a previously materialized transaction view."
+  },
+  {
+    "id": "JB-projection-byte-move",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "    if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {",
+    "replace": "    if codec::escaped_dict(&value).is_some() {",
+    "expect_failing": [
+      "projection_loaded_rows_keep_bytes_until_serialization"
+    ],
+    "rule": "Moving finalized row values restores native byte identity before serialization."
+  },
+  {
+    "id": "JB-projection-literal-map-move",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "    if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {",
+    "replace": "    if codec::raw_bytes(&value).is_some() {",
+    "expect_failing": [
+      "projection_json_rows_keep_literal_private_tag_maps"
+    ],
+    "rule": "Moving finalized JSON row values restores escaped literal mapping identity."
   }
 ]

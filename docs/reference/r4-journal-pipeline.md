@@ -58,6 +58,14 @@ The [R4-14 pairing stage](rust-pairing.md) reuses the native transfer library;
 its 20k process CPU acceptance is 13.02× generic and 11.75× multi-wallet.
 Journal route activation remains with R4-13/R4-15/R4-16.
 This document plans stage R4 of
+
+> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+R4-9's accepted loader-9 and BLOB continuations are integrated; **40 measured
+seed-dependent messages remain pending the Python fix**. Its
+[test-only loader acceptance](r4-native-loader-checkpoint.md#loader-9-acceptance)
+records the exhaustive map, complete mutation campaigns and fresh parity gates.
+Loader-8's audit and timing evidence are unchanged; Python retains production
+load and journal authority. This document plans stage R4 of
 [plan 21](../plan/21-rust-backend.md): `journals process` end to end in the Rust
 binary, byte-identical to Python and much faster. It builds on the
 [custody engine](custody-engine.md) (R2, including the R2g fusion boundary and
@@ -420,6 +428,10 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 > Inherited from `t3code/r4-10-prebuild-5@a0393276a`; pending r10 verification.
 | R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index (descriptor derivation from the R5 descriptor slice) and receipt sources; v1 byte gate against Python; [direct-load checkpoint](r4-native-loader-checkpoint.md): generic 20k 0.505 s CPU / 0.509 s wall including admission, target missed, acceptance remains open | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
 | R4-10 | Pre-build repairs and auto-pricing in Rust; [functional acceptance](#r4-10-functional-acceptance) completes database-dump and mutation gates. The scoped-cache multi-wallet CPU budget remains missed. | Python 0.03 | ≤ 0.03 s |
+
+> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+| R4-9 | Native SQLite loader to `BookSnapshot`, including book-network facts, the owned index and receipt sources; [accepted loader-9 and BLOB continuations; 40 measured seed-dependent messages pending the Python fix](r4-native-loader-checkpoint.md#loader-9-acceptance); all 308 loader and 2,292 custody recipes killed; 24,000 generated books/1,030 permutations, 159 retained replays/permutations and focused census/shadow pass; inherited non-BLOB audit has 16,384 matches, zero writes/unsafe admissions; inherited 20k CPU including admission is 0.288 s generic / 0.429 s multi-wallet, within 5% of loader-7; Python retains production authority | Python load 1.57 / 1.89 (historical floor 0.11; remeasured shell CPU 0.117) | ≤ 0.30 s |
+| R4-10 | Pre-build repairs and auto-pricing in Rust; database-dump parity | Python 0.03 | ≤ 0.03 s |
 | R4-11 | Rendering and joins: entries, quarantine enrichment with ownership candidates, holdings, balance comparison, ownership review; [partial implementation](r4-journal-render-checkpoint.md), acceptance remains open | Python 1.38 / 1.71 | ≤ 0.15 s |
 | R4-12 | Persistence: typed rows to prepared statements, freshness markers, filed-report impact resolution, deferred checkpoint; database-dump parity. [Unregistered checkpoint](r4-journal-persistence-checkpoint.md); acceptance open. | Python 2.25 / 2.55 (deferred-checkpoint floor 1.25 / 1.45) | ≤ floor + 0.15 s |
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |

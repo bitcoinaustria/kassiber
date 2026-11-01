@@ -172,8 +172,10 @@ therefore pins the range decision without claiming that the earlier exploratory
 guard-removal recipe exposed an unsafe admission. Reader capacity and vector
 allocation hints change allocation only; they add no projection alternative.
 
-The BLOB corruption class and the sixteen seed-dependent Python messages remain
-separate pending exceptions. The loader-9 campaign kills all **308 loader
+The original loader-9 record retained the BLOB corruption class and sixteen
+seed-dependent Python messages as separate pending exceptions. The subsequent
+accepted BLOB continuation closes the former; forty measured messages remain
+pending the Python fix. The loader-9 campaign kills all **308 loader
 recipes**, after all **33 unmutated witness filters** pass, with no survivors or
 runner errors. The separate custody campaign's final kill set equals all
 **2,292 entries**. Its original run kills 2,289; three recipes are re-anchored
@@ -212,3 +214,20 @@ recipes now enforce exact matching and BLOB seed-sweep coverage.
 | `crates/pyjson/src/encode.rs` | `JB-json-bytes-refusal`, `JB-json-bytes-default`, `JB-json-bytes-message` | `bytes_json_policy_and_repr_match_python`, `native_loader_blob_conversions_preserve_bytes_and_consuming_policy` |
 | `crates/pyjson/src/value.rs` | `JB-bytes-repr-quotes` | `bytes_json_policy_and_repr_match_python` |
 | `crates/pytext/src/json.rs` | `JB-json-raw-surrogates` | `json_parser_preserves_raw_surrogate_identity` |
+
+> inherited from t3code/r5-transfers-17@59e1476a4; pending r10 verification
+## Transfer-branch integration
+
+Transfers-14 retains this original map and its campaign provenance. Raw database
+admission now lives in `crates/custody/src/gates/loaded.rs` beside typed admission;
+downstream stages are shared. The review-build witness compares both paths.
+The BLOB catalogue additionally contains `JB-shared-snapshot-tag-cache`, killed
+by `shared_snapshot_wire_tags_reset_cached_rows`, to prevent a warmed transaction
+view from bypassing literal-tag sanitization. Finalized-output guards
+`JB-projection-byte-move` and `JB-projection-literal-map-move` pin database byte
+identity and literal JSON mapping identity through the typed assembler's
+move-based output conversion. The loader catalogue retains its 308 original
+recipes and adds two guards for the
+review assembler's inherited strict admission and bounded refusal. The
+[integration handoff](rust-shell.md#accepted-loader-integration-r5-transfers-14)
+distinguishes fresh checks from inherited campaign evidence.

@@ -476,6 +476,60 @@ fn native_loader_legacy_scalars_keep_downstream_admission() {
 }
 
 #[test]
+fn review_assembler_retains_strict_admission_and_refusal_ownership() {
+    let Value::List(cases) =
+        kassiber_pytext::loads(include_str!("../../tests/data/loader.json")).unwrap()
+    else {
+        panic!("cases")
+    };
+    let case = cases
+        .iter()
+        .find(|case| text(get(case, "name")) == "structural-columns")
+        .unwrap();
+    for encrypted in [false, true] {
+        let conn = Connection::open_in_memory().unwrap();
+        if encrypted {
+            conn.pragma_update(None, "key", "synthetic-strict-admission-key")
+                .unwrap();
+        }
+        conn.execute_batch(&text(get(case, "sql"))).unwrap();
+        conn.execute_batch("UPDATE transactions SET amount=1.5")
+            .unwrap();
+        for begin in ["BEGIN", "BEGIN IMMEDIATE"] {
+            conn.execute_batch(begin).unwrap();
+            let changes = conn.total_changes();
+            let loaded = load_read_snapshot(
+                &conn,
+                get(case, "profile").clone(),
+                &text(get(case, "as_of")),
+            )
+            .unwrap()
+            .into_custody()
+            .unwrap();
+            assert!(!loaded.transactions.is_empty());
+            assert!(loaded
+                .transactions
+                .iter()
+                .all(|row| row["amount"] == serde_json::json!(1.5)));
+            let state = conn.transaction_state(Some("main")).unwrap();
+            let Err(error) = crate::pipeline::Prepared::load(
+                &conn,
+                get(case, "profile").clone(),
+                &text(get(case, "as_of")),
+            ) else {
+                panic!("review assembler must retain its strict admission")
+            };
+            assert_eq!(error.family, "RuntimeError");
+            assert_eq!(error.message, "custody snapshot contains unsupported facts");
+            assert_eq!(conn.total_changes(), changes);
+            assert_eq!(conn.transaction_state(Some("main")).unwrap(), state);
+            assert!(!conn.is_autocommit());
+            conn.execute_batch("ROLLBACK").unwrap();
+        }
+    }
+}
+
+#[test]
 fn native_loader_caught_integer_errors_still_propagate_overflow() {
     assert_eq!(
         ownership::legacy_integer(&Value::from("invalid")).unwrap(),

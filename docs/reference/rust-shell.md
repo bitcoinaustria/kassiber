@@ -9007,6 +9007,92 @@ Continue in this order:
 The independent residual-fee pair-authoring Python repro remains unchanged;
 this checkpoint neither fixes nor works around its refusal.
 
+### Accepted loader integration (R5, transfers-14)
+
+Branch `t3code/r5-transfers-14` starts at `61e6b66e7`. Loader-9's single
+`c5966c1ff..e15900677` commit depends on loader-3 through loader-8, which were
+absent from that transfer tip. The local continuation therefore integrates
+`e8387a966`, `05b0d32d4`, `c60e0cb9f`, `39de991a3`, `efcbb7af7`, `c5966c1ff`,
+`e15900677` and `d03c0b9a1` in that order, preserving the typed-row, journal
+persistence and transfer work on the starting branch. No stash is consumed.
+
+Shared column records now cross the existing typed stage adapters explicitly.
+The accepted loader's raw database admission and the typed assembler share
+the downstream custody stages; raw receipt-error precedence no longer crosses
+strict JSON quantity admission first. Native projection retains unusual SQLite
+scalars and BLOB identity until their consuming policy or serialization refusal.
+The typed JSON request sanitizer escapes literal private adapter tags in both
+typed and unported fields; sanitizing a warmed shared snapshot invalidates its
+cached transaction view. Quarantine detail iteration retains Python bytes
+iteration, while JSON storage still refuses unencodable bytes.
+
+The accepted loader's BLOB gap is closed. Its **40 measured seed-dependent
+reference messages** remain pending the Python determinism fix. Original branch
+campaign/audit/timing records remain historical evidence for their own trees;
+they do not establish fresh exhaustive campaigns or performance acceptance for
+this merged branch. The loader catalogue retains all 308 original entries and
+adds two guards for the review assembler's inherited strict admission/refusal.
+The BLOB catalogue retains all 47 original recipes, with added cached-view
+invalidation and two finalized-output identity guards.
+`JL-receipt-accounting-precedence` follows the raw admission call, and
+`JL-integer-string` now targets the complete string arm because BLOB integer
+parsing adds a second occurrence of its former expression. Neither
+recipe's contract or named witness changes. `GAP-120` retains its original
+normalization-before-ignore mutation around the explicit shared-record adapter.
+The merged custody catalogue has 2,327 applicable entries; its original branch
+campaigns are not relabeled as fresh merged-tree kills.
+
+Fresh verification is recorded under `target/r5-evidence/`. The complete
+review-build corpus also compares typed and raw admission/stage response bytes.
+The old SQL-row test now checks byte identity followed by JSON serialization
+refusal, replacing its superseded blanket loader refusal. The first integrated
+Python oracle run exposed a move-based finalized-output conversion that treated
+private byte tags as literal maps. That conversion now restores database bytes
+and escaped literal maps, with full-stage regressions for both. The review
+assembler explicitly retains typed validation and its inherited bounded
+refusal while its raw-loader integration remains incomplete. A regression
+checks both database bindings and caller read/write transaction ownership.
+No Python product code, dependency or route registration changes.
+
+The broad merged native run passes **741 tests** across 32 targets before the
+four new integration regressions and final output/admission corrections. After
+those corrections, an independent empty build tree passes **115 targeted
+tests**: 58 custody tests, 45 journal tests and twelve transfer case/effect
+tests. This includes every new regression, the complete 33-case typed/raw
+review-build comparison and live SQLite/SQLCipher assembly. The rebuilt loader
+passes all **264 Python oracle tests**, with no skips. All **nine focused
+mutations** are killed after their **eight unmutated witnesses** pass, with no
+survivors or runner errors. Applicability checks pass for all **2,327 custody,
+310 loader and 50 BLOB** catalogue entries; the original exhaustive campaigns
+are not rerun. Final formatting, workspace all-target clippy with both harness
+features and warnings denied, transfers rustdoc and whitespace checks pass.
+The required classifier update records **5,807 tests in 359 modules**, followed
+by the required CI preflight: **57 tests pass**. Logs and the machine-readable
+checkpoint summary remain under `target/r5-evidence/`; owned normal, mutation
+and verification build trees are removed after summarizing. The full quality
+gate, merged exhaustive storage/mutation campaigns and performance acceptance
+are not rerun. No background job remains at handoff.
+
+This is a loader-integration boundary. Continue the transfers-13 order:
+
+1. Implement ordered mixed metadata/component operations, prechecked
+   fingerprints, sibling-unpair baselines and rebuild/baseline refresh after
+   intervening non-unpairs; join snapshots/effects/artifacts into actual
+   SQLite/SQLCipher planning and recomputing validation.
+2. Implement writer-locked atomic apply: historical idempotency before freshness,
+   canonical journal persistence, filed-report impacts, durable receipts,
+   caller-owned transaction/cache restoration and late rollback on both bindings.
+3. Close the review assembler's remaining lossless/refusal gaps using the
+   accepted raw loader. `Prepared::load` still converts and validates its raw
+   snapshot through the inherited strict typed boundary; downstream fusion's
+   infallible serialization assumptions also need refusal proof. The accepted
+   loader alone does not establish full review-workflow refusal parity. Preserve
+   the forty measured seed-message exceptions and the unchanged Python
+   residual-fee refusal/repro.
+4. Prove database/envelope/authorship parity, AI once-only revalidated consent
+   and product zero-fallback behavior before registering all six routes.
+   Counts remain **26/29 CLI leaves and 25/28 daemon kinds**.
+
 ### Bitcoin native fetch assembly (R5)
 
 Branch `t3code/r5-sync-11` starts at `6af84154`. This checkpoint implements
