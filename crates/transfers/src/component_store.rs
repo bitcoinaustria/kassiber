@@ -52,6 +52,7 @@ fn convert_error(e: kassiber_custody::components::Error) -> AppError {
         e.message,
     )
 }
+#[allow(clippy::field_reassign_with_default)] // StageSnapshot owns a private shared-row cache.
 pub(super) fn snapshot(c: &Connection, scope: &Scope<'_>) -> Result<Snapshot> {
     let profile = records(c, "SELECT * FROM profiles WHERE id=?", [scope.profile_id])?.remove(0);
     let wallets = records(
@@ -79,20 +80,19 @@ pub(super) fn snapshot(c: &Connection, scope: &Scope<'_>) -> Result<Snapshot> {
             )
         })
         .collect();
-    let snapshot = Snapshot {
-        schema_version: 1,
-        operation: "custody".into(),
-        as_of: "2025-01-01T00:00:00Z".into(),
-        profile,
-        wallets: wallets.clone(),
-        transactions: transactions.into_iter().map(serde_json::Value::Object).collect(),
-        components,
-        anchors,
-        anchor_wallets: wallets,
-        revision_headers: headers,
-        channel_records: records(c,"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'",[scope.profile_id])?,
-        ..Default::default()
-    };
+    // Initialize through Default because the stage's shared row cache is private.
+    let mut snapshot = Snapshot::default();
+    snapshot.schema_version = 1;
+    snapshot.operation = "custody".into();
+    snapshot.as_of = "2025-01-01T00:00:00Z".into();
+    snapshot.profile = profile;
+    snapshot.wallets = wallets.clone();
+    snapshot.transactions = transactions;
+    snapshot.components = components;
+    snapshot.anchors = anchors;
+    snapshot.anchor_wallets = wallets;
+    snapshot.revision_headers = headers;
+    snapshot.channel_records = records(c,"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'",[scope.profile_id])?;
     Ok(snapshot)
 }
 pub(super) fn invalidate(c: &Connection, profile: &str) -> Result<()> {

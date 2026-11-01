@@ -239,11 +239,19 @@ fn prebuild_pipeline_rolls_back_after_actual_build_refusal() {
     let error = run(&c, &case, |p| {
         let mut custody = custody();
         custody["finalized_tax_projection"]["rows"] = json!([]);
-        boundary::build(&p.repaired.profile, &custody, &[], &response(), String::new).map(|_| ())
+        let wallets = [json!({"id":"legacy-wallet","label":"Legacy","wallet_account_id":null})];
+        boundary::build(
+            &p.repaired.profile,
+            &custody,
+            &wallets,
+            &response(),
+            String::new,
+        )
+        .map(|_| ())
     })
     .unwrap_err();
-    assert_eq!(error.family, "KeyError");
-    assert_eq!(error.message, "'legacy-in'");
+    assert_eq!(error.family, "TypeError", "{error:?}");
+    assert_eq!(error.message, "'NoneType' object is not subscriptable");
     assert!(support::logical_equal(&support::snapshot(&c), &before));
     assert!(!c.is_autocommit());
 }

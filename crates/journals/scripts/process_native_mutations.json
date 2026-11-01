@@ -1,0 +1,113 @@
+[
+  {
+    "id": "JPROCESS-native-repair",
+    "file": "crates/journals/src/process.rs",
+    "find": "let repaired = prebuild::repair_journal_inputs(",
+    "replace": "return Ok(Repairs::default());\n        let repaired = prebuild::repair_journal_inputs(",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Invoke real source and legacy repairs inside the whole-process transaction."
+  },
+  {
+    "id": "JPROCESS-native-profile",
+    "file": "crates/journals/src/process.rs",
+    "find": "*profile = repaired.profile;",
+    "replace": "let _ = repaired.profile;",
+    "expect_failing": [
+      "native_process_uses_the_profile_returned_by_legacy_refresh"
+    ],
+    "rule": "Use the profile reloaded by the ordered pre-build API."
+  },
+  {
+    "id": "JPROCESS-native-pricing",
+    "file": "crates/journals/src/process.rs",
+    "find": "profile_id: profile[\"id\"]\n                    .as_str()\n                    .ok_or_else(|| Refusal::new(\"KeyError\", \"id\"))?,",
+    "replace": "profile_id: \"__r4_13_missing_profile__\",",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Price transactions in the repaired profile before loading observations."
+  },
+  {
+    "id": "JPROCESS-native-decimal-context",
+    "file": "crates/journals/src/process.rs",
+    "find": "decimal_context: self.decimal_context,",
+    "replace": "decimal_context: kassiber_pydecimal::Context::new(6, kassiber_pydecimal::Rounding::HalfEven),",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Forward the caller decimal context to cached pricing."
+  },
+  {
+    "id": "JPROCESS-native-build-clock",
+    "file": "crates/journals/src/process.rs",
+    "find": "&mut || sources.now_precise(conn).map_err(prebuild::app),",
+    "replace": "&mut || sources.now(conn).map_err(prebuild::app),",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Sample the precise build clock separately from durable write clocks."
+  },
+  {
+    "id": "JPROCESS-native-store-clock",
+    "file": "crates/journals/src/process.rs",
+    "find": "let stored_at = now()?;",
+    "replace": "let stored_at = clock.clone();",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes",
+      "native_process_late_clock_refusal_restores_real_prebuild_writes"
+    ],
+    "rule": "Read the row clock after building and roll back prior repairs when that source refuses."
+  },
+  {
+    "id": "JPROCESS-custody-resolution-clock",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "let custody_at = clock()?;",
+    "replace": "let custody_at = at.to_owned();",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Sample custody impact resolution creation time independently even when its pending set is empty."
+  },
+  {
+    "id": "JPROCESS-chain-resolution-clock",
+    "file": "crates/journals/src/persistence/filed.rs",
+    "find": "t(clock()?),",
+    "replace": "t(at),",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Sample every filed-chain resolution creation clock independently of rebuilt_at."
+  },
+  {
+    "id": "JPROCESS-native-blocked",
+    "file": "crates/journals/src/process.rs",
+    "find": "!crate::array(&state.custody_quantity[\"issues\"]).is_empty()",
+    "replace": "false",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Report quantity issues as blocked using the Python runtime property contract."
+  },
+  {
+    "id": "JPROCESS-native-repair-count",
+    "file": "crates/journals/src/process.rs",
+    "find": "custody_pair_evidence_repairs: repaired.consolidation.activated,",
+    "replace": "custody_pair_evidence_repairs: 0,",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Expose activated legacy groups in the optional repair count."
+  },
+  {
+    "id": "JPROCESS-native-warning",
+    "file": "crates/journals/src/process.rs",
+    "find": "source_overlap_warning: repaired.source_overlap_warning,",
+    "replace": "source_overlap_warning: None,",
+    "expect_failing": [
+      "native_process_real_prebuild_matches_complete_python_books_and_lifecycle_tapes"
+    ],
+    "rule": "Forward the warning constructed after source repair."
+  }
+]

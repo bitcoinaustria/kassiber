@@ -64,7 +64,7 @@ def vectors():
         "mixed-linked-group", "unlinked-neighbor", "changing-clock", "resolved-issue",
         "repeated-issue", "two-groups", "legacy-real-amount", "legacy-text-amount",
         "invalid-created-at", "empty-created-at", "offset-created-at",
-        "membership-refusal", "draft-exists",
+        "membership-refusal", "draft-exists", "repeated-drift", "repeated-drift-refusal",
     )
     output = []
     for name in names:
@@ -78,7 +78,7 @@ def vectors():
         transaction(conn, "out", direction="outbound", amount=1000, fee=10)
         transaction(conn, "in", amount=900)
         pair(conn)
-        if name == "connected-split":
+        if name in {"connected-split", "repeated-drift"}:
             conn.execute("UPDATE transaction_pairs SET out_amount=400")
             transaction(conn, "in-two", amount=500)
             pair(conn, "pair-two", target="in-two", amount=500)
@@ -149,7 +149,18 @@ def vectors():
             conn.execute("INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,authored_source,created_at) SELECT 'existing-draft',lineage_id,workspace_id,profile_id,2,component_type,'draft','user',created_at FROM custody_components LIMIT 1")
         for guard in pair_guards:
             conn.execute(guard[1])
-        output.append(capture(conn, name))
+        if name in {"repeated-drift", "repeated-drift-refusal"}:
+            with patch.object(migration, "now_iso", return_value=CLOCK), patch("kassiber.core.custody_components._now_iso", return_value=CLOCK):
+                first = migration.refresh_drifted_legacy_pair_components(conn, profile_id="p")
+            assert first.activated == 1 and first.skipped == 0
+            conn.execute("UPDATE transactions SET kind='withdrawal-revised' WHERE id='out'")
+        record = capture(conn, name)
+        if name in {"repeated-drift", "repeated-drift-refusal"}:
+            assert record["error"] is None
+            counts = record["result"]["consolidation"]
+            assert counts["activated"] == int(name == "repeated-drift")
+            assert counts["skipped"] == int(name == "repeated-drift-refusal")
+        output.append(record)
         conn.close()
     return output
 

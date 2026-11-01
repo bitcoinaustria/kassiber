@@ -232,6 +232,15 @@ the response. Error handling must unwind pre-build repairs as well as this
 stage. The writer consumes the shared plaintext WAL/NORMAL or SQLCipher
 DELETE/FULL connection policy.
 
+The R4-13 continuation adds `store_ledger_state_with_clock`, which accepts
+the stored-row timestamp and a fallible clock callback separately. It samples
+the custody-impact service timestamp once, even with no pending impacts, and
+each chain-impact resolution timestamp independently; `rebuilt_at` remains the
+stored-row timestamp. The original entry wraps it with a constant callback.
+The stage still has no implicit clock or commit. Full-process clock/UUID tapes
+and late-clock rollback witnesses are recorded in the
+[R4-13 checkpoint](r4-journal-process-checkpoint.md).
+
 ### CPU and wall measurements
 
 Each cell is **process CPU / wall seconds**, with independent minima over five

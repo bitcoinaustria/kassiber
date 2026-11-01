@@ -156,6 +156,28 @@ pub fn store_ledger_state(
     ids: &mut impl FnMut() -> Result<String, Refusal>,
     observer: &mut impl storage::WriteObserver,
 ) -> Result<Stored, Refusal> {
+    store_ledger_state_with_clock(
+        conn,
+        profile,
+        state,
+        created_at,
+        &mut || Ok(created_at.to_owned()),
+        ids,
+        observer,
+    )
+}
+
+/// Like `store_ledger_state`, with the separately sampled clocks used when
+/// resolving filed-chain impacts. The caller supplies the stored-row clock.
+pub fn store_ledger_state_with_clock(
+    conn: &Connection,
+    profile: &Value,
+    state: &JournalState<'_>,
+    created_at: &str,
+    clock: &mut impl FnMut() -> Result<String, Refusal>,
+    ids: &mut impl FnMut() -> Result<String, Refusal>,
+    observer: &mut impl storage::WriteObserver,
+) -> Result<Stored, Refusal> {
     if conn.is_autocommit() {
         return Err(Refusal::new(
             "RuntimeError",
@@ -169,6 +191,7 @@ pub fn store_ledger_state(
         profile,
         state,
         created_at,
+        clock,
         ids,
     )?;
     conn.execute_batch("RELEASE r4_journal_store")?;
@@ -181,6 +204,7 @@ fn store<O: storage::WriteObserver>(
     profile: &Value,
     state: &JournalState<'_>,
     at: &str,
+    clock: &mut impl FnMut() -> Result<String, Refusal>,
     ids: &mut impl FnMut() -> Result<String, Refusal>,
 ) -> Result<Stored, Refusal> {
     writer.observer.phase("setup");
@@ -439,7 +463,7 @@ fn store<O: storage::WriteObserver>(
         && quarantines.is_empty()
         && array(&state.custody_quantity["issues"]).is_empty()
     {
-        filed::resolve(writer, &wid, &pid, at)?
+        filed::resolve(writer, &wid, &pid, at, clock)?
     } else {
         0
     };

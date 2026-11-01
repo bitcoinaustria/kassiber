@@ -104,7 +104,9 @@ pub(super) fn resolve<O: storage::WriteObserver>(
     wid: &str,
     pid: &str,
     at: &str,
+    clock: &mut impl FnMut() -> Result<String, Refusal>,
 ) -> Result<usize, Refusal> {
+    let custody_at = clock()?;
     let pending=rows(w.conn,"SELECT impact.*,snapshot.report_state,snapshot.report_scope_json FROM custody_filed_report_impacts impact JOIN filed_report_snapshots snapshot ON snapshot.id=impact.filed_report_snapshot_id LEFT JOIN custody_filed_report_impact_resolutions resolution ON resolution.impact_id=impact.id WHERE impact.profile_id=? AND resolution.id IS NULL ORDER BY impact.affected_period_start_year,impact.created_at,impact.id",[pid])?;
     let mut resolutions = Vec::new();
     for r in &pending {
@@ -133,7 +135,7 @@ pub(super) fn resolve<O: storage::WriteObserver>(
             bind(&result["classification_changed"])?,
             bind(&result["gain_changed"])?,
             bind(&result["amendment_status"])?,
-            t(at),
+            t(&custody_at),
         ]);
     }
     let mut count = resolutions.len();
@@ -198,7 +200,7 @@ pub(super) fn resolve<O: storage::WriteObserver>(
             bind(&r["id"])?,
             t(at),
             t(pyjson(&result, true)?),
-            t(at),
+            t(clock()?),
         ]);
     }
     count += resolutions.len();

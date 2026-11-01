@@ -71,7 +71,7 @@ impl Drop for Savepoint<'_> {
     }
 }
 
-fn app(error: kassiber_envelope::AppError) -> Refusal {
+pub(crate) fn app(error: kassiber_envelope::AppError) -> Refusal {
     let mut refusal = Refusal::new("AppError", error.message);
     refusal.code = Some(error.code);
     refusal.hint = error.hint;

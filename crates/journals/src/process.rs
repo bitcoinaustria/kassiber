@@ -1,5 +1,5 @@
 //! Unregistered R4-13 orchestration. R4-10 supplies the pre-build implementation.
-use crate::{boundary, loader, persistence, storage, Refusal};
+use crate::{boundary, loader, persistence, prebuild, storage, Refusal};
 use kassiber_custody::{codec, ledger_request, snapshot::Snapshot, Stages};
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
@@ -17,6 +17,79 @@ pub struct Repairs {
     pub source_overlap_repair: Option<Value>,
     pub source_overlap_warning: Option<Value>,
     pub custody_pair_evidence_repairs: usize,
+}
+
+struct NativePrebuild<'a, R, S> {
+    resolve: R,
+    sources: &'a S,
+    decimal_context: kassiber_pydecimal::Context,
+}
+
+impl<R, S> Prebuild for NativePrebuild<'_, R, S>
+where
+    R: FnMut(&Connection) -> Result<Value, Refusal>,
+    S: kassiber_transfers::Sources,
+{
+    fn resolve(&mut self, conn: &Connection) -> Result<Value, Refusal> {
+        (self.resolve)(conn)
+    }
+
+    fn repair(&mut self, conn: &Connection, profile: &mut Value) -> Result<Repairs, Refusal> {
+        let repaired = prebuild::repair_journal_inputs(
+            conn,
+            profile,
+            &mut || self.sources.now(conn).map_err(prebuild::app),
+            &mut || self.sources.uuid(conn).map_err(prebuild::app),
+        )?;
+        *profile = repaired.profile;
+        Ok(Repairs {
+            source_overlap_repair: repaired.source_overlap_repair,
+            source_overlap_warning: repaired.source_overlap_warning,
+            custody_pair_evidence_repairs: repaired.consolidation.activated,
+        })
+    }
+
+    fn price(&mut self, conn: &Connection, profile: &Value) -> Result<usize, Refusal> {
+        prebuild::auto_price_transactions_from_rates_cache(
+            conn,
+            &prebuild::PricingScope {
+                profile_id: profile["id"]
+                    .as_str()
+                    .ok_or_else(|| Refusal::new("KeyError", "id"))?,
+                fiat_currency: profile["fiat_currency"]
+                    .as_str()
+                    .ok_or_else(|| Refusal::new("KeyError", "fiat_currency"))?,
+                decimal_context: self.decimal_context,
+            },
+        )
+    }
+}
+
+/// Compose the real ordered R4-10 repairs/pricing with the journal pipeline.
+/// The caller resolves scope through the supplied callback under the writer
+/// reservation. Production sources supply entropy and sample each lifecycle
+/// clock at its reference call point; oracle sources provide exact tapes.
+pub fn process_native<'a>(
+    conn: &'a Connection,
+    resolve: impl FnMut(&Connection) -> Result<Value, Refusal>,
+    decimal_context: kassiber_pydecimal::Context,
+    sources: &impl kassiber_transfers::Sources,
+    progress: &mut impl FnMut(&'static str),
+    writes: &mut impl storage::WriteObserver,
+) -> Result<Committed<'a>, Refusal> {
+    process_with_clocks(
+        conn,
+        &mut NativePrebuild {
+            resolve,
+            sources,
+            decimal_context,
+        },
+        &mut || sources.now_precise(conn).map_err(prebuild::app),
+        &mut || sources.now(conn).map_err(prebuild::app),
+        &mut || sources.uuid(conn).map_err(prebuild::app),
+        progress,
+        writes,
+    )
 }
 
 pub struct MissingPrebuild;
@@ -70,6 +143,26 @@ pub fn process<'a>(
     progress: &mut impl FnMut(&'static str),
     writes: &mut impl storage::WriteObserver,
 ) -> Result<Committed<'a>, Refusal> {
+    process_with_clocks(
+        conn,
+        prebuild,
+        &mut || Ok(clock.to_owned()),
+        &mut || Ok(clock.to_owned()),
+        ids,
+        progress,
+        writes,
+    )
+}
+
+fn process_with_clocks<'a>(
+    conn: &'a Connection,
+    prebuild: &mut impl Prebuild,
+    build_clock: &mut impl FnMut() -> Result<String, Refusal>,
+    now: &mut impl FnMut() -> Result<String, Refusal>,
+    ids: &mut impl FnMut() -> Result<String, Refusal>,
+    progress: &mut impl FnMut(&'static str),
+    writes: &mut impl storage::WriteObserver,
+) -> Result<Committed<'a>, Refusal> {
     if !conn.is_autocommit() {
         return Err(Refusal::new(
             "RuntimeError",
@@ -91,8 +184,9 @@ pub fn process<'a>(
     progress("pricing");
     let auto_priced = prebuild.price(conn, &profile)?;
     progress("building");
+    let clock = build_clock()?;
     let span = kassiber_custody::timing::span("snapshot_load");
-    let loaded = loader::load(conn, codec::from_json(&profile)?, clock).map_err(load_error)?;
+    let loaded = loader::load(conn, codec::from_json(&profile)?, &clock).map_err(load_error)?;
     let snapshot = loaded.into_custody().map_err(load_error)?;
     drop(span);
     let stages = kassiber_custody::run_loaded(&snapshot, true).map_err(custody_error)?;
@@ -125,11 +219,14 @@ pub fn process<'a>(
     let state = boundary::build(&profile, &custody, &wallets, &response, String::new)?;
     progress("storing");
     let span = kassiber_custody::timing::span("persistence_commit");
-    let stored = persistence::store_ledger_state(conn, &profile, &state, clock, ids, writes)?;
+    let stored_at = now()?;
+    let stored = persistence::store_ledger_state_with_clock(
+        conn, &profile, &state, &stored_at, now, ids, writes,
+    )?;
     let mut quantity_counts = serde_json::to_value(&stored.quantity_counts)
         .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
     quantity_counts["differences"] = json!(crate::array(&state.quantity_differences).len());
-    quantity_counts["blocked"] = json!(crate::truth(&state.custody_quantity["report_blocked"]));
+    quantity_counts["blocked"] = json!(!crate::array(&state.custody_quantity["issues"]).is_empty());
     quantity_counts["blocked_from"] =
         state.custody_quantity["tax_eligibility"]["blocked_from"].clone();
     let mut payload = json!({

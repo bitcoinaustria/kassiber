@@ -433,6 +433,10 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;
   the native checkpoint preserves reference behavior pending that correction.
+- [ ] Fix Python's lineage-exists refusal on repeated evidence-only legacy
+  pair drift when sorted parent selection supersedes the current revision.
+  Reproduce with `uv run --locked python -m tests.rust_port.repro_journal_repeated_legacy_drift`;
+  native full-dump vectors preserve the reference refusal pending correction.
 - [ ] Finish the [R4-12 persistence checkpoint](docs/reference/r4-journal-persistence-checkpoint.md):
   close the CPU write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,

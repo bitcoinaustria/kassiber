@@ -16,16 +16,17 @@ The local continuation `t3code/r4-13-journals-process-2` starts at
 | Stage branch | Committed tip inspected | Integration |
 | --- | --- | --- |
 | `t3code/r4-9-loader-9` | `c5966c1ff5bbb1bbad1a4b073adf2d10f468dc81` | Already inherited through loader-8; `loader-8..loader-9` is empty. |
-| `t3code/r4-10-prebuild` and `t3code/r4-10-prebuild-2` | `bc9e126d3739b15945ba67542cdc5e30bd09abab` | Cherry-picked cached pricing; no later committed handoff was available. |
+| `t3code/r4-10-prebuild`, `-2` and `-3` | `bc9e126d3739b15945ba67542cdc5e30bd09abab`, `4e2ae2f0b`, `9ce29bfde33c9da35131e5577ff32fe64b6a204e`, `9fa4899afad00b500d2cedbb7c136f7cd550cc32` | Cherry-picked pricing, source repair/warning, legacy refresh/profile reload and the ordered/split APIs. `process_native` now uses the real repair/price APIs. |
 | `t3code/r4-11-render-3` | `197f6cdecc2a8ed12f1ee78a32ef92264bc15c25` | Cherry-picked boundary hardening, preserving newer loader representation and process mutation recipes. |
 | `t3code/r4-12-persist-2` | `b5eb38ea8cb764675322e61e9b957a57deb947c6` | Already an ancestor; no new committed persistence changes. |
 
 The pricing cherry-pick retains the continuation's newer shared-column loader,
 admission tests, process example and checkpoint documentation. Its older
-loader build fixes do not replace loader rounds 3–8. No new dependencies or
-lockfile changes are needed. Cached pricing alone does not implement either
-source-overlap repair or drifted legacy-pair refresh; neither may be silently
-omitted from a registered command.
+loader build fixes do not replace loader rounds 3–8. Pricing adds no dependencies;
+legacy refresh adds only the existing internal transfer crate and its lockfile
+edge, with no new third-party package. Cached pricing alone does not implement
+either repair. The later handoffs supply both repairs, profile reload and the
+combined/split interfaces; the process adapter uses their returned profile.
 
 The subsequently requested R4-14 handoff
 `c4745075705ced90febdbb02ab0eab9684607eb8` is also cherry-picked. Its
@@ -48,8 +49,27 @@ renderer hardening as `664d867bc`. The fresh integrated all-feature native run
 passes **677 tests** across custody and journals; workspace formatting passes.
 The R4-14 service run passes all **seven tests**, including full SQLCipher
 service/dump parity and caller-savepoint rollback of both repeated passes.
+After the later source-repair handoff, all **67 journal tests** pass again,
+including its nine new source tests. Frozen source regeneration matches all
+**49 complete dumps/refusals**. The fresh real-driver replay passes all
+**204 source/pricing comparisons** (49 source plus 53 pricing cases on each
+driver), including serialized source-field bytes. Its native socket syscall
+guard and guard self-test pass; no performance benchmark is run.
 
-The test-only process adapter now optionally runs real native cached pricing.
+The source-repair merged-state mutation campaign kills **57/57 recipes**, with all
+**20 named unmutated baselines** passing and zero build failures. It includes
+eight `JPROCESS` recipes, all 46 source/pricing recipes, both reanchored loader
+admission/precedence recipes, and `GAP-120`. Every recipe is killed by every
+named test declared in its catalog entry. The earlier 26-recipe run belongs
+to the pricing-only boundary; the final run repeats those checks after source
+integration and includes the reanchored shared-savepoint mutation. Source
+hashes, per-recipe named tests and results are retained in
+`target/r4-13/final-integration-mutation-summary.json`; both disposable mutation
+build trees and scratch source copies are removed after summarizing them.
+These bounded integration checks do not certify the full inherited catalogs
+or future CLI/daemon/refresh wiring.
+
+The earlier test-only process adapter optionally runs real native cached pricing.
 Its `cached_pricing: true` mode requires `prepared_repairs_noop: true`; it never
 supplies production resolution or either missing repair. The original
 `prepared_noop: true` benchmark interface remains available. Live fixtures
@@ -71,14 +91,127 @@ regeneration and persistence replay are included in that live run. Logs are
 incremental under `target/r4-13/logs/`; these are focused fixture checks, not
 the 24,000-book generated or 159-recording full-pipeline gates.
 
+The post-source focused shadow run passes **38 tests**: the full 36-case
+process matrix plus the existing daemon main-thread and consent/book-change
+regressions. All 62 custody snapshots match frozen Python on all seven stages
+(zero skipped), 62 native-loader snapshots match v1 bytes, and all 62 tax calls
+match the oracle. The tax v2 selector reports 36 generic and 22 Austrian routes,
+plus two not-routed calls for each; these reference-harness counters do not
+certify CLI hybrid fallback behavior. The frozen generic/Austrian engine,
+ledger and text suites pass all **14 test groups** with the pipeline's JSON
+features. One existing `ezodf` invalid-escape deprecation warning is emitted;
+there is no test failure.
+
+All-target, all-feature clippy passes for journals and transfers with warnings
+denied; workspace formatting passes. The required classifier update and CI
+preflight pass (**57 tests**). Review descriptions now distinguish live pricing
+parity, refusal rollback and abrupt recovery instead of incorrectly describing
+all R4-10 work as a no-op. Manual second review finds no outstanding issue in
+this unregistered checkpoint. `target/r4-13/verification-summary.json` binds
+handoff SHAs, binary/log hashes and check counts; verification build trees are
+removed after summarizing them. The source-repair boundary inspected loader
+`c5966c1ff`, pre-build `4e2ae2f0b`, renderer `197f6cdec` and persistence
+`b5eb38ea8`. No additional committed legacy-refresh handoff was available.
+
+The persistence worker subsequently committed `32767d331`, which is imported
+as a separate verified boundary. Its typed calculation encoder and borrowed
+posting bindings preserve the storage format; relation fallbacks now reuse the
+custody principal primitive and Python's first-truthy source identifier. It also
+adds deterministic termination after every dirty-page DML and before/after
+COMMIT on both codecs. Those stage checks complement the six process-level
+termination cases above. The merge retains all process/renderer mutation entries
+and the newer shared-column loader; none of the older restack loader edits is
+applied. Performance remains a separate track, and this import does not change
+production registration or close full-process campaign acceptance.
+The merged persistence boundary passes all **85 native journal tests** and
+**38 live Python process/storage tests** under custody/tax census: 76 exact
+comparisons on each custody stage, zero skipped, and 76 production tax calls.
+The source-boundary mutation results above predate this persistence import;
+the affected persistence/process recipes must be rerun on the subsequent
+pre-build integration.
+
+The complete pre-build handoffs `9ce29bfde` and `9fa4899af` subsequently supply
+legacy refresh/profile reload and the combined/split APIs. The continuation
+imports the legacy stage as `16c145721`. `process_native` composes the real
+split API with loading, building and persistence; the old prepared adapter is
+retained only for explicit benchmark/fault probes. The transfer regression
+suite passes **44 tests**, including the existing SQLCipher pairing and
+outer-journal rollback checks. No third-party dependency is added.
+
+The new process oracle freezes **11 full process books**: all eight ordered
+pre-build fixtures, a genuine full-build refusal, a custody filed-impact case
+and a chain retraction. Durable UUIDs and every repair/store/resolution clock
+are injected before execution and compared without remapping. Python's random
+`UUID.hex` savepoint names are transient and are excluded from the durable tape;
+their generated values do not appear in any book or result. A precise build
+clock is injected independently. Every stored scalar, rowid and serialized
+field remains part of the comparison. Physical replays cover both codecs.
+
+These fixtures exposed an incorrect `custody_quantity.blocked` response flag:
+the serialized quantity state has no `report_blocked` property. The process now
+uses `bool(issues)`, matching the Python runtime property. They also pin distinct
+store, custody-impact-service and per-chain-resolution clocks, including the
+custody service's clock read when its pending set is empty. The fixed-clock
+persistence API remains compatible; the native process uses its new callback
+variant. The imported pre-build build-refusal witness now supplies a valid
+wallet and expects the renderer continuation's exact missing-row `TypeError`,
+so its only fault remains inside actual building rather than wallet lookup.
+
+The real-prebuild merged state passes all **102 native journal tests**, including
+the combined API's six tests, four complete native-process tests, and the
+persistence crash campaign. Python regeneration matches all **11 complete
+process books**. Its focused custody/tax census passes **53 tests**: the full
+43-case process suite, persistence/render oracles and both named daemon/AI
+regressions. Each custody stage has **76 exact comparisons and nine skipped
+patched-compute builds**; the tax census records 279 production calls. These
+are focused integration checks, not the full generated/recorded campaigns.
+
+The legacy mutation run exposed a missing repeated-drift witness. Two new
+complete Python dumps cover a third immutable revision on a connected group
+and the reference's lineage-exists refusal on a second single-pair drift. The
+updated legacy suite passes all **eight tests** over **40 frozen books**. The
+single-pair refusal is reproduced by
+`uv run --locked python -m tests.rust_port.repro_journal_repeated_legacy_drift`:
+choosing the sorted linked component as revision parent can supersede the
+active revision before the later active-parent lookup. Python product code is
+unchanged; native behavior preserves that refusal and its durable issue.
+
+The integrated pre-build driver replay passes **300 complete comparisons**:
+53 pricing, 49 source, 40 legacy and eight combined cases on each codec. The
+native network syscall guard and its socket self-test pass. The selected
+integration campaign kills **106/106 recipes** across persistence (59), the
+original process (eight), the real process adapter (11), legacy refresh (21)
+and the combined API (seven). All **34 distinct named baseline filters** pass;
+there are zero build failures or remaining survivors. The first campaign
+killed 105 recipes and exposed `JL-retarget`; after adding both second-drift
+witnesses, the unchanged mutation is killed by both the full-dump test and
+`prebuild_legacy_repeated_drift_retargets_each_immutable_revision`. Per-recipe
+named tests, source hashes and both campaign logs are bound in
+`target/r4-13/native-prebuild-final-mutation-summary.json`. Disposable mutation
+trees are removed by the runner. This is a selected integration campaign,
+not the full inherited catalog or future route/refresh wiring.
+
+The final focused shadow run passes **45 tests**, including the full process
+suite and both named daemon/AI regressions: **62 exact custody comparisons per
+stage**, nine skipped patched-compute builds, **71 native-loader v1 byte
+matches**, and **71 tax-oracle matches**. The tax reference harness's generic
+and Austrian route counters do not certify hybrid command routing. All-target,
+all-feature clippy for journals/transfers passes with warnings denied;
+workspace formatting, all **nine network/process chokepoint tests**, and all
+**14 frozen tax engine/ledger/text groups** pass. The required classifier
+update and CI preflight pass (**57 tests**). Current and historical evidence
+are separated in `target/r4-13/verification-summary.json`.
+
 Production registration still requires the following concrete work:
 
-- R4-10 must supply scope/profile resolution and both real repairs:
-  `handlers._repair_journal_source_overlaps` (including warning construction,
-  metadata history, address-list trimming and invalidation) and
-  `custody_authored_migration.refresh_drifted_legacy_pair_components` (including
-  refreshed profile state). Neither implementation is present in the committed
-  pricing handoff. A no-op implementation would change accounting.
+- Bind `process_native`'s resolver callback to the shared production scope
+  resolver under its reserved writer, and use `SystemSources` in product
+  transports. The adapter runs source repair, warning construction, legacy
+  refresh/profile reload, then pricing. Native transports must use
+  `prebuild::source_overlap_result_fields` to preserve the nested Python field
+  order; serializing the serde result dictionary directly loses that order.
+  The private probe still injects the resolved profile and sources for exact
+  comparison; it is not a production scope resolver or route.
 - Finish the lossless stage boundary and exact refusal handling recorded by
   R4-9/R4-11. In particular, `process::stage_value` still explicitly refuses
   NaN, actual surrogate scalars and non-string keys; importing the renderer
@@ -117,12 +250,15 @@ example is an oracle probe, never a packaged command.
 The mandatory `Prebuild` trait is the R4-10 integration seam: scope/profile
 resolution, repairs with profile refresh, and cached auto-pricing.
 `MissingPrebuild` refuses explicitly. There is no production no-op default.
-The example requires `prepared_noop: true`, an injected profile, clock and UUID
-tape, and restricts physical database paths to this worktree's `target/`.
-Live Python comparisons prove that the real pre-build stages leave their
-fixture books unchanged before using that seam. Synthetic benchmark books
-likewise must produce zero pre-build writes and zero pricing/repair counts.
-This establishes prepared-book parity only; it does not establish R4-10.
+`process_native` implements this seam using the real split R4-10 API, an explicit
+decimal context, a caller-supplied scope resolver and transfer `Sources`. It
+samples the precise build clock after repairs/pricing and the row clock when
+storing. `store_ledger_state_with_clock` samples each filed-chain resolution's
+own timestamp. The older fixed-clock persistence entry remains compatible.
+The example accepts `native_prebuild: true` with profile/clock/UUID tapes and
+restricts physical database paths to this worktree's `target/`. Its explicit
+`prepared_noop` and cached-price/no-op-repair modes remain only for inherited
+benchmark probes. The live process suite now uses real pre-build throughout.
 
 The caller-owned connection acquires `BEGIN IMMEDIATE` before profile reads.
 Tax-policy admission precedes repairs. Repairs, pricing, build and persistence
@@ -264,12 +400,18 @@ authority switch is claimed.
 
 ## Remaining integration work
 
-1. Integrate and verify real R4-10 resolution, repairs and cached pricing.
-2. Integrate the completed R4-9/R4-11/R4-12 acceptance handoffs, including
-   lossless stage values, exact refusals and the intended native boundaries.
-3. Run all full-pipeline generated, replay, frozen, census/shadow, codec and
-   rollback gates and the entire inherited mutation catalog. Complete wiring
-   branch/mutation coverage and close performance gaps.
+1. Bind the real `process_native` adapter to production scope resolution and
+   `SystemSources` through the shared book service. Source repair/warning,
+   legacy refresh/profile reload, cached pricing and lifecycle clocks are now
+   composed; preserve the ordered source fields when emitting envelopes.
+2. Finish inherited R4-9/R4-11 acceptance gaps, including lossless stage values,
+   exact refusals and the intended native boundaries. The committed handoffs
+   listed above are imported; their open acceptance work remains open.
+3. Add/run resumable complete-process shards for the twelve generators
+   (24,000 books and 1,030 permutations), all 159 retained recordings and their
+   permutations. Finish integrated frozen, census/shadow, codec/rollback and
+   inherited mutation gates. The focused fixture checks above do not close
+   those campaigns; future route/refresh wiring needs its own named mutations.
 4. Register CLI `journals process` with and without `--auto-pair`, verify exact
    envelopes, routing and zero fallback, and commit that boundary. The native
    R4-14 stage is imported; its refresh coordinator still needs integration.

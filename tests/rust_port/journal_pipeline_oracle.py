@@ -22,6 +22,7 @@ PATH = ROOT / "crates/journals/tests/data/prebuild-pipeline.json"
 
 def restore(conn, before):
     seed(conn)
+    conn.execute("BEGIN IMMEDIATE")
     triggers = conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'").fetchall()
     for name, _ in triggers:
         conn.execute(f'DROP TRIGGER "{name}"')

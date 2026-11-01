@@ -1,4 +1,4 @@
-"""R4-13's unregistered prepared-book pipeline against live Python processing."""
+"""R4-13's unregistered native pipeline against complete Python process dumps."""
 from contextlib import ExitStack
 import itertools
 import json
@@ -104,8 +104,8 @@ def test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dum
             stack.enter_context(patch.object(custody_journal, 'store_ledger_state', store))
             stack.enter_context(patch.object(handlers, 'auto_price_transactions_from_rates_cache', price))
             expected = handlers.process_journals(conn, 'w', 'p', progress_observer=phases.append)
-        request = dict(database=str(native), passphrase=key, prepared_repairs_noop=True,
-                       cached_pricing=True, profile=profile, clock=CLOCK, ids=ids, dump=True)
+        request = dict(database=str(native), passphrase=key, native_prebuild=True,
+                       profile=profile, clock=CLOCK, ids=ids, dump=True)
         result = subprocess.run([str(BINARY)], input=json.dumps(request) + '\n', text=True,
                                 capture_output=True, check=True, timeout=120)
         assert not result.stderr
@@ -132,10 +132,78 @@ def _pricing_book(root, cipher):
     conn.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchall()
     path = Path(conn.execute('PRAGMA database_list').fetchone()[2])
     profile = dict(conn.execute("SELECT * FROM profiles WHERE id='p'").fetchone())
-    request = dict(database=str(path), passphrase=key, prepared_repairs_noop=True,
-                   cached_pricing=True, profile=profile, clock=CLOCK,
+    request = dict(database=str(path), passphrase=key, native_prebuild=True,
+                   profile=profile, clock=CLOCK,
                    ids=[str(uuid.UUID(int=i, version=4)) for i in range(1, 1000)], dump=True)
     return conn, request
+
+
+def _native_vectors():
+    from tests.rust_port.journal_native_process_oracle import PATH
+    packed = json.loads(PATH.read_text())
+    for case in packed['cases']:
+        yield dict(case, **{
+            side: {table: dict(data, rows=case[side].get(table, data['rows']))
+                   for table, data in packed['base'].items()}
+            for side in ('before', 'expected')})
+
+
+def _native_replay(root, case, cipher, **options):
+    from tests.rust_port.journal_pipeline_oracle import restore
+    if cipher:
+        import sqlcipher3 as driver
+    else:
+        driver = sqlite3
+    path = root / 'native.sqlite3'
+    conn = driver.connect(path)
+    try:
+        if cipher:
+            conn.execute("PRAGMA key='synthetic-r4-13-only'")
+        conn.row_factory = driver.Row
+        restore(conn, case['before'])
+        assert scalar_exact(dump(conn), case['before'])
+    finally:
+        conn.close()
+    request = dict(database=str(path), passphrase='synthetic-r4-13-only' if cipher else None,
+                   native_prebuild=True, profile=case['profile'], clock=case['clock'],
+                   ticks=case['ticks'], ids=case['ids'], dump=True, **options)
+    result = subprocess.run([str(BINARY)], input=json.dumps(request) + '\n', text=True,
+                            capture_output=True, check=True, timeout=120)
+    assert not result.stderr
+    return json.loads(result.stdout)
+
+
+def test_real_prebuild_process_vectors_rebuild_from_python():
+    from tests.rust_port.journal_native_process_oracle import PATH, packed_vectors
+    assert json.loads(PATH.read_text()) == packed_vectors()
+
+
+@pytest.mark.parametrize('cipher', [False, True])
+def test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes(prepared_book_root, cipher):
+    for index, case in enumerate(_native_vectors()):
+        root = prepared_book_root / str(index)
+        root.mkdir()
+        actual = _native_replay(root, case, cipher)
+        assert actual['ok'] == (case['error'] is None), case['name']
+        if actual['ok']:
+            assert actual['payload'] == case['result'], case['name']
+        else:
+            assert actual['refusal'] == case['error'], case['name']
+        assert scalar_exact(actual['dump'], case['expected']), case['name']
+        assert actual['clock_reads'] == len(case['ticks']), case['name']
+        assert actual['uuid_reads'] == len(case['ids']), case['name']
+        assert [{'phase': p['phase']} for p in actual['phases']] == case['phases'], case['name']
+        assert actual['build_clock_reads'] == int({'phase': 'building'} in case['phases']), case['name']
+
+
+@pytest.mark.parametrize('cipher', [False, True])
+@pytest.mark.parametrize('write', [1, 8])
+def test_native_real_prebuild_storage_failure_reverts_every_active_stage(prepared_book_root, cipher, write):
+    case = next(case for case in _native_vectors() if case['name'] == 'all-stages')
+    actual = _native_replay(prepared_book_root, case, cipher, fail_after_write=write)
+    assert not actual['ok']
+    assert actual['phases'][-1]['phase'] == 'storing'
+    assert scalar_exact(actual['dump'], case['before'])
 
 
 @pytest.mark.parametrize('cipher', [False, True])

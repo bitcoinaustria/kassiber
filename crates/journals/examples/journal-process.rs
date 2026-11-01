@@ -9,8 +9,52 @@ use kassiber_journals::{
     Refusal,
 };
 use kassiber_store::rusqlite::Connection;
+use kassiber_transfers::Sources;
 use serde_json::{json, Value};
+use std::cell::{Cell, RefCell};
 use std::io::{self, BufRead, Write};
+
+struct Tapes<'a> {
+    ids: RefCell<std::slice::Iter<'a, Value>>,
+    ticks: Option<RefCell<std::slice::Iter<'a, Value>>>,
+    clock: &'a str,
+    clock_reads: Cell<usize>,
+    build_clock_reads: Cell<usize>,
+    uuid_reads: Cell<usize>,
+}
+impl Sources for Tapes<'_> {
+    fn uuid(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        let value = self
+            .ids
+            .borrow_mut()
+            .next()
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                kassiber_envelope::AppError::new("internal_error", "UUID tape exhausted")
+            })?;
+        self.uuid_reads.set(self.uuid_reads.get() + 1);
+        Ok(value.to_owned())
+    }
+    fn now(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        let value = if let Some(ticks) = &self.ticks {
+            ticks
+                .borrow_mut()
+                .next()
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    kassiber_envelope::AppError::new("internal_error", "clock tape exhausted")
+                })?
+        } else {
+            self.clock
+        };
+        self.clock_reads.set(self.clock_reads.get() + 1);
+        Ok(value.to_owned())
+    }
+    fn now_precise(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        self.build_clock_reads.set(self.build_clock_reads.get() + 1);
+        Ok(self.clock.to_owned())
+    }
+}
 
 struct Prepared {
     profile: Value,
@@ -84,8 +128,8 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         &v["prepared_noop"]
     };
-    if prepared != true {
-        return Err("explicit prepared-book seam required".into());
+    if prepared != true && v["native_prebuild"] != true {
+        return Err("explicit native or prepared pipeline mode required".into());
     }
     let start = std::time::Instant::now();
     let started_cpu = cpu();
@@ -108,13 +152,15 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     if v["database"].is_null() {
         support::load(&c, &v["before"]);
     }
-    let mut ids = v["ids"].as_array().ok_or("UUID tape required")?.iter();
-    let mut identity = || {
-        ids.next()
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-            .ok_or_else(|| Refusal::from("UUID tape exhausted".to_owned()))
+    let sources = Tapes {
+        ids: RefCell::new(v["ids"].as_array().ok_or("UUID tape required")?.iter()),
+        ticks: v["ticks"].as_array().map(|v| RefCell::new(v.iter())),
+        clock: v["clock"].as_str().ok_or("clock required")?,
+        clock_reads: Cell::new(0),
+        build_clock_reads: Cell::new(0),
+        uuid_reads: Cell::new(0),
     };
+    let mut identity = || sources.uuid(&c).map_err(|e| Refusal::from(e.message));
     let mut phases = Vec::new();
     let mut writes = Writes {
         observed: 0,
@@ -124,26 +170,39 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         },
     };
-    let result = process::process(
-        &c,
-        &mut Prepared {
-            profile: v["profile"].clone(),
-            cached_pricing: v["cached_pricing"] == true,
-        },
-        v["clock"].as_str().ok_or("clock required")?,
-        &mut identity,
-        &mut |phase| {
-            phases.push(
-                json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
-            )
-        },
-        &mut writes,
-    );
+    let mut progress = |phase| {
+        phases.push(
+            json!({"phase":phase,"wall":start.elapsed().as_secs_f64(),"cpu":cpu()-started_cpu}),
+        );
+    };
+    let result = if v["native_prebuild"] == true {
+        process::process_native(
+            &c,
+            |_| Ok(v["profile"].clone()),
+            kassiber_pydecimal::Context::RP2,
+            &sources,
+            &mut progress,
+            &mut writes,
+        )
+    } else {
+        process::process(
+            &c,
+            &mut Prepared {
+                profile: v["profile"].clone(),
+                cached_pricing: v["cached_pricing"] == true,
+            },
+            v["clock"].as_str().ok_or("clock required")?,
+            &mut identity,
+            &mut progress,
+            &mut writes,
+        )
+    };
     let result = match result {
         Ok(result) => result,
         Err(error) => {
             let mut reply = json!({"ok":false,"error":error.to_string(),
-                "refusal":error,"phases":phases});
+                "refusal":error,"phases":phases,"clock_reads":sources.clock_reads.get(),
+                "build_clock_reads":sources.build_clock_reads.get(),"uuid_reads":sources.uuid_reads.get()});
             if v["dump"] == true {
                 reply["dump"] = support::snapshot(&c);
             }
@@ -153,6 +212,7 @@ fn run(v: &Value) -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     let mut reply = json!({"ok":true,"payload":result.payload,"phases":phases,
+        "clock_reads":sources.clock_reads.get(),"build_clock_reads":sources.build_clock_reads.get(),"uuid_reads":sources.uuid_reads.get(),
         "wall_seconds":start.elapsed().as_secs_f64(),"cpu_seconds":cpu()-started_cpu});
     if v["dump"] == true {
         reply["dump"] = support::snapshot(&c);

@@ -104,6 +104,11 @@ fn prebuild_legacy_full_python_dumps_and_refusals() {
 }
 
 #[test]
+fn prebuild_legacy_repeated_drift_retargets_each_immutable_revision() {
+    check(&["repeated-drift", "repeated-drift-refusal"]);
+}
+
+#[test]
 fn prebuild_legacy_qualification() {
     check(&[
         "no-pairs",
