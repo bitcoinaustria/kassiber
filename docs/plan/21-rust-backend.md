@@ -4218,3 +4218,21 @@ comparison/Payjoin/entropy transports and AI dispatch are separate work. No
 signing or broadcasting authority is introduced. The
 [registration checkpoint](../reference/rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt)
 records routing counts, mutations, checks and the local-only verification limits.
+
+### R5 privacy: legacy hygiene scorer prerequisite (partial)
+
+`t3code/r5-privacy-legacy-scorer` continues from `a731608b1`. The native
+Phase-1 scorer preserves transaction/inventory rules, exact msat conversion,
+collaboration and domain bounds, inbound attribution, structural evidence,
+coverage, risk aggregation and deterministic ranking. The
+[legacy scorer checkpoint](../reference/rust-shell.md#legacy-hygiene-scorer-prerequisite-r5-privacy-legacy-partial)
+records 584 Python-derived vectors, complete 112-table comparisons, 1,168
+guarded fixture-driver calls, six identical hash-seed variants and 39 killed
+mutations. Malformed active amounts retain the reference internal error; a
+local repro records Python's uncaught `ValueError`, without changing Python.
+
+This prerequisite registers no product route. The existing
+`ui.privacy_hygiene.snapshot` still needs CLI-launched daemon acceptance,
+zero-fallback routing proof and registration; no new CLI command is planned.
+`reports privacy-hygiene` remains the distinct configuration report. Mirror
+and PSBT product acceptance remain parallel work.

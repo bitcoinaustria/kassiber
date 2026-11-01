@@ -13925,3 +13925,74 @@ Payjoin verification and conditional entropy transports, Mirror delivery and
 legacy scorer are separate work. AI dispatch, schema, dependencies, lockfiles,
 spending-key authority, signing and broadcasting remain unchanged. No push, PR
 or remote comment is made.
+## Legacy hygiene scorer prerequisite (R5 privacy legacy, partial)
+
+`t3code/r5-privacy-legacy-scorer` starts at `a731608b1`. The native
+`kassiber-reports::legacy_privacy` ports the separate Phase-1 scorer over stored
+transaction JSON and durable wallet inventory. It preserves local coverage gaps,
+exact integer-msat inventory conversion, ambiguity and protocol-domain bounds,
+collaboration exclusions, inbound counterparty attribution, score clamps,
+severity/risk aggregation and stable ranking. Structural context delegates to
+the shared categorical feature extractor and evaluator. Public snapshots omit
+scores, raw JSON, scripts, addresses, wallet configuration and exact amounts,
+as Python does. The score remains an internal ranking operand.
+
+The 584 unchanged-Python vectors cover all scoring rules and refusals:
+
+| Boundary | Cases | Named mutation killer | Mutations |
+| --- | ---: | --- | ---: |
+| Transaction tells and score clamps | 201 | `legacy_transaction_rules_match_python_bytes_and_all_112_tables` | 18 |
+| Inventory, reuse, dust and imported anonymity | 147 | `legacy_inventory_rules_match_python_bytes_and_all_112_tables` | 10 |
+| Collaboration and inbound attribution | 131 | `legacy_collaboration_and_inbound_attribution_match_python` | 6 |
+| Scope, coverage and refusals | 55 | `legacy_scope_and_refusals_match_python` | 1 |
+| Shared structural evidence | 17 | `legacy_structural_features_match_python_without_raw_payloads` | 1 |
+| Stable ranking and limits | 7 | `legacy_ranking_and_limits_match_python_deterministically` | 2 |
+| Numeric coercion and exact amounts | 26 | `legacy_numeric_coercion_and_exact_msat_match_python` | 1 |
+
+Each native vector compares canonical result/error and internal-scoring bytes,
+complete sorted contents of all 112 seeded tables before/after, and SQLite's
+write counter. The retained process oracle regenerates every vector through
+unchanged Python and compares the guarded native service driver with the
+product offline switch both off and on, without consent. All 1,168 driver
+calls preserve all tables and have no attempted egress or fallback path.
+These fixture calls do not accept a product CLI or daemon route.
+
+Six Python hash seeds (`0`, `1`, `2`, `7`, `21`, `42`) produce identical
+canonical corpus bytes, SHA-256
+`cd0e741f57eecdaef91b661d3762e2fda663b1f55024d0ed52d25b89a67e1883`.
+Native ordered collections and stable sorts make ties deterministic. No
+hash-seed-dependent scoring variant was found.
+
+The unchanged Python scorer raises an uncaught `ValueError` for malformed
+stored active-UTXO amounts. `tests/rust_port/repro_python_legacy_privacy_amount.py`
+reproduces it without egress or table changes; the corpus also records malformed
+active and spent amounts. Rust returns the same message as a typed
+`internal_error`, without panicking or silently treating malformed active
+amounts as zero. Python product code remains unchanged.
+
+All seven native selections pass. All 39 recipes in
+`crates/reports/scripts/legacy_privacy_mutations.json` compile and are killed by
+their named selection; compiler errors and empty selections count as no kills.
+Run the serial scratch checker with:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  crates/reports/scripts/legacy_privacy_mutation_check.py
+```
+
+Preserve account `HOME`, set `CARGO_BUILD_JOBS=8`, and keep `TMPDIR`,
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR` under this checkout's `target/`.
+The local logs and summaries live under `target/r5-legacy/`; interrupted and
+overlapping preliminary mutation attempts contribute no kills. The original
+ambiguity fixture masked its mutation behind a missing-value gap; the final
+fully valued duplicate-owner witness kills it. Owned scratch
+and build trees are removed after final verification is summarized. No
+dependency, lockfile, schema, egress or AI-authority change is introduced.
+
+At this prerequisite boundary, native product inventory remains 154 CLI leaves
+(22 reports), 15 report daemon kinds plus two transaction exports. The legacy
+scorer has zero accepted product reads and is not registered. Its existing
+`ui.privacy_hygiene.snapshot` daemon surface still requires CLI-launched daemon
+acceptance, routing proof and registration. The separate
+`reports privacy-hygiene` configuration CLI must remain unchanged; the scorer
+adds no CLI command. Mirror and PSBT product acceptance remain parallel work.

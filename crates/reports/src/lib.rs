@@ -30,6 +30,7 @@ mod gains_desktop;
 mod history;
 mod holdings;
 mod journal;
+pub mod legacy_privacy;
 pub mod lightning;
 mod platform_csv;
 mod privacy_hygiene;

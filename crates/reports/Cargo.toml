@@ -15,6 +15,10 @@ test-harness = ["kassiber-wallets/test-harness"]
 name = "psbt_privacy_fixture"
 required-features = ["test-harness"]
 
+[[example]]
+name = "legacy_privacy_fixture"
+required-features = ["test-harness"]
+
 [dependencies]
 kassiber-rates = { path = "../rates" }
 kassiber-custody = { path = "../custody" }
