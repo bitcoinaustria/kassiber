@@ -239,8 +239,9 @@ cannot swallow a later secret key and expose the part of its value after `@`.
 A finite alias table covers dotted, dashed, underscored, versioned and common
 concatenated/camelCase names, including `apiToken`, `refreshToken`, `dbPassword`,
 `apiSecret`, `walletpassphrase`, `secret_key` and `private_key`. Assignments accept
-`=`, `:`, `=>` and `:=`. Unquoted `&` and `|` remain part of the value, including
-ambiguous query tails. Cookie headers lose every cookie, and authorization and
+`=`, `:`, `=>` and `:=`; other punctuation begins the value rather than
+being silently consumed as an operator. Unquoted `&` and `|` remain part of the
+value, including ambiguous query tails. Cookie headers lose every cookie, and authorization and
 cookie headers include indented continuation lines.
 
 The short aliases `pass`, `user` and `auth` require an explicit assignment,
@@ -255,9 +256,12 @@ Ordinary JSON, enclosing JSON string layers and their Python `repr()` forms do
 not have a fixed nesting cap: delimiter runs are counted directly, without
 recursive JSON decoding. Complete quoted values may span lines; truncated values
 are masked through their line, and ambiguous glued quote tails fail closed
-through the line. This is a credential syntax scanner, not an arbitrary data
-format parser. Arbitrary encodings, unknown aliases and unmarked prose values
-remain outside its contract.
+through the line. A comma followed by a quoted key must include the closing
+key delimiter and assignment separator to establish a record boundary; glued
+text after closing brackets/braces remains part of the ambiguous value.
+This is a credential syntax scanner, not an arbitrary data format parser.
+Arbitrary encodings, unknown aliases and unmarked prose values remain outside
+its contract.
 
 Secret-named space-separated flags consume their next token even when it begins
 with `-`, so `--password --verbose` masks `--verbose`. Outside recognized command

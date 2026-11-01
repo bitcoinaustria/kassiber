@@ -63,8 +63,36 @@ function quotedEnd(text: string, start: number, delimiter: string): [number, boo
 }
 
 function valueBoundary(text: string, pos: number): boolean {
-  if (pos === text.length || (SPACE + ")]}").includes(text[pos])) return true;
-  if (",;".includes(text[pos])) return pos + 1 === text.length || (SPACE + "\\\"'").includes(text[pos + 1]);
+  while (pos < text.length) {
+    if (")]}".includes(text[pos])) pos += 1;
+    else {
+      const [delimiter, body] = quoteAt(text, pos);
+      if (!delimiter) break;
+      pos = body;
+    }
+  }
+  if (pos === text.length || SPACE.includes(text[pos])) return true;
+  if (",;".includes(text[pos])) {
+    pos += 1;
+    const gap = pos;
+    while (pos < text.length && SPACE.includes(text[pos]) && !LINES.includes(text[pos])) pos += 1;
+    if (pos === text.length || LINES.includes(text[pos])) return true;
+    const [delimiter, body] = quoteAt(text, pos);
+    const identifier = /[A-Za-z0-9_.-]+/y;
+    identifier.lastIndex = body;
+    const key = delimiter ? identifier.exec(text) : null;
+    if (key && text.startsWith(delimiter, body + key[0].length)) {
+      let tail = body + key[0].length + delimiter.length;
+      while (tail < text.length && SPACE.includes(text[tail])) tail += 1;
+      return tail < text.length && ":=".includes(text[tail]);
+    }
+    identifier.lastIndex = pos;
+    const prose = pos > gap && !delimiter ? identifier.exec(text) : null;
+    if (prose && /^[a-z]+$/.test(prose[0])) {
+      const end = pos + prose[0].length;
+      return end === text.length || (SPACE + ".!?").includes(text[end]);
+    }
+  }
   return false;
 }
 
@@ -125,7 +153,10 @@ export function redactKeyedSecrets(text: string): string {
       separator = text[pos];
       if (inUrl && match.index === headStart && separator === ":" && pos + 1 < text.length && !SPACE.includes(text[pos + 1])) continue;
       pos += 1;
-      if (pos < text.length && "=>".includes(text[pos])) pos += 1;
+      if ((separator === "=" && text[pos] === ">") || (separator === ":" && text[pos] === "=")) {
+        separator = "=";
+        pos += 1;
+      }
       while (pos < text.length && SPACE.includes(text[pos])) pos += 1;
       if (WEAK_NAMES.has(name) && separator === ":" && !keyQuote) {
         let before = match.index - 1;

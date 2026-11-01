@@ -54,6 +54,7 @@ it.each(stress)("keeps adversarial secret shape $name within the deadline", (tes
 
 it.each(failClosed)("fails closed for review regression $id", (testCase) => {
   const output = logs.emitAppLog({ level: "info", module: "test", file: "test", line: 1, msg: testCase.input, fields: {} })!.msg;
+  if ("expected" in testCase) expect(output).toBe(testCase.expected);
   if (testCase.sentinel) {
     expect(output).not.toContain(testCase.sentinel);
     for (let start = 0; start < testCase.sentinel.length - 3; start += 1) {
