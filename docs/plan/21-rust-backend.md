@@ -4149,3 +4149,33 @@ workstream's prerequisite. This does not accept CLI/file/daemon transports or
 register product reads. PSBT and legacy-scorer served-by counts remain zero.
 Native graph wiring, transport acceptance, routing proof, registration and the
 entire separate legacy scorer remain outstanding.
+
+### R5 privacy: native PSBT inventory admission (partial)
+
+`t3code/r5-privacy-psbt-3` starts at `a731608b1`. The native report now has
+an inventory-only baseline constructor and an explicit source-admission gate.
+Scope resolution, source checks and capture share one SQLite read snapshot.
+The constructor retains exact msat, normalized physical identities, ambiguity,
+branch provenance, existing script-reuse hypotheses and deterministic observer
+components. Admission is limited to 400 inventory rows without spend history,
+bindings, occurrence-qualified sources, stored physical transaction evidence,
+reference observations/cache or attribution datasets. Unsupported sources fail
+`not_implemented`; missing source schemas fail closed. There is no empty-graph
+substitution for a historical book.
+
+The [inventory checkpoint](../reference/rust-shell.md#psbt-native-inventory-admission-checkpoint-r5-privacy-psbt-partial)
+records 139 full-Python-graph result/error byte comparisons and 15 explicit
+native source/bound refusals, all 112 tables, concurrent snapshot checks and
+admission mutations. The guarded fixture uses native database capture rather
+than an injected baseline. It introduces no Python fallback or network route.
+Python product code remains unchanged, including a reproduced corrupt stored
+dataset-manifest `KeyError`.
+
+This is a clean partial boundary, not completion of either requested product
+gate. The latest inspected Mirror tip `3910d821d` adds caller-supplied
+observation merging and confirmation overlays, but its checkpoint still lists
+full SQL source orchestration and historical traversal/clustering as incomplete.
+Integrating that shared graph remains necessary before CLI/file and
+daemon acceptance, transport mutations, hybrid routing proof and registration.
+PSBT product served-by counts remain zero; the legacy scorer and Mirror remain
+their separate workers' scope. Signing, finalizing and broadcasting are absent.

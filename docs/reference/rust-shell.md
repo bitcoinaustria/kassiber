@@ -13673,3 +13673,91 @@ all 57 tests without skips. The optional full report-artifact sweep was stopped
 before completion and is not accepted as a passing gate. Full workspace runtime,
 Python/frontend, packaged and platform verification remain unrun. This is a
 partial local prerequisite, with no push-ready claim.
+
+## PSBT native inventory admission checkpoint (R5 privacy PSBT, partial)
+
+`t3code/r5-privacy-psbt-3` starts at `a731608b1`. The
+`kassiber-reports::psbt_privacy::report_inventory` checkpoint captures its own
+native baseline through `kassiber-wallets::psbt_privacy::inventory`, without
+accepting graph data from a request. The existing report savepoint covers
+scope, source admission, capture and projection. Concurrent commits cannot
+change which book or evidence the read describes. Missing source tables fail
+closed; failures release the report's savepoint without writing any table.
+
+The admitted domain contains at most 400 inventory rows. It preserves the
+reference's chain/network resolution, normalized outpoints, integer msat,
+duplicate-observation ambiguity, explicit/numeric branch evidence and imported
+provenance. Existing non-OP_RETURN script reuse forms observer components;
+private wallet branch knowledge alone cannot connect them. Mixed Bitcoin
+networks retain the reference's empty owned-output projection. The row bound
+keeps every selected physical node/edge and reuse hypothesis below the shared
+query/analytics limits, so the admitted baseline has no silent truncation.
+The reference's canonical attribution-script refusal is retained after script
+conflict resolution, including when no dataset is active.
+
+This is an inventory-only admission boundary. A selected profile's stored
+transaction identifiers/raw evidence, acquired/reference observations,
+attribution datasets, book bindings, explicit chain instances or inventory
+spend links require the still-unported historical graph and refuse with
+`not_implemented` / `details.component=psbt_privacy_baseline`. The legacy
+transaction graph cache is unscoped and therefore blocks admission even if
+its observation originated in another profile. Rows beyond the bound, vout
+values outside the transient adapter's u32 domain and JSON values that cannot
+be represented without losing evidence also refuse. Nonphysical records and
+private custody projections do not establish observer links or source anchors.
+
+The new `psbt_inventory.json` corpus has **139** cases whose native report/error
+and table-projection bytes are compared with unchanged Python using its real
+database graph builder. **15** additional cases pin the explicit native
+unsupported-source/bound refusal. Every case compares complete sorted rows in
+all **112** tables before and after the read. Native tests also cover missing
+source schemas and concurrent commits between scope resolution and capture.
+The guarded `psbt_privacy_fixture` driver selects the native constructor with
+`native_inventory=true`; this is a test-harness field, never a product or AI
+argument. The retained oracle exercises both offline-switch states without
+network consent, payload/script leakage, fallback dispatch or attempted egress.
+
+`repro_python_psbt_invalid_dataset.py` reproduces an uncaught
+`KeyError('valid_from')` when a corrupt stored active dataset manifest omits
+that normalized field. Its fixture bypasses dataset import; it is not a claim
+that valid imported manifests can omit the field. The refusal corpus retains
+that reference exception while native source admission rejects the dataset.
+Python product code is unchanged.
+
+The 16 recipes in `crates/reports/scripts/psbt_inventory_mutations.json` pin
+source gates, capture scope, sentinel/row bounds, spends, instances, network
+separation, normalized duplicates, existing reuse, OP_RETURN exclusion, branch
+provenance, unavailable amounts, reference refusals and snapshot identity.
+Use the existing checker with `--mutations` pointing to this catalog. Compiler
+errors and empty selections are not kills. Account `HOME` is preserved; builds,
+scratch trees and disposable roots stay under `target/r5-psbt-3/` with eight
+Cargo jobs. Local command logs and verification/mutation summaries are retained
+there after owned build and scratch trees are removed.
+
+No product registry changes are made. Inventory remains 154 CLI leaves
+(22 reports), 15 report daemon kinds plus two transaction exports; accepted
+PSBT product reads and fallbacks are both **zero**. Fixture invocations do not
+count as served product reads. This does not finish the first requested graph
+gate or begin transport acceptance. The next boundary needs the shared native
+observation capture, occurrence/binding admission and public historical
+analytics, projected into the existing `Baseline`, including reviewed
+source-funds/counterparty exposure and bounded coverage. The latest inspected
+Mirror tip `3910d821d` adds observation merging/confirmation kernels but still
+lists SQL source orchestration and traversal/clustering as incomplete.
+Then CLI/text-file and
+daemon byte comparisons, all-table/no-egress acceptance, transport mutations,
+hybrid routing proof and registration with non-zero served-by counts remain.
+Proposal comparison, BIP78 verification, conditional entropy and the separate
+legacy scorer remain outside this reduced report checkpoint. No signing,
+finalizing, broadcasting, dependency, schema or AI-allowlist change is added.
+
+Final local Linux verification passes workspace formatting, wallet/report
+production and test-harness all-target Clippy with warnings denied, all ten
+PSBT report tests, six inherited parser tests and five public-feature tests.
+Locked Python 3.11.17 passes all 13 retained parser/overlay/inventory oracle
+cases without skips, including 308 native inventory fixture calls. All 16 new
+admission mutations are killed and their three unmutated selections pass.
+The required classifier update and CI preflight complete; preflight passes all
+57 tests without skips. Owned build trees remain below 2 GiB and are removed
+after summarizing. Full workspace runtime, Python/frontend, packaged and
+platform gates are not run; this partial checkpoint makes no push-ready claim.

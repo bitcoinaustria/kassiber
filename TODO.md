@@ -568,6 +568,14 @@ registers them; exit-tax preserves its reference no-registration boundary.
   This prerequisite has no product routing; native graph construction,
   CLI/file/daemon acceptance and registration remain outstanding. See the
   [overlay checkpoint](docs/reference/rust-shell.md#psbt-inventorylinkage-overlay-prerequisite-r5-privacy-psbt-partial).
+- [x] Add native PSBT baseline capture for the bounded inventory-only domain,
+  with explicit source admission and no injected graph in its Python oracle.
+  Preserve one read snapshot, all 112 tables, ambiguous inventory, branch
+  provenance and existing script-reuse hypotheses. Refuse books requiring
+  historical observations, occurrence/binding services or dataset matching.
+  General graph capture/analytics, CLI/file/daemon acceptance, routing proof
+  and registration still block the parent PSBT task; served-by counts are zero.
+  See the [inventory checkpoint](docs/reference/rust-shell.md#psbt-native-inventory-admission-checkpoint-r5-privacy-psbt-partial).
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

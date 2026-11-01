@@ -4,6 +4,8 @@ use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod inventory;
+
 type Result<T> = std::result::Result<T, AppError>;
 
 pub struct OwnedOutput {

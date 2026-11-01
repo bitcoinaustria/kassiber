@@ -2,7 +2,7 @@
 
 use kassiber_envelope::{dict, s};
 use kassiber_pyjson::{dumps, Options, Value};
-use kassiber_reports::psbt_privacy::{report_with_baseline, table_rows};
+use kassiber_reports::psbt_privacy::{report_inventory, report_with_baseline, table_rows};
 use kassiber_store::rusqlite::Connection;
 use kassiber_wallets::psbt_privacy::{fixture_baseline, fixture_no_egress};
 use sha2::{Digest, Sha256};
@@ -62,12 +62,16 @@ fn tables(conn: &Connection) -> BTreeMap<String, String> {
 }
 
 fn run(group: &str) {
+    run_cases(group, include_str!("data/psbt_privacy.json"));
+}
+
+fn run_cases(group: &str, corpus: &str) {
     fixture_no_egress(|| {
         let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=OFF").unwrap();
         conn.execute_batch(include_str!("data/privacy_hygiene_seed.sql"))
             .unwrap();
-        let cases: Vec<serde_json::Value> =
-            serde_json::from_str(include_str!("data/psbt_privacy.json")).unwrap();
+        let cases: Vec<serde_json::Value> = serde_json::from_str(corpus).unwrap();
         let mut count = 0;
         for case in cases.iter().filter(|v| v["group"] == group) {
             count += 1;
@@ -83,15 +87,19 @@ fn run(group: &str) {
             );
             let changes = conn.total_changes();
             let args = kassiber_pytext::loads(&case["args"].to_string()).unwrap();
-            let actual = report_with_baseline(
-                &conn,
-                &args,
-                case["psbt"].as_str().unwrap(),
-                |_, profile| {
-                    assert_eq!(profile, case["baseline_profile"].as_str().unwrap());
-                    Ok(fixture_baseline(&case["baseline"]))
-                },
-            );
+            let actual = if case["native_inventory"] == true {
+                report_inventory(&conn, &args, case["psbt"].as_str().unwrap())
+            } else {
+                report_with_baseline(
+                    &conn,
+                    &args,
+                    case["psbt"].as_str().unwrap(),
+                    |_, profile| {
+                        assert_eq!(profile, case["baseline_profile"].as_str().unwrap());
+                        Ok(fixture_baseline(&case["baseline"]))
+                    },
+                )
+            };
             let actual = match actual {
                 Ok(payload) => dict([("ok", payload.clone()), ("rows", table_rows(&payload))]),
                 Err(e) => dict([(
@@ -114,7 +122,11 @@ fn run(group: &str) {
                 "{}: private material escaped",
                 case["name"]
             );
-            for node in case["baseline"]["nodes"].as_object().unwrap().values() {
+            for node in case["baseline"]["nodes"]
+                .as_object()
+                .into_iter()
+                .flat_map(|n| n.values())
+            {
                 if let Some(script) = node["script_key"].as_str().filter(|s| !s.is_empty()) {
                     assert!(!actual.contains(script), "{}: script escaped", case["name"]);
                 }
@@ -134,6 +146,97 @@ fn run(group: &str) {
                 .unwrap();
         }
         assert!(count > 0);
+    });
+}
+
+#[test]
+fn psbt_native_inventory_capture_matches_python_all_112_tables() {
+    run_cases("native_inventory", include_str!("data/psbt_inventory.json"));
+}
+
+#[test]
+fn psbt_native_inventory_refuses_unported_sources_and_bounds() {
+    run_cases(
+        "admission_refusal",
+        include_str!("data/psbt_inventory.json"),
+    );
+}
+
+#[test]
+fn psbt_native_inventory_missing_sources_fail_closed_and_release_snapshot() {
+    for table in [
+        "transaction_graph_cache",
+        "chain_analysis_observations",
+        "chain_analysis_reference_assertions",
+        "chain_analysis_datasets",
+        "book_network_bindings",
+        "transactions",
+        "wallet_utxos",
+    ] {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!("data/privacy_hygiene_seed.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("data/book.sql")).unwrap();
+        let cases: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("data/psbt_inventory.json")).unwrap();
+        let case = &cases[0];
+        conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
+        conn.execute_batch(&format!("DROP TABLE {table}")).unwrap();
+        let before = conn.total_changes();
+        let error =
+            report_inventory(&conn, &dict::<&str>([]), case["psbt"].as_str().unwrap()).unwrap_err();
+        assert_eq!(error.code, "internal_error", "{table}");
+        assert_eq!(conn.total_changes(), before);
+        assert!(conn.is_autocommit());
+    }
+}
+
+#[test]
+fn psbt_native_inventory_source_admission_uses_the_scope_snapshot() {
+    fixture_no_egress(|| {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("book.sqlite");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL").unwrap();
+        conn.execute_batch(include_str!("data/privacy_hygiene_seed.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("data/book.sql")).unwrap();
+        let cases: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("data/psbt_privacy.json")).unwrap();
+        let case = &cases[0];
+        conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
+        report_with_baseline(
+            &conn,
+            &dict::<&str>([]),
+            case["psbt"].as_str().unwrap(),
+            |snapshot, _| {
+                let writer = Connection::open(&path).unwrap();
+                writer
+                    .execute(
+                        "UPDATE transactions SET external_id=? WHERE id='in'",
+                        ["07".repeat(32)],
+                    )
+                    .unwrap();
+                writer
+                    .execute("UPDATE wallet_utxos SET amount=1 WHERE id='coin-0'", [])
+                    .unwrap();
+                let payload =
+                    report_inventory(snapshot, &dict::<&str>([]), case["psbt"].as_str().unwrap())?;
+                assert_eq!(
+                    canonical(&payload),
+                    canonical(
+                        &kassiber_pytext::loads(&case["expected"]["ok"].to_string()).unwrap()
+                    )
+                );
+                Ok(fixture_baseline(&case["baseline"]))
+            },
+        )
+        .unwrap();
+        assert!(conn.is_autocommit());
+        let error =
+            report_inventory(&conn, &dict::<&str>([]), case["psbt"].as_str().unwrap()).unwrap_err();
+        assert_eq!(error.code, "not_implemented");
+        assert!(conn.is_autocommit());
     });
 }
 

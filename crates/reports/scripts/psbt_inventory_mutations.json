@@ -1,0 +1,130 @@
+[
+  {
+    "id": "psbt-inventory-source-gate",
+    "file": "crates/reports/src/psbt_privacy/inventory.rs",
+    "find": "if present {",
+    "replace": "if false && present {",
+    "expect_failing": ["psbt_native_inventory_refuses_unported_sources_and_bounds"],
+    "rule": "Stored reference, dataset and binding sources cannot be silently omitted."
+  },
+  {
+    "id": "psbt-inventory-transaction-gate",
+    "file": "crates/reports/src/psbt_privacy/inventory.rs",
+    "find": "if history {",
+    "replace": "if false && history {",
+    "expect_failing": ["psbt_native_inventory_refuses_unported_sources_and_bounds"],
+    "rule": "Physical transaction evidence, including excluded rows, requires the historical graph."
+  },
+  {
+    "id": "psbt-inventory-capture-scope",
+    "file": "crates/reports/src/psbt_privacy/inventory.rs",
+    "find": "SELECT * FROM wallet_utxos WHERE profile_id=? LIMIT {}",
+    "replace": "SELECT * FROM wallet_utxos WHERE profile_id!=? LIMIT {}",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Native capture uses only the resolved profile."
+  },
+  {
+    "id": "psbt-inventory-capture-truncation",
+    "file": "crates/reports/src/psbt_privacy/inventory.rs",
+    "find": "inventory::MAX_ROWS + 1",
+    "replace": "inventory::MAX_ROWS",
+    "expect_failing": ["psbt_native_inventory_refuses_unported_sources_and_bounds"],
+    "rule": "The sentinel row must reveal a book exceeding admission bounds."
+  },
+  {
+    "id": "psbt-inventory-row-bound",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "rows.len() > MAX_ROWS",
+    "replace": "rows.len() > MAX_ROWS + 1",
+    "expect_failing": ["psbt_native_inventory_refuses_unported_sources_and_bounds"],
+    "rule": "Do not admit more rows than the verified complete inventory domain."
+  },
+  {
+    "id": "psbt-inventory-spend-gate",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "if canonical_txid(&row[\"spent_by\"]).is_some() {",
+    "replace": "if false && canonical_txid(&row[\"spent_by\"]).is_some() {",
+    "expect_failing": ["psbt_native_inventory_refuses_unported_sources_and_bounds"],
+    "rule": "Inventory spend links cannot disappear into an unlinked baseline."
+  },
+  {
+    "id": "psbt-inventory-instance-gate",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "|| crate::descriptors::truthy(&raw[\"chain_instance_id\"])",
+    "replace": "|| false && crate::descriptors::truthy(&raw[\"chain_instance_id\"])",
+    "expect_failing": ["psbt_native_inventory_refuses_unported_sources_and_bounds"],
+    "rule": "Instance-qualified observations require occurrence-aware admission."
+  },
+  {
+    "id": "psbt-inventory-mixed-networks",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "if networks.len() <= 1 {",
+    "replace": "if !networks.is_empty() {",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Mixed Bitcoin networks never become a guessed owned-input match."
+  },
+  {
+    "id": "psbt-inventory-duplicate-observation",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "o.observations == 1",
+    "replace": "o.observations >= 1",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "A repeated normalized outpoint is ambiguous even with one wallet identifier."
+  },
+  {
+    "id": "psbt-inventory-script-reuse",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "for other in owned.iter().skip(1) {",
+    "replace": "for other in owned.iter().skip(owned.len()) {",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Existing same-script control hypotheses precede proposal deltas."
+  },
+  {
+    "id": "psbt-inventory-op-return",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "!s.is_empty() && !s.starts_with(\"6a\")",
+    "replace": "!s.is_empty()",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Repeated OP_RETURN scripts do not establish a control hypothesis."
+  },
+  {
+    "id": "psbt-inventory-branch-precedence",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "[\"change\", \"internal\"]",
+    "replace": "[\"missing\", \"missing\"]",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Explicit internal/change role takes precedence over receive tokens and numeric hints."
+  },
+  {
+    "id": "psbt-inventory-imported-evidence",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "if imported { \"imported\" } else { \"ground_truth\" }",
+    "replace": "if imported { \"ground_truth\" } else { \"ground_truth\" }",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Imported branch evidence must retain its provenance category."
+  },
+  {
+    "id": "psbt-inventory-unknown-amount",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "&& o.amount.is_some()",
+    "replace": "&& true",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Unavailable inventory amounts cannot be converted to a zero-valued owned input."
+  },
+  {
+    "id": "psbt-inventory-canonical-script-refusal",
+    "file": "crates/wallets/src/psbt_privacy/inventory.rs",
+    "find": "s.len() <= 20_000 && !s.bytes().all(|b| b.is_ascii_hexdigit())",
+    "replace": "false && s.len() <= 20_000 && !s.bytes().all(|b| b.is_ascii_hexdigit())",
+    "expect_failing": ["psbt_native_inventory_capture_matches_python_all_112_tables"],
+    "rule": "Preserve the unchanged graph's indexed attribution-subject refusal."
+  },
+  {
+    "id": "psbt-inventory-snapshot",
+    "file": "crates/reports/src/psbt_privacy.rs",
+    "find": "let baseline = build_baseline(conn, &text(&profile, \"id\"))?;",
+    "replace": "conn.execute_batch(\"RELEASE SAVEPOINT psbt_privacy_read; SAVEPOINT psbt_privacy_read\").map_err(sql_error)?; let baseline = build_baseline(conn, &text(&profile, \"id\"))?;",
+    "expect_failing": ["psbt_native_inventory_source_admission_uses_the_scope_snapshot"],
+    "rule": "Inventory admission must see the same committed snapshot that resolved scope."
+  }
+]
