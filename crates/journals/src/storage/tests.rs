@@ -190,6 +190,55 @@ fn posting_deltas_reject_duplicates_and_keep_unchanged_rows() {
     );
     assert!(replace_journal_entries(&c, "p", &[], &mut ()).is_err()); // Missing table is a storage error.
 }
+
+#[test]
+fn posting_time_order_keeps_identity_when_times_move_or_are_null() {
+    for nullable in [false, true] {
+        let c = Connection::open_in_memory().unwrap();
+        table(&c, "journal_quantity_postings", &POSTING_COLUMNS);
+        let rows: Vec<[Sql; 12]> = [("z", "first"), ("m", "middle"), ("a", "last")]
+            .into_iter()
+            .map(|(id, time)| {
+                let mut row = std::array::from_fn(|_| Sql::Null);
+                row[0] = Sql::Text(id.into());
+                row[2] = Sql::Text("p".into());
+                row[5] = if nullable && id == "z" {
+                    Sql::Null
+                } else {
+                    Sql::Text(time.into())
+                };
+                row[11] = Sql::Text("first-build".into());
+                row
+            })
+            .collect();
+        replace_quantity_postings(&c, "p", &rows, &mut ()).unwrap();
+        let before = snapshot::<12>(&c, "journal_quantity_postings");
+        let mut next = rows.clone();
+        next.reverse();
+        for row in &mut next {
+            row[11] = Sql::Text("next-build".into());
+        }
+        replace_quantity_postings(&c, "p", &next, &mut ()).unwrap();
+        assert_eq!(snapshot::<12>(&c, "journal_quantity_postings"), before);
+        next[1][5] = Sql::Text("earliest".into());
+        replace_quantity_postings(&c, "p", &next, &mut ()).unwrap();
+        let after = snapshot::<12>(&c, "journal_quantity_postings");
+        for retained in before.iter().filter(|(_, row)| row[0] != rows[1][0]) {
+            assert!(after.contains(retained));
+        }
+        let changed = after.iter().find(|(_, row)| row[0] == rows[1][0]).unwrap();
+        assert_eq!(changed.1, next[1]);
+        next.retain(|row| row[0] != rows[0][0]);
+        replace_quantity_postings(&c, "p", &next, &mut ()).unwrap();
+        assert_eq!(
+            snapshot::<12>(&c, "journal_quantity_postings"),
+            after
+                .into_iter()
+                .filter(|(_, row)| row[0] != rows[0][0])
+                .collect::<Vec<_>>()
+        );
+    }
+}
 #[test]
 fn storage_encodings_and_markers_match_python() {
     let vectors: Value =

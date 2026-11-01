@@ -612,8 +612,8 @@
   {
     "id": "JP-uuid-version",
     "file": "crates/journals/src/storage.rs",
-    "find": "hex[12] = b'8';",
-    "replace": "hex[12] = b'4';",
+    "find": "(digest[6] & 15) | 128",
+    "replace": "(digest[6] & 15) | 64",
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
@@ -622,8 +622,8 @@
   {
     "id": "JP-uuid-variant",
     "file": "crates/journals/src/storage.rs",
-    "find": "(variant & 3) | 8",
-    "replace": "(variant & 3) | 12",
+    "find": "(digest[8] & 63) | 128",
+    "replace": "(digest[8] & 63) | 192",
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
@@ -2638,5 +2638,25 @@
       "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
     ],
     "rule": "The fixed integer part has no leading zero unless it is exactly zero."
+  },
+  {
+    "id": "JP-uuid-high-digit",
+    "file": "crates/journals/src/storage.rs",
+    "find": "usize::from(byte >> 4)",
+    "replace": "usize::from(byte & 15)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "UUID hex retains each digest byte’s high nibble."
+  },
+  {
+    "id": "JP-uuid-low-digit",
+    "file": "crates/journals/src/storage.rs",
+    "find": "usize::from(byte & 15)",
+    "replace": "usize::from(byte >> 4)",
+    "expect_failing": [
+      "storage_encodings_and_markers_match_python"
+    ],
+    "rule": "UUID hex retains each digest byte’s low nibble."
   }
 ]

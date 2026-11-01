@@ -140,8 +140,9 @@ pub fn journal_entry_id(
     asset: &str,
     ordinal: usize,
 ) -> Result<String, Refusal> {
+    use bitcoin_hashes::{sha256, Hash};
     use std::fmt::Write;
-    let options = kassiber_pyjson::Options::new().compact();
+    let options = kassiber_pyjson::Options::new();
     let mut text = String::with_capacity(192);
     text.push('[');
     for value in [
@@ -158,19 +159,18 @@ pub fn journal_entry_id(
         kassiber_pyjson::dumps_str_into(value, &options, &mut text);
     }
     write!(text, ",{ordinal}]").expect("String formatting");
-    let mut hex = kassiber_custody::codec::sha256(&text).as_bytes()[..32].to_vec();
-    hex[12] = b'8';
-    let variant = (hex[16] as char).to_digit(16).expect("SHA-256 hex");
-    hex[16] = b"0123456789abcdef"[((variant & 3) | 8) as usize];
-    let h = std::str::from_utf8(&hex).expect("SHA-256 ASCII");
-    Ok(format!(
-        "{}-{}-{}-{}-{}",
-        &h[..8],
-        &h[8..12],
-        &h[12..16],
-        &h[16..20],
-        &h[20..]
-    ))
+    let mut digest = sha256::Hash::hash(text.as_bytes()).to_byte_array();
+    digest[6] = (digest[6] & 15) | 128;
+    digest[8] = (digest[8] & 63) | 128;
+    let mut out = String::with_capacity(36);
+    for (index, byte) in digest[..16].iter().copied().enumerate() {
+        if [4, 6, 8, 10].contains(&index) {
+            out.push('-');
+        }
+        out.push(b"0123456789abcdef"[usize::from(byte >> 4)] as char);
+        out.push(b"0123456789abcdef"[usize::from(byte & 15)] as char);
+    }
+    Ok(out)
 }
 
 /// Rebuild references expire even when a clock repeats or moves backwards.

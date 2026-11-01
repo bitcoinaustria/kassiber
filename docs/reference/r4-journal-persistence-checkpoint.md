@@ -14,6 +14,103 @@ the proposed-budget language in the historical probes below. Repeat the read
 floor over at least five independent connections with load averages and use its
 minimum. The implementation and all acceptance gates remain open.
 
+## Entry identity continuation from `6200534c2`
+
+**R4-12 remains unaccepted.** The retained writer completes the 32-cell
+2k/20k, generic/multi-wallet, SQLite/SQLCipher comparison over unchanged,
+fresh, appended and changed books. All 480 timed complete dumps match. These
+cells precede the entry-ID optimization below; they do not establish the final
+source's complete matrix. During resume, an inherited runner and its replacement
+briefly shared the multi-wallet 20k SQLCipher appended output path. That cell's
+timings are excluded; its serial final-source replacement is recorded separately.
+
+A serial read-floor repeat, after compilation, opens five independent
+connections for each shape/driver and verifies complete dumps, integrity and
+foreign keys. Its lower minima supersede the earlier loaded repeat for this
+comparison. Independent CPU minima, in seconds:
+
+| 20k cell before entry-ID optimization | Native | Accepted floor | Excess over floor + 0.15 |
+| --- | ---: | ---: | ---: |
+| generic SQLite unchanged | 0.280249 | 0.074710 | 0.055539 |
+| generic SQLite fresh | 0.831084 | 0.639016 | 0.042068 |
+| generic SQLCipher unchanged | 0.423383 | 0.193554 | 0.079829 |
+| generic SQLCipher fresh | 0.945636 | 0.701157 | 0.094479 |
+| multi-wallet SQLite unchanged | 0.352630 | 0.083554 | 0.119076 |
+| multi-wallet SQLite fresh | 0.962646 | 0.717763 | 0.094883 |
+| multi-wallet SQLCipher unchanged | 0.538168 | 0.208488 | 0.179680 |
+| multi-wallet SQLCipher fresh | 1.022698 | 0.775388 | 0.097310 |
+
+The serial final-source multi-wallet 20k SQLCipher appended replacement checks
+all 15 complete dumps over five alternating Python/native pairs. Its independent
+CPU minima are **1.274133 seconds Python, 0.586010 native and
+0.090111 DML floor**, at one-minute load 14.52–19.81. No other job ran
+in this worktree during that replacement.
+
+Unchanged uses the borrowed read floor; fresh uses its exact prepared DML floor.
+All eight cells fail. Lower floors must not be replaced with the earlier slower
+ones to claim acceptance.
+
+Entry identities now encode the first sixteen SHA-256 bytes directly, using the
+already locked Bitcoin hash dependency, preserving UUIDv8 version and RFC
+variant bits. Their manually delimited compact identity preimage uses the same
+ASCII string escaper without allocating unused JSON separator options. No
+dependency, schema, persisted bytes or production registration changes.
+
+Five alternating child-process pairs for 200,000 identity encodings improve
+independent CPU minima from **0.119592 to 0.073837 seconds**. Every pair improves;
+each process also checks 200 Unicode/escaping identities against the prior
+encoder. This focused measurement includes process startup and excludes SQL.
+
+Five fresh-process native pairs on identical physical copies also check all
+30 complete frozen Python dumps, including exact DML floor replays:
+
+| 20k cell | Prior writer | Entry-ID writer | Candidate/prior paired median |
+| --- | ---: | ---: | ---: |
+| generic SQLite fresh | 0.820146 | 0.804641 | 1.120250 |
+| multi-wallet SQLCipher unchanged | 0.551913 | 0.516440 | 0.933178 |
+
+The generic fresh minimum improves, but its paired median regresses; the phase
+record shows large variation in unrelated quantity work too. This is not a
+claim of a consistent full fresh-book speedup. The focused identity speedup and
+all five improved multi-wallet pairs justify retaining the optimization. Both
+cells still exceed their accepted budgets: generic fresh by 0.017192 seconds
+and multi-wallet unchanged by 0.157952 seconds.
+
+Two posting-scan probes are withdrawn for measured regressions, with exact
+dumps retained. Chronological scanning has median candidate/prior ratios
+1.024797 fresh and 1.108336 unchanged across five pairs. Natural scanning has
+ratios 1.161088 and 1.085407 across three pairs. The prior retained scan is
+restored. The added posting regression pins unchanged rowids and creation
+clocks across reordered input, moved timestamps, null timestamps and removals.
+
+All 62 journal tests pass, including both-driver physical crash recovery,
+every-write refusal/unwind rollback, complete dumps and all five signed-zero
+rewrites. The moved UUID version/variant recipes and two new nibble recipes
+are killed; this is four targeted kills, not the exhaustive persistence audit
+or final catalog campaign. Release all-target clippy passes with warnings
+denied; all 65 Python journal oracle/storage checks and 198 mutation
+applicability checks pass. Classifier update leaves no generated diff and all
+57 required preflight checks pass. The
+[entry identity record](r4-journal-persistence-entry-id-measurements.json)
+binds all samples and loads, source/binary hashes, scratch sources, the serial
+appended replacement and final verification logs.
+
+Remaining work, in order:
+
+1. Pass all eight 20k budgets on final source; repeat the complete 2k and
+   appended/changed matrix with exact dumps. The prior-source complete matrix,
+   focused identity speedup and two final-source cells do not close this gate.
+2. Finish the exhaustive persistence branch/refusal-to-mutation audit, including
+   decimal helpers, unreachable paths and driver errors; run final kills for
+   the complete current catalog. The catalog now has 198 recipes.
+3. Run resumable 24,000-book and 1,030-permutation campaigns, retained recordings
+   and permutations plus fresh recordings, full census/shadow with the known
+   Python shadow read-budget reproduction, and all 2,285 custody mutations.
+4. Verify integrated R4-13 transaction ownership, whole pre-COMMIT rollback,
+   setting restoration, committed visibility, response flush before checkpoint,
+   dropped handles and post-COMMIT errors without a second failure response on
+   both physical drivers, then write acceptance.
+
 ## Read-floor repeat on the requested continuation
 
 Five independent newly opened connections per cell visited every retained
