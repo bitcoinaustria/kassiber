@@ -739,14 +739,9 @@ class LndAdapter:
         start_ts = (
             max(0, now_ts - window_days * _SECONDS_PER_DAY) if now_ts else 0
         )
-        forwarding_payload = client.post(
-            "/v1/switch",
-            {
-                "start_time": str(start_ts),
-                "end_time": str(now_ts) if now_ts else "",
-                "num_max_events": LND_MAX_PAGE_SIZE,
-            },
-        )
+        forwarding_payload = {"forwarding_events": _fetch_lnd_forwarding_history(
+            client, start_ts=start_ts, end_ts=now_ts or None,
+        )}
         forwards = _scoped_forwards(
             forwarding_payload, window_start_ts=start_ts
         )
@@ -754,18 +749,7 @@ class LndAdapter:
         # Payments (window-scoped — we only need successful ones for the
         # routing summary, but the adapter sanitizes every row that comes
         # through so future itemization stays opsec-clean).
-        payments_payload = client.get(
-            "/v1/payments",
-            params={
-                "include_incomplete": "true",
-                "max_payments": LND_MAX_PAGE_SIZE,
-            },
-        )
-        payments_raw = [
-            row
-            for row in (payments_payload.get("payments") or [])
-            if isinstance(row, dict)
-        ]
+        payments_raw = _fetch_lnd_payments(client, include_incomplete=True)
         payments_clean = [_sanitize_payment(row) for row in payments_raw]
         if start_ts:
             payments_clean = [
@@ -778,14 +762,9 @@ class LndAdapter:
 
         # Invoices: sanitize before counting so the discard policy is the
         # single boundary for every payload that contributes to the snapshot.
-        invoices_payload = client.get(
-            "/v1/invoices",
-            params={"num_max_invoices": LND_MAX_PAGE_SIZE},
-        )
         invoices_clean = [
             _sanitize_invoice(row)
-            for row in (invoices_payload.get("invoices") or [])
-            if isinstance(row, dict)
+            for row in _fetch_lnd_invoices(client)
         ]
         invoice_count, paid_invoice_count, expired_invoice_count = _invoice_counts(invoices_clean)
         payment_count, completed_payment_count, failed_payment_count = _payment_counts(payments_clean)
@@ -1098,7 +1077,9 @@ def _lnd_routing_income_imports(
     ]
 
 
-def _fetch_lnd_forwarding_history(client: "LndRestClient") -> list[dict[str, Any]]:
+def _fetch_lnd_forwarding_history(
+    client: "LndRestClient", *, start_ts: int = 0, end_ts: int | None = None,
+) -> list[dict[str, Any]]:
     """Read the full forwarding history with offset pagination.
 
     The raw rows live only in memory and are immediately reduced to daily fee
@@ -1111,7 +1092,8 @@ def _fetch_lnd_forwarding_history(client: "LndRestClient") -> list[dict[str, Any
         payload = client.post(
             "/v1/switch",
             {
-                "start_time": "0",
+                "start_time": str(start_ts),
+                **({"end_time": str(end_ts)} if end_ts is not None else {}),
                 "index_offset": str(offset),
                 "num_max_events": LND_MAX_PAGE_SIZE,
             },
@@ -1137,20 +1119,24 @@ def _fetch_lnd_forwarding_history(client: "LndRestClient") -> list[dict[str, Any
         next_offset = _int(
             payload.get("last_offset_index") or payload.get("last_index_offset")
         )
-        if not page or next_offset <= offset or len(page) < LND_MAX_PAGE_SIZE:
+        if not page or len(page) < LND_MAX_PAGE_SIZE:
             break
+        if next_offset <= offset:
+            raise AppError("LND forwarding history cursor did not advance", code="lightning_history_incomplete")
         offset = next_offset
     return rows
 
 
-def _fetch_lnd_payments(client: "LndRestClient") -> list[dict[str, Any]]:
+def _fetch_lnd_payments(
+    client: "LndRestClient", *, include_incomplete: bool = False,
+) -> list[dict[str, Any]]:
     """Read the complete payment history in stable payment-index order."""
     return _fetch_lnd_indexed_history(
         client,
         path="/v1/payments",
         rows_key="payments",
         page_size_key="max_payments",
-        fixed_params={"include_incomplete": "false"},
+        fixed_params={"include_incomplete": "true" if include_incomplete else "false"},
         identity_fields=("payment_index", "payment_hash"),
     )
 
@@ -1200,7 +1186,11 @@ def _fetch_lnd_indexed_history(
         next_offset = _int(
             payload.get("last_index_offset") or payload.get("last_offset_index")
         )
-        if not page or next_offset <= offset:
+        if not page:
+            break
+        if next_offset <= offset:
+            if len(page) >= LND_MAX_PAGE_SIZE:
+                raise AppError("LND history cursor did not advance", code="lightning_history_incomplete")
             break
         offset = next_offset
     return rows
