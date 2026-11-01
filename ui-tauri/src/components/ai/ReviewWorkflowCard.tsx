@@ -160,7 +160,7 @@ export function ReviewReceiptCard({ receipt }: { receipt: ReviewReceipt }) {
     <ReviewEffectsView before={receipt.before} after={receipt.verification} />
     <ReviewTaxDeltaView artifact={receipt} />
     <RemainingIssues effects={receipt.verification} />
-    <Button asChild variant="ghost" size="sm"><Link to="/quarantine"><ArrowUpRight className="size-3.5" aria-hidden="true" />{t("review.receipt.openQuarantine")}</Link></Button>
+    <Button asChild variant="ghost" size="sm"><Link to="/review"><ArrowUpRight className="size-3.5" aria-hidden="true" />{t("review.receipt.openQuarantine")}</Link></Button>
     <RawReview value={receipt} />
   </section>;
 }

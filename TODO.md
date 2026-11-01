@@ -80,12 +80,21 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   own basis is their market value, but the pool timeline is cut at the
   barrier. Done when the policy is written down in the tax reference and the
   barrier follows it.
-- [ ] Show journal staleness and quarantine once in the shell: the bell keeps
-  standing "needs processing"/"quarantined" items that repeat the side-nav
-  hints, staleness has several verbs ("Process", "Reprocess", "Recalculate",
-  "Process ledger"), and a book with any quarantine shows the first-sync card
-  on every refresh. Done when the bell carries events only and one verb is
-  used everywhere.
+- [ ] Show journal staleness once in the shell: the bell and the sidebar now
+  share the Review count, but the bell still keeps standing "needs processing"
+  and "to review" items, staleness has several verbs ("Process", "Reprocess",
+  "Recalculate", "Process ledger"), and a book with any quarantine shows the
+  first-sync card on every refresh. Done when the bell carries events only and
+  one verb is used everywhere.
+- [ ] Let the owner accept the coarse prices of a whole "approximate price"
+  cause in one reviewed step instead of entering each price. Done when a
+  `review plan/apply` operation records the acceptance per transaction,
+  keeps the price's coarse provenance, and Review offers it on that cause.
+- [ ] Finish folding the old review pages into Review and its neighbours:
+  paired-transfer history as a Transactions filter, matching rules in book
+  settings, the address/txid ownership lookup in Search, the CoinTracking/
+  Blockpit comparison and Journals under Extras. Done when the sidebar's Tools
+  group is gone and every old route redirects.
 
 ## Imports, source evidence, and wallet workflows
 

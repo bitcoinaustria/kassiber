@@ -87,6 +87,7 @@ _DESKTOP_SWAP_MATCHING_KINDS = (
     "ui.transfers.unpair",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.dismissals.delete",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",

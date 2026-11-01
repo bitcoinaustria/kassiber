@@ -273,7 +273,7 @@ export function QuarantineCausePanel({
   const calculated = freshness?.last_processed_at || calculatedOn(items);
 
   return (
-    <section className="space-y-4" aria-label={t("quarantine.causes.title")}>
+    <section className="space-y-3" aria-label={t("quarantine.section.title")}>
       {hasFreshnessWarning ? (
         <div
           role="status"
@@ -317,15 +317,18 @@ export function QuarantineCausePanel({
 
       {summary.count ? (
         <div
-          className="kb-surface flex flex-col gap-4 p-(--kb-card-padding) sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
           data-testid="quarantine-summary"
         >
-          <div className="min-w-0 space-y-1">
-            <p className="text-base font-semibold">
-              {t("quarantine.summary.needsYou", { count: attentionCount })}
-            </p>
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
+              {t("quarantine.section.title")}
+              <span className="text-xs font-normal text-muted-foreground">
+                {t("quarantine.summary.needsYou", { count: attentionCount })}
+              </span>
+            </h2>
             {waitingCount ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("quarantine.summary.waiting", { count: waitingCount })}
                 {waitingShown ? null : (
                   <>
@@ -334,7 +337,7 @@ export function QuarantineCausePanel({
                       type="button"
                       variant="link"
                       size="sm"
-                      className="h-auto p-0 text-sm"
+                      className="h-auto p-0 text-xs"
                       onClick={onShowWaiting}
                     >
                       {t("quarantine.summary.showWaiting")}
@@ -344,7 +347,7 @@ export function QuarantineCausePanel({
               </p>
             ) : null}
             {summary.reports_blocked ? (
-              <p className="text-sm text-red-700 dark:text-red-300">
+              <p className="text-xs text-red-700 dark:text-red-300">
                 {t("quarantine.summary.reportsBlocked")}
               </p>
             ) : null}
@@ -352,14 +355,13 @@ export function QuarantineCausePanel({
           {/* Kassiber decides no fix on its own: pairs go as the owner picks
               them on their card; the assistant works through the rest. */}
           <div className="flex shrink-0 flex-wrap gap-2">
-            <FixWithAssistant attentionCount={attentionCount} primary />
+            <FixWithAssistant attentionCount={attentionCount} />
           </div>
         </div>
       ) : null}
 
       {groups.length ? (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold">{t("quarantine.causes.title")}</h2>
           <ol className="space-y-2">
             {(allCauses ? groups : groups.slice(0, SHOWN_CAUSES)).map((group) => (
               <QuarantineCauseCard

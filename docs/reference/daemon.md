@@ -148,7 +148,8 @@ Stream records add `approval` to `ai.chat.tool_call` and `reversible`,
 
 `ui.transfers.dismissals.delete` takes `dismissal_id`, or `tx_out` and `tx_in`,
 removes that dismissal, invalidates journals and returns `deleted` plus the
-removed `dismissal` (legs, reason, expiry). `ui.transfers.unpair` now also
+removed `dismissal` (legs, reason, expiry). The desktop's Review screen calls it
+to undo "Not a transfer". `ui.transfers.unpair` now also
 returns the removed `pair`, and `ui.transfers.rules.delete` the removed `rule`,
 so either can be recreated.
 

@@ -23,7 +23,7 @@ export type AssistantReturnPath =
   | "/journals"
   | "/swaps"
   | "/custody-gaps"
-  | "/quarantine"
+  | "/review"
   | "/reconcile"
   | "/egress"
   | "/imports"

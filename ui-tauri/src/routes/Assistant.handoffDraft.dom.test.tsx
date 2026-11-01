@@ -71,7 +71,7 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { Assistant } from "./Assistant";
 
 const FIX_PROMPT = "Fix the cause that holds this transaction in quarantine.";
-const QUARANTINE = { route: "/quarantine" as const, capabilities: ["review" as const] };
+const QUARANTINE = { route: "/review" as const, capabilities: ["review" as const] };
 
 function parkQuarantineFix() {
   // "Fix with Assistant" with no model chosen yet.

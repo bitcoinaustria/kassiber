@@ -165,7 +165,8 @@ summary always covers the whole book and reports `attention_count`,
 `waiting_count` and the listed scope's `scope_count`. The AI tool accepts the
 same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
 beside the row count, split exactly like the `attention` scope, so the
-side-nav counts what needs the user.
+Review count (`review`: `quarantine_attention` plus transfer candidates)
+counts what needs the user.
 
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
@@ -180,7 +181,8 @@ market-value acquisition. Only the owner decides, pair by pair. Unpairing
 removes the suspense on the next journal run, and journal auto-pairing never
 recreates a pair the owner removed.
 
-The desktop's Quarantine page leads with a summary: how many rows need the
+The desktop's Review screen lists these first, under **Can't be booked yet**.
+The section leads with how many rows need the
 user, how many only wait on a cause (listed on request, one line each with the
 cause it waits on), whether reports are blocked, and **Fix with assistant**,
 which hands the causes to the assistant. Below, one card per cause says what
@@ -195,26 +197,29 @@ that pair and reading: a pair revised or replaced on the same row since
 loses its tick, and the card says so. Every check first reads the book
 again: a picked pair that cleared is left out, and one that was revised or
 re-pointed stops the step until the owner has looked at it again. The
-transaction sheet opened from this page unpairs only a listed pair case,
+transaction sheet opened from this section unpairs only a listed pair case,
 through the same step; it never removes a pair directly. It confirms the review it
 displays: `ui.transactions.resolve` names the review behind the sheet's pair
 (`reviewPairId`), its `pairFingerprint` as read and the book, and when the
-page reads that pair differently nothing is planned. The confirmation lists
+section reads that pair differently nothing is planned. The confirmation lists
 each pair's review (kind, amounts sent and received). An apply that fails without an answer is retried with the same
 proposal and idempotency key. Long lists fold (three rows, four causes). A
 cause with rows past the loaded page says how many and offers **Load more**,
 which reads the next page of what needs the user, so later rows can be opened
-without resolving earlier ones. The page offers the same below the causes
+without resolving earlier ones. The section offers the same below the causes
 whenever more is not loaded (also when the loaded page ends exactly at a
 cause's end) and retries a page that failed. The summary names at most 50
 causes; a cause beyond those gets its card from its loaded rows. "Save & next" walks the loaded rows of the
-cause it was opened from. The side-nav badge counts the causes. The page keeps the gap editor behind developer tools and
+cause it was opened from. The sidebar's Review badge counts the rows that need the user (`quarantine_attention`) plus the open transfer candidates. The gap editor stays behind developer tools, and the section
 offers exclusion only for price and decision questions.
 
 ## Desktop review
 
-The **Transfers & Custody** surface combines transfer/swap review with custody
-gaps and components. Gaps and components retain their developer-mode gate.
+The **Review** screen holds the everyday decisions: the quarantine causes
+above, and the transfer and swap candidates to pair or set aside, one at a
+time or the exact ones together (see [desktop](desktop.md)). The
+**Transfers & Custody** surface keeps the full matching tools (filters, rules,
+saved views, pair history) beside custody gaps and components. Gaps and components retain their developer-mode gate.
 Existing gap links open the selected case, including a case outside the first
 page. Component creation and revision use structured legs and allocations rather
 than a JSON text editor. Unsupported existing shapes are rejected explicitly.
@@ -361,7 +366,7 @@ of sibling pairs in a group re-slice the rest without counting as a change.
 Different txids are a hint, not
 proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
-The Quarantine page uses it for the pairs the owner picked, one or several,
+The Review screen uses it for the pairs the owner picked, one or several,
 so the recalculated journals are stored in the same transaction.
 
 Prices are decimal strings. A price assertion still needs evidence: the module
@@ -371,7 +376,7 @@ movement or missing acquisition basis. Native chain authority, component anchor
 coverage and conservation retain their existing checks.
 
 The chat's bounded review capability pack is selected by English/German review
-requests or the Quarantine screen. It includes case pagination, transaction and
+requests or the Review screen. It includes case pagination, transaction and
 transfer context, evidence reads and the shared plan/apply tools. A review turn
 defaults to 16 model rounds (ordinary turns remain 8; explicit limits win).
 At budget exhaustion the answer retains a bounded continuation packet with

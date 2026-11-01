@@ -530,7 +530,7 @@
       "title": "Geprüfter Review-Beleg",
       "verified_one": "{{count}} Korrektur angewendet; das resultierende Journal wurde neu berechnet und geprüft.",
       "verified_other": "{{count}} Korrekturen angewendet; das resultierende Journal wurde neu berechnet und geprüft.",
-      "openQuarantine": "Quarantäne öffnen"
+      "openQuarantine": "Prüfen öffnen"
     },
     "cases": {
       "more": "{{count}} Fälle geprüft; weitere Fälle sind verfügbar.",

@@ -141,8 +141,6 @@
       "title": "Quarantäne nicht verfügbar",
       "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
     },
-    "emptyTitle": "Nichts in Quarantäne",
-    "emptyBody": "Kann Kassiber eine Transaktion nicht buchen, erscheint sie hier, zusammen mit dem, was zu tun ist.",
     "actions": {
       "fixWithAssistant": "Mit Assistent beheben"
     },
@@ -492,9 +490,6 @@
       "previous": "Zurück",
       "next": "Weiter"
     },
-    "page": {
-      "description": "Transaktionen, die Kassiber noch nicht buchen kann, bleiben aus Steuer-Journalen und Berichten, bis ihre Ursache geklärt ist. Sie bleiben in ihren Wallets, und die Wallet-Guthaben enthalten sie weiterhin."
-    },
     "summary": {
       "needsYou_one": "{{count}} Transaktion braucht dich",
       "needsYou_other": "{{count}} Transaktionen brauchen dich",
@@ -504,7 +499,6 @@
       "showWaiting": "Anzeigen"
     },
     "causes": {
-      "title": "Was zu klären ist",
       "whatToDo": "Was zu tun ist",
       "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
       "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
@@ -589,6 +583,9 @@
       "notACase": "Dieses Paar gehört nicht zu den hier zu prüfenden Paaren. Entkopple es unter Übertragungen & Verwahrung.",
       "sheetChanged": "Dieses Paar liest sich jetzt anders, als das Blatt es gezeigt hat. Es wurde nichts entkoppelt; sieh es dir noch einmal an.",
       "reviewLine": "Geprüft als {{kind}}: {{sent}} gesendet, {{received}} erhalten"
+    },
+    "section": {
+      "title": "Noch nicht buchbar"
     }
   },
   "review": {

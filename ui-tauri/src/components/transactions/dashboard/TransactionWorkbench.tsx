@@ -534,7 +534,7 @@ const TransactionWorkbench = ({
     onBreakdownSelectionChange(null);
     onTableFiltersReset();
     onQuickFilterChange("review_queue");
-    void navigate({ to: "/quarantine" });
+    void navigate({ to: "/review" });
   }, [
     navigate,
     onBreakdownSelectionChange,

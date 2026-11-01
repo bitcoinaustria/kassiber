@@ -264,7 +264,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
 
   const openQuarantine = () => {
     setOpen(false);
-    void navigate({ to: "/quarantine" });
+    void navigate({ to: "/review" });
   };
 
   const submitLabel = isExporting

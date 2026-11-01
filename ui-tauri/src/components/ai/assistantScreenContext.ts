@@ -191,9 +191,9 @@ export function assistantScreenContextFor(
     });
   }
 
-  if (path === "/quarantine") {
+  if (path === "/review") {
     const transaction = firstSafeEntity(params, ["tx", "transaction"]);
-    return context("/quarantine", ["review"], {
+    return context("/review", ["review"], {
       ...(transaction ? { entityType: "transaction" as const, entityId: transaction } : {}),
     });
   }

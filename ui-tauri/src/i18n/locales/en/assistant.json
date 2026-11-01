@@ -530,7 +530,7 @@
       "title": "Verified review receipt",
       "verified_one": "{{count}} correction applied; the resulting journal was rebuilt and verified.",
       "verified_other": "{{count}} corrections applied; the resulting journal was rebuilt and verified.",
-      "openQuarantine": "Open quarantine"
+      "openQuarantine": "Open Review"
     },
     "cases": {
       "more": "{{count}} cases inspected; more cases are available.",

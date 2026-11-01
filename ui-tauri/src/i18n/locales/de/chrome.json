@@ -144,10 +144,6 @@
       "label": "Mittelherkunft durchsuchen",
       "placeholder": "Quellen, Wallets suchen…"
     },
-    "quarantine": {
-      "label": "Quarantäne durchsuchen",
-      "placeholder": "Problem, Account, Quelle suchen…"
-    },
     "reconcile": {
       "label": "Adress-Abgleich durchsuchen",
       "placeholder": "Adressen oder Transaktions-IDs einfügen…"
@@ -175,6 +171,10 @@
     "chainAnalysis": {
       "label": "Chain-Analyse",
       "placeholder": "Transaktion, Outpoint, Adresse suchen…"
+    },
+    "review": {
+      "label": "Prüfen durchsuchen",
+      "placeholder": "Ursache, Wallet, Übertragung suchen…"
     }
   },
   "search": {
@@ -204,15 +204,15 @@
       "body": "Berichte sind erst vertrauenswürdig, wenn die Journalverarbeitung gelaufen ist.",
       "action": "Jetzt verarbeiten"
     },
-    "quarantined": {
-      "title": "Transaktionen in Quarantäne",
-      "body_one": "{{count}} Transaktion muss geprüft werden.",
-      "body_other": "{{count}} Transaktionen müssen geprüft werden."
-    },
     "processing": "Wird verarbeitet…",
     "bookRefreshRunning": {
       "title": "Buch-Aktualisierung läuft bereits",
       "body": "Kassiber aktualisiert bereits Quellen, Kurse oder Journale."
+    },
+    "review": {
+      "title": "Wartet auf deine Prüfung",
+      "body_one": "{{count}} Entscheidung offen.",
+      "body_other": "{{count}} Entscheidungen offen."
     }
   },
   "currencyToggle": {
