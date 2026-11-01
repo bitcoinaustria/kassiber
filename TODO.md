@@ -617,10 +617,12 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port in-memory Mirror clustering, observed reuse/co-spend findings and
   reversible opt-in hypotheses; see the
   [clustering checkpoint](docs/reference/rust-shell.md#mirror-clustering-algorithms-r5-partial).
+- [x] Port captured-snapshot Mirror topology patterns with bounded fan-in/out,
+  reconvergence and conditional peel candidates; see the
+  [pattern checkpoint](docs/reference/rust-shell.md#mirror-topology-patterns-r5-partial).
 - [ ] Finish Mirror's legacy non-finite JSON/lone-surrogate handling and durable
   projection synchronization/read view,
-  then patterns,
-  attribution/dataset matching, conditional entropy, process/book-bound handles,
+  then attribution/dataset matching, conditional entropy, process/book-bound handles,
   report composition and CLI/daemon acceptance. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved

@@ -14388,3 +14388,31 @@ unmutated. The five retained Python/native checks, formatting and wallet
 production/test-harness all-target Clippy pass without skips.
 Local logs and summaries remain under
 `target/r5-analysis/`; no dependency, storage or network changes are included.
+
+## Mirror topology patterns (R5, partial)
+
+`analysis_index::analytics::analyze_patterns` ports observed fan-in/fan-out,
+reconvergence, conditional postmix reconvergence and opt-in larger-output peel
+candidates. Physical edges must be selected, supported, non-stale/non-conflicting
+and within one chain/network. Traversal order and evidence references are stable;
+no pattern grants common ownership, value allocation, taint or accounting facts.
+The engine retains the 250-result, 20,000-work and 100-origin limits, transaction
+hop depth, explicit boundary evidence and stopped reasons. It consumes captured
+snapshots without SQL, durable storage, network access or Python fallback.
+
+The oracle adds 120 pattern cases (248 analytical cases including clustering),
+with diamond/peel/postmix topologies, observer views, stale/conflicting edges,
+domain overlays and a dense three-layer capture. The dense graph reaches both
+result and search limits. Native tests compare canonical bytes, and the guarded
+native driver compares literal stdout with offline mode off/on and no consent.
+Unchanged Python replay is stable across recorded hash seeds 0, 1, 7 and 42.
+All six new mutations are killed by
+`patterns_match_python_captured_snapshots_byte_exact`; its unmutated selection
+also passes. The nine clustering recipes remain in the shared analytical
+catalog. Local logs and summaries live under `target/r5-analysis/`.
+
+Attribution/dataset matching and conditional entropy remain open. Full native
+analytics composition, process/book-bound handles, the Mirror report projection
+and CLI/daemon acceptance/registration follow those algorithms and the parallel
+SQL/durable-index work. AI projections remain Python. There are no dependency,
+product schema or external-I/O changes in this boundary.
