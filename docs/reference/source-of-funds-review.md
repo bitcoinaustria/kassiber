@@ -51,6 +51,15 @@ attested, and the report carries a matching `unknown_origin` warning naming the
 unattributed amount. Cases saved before source assets and gross demand were
 recorded are not re-exported; re-run the report and save the case again.
 
+The current Python reference has a known discrepancy in the fee explanation:
+its transaction-node projection omits the privacy-boundary flag that the fee
+guard checks, and the guard does not inspect privacy link types. A reviewed
+CoinJoin route can therefore retain its privacy warning while its difference
+is still named as network fees. The synthetic
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_fee_privacy.py)
+pins this behavior without changing it. Resolving it is separate from the Rust
+read port; the privacy restriction above remains the intended contract.
+
 Reviewing a link is not editing it. The editor is built from exact stored
 millisatoshis rather than an 8-decimal projection, only fields the reviewer
 deliberately changed are sent, a rejection may not carry an allocation edit, and
@@ -135,9 +144,12 @@ listings through the CLI and daemon, plus the daemon's paginated evidence
 listing. These editor reads retain full attachment metadata without opening
 evidence files. Case listings use their frozen recipient fields and do not
 load or validate the saved report payload. They do not rebuild journals or
-establish provenance, ownership or tax facts. Report traversal, review/input
-handoffs, coverage, suggest/assemble dry runs and all source-funds mutations
-remain pending in Rust. PDF rendering and PDF-containing bundles remain in
+establish provenance, ownership or tax facts. Native source creation and managed
+evidence association are available through the CLI and daemon. They retain the
+provenance boundary and roll back failed writes; native AI consent/once-only
+admission remains pending. The bounded traversal planner is implemented, while
+report production, review/input handoffs, coverage, suggest/assemble dry runs
+and other source-funds mutations remain pending. PDF rendering and PDF-containing bundles remain in
 Python by the owner's decision; their routes are not registered natively.
 
 Uncaught failures on the native source-funds daemon reads include an empty

@@ -6386,6 +6386,87 @@ suggest/assemble, recipient mutations, and full case saving once the parallel
 report/review producer is available. PDF rendering and PDF-containing bundles
 remain Python. There are no dependency, lockfile, schema or tax-rule changes.
 
+## Source-funds dependency traversal preparation (R5 partial)
+
+`t3code/r5-sof-reads-2` starts at `b9b050083`. The reusable native
+`kassiber_reports::source_funds_traversal::load` reads the bounded authored
+frontier and ranks upstream transactions after all downstream dependencies.
+It preserves retained link rows, SQL ordering, distinct source/transaction
+endpoint budgets, suggested-link visibility, rejected-link exclusion, depth
+limits, cycle references, the drainable fringe and discovery order for cyclic
+remainders. The report caller must retain its database read snapshot across
+planning and consumption. Planning performs no allocation, evidence-file read,
+journal rebuild, ownership inference, tax interpretation or external I/O.
+
+The frozen Python planner corpus has 203 synthetic cases, including shared
+ancestors, duplicate links, scoped and unreachable paths, multiple cycle
+shapes, Unicode ordering, a 64-hop chain and the production 5,000-node/edge
+caps. Small cases compare every retained row and rank as canonical JSON bytes;
+the three production-size cases compare ranks, retained counts, first/last link
+ids, cycle reference and truncation. Both implementations compare all 112
+tables around each read. The native suite replays the corpus in plaintext and
+SQLCipher and also pins SQLite query-limit overflow refusal before any read.
+
+All 780 report mutation entries apply. The 20 appended `sof-traversal-*`
+entries pass both unmutated baselines and are killed without build errors or
+empty test selections: 19 by
+`source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables`
+and one by
+`source_funds_traversal_refuses_sqlite_limit_overflow_without_writes`.
+The 760 inherited entries retain their previous evidence. The shared checker
+runs only the affected reports integration target in its isolated scratch
+copy; its source and build trees are removed after summarizing.
+
+Rust 1.99.1 offline/locked checks pass workspace formatting, reports/all-target
+clippy with warnings denied, the 227-case stored-read regression and both new
+planner tests (406 corpus calls across both storage modes plus the overflow
+refusal). The Python generator verifies all 203 cases and their all-table
+invariance. The required classifier update leaves the inventory unchanged;
+required CI preflight passes all 57 tests. Verification logs and per-entry
+mutation evidence are retained in `target/r5-sof-reads-2/`. Builds use eight
+Cargo jobs and worktree-local build/scratch directories, preserve account
+`HOME`, and add no dependencies, lockfile, schema or Python product changes.
+Owned build/data trees are removed after summarizing. Full workspace tests,
+the Python/frontend quality gate, live regtest and platform checks are not
+claimed for this preparation checkpoint.
+
+This is preparation for the first requested report boundary, not acceptance
+of that family. No service command, CLI leaf or daemon kind is registered.
+Served-by counts remain 157 native CLI leaves, including four source-funds
+listings, and five source-funds daemon reads. No new process routing evidence
+or report zero-fallback acceptance is claimed. Report composition, disclosure,
+diagrams and non-PDF output remain first, followed by review-context and
+request-input, coverage, then suggest/assemble dry runs. Each still needs its
+native service/CLI/daemon boundary, byte and all-table comparisons, native
+routing evidence and named mutation kills. PDF rendering and PDF-containing
+bundles remain explicitly Python. Case saving and all provenance mutations
+remain with the parallel `t3code/r5-sof-mutations-2` worker.
+
+The unchanged Python reference has an additional local reproduction:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python \
+  -m crates.reports.scripts.repro_python_source_funds_fee_privacy
+```
+
+It constructs a reviewed CoinJoin link whose 123-msat difference equals its
+child's fee. The report warns of the privacy boundary and defers it in the
+simplified flow, but still names the difference as network fees. Its transaction
+node projection drops `privacy_boundary`, which the fee explanation guard
+expects, and the guard does not inspect privacy link types. This contradicts
+the [source-funds contract](source-of-funds-review.md); this branch records the
+reproduction without changing Python or accepting the behavior as a new native
+rule. A complete report port must resolve the reference discrepancy explicitly.
+
+The mutation continuation imports this preparation from `ff1469f65`. Its
+combined catalog has 819 applicable entries; the 780-entry count above records
+the read branch's original boundary. All five integrated source/traversal Rust
+tests, both CLI/daemon process smoke tests, formatting, reports all-target
+clippy and the 57-test CI preflight pass. The classifier retains 5,717
+definitions. This import adds no routes: the combined inventory remains 159
+native CLI leaves and seven source-funds daemon kinds. Report, diagram and
+fingerprint production is still unavailable to case-saving admission.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

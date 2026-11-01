@@ -489,9 +489,16 @@ registers them; exit-tax preserves its reference no-registration boundary.
   shell has no AI execution loop; Python AI runs and service-only internal-error
   envelopes are excluded from native transport acceptance.
 - [ ] Finish source-funds report traversal/disclosure, review-context/request-input,
-  coverage and suggest/assemble dry runs, then complete case saving and
-  link mutations/batch review (including persisted suggest/assemble) and recipient
-  mutations in separate verified commits. Preserve consent, once-only execution
+  coverage and suggest/assemble dry runs in separate verified commits on
+  `t3code/r5-sof-reads-2`; include diagrams and non-PDF output with report traversal.
+  The native dependency planner is [preparation only](docs/reference/rust-shell.md#source-funds-dependency-traversal-preparation-r5-partial),
+  with a 203-case plaintext/SQLCipher oracle and all 112 tables unchanged;
+  report producers and their new transports remain unregistered. Resolve the
+  recorded Python privacy-boundary fee-attribution discrepancy explicitly at
+  the report parity boundary, without silently changing the reference here.
+- [ ] Complete source-funds case saving, link mutations/batch review (including
+  persisted suggest/assemble) and recipient mutations in separate verified
+  commits on `t3code/r5-sof-mutations-2`. Preserve consent, once-only execution
   and SQLite/SQLCipher rollback.
   A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
   now prepares the two-row case/snapshot write; full case saving still needs the

@@ -9489,5 +9489,205 @@
       "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
     ],
     "rule": "SQLite integer overflow is refused after source field validation, matching Python failure precedence."
+  },
+  {
+    "id": "sof-traversal-profile",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "WHERE profile_id=? AND to_transaction_id=?",
+    "replace": "WHERE profile_id!=? AND to_transaction_id=?",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Traversal stays within the selected profile."
+  },
+  {
+    "id": "sof-traversal-rejected",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "AND state != 'rejected'",
+    "replace": "AND state != 'suggested'",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Rejected links cannot enter the disclosure frontier."
+  },
+  {
+    "id": "sof-traversal-sql-order",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "ORDER BY state DESC,created_at ASC,id ASC",
+    "replace": "ORDER BY state ASC,created_at DESC,id DESC",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Each target retains Python state, creation and identity ordering."
+  },
+  {
+    "id": "sof-traversal-sentinel",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "(edge_limit - edge_count).saturating_add(1)",
+    "replace": "edge_limit - edge_count",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "The extra SQL row detects edge truncation at the exact cap."
+  },
+  {
+    "id": "sof-traversal-depth",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "if depth >= max_depth",
+    "replace": "if depth > max_depth",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "The boundary transaction is not expanded at maximum depth."
+  },
+  {
+    "id": "sof-traversal-edge-cap",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "if edge_count >= edge_limit",
+    "replace": "if edge_count > edge_limit",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Suggested and reviewed links both consume the edge budget."
+  },
+  {
+    "id": "sof-traversal-reviewed-only",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "if text(&row, \"state\") == \"reviewed\"",
+    "replace": "if text(&row, \"state\") != \"reviewed\"",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Only reviewed links add dependency and endpoint authority."
+  },
+  {
+    "id": "sof-traversal-endpoint-namespace",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "format!(\"source:{}\", text(&row, \"from_source_id\"))",
+    "replace": "format!(\"tx:{}\", text(&row, \"from_source_id\"))",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Sources and transactions with equal ids remain distinct graph endpoints."
+  },
+  {
+    "id": "sof-traversal-node-cap",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "!nodes.contains(&endpoint) && nodes.len() >= node_limit",
+    "replace": "!nodes.contains(&endpoint) && nodes.len() > node_limit",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "New endpoints stop the frontier at the exact node cap."
+  },
+  {
+    "id": "sof-traversal-existing-node",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "!nodes.contains(&endpoint) && nodes.len() >= node_limit",
+    "replace": "nodes.len() >= node_limit",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Existing endpoints remain admissible when the node budget is full."
+  },
+  {
+    "id": "sof-traversal-dependency",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "dependencies[parent].insert(index[&tx_id]);",
+    "replace": "dependencies[index[&tx_id]].insert(parent);",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Upstream parents wait for every downstream requirement."
+  },
+  {
+    "id": "sof-traversal-edge-retention",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "retained.push(row);",
+    "replace": "if text(&row, \"state\") == \"reviewed\" { retained.push(row); }",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Suggested links stay visible for report blockers without becoming dependencies."
+  },
+  {
+    "id": "sof-traversal-cycle",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "let cycle = find_cycle(&successors);",
+    "replace": "let cycle = None::<Vec<usize>>;",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Reviewed cycles remain visible as export blockers."
+  },
+  {
+    "id": "sof-traversal-cycle-ref",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "text(row, \"id\"))\n            .unwrap_or_else",
+    "replace": "text(row, \"to_transaction_id\"))\n            .unwrap_or_else",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Cycle references retain the first matching authored link id."
+  },
+  {
+    "id": "sof-traversal-cycle-fallback",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "unwrap_or_else(|| target_id.to_owned())",
+    "replace": "unwrap_or_default()",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Unmatched cycle orientation falls back to the canonical target id."
+  },
+  {
+    "id": "sof-traversal-ready-order",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "ids[a].cmp(&ids[b])",
+    "replace": "ids[b].cmp(&ids[a])",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Ready transactions sort by Python string order within each dependency layer."
+  },
+  {
+    "id": "sof-traversal-ready-batches",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "order.extend(batch);",
+    "replace": "order.splice(0..0, batch);",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Each ready batch follows all previously released downstream batches."
+  },
+  {
+    "id": "sof-traversal-cyclic-tail",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "order.extend((0..ids.len()).filter(|i| !ordered.contains(i)));",
+    "replace": "order.extend((0..ids.len()).filter(|i| !ordered.contains(i)).rev());",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "Undrainable cyclic transactions retain discovery order after the ready fringe."
+  },
+  {
+    "id": "sof-traversal-truncation",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "        truncated,",
+    "replace": "        truncated: false,",
+    "expect_failing": [
+      "source_funds_traversal_pins_dependency_order_cycles_caps_scope_and_all_tables"
+    ],
+    "rule": "The planner publishes truncation instead of presenting a complete graph."
+  },
+  {
+    "id": "sof-traversal-query-limit-range",
+    "file": "crates/reports/src/source_funds_traversal.rs",
+    "find": "        let query_limit =\n            i64::try_from((edge_limit - edge_count).saturating_add(1)).map_err(|_| {\n                AppError::new(\n                    \"internal_error\",\n                    \"Python int too large to convert to SQLite INTEGER\",\n                )\n            })?;\n",
+    "replace": "        let query_limit = (edge_limit - edge_count).saturating_add(1) as i64;\n",
+    "expect_failing": [
+      "source_funds_traversal_refuses_sqlite_limit_overflow_without_writes"
+    ],
+    "rule": "A query limit exceeding SQLite INTEGER fails instead of becoming an unlimited negative LIMIT."
   }
 ]

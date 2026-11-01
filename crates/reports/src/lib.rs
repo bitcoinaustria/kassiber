@@ -38,6 +38,7 @@ mod snapshots;
 pub mod source_funds_cases;
 pub mod source_funds_mutations;
 mod source_funds_reads;
+pub mod source_funds_traversal;
 mod sql;
 mod standalone_csv;
 mod summary;

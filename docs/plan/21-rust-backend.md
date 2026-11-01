@@ -1326,6 +1326,20 @@ parallel report/review producer. The [source mutation checkpoint](../reference/r
 records the boundary. No schema, dependency, lockfile, tax-rule or Python product
 logic changes are included.
 
+### R5 dependency traversal integration (partial)
+
+The `t3code/r5-sof-reads-2` continuation starts at `b9b050083` and adds the
+bounded dependency planner as preparation for report composition. It preserves
+Python's dependency layers, frontier budgets, retained-row ordering and cycle
+behavior. A 203-case frozen corpus includes production-size limits and runs
+natively in plaintext and SQLCipher with byte comparisons and every table
+unchanged. This registers no report service, CLI leaf or daemon kind: the
+mutation branch retains 159 native CLI leaves and seven source-funds daemon
+kinds; this helper adds no transport registrations. Full report/disclosure/diagram transport acceptance is
+still open. The [preparation checkpoint](../reference/rust-shell.md#source-funds-dependency-traversal-preparation-r5-partial)
+also records an unchanged Python privacy-boundary fee-attribution reproduction;
+the port must not silently treat it as an accepted authority change.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one
