@@ -4378,3 +4378,21 @@ side. A dedicated report savepoint retains successful generation publication
 and preserves caller rollback. All 37 native index tests pass; eight report
 flow scenarios compare 22 canonical report states and all 112 table commitments.
 Recovery acceptance and whole-process registration remain open.
+
+### R5 Chain Analysis: local read checkpoint (partial)
+
+The [read checkpoint](../reference/rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial)
+adds a native shared service and eleven CLI commands/nine daemon kinds for local
+overview/trace/path queries, synchronous entropy, case list/get/compare, label
+listing and dataset list/get/query. Graph reads synchronize the inherited durable
+index under caller-owned savepoints; saved cases retain content-integrity checks
+and exact claim queries retain public visibility and state-bound pagination.
+No acquisition or watch operation is registered by this slice, and AI projections
+remain Python.
+
+This does not complete the requested Chain Analysis read inventory. PSBT
+analyze/compare/entropy, dataset preview, their asynchronous `.start` operations
+and `jobs.get` remain open. The pinned base has shared PSBT public-feature
+primitives, but no native PSBT parser/comparison service or source/job runtime.
+Those contracts need their own native implementation and process acceptance;
+unsupported entry points continue to fail closed without Python fallback.

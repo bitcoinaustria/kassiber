@@ -834,6 +834,24 @@ impl Book for RealBook {
         Ok(Box::new(NativeJournalReply(result)))
     }
 
+    fn chain_analysis_reads(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        operation: &str,
+        args: &Value,
+    ) -> Result<Value, AppError> {
+        let (workspace, profile) = self.resolve_scope(workspace, profile)?;
+        kassiber_wallets::analysis_index::reads::execute(
+            self.conn()?,
+            &workspace,
+            &profile,
+            operation,
+            args,
+            &mut kassiber_wallets::publication::wallet::SystemSources::default(),
+        )
+    }
+
     fn diagnostics(
         &self,
         args: &Value,

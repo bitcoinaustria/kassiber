@@ -1,0 +1,3785 @@
+{
+  "schema": "kassiber.registered-journal-process-bench.v1",
+  "native_sha256": "a6adbd668369ff50e08244d6a58e4d05d1cfe5607666f3c9bd4bf13b9aa23093",
+  "records": [
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 2000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "11b9ae7166f9ca46e8eea1fe82465380d70d6f194cd215649a2ab31647aa1352"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 2000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 2000
+        },
+        "built_by": "6f0455cd6bea1770475d052058b63e754b73cee7",
+        "build_seconds": 6.2
+      },
+      "pairs": [
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 5.501130800999817,
+            "cpu": 1.84,
+            "load_before": [
+              11.92919921875,
+              8.03076171875,
+              7.41162109375
+            ],
+            "load_after": [
+              12.89599609375,
+              8.2958984375,
+              7.5009765625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 2.9877357209988986,
+            "cpu": 0.7600000000000001,
+            "load_before": [
+              12.89599609375,
+              8.2958984375,
+              7.5009765625
+            ],
+            "load_after": [
+              12.423828125,
+              8.27392578125,
+              7.498046875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 4.0132807759982825,
+            "cpu": 0.7799999999999999,
+            "load_before": [
+              12.423828125,
+              8.27392578125,
+              7.498046875
+            ],
+            "load_after": [
+              11.9091796875,
+              8.23583984375,
+              7.48974609375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 3.866366869999183,
+            "cpu": 1.7800000000000002,
+            "load_before": [
+              11.9091796875,
+              8.23583984375,
+              7.48974609375
+            ],
+            "load_after": [
+              11.9091796875,
+              8.23583984375,
+              7.48974609375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 2.9323878289978893,
+            "cpu": 1.8699999999999999,
+            "load_before": [
+              11.9091796875,
+              8.23583984375,
+              7.48974609375
+            ],
+            "load_after": [
+              11.435546875,
+              8.1982421875,
+              7.4814453125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 0.9580841120005061,
+            "cpu": 0.7700000000000004,
+            "load_before": [
+              11.435546875,
+              8.1982421875,
+              7.4814453125
+            ],
+            "load_after": [
+              11.435546875,
+              8.1982421875,
+              7.4814453125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 0.9336041110000224,
+            "cpu": 0.7500000000000001,
+            "load_before": [
+              11.435546875,
+              8.1982421875,
+              7.4814453125
+            ],
+            "load_after": [
+              11.435546875,
+              8.1982421875,
+              7.4814453125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 2.2840626210017945,
+            "cpu": 1.8200000000000003,
+            "load_before": [
+              11.435546875,
+              8.1982421875,
+              7.4814453125
+            ],
+            "load_after": [
+              11.0,
+              8.16162109375,
+              7.47314453125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 3.257567612999992,
+            "cpu": 1.8099999999999987,
+            "load_before": [
+              11.0,
+              8.16162109375,
+              7.47314453125
+            ],
+            "load_after": [
+              10.759765625,
+              8.15869140625,
+              7.47607421875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 0.9613847520013223,
+            "cpu": 0.7700000000000005,
+            "load_before": [
+              10.759765625,
+              8.15869140625,
+              7.47607421875
+            ],
+            "load_after": [
+              10.759765625,
+              8.15869140625,
+              7.47607421875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "7597691dff9a4558d187fc3ca95a082818216e3edc1881436df853fbcde8175c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "4803eb34460764c8e189608a537e78d2dc0a8d04d8118a8a69d4d11fed947418"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "81700201a4492ea70d8539c79baa2222af004c5d84e297d346a73131b7d1eb97"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "12221c18e66c13e74aedbecc7cc37ee56b7f017d8f38384a42552484a45450d6"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4000,
+                "a384c913e49126550bcc8f24e60b86edb50938524618b3c70ad1c4a196e93f84"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                1,
+                "9b73ee553561995da4ce8018f2bd24c636f4078c87eb1f73c95b29b5ce69fbc9"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "a8a102076a5a49044b19c834047f5452ab2088d0bfd3886e2129f074f70c0c44"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        }
+      ],
+      "median_cpu": {
+        "python": 1.8200000000000003,
+        "native": 0.7700000000000004,
+        "ratio": 2.363636363636363
+      }
+    },
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "generic",
+        "transactions": 20000,
+        "seed": 1,
+        "csv_sha256": {
+          "book.csv": "7b09f4fd1d6fc465734d1c30db1e8ca2445577932c2fd924ab593106172cf6b1"
+        },
+        "pegs": 0,
+        "pegs_paired": 0,
+        "journals": {
+          "entries_created": 20000,
+          "quarantined": 0,
+          "cross_asset_pairs": 0,
+          "processed_transactions": 20000
+        },
+        "built_by": "6f0455cd6bea1770475d052058b63e754b73cee7",
+        "build_seconds": 21.2
+      },
+      "pairs": [
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 13.218985515002714,
+            "cpu": 12.279999999999998,
+            "load_before": [
+              10.759765625,
+              8.15869140625,
+              7.47607421875
+            ],
+            "load_after": [
+              9.87158203125,
+              8.09912109375,
+              7.4677734375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 6.846574989001965,
+            "cpu": 6.86,
+            "load_before": [
+              9.87158203125,
+              8.09912109375,
+              7.4677734375
+            ],
+            "load_after": [
+              9.4013671875,
+              8.03076171875,
+              7.44873046875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 7.539242773997103,
+            "cpu": 7.119999999999997,
+            "load_before": [
+              9.369140625,
+              8.046875,
+              7.45751953125
+            ],
+            "load_after": [
+              9.5,
+              8.09619140625,
+              7.4765625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 13.579323590001877,
+            "cpu": 12.670000000000005,
+            "load_before": [
+              9.5,
+              8.09619140625,
+              7.4765625
+            ],
+            "load_after": [
+              9.8330078125,
+              8.2392578125,
+              7.53369140625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 15.789131739002187,
+            "cpu": 12.339999999999996,
+            "load_before": [
+              9.8330078125,
+              8.2392578125,
+              7.53369140625
+            ],
+            "load_after": [
+              9.55712890625,
+              8.24609375,
+              7.546875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 7.039624166001886,
+            "cpu": 6.95,
+            "load_before": [
+              9.55712890625,
+              8.24609375,
+              7.546875
+            ],
+            "load_after": [
+              8.9296875,
+              8.15478515625,
+              7.5244140625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 7.20083022000108,
+            "cpu": 6.969999999999996,
+            "load_before": [
+              8.9296875,
+              8.15478515625,
+              7.5244140625
+            ],
+            "load_after": [
+              8.53466796875,
+              8.08544921875,
+              7.50537109375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 13.116513876000681,
+            "cpu": 12.250000000000002,
+            "load_before": [
+              8.09130859375,
+              8.0009765625,
+              7.48095703125
+            ],
+            "load_after": [
+              7.30810546875,
+              7.83544921875,
+              7.43212890625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 13.321976285998971,
+            "cpu": 12.329999999999998,
+            "load_before": [
+              7.30810546875,
+              7.83544921875,
+              7.43212890625
+            ],
+            "load_after": [
+              6.48876953125,
+              7.6298828125,
+              7.37109375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 7.495214553000551,
+            "cpu": 6.959999999999999,
+            "load_before": [
+              6.48876953125,
+              7.6298828125,
+              7.37109375
+            ],
+            "load_after": [
+              5.95166015625,
+              7.47705078125,
+              7.32373046875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 20000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 0,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 40000,
+                  "issues": 0,
+                  "balances": 3,
+                  "decisions": 0,
+                  "economic_relations": 0,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                1,
+                "00f16edc59f52e91e5f06d12c4f377969dac26e89c6a952a86c415cb6a8ca66c"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "e71654852222c40ead67067fc665308f8e0e959d4d6d2bfc21307463f6414ff5"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                20000,
+                "3bc9ea80fb932108698e0b70cfc6edeb30f43f8d42facf1669505e5b94ad7548"
+              ],
+              "journal_quantity_balances": [
+                3,
+                "463b5aed915e303ccc47ec59b70f9ca79c6b9f48f156ba91ff5db5c42c7e62c1"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                40000,
+                "a2b24013413d936e615247af454df445a759d6fdfeaa1fa4ed45d8856f1618f5"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                7,
+                "356adc36b03cb4c0c9dc87ba7500bfe17f732db3aaff0d0e8269d7a537312283"
+              ],
+              "journal_wallet_holdings": [
+                1,
+                "df22ef3802c6daec4c84e42dbe89f9372a5fa67b6559efba90c367cd7d17923d"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        }
+      ],
+      "median_cpu": {
+        "python": 12.329999999999998,
+        "native": 6.959999999999999,
+        "ratio": 1.771551724137931
+      }
+    },
+    {
+      "book": {
+        "schema": "kassiber.journals-bench-book.v1",
+        "kind": "multi-wallet",
+        "transactions": 2000,
+        "seed": 7,
+        "csv_sha256": {
+          "Hot.csv": "e106b0aa2628699a1bff2b7fa4705a94ff8aa3c52761582e69baee21090e0d6c",
+          "Cold.csv": "e65f77cd25ab4e5de41f831eccc073c12b9cd2c5b9909fdca5ae4bea88eabdca",
+          "LHot.csv": "77da8aad0da7f1401e6ed0d8663299c669a05b5a194e2c6fd6c2d3ac9299ab98",
+          "LCold.csv": "94adb338d7efdf3b52025c2ef85e0fb586a7f501ff446d6aef3572295f8fc748"
+        },
+        "pegs": 342,
+        "pegs_paired": 171,
+        "journals": {
+          "entries_created": 2000,
+          "quarantined": 0,
+          "cross_asset_pairs": 171,
+          "processed_transactions": 2000
+        },
+        "built_by": "6f0455cd6bea1770475d052058b63e754b73cee7",
+        "build_seconds": 152.8
+      },
+      "pairs": [
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 2.5194871130006504,
+            "cpu": 2.2899999999999974,
+            "load_before": [
+              5.95166015625,
+              7.47705078125,
+              7.32373046875
+            ],
+            "load_after": [
+              5.71484375,
+              7.40234375,
+              7.30029296875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 1.3389998940001533,
+            "cpu": 1.1399999999999917,
+            "load_before": [
+              5.71484375,
+              7.40234375,
+              7.30029296875
+            ],
+            "load_after": [
+              5.71484375,
+              7.40234375,
+              7.30029296875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 1.360339296003076,
+            "cpu": 1.1400000000000077,
+            "load_before": [
+              5.71484375,
+              7.40234375,
+              7.30029296875
+            ],
+            "load_after": [
+              5.71484375,
+              7.40234375,
+              7.30029296875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 2.502519507997931,
+            "cpu": 2.2799999999999976,
+            "load_before": [
+              5.71484375,
+              7.40234375,
+              7.30029296875
+            ],
+            "load_after": [
+              5.4970703125,
+              7.3291015625,
+              7.27685546875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 2.7155195669984096,
+            "cpu": 2.3399999999999963,
+            "load_before": [
+              5.4970703125,
+              7.3291015625,
+              7.27685546875
+            ],
+            "load_after": [
+              5.4970703125,
+              7.3291015625,
+              7.27685546875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 1.3250540970002476,
+            "cpu": 1.1300000000000026,
+            "load_before": [
+              5.4970703125,
+              7.3291015625,
+              7.27685546875
+            ],
+            "load_after": [
+              5.4970703125,
+              7.3291015625,
+              7.27685546875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 1.3555019590021402,
+            "cpu": 1.140000000000006,
+            "load_before": [
+              5.4970703125,
+              7.3291015625,
+              7.27685546875
+            ],
+            "load_after": [
+              5.376953125,
+              7.2734375,
+              7.2587890625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 2.516748033998738,
+            "cpu": 2.2999999999999936,
+            "load_before": [
+              5.376953125,
+              7.2734375,
+              7.2587890625
+            ],
+            "load_after": [
+              5.376953125,
+              7.2734375,
+              7.2587890625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 2.459826635000354,
+            "cpu": 2.2599999999999962,
+            "load_before": [
+              5.376953125,
+              7.2734375,
+              7.2587890625
+            ],
+            "load_after": [
+              5.1865234375,
+              7.2021484375,
+              7.23583984375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 1.3654670709984202,
+            "cpu": 1.1600000000000108,
+            "load_before": [
+              5.1865234375,
+              7.2021484375,
+              7.23583984375
+            ],
+            "load_after": [
+              5.1865234375,
+              7.2021484375,
+              7.23583984375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 2000,
+                "quarantined": 0,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 171,
+                "auto_priced": 0,
+                "processed_transactions": 2000,
+                "custody_quantity": {
+                  "postings": 4529,
+                  "issues": 0,
+                  "balances": 179,
+                  "decisions": 0,
+                  "economic_relations": 171,
+                  "differences": 0,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "5c4a0f9ead3588c9ff553274cb204671d4293c064e1923774c34ad4a1dc98373"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                171,
+                "e28c95ce7f31987e02bc0f9a1f261980fc56db28a3fc09e806ba12142a0dbfd3"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "63001bda967090a54278214849862eb0cc6494f925f7e30eec90d71e6047ee79"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                2000,
+                "ef354cf251820c38450b1805920e9360e9cf7ef6e6147ae86ffd20539e2ca752"
+              ],
+              "journal_quantity_balances": [
+                179,
+                "f1e85d58e1ea2ea8ea86c4fe3963d6cd16d184712c7d6e34fc5815416d5e7183"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                4529,
+                "b7af70b2811fbf649e5eb5b19ecaea01185006b4301395c77c2322b02c16122f"
+              ],
+              "journal_quarantines": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_tax_summary": [
+                2,
+                "07f611814b2d370811fbfdfa210736e53ba2292f66c48fd9263508103ce071ce"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "bb483f16b5534129dbc4279940f1e943d2d7f2f46c132f2da0a7b7e60875188f"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        }
+      ],
+      "median_cpu": {
+        "python": 2.2899999999999974,
+        "native": 1.140000000000006,
+        "ratio": 2.0087719298245488
+      }
+    },
+    {
+      "book": {
+        "name": "multi-wallet-20000"
+      },
+      "pairs": [
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 21.64860207699894,
+            "cpu": 19.889999999999993,
+            "load_before": [
+              5.1865234375,
+              7.2021484375,
+              7.23583984375
+            ],
+            "load_after": [
+              4.87939453125,
+              6.97412109375,
+              7.1591796875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 17.555722376997437,
+            "cpu": 10.140000000000004,
+            "load_before": [
+              4.87939453125,
+              6.97412109375,
+              7.1591796875
+            ],
+            "load_after": [
+              5.00439453125,
+              6.89453125,
+              7.12939453125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 15.558411699999851,
+            "cpu": 10.059999999999993,
+            "load_before": [
+              4.84375,
+              6.82958984375,
+              7.10693359375
+            ],
+            "load_after": [
+              4.951171875,
+              6.755859375,
+              7.078125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 21.307939479000197,
+            "cpu": 19.820000000000014,
+            "load_before": [
+              4.951171875,
+              6.755859375,
+              7.078125
+            ],
+            "load_after": [
+              5.474609375,
+              6.7431640625,
+              7.06640625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 26.155877122000675,
+            "cpu": 20.509999999999984,
+            "load_before": [
+              5.474609375,
+              6.7431640625,
+              7.06640625
+            ],
+            "load_after": [
+              8.23583984375,
+              7.2685546875,
+              7.2314453125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 11.082152325001516,
+            "cpu": 10.060000000000022,
+            "load_before": [
+              8.056640625,
+              7.2470703125,
+              7.224609375
+            ],
+            "load_after": [
+              7.3525390625,
+              7.123046875,
+              7.18408203125
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "native": {
+            "returncode": 0,
+            "wall": 11.420153050003137,
+            "cpu": 10.03,
+            "load_before": [
+              7.3525390625,
+              7.123046875,
+              7.18408203125
+            ],
+            "load_after": [
+              6.76318359375,
+              7.00341796875,
+              7.14404296875
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "python": {
+            "returncode": 0,
+            "wall": 21.368024491999677,
+            "cpu": 19.43999999999999,
+            "load_before": [
+              6.46142578125,
+              6.9365234375,
+              7.12158203125
+            ],
+            "load_after": [
+              5.55810546875,
+              6.697265625,
+              7.0380859375
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "order": [
+            "native",
+            "python"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        },
+        {
+          "python": {
+            "returncode": 0,
+            "wall": 22.239163392998307,
+            "cpu": 20.11,
+            "load_before": [
+              5.55810546875,
+              6.697265625,
+              7.0380859375
+            ],
+            "load_after": [
+              5.40478515625,
+              6.5869140625,
+              6.9931640625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "native": {
+            "returncode": 0,
+            "wall": 11.425177426997834,
+            "cpu": 10.070000000000011,
+            "load_before": [
+              5.3720703125,
+              6.560546875,
+              6.982421875
+            ],
+            "load_after": [
+              5.24072265625,
+              6.4921875,
+              6.95556640625
+            ],
+            "payload": {
+              "kind": "journals.process",
+              "schema_version": 1,
+              "data": {
+                "profile": "Default",
+                "entries_created": 19983,
+                "quarantined": 17,
+                "transfers_detected": 0,
+                "cross_asset_pairs": 181,
+                "auto_priced": 0,
+                "processed_transactions": 20000,
+                "custody_quantity": {
+                  "postings": 45216,
+                  "issues": 0,
+                  "balances": 189,
+                  "decisions": 0,
+                  "economic_relations": 181,
+                  "differences": 1,
+                  "blocked": false,
+                  "blocked_from": null
+                }
+              }
+            },
+            "journals": {
+              "journal_account_holdings": [
+                2,
+                "c6ff613ae6ffb8e63c5b4ad127e865804e41a7e7112fa05f4530eba9c4c08f51"
+              ],
+              "journal_custody_decisions": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_custody_economic_relations": [
+                181,
+                "26a87fe3e098e905eb4b60a25ea683c1b13f4a3d823fd830e832ac1a3aef859d"
+              ],
+              "journal_custody_gap_inputs": [
+                1,
+                "c12dec4aa03476e4e7a430e432140971f29cbda73913ac56bc77263c3723109a"
+              ],
+              "journal_custody_reconciliations": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_entries": [
+                19983,
+                "76c38d7a82200d8044a07a41a645f131bfa6943e828abda07262ad9c932ff2c2"
+              ],
+              "journal_quantity_balances": [
+                189,
+                "83fcad67169a12dd38cd22f3e87b6affef2b835fd4c208b369c3ec14a3e08ce0"
+              ],
+              "journal_quantity_issues": [
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "journal_quantity_postings": [
+                45216,
+                "74019ee271fc35914f5982f1a343bea81e53f791bb2d9edf4965c90427495354"
+              ],
+              "journal_quarantines": [
+                17,
+                "a6cc9e1fcc3ff1a91c500b35512263a4589013b420c3425556a5c7ef5081991d"
+              ],
+              "journal_tax_summary": [
+                10,
+                "89d91dea4a0022f5a3334108f5e00cbd3b46c22faa311f580d525c7686b6310d"
+              ],
+              "journal_wallet_holdings": [
+                3,
+                "469cfc3df876771b015d42a3340d005e73e95b096ab99a267efe9b22e8a73473"
+              ]
+            }
+          },
+          "order": [
+            "python",
+            "native"
+          ],
+          "payload_equal": true,
+          "journals_equal": true
+        }
+      ],
+      "median_cpu": {
+        "python": 19.889999999999993,
+        "native": 10.060000000000022,
+        "ratio": 1.9771371769383648
+      }
+    }
+  ]
+}

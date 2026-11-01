@@ -107,9 +107,11 @@ The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
 The native catalog includes `wallets import-btcpay`, `wallets import-ledger`,
-`wallets import-wasabi`, `wallets import-samourai`, `wallets preview-document`
-and `wallets import-document`. `commands describe` lists the supported leaves
-from `crates/cli/src/describe.rs`; each family registers through its own CLI
+`wallets import-wasabi`, `wallets import-samourai`, `wallets preview-document`,
+`wallets import-document` and the
+[eleven local Chain Analysis read leaves](#chain-analysis-local-read-checkpoint-r5-partial).
+`commands describe` lists the supported leaves from `crates/cli/src/describe.rs`;
+each family registers through its own CLI
 module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -14874,3 +14876,105 @@ report composition and product registration remain separate work. Product
 Mirror served-by counts remain zero. No Python product code, dependency,
 lockfile, authored schema, accounting or network-consent contract changes.
 Platform packaging and the full Python/frontend quality gate are not claimed.
+
+## Chain Analysis local read checkpoint (R5, partial)
+
+`t3code/r5-chain-analysis-reads` starts at `b258fb1c9` and includes the durable
+recovery change `e4c26e5f7` as `1a4257c34`. The shared native
+`analysis_index::reads` service registers eleven CLI leaves and nine daemon
+kinds: overview/trace/path (`ui.chain_analysis.query`), synchronous transaction
+entropy, dataset list/get/exact-query, immutable case list/get/compare and label
+listing. CLI and daemon adapters resolve the admitted book and delegate to this
+service; AI projections remain in Python. Registry additions are appended.
+
+Graph and entropy reads synchronize the inherited derived index under a
+savepoint. Successful publication is retained within the caller's transaction;
+failed reads and caller rollback restore the original state. Reads retain
+observer/domain separation and expected-scope checks. Cases verify their query,
+snapshot and result commitments before returning data, and comparison covers all
+seven result surfaces. Dataset inspection preserves historical status, public
+visibility, exact indexed matching and metadata/query-bound keyset cursors.
+No authored schema, accounting authority or network permission changes.
+
+The unchanged-Python oracle retains 83 cases and 111 action snapshots. Each
+snapshot compares unsorted compact envelope bytes, schema and all 112 logical
+table commitments, and transaction state. Cases include cold/warm/incremental
+publication, failed-read/caller rollback, physical and ambiguous entropy
+subjects, saved-case integrity and numeric query equality, all comparison
+surfaces, private/historical/incomplete datasets, Unicode commitments, stale
+cursors and cross-book labels. Captured diamond, private-change, peel, postmix
+and custody-attribution graphs exercise the inherited analytics composition.
+Two serialization order corrections in that engine preserve Python's coverage
+and entropy example field order without changing their values.
+
+Whole-process CLI and daemon runs compare literal response bytes and all 112
+tables under strict no-consent guards with product offline mode off/on. No
+configured provider, DNS, HTTP, RPC, socket or loopback probe runs. The two runs
+retain these native served-by counts, including typed error responses:
+
+| CLI leaf (`chain-analysis.` prefix) | Rust | Python |
+| --- | ---: | ---: |
+| `overview` | 2 | 0 |
+| `trace` | 4 | 0 |
+| `path` | 2 | 0 |
+| `entropy` | 4 | 0 |
+| `datasets.list` | 2 | 0 |
+| `datasets.get` | 2 | 0 |
+| `datasets.query` | 2 | 0 |
+| `cases.list` | 2 | 0 |
+| `cases.get` | 4 | 0 |
+| `cases.compare` | 2 | 0 |
+| `labels.list` | 2 | 0 |
+
+Two native daemon sessions serve 28 investigation requests: query 8, entropy 2,
+dataset list/get/query 2 each, case list 2/get 4/compare 2, and labels 4.
+All in-scope invocations are served by Rust with zero Python fallback.
+
+Twelve scratch-tree mutations compile and are killed with five passing
+unmodified test baselines:
+
+| Mutation IDs | Killing test (`chain_analysis_` prefix) |
+| --- | --- |
+| `reads-scope`, `reads-publication`, `reads-analytics` | `query_retains_generation_observer_scope_and_rollback` |
+| `reads-entropy-physical` | `entropy_preserves_validation_and_physical_subjects` |
+| `reads-case-integrity`, `reads-case-feature-diff` | `cases_verify_integrity_and_compare_all_surfaces` |
+| `reads-page-cursor-profile`, `reads-dataset-visibility`, `reads-dataset-incomplete`, `reads-dataset-cursor-state`, `reads-dataset-utf8` | `datasets_bind_cursors_state_and_visibility` |
+| `reads-label-profile` | `labels_remain_ordered_and_book_scoped` |
+
+The Python hash-seed repro records eight seeds with seven full-build ambiguous
+finding-node order variants. The durable read route has one stable wire hash
+across those seeds. The retained repro and variants are
+`tests/rust_port/repro_chain_analysis_reads_hashseed.py` and
+`crates/wallets/tests/data/chain_analysis_reads_hashseeds.json`; Python product
+code is unchanged. Round 9 owns reference determinism.
+
+This checkpoint leaves four requested CLI reads and eight daemon kinds open:
+PSBT analyze/compare/entropy, dataset preview, entropy/PSBT-entropy/dataset-preview
+`.start`, and `ui.chain_analysis.jobs.get`. The base has PSBT public-feature
+primitives but no native PSBT parser/comparison service or purpose/book-scoped
+source/job runtime. Those paths still need source lifetime validation,
+cancellation and book-switch fencing, exact receipts/events and native process
+acceptance. They remain unregistered and fail closed with zero product fallback.
+Acquisition, mutations and watches belong to the parallel operations worker.
+
+Local verification passes all 42 native analysis-index tests, four CLI catalog
+checks, eleven daemon protocol checks and seven Python/native read checks without
+skips. Workspace formatting and affected production/harness all-target Clippy
+pass with warnings denied. The required classifier update records 5,762 test
+definitions, refreshing the inherited summary as well as adding this oracle;
+the required CI preflight passes all 57 tests. The new process module joins the
+serial daemon lane. Manual second-pass review found no remaining P1/P2 finding
+within this checkpoint.
+
+An initial final Python run passed six checks, then hit SIGBUS while creating a
+disposable SQLite schema during the machine-wide disk metadata exhaustion and
+T3 restart. Its failure log is retained. The unchanged seven-test suite passes
+on a fresh disposable root after recovery; no product fix was needed.
+
+Evidence and summaries remain under `target/r5-chain-analysis-reads/`. Local
+verification uses Rust 1.99.1, locked Python 3.11, offline Cargo, six final build
+jobs and serial test jobs. Account `HOME` is preserved; disposable books,
+scratch and builds stay in this worktree's `target/`. Owned mutation and
+verification build trees are removed after summarizing. There are no dependency
+or lockfile changes, push, PR or external comments. Full workspace,
+Python/frontend quality-gate and packaged/platform acceptance are not claimed.

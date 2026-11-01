@@ -209,6 +209,16 @@ pub trait Book: Send {
         Err(not_implemented("journals", "process").into())
     }
 
+    fn chain_analysis_reads(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        operation: &str,
+        _args: &Value,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("chain_analysis", operation))
+    }
+
     /// Redacted report over this admitted connection; never exposes raw rows/configuration.
     fn diagnostics(
         &self,

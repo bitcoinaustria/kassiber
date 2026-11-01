@@ -647,6 +647,9 @@ pub fn analyze_index(
         "pattern_count",
         field(field(&patterns, "coverage"), "pattern_count").clone(),
     );
+    let label_count = field(&coverage, "label_count").clone();
+    super::remove(&mut coverage, "label_count");
+    set(&mut coverage, "label_count", label_count);
     let mut entropy = vec![];
     if text(query, "mode") == "entropy"
         || text(query, "action") == "entropy"

@@ -661,6 +661,14 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [ ] Finish Mirror's CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
   ambiguity ordering; retain the recorded Python reference repro.
+- [x] Register native Chain Analysis overview/trace/path, synchronous entropy,
+  case list/get/compare, label listing and dataset list/get/query reads through
+  the CLI and daemon, retaining byte/all-table parity and zero fallback; see the
+  [read checkpoint](docs/reference/rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial).
+- [ ] Finish the Chain Analysis read port: PSBT analyze/compare/entropy, dataset
+  preview, entropy/PSBT-entropy/dataset-preview `.start`, and `jobs.get`, including
+  purpose/book-scoped source tokens, cancellation/book-switch fencing, exact
+  receipts/events and native transport acceptance. AI projections stay Python.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

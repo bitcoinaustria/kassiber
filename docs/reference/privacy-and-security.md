@@ -1180,7 +1180,16 @@ book-local derived index and source-change feed, inside the caller's transaction
 Stored wallet configuration and observations supply local evidence; they grant
 no acquisition consent or accounting authority. Installation, synchronization,
 expiry handling and recovery perform no DNS, socket, HTTP, RPC, loopback or
-provider operation. Product routes and AI disclosure remain unchanged.
+provider operation. Mirror report routes remain unregistered; AI projections
+stay in Python.
+
+Native Chain Analysis graph and synchronous entropy reads now use this derived
+publication boundary. Saved-case, label and dataset metadata/claim reads use
+only the admitted book. Explicit scope checks, immutable-case commitments,
+public dataset visibility and state-bound cursors remain enforced. These reads
+do not stage sources, acquire observations, probe configured providers or grant
+network permission. See the
+[read checkpoint](rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial).
 
 After-statement observation and disk-book drivers exist only in the test harness.
 Their synthetic parity fixtures and SQLite/SQLCipher interruption artifacts stay

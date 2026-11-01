@@ -132,7 +132,7 @@ pub fn canonical_subject(
     Ok(Value::List(vec![s(chain), s(network), s(key)]))
 }
 
-fn matched(pack: &Value, row: &Value) -> Result<Value, AppError> {
+pub(super) fn matched(pack: &Value, row: &Value) -> Result<Value, AppError> {
     let manifest = field(pack, "manifest");
     let source = kassiber_pytext::loads(text(row, "source_record_json"))
         .map_err(|_| error("Invalid captured attribution source record"))?;

@@ -121,3 +121,7 @@ required-features = ["test-harness"]
 [[example]]
 name = "analysis_entropy_fixture"
 required-features = ["test-harness"]
+
+[[example]]
+name = "chain_analysis_reads_fixture"
+required-features = ["test-harness"]

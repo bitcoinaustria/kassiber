@@ -663,6 +663,13 @@ fn book_command(
             emit(result.payload().clone())?;
             return result.after_reply();
         }
+        if operation.starts_with("chain-analysis.") {
+            return emit(crate::chain_analysis_reads::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
+        }
         if operation.starts_with("metadata.") {
             return emit(crate::metadata::execute(
                 book.as_mut(),

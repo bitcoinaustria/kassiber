@@ -746,11 +746,11 @@ pub fn analyze_transaction_entropy(
                         .map(|(k, v)| (k.to_string(), s(v.to_string()))),
                 ),
             ),
+            ("examples", Value::List(examples.clone())),
             (
                 "examples_truncated",
                 Value::Bool(result.count > BigInt::from(examples.len())),
             ),
-            ("examples", Value::List(examples)),
             ("computation", computation),
         ]))
     };

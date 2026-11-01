@@ -217,6 +217,17 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.lightning-profitability",
     "reports.export-lightning-profitability-csv",
     "reports.psbt-privacy",
+    "chain-analysis.overview",
+    "chain-analysis.trace",
+    "chain-analysis.path",
+    "chain-analysis.entropy",
+    "chain-analysis.datasets.list",
+    "chain-analysis.datasets.get",
+    "chain-analysis.datasets.query",
+    "chain-analysis.cases.list",
+    "chain-analysis.cases.get",
+    "chain-analysis.cases.compare",
+    "chain-analysis.labels.list",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

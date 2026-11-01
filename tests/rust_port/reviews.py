@@ -518,3 +518,5 @@ REVIEWS["tests/test_rust_analysis_recovery.py"] = {"*": {
     "disposition": "oracle", "group": "chain-sync",
     "reason": "kills native Mirror publication at every SQL write and commit boundary on disposable SQLite and SQLCipher books in DELETE and WAL modes; compares interrupted atomic state and Rust/Python restarts with unchanged Python canonical bytes and all 112 tables under strict no-egress guards",
 }}
+
+REVIEWS["tests/test_rust_chain_analysis_reads.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native local graph, entropy, immutable cases, labels and dataset metadata/claim reads with unchanged Python unsorted envelope bytes, all 112 tables, transaction rollback, recorded hash-seed variants and guarded CLI/daemon routing with zero fallback; PSBT, preview and async runtime remain separate"}}

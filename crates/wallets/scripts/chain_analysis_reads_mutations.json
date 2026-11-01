@@ -1,0 +1,122 @@
+[
+  {
+    "id": "reads-scope",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "if *expected != Value::Null",
+    "replace": "if false && *expected != Value::Null",
+    "expect_failing": [
+      "chain_analysis_query_retains_generation_observer_scope_and_rollback"
+    ],
+    "rule": "Reject stale active-book bindings before any local index publication."
+  },
+  {
+    "id": "reads-publication",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "if result.is_err() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "chain_analysis_query_retains_generation_observer_scope_and_rollback"
+    ],
+    "rule": "Successful local reads retain the derived generation within caller transaction ownership."
+  },
+  {
+    "id": "reads-analytics",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "engine::mirror::analyze_snapshot(view, &query)",
+    "replace": "engine::traversal::query_read(view, &query)",
+    "expect_failing": [
+      "chain_analysis_query_retains_generation_observer_scope_and_rollback"
+    ],
+    "rule": "Workbench queries compose findings, patterns, attribution and features through the shared engine."
+  },
+  {
+    "id": "reads-entropy-physical",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "!= &s(\"transaction\")",
+    "replace": "== &s(\"transaction\")",
+    "expect_failing": [
+      "chain_analysis_entropy_preserves_validation_and_physical_subjects"
+    ],
+    "rule": "Conditional entropy requires one physical transaction, never a wallet or output."
+  },
+  {
+    "id": "reads-case-integrity",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "|| engine::digest(&result).map_err(|_| failed())? != text(row, \"result_digest\")",
+    "replace": "|| false",
+    "expect_failing": [
+      "chain_analysis_cases_verify_integrity_and_compare_all_surfaces"
+    ],
+    "rule": "Stored case reads verify the immutable result commitment."
+  },
+  {
+    "id": "reads-case-feature-diff",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "for kind in [\n            \"nodes\",",
+    "replace": "for kind in [\n            \"transaction_features\",",
+    "expect_failing": [
+      "chain_analysis_cases_verify_integrity_and_compare_all_surfaces"
+    ],
+    "rule": "Saved comparisons preserve independent additions, removals and changes for every result surface."
+  },
+  {
+    "id": "reads-page-cursor-profile",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "v[0] != s(profile)",
+    "replace": "false",
+    "expect_failing": [
+      "chain_analysis_datasets_bind_cursors_state_and_visibility"
+    ],
+    "rule": "A pagination cursor is bound to its original book profile."
+  },
+  {
+    "id": "reads-label-profile",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "WHERE profile_id=? AND deleted=0 ORDER BY chain,network,subject,id",
+    "replace": "WHERE ? IS NOT NULL AND deleted=0 ORDER BY chain,network,subject,id",
+    "expect_failing": [
+      "chain_analysis_labels_remain_ordered_and_book_scoped"
+    ],
+    "rule": "Local attribution reads cannot disclose labels belonging to another book."
+  },
+  {
+    "id": "reads-dataset-visibility",
+    "file": "crates/wallets/src/analysis_index/reads/datasets.rs",
+    "find": "observer == s(\"public\") && field(&pack, \"visibility\") != &s(\"public\")",
+    "replace": "false",
+    "expect_failing": [
+      "chain_analysis_datasets_bind_cursors_state_and_visibility"
+    ],
+    "rule": "A public view cannot inspect private attribution packs."
+  },
+  {
+    "id": "reads-dataset-incomplete",
+    "file": "crates/wallets/src/analysis_index/reads/datasets.rs",
+    "find": "if [\"staging\", \"failed\"].contains(&text(&pack, \"status\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "chain_analysis_datasets_bind_cursors_state_and_visibility"
+    ],
+    "rule": "Incomplete dataset versions remain invisible to claim queries."
+  },
+  {
+    "id": "reads-dataset-cursor-state",
+    "file": "crates/wallets/src/analysis_index/reads/datasets.rs",
+    "find": "v[0] != s(binding.as_str())",
+    "replace": "false",
+    "expect_failing": [
+      "chain_analysis_datasets_bind_cursors_state_and_visibility"
+    ],
+    "rule": "Claim cursors bind query, visibility and current dataset metadata state."
+  },
+  {
+    "id": "reads-dataset-utf8",
+    "file": "crates/wallets/src/analysis_index/reads/datasets.rs",
+    "find": ".ensure_ascii(false)",
+    "replace": ".ensure_ascii(true)",
+    "expect_failing": [
+      "chain_analysis_datasets_bind_cursors_state_and_visibility"
+    ],
+    "rule": "Dataset commitments preserve Python UTF-8 canonical bytes rather than ASCII escapes."
+  }
+]
