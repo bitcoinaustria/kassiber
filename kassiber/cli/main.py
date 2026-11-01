@@ -36,7 +36,6 @@ from ..ai.providers import (
     record_detected_api_format,
 )
 from ..build_info import version_text
-from ..private_files import atomic_write_private
 from ..core import chat_history as core_chat_history
 from ..core import legacy_ledger
 from ..core import document_import as core_document_import
@@ -742,7 +741,7 @@ def _cli_export_lightning_profitability_csv(
     csv.writer(buffer).writerows(rows)
     content = buffer.getvalue()
     content.encode("utf-8")
-    atomic_write_private(Path(file_path), content)
+    core_reports._export_csv_rows(file_path, rows)
     return {
         "connection": {
             "id": connection.get("id"),

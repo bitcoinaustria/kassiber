@@ -199,8 +199,13 @@ including values beyond floating-point integer precision. A missing routing
 window refuses the report with `lightning_routing_unavailable`; unavailable
 earnings are never represented as a successful zero summary.
 CSV output is fully rendered and UTF-8 validated before touching the destination,
-then published through an owner-only sibling file and atomic replacement.
-Encoding or publication failure leaves the previous artifact intact.
+then uses the shared CSV writer with platform newline translation disabled.
+Ordinary files use a sibling file and atomic replacement, preserving existing
+permissions and writing through final symlinks; new files use the process umask.
+Parent directories are created, device/pipe destinations are written directly,
+and storage failures use `export_write_failed`. Encoding failure leaves every
+destination untouched; publication failure preserves an ordinary staged file's
+previous artifact.
 
 Core Lightning profitability requires successful channel, forward, payment and
 bookkeeper-income resources. A complete empty window has known zero totals;
