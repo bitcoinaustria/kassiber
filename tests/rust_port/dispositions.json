@@ -10568,6 +10568,22 @@
       }
     },
     "tests/test_http_client.py": {
+      "test_retry_sleep_rechecks_cancellation_within_one_slice": {
+        "disposition": "rust-test",
+        "flags": [],
+        "group": "network-egress",
+        "reason": "calls kassiber.core.sync_control, kassiber.http_client directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_retry_sleep_preserves_delay_and_attempts_with_check": {
+        "disposition": "rust-test",
+        "flags": [],
+        "group": "network-egress",
+        "reason": "calls kassiber.core.sync_control, kassiber.http_client directly",
+        "reviewed": false,
+        "tests": 1
+      },
       "HttpClientTest": {
         "disposition": "rust-test",
         "flags": [
@@ -18571,7 +18587,7 @@
         "reviewed": true,
         "tests": 1
       },
-      "test_freshness_admission_policy_cannot_enable_implicit_journal_refresh": {
+      "test_freshness_admission_honors_disabled_journal_policy": {
         "disposition": "oracle",
         "flags": [
           "sql",
@@ -19551,7 +19567,7 @@
         "reviewed": true,
         "tests": 1
       },
-      "test_product_hybrid_declines_defaults_before_reference_enqueue": {
+      "test_product_hybrid_serves_defaults_without_reference_enqueue": {
         "disposition": "oracle",
         "flags": [
           "mock",
@@ -20020,17 +20036,138 @@
       }
     },
     "tests/test_rust_journal_commands.py": {
-      "test_registered_auto_pair_matches_exact_envelope_complete_book_and_native_route": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_auto_pair_late_failure_retains_only_python_first_commit_and_never_replays_it": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_auto_pair_write_recovery_keeps_exact_reference_commit": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_plain_cli_matches_exact_envelope_and_complete_book": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_plain_scope_refusals_preserve_envelope_and_every_table": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_auto_pair_explicit_scope_overrides_foreign_active_context": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_plain_killed_writer_recovers_every_table": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_plain_fault_rolls_back_every_table_before_replay": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_registered_plain_never_replays_after_a_bootstrap_schema_write": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1},
-      "test_hybrid_refusal_replays_the_last_passphrase_descriptor": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs", "reviewed": true, "tests": 1}
+      "test_registered_auto_pair_matches_exact_envelope_complete_book_and_native_route": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_auto_pair_late_failure_retains_only_python_first_commit_and_never_replays_it": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_auto_pair_write_recovery_keeps_exact_reference_commit": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_plain_cli_matches_exact_envelope_and_complete_book": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_plain_scope_refusals_preserve_envelope_and_every_table": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_auto_pair_explicit_scope_overrides_foreign_active_context": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_plain_killed_writer_recovers_every_table": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_plain_fault_rolls_back_every_table_before_replay": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_registered_plain_never_replays_after_a_bootstrap_schema_write": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_hybrid_refusal_replays_the_last_passphrase_descriptor": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares registered plain and automatic-pairing journal CLI envelopes and complete typed books against Python with bound lifecycle sources, verifies zero-fallback valid routes and scoped refusals, and pins staged-commit recovery and replay authority on both codecs",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_journal_persistence.py": {
       "test_storage_vectors_rebuild_from_python_reference": {
@@ -20149,13 +20286,88 @@
       }
     },
     "tests/test_rust_journal_refresh.py": {
-      "test_refresh_vectors_rebuild_from_the_python_reference": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1},
-      "test_refresh_exact_ordered_results_phases_and_complete_books": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1},
-      "test_plain_process_preserves_the_complete_result_insertion_order": {"disposition": "oracle", "flags": ["subprocess"], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1},
-      "test_refresh_oracle_has_active_pairing_failure_and_commit_witnesses": {"disposition": "oracle", "flags": [], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1},
-      "test_reference_second_rebuild_failure_retains_exact_first_commit": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1},
-      "test_refresh_pairing_faults_at_each_pass_match_reference_books_and_skipped_summary": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1},
-      "test_refresh_recovers_every_write_and_stage_to_python_commit_boundary": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses", "reviewed": true, "tests": 1}
+      "test_refresh_vectors_rebuild_from_the_python_reference": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed"
+        ],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_refresh_exact_ordered_results_phases_and_complete_books": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_plain_process_preserves_the_complete_result_insertion_order": {
+        "disposition": "oracle",
+        "flags": [
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_refresh_oracle_has_active_pairing_failure_and_commit_witnesses": {
+        "disposition": "oracle",
+        "flags": [],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_reference_second_rebuild_failure_retains_exact_first_commit": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed"
+        ],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_refresh_pairing_faults_at_each_pass_match_reference_books_and_skipped_summary": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_refresh_recovers_every_write_and_stage_to_python_commit_boundary": {
+        "disposition": "oracle",
+        "flags": [
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "journals",
+        "reason": "compares unregistered automatic-pairing refresh with Python across complete SQLite/SQLCipher books, ordered result bytes, exact refusals, progress and UUID/clock tapes; retains active pairing, skip-current and two-commit failure witnesses",
+        "reviewed": true,
+        "tests": 1
+      }
     },
     "tests/test_rust_journal_render.py": {
       "test_render_vectors_rebuild_from_python_build": {
@@ -27034,6 +27246,350 @@
         ],
         "group": "journals",
         "reason": "counts every full-process generated operand and verifies durable shard resumption and build-fingerprint refusal through the unregistered native process probe",
+        "reviewed": true,
+        "tests": 1
+      }
+    },
+    "tests/test_freshness_control_projection.py": {
+      "test_source_controls_keep_private_checkpoint_in_database_only": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.freshness, kassiber.db directly",
+        "reviewed": false,
+        "tests": 1
+      }
+    },
+    "tests/test_freshness_prefetch_cancellation.py": {
+      "test_prefetch_stops_requests_after_saved_cancellation": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.db directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_uncancelled_request_counts": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.daemon_freshness, kassiber.db directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_isolated_freshness_uses_owner_thread": {
+        "disposition": "rust-test",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.daemon_freshness, kassiber.core.freshness directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_repair_fetch_progress_uses_owner_thread": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.sync, kassiber.db directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_pooled_cancellation_keeps_other_wallet_results": {
+        "disposition": "rust-test",
+        "flags": [
+          "mock",
+          "mock-internal"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.sync_control, kassiber.core.sync_backends directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_descriptor_route_fences_native_steps": {
+        "disposition": "rust-test",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.db, kassiber.daemon_freshness directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_native_cancellation_prevents_connection": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.chain_observer, kassiber.core.sync_control directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_bdk_cancellation_between_header_reads": {
+        "disposition": "rust-test",
+        "flags": [],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.chain_observer, kassiber.core.sync directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_bdk_cancellation_stops_incremental_widening": {
+        "disposition": "rust-test",
+        "flags": [
+          "mock"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.chain_observer, kassiber.core.sync directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_single_wallet_passes_transport_cancellation": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.db, kassiber.cli.handlers directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_negative_balance_repair_passes_transport_cancellation": {
+        "disposition": "rust-test",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.cli.handlers, kassiber.db directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_shared_electrum_checks_cancellation_before_connect": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.db, kassiber.core.freshness directly",
+        "reviewed": false,
+        "tests": 1
+      },
+      "test_direct_electrum_checks_saved_cancellation": {
+        "disposition": "rust-test",
+        "flags": [
+          "sql",
+          "sql-seed"
+        ],
+        "group": "daemon-runtime",
+        "reason": "calls kassiber.core.sync_control, kassiber.db directly",
+        "reviewed": false,
+        "tests": 1
+      }
+    },
+    "tests/test_rust_freshness_journals.py": {
+      "test_default_refresh_envelopes_events_and_all_tables": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_enqueue_and_limit": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_current_after_repeat": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_null_and_explicit_journal_selection": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_consent_fences": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_graph_publication_after_journals": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_workspace_context_and_book_order": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_reviewed_books_and_restarts": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_policy_and_coalesced_pairing": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_journal_refusal_census_and_hybrid_only_replay": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_encrypted_journal_job_and_hybrid_key_handoff": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_journal_job_pairing_and_caller_authority": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
+        "reviewed": true,
+        "tests": 1
+      },
+      "test_default_refresh_slot_and_cancel": {
+        "disposition": "oracle",
+        "flags": [
+          "mock",
+          "mock-internal",
+          "sql",
+          "sql-seed",
+          "subprocess"
+        ],
+        "group": "daemon-runtime",
+        "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback",
         "reviewed": true,
         "tests": 1
       }

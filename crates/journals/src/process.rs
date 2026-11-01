@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 mod ordered;
 mod refresh;
-pub use refresh::{refresh_native, RefreshOptions};
+pub use refresh::{refresh_native, refresh_native_checked, RefreshOptions};
 
 /// The R4-10 seam is mandatory: no default may silently skip repairs or pricing.
 pub trait Prebuild {

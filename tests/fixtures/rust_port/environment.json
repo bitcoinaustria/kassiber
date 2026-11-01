@@ -394,7 +394,7 @@
     ],
     "KASSIBER_VERSION": [
       "kassiber/core/chain_observer/bdk.py:12",
-      "kassiber/core/chain_observer/bdk.py:33"
+      "kassiber/core/chain_observer/bdk.py:34"
     ],
     "LOCALAPPDATA": [
       "kassiber/db.py:72"
@@ -418,10 +418,10 @@
       "kassiber/backends.py:381"
     ],
     "SSL_CERT_FILE": [
-      "kassiber/core/chain_observer/bdk.py:139",
+      "kassiber/core/chain_observer/bdk.py:140",
       "kassiber/core/chain_observer/host_trust.py:5",
       "kassiber/core/chain_observer/host_trust.py:9",
-      "kassiber/core/chain_observer/lwk.py:54",
+      "kassiber/core/chain_observer/lwk.py:55",
       "scripts/kassiber_pyinstaller_entry.py:29",
       "scripts/kassiber_pyinstaller_entry.py:47"
     ],

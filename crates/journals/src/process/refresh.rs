@@ -32,6 +32,32 @@ pub fn refresh_native<'a>(
     journal_progress: &mut impl FnMut(&'static str),
     writes: &mut impl storage::WriteObserver,
 ) -> Result<Committed<'a>, Refusal> {
+    refresh_native_checked(
+        conn,
+        scope,
+        resolve,
+        sources,
+        options,
+        &mut |value| {
+            phase(value);
+            Ok(())
+        },
+        journal_progress,
+        writes,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn refresh_native_checked<'a>(
+    conn: &'a Connection,
+    scope: &Scope<'_>,
+    resolve: impl FnMut(&Connection) -> Result<Value, Refusal>,
+    sources: &impl Sources,
+    options: RefreshOptions,
+    phase: &mut impl FnMut(&'static str) -> Result<(), Refusal>,
+    journal_progress: &mut impl FnMut(&'static str),
+    writes: &mut impl storage::WriteObserver,
+) -> Result<Committed<'a>, Refusal> {
     refresh(
         conn,
         scope.profile_id,
@@ -76,7 +102,11 @@ fn refresh<'a>(
     pair: &mut impl FnMut() -> Result<kassiber_pyjson::Value, Refusal>,
     mut clocks: Clocks<'_>,
     options: RefreshOptions,
-    progress: Progress<'_, impl FnMut(&'static str), impl FnMut(&'static str)>,
+    progress: Progress<
+        '_,
+        impl FnMut(&'static str) -> Result<(), Refusal>,
+        impl FnMut(&'static str),
+    >,
     writes: &mut impl storage::WriteObserver,
 ) -> Result<Committed<'a>, Refusal> {
     require_idle(conn)?;
@@ -103,7 +133,7 @@ fn refresh<'a>(
     let _transaction = Transaction(conn);
     let summary = if options.auto_pair {
         // Freshness phase observers may commit; invoke them only while idle.
-        (progress.phase)("auto_pair");
+        (progress.phase)("auto_pair")?;
         conn.execute_batch("BEGIN IMMEDIATE")?;
         Some(match pair() {
             Ok(summary) => summary,

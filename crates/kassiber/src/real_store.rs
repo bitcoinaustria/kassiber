@@ -1429,6 +1429,14 @@ impl Book for RealBook {
             .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
             .connection_mut();
         let (mut sources, start_time) = sync_sources();
+        let mut journal_handler = journals::Refresh {
+            cancel,
+            consent,
+            context: kassiber_setup::context::snapshot(conn)?,
+            deadline: Instant::now() + Duration::from_secs(900),
+            #[cfg(feature = "test-harness")]
+            test_passphrase: self.db_passphrase.as_ref().map(Secret::expose),
+        };
         plan.execute_native(
             conn,
             options,
@@ -1441,6 +1449,7 @@ impl Book for RealBook {
             start_time,
             env!("CARGO_PKG_VERSION"),
             |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
+            Some(&mut journal_handler),
         )
     }
     fn freshness_control(&mut self, action: &str, args: &Value) -> Result<Value, AppError> {

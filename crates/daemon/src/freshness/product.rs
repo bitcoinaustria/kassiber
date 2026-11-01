@@ -34,17 +34,6 @@ fn valid_id(id: &RequestId) -> bool {
     matches!(id, RequestId::Value(Value::Str(value)) if value.as_str().is_some_and(|v| !v.is_empty()))
 }
 
-fn no_refresh(kind: &str, args: &Value) -> bool {
-    get(
-        args,
-        if kind == "ui.wallets.sync" {
-            "process_journals"
-        } else {
-            "journals"
-        },
-    ) == Some(&Value::Bool(false))
-}
-
 pub(crate) fn args<'a>(
     kind: &str,
     value: Option<&'a Value>,
@@ -191,9 +180,6 @@ pub(crate) fn parse(kind: &str, args: &Value, id: &RequestId) -> Result<Invocati
     if wallets {
         boolean(args, "process_journals", kind, true)?;
     }
-    if !no_refresh(kind, args) {
-        return Err(fallback());
-    }
     if !valid_id(id) {
         return Err(fallback());
     }
@@ -221,8 +207,19 @@ pub(crate) fn parse(kind: &str, args: &Value, id: &RequestId) -> Result<Invocati
                     .filter(|v| !matches!(v, Value::Null))
                     .map(truthy)
             },
-            journals: Some(false),
+            journals: get(
+                args,
+                if wallets {
+                    "process_journals"
+                } else {
+                    "journals"
+                },
+            )
+            .filter(|v| !matches!(v, Value::Null))
+            .map(truthy),
             force_full,
+            auto_pair: wallets || get(args, "auto_pair").is_some_and(truthy),
+            wallets_sync: wallets,
         },
         options: Options {
             run: wallets || get(args, "run").is_none_or(truthy),
@@ -241,7 +238,7 @@ pub(crate) fn supported(
     if daemon.freshness_requests.running() {
         return Err(super::busy());
     }
-    if !valid_id(id) || !raw_args.is_some_and(|args| no_refresh(kind, args)) {
+    if !valid_id(id) {
         return Ok(false);
     }
     let mut selected_args = raw_args.cloned();

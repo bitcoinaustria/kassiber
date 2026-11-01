@@ -166,6 +166,37 @@ pub fn refresh_with_sources<'a>(
     )
 }
 
+pub fn refresh_with_sources_checked<'a>(
+    conn: &'a Connection,
+    selected_profile: &str,
+    sources: &impl Sources,
+    options: process::RefreshOptions,
+    phase: &mut impl FnMut(&'static str) -> Result<(), Refusal>,
+    journal_progress: &mut impl FnMut(&'static str),
+    writes: &mut impl storage::WriteObserver,
+) -> Result<process::Committed<'a>, Refusal> {
+    let selected = kassiber_envelope::s(selected_profile);
+    let workspace_id: String = conn.query_row(
+        "SELECT workspace_id FROM profiles WHERE id=?",
+        [selected_profile],
+        |row| row.get(0),
+    )?;
+    let workspace = kassiber_envelope::s(workspace_id.as_str());
+    process::refresh_native_checked(
+        conn,
+        &kassiber_transfers::Scope {
+            workspace_id: &workspace_id,
+            profile_id: selected_profile,
+        },
+        |conn| profile(conn, Some(&workspace), Some(&selected)),
+        sources,
+        options,
+        phase,
+        journal_progress,
+        writes,
+    )
+}
+
 /// Match the reference's outer exception projection. Refusal details remain
 /// local until the transport applies its ordinary redaction boundary.
 pub fn application_error(refusal: Refusal) -> AppError {

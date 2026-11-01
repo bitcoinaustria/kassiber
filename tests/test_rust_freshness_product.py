@@ -186,20 +186,13 @@ def test_product_sync_reviewed_books(tmp_path, protocol, kind, fixture):
 
 
 @pytest.mark.parametrize("kind", KINDS)
-@pytest.mark.parametrize("shape", ["default-journals", "invalid-default", "null-journals", "rates", "unported", "empty-id", "null-id",
+@pytest.mark.parametrize("shape", ["rates", "unported", "empty-id", "null-id",
                                     "number-id", "boolean-id", "array-id", "object-id", "surrogate-id", "missing-id"])
 def test_product_selection_refuses_whole_invocation_without_effects(tmp_path, kind, shape):
     config, chain, _ = _fixture("empty")
     roots, books = _books(tmp_path, config)
     args, identity = arguments(kind), "sync"
-    journal_key = "process_journals" if kind == KINDS[0] else "journals"
-    if shape in {"default-journals", "invalid-default"}:
-        args.pop(journal_key)
-        if shape == "invalid-default":
-            args["workspace_id" if kind == KINDS[2] else "wallet"] = False
-    elif shape == "null-journals":
-        args[journal_key] = None
-    elif shape == "rates":
+    if shape == "rates":
         if kind != KINDS[0]:
             args["rates"] = True
             with connect(books[1]) as conn:
@@ -328,7 +321,7 @@ def test_product_enqueue_only_and_run_limit(tmp_path, kind, run):
 
 
 @pytest.mark.parametrize("kind", KINDS[1:])
-def test_product_hybrid_declines_defaults_before_reference_enqueue(tmp_path, kind):
+def test_product_hybrid_serves_defaults_without_reference_enqueue(tmp_path, kind):
     config, chain, _ = _fixture("empty")
     roots, books = _books(tmp_path, config)
     args = arguments(kind, run=False)
@@ -340,9 +333,10 @@ def test_product_hybrid_declines_defaults_before_reference_enqueue(tmp_path, kin
             session.send("status", "open")
             assert session.until("open")["kind"] == "status"
             served_by, _, actual = candidate(session, books[1], rt, kind, args, chain=chain)
-            assert served_by == "python"
+            assert served_by == "rust"
+            actual = [row for row in session.rows if row.get("request_id") == "sync"]
             assert actual == expected
-            assert session.served == [{"command": kind, "served_by": "python"}]
+            assert session.served == [{"command": kind, "served_by": "rust"}]
             assert dump_bytes(books[1]) == dump_bytes(books[0])
             assert chain.hits == []
             session.finish()

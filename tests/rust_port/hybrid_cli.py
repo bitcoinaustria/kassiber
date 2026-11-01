@@ -211,6 +211,14 @@ def main() -> None:
             sys.stdout.buffer.write(result.stdout)
             sys.stderr.buffer.write(result.stderr)
             raise SystemExit(result.returncode)
+        if command == "daemon":
+            # Only this development launcher enables per-job reference replay.
+            # Production builds contain no Python journal bridge.
+            from pathlib import Path
+            os.environ["KASSIBER_RUST_TEST_JOURNAL_PYTHON"] = sys.executable
+            os.environ["KASSIBER_RUST_TEST_JOURNAL_REFERENCE"] = str(
+                Path(__file__).with_name("journal_job_reference.py").resolve()
+            )
         os.execv(rust, [rust, *args])
     # Match the native test build's disposable ownership namespace. Python's
     # production namespace deliberately uses the UID account home, not HOME.

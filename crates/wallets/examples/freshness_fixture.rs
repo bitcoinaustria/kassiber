@@ -220,6 +220,8 @@ fn main() {
                         rates: flag("rates"),
                         journals: flag("journals"),
                         force_full: flag("force_full").unwrap_or(false),
+                        auto_pair: flag("auto_pair").unwrap_or(false),
+                        wallets_sync: false,
                     };
                     let backend = || {
                         serde_json::from_str(

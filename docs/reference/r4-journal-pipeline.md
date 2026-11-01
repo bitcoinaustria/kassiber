@@ -425,6 +425,9 @@ byte parity; its CPU ceilings remain the stage acceptance targets.
 | R4-13 | CLI `journals process` and daemon `ui.journals.process` without automatic pairing in the binary; progress phases; hybrid routing | — | End-to-end targets below |
 | R4-14 | Automatic pairing (transfer suggestions, rules, bulk exact) for `--auto-pair` and the desktop path (decision 3: ported in R4) | Python 3.44 / 4.74 | 10× Python |
 | R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust | — | Parity with the daemon smoke sessions |
+
+<!-- inherited from refresh@dfeaf1533; pending r10 verification -->
+| R4-15 | Freshness `journal_refresh` job and the daemon's single execution slot in Rust; [integration checkpoint and refusal census](r4-journal-freshness-checkpoint.md) | — | Parity with the daemon smoke sessions |
 | R4-16 | Authority switch (below) | — | All gates and budgets |
 
 The owner accepts borrowed read floor + 0.15 process CPU seconds for unchanged
@@ -2124,10 +2127,12 @@ and fusion-input increases before claiming R4-7/R4-8 acceptance.
 
 ### What switches
 
-- In the Rust binary, `journals process` stops answering `not_implemented`,
-  and `commands describe` lists it. There is no Python fallback: a Rust
-  refusal is the command's answer. The daemon kinds and the freshness journal
-  job switch with it (R4-13 to R4-15).
+- The registered Rust CLI and daemon journal paths become production authority
+  only after these gates pass. R4-13/R4-15 registration supports development
+  hybrid verification before the switch. Production Rust builds have no Python
+  bridge: a native refusal is the answer. Development hybrid replay requires
+  proof of unchanged durable state and records every refusal shape for the
+  lossless follow-up.
 - The Python product is not changed. The desktop keeps the Python sidecar
   until the R7 cutover, so users get the speed-up at cutover. Decision 1
   rules out an early path through PyO3.

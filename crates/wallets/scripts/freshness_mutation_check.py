@@ -20,7 +20,7 @@ class Runner(BaseRunner):
     def outcome(self, runner, test):
         lifecycle = "test_rust_freshness_lifecycle.py" in test
         graph = "test_rust_freshness_graph.py" in test
-        product = "test_rust_freshness_product.py" in test
+        product = any(name in test for name in ("test_rust_freshness_product.py", "test_rust_freshness_journals.py"))
         if not lifecycle and not product:
             build = checker._run(
                 ["cargo", "build", "--offline", "--locked", "-p", "kassiber-wallets", "--features", "test-harness",

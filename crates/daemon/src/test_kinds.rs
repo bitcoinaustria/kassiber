@@ -128,6 +128,8 @@ pub(crate) fn handle(
                     rates: flag("rates"),
                     journals: flag("journals"),
                     force_full: flag("force_full").unwrap_or(false),
+                    auto_pair: flag("auto_pair").unwrap_or(false),
+                    wallets_sync: false,
                 };
                 if kind != "test.freshness.plan" {
                     daemon.start_freshness(

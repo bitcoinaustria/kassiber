@@ -117,6 +117,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_rust_freshness_lifecycle",
         "test_rust_freshness_graph",
         "test_rust_freshness_product",
+        "test_rust_freshness_journals",
     }
 )
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})

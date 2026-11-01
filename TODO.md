@@ -745,6 +745,11 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   desktop, AI and freshness journal routes retain Python.
 - [ ] R4-13, R4-15 and R4-16: CLI and daemon journal commands, integration of
   automatic pairing, the freshness journal job and the authority switch.
+
+<!-- inherited from refresh@dfeaf1533; pending r10 verification -->
+  reaches 13.02× / 11.75× Python at 20k. Pairing journal routes remain Python.
+- [ ] R4-13 and R4-16: CLI and daemon journal commands, integration of
+  automatic pairing and the authority switch.
   R4-13's [composition checkpoint](docs/reference/r4-journal-process-checkpoint.md)
   wires native load through persistence, ordered progress and outer rollback.
   The continuation imports cached pricing, R4-14 pairing and renderer boundary
@@ -786,6 +791,16 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   compatibility. Full lossless builder/joins/persistence handoff remains open;
   its stage integration checkpoint does not register any journal route or
   recertify the earlier complete-process campaigns.
+- [x] R4-15: bind the freshness journal handler and post-wallet local refresh
+  through the shared native service, holding the foreground execution slot
+  throughout. Default desktop sync/freshness routing matches Python on both
+  loopback protocols, including pairing authority, cancellation and lifecycle
+  retirement. Python cancellation rounds 7/7b and interruptible native backoff
+  share the same fences. See the [integration checkpoint and refusal census](docs/reference/r4-journal-freshness-checkpoint.md).
+  Python retains production authority until R4-16. Production Rust returns its
+  refusal; only development hybrid replay can use Python after proven rollback.
+  Lossless refusal closure, inherited campaigns and timing acceptance remain
+  on the R4-13/R4-16 tracks.
 
 <!-- inherited from render@f1712c625; pending r10 verification -->
   ownership graph consumption is completed by the
@@ -853,8 +868,9 @@ Python.
   Retain readiness barriers rather than reading stale journals; see the
   [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
   The [R4-14 pairing library](docs/reference/rust-pairing.md) now supplies the
-  matcher/rules/bulk implementation and its oracle/mutation evidence; R4-13 and
-  R4-15 still need to integrate its atomic journal boundary for journal processing.
+  matcher/rules/bulk implementation and its oracle/mutation evidence. R4-15 now
+  binds its atomic journal boundary for freshness; standalone desktop/scoped-AI
+  journal registration remains on R4-13.
 
 ## Accounting correctness and custody
 

@@ -25,7 +25,9 @@ impl From<rusqlite::Error> for Refusal {
                 ffi::SQLITE_CORRUPT | ffi::SQLITE_NOTADB | ffi::SQLITE_AUTH => "DatabaseError",
                 _ => "OperationalError",
             };
-            return Self::new(family, message);
+            let mut refusal = Self::new(family, message);
+            refusal.sqlite_code = Some(code.extended_code);
+            return refusal;
         }
         Self::new("DatabaseError", e.to_string())
     }

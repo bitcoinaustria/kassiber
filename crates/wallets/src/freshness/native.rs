@@ -50,7 +50,7 @@ impl Consent {
             }
         }
     }
-    fn check(&self) -> Result<()> {
+    pub fn check(&self) -> Result<()> {
         if self.revoked.load(Ordering::SeqCst) {
             return Err(AppError::new(
                 "interaction_required",
@@ -174,6 +174,9 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             .zip(&plan.captured.wallets)
         {
             for spec in specs {
+                if field(spec, "job_type") != &s("onchain_wallet_history") {
+                    continue;
+                }
                 let id = or_text(field(field(spec, "payload"), "wallet_id"));
                 let row = wallets
                     .iter()

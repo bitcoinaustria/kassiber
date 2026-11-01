@@ -1,5 +1,5 @@
 use super::{field, or_text, redact};
-use kassiber_envelope::{get, redaction::redact_operational_text, s, truthy};
+use kassiber_envelope::{dict, get, redaction::redact_operational_text, s, truthy};
 use kassiber_pyjson::{Key, PyStr, Value};
 use regex::Regex;
 use std::sync::OnceLock;
@@ -83,6 +83,114 @@ fn error_rows(value: &Value) -> bool {
 
 pub fn payload(value: &Value) -> Value {
     sync(&redact(value))
+}
+
+pub fn journal_step_summary(enqueued: &[Value], completed: &[Value]) -> Value {
+    let mut result = dict([
+        ("status", s("skipped")),
+        ("rebuilt", Value::Bool(false)),
+        ("quarantines", Value::Null),
+        ("auto_pair_applied", Value::from(0)),
+        ("error", Value::Null),
+    ]);
+    let journal = |job: &&Value| field(job, "job_type") == &s("journal_refresh");
+    let Some(job) = completed.iter().rev().find(journal) else {
+        if enqueued
+            .iter()
+            .any(|job| field(job, "job_type") == &s("journal_refresh"))
+        {
+            super::put(&mut result, "status", s("deferred"));
+        }
+        return result;
+    };
+    let status = field(job, "status");
+    if status == &s("done") {
+        let data = field(job, "result");
+        let pairs = field(data, "auto_pair");
+        let rebuilt = get(data, "rebuilt").is_none_or(truthy);
+        for (key, value) in [
+            ("status", s(if rebuilt { "processed" } else { "current" })),
+            ("rebuilt", Value::Bool(rebuilt)),
+            (
+                "quarantines",
+                match field(data, "quarantined") {
+                    value @ Value::Int(_) => value.clone(),
+                    Value::Bool(value) => Value::from(i64::from(*value)),
+                    _ => Value::Null,
+                },
+            ),
+            (
+                "auto_pair_applied",
+                Value::from(super::integer(field(pairs, "applied")).unwrap_or(0)),
+            ),
+        ] {
+            super::put(&mut result, key, value);
+        }
+        if truthy(field(pairs, "skipped")) {
+            super::put(&mut result, "auto_pair_skipped", Value::Bool(true));
+            let error = field(pairs, "error");
+            super::put(
+                &mut result,
+                "error",
+                dict([
+                    (
+                        "code",
+                        if truthy(field(error, "code")) {
+                            field(error, "code").clone()
+                        } else {
+                            s("auto_pair_failed")
+                        },
+                    ),
+                    (
+                        "message",
+                        if truthy(field(error, "message")) {
+                            field(error, "message").clone()
+                        } else {
+                            s("Automatic pairing was skipped; journals were still processed.")
+                        },
+                    ),
+                ]),
+            );
+        }
+    } else if [s("queued"), s("rate_limited")].contains(status) {
+        super::put(&mut result, "status", s("deferred"));
+    } else {
+        super::put(
+            &mut result,
+            "status",
+            s(if status == &s("cancelled") {
+                "cancelled"
+            } else {
+                "failed"
+            }),
+        );
+        let error = field(job, "error");
+        super::put(
+            &mut result,
+            "error",
+            dict([
+                (
+                    "code",
+                    if truthy(field(error, "code")) {
+                        field(error, "code").clone()
+                    } else if truthy(status) {
+                        status.clone()
+                    } else {
+                        s("journal_refresh_failed")
+                    },
+                ),
+                (
+                    "message",
+                    if truthy(field(error, "message")) {
+                        field(error, "message").clone()
+                    } else {
+                        s("Journal processing did not finish.")
+                    },
+                ),
+            ]),
+        );
+    }
+    result
 }
 
 pub fn results(jobs: &[Value]) -> Vec<Value> {

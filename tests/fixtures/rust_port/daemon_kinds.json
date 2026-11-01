@@ -1705,59 +1705,59 @@
       "kind": "ui.freshness.background"
     },
     {
-      "at": "kassiber/daemon_freshness.py:1868",
+      "at": "kassiber/daemon_freshness.py:1874",
       "classification": "event",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon_freshness.py:1901",
+      "at": "kassiber/daemon_freshness.py:1907",
       "classification": "event",
       "kind": "ui.freshness.progress"
     },
     {
-      "at": "kassiber/daemon_freshness.py:1915",
+      "at": "kassiber/daemon_freshness.py:1921",
       "classification": "event",
       "kind": "ui.freshness.background"
     },
     {
-      "at": "kassiber/daemon_freshness.py:1970",
+      "at": "kassiber/daemon_freshness.py:1976",
       "classification": "event",
       "kind": "ui.freshness.worker"
     },
     {
-      "at": "kassiber/daemon_freshness.py:1984",
+      "at": "kassiber/daemon_freshness.py:1990",
       "classification": "event",
       "kind": "ui.freshness.worker"
     },
     {
-      "at": "kassiber/daemon_freshness.py:2020",
+      "at": "kassiber/daemon_freshness.py:2026",
       "classification": "event",
       "kind": "ui.freshness.worker"
     },
     {
-      "at": "kassiber/daemon_freshness.py:2842",
+      "at": "kassiber/daemon_freshness.py:2848",
       "classification": "terminal",
       "kind": "ui.wallets.sync"
     },
     {
-      "at": "kassiber/daemon_freshness.py:2847",
+      "at": "kassiber/daemon_freshness.py:2853",
       "classification": "terminal",
       "kind": "ui.journals.process"
     },
     {
-      "at": "kassiber/daemon_freshness.py:2889",
+      "at": "kassiber/daemon_freshness.py:2895",
       "classification": "terminal",
       "kind": "ui.wallets.sync"
     },
     {
-      "at": "kassiber/daemon_freshness.py:2894",
+      "at": "kassiber/daemon_freshness.py:2900",
       "classification": "terminal",
       "kind": "ui.wallets.sync"
     },
     {
-      "at": "kassiber/daemon_freshness.py:2897",
+      "at": "kassiber/daemon_freshness.py:2903",
       "classification": "terminal",
       "kind": "ui.journals.process"
     },

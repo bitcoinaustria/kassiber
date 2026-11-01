@@ -14,6 +14,65 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static EXECUTING: AtomicBool = AtomicBool::new(false);
 
+struct Combined<'a, N> {
+    native: N,
+    journals: Option<&'a mut dyn execution::Handler>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execution_slot_excludes_competing_threads_and_releases_on_unwind() {
+        let slot = Execution::acquire().unwrap();
+        let error = std::thread::spawn(|| Execution::acquire().err().unwrap())
+            .join()
+            .unwrap();
+        assert_eq!(error.code, "project_operation_in_progress");
+        assert!(error.retryable);
+        drop(slot);
+        let outcome = std::panic::catch_unwind(|| {
+            let _slot = Execution::acquire().unwrap();
+            panic!("synthetic slot unwind");
+        });
+        assert!(outcome.is_err());
+        let _slot = Execution::acquire().unwrap();
+    }
+}
+
+impl<N: execution::Handler> execution::Handler for Combined<'_, N> {
+    fn supports(&self, kind: &str) -> bool {
+        self.native.supports(kind)
+            || self
+                .journals
+                .as_ref()
+                .is_some_and(|handler| handler.supports(kind))
+    }
+    fn prefetch(
+        &mut self,
+        conn: &Connection,
+        jobs: &[Value],
+        observer: &mut dyn FnMut(&Value) -> Result<()>,
+    ) -> Result<()> {
+        self.native.prefetch(conn, jobs, observer)
+    }
+    fn run(
+        &mut self,
+        conn: &mut Connection,
+        job: &Value,
+        progress: &mut execution::Progress<'_>,
+    ) -> std::result::Result<Value, execution::Failure> {
+        if self.native.supports(&or_text(field(job, "job_type"))) {
+            self.native.run(conn, job, progress)
+        } else if let Some(handler) = self.journals.as_mut() {
+            handler.run(conn, job, progress)
+        } else {
+            Err(AppError::new("config_error", "Journal refresh is unavailable").into())
+        }
+    }
+}
+
 struct Execution;
 impl Execution {
     fn acquire() -> Result<Self> {
@@ -49,6 +108,8 @@ pub struct Request {
     pub rates: Option<bool>,
     pub journals: Option<bool>,
     pub force_full: bool,
+    pub auto_pair: bool,
+    pub wallets_sync: bool,
 }
 
 #[derive(PartialEq)]
@@ -109,8 +170,8 @@ fn capture(conn: &Connection, request: &Request) -> Result<Captured> {
             &sources::Options {
                 wallet: request.wallet.clone(),
                 rates: included(request.rates, "market_rates"),
-                journals: included(request.journals, "journals"),
-                auto_pair: false,
+                journals: !request.wallets_sync && included(request.journals, "journals"),
+                auto_pair: request.auto_pair,
                 force_full: request.force_full,
             },
         )?;
@@ -157,9 +218,6 @@ impl Plan {
                 "Freshness admission must start outside a transaction",
             ));
         }
-        if request.journals != Some(false) {
-            return Err(fallback("freshness_journal_refresh"));
-        }
         if request
             .wallet
             .as_deref()
@@ -179,7 +237,9 @@ impl Plan {
             .zip(&captured.wallets)
         {
             for spec in specs {
-                if field(spec, "job_type") != &s("onchain_wallet_history") {
+                if ![s("onchain_wallet_history"), s("journal_refresh")]
+                    .contains(field(spec, "job_type"))
+                {
                     return Err(fallback("freshness_source"));
                 }
             }
@@ -376,7 +436,7 @@ impl Plan {
                 .iter()
                 .map(|job| or_text(field(job, "id")))
                 .collect::<Vec<_>>();
-            let completed = if options.run {
+            let mut completed = if options.run {
                 let selected = if workspace.is_none() {
                     Queue::new(conn, sources).requested_due(&id, &ids, limit)?
                 } else {
@@ -401,7 +461,66 @@ impl Plan {
             } else {
                 vec![]
             };
+            let mut journals = None;
+            if self.request.wallets_sync && self.request.journals != Some(false) {
+                let policy = Queue::new(conn, sources).policy(&id)?;
+                if truthy(field(field(&policy, "source_classes"), "journals")) {
+                    let mut payload = dict([("skip_rebuild_when_current", Value::Bool(true))]);
+                    if self.request.auto_pair {
+                        put(&mut payload, "auto_pair", Value::Bool(true));
+                    }
+                    let mut input = sources::journal(&id, payload);
+                    put(&mut input, "profile_id", s(id.as_str()));
+                    execution::begin(conn)?;
+                    let job = Queue::new(conn, sources).enqueue(&input)?;
+                    execution::commit(conn)?;
+                    let local = if truthy(field(&job, "job_type")) {
+                        vec![job]
+                    } else {
+                        vec![]
+                    };
+                    let ids = local
+                        .iter()
+                        .map(|job| or_text(field(job, "id")))
+                        .collect::<Vec<_>>();
+                    let selected = Queue::new(conn, sources).requested_due(&id, &ids, 1)?;
+                    let done = execution::run_requested(
+                        conn,
+                        &id,
+                        &selected
+                            .iter()
+                            .map(|job| or_text(field(job, "id")))
+                            .collect::<Vec<_>>(),
+                        1,
+                        sources,
+                        handler,
+                        &mut |event| observer(&ui::payload(event)),
+                        clock,
+                    )?;
+                    journals = Some(ui::journal_step_summary(&local, &done));
+                    enqueued.extend(local);
+                    completed.extend(done);
+                } else {
+                    let mut summary = ui::journal_step_summary(&[], &[]);
+                    put(&mut summary, "status", s("disabled"));
+                    journals = Some(summary);
+                }
+            } else if workspace.is_none() {
+                if specs
+                    .iter()
+                    .any(|spec| field(spec, "job_type") == &s("journal_refresh"))
+                {
+                    journals = Some(ui::journal_step_summary(&enqueued, &completed));
+                } else if self.request.journals == Some(true) {
+                    let mut summary = ui::journal_step_summary(&[], &[]);
+                    put(&mut summary, "status", s("disabled"));
+                    journals = Some(summary);
+                }
+            }
             let mut result = Queue::new(conn, sources).snapshot(&id)?;
+            if let Some(journals) = journals {
+                put(&mut result, "journals", journals);
+            }
             let blocked =
                 super::integer(field(field(&result, "summary"), "blocking_reports"))? as usize;
             let cooling =
@@ -494,12 +613,33 @@ impl Plan {
         start_time: u64,
         version: &str,
         mut backend: impl FnMut(&Connection, &str) -> Result<Json>,
+        journals: Option<&mut dyn execution::Handler>,
     ) -> Result<Value> {
         cancel.check(deadline)?;
         self.validate(conn, &mut backend)?;
+        let needs_journals = self
+            .captured
+            .specs
+            .iter()
+            .flatten()
+            .any(|spec| field(spec, "job_type") == &s("journal_refresh"))
+            || self.request.wallets_sync
+                && self.request.journals != Some(false)
+                && self
+                    .captured
+                    .policies
+                    .iter()
+                    .any(|policy| truthy(field(field(policy, "source_classes"), "journals")));
+        if needs_journals
+            && !journals
+                .as_ref()
+                .is_some_and(|handler| handler.supports("journal_refresh"))
+        {
+            return Err(fallback("freshness_journal_refresh"));
+        }
         let proof = super::native::Consent::consume(consent, &self)?;
         let resolver = std::cell::RefCell::new(&mut backend);
-        let mut handler = super::native::Native::new(
+        let native = super::native::Native::new(
             &self,
             conn,
             proof,
@@ -510,6 +650,7 @@ impl Plan {
             version,
             |conn, name| resolver.borrow_mut()(conn, name),
         )?;
+        let mut handler = Combined { native, journals };
         let result = self.execute(
             conn,
             options,

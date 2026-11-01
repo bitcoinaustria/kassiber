@@ -380,11 +380,6 @@ fn the_probe_reports_implementation_without_running_the_command() {
             "diagnostics.collect",
         ),
         (&["--machine", "wallets", "sync"][..], 0, "wallets.sync"),
-        (
-            &["--machine", "journals", "process"][..],
-            PROBE_NOT_IMPLEMENTED,
-            "journals.process",
-        ),
     ] {
         let (code, out, err) = invoke(Arc::new(StubStore), &probe, argv);
         assert_eq!(code, expected, "{argv:?}");

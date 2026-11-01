@@ -10249,8 +10249,8 @@ The guarded product-lifecycle seam exercises automatic startup without the
 explicit graph-start kind. Source-control proof now covers the originating
 wallet and graph sources on both protocols: pause/resume, graph cancellation,
 and the reference's no-op cancellation of an already completed wallet job.
-Control envelopes and every logical table match the reference, retaining the
-recorded checkpoint-redaction exception. Existing cancellation, consent,
+Control envelopes and every logical table match the reference. Python now
+shares checkpoint redaction after the cancellation fixes. Existing cancellation, consent,
 restart, output-closure and SQLCipher fences remain in place.
 
 This boundary registers no product route. Product argument/request-ID
@@ -11308,3 +11308,30 @@ services, public CLI/daemon wiring and registration, product wire/CSV/all-112-
 table comparisons, zero-fallback counts and service/transport mutation kills
 remain required. Node-snapshot/backend-test routes and AI projections retain
 their separately scoped deferrals.
+
+<!-- inherited from refresh@dfeaf1533; pending r10 verification -->
+## Journal freshness integration (R4-15)
+
+The [R4-15 checkpoint](r4-journal-freshness-checkpoint.md) now connects that
+handoff to the shared native journals service on the request worker's
+connection. Default journal refresh is admitted for the three product routes;
+wallet sync retains its separate skip-current/automatic-pairing follow-up.
+Journal jobs share the foreground slot and request retirement fences with
+wallet jobs. Production builds have no Python bridge. Development hybrid
+replay is per journal job, requires exact rollback and records every refusal
+shape for the lossless follow-up. Python retains production authority until
+R4-16. The earlier explicit-opt-out restriction describes the sync-22 boundary.
+
+Python cancellation rounds 7/7b are integrated on this line, including the
+owning-thread prefetch checks, checkpoint redaction, SDK-step fences and
+interruptible backoff. Native HTTP backoff is interruptible too. Cancellation
+and control-response comparisons now require exact parity without a privacy
+exception.
+
+The integration passes 468 affected Rust tests, 522 inherited regression cases
+and all 114 new journal freshness cases across focused runs. Complete-book
+product witnesses retain 117 default-refresh and 327 inherited native round
+trips with zero served-shape fallbacks. Eleven touched mutations are killed;
+formatting, production/harness clippy and all 57 required preflight checks pass.
+The inventory records 5,979 definitions. The checkpoint above records the
+refusal census, encrypted replay/cancellation proof and the unrun broader gates.

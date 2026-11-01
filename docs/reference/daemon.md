@@ -795,15 +795,19 @@ retries, pauses, resumes, and cancels jobs, but it never performs network sync
 itself. Persistent state lives in SQLite under `freshness_jobs` and
 `freshness_source_states`.
 
-The Rust daemon registers the supported Bitcoin no-refresh variants of
-`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`.
-Wallet sync requires explicit `process_journals:false`; the freshness kinds
-require explicit `journals:false`. Successful native executions require a
+The Rust daemon registers the supported Bitcoin variants of
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`, including
+their default local journal refresh. Successful native executions require a
 nonempty UTF-8 string request ID and a fully supported source selection.
 Enabled unported rate sources, unsupported wallet/backend shapes and wallet
 sync's separate direct-sync cases remain on Python in the test hybrid candidate.
-Defaults still require native journal processing from R4-13. A direct native
-unsupported invocation refuses before consent and never retries through Python.
+A direct native unsupported invocation refuses before consent. Production
+builds return native journal refusals without starting Python. Only the
+development hybrid launcher enables individual journal replay, after exact
+durable-file comparison proves rollback. A committed stale-first rebuild
+prevents replay. The [R4-15 checkpoint](r4-journal-freshness-checkpoint.md)
+records that contract and the refusal census. Python retains production
+authority until R4-16.
 The guarded candidate selector only reads an already opened book; it neither
 opens nor migrates a database, changes queue state nor contacts a backend.
 

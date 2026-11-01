@@ -48,6 +48,7 @@ REVIEWS = {
         },
     },
     "tests/test_rust_freshness_product.py": {"*": {"disposition": "oracle", "group": "daemon-runtime", "reason": "compares registered no-refresh product envelopes, event sequences and every logical table with Python across disposable Electrum/Esplora fixture, restart and reviewed books; pins per-invocation hybrid decisions, zero served-shape fallbacks, argument validation and inert/busy selection"}},
+    "tests/test_rust_freshness_journals.py": {"*": {"disposition": "oracle", "group": "daemon-runtime", "reason": "compares default journal-refresh product events, envelopes and every logical table with Python on disposable loopback books, including pairing authority, policy, workspace order and reviewed restarts; records native refusals and restricts development replay to proven rollback"}},
     "tests/test_rust_freshness_graph.py": {
         "*": {"disposition": "rust-test", "group": "daemon-runtime", "reason": "drives the guarded connection-owning graph worker on disposable loopback books to pin grant, request, lifecycle, output and SQLCipher fences and unsolicited redacted events; preserves subprocess witnesses without claiming automatic startup or product registration"},
         "test_reference_electrum_mismatched_transaction_repro_and_native_refusal": {"disposition": "oracle", "group": "daemon-runtime", "reason": "reproduces Python caching different Electrum transaction bytes under the requested ID and pins native computed-ID refusal; retains the reference bug without changing Python or claiming product parity"},

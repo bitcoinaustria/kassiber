@@ -191,16 +191,20 @@ pub fn build(conn: &Connection, profile: &str, options: &Options) -> Result<Vec<
         } else {
             dict::<&str>([])
         };
-        specs.push(spec(
-            "journal_refresh",
-            "journals",
-            format!("journals:{profile}"),
-            "Journal refresh".into(),
-            payload,
-            80,
-        ));
+        specs.push(journal(profile, payload));
     }
     Ok(specs)
+}
+
+pub(super) fn journal(profile: &str, payload: Value) -> Value {
+    spec(
+        "journal_refresh",
+        "journals",
+        format!("journals:{profile}"),
+        "Journal refresh".into(),
+        payload,
+        80,
+    )
 }
 
 pub fn filter_by_policy(specs: Vec<Value>, policy: &Value, force: bool) -> Vec<Value> {

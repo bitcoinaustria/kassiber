@@ -144,11 +144,11 @@ def test_freshness_admission_workspace_order_is_inert(tmp_path):
     assert dump_bytes(book) == before
 
 
-def test_freshness_admission_policy_cannot_enable_implicit_journal_refresh(tmp_path):
+def test_freshness_admission_honors_disabled_journal_policy(tmp_path):
     book = _book(tmp_path, sql="INSERT INTO settings VALUES('freshness.policy.profile.p','{\"source_classes\":{\"journals\":false}}');")
     before = dump_bytes(book)
     actual = _invoke(tmp_path, book, [op("plan", backend=backend()), plan_op()])
-    assert actual[0]["error"]["details"]["reason"] == "freshness_journal_refresh"
+    assert actual[0]["kind"] == "plan"
     assert actual[1]["kind"] == "plan"
     assert dump_bytes(book) == before
 
@@ -201,8 +201,6 @@ def test_freshness_admission_validation_is_not_capability_fallback(tmp_path, arg
 
 
 @pytest.mark.parametrize("config,extra_sql,args,reason", [
-    (None, "", {}, None),
-    (None, "", {"journals": True}, "freshness_journal_refresh"),
     ({"addresses": ["one"]}, "", {"journals": False}, "wallet_route"),
     ({"sync_source": "btcpay", "backend": "merchant", "store_id": "store"}, "", {"journals": False}, "freshness_source"),
     (None, "INSERT INTO settings VALUES('freshness.policy.profile.p','{\"source_classes\":{\"market_rates\":true}}');", {"journals": False}, "freshness_source"),
@@ -241,7 +239,8 @@ def test_freshness_admission_mixed_workspace_refuses_before_recovery(tmp_path):
 def test_freshness_admission_execution_slot_released_after_refusal_and_drop(tmp_path):
     book = _book(tmp_path)
     before = dump_bytes(book)
-    result = _invoke(tmp_path, book, [plan_op("plan_busy"), plan_op(), op("plan"), plan_op()])
+    result = _invoke(tmp_path, book, [plan_op("plan_busy"), plan_op(),
+        op("plan", backend=backend("bitcoinrpc")), plan_op()])
     assert result[0] == build_error_envelope("project_operation_in_progress", "Another refresh is still running",
                                            hint="Wait for the current refresh to finish, then retry.", retryable=True)
     assert [r["kind"] for r in result] == ["error", "plan", "error", "plan"]

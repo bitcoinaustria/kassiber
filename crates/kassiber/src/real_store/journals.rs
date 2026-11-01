@@ -73,7 +73,7 @@ pub(super) fn process<'a>(
 }
 
 #[cfg(feature = "test-harness")]
-struct Sources;
+pub(super) struct Sources;
 #[cfg(feature = "test-harness")]
 impl kassiber_transfers::Sources for Sources {
     fn uuid(&self, conn: &Connection) -> Result<String, kassiber_envelope::AppError> {
@@ -126,3 +126,174 @@ impl kassiber_journals::storage::WriteObserver for Writes<'_> {
         Ok(())
     }
 }
+
+#[cfg(feature = "test-harness")]
+struct RefreshWrites<'a> {
+    writes: Writes<'a>,
+    committed: &'a std::cell::Cell<bool>,
+}
+#[cfg(feature = "test-harness")]
+impl kassiber_journals::storage::WriteObserver for RefreshWrites<'_> {
+    fn wrote(&mut self, table: &'static str) -> kassiber_store::rusqlite::Result<()> {
+        if self.committed.get()
+            && std::env::var("KASSIBER_RUST_TEST_JOURNAL_FAIL_SECOND_BUILD").as_deref() == Ok("1")
+        {
+            return Err(kassiber_store::rusqlite::Error::ExecuteReturnedResults);
+        }
+        self.writes.wrote(table)
+    }
+}
+
+pub(super) struct Refresh<'a> {
+    pub cancel: &'a kassiber_wallets::scan::Cancellation,
+    pub consent: Option<&'a kassiber_wallets::freshness::native::Consent>,
+    pub context: Value,
+    pub deadline: std::time::Instant,
+    #[cfg(feature = "test-harness")]
+    pub test_passphrase: Option<&'a str>,
+}
+
+impl Refresh<'_> {
+    fn check(&self, conn: &Connection) -> Result<(), kassiber_envelope::AppError> {
+        kassiber_wallets::scan::Control::check(self.cancel, self.deadline)?;
+        if let Some(consent) = self.consent {
+            consent.check()?;
+        }
+        if kassiber_setup::context::snapshot(conn)? != self.context {
+            return Err(kassiber_envelope::AppError::new(
+                "stale_context",
+                "Freshness selection changed",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
+    fn supports(&self, kind: &str) -> bool {
+        kind == "journal_refresh"
+    }
+
+    fn run(
+        &mut self,
+        conn: &mut Connection,
+        job: &Value,
+        progress: &mut kassiber_wallets::freshness::execution::Progress<'_>,
+    ) -> Result<Value, kassiber_wallets::freshness::execution::Failure> {
+        use kassiber_envelope::{dict, get, py_str, s, set, truthy};
+        use kassiber_wallets::freshness::execution::Failure;
+        self.check(conn)?;
+        progress.emit(conn, &dict([("phase", s("journal_refresh"))]))?;
+        self.check(conn)?;
+        #[cfg(feature = "test-harness")]
+        if let Ok(wait) = std::env::var("KASSIBER_RUST_TEST_JOURNAL_WAIT_MS") {
+            let until = std::time::Instant::now()
+                + std::time::Duration::from_millis(wait.parse::<u64>().unwrap_or(0).min(5000));
+            while std::time::Instant::now() < until {
+                self.check(conn)?;
+                progress.check(conn)?;
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+        let payload = get(job, "payload").unwrap_or(&Value::Null);
+        let profile = py_str(get(job, "profile_id").unwrap_or(&Value::Null));
+        #[cfg(feature = "test-harness")]
+        let sources = Sources;
+        #[cfg(not(feature = "test-harness"))]
+        let sources = kassiber_transfers::SystemSources;
+        #[cfg(feature = "test-harness")]
+        let guard = kassiber_journals::service::ReplayGuard::capture(conn);
+        let last_phase = std::cell::Cell::new("admission");
+        let paired_phase = std::cell::Cell::new(false);
+        #[cfg(feature = "test-harness")]
+        let committed = std::cell::Cell::new(false);
+        #[cfg(feature = "test-harness")]
+        let mut writes = RefreshWrites {
+            writes: Writes(0),
+            committed: &committed,
+        };
+        #[cfg(not(feature = "test-harness"))]
+        let mut writes = ();
+        let result = kassiber_journals::service::refresh_with_sources_checked(
+            conn,
+            &profile,
+            &sources,
+            kassiber_journals::process::RefreshOptions {
+                auto_pair: get(payload, "auto_pair").is_some_and(truthy),
+                skip_rebuild_when_current: get(payload, "skip_rebuild_when_current")
+                    .is_some_and(truthy),
+                ..Default::default()
+            },
+            &mut |phase| {
+                self.check(conn)?;
+                progress.emit(conn, &dict([("phase", s(phase))]))?;
+                paired_phase.set(phase == "auto_pair");
+                last_phase.set(phase);
+                self.check(conn)?;
+                Ok(())
+            },
+            &mut |phase| {
+                last_phase.set(phase);
+                #[cfg(feature = "test-harness")]
+                if phase == "complete" {
+                    committed.set(true);
+                }
+            },
+            &mut writes,
+        )
+        .map_err(|error| {
+            #[cfg(feature = "test-harness")]
+            {
+                let replay_safe = last_phase.get() != "complete" && guard.unchanged(conn);
+                hybrid::record(&error, last_phase.get(), replay_safe);
+            }
+            if error.family == "AppError" {
+                Failure::App(kassiber_journals::service::application_error(error))
+            } else if let Some(code) = error.sqlite_code {
+                Failure::Database(kassiber_store::rusqlite::Error::SqliteFailure(
+                    kassiber_store::rusqlite::ffi::Error::new(code),
+                    Some(error.message.clone()),
+                ))
+            } else {
+                let module = if [
+                    "DatabaseError",
+                    "OperationalError",
+                    "IntegrityError",
+                    "ProgrammingError",
+                ]
+                .contains(&error.family.as_str())
+                {
+                    "sqlite3"
+                } else {
+                    "builtins"
+                };
+                Failure::Unexpected {
+                    message: error.message.clone(),
+                    class: format!("{module}.{}", error.family),
+                }
+            }
+        });
+        #[cfg(feature = "test-harness")]
+        let result = match result {
+            Err(error)
+                if last_phase.get() != "complete"
+                    && guard.unchanged(conn)
+                    && hybrid::enabled()
+                    && hybrid::replayable(&error) =>
+            {
+                self.check(conn)?;
+                progress.check(conn)?;
+                return hybrid::replay(self, conn, job, progress, paired_phase.get());
+            }
+            result => result,
+        };
+        let result = result?;
+        let mut payload = result.ordered_payload.clone();
+        drop(result);
+        set(&mut payload, "status", s("synced"));
+        Ok(payload)
+    }
+}
+
+#[cfg(feature = "test-harness")]
+mod hybrid;

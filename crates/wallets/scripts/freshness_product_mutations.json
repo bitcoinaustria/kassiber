@@ -20,14 +20,14 @@
     "rule": "Reject unsupported freshness arguments before preparing or executing a source job."
   },
   {
-    "id": "product-journal-opt-out",
+    "id": "product-default-journals",
     "file": "crates/daemon/src/freshness/product.rs",
-    "find": "    ) == Some(&Value::Bool(false))",
-    "replace": "    ) != Some(&Value::Bool(true))",
+    "find": ".filter(|v| !matches!(v, Value::Null))\n            .map(truthy),\n            force_full,",
+    "replace": ".filter(|v| !matches!(v, Value::Null))\n            .map(truthy).or(Some(false)),\n            force_full,",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[default-journals-ui.wallets.sync]"
+      "tests/test_rust_freshness_journals.py::test_default_refresh_envelopes_events_and_all_tables[empty-ui.wallets.sync-esplora]"
     ],
-    "rule": "Select only an explicit journal opt-out before any native action."
+    "rule": "Default wallet sync performs its local journal refresh after the wallet work."
   },
   {
     "id": "product-request-identity",

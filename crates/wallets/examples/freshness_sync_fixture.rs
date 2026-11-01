@@ -88,6 +88,8 @@ fn main() {
             rates: Some(false),
             journals: Some(false),
             force_full: input["force_full"] == true,
+            auto_pair: false,
+            wallets_sync: false,
         };
         let plan = Plan::new(
             &conn,
@@ -156,6 +158,7 @@ fn main() {
             input["start_time"].as_u64().unwrap_or(1_700_000_000),
             input["version"].as_str().unwrap(),
             |conn, _| Ok(backend(conn, &input, true)),
+            None,
         )
     })();
     let envelope = match result {

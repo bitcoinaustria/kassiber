@@ -21,10 +21,12 @@ SCENARIOS = ('exact', 'ambiguous', 'tolerance', 'multi-wallet', 'rules', 'dismis
              'unpaired', 'ownership', 'booked', 'guards-after-rule', 'fee-variants')
 
 
-def book(scenario):
-    conn = sqlite3.connect(':memory:')
-    conn.row_factory = sqlite3.Row
-    seed(conn)
+def book(scenario, *, connection=None):
+    conn = connection
+    if conn is None:
+        conn = sqlite3.connect(':memory:')
+        conn.row_factory = sqlite3.Row
+        seed(conn)
     conn.execute('DELETE FROM wallets')
     conn.execute('DELETE FROM profiles')
     conn.execute('DELETE FROM workspaces')

@@ -210,9 +210,32 @@ fn wrap(conn: &Connection, job: &Value, failure: Failure) -> Result<AppError> {
                     773 => "SQLITE_BUSY_TIMEOUT",
                     262 => "SQLITE_LOCKED_SHAREDCACHE",
                     518 => "SQLITE_LOCKED_VTAB",
+                    1 => "SQLITE_ERROR",
+                    19 => "SQLITE_CONSTRAINT",
+                    787 => "SQLITE_CONSTRAINT_FOREIGNKEY",
+                    1555 => "SQLITE_CONSTRAINT_PRIMARYKEY",
+                    1811 => "SQLITE_CONSTRAINT_TRIGGER",
+                    2067 => "SQLITE_CONSTRAINT_UNIQUE",
                     _ => "",
                 };
-                put(&mut details, "error_class", s("sqlite3.OperationalError"));
+                let class =
+                    match code.code {
+                        rusqlite::ErrorCode::ConstraintViolation
+                        | rusqlite::ErrorCode::TypeMismatch => "sqlite3.IntegrityError",
+                        rusqlite::ErrorCode::TooBig => "sqlite3.DataError",
+                        rusqlite::ErrorCode::InternalMalfunction
+                        | rusqlite::ErrorCode::NotFound => "sqlite3.InternalError",
+                        rusqlite::ErrorCode::ApiMisuse
+                        | rusqlite::ErrorCode::ParameterOutOfRange => "sqlite3.ProgrammingError",
+                        rusqlite::ErrorCode::OutOfMemory => "builtins.MemoryError",
+                        rusqlite::ErrorCode::DatabaseCorrupt
+                        | rusqlite::ErrorCode::NotADatabase
+                        | rusqlite::ErrorCode::AuthorizationForStatementDenied => {
+                            "sqlite3.DatabaseError"
+                        }
+                        _ => "sqlite3.OperationalError",
+                    };
+                put(&mut details, "error_class", s(class));
                 put(
                     &mut details,
                     "sqlite_error_code",

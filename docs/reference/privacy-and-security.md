@@ -156,14 +156,17 @@ those actions retain the private checkpoint locally for the next sync.
 
 The Rust freshness source/admission prerequisite only reads local state. It
 creates no consent grant, recovers no jobs and contacts no backend, even when
-saved configuration selects a loopback server. Its admitted plan requires an
-explicit journal opt-out and rejects the entire selection when an enabled
-source has no native executor. The three native daemon sync/freshness product
-routes now admit their verified explicit no-refresh variants. The guarded
+saved configuration selects a loopback server. Admission rejects the entire
+selection when an enabled source has no native executor. The three native daemon sync/freshness product
+routes also admit default local journal refresh. The guarded
 whole-invocation hybrid selector reads only an already opened book; static
-opt-outs and unopened/locked books decline without database open or migration.
-Defaults and unsupported source shapes stay on Python in that candidate;
-native execution never retries through Python after starting.
+unsupported shapes and unopened/locked books decline without database open or
+migration. Journal refresh performs no network I/O. Production builds return
+native refusals. The development hybrid launcher alone enables a test-build
+reference job after byte-identical journal rollback; it cannot replay a
+committed stale-first rebuild or a cancelled/revoked request. Refusal census
+records contain phase, exception family and replay eligibility, without book
+operands or error messages. Python retains production authority until R4-16.
 
 The internal Rust freshness executor consumes an admitted plan under its
 foreground slot. Its once-only request grant binds to that exact plan;
@@ -176,8 +179,8 @@ request runner services cancellation, source controls and offline
 changes while fetching; switch, lock, shutdown and EOF cancel/revoke and join
 its connection owner before releasing the book. Used request identities cannot
 create another grant. Source-control results redact private checkpoints,
-including the result container that Python pause/resume currently returns unredacted.
-That reference bug has a disposable repro; Python is unchanged here.
+including the result container, matching Python pause/resume after the
+cancellation and checkpoint-redaction fixes.
 
 The runner carries private successful-job graph grants separately
 from the response and publishes them into a bounded in-memory mailbox only
@@ -202,8 +205,8 @@ expose fixed error categories rather than database or backend error details.
 Native Electrum graph decoding also checks the computed transaction ID before
 using a response or caching a parent. A disposable reference repro demonstrates
 that Python currently accepts different transaction bytes under the requested
-ID. That correctness difference is separate from the two recorded privacy
-differences; the Python implementation remains unchanged.
+ID. That correctness difference remains open; the cancellation and checkpoint
+privacy differences are resolved on both runtimes.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview

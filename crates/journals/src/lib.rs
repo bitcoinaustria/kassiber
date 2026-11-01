@@ -42,6 +42,9 @@ pub struct RefusalDetails {
     pub error_class: Option<String>,
     pub invariant: Option<String>,
     pub cause: Option<Box<Refusal>>,
+    /// Driver metadata used by daemon retry/error projection, outside oracle JSON.
+    #[serde(skip)]
+    pub sqlite_code: Option<i32>,
 }
 impl Refusal {
     pub(crate) fn new(family: &str, message: impl Into<String>) -> Self {
@@ -55,6 +58,7 @@ impl Refusal {
             error_class: None,
             invariant: None,
             cause: None,
+            sqlite_code: None,
         }))
     }
 }
@@ -78,6 +82,11 @@ impl std::error::Error for Refusal {}
 impl From<String> for Refusal {
     fn from(message: String) -> Self {
         Self::new("RuntimeError", message)
+    }
+}
+impl From<kassiber_envelope::AppError> for Refusal {
+    fn from(error: kassiber_envelope::AppError) -> Self {
+        prebuild::app(error)
     }
 }
 impl From<kassiber_pydecimal::DecimalError> for Refusal {
