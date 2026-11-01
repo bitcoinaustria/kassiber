@@ -6307,6 +6307,85 @@ requires its own verified boundary, exact attachment placement/hashes where
 applicable, all-table parity and SQLite/SQLCipher late-failure rollback.
 PDF rendering and PDF-containing bundles remain Python.
 
+## Source-funds source mutation checkpoint (R5 partial)
+
+`t3code/r5-sof-mutations-2` starts at `62d4cd51a`. Source creation and managed
+source-evidence association now use one native report service through the CLI
+and daemon. The inventory becomes 159 native CLI leaves, including two source
+mutations, and seven source-funds daemon kinds, including the corresponding
+two mutations. Link, recipient and case-saving mutations remain unregistered.
+
+The service preserves Python's validation order, source enum, exact integer
+msat conversion and rounding, finite fiat validation, UTC acquisition time,
+null/empty values, review state and scoped source/attachment resolution.
+An ambiguous source id/label refuses rather than choosing one. Evidence accepts
+existing managed attachment ids only. Association never reads, copies or
+rewrites a managed file, changes its hash, fetches a URL or establishes
+ownership, basis, custody or tax facts. Duplicate association remains harmless.
+
+One admitted write transaction covers source creation, all associations and
+response projection. A standalone failure rolls back the entire operation;
+a nested failure rolls back its savepoint and retains unrelated pending work.
+Busy and deferred commit refusals leave no source or attachment association.
+The unchanged Python source helper retains pending rows after a later missing
+attachment, just as the frozen-case primitive needs caller rollback. Its
+separate synthetic repro is
+`crates/reports/scripts/repro_python_source_funds_mutations.py`; the earlier
+case pending-row repro and Python product code remain unchanged.
+
+The frozen corpus has 144 cases, including the distinct sqlite3 and SQLCipher
+unsupported-parameter messages. All three native service tests pass. The
+process oracle passes all 288 SQLite/SQLCipher comparisons with complete helper
+envelope bytes, every one of the 112 tables and unchanged evidence files and
+hashes. Actual transport comparisons add 11 CLI mutation calls and ten daemon
+mutation requests, plus one daemon source-list read, with literal response
+bytes, all-table parity and zero mutation fallback. Generated source identities
+use an explicit one-to-one mapping; timestamps are injected only in test builds.
+Internal-error helper envelopes are service evidence, not full process wire
+acceptance: Python traceback/debug diagnostics remain the existing open gap.
+
+All 799 report mutation entries apply at this boundary. The 23 new entries
+pass their five unmutated named baselines and are all killed, with no build
+errors, survivors or empty selections. The 776 inherited entries retain their
+previous evidence. An earlier campaign against the smaller corpus is retained
+separately and does not substitute for the final run.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_sources_pin_validation_envelopes_and_all_112_tables` | 17 |
+| `source_funds_sources_preserve_outer_work_and_roll_back_late_failures_on_both_stores` | 2 |
+| `source_funds_sources_roll_back_busy_and_deferred_commits_on_both_stores` | 1 |
+| `source_funds_source_cli_forwards_mutations_and_managed_ids` | 2 |
+| `source_funds_source_daemon_preserves_mutation_arguments_and_admission` | 1 |
+
+Rust 1.99.1 offline/locked formatting and all-target clippy with warnings denied
+pass for reports, CLI and daemon. The seven source-funds integration tests and
+all 34 CLI/daemon library tests pass. The full workspace/frontend gate, regtest
+and packaged/platform checks are not claimed. Account `HOME` stays unchanged;
+all scratch, data and both Cargo output directories stay under this worktree's
+`target/`, with eight Cargo jobs and no incremental/debug build output.
+
+Selected Python workflow, tool-schema and consent regressions pass: 74 tests
+and 12 subtests in the sandbox, then all five sandbox-limited witnesses with
+the required owned-loopback/local test permissions. The failed sandbox run is
+retained separately. These reference AI executions are not native acceptance.
+The source generator checks cleanly and both pending-row repros pass. The
+required classifier update records 5,717 definitions and both retained source
+oracles; required CI preflight passes all 57 tests.
+
+Native AI admission is still pending. The Rust shell has no AI execution loop;
+its `ai.chat` path remains unsupported. Existing Python tool schemas, redaction,
+book binding, consent and duplicate-call handling are unchanged, and no Python
+AI execution contributes native acceptance. Source CLI/daemon routing does not
+complete the requested consent-bound AI mutation slice.
+
+Verification evidence is retained under `target/r5-sof-mutations-2/`. The next
+boundary needs native AI consent/once-only integration and diagnostic wire
+parity, followed by link creation/review/attachment, batch review and persisted
+suggest/assemble, recipient mutations, and full case saving once the parallel
+report/review producer is available. PDF rendering and PDF-containing bundles
+remain Python. There are no dependency, lockfile, schema or tax-rule changes.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

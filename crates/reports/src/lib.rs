@@ -36,6 +36,7 @@ mod privacy_hygiene;
 mod snapshot_write;
 mod snapshots;
 pub mod source_funds_cases;
+pub mod source_funds_mutations;
 mod source_funds_reads;
 mod sql;
 mod standalone_csv;
@@ -122,6 +123,9 @@ pub fn execute_with_sources(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    if source_funds_mutations::handles(command) {
+        return source_funds_mutations::execute(conn, command, args, sources);
+    }
     if command == "reports.filed-snapshots.create" {
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
         return snapshot_write::create_cli(conn, &workspace, &profile, args, sources);

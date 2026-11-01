@@ -479,17 +479,25 @@ registers them; exit-tax preserves its reference no-registration boundary.
   non-debug response byte, all 112 tables and native routing checked. The
   [diagnostic checkpoint](docs/reference/rust-shell.md#source-funds-native-diagnostic-checkpoint-r5-partial)
   records 239 passing parity tests, zero fallbacks and five new mutation kills.
+- [x] Port source creation and managed-id source evidence association through
+  the native service, CLI and daemon, with complete helper envelopes, all 112
+  tables, file/hash invariance and late rollback on SQLite and SQLCipher.
+  The inventory is 159 native CLI leaves and seven source-funds daemon kinds;
+  11 CLI mutation calls and ten daemon mutation requests are verified with zero
+  fallback. See the [partial source mutation checkpoint](docs/reference/rust-shell.md#source-funds-source-mutation-checkpoint-r5-partial).
+- [ ] Complete source mutation AI consent and once-only admission. The native
+  shell has no AI execution loop; Python AI runs and service-only internal-error
+  envelopes are excluded from native transport acceptance.
 - [ ] Finish source-funds report traversal/disclosure, review-context/request-input,
-  coverage and suggest/assemble dry runs in separate verified commits on
-  `t3code/r5-sof-reads`; include diagrams and non-PDF output with report traversal.
-- [ ] Port source-funds case saving, source mutations, link mutations/batch review
-  (including persisted suggest/assemble) and recipient mutations in separate
-  verified commits on `t3code/r5-sof-mutations`. Preserve consent, once-only
-  execution and SQLite/SQLCipher rollback.
+  coverage and suggest/assemble dry runs, then complete case saving and
+  link mutations/batch review (including persisted suggest/assemble) and recipient
+  mutations in separate verified commits. Preserve consent, once-only execution
+  and SQLite/SQLCipher rollback.
   A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)
   now prepares the two-row case/snapshot write; full case saving still needs the
   parallel native report/review producers, transport registration and consent.
-  Newly served native mutation CLI/daemon counts remain zero.
+  Source creation/association now have their own transport checkpoint above;
+  case-saving native mutation CLI/daemon counts remain zero.
 - [x] Port full-report, Austrian bundle and transaction CSV artifacts, saved
   export registration and their daemon kinds. Preserve
   sealed summaries, hashes and phase-4 append-only impact history.

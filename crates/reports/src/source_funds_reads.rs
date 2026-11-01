@@ -153,7 +153,7 @@ fn sources(conn: &Connection, profile: &str) -> Result<Value> {
     .map(Value::List)
 }
 
-fn source(conn: &Connection, row: &Value) -> Result<Value> {
+pub(crate) fn source(conn: &Connection, row: &Value) -> Result<Value> {
     Ok(dict([
         ("id", value(row, "id").clone()),
         ("source_type", value(row, "source_type").clone()),

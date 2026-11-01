@@ -24,6 +24,8 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_cross_check",
     "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
+    "ui.source_funds.sources.create",
+    "ui.source_funds.sources.attach",
     "ui.source_funds.links.list",
     "ui.source_funds.evidence.list",
     "ui.source_funds.recipients.list",
@@ -431,7 +433,6 @@ mod tests {
             "ui.source_funds.cases.save",
             "ui.source_funds.suggest",
             "ui.source_funds.assemble",
-            "ui.source_funds.sources.create",
             "ui.source_funds.links.create",
             "ui.source_funds.recipients.create",
         ] {
@@ -445,6 +446,38 @@ mod tests {
         let error = cross_check_args(Some(&Value::Bool(false))).unwrap_err();
         assert_eq!(error.message, "daemon args must be an object");
         assert_eq!(error.details, Some(dict([("type", s("bool"))])));
+    }
+
+    #[test]
+    fn source_funds_source_daemon_preserves_mutation_arguments_and_admission() {
+        let args = dict([
+            ("source_type", s("income")),
+            ("label", s("Origin")),
+            ("amount", s("1.00000000001")),
+            ("asset", s("LBTC")),
+            ("fiat_value", s("12.34")),
+            ("fiat_currency", s("EUR")),
+            ("acquired_at", s("2024-01-01")),
+            ("description", s("Evidence")),
+            ("attachment_ids", Value::List(vec![s("a-a"), s("a-z")])),
+            ("source", s("s-z")),
+            ("attachment_id", s("a-a")),
+        ]);
+        for kind in [
+            "ui.source_funds.sources.create",
+            "ui.source_funds.sources.attach",
+        ] {
+            assert!(KINDS.contains(&kind));
+            let actual = execute(&mut SourceFundsCapture, kind, Some(&args)).unwrap();
+            assert_eq!(get(&actual, "command"), Some(&s(kind)));
+            assert_eq!(get(&actual, "args"), Some(&args));
+            assert_eq!(
+                execute(&mut SourceFundsCapture, kind, Some(&Value::List(vec![])))
+                    .unwrap_err()
+                    .code,
+                "validation"
+            );
+        }
     }
     #[test]
     fn cross_check_daemon_preserves_uploaded_bytes_and_registration() {

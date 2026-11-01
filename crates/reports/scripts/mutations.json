@@ -9259,5 +9259,235 @@
       "source_funds_case_snapshot_rolls_back_commit_busy_on_both_stores"
     ],
     "rule": "After an outermost commit is refused as busy, cleanup uses full rollback rather than another release that can fail as busy again."
+  },
+  {
+    "id": "sof-source-msat-scale",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "Decimal::from(100_000_000_000i64)",
+    "replace": "Decimal::from(100_000_000i64)",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Source BTC inputs preserve exact integer millisatoshis."
+  },
+  {
+    "id": "sof-source-half-up",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "to_fixed_places(0, Rounding::HalfUp)",
+    "replace": "to_fixed_places(0, Rounding::HalfEven)",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Half-millisatoshi ties follow the Python amount adapter."
+  },
+  {
+    "id": "sof-source-negative",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "scaled.is_negative() && scaled.copy_abs() >= \"0.5\".parse().unwrap()",
+    "replace": "false",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Negative amounts are refused after millisatoshi rounding."
+  },
+  {
+    "id": "sof-source-source-type",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "if !SOURCE_TYPES.contains(&source_type.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Source types use the explicit provenance enum."
+  },
+  {
+    "id": "sof-source-finite-fiat",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "kassiber_pydecimal::finite_price(&py_str(value(args, \"fiat_value\")))",
+    "replace": "kassiber_pydecimal::finite_price(\"0\")",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Fiat values retain the shared finite decimal boundary."
+  },
+  {
+    "id": "sof-source-currency",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "upper(strip(raw.as_str().unwrap_or_default()))",
+    "replace": "strip(raw.as_str().unwrap_or_default()).into()",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Fiat currency is normalized with Python uppercase semantics."
+  },
+  {
+    "id": "sof-source-timestamp",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "Some(kassiber_wallets::time::timestamp(&py_str(acquired))?)",
+    "replace": "Some(py_str(acquired))",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Acquisition timestamps are canonical UTC seconds."
+  },
+  {
+    "id": "sof-source-label",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "let label = strip(&label);",
+    "replace": "let label = label.as_str();",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Source labels use Python whitespace normalization."
+  },
+  {
+    "id": "sof-source-empty-label",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "if label.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Empty source labels fail closed."
+  },
+  {
+    "id": "sof-source-reviewed",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "VALUES(?,?,?,?,?,?,?,?,?,?,?,'reviewed',?,?)",
+    "replace": "VALUES(?,?,?,?,?,?,?,?,?,?,?,'suggested',?,?)",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "An explicitly created source carries the reference review state without granting accounting authority."
+  },
+  {
+    "id": "sof-source-managed-scope",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "SELECT id FROM attachments WHERE profile_id=? AND id=?",
+    "replace": "SELECT id FROM attachments WHERE ? IS NOT NULL AND id=?",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Managed evidence must belong to the selected book."
+  },
+  {
+    "id": "sof-source-attachment-list",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "for attachment in &attachments {",
+    "replace": "for attachment in attachments.iter().take(0) {",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Every supplied managed evidence id is validated and associated atomically."
+  },
+  {
+    "id": "sof-source-singular-id",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "if !id.is(\"\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "The desktop singular managed attachment id is retained when no list is supplied."
+  },
+  {
+    "id": "sof-source-source-scope",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "WHERE profile_id=? AND (id=? OR lower(label)=lower(?))",
+    "replace": "WHERE ? IS NOT NULL AND (id=? OR lower(label)=lower(?))",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Source attachment references cannot escape the selected book."
+  },
+  {
+    "id": "sof-source-source-ambiguity",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "A source id colliding with another label remains ambiguous as in Python."
+  },
+  {
+    "id": "sof-source-attach-update",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "params![text(&source,\"id\"),attachment,sources.now(conn)?]",
+    "replace": "params![text(&source,\"id\"),attachment,\"wrong\"]",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Associations preserve the single injected timestamp and leave source metadata unchanged."
+  },
+  {
+    "id": "sof-source-nested-commit",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"RELEASE report_export\"\n        })",
+    "replace": "\"COMMIT\"\n        })",
+    "expect_failing": [
+      "source_funds_sources_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "A nested mutation cannot commit the caller transaction."
+  },
+  {
+    "id": "sof-source-late-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"ROLLBACK\"\n        } else {",
+    "replace": "\"SELECT 1\"\n        } else {",
+    "expect_failing": [
+      "source_funds_sources_roll_back_busy_and_deferred_commits_on_both_stores"
+    ],
+    "rule": "Late commit refusal rolls back the complete standalone source mutation."
+  },
+  {
+    "id": "sof-source-nested-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"ROLLBACK TO report_export; RELEASE report_export\"",
+    "replace": "\"ROLLBACK\"",
+    "expect_failing": [
+      "source_funds_sources_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "Failed nested source mutations retain unrelated pending work."
+  },
+  {
+    "id": "sof-source-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"source-funds.sources.create\",\n    \"source-funds.sources.attach\",",
+    "replace": "    \"source-funds.sources.attach\",",
+    "expect_failing": [
+      "source_funds_source_cli_forwards_mutations_and_managed_ids"
+    ],
+    "rule": "Both source mutations are native CLI commands."
+  },
+  {
+    "id": "sof-source-cli-payload",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"attachments\",\n            \"source\",\n            \"attachment\",",
+    "replace": "            \"source\",\n            \"attachment\",",
+    "expect_failing": [
+      "source_funds_source_cli_forwards_mutations_and_managed_ids"
+    ],
+    "rule": "The CLI forwards managed evidence ids to the shared service."
+  },
+  {
+    "id": "sof-source-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.sources.create\",\n    \"ui.source_funds.sources.attach\",",
+    "replace": "    \"ui.source_funds.sources.create\",",
+    "expect_failing": [
+      "source_funds_source_daemon_preserves_mutation_arguments_and_admission"
+    ],
+    "rule": "Managed source evidence attachment is a native daemon route."
+  },
+  {
+    "id": "sof-source-overflow-order",
+    "file": "crates/reports/src/source_funds_mutations.rs",
+    "find": "return Ok(Amount::Overflow);",
+    "replace": "return Err(AppError::new(\"internal_error\", \"Python int too large to convert to SQLite INTEGER\"));",
+    "expect_failing": [
+      "source_funds_sources_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "SQLite integer overflow is refused after source field validation, matching Python failure precedence."
   }
 ]

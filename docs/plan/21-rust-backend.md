@@ -1301,6 +1301,31 @@ The [persistence checkpoint](../reference/rust-shell.md#source-funds-frozen-case
 records the exact boundary and verification. PDF-containing bundles stay Python;
 no dependencies, lockfiles, schema, tax rules or Python product code change.
 
+### R5 source mutation transport continuation (partial)
+
+`t3code/r5-sof-mutations-2`, based on `62d4cd51a`, adds source creation and
+managed-id evidence association to the shared native report service, CLI and
+daemon. Exact source/fiat/timestamp validation, attachment scope and duplicate
+associations match Python. The complete write and response projection share a
+transaction; both storage bindings retain outer pending work and roll back
+late statement, busy-commit and deferred-commit failures. Files and their
+hashes remain unchanged; provenance grants no accounting authority.
+
+The 144-case corpus and all 288 SQLite/SQLCipher process comparisons pass with
+complete helper envelopes and all 112 tables. Actual process acceptance covers
+11 native CLI mutation calls and ten native daemon mutation requests with
+zero fallback, plus one source-list daemon read. The supported inventory is
+159 CLI leaves and seven source-funds daemon kinds. The new Python pending-row
+repro preserves the reference bug and the existing case repro is untouched.
+
+This remains partial: Rust AI consent/once-only admission and internal-error
+traceback/debug wire parity are unaccepted. No Python AI call counts as native
+execution. Link mutations, batch review, persisted suggest/assemble, recipient
+mutations and full case saving remain pending; the last still depends on the
+parallel report/review producer. The [source mutation checkpoint](../reference/rust-shell.md#source-funds-source-mutation-checkpoint-r5-partial)
+records the boundary. No schema, dependency, lockfile, tax-rule or Python product
+logic changes are included.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

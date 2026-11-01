@@ -21236,6 +21236,10 @@
         "tests": 1
       }
     },
+    "tests/test_rust_source_funds_mutations.py": {
+      "test_source_mutation_bytes_managed_files_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native source creation and managed-id evidence association against unchanged Python on SQLite and SQLCipher, including helper envelope bytes, all 112 tables, unchanged managed files and hashes, and CLI/daemon process envelopes with zero mutation fallbacks; native AI consent and internal-error traceback/debug wire parity remain explicitly unaccepted", "reviewed": true, "tests": 1},
+      "test_source_mutation_process_envelopes_files_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native source creation and managed-id evidence association against unchanged Python on SQLite and SQLCipher, including helper envelope bytes, all 112 tables, unchanged managed files and hashes, and CLI/daemon process envelopes with zero mutation fallbacks; native AI consent and internal-error traceback/debug wire parity remain explicitly unaccepted", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_source_funds_reads.py": {
       "test_source_funds_stored_service_bytes_and_all_112_tables": {
         "disposition": "oracle",

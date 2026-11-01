@@ -32,6 +32,8 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.links.list",
     "source-funds.cases.list",
     "source-funds.recipients.list",
+    "source-funds.sources.create",
+    "source-funds.sources.attach",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -68,8 +70,24 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
 
 fn source_funds_request(args: &Namespace) -> Value {
     dict(
-        ["workspace", "profile", "target_transaction", "state"]
-            .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+        [
+            "workspace",
+            "profile",
+            "target_transaction",
+            "state",
+            "source_type",
+            "label",
+            "asset",
+            "amount",
+            "fiat_currency",
+            "fiat_value",
+            "acquired_at",
+            "description",
+            "attachments",
+            "source",
+            "attachment",
+        ]
+        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
     )
 }
 
@@ -184,6 +202,76 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn source_funds_source_cli_forwards_mutations_and_managed_ids() {
+        for tail in [
+            vec![
+                "create",
+                "--type",
+                "income",
+                "--label",
+                "Origin",
+                "--asset",
+                "LBTC",
+                "--amount",
+                "1.00000000001",
+                "--fiat-value",
+                "12.34",
+                "--fiat-currency",
+                "EUR",
+                "--acquired-at",
+                "2024-01-01",
+                "--description",
+                "Evidence",
+                "--attachment",
+                "a-a",
+                "--attachment",
+                "a-z",
+            ],
+            vec!["attach", "--source", "s-z", "--attachment", "a-a"],
+        ] {
+            let mut argv = vec!["source-funds", "sources"];
+            argv.extend(tail);
+            argv.extend(["--workspace", "Main", "--profile", "Book"]);
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let command = format!(
+                "source-funds.sources.{}",
+                args.text("source_funds_sources_command").unwrap()
+            );
+            assert!(COMMANDS.contains(&command.as_str()));
+            assert!(crate::describe::IMPLEMENTED.contains(&command.as_str()));
+            let actual = execute(&mut SourceFundsCapture, &command, &args).unwrap();
+            let request = get(&actual, "args").unwrap();
+            for key in [
+                "workspace",
+                "profile",
+                "source_type",
+                "label",
+                "asset",
+                "amount",
+                "fiat_currency",
+                "fiat_value",
+                "acquired_at",
+                "description",
+                "attachments",
+                "source",
+                "attachment",
+            ] {
+                assert_eq!(
+                    get(request, key).unwrap(),
+                    args.get(key).unwrap_or(&Value::Null),
+                    "{key}"
+                );
+            }
+        }
+    }
     struct SourceFundsCapture;
     impl Book for SourceFundsCapture {
         fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
@@ -264,7 +352,6 @@ mod tests {
             "reports.export-source-funds-bundle",
             "source-funds.suggest",
             "source-funds.assemble",
-            "source-funds.sources.create",
             "source-funds.links.create",
             "source-funds.recipients.create",
         ] {
