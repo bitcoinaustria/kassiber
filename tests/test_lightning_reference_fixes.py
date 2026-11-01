@@ -10,6 +10,24 @@ from kassiber.core.lightning import build_profitability_report, profitability_cs
 from tests.test_lightning_scaffold import _snapshot_with_routing
 
 
+def test_deep_lightning_config_uses_recoverable_malformed_config_path(tmp_path):
+    from kassiber.core.lightning import resolve_lightning_connection
+    from kassiber.db import open_db
+    from tests.test_source_overlap import _seed_book, _wallet
+
+    conn = open_db(tmp_path / "data")
+    try:
+        _seed_book(conn)
+        _wallet(conn, "node", "Node", "coreln", {})
+        depth = 10_000
+        conn.execute("UPDATE wallets SET config_json=?", ("[" * depth + "0" + "]" * depth,))
+        connection = resolve_lightning_connection(conn, "node")
+        assert connection["config"] == {}
+        assert connection["backend_name"] is None
+    finally:
+        conn.close()
+
+
 @pytest.mark.parametrize("existing", [False, True])
 def test_csv_encoding_failure_preserves_destination(tmp_path, monkeypatch, existing):
     cli = importlib.import_module("kassiber.cli.main")
