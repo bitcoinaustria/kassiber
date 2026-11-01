@@ -597,7 +597,9 @@ then records a redacted error for that wallet and continues without disturbing
 already committed wallets.
 
 Freshness progress callbacks use the same SQLite connection and historically
-committed their progress rows. Network progress is emitted during preparation;
+committed their progress rows. Network workers synchronously route progress and
+cancellation checks to the thread owning that connection, including isolated
+single-wallet jobs and widened repair fetches. Network progress is emitted during preparation;
 commit-capable progress callbacks are suppressed during local apply so they
 cannot invalidate the wallet savepoint. Deterministic fault injection covers
 all six state boundaries and compares the exact before/after database state.

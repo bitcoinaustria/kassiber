@@ -12,7 +12,9 @@ from embit import bip32, script
 import pytest
 
 from kassiber import daemon_freshness
-from kassiber.core import sync_backends
+from kassiber.cli import handlers
+from kassiber.core import sync as core_sync
+from kassiber.core import freshness, sync_backends
 from kassiber.core.sync_control import sync_transport_check
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
@@ -27,7 +29,7 @@ def cancellation_backend(protocol, book, hits):
                         else request.startswith("/scripthash/"))
             if fetching and hits["cancelled_at"] is None:
                 with sqlite3.connect(book) as control:
-                    control.execute("UPDATE freshness_jobs SET cancel_requested=1 WHERE status='queued'")
+                    control.execute("UPDATE freshness_jobs SET cancel_requested=1 WHERE status IN ('queued','running')")
                 hits["cancelled_at"] = len(hits["requests"])
 
     class HttpHandler(BaseHTTPRequestHandler):
@@ -120,6 +122,140 @@ def test_prefetch_stops_requests_after_saved_cancellation(tmp_path, protocol, en
         assert remaining <= 1
     finally:
         conn.close()
+
+
+@contextmanager
+def cancellation_book(path, *, wallet_count=1, address_count=8):
+    conn = open_db(path)
+    try:
+        conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('w','Set','fixed')")
+        conn.execute("INSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('p','w','Book','EUR','fixed')")
+        set_setting(conn, "context_workspace", "w")
+        set_setting(conn, "context_profile", "p")
+        for index in range(wallet_count):
+            root = bip32.HDKey.from_seed(f"cancellation fixture wallet {index}".encode())
+            addresses = [script.p2wpkh(root.derive([i]).key.get_public_key()).address() for i in range(address_count)]
+            conn.execute(
+                "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES(?,'w','p',?,'address',?,'fixed')",
+                (f"a{index}", f"Wallet {index}", json.dumps({"addresses": addresses, "backend": "fixture"})),
+            )
+        conn.commit()
+        yield conn
+    finally:
+        conn.close()
+
+
+def backend_runtime(protocol, url):
+    return {"backends": {"fixture": {"name": "fixture", "kind": protocol, "url": url, "batch_size": 2}},
+            "default_backend": "fixture"}
+
+
+@pytest.mark.parametrize("wallet_count", [1, 3])
+@pytest.mark.parametrize("protocol", ["esplora", "electrum"])
+@pytest.mark.parametrize("entrypoint", ["freshness", "wallet-sync"])
+def test_uncancelled_request_counts(tmp_path, protocol, entrypoint, wallet_count):
+    with cancellation_book(tmp_path / "data", wallet_count=wallet_count, address_count=30) as conn:
+        hits = {"requests": [], "cancelled_at": -1, "lock": threading.Lock()}
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        with cancellation_backend(protocol, book, hits) as url:
+            runtime = backend_runtime(protocol, url)
+            if entrypoint == "freshness":
+                result = daemon_freshness._freshness_run_payload(conn, runtime, {"rates": False, "journals": False})
+            else:
+                result = daemon_freshness._wallets_sync_payload(conn, runtime, {"all": True, "process_journals": False}, strict=True)
+        assert [job["status"] for job in result["completed"]] == ["done"] * wallet_count
+        expected = 154 * wallet_count if protocol == "esplora" else 1 + 92 * wallet_count
+        assert len(hits["requests"]) == expected
+        print(f"REQUEST_COUNT {entrypoint} {protocol} {wallet_count}: {len(hits['requests'])}")
+
+
+@pytest.mark.parametrize("mode", ["background", "report-read", "duplicate", "prefetch-failure"])
+@pytest.mark.parametrize("protocol", ["esplora", "electrum"])
+@pytest.mark.parametrize("cancel", [False, True])
+def test_isolated_freshness_uses_owner_thread(tmp_path, monkeypatch, mode, protocol, cancel):
+    with cancellation_book(tmp_path / "data") as conn:
+        classes = dict.fromkeys(freshness.get_policy(conn, "p").source_classes, False)
+        classes[freshness.SOURCE_ONCHAIN] = True
+        freshness.set_policy(conn, "p", background_enabled=True, report_read_sync=True, source_classes=classes)
+        conn.commit()
+        before_wallet = dict(conn.execute("SELECT * FROM wallets").fetchone())
+        if mode == "prefetch-failure":
+            def failed_prefetch(*_args, **_kwargs):
+                raise RuntimeError("injected batch prefetch failure")
+            monkeypatch.setattr(daemon_freshness, "_prefetch_onchain_freshness_jobs", failed_prefetch)
+        elif mode == "duplicate":
+            specs = daemon_freshness._freshness_wallet_source_specs(conn, "p", include_rates=False, include_journals=False)
+            specs.append({**specs[0], "source_key": specs[0]["source_key"] + ":duplicate"})
+            duplicate_jobs = daemon_freshness._enqueue_freshness_jobs(conn, "p", specs)
+        hits = {"requests": [], "cancelled_at": None if cancel else -1, "lock": threading.Lock()}
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        with cancellation_backend(protocol, book, hits) as url:
+            runtime = backend_runtime(protocol, url)
+            if mode == "background":
+                class Output:
+                    def write(self, _event):
+                        pass
+                daemon_freshness._freshness_background_tick(conn, runtime, Output())
+            elif mode == "report-read":
+                daemon_freshness._auto_sync_wallets_if_enabled(conn, runtime, state={})
+            elif mode == "duplicate":
+                profile = conn.execute("SELECT * FROM profiles").fetchone()
+                prefetched = daemon_freshness._prefetch_onchain_freshness_jobs(conn, runtime, profile, duplicate_jobs)
+                assert prefetched == {}
+                freshness.run_due_jobs(conn, daemon_freshness._freshness_handlers(runtime, prefetched_onchain=prefetched), profile_id="p", limit=2)
+            else:
+                daemon_freshness._freshness_run_payload(
+                    conn, runtime, {"rates": False, "journals": False, "force_full": mode == "duplicate"},
+                )
+        jobs = [dict(row) for row in conn.execute("SELECT * FROM freshness_jobs")]
+        assert len(jobs) == (2 if mode == "duplicate" else 1)
+        assert [job["status"] for job in jobs] == ["cancelled" if cancel else "done"] * len(jobs)
+        assert hits["requests"]
+        if cancel:
+            assert hits["cancelled_at"] is not None
+            assert len(hits["requests"]) - hits["cancelled_at"] <= 1
+            assert dict(conn.execute("SELECT * FROM wallets").fetchone()) == before_wallet
+            for table in ("transactions", "chain_observer_instances", "wallet_utxo_refreshes"):
+                assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
+            state = conn.execute("SELECT checkpoint_json FROM freshness_source_states").fetchone()
+            assert json.loads(state[0]) == {}
+
+
+@pytest.mark.parametrize("protocol", ["esplora", "electrum"])
+@pytest.mark.parametrize("cancel", [False, True])
+def test_repair_fetch_progress_uses_owner_thread(tmp_path, protocol, cancel):
+    with cancellation_book(tmp_path / "data") as conn:
+        job = daemon_freshness._freshness_run_payload(conn, {}, {"rates": False, "journals": False, "run": False})["enqueued"][0]
+        wallet = dict(conn.execute("SELECT * FROM wallets").fetchone())
+        profile = dict(conn.execute("SELECT * FROM profiles").fetchone())
+        owner = threading.get_ident()
+        progress_threads = []
+
+        def check():
+            freshness._check_cancelled(conn, job["id"])
+
+        def progress(_payload):
+            progress_threads.append(threading.get_ident())
+            check()
+
+        hits = {"requests": [], "cancelled_at": None if cancel else -1, "lock": threading.Lock()}
+        book = conn.execute("PRAGMA database_list").fetchone()[2]
+        with cancellation_backend(protocol, book, hits) as url:
+            token = core_sync.sync_progress_emitter.set(progress)
+            try:
+                def fetch():
+                    return core_sync.fetch_wallet_backend(backend_runtime(protocol, url), profile, wallet,
+                                                          handlers._wallet_sync_hooks(commit=False), force_full=True, check_cancelled=check)
+                if cancel:
+                    with pytest.raises(AppError) as error:
+                        fetch()
+                    assert error.value.code == "cancelled"
+                    assert len(hits["requests"]) - hits["cancelled_at"] <= 1
+                else:
+                    assert isinstance(fetch(), core_sync.WalletBackendFetch)
+            finally:
+                core_sync.sync_progress_emitter.reset(token)
+        assert progress_threads and set(progress_threads) == {owner}
 
 
 @pytest.mark.parametrize("cancel_during_batch", [False, True])

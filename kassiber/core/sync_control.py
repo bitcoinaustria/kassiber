@@ -7,6 +7,7 @@ from threading import Event
 
 
 sync_transport_check = ContextVar("sync_transport_check", default=None)
+sync_progress_emitter = ContextVar("kassiber.sync_progress_emitter", default=None)
 
 
 def check_sync_transport():
@@ -27,15 +28,17 @@ def run_sync_network(step, check=None):
 
 
 def checked_parallel_map(step, items, check, max_workers):
-    """Service worker checks on the caller that owns the database connection.
+    """Service worker checks and progress on the database-owning caller.
 
     Each transport waits for a fresh check, including queued HTTP work and
     pooled Electrum batches. All workers finish before this function returns.
     """
     requests = Queue()
+    progress = sync_progress_emitter.get()
 
-    def ask_owner(item):
-        reply = {"ready": Event(), "error": None, "item": item}
+    def ask_owner(item, *, payload=None, is_progress=False):
+        reply = {"ready": Event(), "error": None, "item": item,
+                 "payload": payload, "is_progress": is_progress}
         requests.put(reply)
         reply["ready"].wait()
         if reply["error"] is not None:
@@ -43,12 +46,17 @@ def checked_parallel_map(step, items, check, max_workers):
 
     def run(item):
         token = sync_transport_check.set(lambda: ask_owner(item))
+        progress_token = sync_progress_emitter.set(
+            (lambda payload: ask_owner(item, payload=payload, is_progress=True))
+            if progress is not None else None
+        )
         try:
             check_sync_transport()
             return step(item)
         except Exception as exc:
             return exc
         finally:
+            sync_progress_emitter.reset(progress_token)
             sync_transport_check.reset(token)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -65,7 +73,10 @@ def checked_parallel_map(step, items, check, max_workers):
             try:
                 if interrupted is not None:
                     raise interrupted
-                check(reply["item"])
+                if reply["is_progress"]:
+                    progress(reply["payload"])
+                else:
+                    check(reply["item"])
             except BaseException as exc:
                 reply["error"] = exc
                 if not isinstance(exc, Exception):
