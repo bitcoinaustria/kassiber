@@ -201,6 +201,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-document",
     "source-funds.sources.create",
     "source-funds.sources.attach",
+    "source-funds.recipients.create",
+    "source-funds.recipients.update",
+    "source-funds.recipients.delete",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

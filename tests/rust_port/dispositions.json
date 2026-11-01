@@ -21308,6 +21308,10 @@
         "tests": 1
       }
     },
+    "tests/test_rust_source_funds_recipients.py": {
+      "test_recipient_mutation_bytes_files_and_all_112_tables": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native recipient creation, update and soft deletion with unchanged Python on SQLite and SQLCipher using full helper envelopes, all 112 tables, frozen case history and unchanged file hashes; process checks require native CLI/daemon routing without fallbacks; no recipient AI tools are exposed and internal-error traceback/debug wire acceptance remains pending", "reviewed": true, "tests": 1},
+      "test_recipient_mutation_process_envelopes_files_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native recipient creation, update and soft deletion with unchanged Python on SQLite and SQLCipher using full helper envelopes, all 112 tables, frozen case history and unchanged file hashes; process checks require native CLI/daemon routing without fallbacks; no recipient AI tools are exposed and internal-error traceback/debug wire acceptance remains pending", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_store_interop.py": {
       "test_python_created_books_rust_reads_and_writes": {
         "disposition": "rust-test",

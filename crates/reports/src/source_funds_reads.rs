@@ -370,16 +370,23 @@ fn recipients(conn: &Connection, profile: &str, include_inactive: bool) -> Resul
     };
     let order = if include_inactive { "active DESC," } else { "" };
     Ok(Value::List(rows(conn, &format!("SELECT * FROM source_funds_recipients WHERE profile_id=?{active} ORDER BY {order}label COLLATE NOCASE ASC,id ASC"), [profile])?
-        .iter().map(|row| dict([
-            ("id", value(row, "id").clone()),
-            ("label", value(row, "label").clone()),
-            ("kind", value(row, "kind").clone()),
-            ("default_reveal_mode", value(row, "default_reveal_mode").clone()),
-            ("notes", fallback(row, "notes")),
-            ("active", Value::Bool(truthy(value(row, "active")))),
-            ("created_at", value(row, "created_at").clone()),
-            ("updated_at", value(row, "updated_at").clone()),
-        ])).collect()))
+        .iter().map(recipient).collect()))
+}
+
+pub(super) fn recipient(row: &Value) -> Value {
+    dict([
+        ("id", value(row, "id").clone()),
+        ("label", value(row, "label").clone()),
+        ("kind", value(row, "kind").clone()),
+        (
+            "default_reveal_mode",
+            value(row, "default_reveal_mode").clone(),
+        ),
+        ("notes", fallback(row, "notes")),
+        ("active", Value::Bool(truthy(value(row, "active")))),
+        ("created_at", value(row, "created_at").clone()),
+        ("updated_at", value(row, "updated_at").clone()),
+    ])
 }
 
 fn evidence_page(args: &Value) -> Result<(i64, i64)> {

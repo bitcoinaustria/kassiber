@@ -145,13 +145,23 @@ listing. These editor reads retain full attachment metadata without opening
 evidence files. Case listings use their frozen recipient fields and do not
 load or validate the saved report payload. They do not rebuild journals or
 establish provenance, ownership or tax facts. Native source creation and managed
-evidence association are available through the CLI and daemon. They retain the
-provenance boundary and roll back failed writes; native AI consent/once-only
+evidence association, plus recipient creation, updates and soft deletion, are
+available through the CLI and daemon. They retain the provenance boundary and
+roll back failed writes; native AI consent/once-only
 admission remains pending. The bounded traversal planner is implemented, while
 report production, review/input handoffs, coverage, suggest/assemble dry runs
-and other source-funds mutations remain pending. PDF rendering and PDF-containing bundles remain in
-Python by the owner's decision; their routes are not registered natively.
+and link/case mutations remain pending. PDF rendering and PDF-containing
+bundles remain in Python by the owner's decision; their routes are not
+registered natively.
 
 Uncaught failures on the native source-funds daemon reads include an empty
 native debug string; typed refusals retain null. Python-only traceback frames
 and stderr are not fabricated. Non-debug response fields retain exact parity.
+
+Recipient mutations preserve exact, profile-scoped references and frozen case
+recipient fields. Python currently translates duplicate-recipient constraint
+errors to validation errors on SQLite but leaves SQLCipher's distinct exception
+untranslated. The Rust service preserves that envelope difference. The local
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_recipient_constraints.py)
+records the discrepancy without changing Python product behavior. No recipient
+mutation tools are exposed to the in-product AI.

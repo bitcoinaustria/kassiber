@@ -29,6 +29,9 @@ pub const KINDS: &[&str] = &[
     "ui.source_funds.links.list",
     "ui.source_funds.evidence.list",
     "ui.source_funds.recipients.list",
+    "ui.source_funds.recipients.create",
+    "ui.source_funds.recipients.update",
+    "ui.source_funds.recipients.delete",
     "ui.reports.cross_check",
 ];
 pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<Value, AppError> {
@@ -401,6 +404,33 @@ mod tests {
             .unwrap()
             .contains("planted-secret-value"));
     }
+
+    #[test]
+    fn source_funds_recipient_daemon_preserves_arguments_and_registers_mutations() {
+        let args = dict([
+            ("recipient", s(" r-a ")),
+            ("label", s("Renamed")),
+            ("kind", s("bank")),
+            ("default_reveal_mode", s("full")),
+            ("notes", s("")),
+        ]);
+        for kind in [
+            "ui.source_funds.recipients.create",
+            "ui.source_funds.recipients.update",
+            "ui.source_funds.recipients.delete",
+        ] {
+            assert!(KINDS.contains(&kind));
+            let actual = execute(&mut SourceFundsCapture, kind, Some(&args)).unwrap();
+            assert_eq!(get(&actual, "command"), Some(&s(kind)));
+            assert_eq!(get(&actual, "args"), Some(&args));
+            assert_eq!(
+                execute(&mut SourceFundsCapture, kind, Some(&Value::Bool(false)))
+                    .unwrap_err()
+                    .code,
+                "validation"
+            );
+        }
+    }
     #[test]
     fn source_funds_stored_daemon_preserves_arguments_and_registers_only_lists() {
         let args = dict([
@@ -434,7 +464,6 @@ mod tests {
             "ui.source_funds.suggest",
             "ui.source_funds.assemble",
             "ui.source_funds.links.create",
-            "ui.source_funds.recipients.create",
         ] {
             assert!(!KINDS.contains(&kind));
         }

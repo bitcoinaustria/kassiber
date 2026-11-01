@@ -9689,5 +9689,235 @@
       "source_funds_traversal_refuses_sqlite_limit_overflow_without_writes"
     ],
     "rule": "A query limit exceeding SQLite INTEGER fails instead of becoming an unlimited negative LIMIT."
+  },
+  {
+    "id": "sof-recipient-create-label",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "let label = strip(&label);",
+    "replace": "let label = label.as_str();",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Recipient labels use Python whitespace normalization before validation."
+  },
+  {
+    "id": "sof-recipient-kind-hyphen",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "normalized.replace('-', \"_\")",
+    "replace": "normalized",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Recipient kind normalization preserves hyphen aliases."
+  },
+  {
+    "id": "sof-recipient-enum",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "if !choices.contains(&normalized.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Recipient kinds and disclosure defaults remain explicit enums."
+  },
+  {
+    "id": "sof-recipient-reveal-default",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "if !kind && raw.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "An explicitly empty updated reveal mode resets the Python standard default."
+  },
+  {
+    "id": "sof-recipient-create-notes",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "let notes = strip(&notes);",
+    "replace": "let notes = notes.as_str();",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "New recipient notes are trimmed and empty notes stored as NULL."
+  },
+  {
+    "id": "sof-recipient-inactive-label",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "AND label=? AND active=1",
+    "replace": "AND label=?",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Label lookup excludes inactive recipients while id lookup retains them."
+  },
+  {
+    "id": "sof-recipient-exact-label",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "AND label=? AND active=1",
+    "replace": "AND lower(label)=lower(?) AND active=1",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Recipient label references are case-sensitive."
+  },
+  {
+    "id": "sof-recipient-id-precedence",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "if let Some(row) = rows(\n        conn,\n        \"SELECT * FROM source_funds_recipients WHERE profile_id=? AND id=?\",",
+    "replace": "if let Some(row) = rows(\n        conn,\n        \"SELECT * FROM source_funds_recipients WHERE profile_id=? AND id=? AND active=1\",",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Inactive ids remain resolvable and cannot be confused with an active label."
+  },
+  {
+    "id": "sof-recipient-profile-scope",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "\"SELECT * FROM source_funds_recipients WHERE profile_id=? AND id=?\",\n        [profile, reference]",
+    "replace": "\"SELECT * FROM source_funds_recipients WHERE ? IS NOT NULL AND id=?\",\n        [profile, reference]",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Recipient mutation resolution remains bound to the selected profile."
+  },
+  {
+    "id": "sof-recipient-binding-errors",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "&& rows(conn, \"PRAGMA cipher_salt\", []).is_ok_and(|rows| rows.is_empty())",
+    "replace": "&& false",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Plain SQLite and SQLCipher retain their distinct Python constraint envelopes."
+  },
+  {
+    "id": "sof-recipient-soft-delete",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "SET active=0,updated_at=?",
+    "replace": "SET active=1,updated_at=?",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Delete preserves recipient identities and frozen case history while deactivating the row."
+  },
+  {
+    "id": "sof-recipient-delete-scope",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "SET active=0,updated_at=? WHERE profile_id=? AND id=?",
+    "replace": "SET active=0,updated_at=? WHERE profile_id=? OR id=?",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Soft deletion changes only its scoped recipient."
+  },
+  {
+    "id": "sof-recipient-omitted-fields",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "_ => text(&existing, key),",
+    "replace": "_ => String::new(),",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Omitted and non-string update fields preserve stored values."
+  },
+  {
+    "id": "sof-recipient-preserved-notes",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "let notes = field(\"notes\");",
+    "replace": "let notes = strip(&field(\"notes\")).to_owned();",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Omitted notes preserve existing whitespace rather than rewriting history."
+  },
+  {
+    "id": "sof-recipient-update-clock",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "params![label,kind,reveal,(!notes.is_empty()).then_some(notes),now,profile,id]",
+    "replace": "params![label,kind,reveal,(!notes.is_empty()).then_some(notes),text(&existing,\"updated_at\"),profile,id]",
+    "expect_failing": [
+      "source_funds_recipients_pin_validation_envelopes_and_all_112_tables"
+    ],
+    "rule": "Every successful update records its one operation timestamp."
+  },
+  {
+    "id": "sof-recipient-nested-commit",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"RELEASE report_export\"\n        })",
+    "replace": "\"COMMIT\"\n        })",
+    "expect_failing": [
+      "source_funds_recipients_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "Nested recipient mutations do not commit unrelated caller work."
+  },
+  {
+    "id": "sof-recipient-late-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"ROLLBACK\"\n        } else {",
+    "replace": "\"SELECT 1\"\n        } else {",
+    "expect_failing": [
+      "source_funds_recipients_roll_back_busy_and_deferred_commits_on_both_stores"
+    ],
+    "rule": "Busy and deferred commit failures roll back every recipient effect."
+  },
+  {
+    "id": "sof-recipient-nested-rollback",
+    "file": "crates/reports/src/export.rs",
+    "find": "\"ROLLBACK TO report_export; RELEASE report_export\"",
+    "replace": "\"ROLLBACK\"",
+    "expect_failing": [
+      "source_funds_recipients_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "Nested recipient failures retain the outer pending transaction."
+  },
+  {
+    "id": "sof-recipient-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"source-funds.recipients.create\",\n    \"source-funds.recipients.update\",",
+    "replace": "    \"source-funds.recipients.create\",",
+    "expect_failing": [
+      "source_funds_recipient_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "Recipient update is registered as a native CLI route."
+  },
+  {
+    "id": "sof-recipient-cli-admission",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"source-funds.recipients.create\",\n    \"source-funds.recipients.update\",",
+    "replace": "    \"source-funds.recipients.update\",",
+    "expect_failing": [
+      "source_funds_recipient_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "Recipient creation is admitted by the native command inventory."
+  },
+  {
+    "id": "sof-recipient-cli-fields",
+    "file": "crates/cli/src/reports.rs",
+    "find": "            \"recipient\",\n            \"kind\",\n            \"default_reveal_mode\",\n            \"notes\",",
+    "replace": "            \"recipient\",\n            \"kind\",\n            \"notes\",",
+    "expect_failing": [
+      "source_funds_recipient_cli_forwards_fields_and_registers_mutations"
+    ],
+    "rule": "The CLI forwards explicit disclosure defaults to the shared service."
+  },
+  {
+    "id": "sof-recipient-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.source_funds.recipients.update\",\n    \"ui.source_funds.recipients.delete\",",
+    "replace": "    \"ui.source_funds.recipients.update\",",
+    "expect_failing": [
+      "source_funds_recipient_daemon_preserves_arguments_and_registers_mutations"
+    ],
+    "rule": "Recipient deletion is registered as a native daemon route."
+  },
+  {
+    "id": "sof-recipient-cipher-errors",
+    "file": "crates/reports/src/source_funds_recipients.rs",
+    "find": "&& rows(conn, \"PRAGMA cipher_salt\", []).is_ok_and(|rows| rows.is_empty())",
+    "replace": "&& true",
+    "expect_failing": [
+      "source_funds_recipients_preserve_outer_work_and_roll_back_late_failures_on_both_stores"
+    ],
+    "rule": "SQLCipher constraint failures retain the reference internal-error envelope instead of SQLite validation mapping."
   }
 ]

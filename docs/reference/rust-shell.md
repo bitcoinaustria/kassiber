@@ -6467,6 +6467,79 @@ definitions. This import adds no routes: the combined inventory remains 159
 native CLI leaves and seven source-funds daemon kinds. Report, diagram and
 fingerprint production is still unavailable to case-saving admission.
 
+## Source-funds recipient mutation checkpoint (R5 partial)
+
+The `t3code/r5-sof-mutations-2` continuation adds recipient create, update and
+soft-delete through `source_funds_recipients`, the CLI and daemon. The inventory
+becomes 162 native CLI leaves and ten source-funds daemon kinds. The three new
+CLI leaves and three daemon kinds delegate to the same service; no recipient
+tools exist in Python's AI allowlist and none are added here. Existing source
+AI consent/once-only admission remains pending on the native AI execution loop.
+
+Recipient references prefer scoped ids, including inactive ids, then exact
+active labels. Creation retains Python whitespace/kind/reveal normalization;
+partial updates preserve omitted and non-string fields, including existing
+note whitespace. Empty edited notes become NULL. Soft deletion preserves the
+recipient identity and all saved case fields. These settings and disclosure
+defaults establish no provenance, custody, ownership, basis or tax facts and
+perform no evidence-file or network I/O.
+
+One admitted transaction owns validation, the write and response projection.
+Standalone failures roll back all changes; nested failures preserve unrelated
+pending work. Trigger refusals, busy commits and deferred foreign-key failures
+are covered for creation, updates and deletion on SQLite and SQLCipher.
+Both duplicate-label and id collisions retain Python's binding-specific
+constraint envelopes: SQLite catches `sqlite3.IntegrityError` as validation,
+while SQLCipher's distinct exception escapes as an internal error. The local
+`crates/reports/scripts/repro_python_source_funds_recipient_constraints.py`
+records that reference discrepancy. Python product code and the existing
+pending-row reproductions remain unchanged.
+
+The frozen corpus has 143 cases. All 286 SQLite/SQLCipher process comparisons
+pass with full helper envelope bytes, every one of the 112 tables and unchanged
+evidence file bytes/hashes. Actual transport comparisons cover 13 native CLI
+mutation calls and 13 native daemon mutation requests plus two daemon reads,
+with literal response bytes and zero fallback. Generated recipient ids use a
+one-to-one mapping and only test builds inject the clock. Internal-error
+traceback/debug process-wire parity remains the existing unaccepted shell gap.
+
+All 842 report mutation entries apply. The 23 new recipient entries pass their
+five named unmutated baselines and are killed with no build errors, survivors
+or empty selections. The 819 inherited entries retain their previous evidence.
+
+| Named test | New mutations killed |
+| --- | ---: |
+| `source_funds_recipients_pin_validation_envelopes_and_all_112_tables` | 15 |
+| `source_funds_recipients_preserve_outer_work_and_roll_back_late_failures_on_both_stores` | 3 |
+| `source_funds_recipients_roll_back_busy_and_deferred_commits_on_both_stores` | 1 |
+| `source_funds_recipient_cli_forwards_fields_and_registers_mutations` | 3 |
+| `source_funds_recipient_daemon_preserves_arguments_and_registers_mutations` | 1 |
+
+All 12 source-funds Rust integration tests and all 36 CLI/daemon library tests
+pass. Rust 1.99.1 offline/locked formatting and reports/CLI/daemon all-target
+clippy with warnings denied pass. The generator and binding-constraint repro
+pass. Account `HOME` remains unchanged; all books, preferences, owner roots,
+scratch and both Cargo directories stay below the worktree's `target/`, with
+eight Cargo jobs and incremental/debug output disabled. The isolated mutation
+checker selects only the affected integration target or transport libraries.
+Verification logs, routing records, source/probe hashes and summaries stay in
+`target/r5-sof-mutations-2/`; owned build/data trees are removed after
+summarizing. Verification is Linux-only. The full workspace/frontend quality
+gate, Docker regtest and packaged/platform checks are not claimed.
+
+The required classifier update records 5,719 definitions, with both new Python
+tests retained as reviewed report oracles in the serial daemon lane. Final CI
+preflight passes all 57 tests. The final source/recipient transport rerun passes
+all four process tests after strengthening recipient identity normalization.
+
+This remains a partial mutation checkpoint. Link creation/review/attachment,
+batch review and persisted suggest/assemble still need their native services,
+transports, consent and once-only execution. Complete case saving still needs
+the native report, diagram, fingerprint and write-lock producer; the imported
+traversal planner alone cannot admit a save. PDF rendering and PDF-containing
+bundles remain Python. No dependency, lockfile, schema or tax-rule changes are
+included.
+
 ## Not yet ported
 
 The diagnostics slice now implements explicit public reports and native debug

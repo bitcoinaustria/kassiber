@@ -482,12 +482,19 @@ registers them; exit-tax preserves its reference no-registration boundary.
 - [x] Port source creation and managed-id source evidence association through
   the native service, CLI and daemon, with complete helper envelopes, all 112
   tables, file/hash invariance and late rollback on SQLite and SQLCipher.
-  The inventory is 159 native CLI leaves and seven source-funds daemon kinds;
+  This boundary added two CLI leaves and two source-funds daemon kinds;
   11 CLI mutation calls and ten daemon mutation requests are verified with zero
   fallback. See the [partial source mutation checkpoint](docs/reference/rust-shell.md#source-funds-source-mutation-checkpoint-r5-partial).
 - [ ] Complete source mutation AI consent and once-only admission. The native
   shell has no AI execution loop; Python AI runs and service-only internal-error
   envelopes are excluded from native transport acceptance.
+- [x] Port recipient create/update/soft-delete through the shared native
+  service, CLI and daemon. Preserve scoped exact references, partial updates,
+  frozen case history and binding-specific constraint errors. Compare full
+  envelopes, all 112 tables and unchanged file hashes, with late rollback on
+  both bindings and zero transport fallbacks. The inventory is 162 native CLI
+  leaves and ten source-funds daemon kinds; Python exposes no recipient AI tools.
+  See the [recipient checkpoint](docs/reference/rust-shell.md#source-funds-recipient-mutation-checkpoint-r5-partial).
 - [ ] Finish source-funds report traversal/disclosure, review-context/request-input,
   coverage and suggest/assemble dry runs in separate verified commits on
   `t3code/r5-sof-reads-2`; include diagrams and non-PDF output with report traversal.
@@ -496,8 +503,8 @@ registers them; exit-tax preserves its reference no-registration boundary.
   report producers and their new transports remain unregistered. Resolve the
   recorded Python privacy-boundary fee-attribution discrepancy explicitly at
   the report parity boundary, without silently changing the reference here.
-- [ ] Complete source-funds case saving, link mutations/batch review (including
-  persisted suggest/assemble) and recipient mutations in separate verified
+- [ ] Complete source-funds case saving and link mutations/batch review
+  (including persisted suggest/assemble) in separate verified
   commits on `t3code/r5-sof-mutations-2`. Preserve consent, once-only execution
   and SQLite/SQLCipher rollback.
   A [native frozen-case persistence helper](docs/reference/rust-shell.md#source-funds-frozen-case-persistence-foundation-r5-partial)

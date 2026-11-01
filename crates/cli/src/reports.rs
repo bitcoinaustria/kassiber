@@ -34,6 +34,9 @@ pub const COMMANDS: &[&str] = &[
     "source-funds.recipients.list",
     "source-funds.sources.create",
     "source-funds.sources.attach",
+    "source-funds.recipients.create",
+    "source-funds.recipients.update",
+    "source-funds.recipients.delete",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     match command {
@@ -86,6 +89,10 @@ fn source_funds_request(args: &Namespace) -> Value {
             "attachments",
             "source",
             "attachment",
+            "recipient",
+            "kind",
+            "default_reveal_mode",
+            "notes",
         ]
         .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
     )
@@ -202,6 +209,83 @@ fn request(args: &Namespace) -> Value {
 mod tests {
     use super::*;
     use kassiber_envelope::get;
+    #[test]
+    fn source_funds_recipient_cli_forwards_fields_and_registers_mutations() {
+        for (action, fields) in [
+            (
+                "create",
+                vec![
+                    "--label",
+                    "Recipient",
+                    "--kind",
+                    "bank",
+                    "--default-reveal-mode",
+                    "minimal",
+                    "--notes",
+                    "Evidence",
+                ],
+            ),
+            (
+                "update",
+                vec![
+                    "--recipient",
+                    "r-a",
+                    "--label",
+                    "Renamed",
+                    "--kind",
+                    "lawyer",
+                    "--default-reveal-mode",
+                    "full",
+                    "--notes",
+                    "",
+                ],
+            ),
+            ("delete", vec!["--recipient", "r-a"]),
+        ] {
+            let mut argv = vec![
+                "source-funds",
+                "recipients",
+                action,
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+            ];
+            argv.extend(fields);
+            let args = crate::argparse::parse_args(
+                &argv.into_iter().map(String::from).collect::<Vec<_>>(),
+                crate::argparse::Context {
+                    width: 78,
+                    version: "test",
+                },
+            )
+            .unwrap();
+            let command = format!("source-funds.recipients.{action}");
+            assert!(COMMANDS.contains(&command.as_str()));
+            assert!(crate::describe::IMPLEMENTED.contains(&command.as_str()));
+            let actual = execute(&mut SourceFundsCapture, &command, &args).unwrap();
+            assert_eq!(
+                get(&actual, "command"),
+                Some(&kassiber_envelope::s(command.as_str()))
+            );
+            let payload = get(&actual, "args").unwrap();
+            for key in [
+                "workspace",
+                "profile",
+                "recipient",
+                "label",
+                "kind",
+                "default_reveal_mode",
+                "notes",
+            ] {
+                assert_eq!(
+                    get(payload, key),
+                    Some(args.get(key).unwrap_or(&Value::Null)),
+                    "{key}"
+                );
+            }
+        }
+    }
     #[test]
     fn source_funds_source_cli_forwards_mutations_and_managed_ids() {
         for tail in [
@@ -353,7 +437,6 @@ mod tests {
             "source-funds.suggest",
             "source-funds.assemble",
             "source-funds.links.create",
-            "source-funds.recipients.create",
         ] {
             assert!(!COMMANDS.contains(&command));
             assert!(!crate::describe::IMPLEMENTED.contains(&command));

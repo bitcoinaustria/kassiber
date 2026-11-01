@@ -1340,6 +1340,32 @@ still open. The [preparation checkpoint](../reference/rust-shell.md#source-funds
 also records an unchanged Python privacy-boundary fee-attribution reproduction;
 the port must not silently treat it as an accepted authority change.
 
+### R5 recipient mutation continuation (partial)
+
+The mutation continuation adds recipient create/update/soft-delete through the
+shared native report service and both transports. It preserves exact scoped
+references, inactive-id lookup, partial-update semantics, one timestamp per
+write and immutable saved-case recipient fields. These local settings convey
+no ownership or tax authority and perform no evidence-file or network I/O.
+Python exposes no recipient AI tools; this port adds none.
+
+The 143-case corpus covers full helper envelopes and all 112 tables on SQLite
+and SQLCipher, including the reference's binding-specific constraint errors.
+Native process checks compare 13 CLI mutation calls and 13 daemon mutation
+requests plus two daemon reads, with zero fallback and unchanged file hashes.
+Late statement, deferred-commit and busy-commit refusals restore all rows on
+both bindings; nested operations retain unrelated pending work. The inventory
+becomes 162 native CLI leaves and ten source-funds daemon kinds.
+
+The [recipient checkpoint](../reference/rust-shell.md#source-funds-recipient-mutation-checkpoint-r5-partial)
+records verification and named mutation kills. The synthetic constraint-error
+reproduction preserves Python unchanged. Link mutations, batch review,
+persisted suggest/assemble and complete case saving still remain; the latter
+awaits native report/diagram/fingerprint production. Source AI consent/once-only
+admission and internal-error traceback/debug process parity remain unaccepted.
+PDF-containing exports remain Python; there are no dependency, lockfile, schema
+or tax-rule changes.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

@@ -38,6 +38,7 @@ mod snapshots;
 pub mod source_funds_cases;
 pub mod source_funds_mutations;
 mod source_funds_reads;
+pub mod source_funds_recipients;
 pub mod source_funds_traversal;
 mod sql;
 mod standalone_csv;
@@ -124,6 +125,9 @@ pub fn execute_with_sources(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
+    if source_funds_recipients::handles(command) {
+        return source_funds_recipients::execute(conn, command, args, sources);
+    }
     if source_funds_mutations::handles(command) {
         return source_funds_mutations::execute(conn, command, args, sources);
     }
