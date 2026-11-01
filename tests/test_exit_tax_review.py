@@ -528,6 +528,33 @@ def test_offset_departure_selects_jurisdiction_civil_day(engine_book, departure,
     assert report["departureDate"] == (at_day if country == "at" else generic_day)
 
 
+@pytest.mark.parametrize("country", ("at", "generic"))
+@pytest.mark.parametrize("departure", (
+    "2024-03-31T23:30:00", "2024-10-27 02:30:00", "2025-01-01T00:30:00.123456",
+))
+def test_timed_departure_requires_explicit_offset(engine_book, country, departure):
+    from kassiber.errors import AppError
+
+    conn = engine_book(regime_rows(), country=country, pair=True)
+    with pytest.raises(AppError) as error:
+        reports.report_exit_tax(conn, "W", "P", handlers._report_hooks(), departure_date=departure)
+    assert error.value.code == "validation"
+    assert "date (YYYY-MM-DD) or a date-time with an offset" in error.value.hint
+
+
+@pytest.mark.parametrize("command", ("exit-tax", "export-exit-tax-pdf", "export-exit-tax-xlsx"))
+def test_exit_tax_help_requires_offset_for_timed_departures(command, capsys):
+    from kassiber.cli.main import build_parser
+
+    with pytest.raises(SystemExit) as result:
+        build_parser().parse_args(["reports", command, "--help"])
+    assert result.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "date-time with an offset" in help_text
+    assert "without an offset are rejected" in help_text
+    assert "Europe/Vienna" in help_text
+
+
 @pytest.mark.parametrize(("day", "start", "priced"), [
     ("2024-03-31", "2024-03-30T23:00:00Z", True),
     ("2024-10-27", "2024-10-26T22:00:00Z", False),
