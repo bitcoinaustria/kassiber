@@ -283,7 +283,14 @@ def _same_asset_amount_close(out_tx: Mapping[str, Any], in_tx: Mapping[str, Any]
 def _btc_value(msat: int | None) -> float | None:
     if msat is None:
         return None
-    return float(msat_to_btc(msat))
+    amount = dec(msat)
+    if not amount.is_finite() or amount != amount.to_integral_value():
+        raise AppError(
+            "Stored source-funds amounts must be whole millisatoshis",
+            code="validation",
+            retryable=False,
+        )
+    return float(msat_to_btc(int(amount)))
 
 
 def _safe_json_loads(value: str | None) -> Any:

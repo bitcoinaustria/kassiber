@@ -32,6 +32,10 @@ with exact millisatoshi ratios; this changes only the report projection, not
 the authored allocation. Multiple possible sources and ratios requiring
 rounding remain unresolved.
 
+Stored source, link and case listings refuse fractional or nonfinite
+millisatoshi quantities with `validation`. They do not truncate legacy values
+into a different BTC display amount or rewrite the retained evidence.
+
 A report states the gross upstream demand its reviewed routes require, per
 source denomination, and says so explicitly when that gross differs from the
 selected target. It claims a target composition share only when the gross
