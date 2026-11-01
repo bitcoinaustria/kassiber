@@ -2311,6 +2311,70 @@ def _attachment_entries_by_transaction(conn, tx_where, tx_params):
     return grouped
 
 
+def _report_transaction_query_rows(conn, profile, wallet=None):
+    """Read transaction projections without unrelated whole-report aggregates."""
+    tx_filters = ["t.profile_id = ?"]
+    tx_params = [profile["id"]]
+    if wallet:
+        tx_filters.append("t.wallet_id = ?")
+        tx_params.append(wallet["id"])
+    tx_where = " AND ".join(tx_filters)
+    transaction_rows = conn.execute(
+        f"""
+        SELECT
+            t.id AS row_id,
+            t.occurred_at,
+            w.label AS wallet,
+            COALESCE(t.external_id, '') AS transaction_id,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            t.fiat_currency,
+            t.fiat_rate,
+            t.fiat_value,
+            t.fiat_rate_exact,
+            t.fiat_value_exact,
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.note, '') AS note,
+            COALESCE(t.counterparty, '') AS counterparty
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE {tx_where} AND t.excluded = 0
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        tx_params,
+    ).fetchall()
+    tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
+    attachments_by_tx = _attachment_entries_by_transaction(conn, tx_where, tx_params)
+    journals_current = _journals_current(conn, profile["id"])
+    journal_values = (
+        _transaction_journal_values(conn, profile, wallet=wallet) if journals_current else {}
+    )
+    transfer_legs = _self_transfer_legs_by_transaction(
+        conn, profile, journals_current=journals_current
+    )
+    transactions = []
+    for row in transaction_rows:
+        entries = attachments_by_tx.get(row["row_id"], [])
+        journal = journal_values.get(row["row_id"], {})
+        references = [entry["url"] for entry in entries if entry.get("url")]
+        transactions.append(
+            {
+                **dict(row),
+                "cost_basis": journal.get("cost_basis"),
+                "gain_loss": journal.get("gain_loss"),
+                "transfer": transfer_legs.get(row["row_id"], ""),
+                "tags": tags_by_tx.get(row["row_id"], ""),
+                "references": "\n".join(references),
+                "attachments": "\n".join(entry["display_name"] for entry in entries),
+                "attachments_list": entries,
+            }
+        )
+
+    return transactions
+
+
 def _report_query_rows(conn, profile, wallet=None):
     tx_filters = ["t.profile_id = ?"]
     tx_params = [profile["id"]]
@@ -2421,58 +2485,8 @@ def _report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
 
-    transaction_rows = conn.execute(
-        f"""
-        SELECT
-            t.id AS row_id,
-            t.occurred_at,
-            w.label AS wallet,
-            COALESCE(t.external_id, '') AS transaction_id,
-            t.direction,
-            t.asset,
-            t.amount,
-            t.fee,
-            t.fiat_currency,
-            t.fiat_rate,
-            t.fiat_value,
-            t.fiat_rate_exact,
-            t.fiat_value_exact,
-            COALESCE(t.description, '') AS description,
-            COALESCE(t.note, '') AS note,
-            COALESCE(t.counterparty, '') AS counterparty
-        FROM transactions t
-        JOIN wallets w ON w.id = t.wallet_id
-        WHERE {tx_where} AND t.excluded = 0
-        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
-        """,
-        tx_params,
-    ).fetchall()
-    tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
-    attachments_by_tx = _attachment_entries_by_transaction(conn, tx_where, tx_params)
     journals_current = _journals_current(conn, profile["id"])
-    journal_values = (
-        _transaction_journal_values(conn, profile, wallet=wallet) if journals_current else {}
-    )
-    transfer_legs = _self_transfer_legs_by_transaction(
-        conn, profile, journals_current=journals_current
-    )
-    transactions = []
-    for row in transaction_rows:
-        entries = attachments_by_tx.get(row["row_id"], [])
-        journal = journal_values.get(row["row_id"], {})
-        references = [entry["url"] for entry in entries if entry.get("url")]
-        transactions.append(
-            {
-                **dict(row),
-                "cost_basis": journal.get("cost_basis"),
-                "gain_loss": journal.get("gain_loss"),
-                "transfer": transfer_legs.get(row["row_id"], ""),
-                "tags": tags_by_tx.get(row["row_id"], ""),
-                "references": "\n".join(references),
-                "attachments": "\n".join(entry["display_name"] for entry in entries),
-                "attachments_list": entries,
-            }
-        )
+    transactions = _report_transaction_query_rows(conn, profile, wallet=wallet)
 
     pair_filters = ["p.profile_id = ?"]
     pair_params = [profile["id"]]

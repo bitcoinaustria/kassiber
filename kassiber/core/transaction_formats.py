@@ -40,7 +40,7 @@ from .reports import (
     ReportHooks,
     _generic_report_transaction_rows,
     _optional_decimal_pref,
-    _report_query_rows,
+    _report_transaction_query_rows,
     _require_report_context,
     export_wallet_scope_label,
     resolve_export_wallets,
@@ -392,7 +392,9 @@ def build_platform_rows(
         details={"wallet": export_wallet_scope_label(wallets)},
     )
 
-    query_rows = _report_query_rows(conn, profile, wallet=wallets[0] if wallets and len(wallets) == 1 else None)
+    query_rows = {"transactions": _report_transaction_query_rows(
+        conn, profile, wallet=wallets[0] if wallets and len(wallets) == 1 else None
+    )}
     export_rows = _generic_report_transaction_rows({"query_rows": query_rows})
     tx_meta = {
         row["id"]: row
