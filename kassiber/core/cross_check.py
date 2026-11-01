@@ -127,6 +127,13 @@ def _utc(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _shift_utc(moment: datetime, delta: timedelta) -> datetime:
+    try:
+        return moment + delta
+    except OverflowError:
+        return (datetime.min if delta < timedelta() else datetime.max).replace(tzinfo=timezone.utc)
+
+
 def _rows(count: int) -> str:
     return f"{count} row" if count == 1 else f"{count} rows"
 
@@ -410,10 +417,10 @@ class _Index:
         bucket = self._rows.get(key)
         if not bucket:
             return None
-        moment = tool.occurred_at - offset
+        moment = _shift_utc(tool.occurred_at, -offset)
         times = self._times[key]
-        start = bisect.bisect_left(times, moment - _PROBABLE_WINDOW)
-        end = bisect.bisect_right(times, moment + _PROBABLE_WINDOW)
+        start = bisect.bisect_left(times, _shift_utc(moment, -_PROBABLE_WINDOW))
+        end = bisect.bisect_right(times, _shift_utc(moment, _PROBABLE_WINDOW))
         best = None
         for row in bucket[start:end]:
             if row.matched or _conflicting_ids(tool, row) or not _amount_fits(tool, row):
@@ -543,7 +550,7 @@ def _differences(
             )
 
     if tool.occurred_at is not None:
-        shifted = tool.occurred_at - offset
+        shifted = _shift_utc(tool.occurred_at, -offset)
         drift = shifted - book.occurred_at
         # A different tax year matters however small the drift: 22:59Z and
         # 23:01Z on 31 December are two years in an Austrian book.
@@ -830,7 +837,7 @@ def cross_check(
             bucket["fees"] += row.fee_msat
 
     for tool_row, book, match in pairs:
-        if not (in_period(tool_row.occurred_at - offset) or in_period(book.occurred_at)):
+        if not (in_period(_shift_utc(tool_row.occurred_at, -offset)) or in_period(book.occurred_at)):
             continue
         diffs = _differences(tool_row, book, offset=offset, calendar=calendar, compare_types=compare_types)
         status = "different" if any(diff["severity"] == "tax" for diff in diffs) else "matched"
@@ -843,14 +850,14 @@ def cross_check(
                 "differences": diffs,
             }
         )
-        if in_period(tool_row.occurred_at - offset):
+        if in_period(_shift_utc(tool_row.occurred_at, -offset)):
             add_tool_total(tool_row)
         if in_period(book.occurred_at):
             add_book_total(book)
         source_wallets[tool_row.source][book.wallet] += 1
         source_matched[tool_row.source] += 1
     for tool_row, book, match in excluded_pairs:
-        if not (in_period(tool_row.occurred_at - offset) or in_period(book.occurred_at)):
+        if not (in_period(_shift_utc(tool_row.occurred_at, -offset)) or in_period(book.occurred_at)):
             continue
         rows.append(
             {
@@ -861,10 +868,10 @@ def cross_check(
                 "differences": [],
             }
         )
-        if in_period(tool_row.occurred_at - offset):
+        if in_period(_shift_utc(tool_row.occurred_at, -offset)):
             add_tool_total(tool_row)
     for tool_row in only_tool:
-        if not in_period(tool_row.occurred_at - offset):
+        if not in_period(_shift_utc(tool_row.occurred_at, -offset)):
             continue
         rows.append({"status": "only_tool", "match": None, "tool": _tool_payload(tool_row), "kassiber": None, "differences": []})
         add_tool_total(tool_row)
