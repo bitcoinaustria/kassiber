@@ -7,8 +7,21 @@ pub(super) fn process<'a>(
     conn: &'a Connection,
     workspace: Option<&Value>,
     profile: Option<&Value>,
+    auto_pair: bool,
     progress: &mut impl FnMut(&'static str),
 ) -> Result<Committed<'a>, Refusal> {
+    if auto_pair {
+        return kassiber_journals::service::refresh(
+            conn,
+            workspace,
+            profile,
+            kassiber_journals::process::RefreshOptions {
+                auto_pair,
+                ..Default::default()
+            },
+            progress,
+        );
+    }
     kassiber_journals::service::process(conn, workspace, profile, progress)
 }
 
@@ -17,15 +30,45 @@ pub(super) fn process<'a>(
     conn: &'a Connection,
     workspace: Option<&Value>,
     profile: Option<&Value>,
+    auto_pair: bool,
     progress: &mut impl FnMut(&'static str),
 ) -> Result<Committed<'a>, Refusal> {
+    if std::env::var("KASSIBER_RUST_TEST_JOURNAL_FAIL_PAIRED_STORE").as_deref() == Ok("1") {
+        conn.execute_batch("CREATE TEMP TRIGGER IF NOT EXISTS refresh_failure BEFORE UPDATE OF last_processed_at ON profiles WHEN NEW.last_processed_at IS NOT NULL AND EXISTS(SELECT 1 FROM custody_component_economic_terms WHERE term_kind='transaction_pair') BEGIN SELECT RAISE(ABORT,'second rebuild failed'); END")?;
+    }
+    let observed = std::cell::Cell::new(0);
+    let mut progress = |phase| {
+        if phase == "complete"
+            && std::env::var("KASSIBER_RUST_TEST_JOURNAL_TRACE_WRITES").as_deref() == Ok("1")
+        {
+            eprintln!(
+                "{}",
+                serde_json::json!({"phase":phase,"writes":observed.get()})
+            );
+        }
+        progress(phase);
+    };
+    if auto_pair {
+        return kassiber_journals::service::refresh_with_sources(
+            conn,
+            workspace,
+            profile,
+            &Sources,
+            kassiber_journals::process::RefreshOptions {
+                auto_pair,
+                ..Default::default()
+            },
+            &mut progress,
+            &mut Writes(&observed),
+        );
+    }
     kassiber_journals::service::process_with_sources(
         conn,
         workspace,
         profile,
         &Sources,
-        progress,
-        &mut Writes(0),
+        &mut progress,
+        &mut Writes(&observed),
     )
 }
 
@@ -55,16 +98,16 @@ impl kassiber_transfers::Sources for Sources {
 }
 
 #[cfg(feature = "test-harness")]
-struct Writes(usize);
+struct Writes<'a>(&'a std::cell::Cell<usize>);
 #[cfg(feature = "test-harness")]
-impl kassiber_journals::storage::WriteObserver for Writes {
+impl kassiber_journals::storage::WriteObserver for Writes<'_> {
     fn wrote(&mut self, table: &'static str) -> kassiber_store::rusqlite::Result<()> {
-        self.0 += 1;
+        self.0.set(self.0.get() + 1);
         let selected = |name| {
             std::env::var(name)
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
-                == Some(self.0)
+                == Some(self.0.get())
         };
         if selected("KASSIBER_RUST_TEST_JOURNAL_FAIL_AFTER_WRITE") {
             return Err(kassiber_store::rusqlite::Error::ExecuteReturnedResults);
@@ -73,7 +116,7 @@ impl kassiber_journals::storage::WriteObserver for Writes {
             use std::io::Write;
             println!(
                 "{}",
-                serde_json::json!({"paused_at": self.0, "table": table})
+                serde_json::json!({"paused_at": self.0.get(), "table": table})
             );
             std::io::stdout().flush().expect("journal test kill point");
             loop {

@@ -1,11 +1,19 @@
 [
   {
-    "id": "JROUTE-auto-pair-admission",
+    "id": "JROUTE-auto-pair-registration",
     "file": "crates/cli/src/run.rs",
-    "find": "        && (command != \"journals.process\" || !args.flag(\"auto_pair\"))",
-    "replace": "",
-    "expect_failing": ["journal_auto_pair_remains_unregistered_before_bootstrap", "the_probe_reports_implementation_without_running_the_command"],
-    "rule": "Keep automatic pairing outside the plain registration boundary."
+    "find": "    IMPLEMENTED.contains(&command)\n",
+    "replace": "    IMPLEMENTED.contains(&command)\n        && (command != \"journals.process\" || !args.flag(\"auto_pair\"))\n",
+    "expect_failing": ["journal_auto_pair_registration_forwards_flag_and_finishes_checkpoint", "the_probe_reports_implementation_without_running_the_command"],
+    "rule": "Admit automatic pairing through both ordinary CLI routing and the hybrid implementation probe."
+  },
+  {
+    "id": "JROUTE-auto-pair-forwarding",
+    "file": "crates/cli/src/run.rs",
+    "find": "                    namespace.flag(\"auto_pair\"),",
+    "replace": "                    false,",
+    "expect_failing": ["journal_auto_pair_registration_forwards_flag_and_finishes_checkpoint"],
+    "rule": "Forward explicit automatic-pairing authority to the shared book service."
   },
   {
     "id": "JROUTE-plain-registration",
@@ -38,5 +46,13 @@
     "replace": "return Ok(());",
     "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
     "rule": "Complete the journal checkpoint after publishing the terminal envelope."
+  },
+  {
+    "id": "JROUTE-auto-pair-service",
+    "file": "crates/journals/src/service.rs",
+    "find": "        options,\n        &mut |phase| (progress.borrow_mut())(phase),",
+    "replace": "        process::RefreshOptions { auto_pair: false, ..options },\n        &mut |phase| (progress.borrow_mut())(phase),",
+    "expect_failing": ["refresh_service_resolves_explicit_scope_and_matches_pairing_books"],
+    "rule": "Carry the caller's pairing authority through the scoped production service."
   }
 ]

@@ -114,6 +114,58 @@ pub fn process_with_sources<'a>(
     )
 }
 
+pub fn refresh<'a>(
+    conn: &'a Connection,
+    workspace: Option<&Value>,
+    selected_profile: Option<&Value>,
+    options: process::RefreshOptions,
+    progress: &mut impl FnMut(&'static str),
+) -> Result<process::Committed<'a>, Refusal> {
+    refresh_with_sources(
+        conn,
+        workspace,
+        selected_profile,
+        &SystemSources,
+        options,
+        progress,
+        &mut (),
+    )
+}
+
+pub fn refresh_with_sources<'a>(
+    conn: &'a Connection,
+    workspace: Option<&Value>,
+    selected_profile: Option<&Value>,
+    sources: &impl Sources,
+    options: process::RefreshOptions,
+    progress: &mut impl FnMut(&'static str),
+    writes: &mut impl storage::WriteObserver,
+) -> Result<process::Committed<'a>, Refusal> {
+    let initial = profile(conn, workspace, selected_profile)?;
+    let workspace_id = initial["workspace_id"]
+        .as_str()
+        .ok_or_else(|| Refusal::new("KeyError", "workspace_id"))?;
+    let profile_id = initial["id"]
+        .as_str()
+        .ok_or_else(|| Refusal::new("KeyError", "id"))?;
+    let workspace = kassiber_envelope::s(workspace_id);
+    let selected_profile = kassiber_envelope::s(profile_id);
+    let progress = std::cell::RefCell::new(progress);
+    process::refresh_native(
+        conn,
+        &kassiber_transfers::Scope {
+            workspace_id,
+            profile_id,
+        },
+        |conn| profile(conn, Some(&workspace), Some(&selected_profile)),
+        sources,
+        options,
+        &mut |phase| (progress.borrow_mut())(phase),
+        &mut |phase| (progress.borrow_mut())(phase),
+        writes,
+    )
+}
+
 /// Match the reference's outer exception projection. Refusal details remain
 /// local until the transport applies its ordinary redaction boundary.
 pub fn application_error(refusal: Refusal) -> AppError {

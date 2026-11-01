@@ -180,6 +180,74 @@ fn refresh_matches_complete_python_books_ordered_results_phases_and_tapes() {
 }
 
 #[test]
+fn refresh_service_resolves_explicit_scope_and_matches_pairing_books() {
+    let vectors = vectors();
+    for case in vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["auto_pair"] == true)
+    {
+        let conn = load(&vectors, case);
+        let scope = scope(case);
+        let sources = Tapes::new(case);
+        let mut phases = Vec::new();
+        let result = kassiber_journals::service::refresh_with_sources(
+            &conn,
+            Some(&kassiber_envelope::s(scope.workspace_id)),
+            Some(&kassiber_envelope::s(scope.profile_id)),
+            &sources,
+            RefreshOptions {
+                auto_pair: true,
+                skip_rebuild_when_current: case["skip_rebuild_when_current"] == true,
+                ..Default::default()
+            },
+            &mut |phase| phases.push(json!({"phase":phase})),
+            &mut (),
+        );
+        match result {
+            Ok(result) => {
+                assert!(case["error"].is_null(), "{}", case["name"]);
+                assert_eq!(
+                    kassiber_pyjson::dumps(&result.ordered_payload, &Default::default()).unwrap(),
+                    case["payload_json"].as_str().unwrap(),
+                    "{}",
+                    case["name"]
+                );
+                result.after_reply().unwrap();
+            }
+            Err(error) => assert_eq!(
+                serde_json::to_value(error).unwrap(),
+                case["error"],
+                "{}",
+                case["name"]
+            ),
+        }
+        assert!(
+            support::logical_equal(
+                &support::snapshot(&conn),
+                &expand(&vectors, case, "expected")
+            ),
+            "{}",
+            case["name"]
+        );
+        assert_eq!(
+            phases,
+            *case["phases"].as_array().unwrap(),
+            "{}",
+            case["name"]
+        );
+        assert_eq!(
+            sources.precise.get(),
+            case["precise_reads"].as_u64().unwrap() as usize
+        );
+        assert!(sources.ids.borrow_mut().next().is_none());
+        assert!(sources.ticks.borrow_mut().next().is_none());
+        assert!(conn.is_autocommit());
+    }
+}
+
+#[test]
 fn refresh_cancellation_rolls_back_pairs_and_keeps_only_the_first_commit() {
     let vectors = vectors();
     for current in [false, true] {

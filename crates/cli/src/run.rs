@@ -164,7 +164,6 @@ pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
 fn implemented(command: &str, args: &Namespace) -> bool {
     IMPLEMENTED.contains(&command)
-        && (command != "journals.process" || !args.flag("auto_pair"))
         && (command != "transactions.export"
             || matches!(
                 args.text("export_format"),
@@ -653,6 +652,7 @@ fn book_command(
                 .process_journals(
                     namespace.get("workspace"),
                     namespace.get("profile"),
+                    namespace.flag("auto_pair"),
                     &mut |_| {},
                 )
                 .map_err(|failure| {

@@ -212,6 +212,7 @@ impl Book for FakeBook {
         &mut self,
         workspace: Option<&Value>,
         profile: Option<&Value>,
+        auto_pair: bool,
         progress: &mut dyn FnMut(&'static str),
     ) -> Result<Box<dyn JournalReply + '_>, JournalFailure> {
         self.store.record("journals process".into());
@@ -221,6 +222,7 @@ impl Book for FakeBook {
             payload: dict([
                 ("workspace", workspace.cloned().unwrap_or(Value::Null)),
                 ("profile", profile.cloned().unwrap_or(Value::Null)),
+                ("auto_pair", Value::Bool(auto_pair)),
             ]),
         }))
     }

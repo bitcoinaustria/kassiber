@@ -88,16 +88,26 @@ fn journal_plain_registration_forwards_selectors_and_finishes_checkpoint() {
 }
 
 #[test]
-fn journal_auto_pair_remains_unregistered_before_bootstrap() {
+fn journal_auto_pair_registration_forwards_flag_and_finishes_checkpoint() {
     let store = FakeStore::new(FakeConfig::default());
     let (code, out, err) = invoke(
         Arc::new(store.clone()),
         &Environment::default(),
-        &["--machine", "journals", "process", "--auto-pair"],
+        &[
+            "--machine",
+            "--data-root",
+            "/disposable",
+            "journals",
+            "process",
+            "--auto-pair",
+        ],
     );
-    assert_eq!((code, err.as_str()), (1, ""), "{out}");
-    assert!(out.contains("\"code\": \"not_implemented\""), "{out}");
-    assert!(store.events().is_empty());
+    assert_eq!((code, err.as_str()), (0, ""), "{out}");
+    assert!(out.contains("\"auto_pair\": true"), "{out}");
+    let events = store.events();
+    let index = |event| events.iter().position(|e| e == event).unwrap();
+    assert!(index("journals process") < index("journals checkpoint"));
+    assert!(index("journals checkpoint") < index("close"));
 }
 
 #[test]
@@ -356,7 +366,7 @@ fn the_probe_reports_implementation_without_running_the_command() {
         ),
         (
             &["--machine", "journals", "process", "--auto-pair"][..],
-            PROBE_NOT_IMPLEMENTED,
+            0,
             "journals.process",
         ),
         (

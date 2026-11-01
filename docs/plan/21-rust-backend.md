@@ -2991,17 +2991,19 @@ zero-fallback hybrid workloads remain before registration. See the
 [publication handoff](../reference/rust-shell.md#bitcoin-atomic-publication-verification-r5)
 for exact verification and mutation results.
 
-### R4-13 process composition and plain CLI registration (partial)
+### R4-13 process composition and CLI registration (partial)
 
 The [pipeline checkpoint](../reference/r4-journal-process-checkpoint.md) composes
 the native loader, custody kernels, fusion/engine, rendering and persistence
 under one writer transaction. Production now binds the shared scope resolver
-and `SystemSources`, and registers plain CLI `journals process`. Its hybrid
-launcher replays a refusal through Python only after byte-identical rollback;
-successful admitted invocations stay native. R4-10's ordered pre-build is
-integrated. Transitional JSON boundaries and pairing/desktop/AI registration
-remain open. Registered-route campaigns, census/shadow, inherited mutation and
-performance acceptance are still required. The existing
+and `SystemSources`, and registers CLI `journals process` with optional automatic
+pairing. Its hybrid launcher replays a refusal through Python only after
+byte-identical rollback; successful admitted invocations stay native. R4-10's
+ordered pre-build is integrated. Automatic pairing preserves Python's separate
+first-rebuild commit and atomic pairing/second-rebuild transaction.
+Transitional JSON boundaries and
+desktop/AI registration remain open. Registered-route campaigns, census/shadow,
+inherited mutation and performance acceptance are still required. The existing
 desktop daemon path enables pairing by default, while scoped AI processing
 disables it; registration must preserve both contracts with R4-14.
 

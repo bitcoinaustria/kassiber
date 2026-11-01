@@ -119,11 +119,12 @@ described in the [CLI registration checkpoint](#bitcoin-wallet-sync-cli-registra
 
 <!-- inherited from process@08e99c524; pending r10 verification -->
 The development-only hybrid candidate may select Python before bootstrap.
-Plain `journals process` also supports guarded refusal replay after native
-execution: only a test build's byte-identical rollback signal can hand the
-whole invocation to Python. The launcher records the phase/exception-family
-shape of each fallback. Product binaries keep typed native errors and never
-launch Python. `--auto-pair` remains outside this registration boundary.
+`journals process`, including `--auto-pair`, supports guarded refusal replay
+after native execution: only a test build's byte-identical rollback signal can
+hand the whole invocation to Python. The launcher records the
+phase/exception-family shape of each fallback. Product binaries keep typed
+native errors and never launch Python. An automatic-pairing invocation that retained its first rebuild
+cannot request replay after a later refusal.
 Wallet lifecycle remains a partial service checkpoint with the explicit limitations below.
 
 `commands describe` builds the catalog from the generated tree with the

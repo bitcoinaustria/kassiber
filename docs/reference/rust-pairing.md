@@ -2,9 +2,10 @@
 
 `kassiber_transfers::pairing` ports the automatic pairing used before journal
 processing. The journal stage remains separate from R4-13's pipeline wiring:
-`journals process --auto-pair`, desktop journal processing and freshness journal
-jobs retain Python routing until that integration lands. The existing native
-transfer commands reuse this same library. The [service slice contract](../plan/21-rust-backend.md#service-slice-contract-r4-onward)
+CLI `journals process --auto-pair` now uses the native refresh coordinator;
+desktop journal processing, freshness journal jobs and scoped AI processing
+retain Python routing until their separate registration gates pass. The existing
+native transfer commands reuse this same library. The [service slice contract](../plan/21-rust-backend.md#service-slice-contract-r4-onward)
 and [transfers classification](rust-shell.md#transfers-and-review-classification-r5)
 continue to govern route activation.
 
@@ -52,7 +53,8 @@ probe providers, discover books, or change routing. The supplied `Sources`
 provides clocks and UUIDs; production uses `SystemSources`. The returned value
 has Python freshness's exact automatic-pairing summary shape.
 
-R4-13's unregistered `process::refresh_native` now coordinates this contract.
+R4-13's `process::refresh_native` coordinates this contract through the shared
+scoped book service and registered CLI flag.
 Its captured entry, `auto_pair_before_journals_captured`, preserves SQLite
 exceptions separately from application refusals for the exact skipped-pairing
 summary. The ordinary pairing entry and its pending-write contract remain the

@@ -1,5 +1,6 @@
 """Disposable CLI reference with clocks bound for registered-route byte tests."""
 from contextlib import ExitStack
+from datetime import datetime
 import os
 from pathlib import Path
 import sys
@@ -15,6 +16,14 @@ def main():
     owner = Path(os.environ['KASSIBER_RUST_TEST_OWNER_ROOT'])
     with ExitStack() as stack:
         stack.enter_context(patch.object(project, '_owner_lock_root', lambda: owner))
+        if os.environ.get('KASSIBER_RUST_TEST_JOURNAL_FAIL_PAIRED_STORE') == '1':
+            original_process = custody_journal.process_journals
+            def process(conn, *args, **kwargs):
+                conn.execute("CREATE TEMP TRIGGER IF NOT EXISTS refresh_failure BEFORE UPDATE OF last_processed_at ON profiles "
+                             "WHEN NEW.last_processed_at IS NOT NULL AND EXISTS(SELECT 1 FROM custody_component_economic_terms "
+                             "WHERE term_kind='transaction_pair') BEGIN SELECT RAISE(ABORT,'second rebuild failed'); END")
+                return original_process(conn, *args, **kwargs)
+            stack.enter_context(patch.object(custody_journal, 'process_journals', process))
         if os.environ.get('KASSIBER_RUST_TEST_JOURNAL_IDS') == 'sequential':
             counter = itertools.count(1)
             class DurableUUID(uuid.UUID):
@@ -33,8 +42,17 @@ def main():
                 'kassiber.core.custody_journal.custody_build_clock',
                 'kassiber.core.custody_filed_reports.now_iso',
                 'kassiber.core.filed_report_chain.now_iso',
+                'kassiber.core.custody_components._now_iso',
+                'kassiber.core.custody_review_terms.now_iso',
+                'kassiber.core.custody_authored_migration.now_iso',
+                'kassiber.cli.handlers.now_iso',
             ):
                 stack.enter_context(patch(target, return_value=clock))
+            class Frozen(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    return datetime.fromisoformat(clock.replace('Z', '+00:00'))
+            stack.enter_context(patch('kassiber.core.transfer_matching.datetime', Frozen))
         return cli(sys.argv[1:])
 
 

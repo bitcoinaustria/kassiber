@@ -187,6 +187,7 @@ pub trait Book: Send {
         &mut self,
         _workspace: Option<&Value>,
         _profile: Option<&Value>,
+        _auto_pair: bool,
         _progress: &mut dyn FnMut(&'static str),
     ) -> Result<Box<dyn JournalReply + '_>, JournalFailure> {
         Err(not_implemented("journals", "process").into())

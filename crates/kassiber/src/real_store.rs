@@ -812,12 +812,13 @@ impl Book for RealBook {
         &mut self,
         workspace: Option<&Value>,
         profile: Option<&Value>,
+        auto_pair: bool,
         progress: &mut dyn FnMut(&'static str),
     ) -> Result<Box<dyn JournalReply + '_>, JournalFailure> {
         let conn = self.conn()?;
         let guard = kassiber_journals::service::ReplayGuard::capture(conn);
         let mut last_phase = "admission";
-        let result = journals::process(conn, workspace, profile, &mut |phase| {
+        let result = journals::process(conn, workspace, profile, auto_pair, &mut |phase| {
             last_phase = phase;
             progress(phase);
         })

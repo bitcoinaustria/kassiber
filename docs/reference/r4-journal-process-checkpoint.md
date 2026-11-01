@@ -961,8 +961,10 @@ cases on both drivers. The disposable native probe can pause at each progress
 phase and each precise clock read, in addition to its existing per-write pause
 and fault controls. Recovery checks cover every observed journal write, both
 rebuilds, all four pairing clock calls and the boundaries before/after commits.
-They reopen the book, check integrity and compare every typed application row
-against the initial or exact Python first-commit snapshot as appropriate.
+The sweep contains **208 abrupt kills**, **144 journal-write faults** and
+**16 pairing-pass faults** across both codecs and current/stale starting books.
+The checks reopen the book, check integrity and compare every typed application
+row against the initial or exact Python first-commit snapshot as appropriate.
 These controls belong only to the unpackaged example; route registration is a
 separate boundary.
 
@@ -975,3 +977,62 @@ Rust refresh tests** pass, including the new durable replay guard regression.
 All-target, all-feature journal clippy passes with warnings denied, and
 workspace formatting passes. The classifier update and required CI preflight
 pass (**57 tests**). Registration and the remaining campaign gates remain open.
+
+### CLI automatic-pairing registration
+
+The CLI implementation probe and ordinary dispatch now admit `--auto-pair`.
+The flag crosses the shared `Book::process_journals` contract and selects the
+scoped native refresh service. Production binds transfer `SystemSources`;
+test builds bind the same coordinator to clocks, UUIDs and write observers.
+The service resolves the requested book once, fixes its workspace/profile IDs
+and reloads the stored profile under each rebuild's writer reservation. It
+preserves Python's first-commit policy and the deferred final checkpoint.
+Plain processing keeps its existing result shape; automatic processing adds
+the ordered `rebuilt` and `auto_pair` fields through the refresh coordinator.
+
+The registered route matrix covers all eleven pairing scenarios, stale/current
+projections, both codecs and an additional Austrian exact-pair case. Every
+valid hybrid call must report Rust service with no fallback. Scope refusals
+remain no-write operations. Late rebuild failure is injected with a temporary
+trigger after schema admission, leaving the durable schema unchanged. A
+separate registered write matrix discovers both commit boundaries from a
+successful test-harness invocation before faulting or killing the first write
+and the first/last writes of the second rebuild. Reopened books must match the
+initial or exact live-Python first-commit snapshot, and a retained commit must
+never authorize replay. The additional controls are compiled only into the
+unpackaged test harness.
+
+Verification passes **121 distinct registered CLI cases**: the full 111-case
+run plus the expanded 16-case scope run, with six overlapping cases. All
+**48 valid hybrid automatic-pairing calls** stay native, comparing raw output,
+ordered envelopes and complete typed books without masking any result fields.
+The inherited focused plain-route refusal checks retain nine replays: five
+`building:AppError`, two `preparing:ValueError` and two injected
+`storing:DatabaseError`. These focused counts are not an exhaustive census.
+All **183 native CLI/journal tests** pass. All **seven route mutations** are
+killed, with **four passing unmutated baselines**, no survivors and no build
+failures. Production compilation, scoped all-target/all-feature clippy,
+default-feature production clippy and workspace formatting pass.
+The required classifier update completes and CI preflight passes all
+**57 tests**. Source/binary/log hashes and bounded route/fallback counts are retained
+in `target/r4-13/continuation-6/cli/verification-summary.json`. Verified binaries
+and logs remain after disposable mutation and verification build trees are
+removed. No background verification job remains running at handoff.
+
+### Sixth-continuation handoff
+
+CLI automatic pairing is the completed registration boundary. Desktop
+`ui.journals.process` (`auto_pair=True`) still needs exact event/envelope,
+scope/argument authority, cancellation and route mutation verification. The
+internal scoped AI mutation (`auto_pair=False`) still needs registration inside
+Python's consent-bound main-thread dispatcher; the chat loop remains Python.
+A new public no-pairing daemon kind would not satisfy that internal path.
+
+Then rerun **25,030 generated** and **318 recorded** comparisons through the
+registered routes, including census/shadow and the inherited mutation catalogs
+with source/binary manifests. Benchmark all four books from process start to
+exit against Python with load recorded. Complete the lossless refusal census,
+including NaN stage values, actual surrogate scalars/keys, non-string stage
+keys, BLOB profile admission and malformed-scalar/refusal precedence. Earlier
+probe campaigns and timings do not certify these remaining gates. R4-13
+remains open.
