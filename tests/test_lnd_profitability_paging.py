@@ -1,6 +1,7 @@
 """Profitability cannot silently use only LND's first page."""
 
 from copy import deepcopy
+from decimal import Decimal
 
 import pytest
 
@@ -71,3 +72,23 @@ def test_full_page_without_advancing_cursor_refuses_incomplete_history(monkeypat
     with pytest.raises(AppError) as raised:
         fetch(node)
     assert raised.value.code == "lightning_history_incomplete"
+
+
+def test_proxy_capped_forward_pages_read_all_2500_events():
+    class CappedNode(PagedNode):
+        def post(self, path, payload=None):
+            assert path == "/v1/switch"
+            self.requests.append(("POST", path, dict(payload)))
+            offset = int(payload["index_offset"])
+            rows = []
+            for index in range(offset, min(offset + 500, 2500)):
+                row = deepcopy(CANNED_FORWARDS["forwarding_events"][0])
+                row.update(timestamp_ns=str(1_710_000_000_000_000_000 + index), fee_msat="1000")
+                rows.append(row)
+            return {"forwarding_events": rows, "last_offset_index": str(offset + len(rows))}
+
+    node = CappedNode(BACKEND)
+    rows = lnd._fetch_lnd_forwarding_history(node)
+    assert len(rows) == 2500
+    assert sum(row["amount"] for row in lnd._lnd_routing_income_imports(rows)) == Decimal("0.000025")
+    assert [int(payload["index_offset"]) for _, _, payload in node.requests] == [0, 500, 1000, 1500, 2000, 2500]

@@ -211,7 +211,8 @@ LND profitability pages forwarding events across the requested time window and
 payments in stable index order before filtering their timestamps. Invoice
 counts also page to exhaustion. A full page without an advancing cursor refuses
 with `lightning_history_incomplete`, so a first-page total cannot masquerade as
-a complete report. These reads occur only within the explicitly requested
+a complete report. An advancing cursor continues even when a proxy returns
+fewer events than requested. These reads occur only within the explicitly requested
 snapshot/report action; constructing an adapter contacts nothing.
 
 Core Lightning profitability requires successful channel, forward, payment and

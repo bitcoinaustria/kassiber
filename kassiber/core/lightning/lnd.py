@@ -1119,10 +1119,12 @@ def _fetch_lnd_forwarding_history(
         next_offset = _int(
             payload.get("last_offset_index") or payload.get("last_index_offset")
         )
-        if not page or len(page) < LND_MAX_PAGE_SIZE:
+        if not page:
             break
         if next_offset <= offset:
-            raise AppError("LND forwarding history cursor did not advance", code="lightning_history_incomplete")
+            if len(page) >= LND_MAX_PAGE_SIZE:
+                raise AppError("LND forwarding history cursor did not advance", code="lightning_history_incomplete")
+            break
         offset = next_offset
     return rows
 
