@@ -198,6 +198,9 @@ The operator CSV formats satoshi amounts as exact eight-place BTC strings,
 including values beyond floating-point integer precision. A missing routing
 window refuses the report with `lightning_routing_unavailable`; unavailable
 earnings are never represented as a successful zero summary.
+CSV output is fully rendered and UTF-8 validated before touching the destination,
+then published through an owner-only sibling file and atomic replacement.
+Encoding or publication failure leaves the previous artifact intact.
 
 ### AI tool surface redaction
 
