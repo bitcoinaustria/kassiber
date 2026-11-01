@@ -8,8 +8,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.rust_port.journal_pipeline_oracle import capture
-from tests.rust_port.journal_prebuild_oracle import ROOT
+ROOT = Path(__file__).resolve().parents[2]
 
 _ORIGINAL = None
 _FAILURES = []
@@ -50,17 +49,25 @@ def install_from_environment():
     if not destination.resolve().is_relative_to(ROOT / 'target'):
         raise ValueError('pre-build recordings require a disposable worktree target directory')
     destination.mkdir(mode=0o700, parents=True, exist_ok=True)
-    spec = importlib.util.spec_from_file_location('prebuild_check', ROOT / 'scripts/check-journal-prebuild.py')
-    check = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(check)
     from kassiber.cli import handlers
-    _ORIGINAL = handlers._repair_journal_source_overlaps
+    if _ORIGINAL is not None:
+        return
+    original = handlers._repair_journal_source_overlaps
+    _ORIGINAL = original
+    check = None
 
     def compare(conn, profile, stem):
+        nonlocal check
+        from tests.rust_port.journal_pipeline_oracle import capture
+        if check is None:
+            spec = importlib.util.spec_from_file_location('prebuild_check', ROOT / 'scripts/check-journal-prebuild.py')
+            check = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(check)
         schema = [list(row) for row in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name")]
-        with patch.object(handlers, '_repair_journal_source_overlaps', _ORIGINAL):
+        with patch.object(handlers, '_repair_journal_source_overlaps', original):
             case = capture(conn, f'fresh-{stem}', profile['id'], pending=True)
         case['schema'] = schema
+        case['recorded_by'] = os.environ.get('PYTEST_CURRENT_TEST')
         request = dict(case, stage='pipeline', dump=False)
         row = check.native(binary.resolve(), [request])[0]
         assert row['verified'], 'pre-build full-book database mismatch'
@@ -81,7 +88,7 @@ def install_from_environment():
             with os.fdopen(descriptor, 'w') as output:
                 output.write('full-book pre-build comparison failed\n')
             raise
-        return _ORIGINAL(conn, profile)
+        return original(conn, profile)
 
     handlers._repair_journal_source_overlaps = compared
 

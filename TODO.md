@@ -602,7 +602,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   now completes 24,000 seeds and 1,030 permutations: 24,815 stored operands,
   49,630 file comparisons and 215 separate schema refusals. Historical replay
   and 89 fresh full-book captures also pass both file drivers. Fresh source
-  activity is measured separately; legacy activation coverage remains open.
+  activity is measured separately. The [mutation/census checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-mutation-and-census-checkpoint)
+  closes the 81 pre-build recipe kill set and records fresh handler activation
+  and domain-skip outcomes. Core shadow passes; census and report coverage
+  completes across initial runs and exact continuations after recorder fixes.
+  Three recorder/guard mutations are killed. Inherited mutation execution,
+  the branch audit and whole-stage cache/CPU acceptance remain open.
 - [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
   conversion can collapse distinct amounts. The disposable repro is
   `python -m tests.rust_port.repro_journal_fractional_source_overlap`;

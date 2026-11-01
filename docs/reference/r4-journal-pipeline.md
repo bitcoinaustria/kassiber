@@ -846,6 +846,82 @@ mutation recipes pin the corrected refusal paths; execution remains open.
 These are additional correctness checkpoints. Census/shadow, full mutation
 execution, cache optimization and whole-stage CPU acceptance remain open.
 
+### R4-10 mutation and census checkpoint
+
+All 81 pre-build recipes are now killed: 21 legacy, seven pipeline, 46
+pricing/source and seven numeric-edge recipes. The initial run killed 80;
+`JL-retarget` survived because a later retarget compensated for the deleted
+operation. A new Python-authored fixture keeps an inactive deterministic
+revision beside a different active migration revision. That fixture kills the
+survivor and is frozen in both the 58-case legacy and 51-case ordered corpora.
+The previous frozen cases retain their operands and expectations.
+All **462 complete-dump comparisons** pass across SQLite and SQLCipher under
+the native socket guard. The release journal/transfer suite passes 107 tests.
+
+Fresh handler-path controls now record both a legacy activation and a domain
+skip in each focused census/shadow lane. Both outcomes pass complete replay
+on SQLite and SQLCipher. Earlier low-level processing tests supplied their own
+source callbacks, so the recorder did not observe their legacy work.
+
+Broader runs exposed two recorder installation defects: oracle-first child
+imports could encounter a partially initialized oracle, and an import hook
+could install a second wrapper reentrantly. Oracle/checker imports are now
+lazy, installation checks again after importing handlers, and each wrapper
+retains its original callback. Regressions cover all three child import orders
+and force re-entry while requiring exactly one capture. Later report runs found
+that the first `resource` import inside the pre-exec syscall guard emitted
+`-X importtime` diagnostics into the native probe's captured stderr. The checker
+now imports it in the Linux parent. Platform refusal, the core-dump limit,
+socket filter and strict stderr assertion remain intact. A positive import-time
+regression passes, and all three Python recorder/guard mutations are killed
+after their unmutated controls pass. Swallowed child differences, stale
+directories and zero-comparison sessions still fail.
+
+The custody harness's own unit tests now isolate their mode lifecycle from an
+outer census or shadow session and restore that session afterward. This keeps
+their deliberately patched refusal cases compared instead of accidentally
+treating them as patches made after installation. Product/reference accounting
+code and comparison rules are unchanged. Both focused harness lanes pass
+89 tests, with 19 pre-build captures and four exact native-loader matches each.
+Recordings include the originating pytest node; regeneration of the 505 frozen
+generator operands is not counted as that many fresh handler books.
+
+The full core census initially passed 1,916 tests with 167 failures in the sandbox.
+A permitted continuation passed 1,883 tests before stopping at the recorder
+import defect; focused reruns close every originally failed case, including
+nine remaining environment cases. These are combined-run results, not a claim
+that one uninterrupted shard passed. The initial full run recorded 333 exact
+native-loader matches and 568 matching pre-build captures. Books remain
+disposable under `target/`, with the account `HOME` unchanged.
+
+The full core custody-shadow rerun passes **728 tests and 234 subtests**, with
+328 exact loader matches. The report census and shadow runs pass 2,300 and
+1,822 tests before the import-time guard defect stops both at two subtest
+failures. After the guard correction, exact JUnit-selected continuations pass
+**231 census tests and 103 subtests**, and **109 shadow tests and 42 subtests**.
+Collection manifests prove coverage of all 2,540 census and 1,940 effective
+shadow identities, with no missing identities or unrechecked failures. Shadow's
+two deliberate single-build SQL-read-budget exclusions pass in census.
+These report results are combined-run coverage, not uninterrupted passing shards.
+
+| Lane | Pre-build captures | SQLite/SQLCipher file comparisons |
+| --- | ---: | ---: |
+| Full core custody-shadow | 568 | 1,136 |
+| Report census, initial and completion | 167 | 334 |
+| Report custody-shadow, initial and completion | 167 | 334 |
+
+The core captures include 505 regenerated frozen operands (793 priced rows and
+one refusal) and 63 other handler captures (five priced rows). Each report lane
+captures one legacy activation, one skip and seven warnings. The two focused
+19-capture harness sets also pass all 76 file comparisons. Counts describe
+captures, not distinct books; originating test nodes and activity remain in the
+record. Failed initial sessions are not presented as standalone passing gates.
+
+R4-10 remains **unaccepted**. The inherited journal (112), transfer/daemon (280)
+and custody (2,327) mutation catalogues apply, but their execution, the branch audit,
+whole-stage cache/CPU work and final acceptance record remain open. The
+[campaign record](r4-prebuild-campaign-results.json) retains the exact scope.
+
 ## Performance budget
 
 The budget is for the Rust binary's `journals process` (no `--auto-pair`) on

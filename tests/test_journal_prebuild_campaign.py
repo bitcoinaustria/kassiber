@@ -46,7 +46,12 @@ def test_prebuild_campaign_scenario_vectors_reproduce():
 
 
 @pytest.mark.skipif(sys.platform != 'linux' or os.uname().machine != 'x86_64', reason='native syscall guard requires Linux x86-64')
-def test_prebuild_child_difference_cannot_be_swallowed():
+@pytest.mark.parametrize('first_import', [
+    'from kassiber.cli import handlers',
+    'from tests.rust_port.journal_pipeline_oracle import capture',
+    'from tests.rust_port.journal_prebuild_oracle import seed',
+])
+def test_prebuild_child_difference_cannot_be_swallowed(first_import):
     (ROOT / 'target').mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=ROOT / 'target', prefix='prebuild-child-gate-') as directory:
         scratch = Path(directory)
@@ -58,7 +63,7 @@ def test_prebuild_child_difference_cannot_be_swallowed():
         '''))
         binary.chmod(0o700)
         child = scratch / 'child.py'
-        child.write_text(textwrap.dedent('''
+        child.write_text(first_import + '\n' + textwrap.dedent('''
             import sqlite3
             from kassiber.cli import handlers
             from tests.rust_port.journal_prebuild_oracle import seed
@@ -102,6 +107,85 @@ def test_prebuild_child_difference_cannot_be_swallowed():
         assert '1 passed' in empty.stdout
         assert 'whole pre-build: 0 complete full-book comparisons' in empty.stdout
         assert not list((scratch / 'empty').iterdir())
+
+
+@pytest.mark.skipif(sys.platform != 'linux' or os.uname().machine != 'x86_64', reason='native syscall guard requires Linux x86-64')
+def test_prebuild_native_guard_preserves_import_time_diagnostics():
+    (ROOT / 'target').mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=ROOT / 'target', prefix='prebuild-import-time-') as directory:
+        binary = Path(directory) / 'native'
+        binary.write_text(f'#!{sys.executable}\n' + textwrap.dedent('''
+            import sys
+            for line in sys.stdin:
+                print('{"ok": true}', flush=True)
+        '''))
+        binary.chmod(0o700)
+        probe = textwrap.dedent('''
+            import importlib.util, sys
+            from pathlib import Path
+            spec = importlib.util.spec_from_file_location('prebuild_check', 'scripts/check-journal-prebuild.py')
+            check = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(check)
+            assert check.native(Path(sys.argv[1]), [{}]) == [{'ok': True}]
+        ''')
+        env = {key: value for key, value in os.environ.items() if not key.startswith(
+            ('KASSIBER_TEST_TAX_', 'KASSIBER_TEST_CUSTODY_', 'KASSIBER_TEST_JOURNAL_PREBUILD_'))}
+        result = subprocess.run([sys.executable, '-X', 'importtime', '-c', probe, str(binary)],
+                                cwd=ROOT, env=env, text=True, capture_output=True, timeout=120)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert 'import time:' in result.stderr and 'resource' in result.stderr
+
+
+@pytest.mark.skipif(sys.platform != 'linux' or os.uname().machine != 'x86_64', reason='native syscall guard requires Linux x86-64')
+def test_prebuild_recorder_install_is_reentrant():
+    (ROOT / 'target').mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=ROOT / 'target', prefix='prebuild-reentrant-') as directory:
+        scratch = Path(directory)
+        binary = scratch / 'native'
+        binary.write_text(f'#!{sys.executable}\n' + textwrap.dedent('''
+            import json, sys
+            for line in sys.stdin:
+                request = json.loads(line)
+                print(json.dumps(dict(verified=True, result=request['result'], error=request['error'],
+                                      projection_wire=request['wire_fields'])), flush=True)
+        '''))
+        binary.chmod(0o700)
+        child = scratch / 'child.py'
+        child.write_text(textwrap.dedent(f'''
+            import builtins, os, sqlite3
+            from unittest.mock import patch
+            from kassiber.cli import handlers
+            from tests.rust_port import journal_prebuild_recorder as recorder
+            from tests.rust_port.journal_prebuild_oracle import seed
+            os.environ[recorder.BINARY_ENV] = {str(binary)!r}
+            os.environ[recorder.DIRECTORY_ENV] = {str(scratch / 'records')!r}
+            original_import = builtins.__import__
+            entered = False
+            def importing(name, globals=None, locals=None, fromlist=(), level=0):
+                global entered
+                module = original_import(name, globals, locals, fromlist, level)
+                if name == 'kassiber.cli' and 'handlers' in fromlist and not entered:
+                    entered = True
+                    recorder.install_from_environment()
+                return module
+            with patch('builtins.__import__', side_effect=importing):
+                recorder.install_from_environment()
+            assert entered
+            conn = sqlite3.connect(':memory:')
+            conn.row_factory = sqlite3.Row
+            seed(conn)
+            conn.execute('BEGIN IMMEDIATE')
+            handlers._repair_journal_source_overlaps(conn, conn.execute("SELECT * FROM profiles WHERE id='p'").fetchone())
+            conn.close()
+            recorder.uninstall()
+        '''))
+        env = {key: value for key, value in os.environ.items() if not key.startswith(
+            ('KASSIBER_TEST_TAX_', 'KASSIBER_TEST_CUSTODY_', 'KASSIBER_TEST_JOURNAL_PREBUILD_'))}
+        result = subprocess.run([sys.executable, str(child)], cwd=ROOT, env=env,
+                                text=True, capture_output=True, timeout=120)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert len(list((scratch / 'records').glob('*.prebuild.json'))) == 1
+        assert not list((scratch / 'records').glob('*.prebuild.failure'))
 
 
 @pytest.mark.skipif(sys.platform != 'linux' or os.uname().machine != 'x86_64', reason='native syscall guard requires Linux x86-64')

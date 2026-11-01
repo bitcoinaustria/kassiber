@@ -17495,6 +17495,1395 @@
     "status": "Both native 20k medians exceed target; profiling and optimization remain open",
     "target_seconds": 0.03
   },
+  "mutation_and_census": {
+    "base_commit": "0ebdb9bbe",
+    "broad_verified_lanes": {
+      "full-core-accounting-shadow-verified": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "frozen_regeneration": {
+              "addresses_removed": 0,
+              "auto_priced": 793,
+              "captures": 505,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "refusals": 1,
+              "warnings": 0
+            },
+            "handler_capture": {
+              "addresses_removed": 0,
+              "auto_priced": 5,
+              "captures": 63,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "tests/test_cost_basis_pool_policy.py::CostBasisPoolPolicyTests::test_supported_scope_change_blocks_reports_until_reprocessed (call)": 2,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_all_excluded_component_anchors_still_block_reports (call)": 1,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_header_only_active_component_blocks_cli_reports_without_fake_quarantine (call)": 1,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_retracted_transaction_anchor_stays_durable_and_fails_closed (call)": 2,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_reviewed_conversion_fee_activates_and_projects_end_to_end (call)": 1,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[carrying-value-LBTC-False] (call)": 1,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[carrying-value-LBTC-True] (call)": 2,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[taxable-EUR-False] (call)": 1,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[taxable-EUR-True] (call)": 2,
+            "tests/test_direct_payout_timestamps.py::DirectPayoutTimestampTests::test_legacy_stored_payout_time_books_like_the_canonical_time (call)": 5,
+            "tests/test_direct_payout_timestamps.py::DirectPayoutTimestampTests::test_unparseable_stored_payout_time_is_a_validation_error (call)": 1,
+            "tests/test_import_batches.py::ImportRollbackCliTests::test_rollback_removes_the_runs_transactions_but_keeps_the_wallet (call)": 1,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_campaign_resume_checks_prefix_and_runs_only_missing_operands (call)": 1,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_campaign_scenario_vectors_reproduce (call)": 505,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_recorder_preserves_pending_caller_writes (call)": 1,
+            "tests/test_lnd_settlement_timestamps.py::test_existing_date_correction_invalidates_and_rebuilds_journal (call)": 2,
+            "tests/test_lnd_settlement_timestamps.py::test_successful_settlement_drives_journal_date (call)": 1,
+            "tests/test_partial_payout_compatibility.py::test_pre_fix_historical_book_requires_rebuild (call)": 1,
+            "tests/test_pyfix_review.py::test_legacy_price_error_identifies_transaction (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_batch_judges_an_unpair_after_the_operations_before_it (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_pair_left_suspense_is_fixed_by_one_reviewed_unpair (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_pair_that_leaves_a_suspense_points_at_the_pair (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_shared_leg_batch_survives_its_own_sibling_unpair (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_suspense_without_a_pair_offers_no_pair_review (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_an_allocation_only_revision_since_confirmation_is_refused (call)": 2,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_apply_refuses_a_confirmation_that_no_longer_matches (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_downstream_rows_group_under_the_custody_problem_that_blocks_them (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_missing_acquisition_history_names_amounts_and_wallet (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_presumed_disposals_and_unclassified_receipts_are_listed_as_assumptions (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_review_cases_list_causes_and_count_what_waits_on_them (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_scopes_list_what_needs_the_user_apart_from_what_waits (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_stale_projection_and_paging_are_reported (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_the_ai_tool_accepts_the_scope_and_offset_it_is_told_to_send (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_the_badge_counts_unresolved_downstream_rows_like_the_attention_scope (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_the_sheet_reading_names_the_review_and_its_fingerprint (call)": 2,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_unpair_refuses_a_pair_revised_since_it_was_confirmed (call)": 2,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_unpair_refuses_a_pair_that_no_longer_holds_a_suspense (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_unpair_refuses_a_replacement_pair_on_the_old_confirmation (call)": 2,
+            "tests/test_rates_kraken_csv.py::KrakenCsvRatesTest::test_desktop_daemon_rebuild_reprices_active_profile (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::OwnershipDeriverHandlerTest::test_process_journals_persists_derived_move (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_conserving_graphless_fanout_still_books_moves (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_graphless_multi_source_consolidation_holds (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_nonconserving_graphless_fanout_holds_whole_group (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_one_to_one_partial_payment_is_not_a_fanout_hold (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_pending_self_transfer_is_not_a_verified_custody_move (call)": 2,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_rbf_losing_self_transfer_is_not_a_verified_custody_move (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_shared_provider_id_across_wallets_holds_until_reviewed (call)": 2,
+            "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinImportTest::test_btc_deposit_is_the_reverse_reviewed_custody_move (call)": 1,
+            "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinImportTest::test_txidless_withdrawal_is_reviewed_then_carries_basis_to_self_custody (call)": 1
+          },
+          "total": 568
+        },
+        "comparison_summaries": [
+          "native loader: 328 exact v1 byte matches",
+          "production calls: 630, from test modules: 19",
+          "whole pre-build: 568 complete full-book comparisons"
+        ],
+        "file_replay": {
+          "activity": {
+            "path": "target/r4-10/full-core-accounting-shadow-verified-files.activity.jsonl",
+            "sha256": "89811573c26cbee61729583880104a2f6902c16dbdded82a795acfedacc3cbd3"
+          },
+          "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+          "comparisons": 1136,
+          "complete": true,
+          "summary": {
+            "path": "target/r4-10/full-core-accounting-shadow-verified-files.json",
+            "sha256": "8ff6397e8d38631be2d186b5a041db5284824faca5a779fa1e5fdd8efa3840b7"
+          },
+          "totals": {
+            "recorded": {
+              "addresses_removed": 0,
+              "attempts": 568,
+              "auto_priced": 798,
+              "books": 568,
+              "changed_tables": 681,
+              "components": 240,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "permutation_attempts": 0,
+              "refusals": 1,
+              "seed_attempts": 568,
+              "transactions": 2620,
+              "warnings": 0
+            }
+          }
+        },
+        "junit": {
+          "path": "target/r4-10/full-core-accounting-shadow-verified.xml",
+          "sha256": "1594d279ba2adf9add6805282b314085e48a1ca34161027b24b199fdb3c54ed4"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 46,
+          "tests": 1008
+        },
+        "log": {
+          "path": "target/r4-10/full-core-accounting-shadow-verified.log",
+          "sha256": "af5c7c312cf96b08347815b260df832cd6262244a56f30dc0a604b35643f4f66"
+        },
+        "summary": "728 passed, 46 skipped, 234 subtests passed in 492.35s (0:08:12)"
+      }
+    },
+    "checker": {
+      "path": "scripts/check-journal-prebuild.py",
+      "sha256": "e442953dd20d6df32d30f3b6b8864707cdfbcada178c9599cb9ff86aebd9238d"
+    },
+    "checkpoint_verification": {
+      "classifier_log": {
+        "path": "target/r4-10/mutation-census-classifier.log",
+        "sha256": "6d5aec411b822716320386bd5a09a02e20eb087879bc27512f783043fa4d4896"
+      },
+      "manual_second_pass": "Reviewed recorder lifecycle, callback retention, harness restoration, unchanged Python reference, additive frozen cases, strict syscall/stderr guard and evidence provenance",
+      "preflight_log": {
+        "path": "target/r4-10/mutation-census-preflight.log",
+        "sha256": "2ea2a31238f48318e93e9f410b1cbc08a02875f254fa7366d6e9a6fe9a0eb78c"
+      }
+    },
+    "core_census_combined": {
+      "distinct_initial_failed_identities": 164,
+      "environment_completion": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "handler_capture": {
+              "addresses_removed": 0,
+              "auto_priced": 0,
+              "captures": 2,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[False] (call)": 1,
+            "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[True] (call)": 1
+          },
+          "total": 2
+        },
+        "comparison_summaries": [
+          "native loader: 2 exact v1 byte matches",
+          "production calls: 2, from test modules: 1",
+          "whole pre-build: 2 complete full-book comparisons"
+        ],
+        "junit": {
+          "path": "target/r4-10/core-census-completion.xml",
+          "sha256": "2a17290d1c8b8d460adc111730b2c8dc2862230da9969d11a4e7d9e87f55e5a6"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 11
+        },
+        "log": {
+          "path": "target/r4-10/core-census-completion.log",
+          "sha256": "40b7ef999b813276039ab700ecb48f273cf29e1bffdd9410d8faec0d5bb124c8"
+        },
+        "summary": "11 passed in 7.96s"
+      },
+      "initial": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "earlier_unattributed": {
+              "addresses_removed": 0,
+              "auto_priced": 798,
+              "captures": 568,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "refusals": 1,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "not recorded by earlier recorder": 568
+          },
+          "total": 568
+        },
+        "comparison_summaries": [
+          "native loader: 333 exact v1 byte matches",
+          "production calls: 629, from test modules: 19",
+          "whole pre-build: 568 complete full-book comparisons"
+        ],
+        "junit": {
+          "path": "target/r4-10/full-core-accounting-census.xml",
+          "sha256": "fd52a5110ab69cf805c541694eda56d418d8d5fbfca0626311e7f4e9451df335"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 167,
+          "skipped": 298,
+          "tests": 2833
+        },
+        "log": {
+          "path": "target/r4-10/full-core-accounting-census.log",
+          "sha256": "8312da24736e98ccf0bd2f40b6a88879539b7fa5b11e5e456569e440656d362c"
+        },
+        "summary": "167 failed, 1916 passed, 298 skipped, 452 subtests passed in 773.26s (0:12:53)"
+      },
+      "permitted_continuation": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "frozen_regeneration": {
+              "addresses_removed": 0,
+              "auto_priced": 793,
+              "captures": 505,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "refusals": 1,
+              "warnings": 0
+            },
+            "handler_capture": {
+              "addresses_removed": 0,
+              "auto_priced": 1,
+              "captures": 60,
+              "duplicates_excluded": 0,
+              "legacy_activated": 0,
+              "legacy_skipped": 0,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "tests/test_cost_basis_pool_policy.py::CostBasisPoolPolicyTests::test_supported_scope_change_blocks_reports_until_reprocessed (call)": 2,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_all_excluded_component_anchors_still_block_reports (call)": 1,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_header_only_active_component_blocks_cli_reports_without_fake_quarantine (call)": 1,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_retracted_transaction_anchor_stays_durable_and_fails_closed (call)": 2,
+            "tests/test_custody_components.py::CustodyComponentApiTests::test_reviewed_conversion_fee_activates_and_projects_end_to_end (call)": 1,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[carrying-value-LBTC-False] (call)": 1,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[carrying-value-LBTC-True] (call)": 2,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[taxable-EUR-False] (call)": 1,
+            "tests/test_direct_payout_slices.py::test_partial_payout_ledger_journals_and_report[taxable-EUR-True] (call)": 2,
+            "tests/test_direct_payout_timestamps.py::DirectPayoutTimestampTests::test_legacy_stored_payout_time_books_like_the_canonical_time (call)": 5,
+            "tests/test_direct_payout_timestamps.py::DirectPayoutTimestampTests::test_unparseable_stored_payout_time_is_a_validation_error (call)": 1,
+            "tests/test_import_batches.py::ImportRollbackCliTests::test_rollback_removes_the_runs_transactions_but_keeps_the_wallet (call)": 1,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_campaign_resume_checks_prefix_and_runs_only_missing_operands (call)": 1,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_campaign_scenario_vectors_reproduce (call)": 505,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_recorder_preserves_pending_caller_writes (call)": 1,
+            "tests/test_lnd_settlement_timestamps.py::test_existing_date_correction_invalidates_and_rebuilds_journal (call)": 2,
+            "tests/test_lnd_settlement_timestamps.py::test_successful_settlement_drives_journal_date (call)": 1,
+            "tests/test_partial_payout_compatibility.py::test_pre_fix_historical_book_requires_rebuild (call)": 1,
+            "tests/test_pyfix_review.py::test_legacy_price_error_identifies_transaction (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_batch_judges_an_unpair_after_the_operations_before_it (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_pair_left_suspense_is_fixed_by_one_reviewed_unpair (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_pair_that_leaves_a_suspense_points_at_the_pair (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_shared_leg_batch_survives_its_own_sibling_unpair (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_a_suspense_without_a_pair_offers_no_pair_review (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_an_allocation_only_revision_since_confirmation_is_refused (call)": 2,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_apply_refuses_a_confirmation_that_no_longer_matches (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_downstream_rows_group_under_the_custody_problem_that_blocks_them (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_missing_acquisition_history_names_amounts_and_wallet (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_presumed_disposals_and_unclassified_receipts_are_listed_as_assumptions (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_review_cases_list_causes_and_count_what_waits_on_them (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_scopes_list_what_needs_the_user_apart_from_what_waits (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_stale_projection_and_paging_are_reported (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_the_ai_tool_accepts_the_scope_and_offset_it_is_told_to_send (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_the_badge_counts_unresolved_downstream_rows_like_the_attention_scope (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_the_sheet_reading_names_the_review_and_its_fingerprint (call)": 2,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_unpair_refuses_a_pair_revised_since_it_was_confirmed (call)": 2,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_unpair_refuses_a_pair_that_no_longer_holds_a_suspense (call)": 1,
+            "tests/test_quarantine_review.py::QuarantineReviewTest::test_unpair_refuses_a_replacement_pair_on_the_old_confirmation (call)": 2,
+            "tests/test_rates_kraken_csv.py::KrakenCsvRatesTest::test_desktop_daemon_rebuild_reprices_active_profile (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_conserving_graphless_fanout_still_books_moves (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_graphless_multi_source_consolidation_holds (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_nonconserving_graphless_fanout_holds_whole_group (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_one_to_one_partial_payment_is_not_a_fanout_hold (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_pending_self_transfer_is_not_a_verified_custody_move (call)": 2,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_rbf_losing_self_transfer_is_not_a_verified_custody_move (call)": 1,
+            "tests/test_rp2_ownership_transfers.py::RawObservationHoldJournalTest::test_shared_provider_id_across_wallets_holds_until_reviewed (call)": 2
+          },
+          "total": 565
+        },
+        "comparison_summaries": [
+          "native loader: 316 exact v1 byte matches",
+          "production calls: 583, from test modules: 17",
+          "whole pre-build: 565 complete full-book comparisons"
+        ],
+        "junit": {
+          "path": "target/r4-10/full-core-accounting-census-permitted.xml",
+          "sha256": "1cf72227fbf3053bfbd243b878c22d825ac0cf2bb4aed1cd478c2748bad1c34e"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 1,
+          "skipped": 271,
+          "tests": 2527
+        },
+        "log": {
+          "path": "target/r4-10/full-core-accounting-census-permitted.log",
+          "sha256": "f1e5a2f17e4c8aa05af42141c52c925b646b3da349a79f87066cc3b20fa86e37"
+        },
+        "summary": "1 failed, 1883 passed, 271 skipped, 372 subtests passed in 974.47s (0:16:14)"
+      },
+      "remaining_import_control": "Passes in both focused verified harness lanes",
+      "status": "Every originally failed case has a later passing outcome; not one uninterrupted passing shard",
+      "without_later_passing_outcome": []
+    },
+    "current_frozen_file_replay": {
+      "boundary": "ordered source repairs, drifted legacy pair refresh/profile reload, and cached pricing",
+      "full_dump_comparisons": 462,
+      "network": "native process killed on socket/connect/send syscalls; guard self-test passed",
+      "path": "target/r4-10/preexec-files.json",
+      "sha256": "327e88964d758202a76c5d9b625575d61b9081d6af02a326e333f80c0d7a58b9"
+    },
+    "focused_harness": {
+      "census": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "handler_capture": {
+              "addresses_removed": 0,
+              "auto_priced": 0,
+              "captures": 19,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[False] (call)": 1,
+            "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[True] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-shadow] (call)": 1,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_campaign_resume_checks_prefix_and_runs_only_missing_operands (call)": 1,
+            "tests/test_pyfix_review.py::test_legacy_price_error_identifies_transaction (call)": 1,
+            "tests/test_transaction_graph.py::TransactionGraphTest::test_excluded_transaction_does_not_stale_current_custody_projection (call)": 1
+          },
+          "total": 19
+        },
+        "comparison_summaries": [
+          "native loader: 4 exact v1 byte matches",
+          "production calls: 5, from test modules: 3",
+          "whole pre-build: 19 complete full-book comparisons"
+        ],
+        "file_replay": {
+          "activity": {
+            "path": "target/r4-10/census-harness-verified-files.activity.jsonl",
+            "sha256": "16913f872aed28b5de194c1841ef082c5ba28e5fc0b8b0027b3aac89387ba6bc"
+          },
+          "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+          "comparisons": 38,
+          "complete": true,
+          "summary": {
+            "path": "target/r4-10/census-harness-verified-files.json",
+            "sha256": "98ff9c163f3fd2944251fd2cbd912d136bae291e6e945c64101a8ba4dbffa00b"
+          },
+          "totals": {
+            "recorded": {
+              "addresses_removed": 0,
+              "attempts": 19,
+              "auto_priced": 0,
+              "books": 19,
+              "changed_tables": 12,
+              "components": 5,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 19,
+              "transactions": 38,
+              "warnings": 0
+            }
+          }
+        },
+        "junit": {
+          "path": "target/r4-10/census-harness-verified.xml",
+          "sha256": "9b5a8f7660d922b10300c385a69ae0a97be7a1b167b272a237ab548ef8d81fb6"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 89
+        },
+        "log": {
+          "path": "target/r4-10/census-harness-verified.log",
+          "sha256": "844268f91b8b9087ce71acbcc1b01ca3dd1b3db0631ecb413f8783c64abfa4d8"
+        },
+        "summary": "89 passed in 68.23s (0:01:08)"
+      },
+      "shadow": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "handler_capture": {
+              "addresses_removed": 0,
+              "auto_priced": 0,
+              "captures": 19,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[False] (call)": 1,
+            "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[True] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-shadow] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-census] (call)": 1,
+            "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-shadow] (call)": 1,
+            "tests/test_journal_prebuild_campaign.py::test_prebuild_campaign_resume_checks_prefix_and_runs_only_missing_operands (call)": 1,
+            "tests/test_pyfix_review.py::test_legacy_price_error_identifies_transaction (call)": 1,
+            "tests/test_transaction_graph.py::TransactionGraphTest::test_excluded_transaction_does_not_stale_current_custody_projection (call)": 1
+          },
+          "total": 19
+        },
+        "comparison_summaries": [
+          "native loader: 4 exact v1 byte matches",
+          "production calls: 5, from test modules: 3",
+          "whole pre-build: 19 complete full-book comparisons"
+        ],
+        "file_replay": {
+          "activity": {
+            "path": "target/r4-10/shadow-harness-verified-files.activity.jsonl",
+            "sha256": "3332afe28edd8b9495eaa9489cc8dd011569798d7c3e566892a2b9a10c7f6813"
+          },
+          "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+          "comparisons": 38,
+          "complete": true,
+          "summary": {
+            "path": "target/r4-10/shadow-harness-verified-files.json",
+            "sha256": "fb5b1c3b889fda7cf8812a4dafd946ece6daa9ab1d926cce10c3e44c46a201c5"
+          },
+          "totals": {
+            "recorded": {
+              "addresses_removed": 0,
+              "attempts": 19,
+              "auto_priced": 0,
+              "books": 19,
+              "changed_tables": 12,
+              "components": 5,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 19,
+              "transactions": 38,
+              "warnings": 0
+            }
+          }
+        },
+        "junit": {
+          "path": "target/r4-10/shadow-harness-verified.xml",
+          "sha256": "42096baa342d224356cd89ec9b801a8754fe5462eb1ccad6d39bb8ae188a84cb"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 89
+        },
+        "log": {
+          "path": "target/r4-10/shadow-harness-verified.log",
+          "sha256": "2e166e039eb15b61faa85297056ad4de8aa95cadaf14aac66eadbf3096538edb"
+        },
+        "summary": "89 passed in 57.74s"
+      }
+    },
+    "legacy_handler_activity": {
+      "census": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "earlier_unattributed": {
+              "addresses_removed": 0,
+              "auto_priced": 0,
+              "captures": 2,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "not recorded by earlier recorder": 2
+          },
+          "total": 2
+        },
+        "comparison_summaries": [
+          "native loader: 2 exact v1 byte matches",
+          "production calls: 2, from test modules: 1",
+          "whole pre-build: 2 complete full-book comparisons"
+        ],
+        "file_replay": {
+          "activity": {
+            "path": "target/r4-10/census-legacy-verified-files.activity.jsonl",
+            "sha256": "e9a6a0be274491721a1798f9a87ebbe72b6a9bf0b01a72f8abcf1f5a44cbf8b9"
+          },
+          "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+          "comparisons": 4,
+          "complete": true,
+          "summary": {
+            "path": "target/r4-10/census-legacy-verified-files.json",
+            "sha256": "a0f15caaff5cc7f118f5bb2048028fbe5e3559334aa8386f11bc193e8f6f4118"
+          },
+          "totals": {
+            "recorded": {
+              "addresses_removed": 0,
+              "attempts": 2,
+              "auto_priced": 0,
+              "books": 2,
+              "changed_tables": 12,
+              "components": 4,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 2,
+              "transactions": 6,
+              "warnings": 0
+            }
+          }
+        },
+        "junit": {
+          "path": "target/r4-10/census-legacy-verified.xml",
+          "sha256": "e4c12b9451c58770eb2b62ca6160e6389d7199f9d36a15f4f7a0cf19dacf7dc0"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 2
+        },
+        "log": {
+          "path": "target/r4-10/census-legacy-verified.log",
+          "sha256": "02fd7bcc3c290ccea362d7388c25912f89cda94eca7892c9ca4d78c66ec41317"
+        },
+        "summary": "2 passed in 2.85s"
+      },
+      "shadow": {
+        "capture_provenance": {
+          "activity_by_origin": {
+            "earlier_unattributed": {
+              "addresses_removed": 0,
+              "auto_priced": 0,
+              "captures": 2,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "refusals": 0,
+              "warnings": 0
+            }
+          },
+          "by_test": {
+            "not recorded by earlier recorder": 2
+          },
+          "total": 2
+        },
+        "comparison_summaries": [
+          "native loader: 2 exact v1 byte matches",
+          "production calls: 2, from test modules: 1",
+          "whole pre-build: 2 complete full-book comparisons"
+        ],
+        "file_replay": {
+          "activity": {
+            "path": "target/r4-10/shadow-legacy-verified-files.activity.jsonl",
+            "sha256": "d1f383935f1526addf84030938c9042343d62abfed7aa7c99807fc5baec38949"
+          },
+          "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+          "comparisons": 4,
+          "complete": true,
+          "summary": {
+            "path": "target/r4-10/shadow-legacy-verified-files.json",
+            "sha256": "ebb3b3b81cd1286e63b83c128a1b9d780567cbfde97e4af643766384b43a15e4"
+          },
+          "totals": {
+            "recorded": {
+              "addresses_removed": 0,
+              "attempts": 2,
+              "auto_priced": 0,
+              "books": 2,
+              "changed_tables": 12,
+              "components": 4,
+              "duplicates_excluded": 0,
+              "legacy_activated": 1,
+              "legacy_skipped": 1,
+              "permutation_attempts": 0,
+              "refusals": 0,
+              "seed_attempts": 2,
+              "transactions": 6,
+              "warnings": 0
+            }
+          }
+        },
+        "junit": {
+          "path": "target/r4-10/shadow-legacy-verified.xml",
+          "sha256": "b5082e9cc004a94fcf92d514c2969ede244134f9ab4900d18ba94a9abe39f04c"
+        },
+        "junit_counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 2
+        },
+        "log": {
+          "path": "target/r4-10/shadow-legacy-verified.log",
+          "sha256": "456f590c43c87e1598522381ec66393539a97814d6ac8922953c4342f9a7c2e7"
+        },
+        "summary": "2 passed in 2.80s"
+      }
+    },
+    "limits": [
+      "Pre-build captures from test_prebuild_campaign_scenario_vectors_reproduce regenerate frozen generator operands; they are not independent fresh handler books",
+      "Earlier failed broad attempts are superseded for pass evidence and are not added to passed lane totals",
+      "Books and recorder artifacts remain private and disposable under target; account HOME is unchanged",
+      "Inherited catalogue applicability is checked, but execution and branch audit remain open"
+    ],
+    "native_binary": {
+      "path": "target/cargo/release/examples/journal-prebuild",
+      "sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0"
+    },
+    "native_tests": {
+      "failed": 0,
+      "passed": 107,
+      "path": "target/r4-10/retarget-native.log",
+      "scope": "Release journal and transfer crates, offline, test-harness",
+      "sha256": "1f9ad8665133432f0f0c4b99aba4bbf26e7d26aa49b3a1d574db1b0e7f322bc9"
+    },
+    "prebuild_mutations": {
+      "catalogs": [
+        {
+          "entries": 21,
+          "path": "crates/journals/scripts/legacy_mutations.json",
+          "sha256": "e9faeab6f511d14bd2cb4b7ff4fa7724d241facaaccfd80d661ef2c0e60b6546"
+        },
+        {
+          "entries": 7,
+          "path": "crates/journals/scripts/pipeline_mutations.json",
+          "sha256": "e0d3791e7f669e6b31dc0370fb659b51d423095cf972acdf0b499f690cd1026c"
+        },
+        {
+          "entries": 46,
+          "path": "crates/journals/scripts/prebuild_mutations.json",
+          "sha256": "0b501af0d434781852c8190bce75fa035a9de5926688eff2d2359ab83dec7092"
+        },
+        {
+          "entries": 7,
+          "path": "crates/journals/scripts/prebuild_edge_mutations.json",
+          "sha256": "a5c0d1f8b5c2c774fc419e9ae801510443c1d65c2049703ab4f15c9f2d329ea2"
+        }
+      ],
+      "initial_log": {
+        "path": "target/r4-10/mutations.log",
+        "sha256": "e28ae0a56535aec1b8fca3c7076e29f3022df8647444fa27d224ac9b5f02a5a2"
+      },
+      "initial_run_killed": 80,
+      "initial_survivor": "legacy:JL-retarget",
+      "killed": 81,
+      "limit": "All recipes killed across two runs; no claim of one fresh 81-recipe run",
+      "recipes": 81,
+      "rerun": "JL-retarget killed after a Python-authored inactive exact revision/active revision fixture was added",
+      "survivor_rerun_log": {
+        "path": "target/r4-10/retarget-mutation.log",
+        "sha256": "1fcf877ec0c51140d83b89ba0fbf3d55206a57b70660c3e0deec95a4aa0ce065"
+      }
+    },
+    "preexec_guard_regression": {
+      "fix": "Preload resource in the parent on Linux; keep platform refusal, core-dump limit, syscall filter and strict native stderr assertion",
+      "log": {
+        "path": "target/r4-10/preexec-regression.log",
+        "sha256": "b336bfbb42d8a55315e2f7350d4a6528e0fd95453f81c1e21f96f9ae7c5d2932"
+      },
+      "python_reference_unchanged": true
+    },
+    "python_reference_unchanged": true,
+    "recorder": {
+      "path": "tests/rust_port/journal_prebuild_recorder.py",
+      "sha256": "20ff8b1cec42710cb1eca18df69276050614d9fa014981cd4875ba37fd7d3414"
+    },
+    "recorder_mutations": {
+      "baseline_named_selections": 3,
+      "catalog": {
+        "path": "crates/journals/scripts/recorder_mutations.json",
+        "sha256": "0a5124b2611a8ee28e42784d77aca48bfaf28b859b9f7fc28649882706680946"
+      },
+      "killed": 3,
+      "log": {
+        "path": "target/r4-10/recorder-mutations-final.log",
+        "sha256": "6617c2056f4f195204f6b2f6dd11bc74bf53f3acf3157600e52a4cc36430d21b"
+      },
+      "recipes": 3
+    },
+    "report_lanes_combined": {
+      "census": {
+        "collected_before_shard_deselection": 2540,
+        "completion": {
+          "capture_provenance": {
+            "activity_by_origin": {
+              "handler_capture": {
+                "addresses_removed": 0,
+                "auto_priced": 0,
+                "captures": 17,
+                "duplicates_excluded": 0,
+                "legacy_activated": 0,
+                "legacy_skipped": 0,
+                "refusals": 0,
+                "warnings": 0
+              }
+            },
+            "by_test": {
+              "tests/test_austrian_classification.py::CarryPairPhaseOneBlockJournalTest::test_oversold_at_direct_payout_quarantines_source_instead_of_aborting (call)": 1,
+              "tests/test_austrian_classification.py::CarryPairPhaseOneBlockJournalTest::test_oversold_at_swap_leg_quarantines_pair_instead_of_aborting (call)": 1,
+              "tests/test_austrian_classification.py::CarryPairPhaseOneBlockJournalTest::test_unpriced_carry_leg_keeps_its_missing_price_reason (call)": 2,
+              "tests/test_custody_migration_acceptance.py::test_pre_durable_anchor_migration_preserves_authored_and_tax_history (call)": 2,
+              "tests/test_exit_tax.py::ExitTaxEngineIntegrationTests::test_real_engine_exit_tax_headline (call)": 1,
+              "tests/test_filed_report_chain_carry.py::test_cross_rail_dependency_closure_follows_actual_reviewed_basis[carrying-value] (call)": 1,
+              "tests/test_filed_report_chain_carry.py::test_cross_rail_dependency_closure_follows_actual_reviewed_basis[taxable] (call)": 1,
+              "tests/test_report_cross_check.py::CrossCheckCarriedBasisTests::test_own_exports_of_a_carried_conversion_check_back_clean (setup)": 1,
+              "tests/test_report_cross_check.py::CrossCheckRoundTripTests::test_an_unreadable_row_is_named_not_dropped (setup)": 1,
+              "tests/test_report_transaction_formats.py::AltConversionExportTests::test_a_realized_alt_conversion_exports_as_a_sale (setup)": 1,
+              "tests/test_report_transaction_formats.py::TaxableConversionExportTests::test_taxable_conversion_exports_as_sale_and_purchase_at_booked_values (setup)": 1,
+              "tests/test_source_funds_custody_projection.py::test_effective_nm_bridge_becomes_reviewed_source_funds_lineage (call)": 1,
+              "tests/test_source_funds_custody_projection.py::test_report_revalidates_all_custody_links_with_one_projection_read (call)": 1,
+              "tests/test_tax_shadow_harness.py::ChildProcessShadowTest::test_shadow_child_compares_and_records_its_route (call)": 2
+            },
+            "total": 17
+          },
+          "comparison_summaries": [
+            "native loader: 26 exact v1 byte matches",
+            "production calls: 43, from test modules: 11",
+            "whole pre-build: 17 complete full-book comparisons"
+          ],
+          "file_replay": {
+            "activity": {
+              "path": "target/r4-10/reports-census-completion-files.activity.jsonl",
+              "sha256": "c298504850847405f7f521acaadbab19d05a253eb59171d714ed142357596d6c"
+            },
+            "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+            "comparisons": 34,
+            "complete": true,
+            "summary": {
+              "path": "target/r4-10/reports-census-completion-files.json",
+              "sha256": "9bb8913f538a214d85669ccaec1131709c3ca32e537c3d8d0768c510ac616e63"
+            },
+            "totals": {
+              "recorded": {
+                "addresses_removed": 0,
+                "attempts": 17,
+                "auto_priced": 0,
+                "books": 17,
+                "changed_tables": 0,
+                "components": 23,
+                "duplicates_excluded": 0,
+                "legacy_activated": 0,
+                "legacy_skipped": 0,
+                "permutation_attempts": 0,
+                "refusals": 0,
+                "seed_attempts": 17,
+                "transactions": 73,
+                "warnings": 0
+              }
+            }
+          },
+          "junit": {
+            "path": "target/r4-10/reports-census-completion.xml",
+            "sha256": "43e336319f1f17da857fdd3e958db04fea0f40d82746717bc06a62d8fdee77db"
+          },
+          "junit_counts": {
+            "errors": 0,
+            "failures": 0,
+            "skipped": 1,
+            "tests": 335
+          },
+          "log": {
+            "path": "target/r4-10/reports-census-completion.log",
+            "sha256": "7092a7f57666c83982191e39f88881214b297e3b1978c03f51fa38a26fcfe488"
+          },
+          "summary": "231 passed, 1 skipped, 103 subtests passed in 114.53s (0:01:54)"
+        },
+        "declared_deselections": [],
+        "deselection_reason": "The inherited shadow command excludes two parametrizations of the single-build SQL read budget because shadow performs a second build; both are checked in census",
+        "effective_collected": 2540,
+        "initial": {
+          "capture_provenance": {
+            "activity_by_origin": {
+              "handler_capture": {
+                "addresses_removed": 0,
+                "auto_priced": 0,
+                "captures": 150,
+                "duplicates_excluded": 0,
+                "legacy_activated": 1,
+                "legacy_skipped": 1,
+                "refusals": 0,
+                "warnings": 7
+              }
+            },
+            "by_test": {
+              "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[False] (call)": 1,
+              "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[True] (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_external_residual_classification_finalizes_exact_point_one (call)": 2,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_retained_residual_is_internal_reviewed_without_fake_observation (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_reviewed_gift_never_degrades_to_a_market_sale (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_reviewed_loss_never_degrades_to_a_market_sale (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_suspense_continuation_remains_an_explicit_custody_blocker (call)": 1,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_complete_policy_history_is_automatic_fee_exact_and_order_invariant (call)": 4,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_exit_tax_blocks_until_exact_missing_wallet_bridge_carries_basis (call)": 2,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_false_friend_revenue_and_competing_returns_stay_alternatives (call)": 1,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_missing_whirlpool_review_carries_99_and_keeps_residual_and_sale_blocked (call)": 2,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_recovered_policy_evidence_validates_or_blocks_without_rewriting_bridge (call)": 2,
+              "tests/test_custody_native_hash_ambiguity.py::test_process_journals_holds_ambiguous_native_hash_route[None] (call)": 1,
+              "tests/test_custody_native_hash_ambiguity.py::test_process_journals_holds_ambiguous_native_hash_route[regtest] (call)": 1,
+              "tests/test_custody_native_hash_ambiguity.py::test_retracting_duplicate_recomputes_and_clears_derived_hold (call)": 2,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-False-2026-01-02T00:00:00Z-2026-01-01T00:00:00Z-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-True-2026-01-01T00:00:00Z-2026-01-01T00:00:00Z-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-True-2026-01-01T00:00:00Z-2026-01-02T00:00:00Z-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-True-2026-01-02T00:00:00Z-2026-01-01T00:00:00Z-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[True-True-2026-01-01T00:00:00Z-2026-01-01T00:00:00Z-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_known_own_input_requires_source_history_in_public_journal[False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_known_own_input_requires_source_history_in_public_journal[True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[False-False-False-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-current-missing_script] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-current-missing_value] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-missing-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-stale-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-True-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-True-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-True-False-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-0-0-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-0-0-True-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-0-10-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-10-0-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[True-0-0-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[True-0-0-False-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[True-10-0-False-False] (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_austrian_moving_average_residual_blocks_report_readiness (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_author_snapshot_is_audit_only_after_commitments_validate (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_authoritative_same_txid_wallet_roll_compiles_to_internal_quantity (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_complete_reviewed_component_is_canonical_differential_equal (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_component_evidence_quantity_drift_fail_closes_before_rp2 (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_exact_native_pair_ignores_import_timestamp_skew (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_exact_native_partial_fanout_books_residual_as_external (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_explicit_acquisition_is_not_a_samourai_gap_return (call)": 3,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_explicit_sell_is_not_a_samourai_gap_source (call)": 3,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_observer_lifecycle_enrichment_does_not_retract_reviewed_component (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_promoted_gap_is_force_blocked_before_rp2_and_reported (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_residual_component_blocks_later_tax_for_every_generic_algorithm (call)": 5,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_same_txid_rows_remain_external_without_observer_or_review (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-shadow] (call)": 1,
+              "tests/test_filed_report_chain.py::test_a_retired_projection_does_not_hide_the_replacement_from_a_saved_report (setup)": 1,
+              "tests/test_filed_report_chain.py::test_block_only_refresh_requires_native_authority_and_preserves_other_evidence (setup)": 1,
+              "tests/test_filed_report_chain.py::test_capture_keeps_historical_cross_wallet_basis_but_not_unrelated_inputs (setup)": 1,
+              "tests/test_filed_report_chain.py::test_confirmation_reversal_waits_for_authoritative_recovery (call)": 2,
+              "tests/test_filed_report_chain.py::test_confirmation_reversal_waits_for_authoritative_recovery (setup)": 1,
+              "tests/test_filed_report_chain.py::test_empty_scope_and_unbooked_observation_are_not_dependencies (setup)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[False] (call)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[False] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[True] (call)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[True] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_existing_confirmation_watch_marks_report_uncertain_until_wallet_refresh (call)": 2,
+              "tests/test_filed_report_chain.py::test_existing_confirmation_watch_marks_report_uncertain_until_wallet_refresh (setup)": 1,
+              "tests/test_filed_report_chain.py::test_export_retraction_inbox_and_rebuild_preserve_original (call)": 1,
+              "tests/test_filed_report_chain.py::test_export_retraction_inbox_and_rebuild_preserve_original (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_copies_original_capture_after_source_changes_and_rejects_external (call)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_copies_original_capture_after_source_changes_and_rejects_external (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_copy_failure_rolls_back_marker_without_committing_caller (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[classification_summary-value5] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[content_sha256-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[gain_summary-value6] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[period_end_year-2027] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[period_start_year-2025] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[report_kind-different] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[report_scope-value4] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_supports_a_real_empty_export_without_inventing_dependencies (setup)": 1,
+              "tests/test_filed_report_chain.py::test_inbox_paging_scope_read_and_filed_state_never_mutate (call)": 1,
+              "tests/test_filed_report_chain.py::test_inbox_paging_scope_read_and_filed_state_never_mutate (setup)": 1,
+              "tests/test_filed_report_chain.py::test_missing_authority_is_coverage_loss_not_retraction (call)": 2,
+              "tests/test_filed_report_chain.py::test_missing_authority_is_coverage_loss_not_retraction (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[conflicting-filter] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[domain] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[occurrence] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[wrong-domain] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[wrong-occurrence] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_same_timestamp_block_occurrence_refreshes_evidence_and_report_impact[change0] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_same_timestamp_block_occurrence_refreshes_evidence_and_report_impact[change1] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_sync_rollback_rolls_back_report_items_and_authority (setup)": 1,
+              "tests/test_filed_report_chain.py::test_watch_evaluation_appends_report_attachment_in_same_durable_inbox (setup)": 1,
+              "tests/test_report_explanation.py::test_custody_context_includes_intervening_moves_but_not_future_or_unrelated (call)": 1,
+              "tests/test_report_explanation_carry.py::test_cross_rail_sale_follows_real_retained_engine_lots_and_fees (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_missing_or_invalid_inherited_detail_is_explicit[None-engine_detail_unavailable] (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_missing_or_invalid_inherited_detail_is_explicit[{}-engine_detail_mismatch] (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_recursive_source_trace_stops_on_cycle (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_source_trace_is_bounded_and_does_not_invent_pool_sources (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_successive_real_carries_retain_original_source_recursively[True] (setup)": 1,
+              "tests/test_report_transaction_formats.py::PlatformExportTests::test_a_period_narrows_the_file_and_its_quarantine_barrier (setup)": 1,
+              "tests/test_report_year_handoff.py::YearHandoffExportTests::test_balances_use_the_year_end_rate (setup)": 1,
+              "tests/test_source_funds_native_reconciliation.py::test_certificate_requires_complete_selected_native_claims[absent] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_certificate_requires_complete_selected_native_claims[partial] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[book_stale] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[component_retired] (call)": 1,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[component_retired] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[history_retracted] (call)": 1,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[history_retracted] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_recovered_native_history_preserves_reviewed_report (setup)": 2,
+              "tests/test_swap_matching_cli.py::SwapMatchingCliTest::test_tax_summary_csv_surfaces_swap_fee_columns (call)": 1,
+              "tests/test_tax_shadow_harness.py::ChildProcessShadowTest::test_census_child_records_without_comparing (call)": 1,
+              "tests/test_tax_shadow_harness.py::ChildProcessShadowTest::test_injected_difference_fails_the_journals_process_child (call)": 1,
+              "tests/test_transaction_graph.py::TransactionGraphTest::test_excluded_transaction_does_not_stale_current_custody_projection (call)": 1,
+              "tests/test_transaction_graph.py::TransactionGraphTest::test_recorded_one_to_one_transfer_is_annotated (call)": 1
+            },
+            "total": 150
+          },
+          "comparison_summaries": [
+            "native loader: 357 exact v1 byte matches",
+            "production calls: 295, from test modules: 24",
+            "whole pre-build: 150 complete full-book comparisons"
+          ],
+          "file_replay": {
+            "activity": {
+              "path": "target/r4-10/full-reports-contracts-census-verified-files.activity.jsonl",
+              "sha256": "ff47bb5025e2ac3a5ca7cd34341629f34777b17a21a632f6b2698908515c6187"
+            },
+            "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+            "comparisons": 300,
+            "complete": true,
+            "summary": {
+              "path": "target/r4-10/full-reports-contracts-census-verified-files.json",
+              "sha256": "1324c8962d756277c699f0fd4f6859dcd925bc03f0e4307c3c061b72c6483835"
+            },
+            "totals": {
+              "recorded": {
+                "addresses_removed": 0,
+                "attempts": 150,
+                "auto_priced": 0,
+                "books": 150,
+                "changed_tables": 12,
+                "components": 57,
+                "duplicates_excluded": 0,
+                "legacy_activated": 1,
+                "legacy_skipped": 1,
+                "permutation_attempts": 0,
+                "refusals": 0,
+                "seed_attempts": 150,
+                "transactions": 502,
+                "warnings": 7
+              }
+            }
+          },
+          "junit": {
+            "path": "target/r4-10/full-reports-contracts-census-verified.xml",
+            "sha256": "d4c42ba76c647947b524ac4b381a2f59d5c725dbe1605adceb1684b3029c4916"
+          },
+          "junit_counts": {
+            "errors": 0,
+            "failures": 2,
+            "skipped": 9,
+            "tests": 5032
+          },
+          "log": {
+            "path": "target/r4-10/full-reports-contracts-census-verified.log",
+            "sha256": "3ac4d669f1da276d46c3683cf45ae74f79cc22f7fc49274bd875bc362c9328f4"
+          },
+          "summary": "2 failed, 2300 passed, 9 skipped, 2721 subtests passed in 1157.54s (0:19:17)"
+        },
+        "missing_identities": 0,
+        "original_failed_identities_without_later_pass": 0,
+        "original_failure": "The first resource import in the pre-exec guard emitted -X importtime diagnostics into the captured native stderr",
+        "selected_before_shard_deselection": 232,
+        "selected_for_completion": 232,
+        "selection": {
+          "path": "target/r4-10/reports-census-completion-selection.json",
+          "sha256": "0181f31e90ad3c2ee5a4a805b21a28c47ee82f4146bab2f8725b3d40cd0bf729"
+        },
+        "selection_plugin": {
+          "path": "target/r4-10/remainder_select.py",
+          "sha256": "66e629258793ddd0f39ed2ebfdd437256af900c44cde16b8451ed6e81990aedf"
+        },
+        "status": "Every collected identity covered across initial run and exact JUnit-selected continuation; not one uninterrupted passing shard"
+      },
+      "shadow": {
+        "collected_before_shard_deselection": 1942,
+        "completion": {
+          "capture_provenance": {
+            "activity_by_origin": {
+              "handler_capture": {
+                "addresses_removed": 0,
+                "auto_priced": 0,
+                "captures": 17,
+                "duplicates_excluded": 0,
+                "legacy_activated": 0,
+                "legacy_skipped": 0,
+                "refusals": 0,
+                "warnings": 0
+              }
+            },
+            "by_test": {
+              "tests/test_austrian_classification.py::CarryPairPhaseOneBlockJournalTest::test_oversold_at_direct_payout_quarantines_source_instead_of_aborting (call)": 1,
+              "tests/test_austrian_classification.py::CarryPairPhaseOneBlockJournalTest::test_oversold_at_swap_leg_quarantines_pair_instead_of_aborting (call)": 1,
+              "tests/test_austrian_classification.py::CarryPairPhaseOneBlockJournalTest::test_unpriced_carry_leg_keeps_its_missing_price_reason (call)": 2,
+              "tests/test_custody_migration_acceptance.py::test_pre_durable_anchor_migration_preserves_authored_and_tax_history (call)": 2,
+              "tests/test_exit_tax.py::ExitTaxEngineIntegrationTests::test_real_engine_exit_tax_headline (call)": 1,
+              "tests/test_filed_report_chain_carry.py::test_cross_rail_dependency_closure_follows_actual_reviewed_basis[carrying-value] (call)": 1,
+              "tests/test_filed_report_chain_carry.py::test_cross_rail_dependency_closure_follows_actual_reviewed_basis[taxable] (call)": 1,
+              "tests/test_report_cross_check.py::CrossCheckCarriedBasisTests::test_own_exports_of_a_carried_conversion_check_back_clean (setup)": 1,
+              "tests/test_report_cross_check.py::CrossCheckRoundTripTests::test_an_unreadable_row_is_named_not_dropped (setup)": 1,
+              "tests/test_report_transaction_formats.py::AltConversionExportTests::test_a_realized_alt_conversion_exports_as_a_sale (setup)": 1,
+              "tests/test_report_transaction_formats.py::TaxableConversionExportTests::test_taxable_conversion_exports_as_sale_and_purchase_at_booked_values (setup)": 1,
+              "tests/test_source_funds_custody_projection.py::test_effective_nm_bridge_becomes_reviewed_source_funds_lineage (call)": 1,
+              "tests/test_source_funds_custody_projection.py::test_report_revalidates_all_custody_links_with_one_projection_read (call)": 1,
+              "tests/test_tax_shadow_harness.py::ChildProcessShadowTest::test_shadow_child_compares_and_records_its_route (call)": 2
+            },
+            "total": 17
+          },
+          "comparison_summaries": [
+            "native loader: 25 exact v1 byte matches",
+            "production calls: 43, from test modules: 11",
+            "whole pre-build: 17 complete full-book comparisons"
+          ],
+          "file_replay": {
+            "activity": {
+              "path": "target/r4-10/reports-shadow-completion-files.activity.jsonl",
+              "sha256": "9a37b084fec85d50306846a3b33dc495efea9c10f11ec2b6596ea38bf9f257b6"
+            },
+            "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+            "comparisons": 34,
+            "complete": true,
+            "summary": {
+              "path": "target/r4-10/reports-shadow-completion-files.json",
+              "sha256": "46a0cc97dd1ec0585d82095badd68977d0866199a2af46bb210e1c6eb600cb3c"
+            },
+            "totals": {
+              "recorded": {
+                "addresses_removed": 0,
+                "attempts": 17,
+                "auto_priced": 0,
+                "books": 17,
+                "changed_tables": 0,
+                "components": 23,
+                "duplicates_excluded": 0,
+                "legacy_activated": 0,
+                "legacy_skipped": 0,
+                "permutation_attempts": 0,
+                "refusals": 0,
+                "seed_attempts": 17,
+                "transactions": 73,
+                "warnings": 0
+              }
+            }
+          },
+          "junit": {
+            "path": "target/r4-10/reports-shadow-completion.xml",
+            "sha256": "c75e2a7897979d6856f31bfeb024da236c0da7520ed0eb5088780146c7816640"
+          },
+          "junit_counts": {
+            "errors": 0,
+            "failures": 0,
+            "skipped": 1,
+            "tests": 152
+          },
+          "log": {
+            "path": "target/r4-10/reports-shadow-completion.log",
+            "sha256": "37ed4b10cb27b386ca00c63e8df104885d9e12c10ad6e184e0518999ff25cbd0"
+          },
+          "summary": "109 passed, 1 skipped, 42 subtests passed in 91.60s (0:01:31)"
+        },
+        "declared_deselections": [
+          "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads[False]",
+          "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads[True]"
+        ],
+        "deselection_reason": "The inherited shadow command excludes two parametrizations of the single-build SQL read budget because shadow performs a second build; both are checked in census",
+        "effective_collected": 1940,
+        "initial": {
+          "capture_provenance": {
+            "activity_by_origin": {
+              "handler_capture": {
+                "addresses_removed": 0,
+                "auto_priced": 0,
+                "captures": 150,
+                "duplicates_excluded": 0,
+                "legacy_activated": 1,
+                "legacy_skipped": 1,
+                "refusals": 0,
+                "warnings": 7
+              }
+            },
+            "by_test": {
+              "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[False] (call)": 1,
+              "tests/test_custody_authored_migration.py::test_journal_handler_prebuild_legacy_outcomes[True] (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_external_residual_classification_finalizes_exact_point_one (call)": 2,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_retained_residual_is_internal_reviewed_without_fake_observation (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_reviewed_gift_never_degrades_to_a_market_sale (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_reviewed_loss_never_degrades_to_a_market_sale (call)": 1,
+              "tests/test_custody_gap_lifecycle.py::CustodyGapLifecycleTests::test_suspense_continuation_remains_an_explicit_custody_blocker (call)": 1,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_complete_policy_history_is_automatic_fee_exact_and_order_invariant (call)": 4,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_exit_tax_blocks_until_exact_missing_wallet_bridge_carries_basis (call)": 2,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_false_friend_revenue_and_competing_returns_stay_alternatives (call)": 1,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_missing_whirlpool_review_carries_99_and_keeps_residual_and_sale_blocked (call)": 2,
+              "tests/test_custody_lineage_flagship.py::CustodyLineageFlagshipTests::test_recovered_policy_evidence_validates_or_blocks_without_rewriting_bridge (call)": 2,
+              "tests/test_custody_native_hash_ambiguity.py::test_process_journals_holds_ambiguous_native_hash_route[None] (call)": 1,
+              "tests/test_custody_native_hash_ambiguity.py::test_process_journals_holds_ambiguous_native_hash_route[regtest] (call)": 1,
+              "tests/test_custody_native_hash_ambiguity.py::test_retracting_duplicate_recomputes_and_clears_derived_hold (call)": 2,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-False-2026-01-02T00:00:00Z-2026-01-01T00:00:00Z-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-True-2026-01-01T00:00:00Z-2026-01-01T00:00:00Z-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-True-2026-01-01T00:00:00Z-2026-01-02T00:00:00Z-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[False-True-2026-01-02T00:00:00Z-2026-01-01T00:00:00Z-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_confirmation_uses_closed_observation_chronology[True-True-2026-01-01T00:00:00Z-2026-01-01T00:00:00Z-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_known_own_input_requires_source_history_in_public_journal[False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_known_own_input_requires_source_history_in_public_journal[True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[False-False-False-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-current-missing_script] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-current-missing_value] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-missing-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-False-stale-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-False-True-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-False-True-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_late_descriptor_reconciles_receipts_without_rewriting_imports[True-True-False-False-current-complete] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-0-0-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-0-0-True-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-0-10-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[False-10-0-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[True-0-0-False-False] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[True-0-0-False-True] (call)": 1,
+              "tests/test_custody_observation_consistency.py::test_returned_own_input_does_not_fund_foreign_receipt[True-10-0-False-False] (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_austrian_moving_average_residual_blocks_report_readiness (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_author_snapshot_is_audit_only_after_commitments_validate (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_authoritative_same_txid_wallet_roll_compiles_to_internal_quantity (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_complete_reviewed_component_is_canonical_differential_equal (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_component_evidence_quantity_drift_fail_closes_before_rp2 (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_exact_native_pair_ignores_import_timestamp_skew (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_exact_native_partial_fanout_books_residual_as_external (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_explicit_acquisition_is_not_a_samourai_gap_return (call)": 3,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_explicit_sell_is_not_a_samourai_gap_source (call)": 3,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_observer_lifecycle_enrichment_does_not_retract_reviewed_component (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_promoted_gap_is_force_blocked_before_rp2_and_reported (call)": 1,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_residual_component_blocks_later_tax_for_every_generic_algorithm (call)": 5,
+              "tests/test_custody_quantity_handler.py::CustodyQuantityHandlerTests::test_same_txid_rows_remain_external_without_observer_or_review (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[False-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[evidence-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[finalized_projection-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[fusion-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[gaps-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[interpretation-shadow] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-census] (call)": 1,
+              "tests/test_custody_shadow_harness.py::test_custody_child_compares_and_records_differences[quantity-shadow] (call)": 1,
+              "tests/test_filed_report_chain.py::test_a_retired_projection_does_not_hide_the_replacement_from_a_saved_report (setup)": 1,
+              "tests/test_filed_report_chain.py::test_block_only_refresh_requires_native_authority_and_preserves_other_evidence (setup)": 1,
+              "tests/test_filed_report_chain.py::test_capture_keeps_historical_cross_wallet_basis_but_not_unrelated_inputs (setup)": 1,
+              "tests/test_filed_report_chain.py::test_confirmation_reversal_waits_for_authoritative_recovery (call)": 2,
+              "tests/test_filed_report_chain.py::test_confirmation_reversal_waits_for_authoritative_recovery (setup)": 1,
+              "tests/test_filed_report_chain.py::test_empty_scope_and_unbooked_observation_are_not_dependencies (setup)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[False] (call)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[False] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[True] (call)": 1,
+              "tests/test_filed_report_chain.py::test_esplora_same_stats_reorg_refreshes_confirmation_and_saved_report[True] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_existing_confirmation_watch_marks_report_uncertain_until_wallet_refresh (call)": 2,
+              "tests/test_filed_report_chain.py::test_existing_confirmation_watch_marks_report_uncertain_until_wallet_refresh (setup)": 1,
+              "tests/test_filed_report_chain.py::test_export_retraction_inbox_and_rebuild_preserve_original (call)": 1,
+              "tests/test_filed_report_chain.py::test_export_retraction_inbox_and_rebuild_preserve_original (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_copies_original_capture_after_source_changes_and_rejects_external (call)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_copies_original_capture_after_source_changes_and_rejects_external (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_copy_failure_rolls_back_marker_without_committing_caller (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[classification_summary-value5] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[content_sha256-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[gain_summary-value6] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[period_end_year-2027] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[period_start_year-2025] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[report_kind-different] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_rejects_mismatched_identity_before_writing[report_scope-value4] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_filed_reference_supports_a_real_empty_export_without_inventing_dependencies (setup)": 1,
+              "tests/test_filed_report_chain.py::test_inbox_paging_scope_read_and_filed_state_never_mutate (call)": 1,
+              "tests/test_filed_report_chain.py::test_inbox_paging_scope_read_and_filed_state_never_mutate (setup)": 1,
+              "tests/test_filed_report_chain.py::test_missing_authority_is_coverage_loss_not_retraction (call)": 2,
+              "tests/test_filed_report_chain.py::test_missing_authority_is_coverage_loss_not_retraction (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[conflicting-filter] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[domain] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[occurrence] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[wrong-domain] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_qualified_watch_subjects_retain_captured_domain_and_occurrence[wrong-occurrence] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_same_timestamp_block_occurrence_refreshes_evidence_and_report_impact[change0] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_same_timestamp_block_occurrence_refreshes_evidence_and_report_impact[change1] (setup)": 1,
+              "tests/test_filed_report_chain.py::test_sync_rollback_rolls_back_report_items_and_authority (setup)": 1,
+              "tests/test_filed_report_chain.py::test_watch_evaluation_appends_report_attachment_in_same_durable_inbox (setup)": 1,
+              "tests/test_report_explanation.py::test_custody_context_includes_intervening_moves_but_not_future_or_unrelated (call)": 1,
+              "tests/test_report_explanation_carry.py::test_cross_rail_sale_follows_real_retained_engine_lots_and_fees (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_missing_or_invalid_inherited_detail_is_explicit[None-engine_detail_unavailable] (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_missing_or_invalid_inherited_detail_is_explicit[{}-engine_detail_mismatch] (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_recursive_source_trace_stops_on_cycle (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_source_trace_is_bounded_and_does_not_invent_pool_sources (setup)": 1,
+              "tests/test_report_explanation_carry.py::test_successive_real_carries_retain_original_source_recursively[True] (setup)": 1,
+              "tests/test_report_transaction_formats.py::PlatformExportTests::test_a_period_narrows_the_file_and_its_quarantine_barrier (setup)": 1,
+              "tests/test_report_year_handoff.py::YearHandoffExportTests::test_balances_use_the_year_end_rate (setup)": 1,
+              "tests/test_source_funds_native_reconciliation.py::test_certificate_requires_complete_selected_native_claims[absent] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_certificate_requires_complete_selected_native_claims[partial] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[book_stale] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[component_retired] (call)": 1,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[component_retired] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[history_retracted] (call)": 1,
+              "tests/test_source_funds_native_reconciliation.py::test_reconciliation_proof_never_outlives_its_inputs[history_retracted] (setup)": 2,
+              "tests/test_source_funds_native_reconciliation.py::test_recovered_native_history_preserves_reviewed_report (setup)": 2,
+              "tests/test_swap_matching_cli.py::SwapMatchingCliTest::test_tax_summary_csv_surfaces_swap_fee_columns (call)": 1,
+              "tests/test_tax_shadow_harness.py::ChildProcessShadowTest::test_census_child_records_without_comparing (call)": 1,
+              "tests/test_tax_shadow_harness.py::ChildProcessShadowTest::test_injected_difference_fails_the_journals_process_child (call)": 1,
+              "tests/test_transaction_graph.py::TransactionGraphTest::test_excluded_transaction_does_not_stale_current_custody_projection (call)": 1,
+              "tests/test_transaction_graph.py::TransactionGraphTest::test_recorded_one_to_one_transfer_is_annotated (call)": 1
+            },
+            "total": 150
+          },
+          "comparison_summaries": [
+            "native loader: 355 exact v1 byte matches",
+            "production calls: 295, from test modules: 24",
+            "whole pre-build: 150 complete full-book comparisons"
+          ],
+          "file_replay": {
+            "activity": {
+              "path": "target/r4-10/full-reports-contracts-shadow-verified-files.activity.jsonl",
+              "sha256": "00003e171b969ed4d2ac5ad1776d0cca9436a9d94e2b04450e3a727827155a0f"
+            },
+            "binary_sha256": "fa547d8f9a18974a00a4aba5aa4b2024dfa20f8976adccf5773e55e8bfe309c0",
+            "comparisons": 300,
+            "complete": true,
+            "summary": {
+              "path": "target/r4-10/full-reports-contracts-shadow-verified-files.json",
+              "sha256": "9c95f349b54a1f725dc9535eabdd0068974e7ee5e4206010136b3aa00a71e0ed"
+            },
+            "totals": {
+              "recorded": {
+                "addresses_removed": 0,
+                "attempts": 150,
+                "auto_priced": 0,
+                "books": 150,
+                "changed_tables": 12,
+                "components": 57,
+                "duplicates_excluded": 0,
+                "legacy_activated": 1,
+                "legacy_skipped": 1,
+                "permutation_attempts": 0,
+                "refusals": 0,
+                "seed_attempts": 150,
+                "transactions": 502,
+                "warnings": 7
+              }
+            }
+          },
+          "junit": {
+            "path": "target/r4-10/full-reports-contracts-shadow-verified.xml",
+            "sha256": "5c9db429602a5e56f439d1b0d1e3e7f2e8de1c7c3cd9419bf3f1f71d7e8ec926"
+          },
+          "junit_counts": {
+            "errors": 0,
+            "failures": 2,
+            "skipped": 9,
+            "tests": 1937
+          },
+          "log": {
+            "path": "target/r4-10/full-reports-contracts-shadow-verified.log",
+            "sha256": "84cfe135a9b74060fc7dc71ce7d7b0d1e4c5ff4a8e3a442e49b974df44ef04af"
+          },
+          "summary": "2 failed, 1822 passed, 9 skipped, 104 subtests passed in 730.95s (0:12:10)"
+        },
+        "missing_identities": 0,
+        "original_failed_identities_without_later_pass": 0,
+        "original_failure": "The first resource import in the pre-exec guard emitted -X importtime diagnostics into the captured native stderr",
+        "selected_before_shard_deselection": 112,
+        "selected_for_completion": 110,
+        "selection": {
+          "path": "target/r4-10/reports-shadow-completion-selection.json",
+          "sha256": "f67d4ccf9576043123bb93e15389eac1ba7564cd7f94e61a10a5d71f7f8c95b0"
+        },
+        "selection_plugin": {
+          "path": "target/r4-10/remainder_select.py",
+          "sha256": "66e629258793ddd0f39ed2ebfdd437256af900c44cde16b8451ed6e81990aedf"
+        },
+        "status": "Every collected identity covered across initial run and exact JUnit-selected continuation; not one uninterrupted passing shard"
+      }
+    },
+    "schema": "kassiber.r4-prebuild-mutation-census.v1",
+    "superseded_attempts": {
+      "full-core-accounting-shadow-permitted": {
+        "log": {
+          "path": "target/r4-10/full-core-accounting-shadow-permitted.log",
+          "sha256": "32af04c49a32b57ca8d2144ff8014f9e424e434bb80aa1483369fb88c215b3e5"
+        },
+        "reason": "Recorder import re-entry caused recursive comparisons; report census also exposed inherited harness mode contamination",
+        "status": "Failed; excluded from passing gate evidence"
+      },
+      "full-reports-contracts-census-permitted": {
+        "log": {
+          "path": "target/r4-10/full-reports-contracts-census-permitted.log",
+          "sha256": "a2e583e70ebcd4e1d4d488da69986f9a3938857922d0e39f04a221976078c6f5"
+        },
+        "reason": "Recorder import re-entry caused recursive comparisons; report census also exposed inherited harness mode contamination",
+        "status": "Failed; excluded from passing gate evidence"
+      },
+      "full-reports-contracts-shadow-permitted": {
+        "log": {
+          "path": "target/r4-10/full-reports-contracts-shadow-permitted.log",
+          "sha256": "66994361e062a1be3d1a8df83a13035858ad87d14cb53213201b9d43b94fd0ab"
+        },
+        "reason": "Recorder import re-entry caused recursive comparisons; report census also exposed inherited harness mode contamination",
+        "status": "Failed; excluded from passing gate evidence"
+      }
+    },
+    "vectors": {
+      "legacy": {
+        "base_unchanged": true,
+        "cases": 58,
+        "path": "crates/journals/tests/data/prebuild-legacy.json",
+        "previous_cases_unchanged": 57,
+        "sha256": "ac1969c44facdebe45f0cb844db654f1f3a3b30111f945c6c30859aa3a74b7c0"
+      },
+      "pipeline": {
+        "base_unchanged": true,
+        "cases": 51,
+        "path": "crates/journals/tests/data/prebuild-pipeline.json",
+        "previous_cases_unchanged": 50,
+        "sha256": "d9e593f9c832b64601d0ff4ca151b083d2f058595cba99b93f01ef6f2cd154d2"
+      }
+    }
+  },
   "previous_interrupted_campaigns": "Both exhaustive all-file and in-memory attempts were interrupted; partial summaries are not successful gates",
   "recorder_controls": {
     "child_mismatch": "Child catches injected mismatch; parent test body passes but session exits 1 with private failure marker",
@@ -17503,12 +18892,12 @@
     "stale_directory": "A nonempty recording directory is refused"
   },
   "remaining": [
-    "Complete focused census/shadow across the remaining pre-build branches",
-    "Execute all 21 legacy, 7 pipeline and 46 existing pricing/source mutations, plus uncovered branch recipes and inherited required gates",
-    "Profile whole-stage 20k process CPU, optimize caches, measure the cost breakdown against 0.03 s, and write acceptance"
+    "Execute inherited journal (112), transfer/daemon (280) and custody (2327) mutation gates; finish uncovered-branch audit",
+    "Whole-stage generic/multi-wallet 20k process CPU profiling, cache optimization and comparison against 0.03 seconds with complete cost breakdown if missed",
+    "Final acceptance record after all required gates pass"
   ],
   "schema": "kassiber.r4-prebuild-campaign-checkpoint.v2",
-  "status": "Generated/recorded and legacy/refusal coverage checkpoints; R4-10 remains unaccepted",
+  "status": "Generated, recorded, legacy/refusal and prebuild mutation/census checkpoints; R4-10 remains unaccepted",
   "verification": {
     "classifier_update": "passed; two new oracle tests recorded",
     "combined_stage_file_comparisons": 16,

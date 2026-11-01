@@ -14,6 +14,18 @@ from tests import test_tax_shadow_harness as tax_harness
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def isolated_comparison_mode():
+    previous = compare._INSTALLED_MODE
+    compare.uninstall_custody_mode()
+    try:
+        yield
+    finally:
+        compare.uninstall_custody_mode()
+        if previous:
+            compare.install_custody_mode(previous)
+
+
 def child_env(mode="shadow", *, inject=False):
     env = {key: value for key, value in os.environ.items() if not key.startswith("KASSIBER_TEST_CUSTODY_")}
     env[compare.MODE_ENV] = mode

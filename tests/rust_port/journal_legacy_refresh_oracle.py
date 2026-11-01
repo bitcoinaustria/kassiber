@@ -9,6 +9,7 @@ import sqlite3
 from unittest.mock import patch
 
 from kassiber.core import custody_authored_migration as migration
+from kassiber.core import custody_components as components
 from tests.rust_port.journal_prebuild_oracle import ROOT, CLOCK, refusal, seed, transaction
 from tests.rust_port.journal_persistence_oracle import dump
 
@@ -72,6 +73,7 @@ def vectors():
         "missing-inbound", "missing-commitments", "resolved-issue-recurs",
         "two-groups-invalid-text", "two-groups-oversized", "reviewed-below-i128-text",
         "repeated-drift", "repeated-drift-refusal",
+        "inactive-exact-with-active-revision",
     )
     output = []
     for name in names:
@@ -99,6 +101,21 @@ def vectors():
         pair_guards = conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='transaction_pairs'").fetchall()
         for guard in pair_guards:
             conn.execute(f'DROP TRIGGER "{guard[0]}"')
+        if name == "inactive-exact-with-active-revision":
+            original = conn.execute("SELECT component_id FROM transaction_pairs").fetchone()[0]
+            plan = migration._retarget_revision_spec(
+                migration._pair_group_spec(migration._pair_rows(conn)),
+                supersedes_component_id="fixture-revision",
+            )
+            with patch("kassiber.core.custody_components._now_iso", return_value=CLOCK):
+                components.update_component(
+                    conn, original, new_component_id="000-active-revision",
+                    legs=plan["legs"], allocations=plan["allocations"],
+                    economic_terms=plan["terms"], preserve_planned_row_ids=True,
+                    authored_source="migration", created_at=CLOCK,
+                )
+                components.activate_component(conn, "000-active-revision")
+            conn.execute("UPDATE transaction_pairs SET component_id='000-active-revision'")
         if name not in {"unlinked", "unchanged"}:
             conn.execute("UPDATE transactions SET kind='withdrawal' WHERE direction='outbound'")
         changes = {

@@ -13,6 +13,9 @@ import sys
 import tempfile
 import time
 
+if sys.platform == "linux":
+    import resource
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from kassiber.cli.handlers import auto_price_transactions_from_rates_cache
@@ -24,10 +27,9 @@ from tests.rust_port.journal_pipeline_oracle import vectors as pipeline_vectors
 
 
 def deny_network():
-    import resource
-    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     if sys.platform != "linux" or os.uname().machine != "x86_64":
         raise RuntimeError("the local syscall guard requires Linux x86_64")
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     class Filter(ctypes.Structure):
         _fields_ = [("code", ctypes.c_ushort), ("jt", ctypes.c_ubyte), ("jf", ctypes.c_ubyte), ("k", ctypes.c_uint32)]
     class Program(ctypes.Structure):

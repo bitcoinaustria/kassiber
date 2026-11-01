@@ -498,6 +498,52 @@ def test_journal_processing_refreshes_reviewed_pair_after_evidence_drift(tmp_pat
         conn.close()
 
 
+@pytest.mark.parametrize("domain_skip", [False, True])
+def test_journal_handler_prebuild_legacy_outcomes(tmp_path, domain_skip):
+    from kassiber.cli import handlers
+
+    conn = open_db(tmp_path)
+    try:
+        _legacy_rows(conn)
+        refresh_legacy_authored_components(conn)
+        old_id = conn.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id='pair'"
+        ).fetchone()[0]
+        if domain_skip:
+            guards = conn.execute(
+                "SELECT name,sql FROM sqlite_master "
+                "WHERE type='trigger' AND tbl_name='transaction_pairs'"
+            ).fetchall()
+            for name, _ in guards:
+                conn.execute(f'DROP TRIGGER "{name}"')
+            conn.execute("UPDATE transaction_pairs SET out_amount=1001 WHERE id='pair'")
+            for _, sql in guards:
+                conn.execute(sql)
+        conn.execute("UPDATE transactions SET kind='withdrawal' WHERE id='pair-out'")
+        conn.commit()
+
+        result = handlers.process_journals(conn, "ws", "profile")
+
+        new_id = conn.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id='pair'"
+        ).fetchone()[0]
+        issues = conn.execute(
+            "SELECT issue_code FROM custody_authored_migration_issues "
+            "WHERE legacy_source_id='pair' AND resolved_at IS NULL"
+        ).fetchall()
+        if domain_skip:
+            assert new_id == old_id
+            assert "custody_pair_evidence_repairs" not in result
+            assert [row[0] for row in issues] == ["custody_legacy_group_invalid"]
+        else:
+            assert new_id != old_id
+            assert result["custody_pair_evidence_repairs"] == 1
+            assert issues == []
+        assert not conn.in_transaction
+    finally:
+        conn.close()
+
+
 def test_journal_processing_does_not_refresh_pair_with_other_validation_failure(
     tmp_path,
 ):
