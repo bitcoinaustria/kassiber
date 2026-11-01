@@ -65,9 +65,13 @@ impl Host for Daemon {
         Daemon::ensure_owner(self)
     }
     fn maintenance(&self) -> Result<Box<dyn Send>, AppError> {
-        self.store.restore_maintenance(&self.data_root)
+        let lease = self.store.restore_maintenance(&self.data_root)?;
+        // Workers must exit before the replacement; admission stays closed.
+        let quiesced = self.analysis.quiesce(std::time::Duration::from_secs(5))?;
+        Ok(Box::new((lease, quiesced)))
     }
     fn close_database(&mut self, expected: &Fingerprint) -> Result<(), AppError> {
+        self.analysis.clear();
         self.book
             .as_mut()
             .expect("unlocked backup")

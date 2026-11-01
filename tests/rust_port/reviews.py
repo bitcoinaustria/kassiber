@@ -520,3 +520,5 @@ REVIEWS["tests/test_rust_analysis_recovery.py"] = {"*": {
 }}
 
 REVIEWS["tests/test_rust_chain_analysis_reads.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native local graph, entropy, immutable cases, labels and dataset metadata/claim reads with unchanged Python unsorted envelope bytes, all 112 tables, transaction rollback, recorded hash-seed variants and guarded CLI/daemon routing with zero fallback; PSBT, preview and async runtime remain separate"}}
+
+REVIEWS["tests/test_rust_chain_analysis_psbt_reads.py"] = {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares native PSBT analyze/compare/entropy, BIP78 signature and output checks, staged source grants and analysis receipts with unchanged Python unsorted envelope bytes and all 112 tables; daemon receipts are compared with job identifiers, elapsed time and completion races masked; CLI/daemon routing runs under strict no-consent guards with zero fallback"}}

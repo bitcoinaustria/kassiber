@@ -840,15 +840,17 @@ impl Book for RealBook {
         profile: Option<&Value>,
         operation: &str,
         args: &Value,
+        local: &mut kassiber_wallets::analysis_index::reads::Local,
     ) -> Result<Value, AppError> {
         let (workspace, profile) = self.resolve_scope(workspace, profile)?;
-        kassiber_wallets::analysis_index::reads::execute(
+        kassiber_wallets::analysis_index::reads::execute_local(
             self.conn()?,
             &workspace,
             &profile,
             operation,
             args,
             &mut kassiber_wallets::publication::wallet::SystemSources::default(),
+            local,
         )
     }
 

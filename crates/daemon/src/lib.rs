@@ -386,6 +386,8 @@ pub(crate) struct Daemon {
     /// The passphrase that unlocked the book, for later background opens.
     unlocked_passphrase: Option<Secret>,
     backup_sessions: kassiber_backup::desktop::Sessions,
+    /// Chain Analysis receipts and staged sources, cleared at book boundaries.
+    analysis: Arc<kassiber_wallets::analysis_index::runtime::Runtime>,
 }
 
 impl Daemon {
@@ -407,6 +409,7 @@ impl Daemon {
             ownership_generation: format!("desktop-{}-{}", std::process::id(), token_hex8()),
             unlocked_passphrase: None,
             backup_sessions: Default::default(),
+            analysis: Default::default(),
         }
     }
 
@@ -708,8 +711,10 @@ impl Daemon {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
+            let runtime = Arc::clone(&self.analysis);
             let payload = chain_analysis_reads::execute(
                 self.book_mut()?.as_mut(),
+                &runtime,
                 &kind_text,
                 args.as_ref(),
             )?;
@@ -838,6 +843,9 @@ impl Daemon {
                 }
                 let payload =
                     services::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+                if kind_text == "ui.profiles.switch" {
+                    self.analysis.clear();
+                }
                 Ok((
                     Some(with_request_id(success(&kind_text, payload), &request_id)),
                     false,
@@ -1168,6 +1176,7 @@ impl Daemon {
     /// passphrase.
     fn lock(&mut self) -> Result<(), AppError> {
         self.reap_freshness(true)?;
+        self.analysis.clear();
         if let Some(mut book) = self.book.take() {
             if let Err(error) = book.close() {
                 self.book = Some(book);
@@ -1268,6 +1277,7 @@ impl Daemon {
     /// The `finally` of Python's `run`: forget the passphrase, close the
     /// book, and release ownership.
     fn shutdown_resources(&mut self) {
+        self.analysis.clear();
         self.backup_sessions.clear();
         self.unlocked_passphrase = None;
         if self.reap_freshness(true).is_err() {

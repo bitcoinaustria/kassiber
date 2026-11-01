@@ -16,13 +16,22 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value> {
             Value::Null
         } else {
             let empty = dict::<&str>([]);
-            match execute(
+            let mut local = Local::default();
+            if let Value::Dict(files) = field(action, "files") {
+                for (key, raw) in files {
+                    use bitcoin::hex::FromHex;
+                    let bytes = Vec::<u8>::from_hex(raw_text(raw)).expect("fixture hex");
+                    local.files.push((key.as_str().unwrap().to_owned(), bytes));
+                }
+            }
+            match execute_local(
                 conn,
                 "ws",
                 "p",
                 operation,
                 get(action, "args").unwrap_or(&empty),
                 &mut engine::durable::fixture::FixedSources("2026-01-01T00:00:00Z".to_owned()),
+                &mut local,
             ) {
                 Ok(v) => kassiber_envelope::success(&format!("ui.chain_analysis.{operation}"), v),
                 Err(e) => e.envelope(None),
@@ -40,4 +49,8 @@ pub fn evaluate(case: &Value, conn: &Connection) -> Result<Value> {
         ]));
     }
     Ok(Value::List(results))
+}
+
+fn raw_text(v: &Value) -> &str {
+    v.as_str().unwrap_or("")
 }

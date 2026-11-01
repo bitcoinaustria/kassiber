@@ -228,6 +228,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "chain-analysis.cases.get",
     "chain-analysis.cases.compare",
     "chain-analysis.labels.list",
+    "chain-analysis.psbt.analyze",
+    "chain-analysis.psbt.compare",
+    "chain-analysis.psbt.entropy",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

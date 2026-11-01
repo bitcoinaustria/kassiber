@@ -1,16 +1,19 @@
 use crate::analysis_index::{self as engine, field, list, remove, Text};
 use crate::database_error;
 use crate::publication::{row::rows, wallet::Sources};
+use engine::runtime::{self, Runtime};
 use engine::views::GraphRead;
 use kassiber_envelope::{dict, get, s, set, truthy, AppError};
 use kassiber_pyjson::{dumps, Options, Value};
 use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql, Connection};
 use std::collections::BTreeMap;
+use std::sync::{Arc, OnceLock};
 
 mod cursor;
 mod datasets;
 #[cfg(any(test, feature = "test-harness"))]
 pub mod fixture;
+mod psbt;
 #[cfg(test)]
 mod tests;
 
@@ -26,7 +29,68 @@ pub const OPERATIONS: &[&str] = &[
     "datasets.list",
     "datasets.get",
     "datasets.query",
+    "psbt.analyze",
+    "psbt.compare",
+    "psbt.entropy",
+    "entropy.start",
+    "psbt.entropy.start",
+    "jobs.get",
+    "jobs.cancel",
+    "internal.stage",
 ];
+
+/// Caller-supplied local inputs. File bytes come from the CLI; the runtime
+/// holds the daemon's staged grants and receipts. Nothing here is persisted.
+#[derive(Default)]
+pub struct Local {
+    pub files: Vec<(String, Vec<u8>)>,
+    pub runtime: Option<Arc<Runtime>>,
+}
+impl Local {
+    /// The reference keeps one process-wide registry; callers without a
+    /// daemon runtime share this one.
+    fn runtime(&self) -> Arc<Runtime> {
+        static PROCESS: OnceLock<Arc<Runtime>> = OnceLock::new();
+        self.runtime
+            .clone()
+            .unwrap_or_else(|| Arc::clone(PROCESS.get_or_init(Runtime::new)))
+    }
+}
+
+fn merge(target: &mut Value, extra: Value) {
+    if let Value::Dict(fields) = extra {
+        for (k, v) in fields {
+            set(target, k.as_str().expect("analysis keys are text"), v);
+        }
+    }
+}
+fn scenario(args: &Value) -> Result<Value> {
+    engine::entropy::normalize_scenario(field(args, "scenario")).map_err(|reason| {
+        invalid("Invalid entropy scenario").with_details(dict([("reason", s(reason))]))
+    })
+}
+fn start(
+    conn: &Connection,
+    local: &Local,
+    scope: Vec<u8>,
+    request: Value,
+    compute: impl FnOnce(engine::entropy::Hooks<'_>) -> Value + Send + 'static,
+) -> Result<Value> {
+    local.runtime().start(
+        conn,
+        scope,
+        request,
+        Box::new(move |worker| {
+            let mut progress = |v| worker.progress(v);
+            let mut cancelled = || worker.cancelled();
+            Ok(compute(engine::entropy::Hooks {
+                progress: Some(&mut progress),
+                cancelled: Some(&mut cancelled),
+                ..Default::default()
+            }))
+        }),
+    )
+}
 
 fn invalid(message: impl Into<String>) -> AppError {
     AppError::new("validation", message)
@@ -130,6 +194,29 @@ pub fn execute(
     args: &Value,
     sources: &mut dyn Sources,
 ) -> Result<Value> {
+    execute_local(
+        conn,
+        workspace,
+        profile,
+        operation,
+        args,
+        sources,
+        &mut Local::default(),
+    )
+}
+
+pub fn execute_local(
+    conn: &Connection,
+    workspace: &str,
+    profile: &str,
+    operation: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+    local: &mut Local,
+) -> Result<Value> {
+    if operation == "internal.stage" {
+        return stage(conn, workspace, profile, args, local);
+    }
     if !OPERATIONS.contains(&operation) {
         return Err(AppError::new(
             "not_implemented",
@@ -155,7 +242,17 @@ pub fn execute(
     remove(&mut args, "expected_scope");
     match operation {
         "query" => query(conn, profile, &args, sources),
-        "entropy" => entropy(conn, profile, &args, sources),
+        "entropy" => entropy(conn, profile, &args, sources, None),
+        "entropy.start" => entropy(conn, profile, &args, sources, Some(local)),
+        "jobs.get" | "jobs.cancel" => {
+            arguments(&args, &["job_id"], &["job_id"])?;
+            local.runtime().get(
+                &runtime::scope_key(conn, profile),
+                field(&args, "job_id"),
+                operation == "jobs.cancel",
+            )
+        }
+        op if op.starts_with("psbt.") => psbt::execute(conn, profile, op, &args, local),
         "cases.list" => page(conn, profile, &args, false),
         "cases.get" => {
             arguments(&args, &["id"], &["id"])?;
@@ -200,11 +297,47 @@ fn query(
     })
 }
 
+fn stage(
+    conn: &Connection,
+    workspace: &str,
+    profile: &str,
+    args: &Value,
+    local: &Local,
+) -> Result<Value> {
+    arguments(
+        args,
+        &["source_file", "purpose", "expected_scope"],
+        &["source_file", "purpose"],
+    )?;
+    if let Some(expected) = get(args, "expected_scope").filter(|v| **v != Value::Null) {
+        if !same_scope(expected, workspace, profile) {
+            return Err(AppError::new(
+                "scope_changed",
+                "The active book changed; choose the analysis source again",
+            ));
+        }
+    }
+    local.runtime().stage(
+        conn,
+        runtime::scope_key(conn, profile),
+        field(args, "source_file"),
+        field(args, "purpose"),
+    )
+}
+
+fn same_scope(expected: &Value, workspace: &str, profile: &str) -> bool {
+    matches!(expected, Value::Dict(fields) if fields.len() == 2)
+        && field(expected, "workspace_id") == &s(workspace)
+        && field(expected, "profile_id") == &s(profile)
+}
+
+/// `prepare_entropy` then `run_entropy`, or `start_entropy` with `local`.
 fn entropy(
     conn: &Connection,
     profile: &str,
     args: &Value,
     sources: &mut dyn Sources,
+    start_in: Option<&Local>,
 ) -> Result<Value> {
     arguments(
         args,
@@ -247,11 +380,8 @@ fn entropy(
         )?
         .into(),
     );
-    let scenario =
-        engine::entropy::normalize_scenario(field(args, "scenario")).map_err(|reason| {
-            invalid("Invalid entropy scenario").with_details(dict([("reason", s(reason))]))
-        })?;
-    atomic(conn, || {
+    let scenario = scenario(args)?;
+    let (context, prepared) = atomic(conn, || {
         engine::durable::synchronize_with_sources(conn, profile, false, sources)?;
         engine::views::with_read(conn, profile, text(&query, "observer"), |view| {
             let mut context = dict([
@@ -260,47 +390,55 @@ fn entropy(
                 ("subject", field(&query, "subject").clone()),
                 ("observer", field(&query, "observer").clone()),
             ]);
+            let unavailable =
+                |reason: &str| dict([("status", s("unavailable")), ("reason", s(reason))]);
             let subjects =
                 match engine::traversal::resolve_read(view, text(&query, "subject"), &query) {
                     Ok(v) => v,
                     Err(e) if e.code == "subject_ambiguous" => {
-                        set(&mut context, "status", s("unavailable"));
-                        set(&mut context, "reason", s("ambiguous_domain"));
-                        return Ok(context);
+                        return Ok((context, Err(unavailable("ambiguous_domain"))));
                     }
                     Err(e) => return Err(e),
                 };
             if subjects.len() != 1
                 || field(&view.get("nodes", &subjects[0])?, "kind") != &s("transaction")
             {
-                set(&mut context, "status", s("unavailable"));
-                set(
-                    &mut context,
-                    "reason",
-                    s("single_physical_transaction_required"),
-                );
-                return Ok(context);
+                return Ok((
+                    context,
+                    Err(unavailable("single_physical_transaction_required")),
+                ));
             }
             let id = &subjects[0];
             set(&mut context, "subject", s(id.as_str()));
             let node = view.get("nodes", id)?;
             let facts = view.get("transaction_facts", id)?;
-            let result = engine::entropy::analyze_transaction_entropy(
-                &facts,
-                text(&node, "chain"),
-                &states,
-                &duration,
-                &scenario,
-                engine::entropy::Hooks::default(),
-            );
-            if let Value::Dict(fields) = result {
-                for (k, v) in fields {
-                    set(&mut context, k.as_str().unwrap(), v);
-                }
-            }
-            Ok(context)
+            Ok((context, Ok((facts, text(&node, "chain").to_owned()))))
         })
-    })
+    })?;
+    let snapshot = field(&context, "snapshot_id").clone();
+    let compute = move |hooks: engine::entropy::Hooks<'_>| {
+        let mut value = context;
+        let result = match prepared {
+            Err(unavailable) => unavailable,
+            Ok((facts, chain)) => engine::entropy::analyze_transaction_entropy(
+                &facts, &chain, &states, &duration, &scenario, hooks,
+            ),
+        };
+        merge(&mut value, result);
+        value
+    };
+    let Some(local) = start_in else {
+        return Ok(compute(engine::entropy::Hooks::default()));
+    };
+    let mut request = args.clone();
+    set(&mut request, "snapshot_id", snapshot);
+    start(
+        conn,
+        local,
+        runtime::scope_key(conn, profile),
+        request,
+        compute,
+    )
 }
 
 fn case(row: &Value, detail: bool) -> Result<Value> {

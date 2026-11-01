@@ -12,6 +12,10 @@ const MAX_MONEY: u64 = 21_000_000 * 100_000_000;
 type Result<T> = std::result::Result<T, AppError>;
 type Map<'a> = Vec<(&'a [u8], &'a [u8])>;
 
+mod compare;
+mod order;
+pub use compare::{analyze_parts, analyze_payload, compare, decode, Payload};
+
 fn invalid(reason: &str) -> AppError {
     AppError::new(
         "chain_analysis_invalid_psbt",

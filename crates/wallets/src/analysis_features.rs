@@ -112,7 +112,7 @@ pub fn signature_encoding(signature: &[u8], schnorr: bool) -> Option<Value> {
     )
 }
 
-fn pushes(script: &[u8]) -> Option<Vec<&[u8]>> {
+pub(crate) fn pushes(script: &[u8]) -> Option<Vec<&[u8]>> {
     let mut out = Vec::new();
     let mut pos = 0;
     while pos < script.len() {

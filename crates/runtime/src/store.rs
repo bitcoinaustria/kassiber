@@ -215,6 +215,7 @@ pub trait Book: Send {
         _profile: Option<&Value>,
         operation: &str,
         _args: &Value,
+        _local: &mut kassiber_wallets::analysis_index::reads::Local,
     ) -> Result<Value, AppError> {
         Err(not_implemented("chain_analysis", operation))
     }
