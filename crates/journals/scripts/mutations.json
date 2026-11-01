@@ -2568,5 +2568,75 @@
       "entry_deltas_rewrite_timestamp_groups_and_retain_untouched_rowids"
     ],
     "rule": "A content change still propagates to its whole timestamp group when retained creation clocks agree."
+  },
+  {
+    "id": "JP-fixed-sign",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "raw.strip_prefix(b\"-\")?",
+    "replace": "raw.strip_prefix(b\"-\").unwrap_or(raw)",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "The retained fixed text must carry exactly the decimal sign, including signed zero."
+  },
+  {
+    "id": "JP-fixed-integer-prefix",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "coefficient.first().is_none_or(|&b| b == b'0')",
+    "replace": "coefficient.is_empty()",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "A fixed integer coefficient cannot acquire a leading zero."
+  },
+  {
+    "id": "JP-fixed-integer-padding",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "!raw[end..].iter().all(|&b| b == b'0')",
+    "replace": "false",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Every fixed integer exponent padding digit must be zero."
+  },
+  {
+    "id": "JP-fixed-scale",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "let point = raw.len().checked_sub(scale.checked_add(1)?)?;",
+    "replace": "let point = raw.len().checked_sub(scale.checked_add(0)?)?;",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "The decimal scale determines the exact fixed decimal point position."
+  },
+  {
+    "id": "JP-fixed-point",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "raw.get(point) != Some(&b'.') || point == 0",
+    "replace": "point == 0",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "Fixed fractional text requires an actual decimal point."
+  },
+  {
+    "id": "JP-fixed-zero-padding",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": ".unwrap_or(right.len() - 1)",
+    "replace": ".unwrap_or(right.len())",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "All-zero fractional text still compares a zero coefficient digit."
+  },
+  {
+    "id": "JP-fixed-leading-zero",
+    "file": "crates/journals/src/persistence/entries.rs",
+    "find": "if left[0] == b'0' {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_decimal_comparison_retains_every_fixed_digit_sign_and_scale"
+    ],
+    "rule": "The fixed integer part has no leading zero unless it is exactly zero."
   }
 ]

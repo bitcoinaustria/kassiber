@@ -35,6 +35,36 @@ This profile locates work and does not establish five-pair acceptance.
 binds every floor trial, load average, book manifest, source and binary hash,
 complete-dump hash and the separate baseline profile. No acceptance is claimed.
 
+## Fixed-layout equality from `0c562125f`
+
+Retained decimals now use their scale and the canonical retained layout to
+split coefficient digits. The comparison checks the decimal point, sign,
+integer leading zeros and exact exponent padding, then compares the exact
+coefficient. It no longer computes coefficient digit counts twice per match.
+Validation of the fixed-format padding limit and the independent REAL-bit
+comparison remain unchanged. No persisted bytes or bindings change.
+
+Five alternating pairs measure total child process CPU for full fixed-layout
+equality, excluding validation, REAL parsing and database reads. Independent
+minima, in seconds:
+
+| Coefficient digits / exponent | Prior equality | Scale-based equality |
+| --- | ---: | ---: |
+| 12 / -2 | 0.058388 | 0.038749 |
+| 32 / -32 | 0.043414 | 0.035120 |
+| 60 / -32 | 0.167433 | 0.041731 |
+| 130 / -32 | 0.122744 | 0.053761 |
+| 1,000 / -1,000 | 0.113283 | 0.064937 |
+| 4,096 / -32 | 0.213654 | 0.127861 |
+
+The [fixed-layout record](r4-journal-persistence-fixed-layout-measurements.json)
+contains every sample and load, source/library/binary hashes, complete scratch
+benchmark sources and verification logs. All 35 library and 18 persistence
+tests pass; the expanded canonical-layout witness also rejects changed point
+separators, missing negative signs and signed leading-zero prefixes. Release
+all-target clippy passes and all 196 mutation recipes apply. The seven new
+layout recipes await final kills. **R4-12 acceptance remains open.**
+
 ## Singleton timestamp tracking from `9788b0070`
 
 Retained comparison now allocates creation-clock tracking only for timestamp

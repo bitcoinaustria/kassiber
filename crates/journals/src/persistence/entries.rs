@@ -140,8 +140,7 @@ pub(super) fn validate(decimal: &JournalDecimal) -> Result<(), Refusal> {
 }
 
 fn fixed_equal(decimal: &JournalDecimal, raw: &[u8]) -> bool {
-    fn compare(decimal: &JournalDecimal, raw: &[u8]) -> Option<bool> {
-        let d = &decimal.0;
+    fn compare(d: &kassiber_pydecimal::Decimal, raw: &[u8]) -> Option<bool> {
         let raw = if d.is_sign_negative() {
             raw.strip_prefix(b"-")?
         } else {
@@ -150,36 +149,40 @@ fn fixed_equal(decimal: &JournalDecimal, raw: &[u8]) -> bool {
         if d.is_zero() && d.exponent() >= 0 {
             return Some(raw == b"0");
         }
-        let digits =
-            usize::try_from(i128::from(d.adjusted()) - i128::from(d.exponent()) + 1).ok()?;
-        let int_len = i128::from(d.adjusted()) + 1;
         let (left, right) = if d.exponent() >= 0 {
             let padding = usize::try_from(d.exponent()).ok()?;
-            if raw.len() != digits.checked_add(padding)?
-                || !raw[digits..].iter().all(|&b| b == b'0')
+            let end = raw.len().checked_sub(padding)?;
+            let coefficient = &raw[..end];
+            if coefficient.first().is_none_or(|&b| b == b'0')
+                || !raw[end..].iter().all(|&b| b == b'0')
             {
                 return Some(false);
             }
-            (&raw[..digits], &b""[..])
-        } else if int_len > 0 {
-            let int_len = usize::try_from(int_len).ok()?;
-            if raw.len() != digits.checked_add(1)? || raw.get(int_len) != Some(&b'.') {
-                return Some(false);
-            }
-            (&raw[..int_len], &raw[int_len + 1..])
+            (coefficient, &b""[..])
         } else {
-            let padding = usize::try_from(-int_len).ok()?;
-            let rest = raw.strip_prefix(b"0.")?;
-            if rest.len() != padding.checked_add(digits)?
-                || !rest[..padding].iter().all(|&b| b == b'0')
-            {
+            let scale = usize::try_from(-i128::from(d.exponent())).ok()?;
+            let point = raw.len().checked_sub(scale.checked_add(1)?)?;
+            if raw.get(point) != Some(&b'.') || point == 0 {
                 return Some(false);
             }
-            (&rest[padding..], &b""[..])
+            let left = &raw[..point];
+            let right = &raw[point + 1..];
+            if left == b"0" {
+                let start = right
+                    .iter()
+                    .position(|&b| b != b'0')
+                    .unwrap_or(right.len() - 1);
+                (&right[start..], &b""[..])
+            } else {
+                if left[0] == b'0' {
+                    return Some(false);
+                }
+                (left, right)
+            }
         };
         Some(d.coefficient_matches_ascii(left, right))
     }
-    compare(decimal, raw).unwrap_or(false)
+    compare(&decimal.0, raw).unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -357,6 +360,17 @@ mod tests {
                     format!("{fixed}0"),
                     format!("{fixed} "),
                     decimal.0.to_string(),
+                    fixed.replace('.', ":"),
+                    fixed.trim_start_matches('-').to_owned(),
+                    format!(
+                        "{}0{}",
+                        if decimal.0.is_sign_negative() {
+                            "-"
+                        } else {
+                            ""
+                        },
+                        fixed.trim_start_matches('-')
+                    ),
                 ] {
                     assert_eq!(
                         fixed_equal(&decimal, altered.as_bytes()),

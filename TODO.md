@@ -680,7 +680,8 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   budgets remain open. The alternating native-baseline harness records a slower
   single fresh 2k sample explicitly. Exact coefficient comparisons now avoid
   unchanged decimal formatting at every width; five alternating pairs improve
-  each tested width from 40 to 4,096 digits. Singleton timestamp tracking also
+  each tested width from 40 to 4,096 digits; scale-based layout checks improve
+  full decimal equality from 12 to 4,096 digits. Singleton timestamp tracking also
   improves an exact changed-book comparison across six runtime orders. Native
   timing operations now use fresh processes so the SQL floor cannot bias
   allocator state. Finish the full eight-cell budget gate, then the mutation
